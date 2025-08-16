@@ -33,16 +33,16 @@ A local-first desktop application that serves as a knowledge base with task mana
 
 ```bash
 # Install dependencies
-pnpm install
+npm install
 
 # Start development server
-pnpm dev
+npm dev
 
 # Build for production
-pnpm build
+npm run build
 
 # Run Tauri app
-pnpm tauri dev
+npm run tauri dev
 ```
 
 ## Project Structure
@@ -50,9 +50,9 @@ pnpm tauri dev
 ```
 src/
 ├── components/          # UI components
-│   ├── FolderSidebar.svelte
-│   ├── PagesList.svelte
-│   └── ContentPanel.svelte
+│   ├── Folders.svelte
+│   ├── Pages.svelte
+│   └── Page.svelte
 ├── stores/             # State management
 │   └── appStore.ts
 ├── routes/             # SvelteKit routes

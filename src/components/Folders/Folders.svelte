@@ -1,24 +1,21 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
-  import { selectedFolder } from "../stores/appStore";
-  import type { Folder } from "../stores/appStore";
-  import type { FileInfo } from "../stores/appStore";
+  import { selectedFolder, selectedPage } from "../../stores/appStore";
+  import type { Folder } from "../../stores/appStore";
+  import type { FileInfo } from "../../stores/appStore";
 
   export let currentDirectory: string = "";
-  export let directoryFiles: FileInfo[] = [];
   export let rootDirectoryFiles: FileInfo[] = [];
 
   const dispatch = createEventDispatcher<{
     "select-folder": { path: string };
   }>();
 
-  function selectFolder(folder: Folder) {
+  export function selectFolder(folder: Folder) {
     selectedFolder.set(folder);
     dispatch("select-folder", { path: folder.path });
+    selectedPage.set(null);
   }
-
-  // Get the current directory name for display
-  $: currentDirName = currentDirectory.split("/").pop() || "Root";
 
   // Extract directories from the root directory files (always show root folders)
   $: directories = rootDirectoryFiles

@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import FolderSidebar from "../components/FolderSidebar.svelte";
-  import PagesList from "../components/PagesList.svelte";
-  import ContentPanel from "../components/ContentPanel.svelte";
-  import { selectedFolder, pages } from "../stores/appStore";
+  import Pages from "../components/Pages/Pages.svelte";
+  import Content from "../components/Content/Content.svelte";
+  import { pages, selectedPage } from "../stores/appStore";
   import type { FileInfo } from "../stores/appStore";
+  import Folders from "../components/Folders/Folders.svelte";
 
   let currentDirectory = "";
   let isLoading = false;
@@ -60,26 +60,43 @@
       isLoading = false;
     }
   }
+
+  function handleFileCreated(event: CustomEvent<{ file: FileInfo }>) {
+    const newFile = event.detail.file;
+
+    // Add the new file to the directoryFiles array
+    directoryFiles = [...directoryFiles, newFile];
+
+    // Also add to pages store for consistency
+    const newPage = {
+      id: newFile.path,
+      title: newFile.name,
+      path: newFile.path,
+      isCompleted: false,
+      scheduledAt: null,
+    };
+
+    pages.update((currentPages) => [...currentPages, newPage]);
+
+    // Automatically select the newly created file
+    selectedPage.set(newPage);
+  }
 </script>
 
 <div class="flex h-screen bg-blue-100">
-  <!-- Left Panel - Directory List -->
   <div class="w-48 border-r border-gray-300 bg-white">
-    <FolderSidebar
+    <Folders
       {currentDirectory}
-      {directoryFiles}
       {rootDirectoryFiles}
       on:select-folder={(e: CustomEvent) => loadDirectory(e.detail.path)}
     />
   </div>
 
-  <!-- Middle Panel - Files in Directory -->
   <div class="w-72 border-r border-gray-300 bg-white">
-    <PagesList {isLoading} {directoryFiles} />
+    <Pages {isLoading} {directoryFiles} on:file-created={handleFileCreated} />
   </div>
 
-  <!-- Right Panel - Markdown Editor -->
   <div class="flex-1 bg-gray-50">
-    <ContentPanel />
+    <Content />
   </div>
 </div>
