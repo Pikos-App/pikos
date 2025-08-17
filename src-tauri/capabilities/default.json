@@ -9,12 +9,17 @@
     "fs:default",
     "fs:allow-remove",
     "fs:allow-write-text-file",
+    "fs:allow-read-text-file",
+    "fs:allow-read-dir",
+    "fs:allow-read",
+    "fs:allow-read-file",
     {
       "identifier": "fs:scope",
       "allow": [
-        {
-          "path": "/Users/alex/Documents/pikos/**"
-        }
+        { "path": "/Users/alex/Documents/pikos" },
+        { "path": "/Users/alex/Documents/pikos/**" },
+        { "path": "$HOME/Documents/pikos" },
+        { "path": "$HOME/Documents/pikos/**" }
       ]
     }
   ]

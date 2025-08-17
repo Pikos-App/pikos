@@ -1,24 +1,28 @@
 <script lang="ts">
-  import { pages, selectedPage } from "../../stores/fileSystemStore";
-  import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { selectedPage } from "../../stores/fileSystemStore";
+  import { writePageContent } from "../../stores/fileSystemActions";
   import ContentHeader from "./ContentHeader.svelte";
 
-  let content = "";
+  let content: string = "";
+  let loadedPath: string | null = null;
+  let isFocused: boolean = false;
 
-  onMount(() => {
-    loadPageContent();
-  });
+  // When selection changes, initialize local content from store
+  $: if ($selectedPage?.path && $selectedPage.path !== loadedPath) {
+    content = $selectedPage.content ?? "";
+    loadedPath = $selectedPage.path;
+  }
 
-  async function loadPageContent() {
-    if ($selectedPage) {
-      try {
-        content = await invoke("read_file", { filePath: $selectedPage.path });
-      } catch (error) {
-        console.error("Failed to load file content:", error);
-        content = `# ${$selectedPage.title} Error loading file content.`;
-      }
-    }
+  // When the content for the currently loaded path updates (e.g., after async load),
+  // sync the editor if the user isn't actively typing.
+  $: if (
+    $selectedPage?.path &&
+    $selectedPage.path === loadedPath &&
+    !isFocused &&
+    typeof $selectedPage.content === "string" &&
+    $selectedPage.content !== content
+  ) {
+    content = $selectedPage.content;
   }
 
   let timeoutId: number;
@@ -26,26 +30,9 @@
     clearTimeout(timeoutId);
 
     timeoutId = setTimeout(() => {
-      console.log("write content to file system");
-      writePageContent();
+      if ($selectedPage) writePageContent(content, $selectedPage.path);
     }, 500);
   }
-
-  async function writePageContent() {
-    if (!$selectedPage) return;
-
-    try {
-      await invoke("write_file", {
-        filePath: $selectedPage.path,
-        contents: content,
-      });
-    } catch (error) {
-      console.error("Failed to save file content:", error);
-      content = `# ${$selectedPage.title} Error saving file content.`;
-    }
-  }
-
-  $: if ($selectedPage) loadPageContent();
 </script>
 
 <div class="h-full flex flex-col">
@@ -61,10 +48,12 @@
         <p class="text-sm">Select a file from the list to view its content</p>
       </div>
     {:else}
-      <div class="h-full">
+      <div class="h-full overflow-y-hidden">
         <textarea
           bind:value={content}
           on:input={debouncedWritePageContent}
+          on:focus={() => (isFocused = true)}
+          on:blur={() => (isFocused = false)}
           class="w-full h-full p-4 bg-white text-gray-900 resize-none focus:outline-none font-mono text-sm"
           placeholder="Enter your markdown content here..."
         ></textarea>

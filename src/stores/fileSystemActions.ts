@@ -1,18 +1,190 @@
 import { get } from "svelte/store";
 import { pages, selectedFolder, selectedPage, type Page } from "./fileSystemStore";
-import { remove, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { remove, readTextFile, writeTextFile, readDir, type DirEntry } from "@tauri-apps/plugin-fs";
 
 export interface FSAdapter {
   remove(path: string): Promise<void>;
   readTextFile(path: string): Promise<string>;
   writeTextFile(path: string, data: string): Promise<void>;
+  readDir(path: string): Promise<DirEntry[]>;
 }
 
-let fs: FSAdapter = { remove, readTextFile, writeTextFile };
+let fs: FSAdapter = { remove, readTextFile, writeTextFile, readDir };
 
 // allow for custom fs adapter for testing
 export function setFSAdapter(adapter: FSAdapter) {
   fs = adapter;
+}
+
+// Automatically load content whenever the selected page changes
+let __lastLoadedPath: string | null = null;
+selectedPage.subscribe((p) => {
+  const path = p?.path ?? null;
+  if (!path) {
+    __lastLoadedPath = null;
+    return;
+  }
+  if (path !== __lastLoadedPath) {
+    __lastLoadedPath = path;
+    // fire and forget; store will be updated by the action
+    readPageContent(path);
+  }
+});
+
+// Automatically load directory listing whenever the selected folder changes
+let __lastLoadedFolderPath: string | null = null;
+selectedFolder.subscribe((f) => {
+  const path = f?.path ?? null;
+  if (!path) {
+    __lastLoadedFolderPath = null;
+    pages.set([]);
+    return;
+  }
+  if (path !== __lastLoadedFolderPath) {
+    __lastLoadedFolderPath = path;
+    // fire and forget; store will be updated by the action
+    readDirectory(path);
+  }
+});
+
+/**
+ * Read content from a page's file and update in-memory stores.
+ */
+export async function readPageContent(path?: string) {
+  const current = get(selectedPage);
+  const targetPath = path ?? current?.path;
+  if (!targetPath) return;
+
+  const start = performance.now();
+  try {
+    const text = await fs.readTextFile(targetPath);
+    const fsMs = performance.now() - start;
+    console.log(`[FS] readPageContent: file read in ${fsMs.toFixed(2)} ms for`, targetPath);
+
+    // Update stores with loaded content
+    pages.update((list) => list.map((p) => (p.path === targetPath ? { ...p, content: text } : p)));
+    if (current?.path === targetPath) selectedPage.set({ ...current, content: text });
+
+    return text;
+  } catch (e) {
+    console.error("Failed to read file:", e);
+  }
+}
+
+/**
+ * Read a directory and populate the pages store with directories and markdown files.
+ * Directories are listed first, then files; both sorted alphabetically (case-insensitive).
+ */
+export async function readDirectory(dirPath?: string) {
+  const folderPath = dirPath ?? get(selectedFolder)?.path;
+  if (!folderPath) return;
+
+  const start = performance.now();
+  try {
+    const entries = await fs.readDir(folderPath);
+
+    const filtered = entries.filter((e) => {
+      const isDir = e.isDirectory === true;
+      const name = e.name ?? "";
+      const isMd = !isDir && name.toLowerCase().endsWith(".md");
+      return isDir || isMd;
+    });
+
+    filtered.sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+      const an = (a.name ?? "").toLowerCase();
+      const bn = (b.name ?? "").toLowerCase();
+      return an.localeCompare(bn);
+    });
+
+    const list: Page[] = filtered.map((e) => {
+      const is_directory = e.isDirectory === true;
+      const name = e.name ?? "unknown";
+      const path = (e as any).path ?? `${folderPath}/${name}`;
+      const is_markdown = !is_directory && name.toLowerCase().endsWith(".md");
+      return {
+        id: path,
+        title: name,
+        path,
+        isCompleted: false,
+        scheduledAt: null,
+        is_directory,
+        is_markdown,
+      } as Page;
+    });
+
+    pages.set(list);
+
+    const ms = performance.now() - start;
+    console.log(`[FS] readDirectory: loaded ${list.length} entries in ${ms.toFixed(2)} ms from`, folderPath);
+    return list;
+  } catch (e) {
+    console.error("Failed to read directory:", e);
+  }
+}
+
+/**
+ * Persist content to a page's file, then update in-memory stores.
+ */
+export async function writePageContent(content: string, path?: string) {
+  const current = get(selectedPage);
+  const targetPath = path ?? current?.path;
+  if (!targetPath) return;
+
+  const start = performance.now();
+  try {
+    await fs.writeTextFile(targetPath, content);
+    const fsMs = performance.now() - start;
+    console.log(`[FS] writePageContent: file persisted in ${fsMs.toFixed(2)} ms for`, targetPath);
+
+    const updatedAt = new Date().toISOString();
+    pages.update((list) => list.map((p) => (p.path === targetPath ? { ...p, content: content, updatedAt } : p)));
+    if (current?.path === targetPath) selectedPage.set({ ...current, content: content, updatedAt });
+  } catch (e) {
+    console.error("Failed to write file:", e);
+  }
+}
+
+/**
+ * Optimistically update stores with new content, then persist.
+ * Revert stores if the filesystem write fails.
+ */
+export async function optimisticWritePageContent(contents: string, path?: string) {
+  const current = get(selectedPage);
+  const targetPath = path ?? current?.path;
+  if (!targetPath) return;
+
+  const prevPages = get(pages);
+  const prevSelected = current;
+
+  const updatedAt = new Date().toISOString();
+
+  const start = performance.now();
+  // optimistic state
+  pages.update((list) => list.map((p) => (p.path === targetPath ? { ...p, content: contents, updatedAt } : p)));
+  if (current?.path === targetPath) selectedPage.set({ ...current, content: contents, updatedAt });
+  const optimisticMs = performance.now() - start;
+  console.log(
+    `[FS] optimisticWritePageContent: optimistic state updated in ${optimisticMs.toFixed(2)} ms for`,
+    targetPath
+  );
+
+  try {
+    const tWrite = performance.now();
+    await fs.writeTextFile(targetPath, contents);
+    const fsMs = performance.now() - tWrite;
+    console.log(`[FS] optimisticWritePageContent: file persisted in ${fsMs.toFixed(2)} ms for`, targetPath);
+  } catch (e) {
+    // revert state
+    pages.set(prevPages);
+    selectedPage.set(prevSelected);
+    const revertMs = performance.now() - start;
+    console.warn(
+      `[FS] optimisticWritePageContent: write failed after ${revertMs.toFixed(2)} ms, state reverted for`,
+      targetPath
+    );
+    console.error("Failed to write file:", e);
+  }
 }
 
 /**
@@ -111,10 +283,7 @@ export async function optimisticCreateFile() {
   pages.update((list) => [newPage, ...list]);
   selectedPage.set(newPage);
   const optimisticMs = performance.now() - start;
-  console.log(
-    `[FS] optimisticCreateFile: optimistic state updated in ${optimisticMs.toFixed(2)} ms for`,
-    newFilePath
-  );
+  console.log(`[FS] optimisticCreateFile: optimistic state updated in ${optimisticMs.toFixed(2)} ms for`, newFilePath);
 
   try {
     const tWrite = performance.now();

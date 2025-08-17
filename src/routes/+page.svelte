@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import Pages from "../components/Pages/Pages.svelte";
   import Content from "../components/Content/Content.svelte";
-  import { pages, selectedPage, selectedFolder } from "../stores/fileSystemStore";
+  import { pages, selectedFolder } from "../stores/fileSystemStore";
   import type { FileInfo } from "../stores/fileSystemStore";
   import Folders from "../components/Folders/Folders.svelte";
+  import { readDirectory } from "../stores/fileSystemActions";
 
   let currentDirectory = "";
   let isLoading = false;
@@ -20,43 +20,24 @@
   async function loadDirectory(path: string) {
     isLoading = true;
     try {
-      // Use Tauri command to read directory
-      const files: FileInfo[] = await invoke("read_directory", {
-        dirPath: path,
-      });
-
-      // If this is the initial load (root directory), store it separately
-      if (path === "/Users/alex/Documents/pikos") {
-        rootDirectoryFiles = files;
-      }
-
-      // Convert FileInfo to Page objects for all files
-      const allPages = files.map((file, index) => ({
-        id: index.toString(),
-        title: file.name,
-        path: file.path,
-        isCompleted: false,
-        scheduledAt: null,
-        is_directory: file.is_directory,
-        is_markdown: file.is_markdown,
-      }));
-
-      pages.set(allPages);
-
       // Update current directory and selected folder
       currentDirectory = path;
-
-      // Find the folder that was selected and set it in the store
       const folderName = path.split("/").pop() || "";
+      // Set selected folder (triggers auto-load subscription in actions)
       if (folderName && path !== "/Users/alex/Documents/pikos") {
-        selectedFolder.set({
-          id: path,
-          name: folderName,
-          path: path,
-        });
+        selectedFolder.set({ id: path, name: folderName, path });
       } else {
-        // If we're at root, clear the selected folder to show all files
+        // Root: clear selected folder and load directly to also produce rootDirectoryFiles
         selectedFolder.set(null);
+        const list = await readDirectory(path);
+        if (Array.isArray(list)) {
+          rootDirectoryFiles = list.map((p) => ({
+            name: p.title,
+            path: p.path,
+            is_directory: p.is_directory,
+            is_markdown: p.is_markdown,
+          } satisfies FileInfo));
+        }
       }
     } catch (error) {
       console.error("Failed to load directory:", error);
