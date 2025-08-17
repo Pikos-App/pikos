@@ -66,10 +66,7 @@
             : 'text-gray-700'}"
           on:click={() => selectFolder(folder)}
         >
-          <div
-            class="w-2 h-2 rounded-full flex-shrink-0"
-            style="background-color: {folder.color || '#6b7280'}"
-          ></div>
+          <div class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: {folder.color || '#6b7280'}"></div>
           <span class="text-sm truncate">{folder.name}</span>
         </button>
       </div>

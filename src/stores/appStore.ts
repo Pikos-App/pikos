@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable } from "svelte/store";
 
 export interface Page {
   id: string;
@@ -31,5 +31,3 @@ export interface Folder {
 export const pages = writable<Page[]>([]);
 export const selectedPage = writable<Page | null>(null);
 export const selectedFolder = writable<Folder | null>(null);
-
-

@@ -5,6 +5,7 @@ A local-first desktop application that serves as a knowledge base with task mana
 ## Features
 
 ### Current (Basic UI)
+
 - ✅ Three-panel layout (folders, pages, content)
 - ✅ Folder navigation with color coding
 - ✅ Page list with filtering (all, scheduled, unscheduled)
@@ -13,6 +14,7 @@ A local-first desktop application that serves as a knowledge base with task mana
 - ✅ Responsive design with Tailwind CSS
 
 ### Planned
+
 - 📅 Calendar view with time blocking
 - 🔍 Full-text search across content
 - 📁 File system integration (markdown files)

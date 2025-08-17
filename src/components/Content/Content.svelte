@@ -58,10 +58,7 @@
         <h2 class="text-sm font-medium text-gray-900">
           {$selectedPage?.title}
         </h2>
-        <button
-          on:click={closePage}
-          class="text-xs text-gray-500 hover:text-gray-700">x</button
-        >
+        <button on:click={closePage} class="text-xs text-gray-500 hover:text-gray-700">x</button>
       </div>
     {/if}
   </div>
