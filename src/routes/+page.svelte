@@ -3,8 +3,8 @@
   import { invoke } from "@tauri-apps/api/core";
   import Pages from "../components/Pages/Pages.svelte";
   import Content from "../components/Content/Content.svelte";
-  import { pages, selectedPage, selectedFolder } from "../stores/appStore";
-  import type { FileInfo } from "../stores/appStore";
+  import { pages, selectedPage, selectedFolder } from "../stores/fileSystemStore";
+  import type { FileInfo } from "../stores/fileSystemStore";
   import Folders from "../components/Folders/Folders.svelte";
 
   let currentDirectory = "";
@@ -66,26 +66,6 @@
       isLoading = false;
     }
   }
-
-  function handleFileCreated(event: CustomEvent<{ file: FileInfo }>) {
-    const newFile = event.detail.file;
-
-    // Add to pages store
-    const newPage = {
-      id: newFile.path,
-      title: newFile.name,
-      path: newFile.path,
-      isCompleted: false,
-      scheduledAt: null,
-      is_directory: newFile.is_directory,
-      is_markdown: newFile.is_markdown,
-    };
-
-    pages.update((currentPages) => [...currentPages, newPage]);
-
-    // Automatically select the newly created file
-    selectedPage.set(newPage);
-  }
 </script>
 
 <div class="flex h-screen bg-blue-100">
@@ -98,7 +78,7 @@
   </div>
 
   <div class="w-72 border-r border-gray-300 bg-white">
-    <Pages {isLoading} on:file-created={handleFileCreated} />
+    <Pages {isLoading} />
   </div>
 
   <div class="flex-1 bg-gray-50">

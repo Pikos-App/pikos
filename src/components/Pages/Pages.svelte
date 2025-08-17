@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { selectedPage, selectedFolder, pages } from "../../stores/appStore";
-  import type { Page } from "../../stores/appStore";
+  import { selectedPage, selectedFolder, pages } from "../../stores/fileSystemStore";
+  import type { Page } from "../../stores/fileSystemStore";
   import PagesHeader from "./PagesHeader.svelte";
   export let isLoading: boolean;
 
@@ -14,7 +14,7 @@
 </script>
 
 <div class="h-full flex flex-col">
-  <PagesHeader on:file-created />
+  <PagesHeader />
 
   <div class="flex-1 overflow-y-auto">
     {#if isLoading}

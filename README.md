@@ -47,20 +47,6 @@ npm run build
 npm run tauri dev
 ```
 
-## Project Structure
-
-```
-src/
-├── components/          # UI components
-│   ├── Folders.svelte
-│   ├── Pages.svelte
-│   └── Page.svelte
-├── stores/             # State management
-│   └── appStore.ts
-├── routes/             # SvelteKit routes
-└── app.css            # Global styles
-```
-
 ## Design Philosophy
 
 - **Local-first**: All data stored locally, no cloud dependency

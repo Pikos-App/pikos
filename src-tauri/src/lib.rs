@@ -69,12 +69,6 @@ async fn read_directory(dir_path: String) -> Result<Vec<FileInfo>, String> {
 }
 
 #[tauri::command]
-async fn create_file(file_path: String) -> Result<String, String> {
-    std::fs::File::create(&file_path).map_err(|e| format!("Failed to create file: {}", e))?;
-    Ok(format!("Successfully created file: {}", file_path))
-}
-
-#[tauri::command]
 async fn read_file(file_path: String) -> Result<String, String> {
     std::fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {}", e))
 }
@@ -92,7 +86,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             read_directory,
-            create_file,
             read_file,
             write_file
         ])

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { pages, selectedPage } from "../../stores/appStore";
+  import { pages, selectedPage } from "../../stores/fileSystemStore";
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { remove } from "@tauri-apps/plugin-fs";
+  import ContentHeader from "./ContentHeader.svelte";
 
   let content = "";
 
@@ -21,10 +21,6 @@
     }
   }
 
-  function closePage() {
-    selectedPage.set(null);
-  }
-
   let timeoutId: number;
   async function debouncedWritePageContent() {
     clearTimeout(timeoutId);
@@ -33,20 +29,6 @@
       console.log("write content to file system");
       writePageContent();
     }, 500);
-  }
-
-  async function deletePage() {
-    if (!$selectedPage) return;
-
-    const pageToDelete = $selectedPage;
-
-    try {
-      await remove(pageToDelete.path);
-      selectedPage.set(null);
-      pages.set($pages.filter((page) => page.path !== pageToDelete.path));
-    } catch (error) {
-      console.error("Failed to delete file:", error);
-    }
   }
 
   async function writePageContent() {
@@ -67,19 +49,9 @@
 </script>
 
 <div class="h-full flex flex-col">
-  <div class="p-3 border-gray-200">
-    {#if $selectedPage}
-      <div class="flex items-center justify-between">
-        <h2 class="text-sm font-medium text-gray-900">
-          {$selectedPage?.title}
-        </h2>
-        <div class="flex items-center gap-2">
-          <button on:click={deletePage} class="text-xs text-gray-500 hover:text-gray-700">delete</button>
-          <button on:click={closePage} class="text-xs text-gray-500 hover:text-gray-700">close</button>
-        </div>
-      </div>
-    {/if}
-  </div>
+  {#if $selectedPage}
+    <ContentHeader title={$selectedPage.title} />
+  {/if}
 
   <div class="flex-1 overflow-y-auto">
     {#if !$selectedPage}

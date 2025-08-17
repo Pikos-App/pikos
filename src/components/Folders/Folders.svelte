@@ -1,8 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
-  import { selectedFolder, selectedPage } from "../../stores/appStore";
-  import type { Folder } from "../../stores/appStore";
-  import type { FileInfo } from "../../stores/appStore";
+  import { selectedFolder, selectedPage } from "../../stores/fileSystemStore";
+  import type { Folder } from "../../stores/fileSystemStore";
+  import type { FileInfo } from "../../stores/fileSystemStore";
 
   export let currentDirectory: string = "";
   export let rootDirectoryFiles: FileInfo[] = [];
@@ -50,7 +50,7 @@
 
 <div class="h-full flex flex-col">
   <!-- Header -->
-  <div class="p-3 border-b border-gray-200">
+  <div class="h-10 px-3 flex items-center justify-between border-b border-gray-200">
     <h2 class="text-sm font-medium text-gray-900">Folders</h2>
   </div>
 
