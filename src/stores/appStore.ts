@@ -10,6 +10,8 @@ export interface Page {
   tags?: string[];
   createdAt?: string;
   updatedAt?: string;
+  is_directory: boolean;
+  is_markdown: boolean;
 }
 
 export interface FileInfo {

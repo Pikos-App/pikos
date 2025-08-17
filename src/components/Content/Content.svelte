@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { selectedPage } from "../../stores/appStore";
+  import { pages, selectedPage } from "../../stores/appStore";
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { remove } from "@tauri-apps/plugin-fs";
 
   let content = "";
 
@@ -34,6 +35,20 @@
     }, 500);
   }
 
+  async function deletePage() {
+    if (!$selectedPage) return;
+
+    const pageToDelete = $selectedPage;
+
+    try {
+      await remove(pageToDelete.path);
+      selectedPage.set(null);
+      pages.set($pages.filter((page) => page.path !== pageToDelete.path));
+    } catch (error) {
+      console.error("Failed to delete file:", error);
+    }
+  }
+
   async function writePageContent() {
     if (!$selectedPage) return;
 
@@ -58,7 +73,10 @@
         <h2 class="text-sm font-medium text-gray-900">
           {$selectedPage?.title}
         </h2>
-        <button on:click={closePage} class="text-xs text-gray-500 hover:text-gray-700">x</button>
+        <div class="flex items-center gap-2">
+          <button on:click={deletePage} class="text-xs text-gray-500 hover:text-gray-700">delete</button>
+          <button on:click={closePage} class="text-xs text-gray-500 hover:text-gray-700">close</button>
+        </div>
       </div>
     {/if}
   </div>

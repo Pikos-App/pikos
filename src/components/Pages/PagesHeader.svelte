@@ -1,10 +1,8 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { selectedPage, selectedFolder } from "../../stores/appStore";
-  import type { Page } from "../../stores/appStore";
+  import { selectedFolder, pages } from "../../stores/appStore";
   import type { FileInfo } from "../../stores/appStore";
   import { createEventDispatcher } from "svelte";
-  export let directoryFiles: FileInfo[] = [];
 
   const dispatch = createEventDispatcher<{
     "file-created": { file: FileInfo };
@@ -16,7 +14,7 @@
 
   function getUntitledCount() {
     const regex = /untitled\s*\d*\.md/;
-    const matches = directoryFiles.filter((file) => regex.test(file.name));
+    const matches = $pages.filter((page) => regex.test(page.title));
     return matches.length;
   }
 
