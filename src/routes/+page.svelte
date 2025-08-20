@@ -6,15 +6,25 @@
   import type { FileInfo } from "../stores/fileSystemStore";
   import Folders from "../components/Folders/Folders.svelte";
   import { readDirectory } from "../stores/fileSystemActions";
+  import { Keyboard } from "../keyboard/registry";
+  import "../keyboard/actions"; // side-effect import to register shortcuts
 
   let currentDirectory = "";
   let isLoading = false;
   let rootDirectoryFiles: FileInfo[] = []; // Keep track of root directory contents
 
-  onMount(async () => {
+  onMount(() => {
     // Set a default directory for testing
     currentDirectory = "/Users/alex/Documents/pikos";
-    await loadDirectory(currentDirectory);
+    // Fire and forget
+    loadDirectory(currentDirectory);
+
+    // Attach global keyboard handler with proper cleanup
+    const handler = (e: KeyboardEvent) => Keyboard.handle(e);
+    window.addEventListener("keydown", handler);
+    return () => {
+      window.removeEventListener("keydown", handler);
+    };
   });
 
   async function loadDirectory(path: string) {
@@ -31,12 +41,15 @@
         selectedFolder.set(null);
         const list = await readDirectory(path);
         if (Array.isArray(list)) {
-          rootDirectoryFiles = list.map((p) => ({
-            name: p.title,
-            path: p.path,
-            is_directory: p.is_directory,
-            is_markdown: p.is_markdown,
-          } satisfies FileInfo));
+          rootDirectoryFiles = list.map(
+            (p) =>
+              ({
+                name: p.title,
+                path: p.path,
+                is_directory: p.is_directory,
+                is_markdown: p.is_markdown,
+              }) satisfies FileInfo
+          );
         }
       }
     } catch (error) {
@@ -47,6 +60,8 @@
       isLoading = false;
     }
   }
+
+  // Keyboard listener is attached in onMount with cleanup
 </script>
 
 <div class="flex h-screen bg-blue-100">
