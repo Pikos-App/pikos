@@ -5,9 +5,14 @@
   import MarkdownEditor from "./MarkdownEditor.svelte";
 
   let content = "";
+  let currentPath = "";
 
-  $: if ($selectedPage?.content) {
-    content = $selectedPage.content;
+  $: if ($selectedPage) {
+    // Only update content if the path has changed or content is not set
+    if ($selectedPage.path !== currentPath || $selectedPage.content !== content) {
+      content = $selectedPage.content || '';
+      currentPath = $selectedPage.path;
+    }
   }
 
   function handleContentChange(newContent: string) {

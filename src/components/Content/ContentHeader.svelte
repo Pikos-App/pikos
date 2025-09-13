@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Dropdown from "../Dropdown/Dropdown.svelte";
+  import Dropdown from "../../lib/components/Dropdown/Dropdown.svelte";
   import { selectedPage } from "../../stores/fileSystemStore";
   import { deletePage, optimisticDeletePage } from "../../stores/fileSystemActions";
 
@@ -17,5 +17,5 @@
 
 <div class="flex items-center justify-between h-10 px-3 border-b border-gray-200">
   <h2 class="text-sm font-medium text-gray-900">{title}</h2>
-  <Dropdown {options} />
+  <Dropdown {options} triggerLabel={null} align="end" />
 </div>

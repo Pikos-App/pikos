@@ -1,11 +1,13 @@
 import { createFile, deletePage } from "../stores/fileSystemActions";
 import { selectedPage } from "../stores/fileSystemStore";
+import { modal } from "../stores/uiStore";
 import { Keyboard } from "./registry";
 
 export const shortcuts = {
   newFile: "Mod+N",
   deleteFile: "Mod+Shift+D",
   closeFile: "Mod+W",
+  pageSwitcher: "Mod+P",
 };
 
 // Register bindings in the global scope
@@ -17,6 +19,16 @@ Keyboard.register({
   preventDefault: true,
   repeat: false,
   allowInInputs: false,
+});
+
+Keyboard.register({
+  id: "page-switcher",
+  combo: shortcuts.pageSwitcher,
+  scope: "global",
+  handler: () => modal.open("page-switcher"),
+  preventDefault: true,
+  repeat: false,
+  allowInInputs: true,
 });
 
 Keyboard.register({

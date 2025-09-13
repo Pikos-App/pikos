@@ -18,16 +18,31 @@ export function setFSAdapter(adapter: FSAdapter) {
 
 // Automatically load content whenever the selected page changes
 let __lastLoadedPath: string | null = null;
-selectedPage.subscribe((p) => {
+selectedPage.subscribe(async (p) => {
   const path = p?.path ?? null;
   if (!path) {
     __lastLoadedPath = null;
     return;
   }
+  
+  // Always update the selected page in the pages list to ensure consistency
+  if (p) {
+    pages.update(pages => 
+      pages.map(page => 
+        page.path === p.path ? { ...page, ...p } : page
+      )
+    );
+  }
+  
+  // Only load content if it's a different page
   if (path !== __lastLoadedPath) {
     __lastLoadedPath = path;
-    // fire and forget; store will be updated by the action
-    readPageContent(path);
+    // Force a re-render by setting content to null first
+    if (p) {
+      selectedPage.set({ ...p, content: undefined });
+    }
+    // Then load the content
+    await readPageContent(path);
   }
 });
 
@@ -51,8 +66,7 @@ selectedFolder.subscribe((f) => {
  * Read content from a page's file and update in-memory stores.
  */
 export async function readPageContent(path?: string) {
-  const current = get(selectedPage);
-  const targetPath = path ?? current?.path;
+  const targetPath = path ?? get(selectedPage)?.path;
   if (!targetPath) return;
 
   const start = performance.now();
@@ -62,8 +76,18 @@ export async function readPageContent(path?: string) {
     console.log(`[FS] readPageContent: file read in ${fsMs.toFixed(2)} ms for`, targetPath);
 
     // Update stores with loaded content
-    pages.update((list) => list.map((p) => (p.path === targetPath ? { ...p, content: text } : p)));
-    if (current?.path === targetPath) selectedPage.set({ ...current, content: text });
+    pages.update((list) => {
+      const updated = list.map((p) => 
+        p.path === targetPath ? { ...p, content: text } : p
+      );
+      return updated;
+    });
+
+    // Always get the latest selectedPage to ensure we don't have a stale reference
+    const currentPage = get(selectedPage);
+    if (currentPage?.path === targetPath) {
+      selectedPage.set({ ...currentPage, content: text });
+    }
 
     return text;
   } catch (e) {
