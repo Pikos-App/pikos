@@ -118,7 +118,7 @@
 </script>
 
 <Modal open {onClose} size="md">
-  <div class="h-[500px] flex flex-col">
+  <div class="h-[300px] flex flex-col">
     <div class="flex-shrink-0">
       <input
         bind:this={searchInput}
