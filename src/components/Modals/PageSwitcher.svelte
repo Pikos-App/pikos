@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { get } from "svelte/store";
   import { pages, selectedPage } from "../../stores/fileSystemStore";
   import { recentPages } from "../../stores/recentPagesStore";
   import { readPageContent } from "../../stores/fileSystemActions";
@@ -130,7 +129,7 @@
         autocorrect="off"
         autocapitalize="off"
         spellcheck="false"
-        class="w-full p-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+        class="w-full p-2 border rounded-sm focus:outline-none focus:ring-1 text-base"
         aria-label="Search pages"
       />
     </div>
@@ -167,7 +166,7 @@
       {:else}
         {#each filteredPages as page, index (page.path)}
           <div
-            class="p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md cursor-pointer transition-colors {selectedIndex ===
+            class="p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md cursor-pointer transition-colors {selectedIndex ===
             index
               ? 'bg-blue-50 dark:bg-gray-700'
               : ''}"
