@@ -1,0 +1,29 @@
+# Opt-in pre-commit and pre-push hooks.
+# Activate with: pnpm lefthook install
+# Skip for a single commit: LEFTHOOK=0 git commit ...
+
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      # Biome runs format + lint in one pass. stage_fixed re-stages auto-fixed files.
+      glob: "apps/desktop/src/**/*.{ts,tsx,json}"
+      run: pnpm --filter @pikos/desktop biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
+
+    typecheck-desktop:
+      run: pnpm --filter @pikos/desktop tsc --noEmit
+
+    typecheck-core:
+      run: pnpm --filter @pikos/core tsc --noEmit
+
+pre-push:
+  commands:
+    test-core:
+      # Unit tests are fast (<5s). Run on push so they don't slow every commit.
+      run: pnpm --filter @pikos/core vitest run
+
+    test-e2e:
+      # Playwright runs against the Vite dev server (no Tauri needed).
+      # Skip with: LEFTHOOK_EXCLUDE=test-e2e git push
+      run: pnpm --filter @pikos/desktop playwright test
