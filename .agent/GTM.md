@@ -12,15 +12,42 @@ The product Pikos replaces: Obsidian (notes) + TickTick (tasks + calendar). Neit
 
 ## Positioning
 
-**Core promise:** Your data is a SQLite file on your device. Pikos has no servers. It cannot read your notes.
+**Core promise:** Your notes, tasks, and calendar — private by default. Nothing leaves your device unless you choose it to.
 
-**Against Obsidian:** Obsidian is notes-only, no native task management, plugin ecosystem is fragmented, sync costs $8/mo. Pikos is unified.
+**Against Obsidian:** Notes-only, no real task management, plugin ecosystem is fragmented, sync costs $8/mo. Pikos is unified and has a built-in calendar.
 
-**Against TickTick:** TickTick is tasks-first, notes are second-class, cloud-dependent, no real privacy story. Pikos is local-first.
+**Against TickTick:** Tasks-first, notes are second-class, cloud-dependent, no real privacy story. Pikos is local-first with equal footing for notes and tasks.
 
-**Against NotePlan** (closest competitor — markdown + calendar, macOS/iOS): NotePlan uses file-based markdown, no structured metadata, weaker calendar, $69.99/yr. Pikos has a richer data model and better privacy controls.
+**Against NotePlan** (closest competitor — markdown + calendar, macOS/iOS): File-based markdown, no structured metadata, weaker calendar, $69.99/yr. Pikos has a richer data model and a cleaner UX.
 
-**Who Pikos is for:** Technically comfortable people who care about owning their data — developers, designers, writers who have bounced off the privacy-invasive defaults of mainstream productivity tools.
+**Against Notion/Obsidian/Craft:** All require accounts or cloud sync by default. Pikos requires neither.
+
+---
+
+### Who Pikos is for
+
+Pikos is for **anyone** who wants their notes, tasks, and calendar in one place without their data living on someone else's server. The app should be as approachable as TickTick and as deep as Obsidian — but most users will never need the deep end.
+
+**Two real audiences, one app:**
+
+| Audience | How they think about the app | Privacy framing |
+|---|---|---|
+| General users | "My to-dos, notes, and calendar, all in one place. Fast. No sign-up." | "Nothing goes to the cloud." |
+| Power users / developers | "Local SQLite, no servers, structured data, open format I can inspect." | "The data file is yours. Here's where it lives." |
+
+The product pitch and UX defaults should serve the general user. Power-user depth (vault paths, keyboard shortcuts, advanced filters, future API) is progressively disclosed — available but never required.
+
+**What this means for the app:**
+- Default experience: dead simple. Create a task. Add a note. See your calendar. No setup wizard, no concepts to learn.
+- The word "vault" is fine and intuitive (like a safe) — but never expose file paths or SQLite in the default UI.
+- Power features (nested folders, advanced filters, wikilinks, import/export) live behind discoverable surfaces, not in the critical path.
+- Performance and reliability are table stakes, not differentiators. The app must feel instant at all times.
+
+---
+
+### Competitive moat
+
+The combination is the moat: fast + private + tasks + calendar + notes in one app. Any single property is replicable. The combination at this quality level isn't.
 
 ---
 
@@ -68,14 +95,22 @@ Marketing site live. Download available to anyone. No sign-up required.
 - GOO-52: All three platform builds in CI (macOS signed + notarized, Windows + Linux)
 - App is genuinely stable and has survived Phase 2
 
-**Credibility angle:** The app itself is the portfolio piece. The marketing site can have a brief "why I built this" story — not a startup pitch, just honest context. Technical blog posts about interesting decisions (Tauri + SQLite, local-first design, React Compiler) drive developer discovery organically.
+**Dual landing pages (same app, two entry points):**
+
+- `/` — General audience. Visual, task-focused, approachable. Headline: *"Your notes, tasks, and calendar. Private by default."* Shows the calendar + task list. No mention of SQLite, Tauri, or file paths. Download button prominent above the fold.
+- `/open` or `/for-developers` — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief "why I built this" story. Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
+
+The two pages let you run different SEO and social campaigns without the messaging feeling split. General landing page targets: "private notes app", "offline task manager", "notes app no account". Technical page targets: "local-first notes app", "obsidian alternative with tasks", "sqlite notes app".
+
+**Credibility angle:** Technical blog posts about interesting decisions (Tauri + SQLite, local-first design, React Compiler) drive developer discovery organically and feed the `/for-developers` page.
 
 **Channels:**
 
-- Marketing site (direct + organic search)
+- Marketing site — general page (direct, organic, social)
+- Marketing site — technical page (Hacker News, developer communities, GitHub)
 - GitHub (open source or source-available — see below)
 - Personal social presence (occasional, not performative)
-- Hacker News / indie hackers when the time is right (one "Show HN" post, well-timed)
+- Hacker News / indie hackers when the time is right (one "Show HN" post, well-timed — link to technical page)
 
 ---
 
@@ -99,14 +134,14 @@ The split is clean: the free app is a complete product, not a crippled demo. Syn
 
 ## Distribution
 
-| Channel                        | When     | Notes                                                                            |
-| ------------------------------ | -------- | -------------------------------------------------------------------------------- |
-| GitHub Releases                | Phase 2+ | Primary distribution, auto-updater source                                        |
-| Marketing site direct download | Phase 3+ | Links to GitHub Releases                                                         |
-| Homebrew cask                  | Phase 3+ | Developer-friendly, one-line install                                             |
-| Mac App Store                  | Future   | More friction (sandboxing, Apple review, 30% cut) — evaluate after public launch |
+| Channel                        | When     | Notes                                                                                                                                                                                    |
+| ------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub Releases                | Phase 2+ | Primary distribution, auto-updater source                                                                                                                                                |
+| Marketing site direct download | Phase 3+ | Links to GitHub Releases                                                                                                                                                                 |
+| Homebrew cask                  | Phase 3+ | Developer-friendly, one-line install                                                                                                                                                     |
+| Mac App Store                  | Future   | More friction (sandboxing, Apple review, 30% cut) — evaluate after public launch                                                                                                         |
 | Windows                        | Phase 3+ | Tauri builds `.msi`/`.exe`. No signing required to run; Windows Defender/SmartScreen will warn without a code signing cert — acceptable for early adopters, fix before wide distribution |
-| Linux                          | Phase 3+ | Tauri builds `.AppImage` + `.deb`. No signing required. Low friction to add to CI matrix. |
+| Linux                          | Phase 3+ | Tauri builds `.AppImage` + `.deb`. No signing required. Low friction to add to CI matrix.                                                                                                |
 
 ---
 
@@ -114,11 +149,11 @@ The split is clean: the free app is a complete product, not a crippled demo. Syn
 
 **Goal: Mac + Windows + Linux from Phase 3.** Tauri supports all three with minimal extra effort once the Mac build is working.
 
-| Platform | Signing | Complexity | Cost |
-| -------- | ------- | ---------- | ---- |
-| macOS | Required (Gatekeeper blocks unsigned apps) | Moderate — one-time cert setup (~2-3 hrs), then fully automated | $99/yr (Apple Developer) |
-| Windows | Optional — SmartScreen warns but doesn't block | Low — skip for Phase 2, add OV cert before wide launch | ~$300–500/yr (OV cert from a CA) |
-| Linux | Not applicable | Trivial — add ubuntu runner to CI matrix | $0 |
+| Platform | Signing                                        | Complexity                                                      | Cost                             |
+| -------- | ---------------------------------------------- | --------------------------------------------------------------- | -------------------------------- |
+| macOS    | Required (Gatekeeper blocks unsigned apps)     | Moderate — one-time cert setup (~2-3 hrs), then fully automated | $99/yr (Apple Developer)         |
+| Windows  | Optional — SmartScreen warns but doesn't block | Low — skip for Phase 2, add OV cert before wide launch          | ~$300–500/yr (OV cert from a CA) |
+| Linux    | Not applicable                                 | Trivial — add ubuntu runner to CI matrix                        | $0                               |
 
 **macOS notarization in practice:** Apple requires apps to be signed with a Developer ID cert and submitted to their notarization service. The `tauri-apps/tauri-action` GitHub Action automates all of this — you set up secrets once (certificate, passwords, Apple ID, team ID) and every release tag triggers a full build → sign → notarize → upload pipeline. The one-time setup takes a few hours; after that it's push-and-done.
 
