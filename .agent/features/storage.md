@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS pages (
   id              TEXT PRIMARY KEY,   -- UUID
   folder_id       TEXT REFERENCES folders(id) ON DELETE SET NULL,
   title           TEXT NOT NULL DEFAULT '',
+  subtitle        TEXT,                       -- one-sentence summary; shown in list + calendar block
   content         TEXT NOT NULL DEFAULT '{}', -- Tiptap JSON string (NOT markdown)
   content_text    TEXT NOT NULL DEFAULT '',   -- plain text for FTS (extracted on save)
   status          TEXT NOT NULL DEFAULT 'not_started',
@@ -82,28 +83,59 @@ CREATE INDEX IF NOT EXISTS idx_pages_completed_at   ON pages(completed_at);
 CREATE INDEX IF NOT EXISTS idx_pages_rrule          ON pages(rrule) WHERE rrule IS NOT NULL;
                                               -- partial index: only rows that are recurrence templates
 
+-- ─── Page Schedules ──────────────────────────────────────────────────────────
+-- Multiple calendar occurrences for one page (e.g. "work on this Tue AND Thu").
+-- Distinct from rrule (which is for infinite recurring templates; expanded virtually).
+-- When you drag-to-schedule, a new row is inserted here instead of overwriting pages.scheduled_start.
+-- pages.scheduled_start/end are now DENORMS = earliest future row in page_schedules (for list views).
+CREATE TABLE IF NOT EXISTS page_schedules (
+  id              TEXT PRIMARY KEY,   -- UUID
+  page_id         TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  scheduled_start TEXT NOT NULL,      -- ISO 8601
+  scheduled_end   TEXT,               -- ISO 8601; NULL = 1h default
+  created_at      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_page_schedules_page    ON page_schedules(page_id);
+CREATE INDEX IF NOT EXISTS idx_page_schedules_start   ON page_schedules(scheduled_start);
+
+-- ─── Focus Sessions ───────────────────────────────────────────────────────────
+-- Core table (used by the built-in Focus Timer plugin via PluginContext).
+-- page_id = optional association to the page being worked on.
+-- Sessions < 10s are auto-discarded on stop. 10s–60s show a "Remove?" prompt.
+CREATE TABLE IF NOT EXISTS focus_sessions (
+  id            TEXT PRIMARY KEY,   -- UUID
+  page_id       TEXT REFERENCES pages(id) ON DELETE SET NULL,
+  started_at    TEXT NOT NULL,      -- ISO 8601
+  ended_at      TEXT,               -- ISO 8601; NULL if in progress
+  duration_s    INTEGER             -- denorm for fast daily/weekly totals
+);
+
+CREATE INDEX IF NOT EXISTS idx_focus_sessions_page      ON focus_sessions(page_id);
+CREATE INDEX IF NOT EXISTS idx_focus_sessions_started   ON focus_sessions(started_at);
+
 -- ─── FTS5 ────────────────────────────────────────────────────────────────────
--- Indexes content_text (plain text extracted from Tiptap JSON), not raw JSON
+-- Indexes title, subtitle, content_text (plain text extracted from Tiptap JSON), tags
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
-  title, content_text, tags,
+  title, subtitle, content_text, tags,
   content=pages, content_rowid=rowid
 );
 
 CREATE TRIGGER IF NOT EXISTS pages_fts_insert AFTER INSERT ON pages BEGIN
-  INSERT INTO pages_fts(rowid, title, content_text, tags)
-  VALUES (new.rowid, new.title, new.content_text, new.tags);
+  INSERT INTO pages_fts(rowid, title, subtitle, content_text, tags)
+  VALUES (new.rowid, new.title, new.subtitle, new.content_text, new.tags);
 END;
 
 CREATE TRIGGER IF NOT EXISTS pages_fts_update AFTER UPDATE ON pages BEGIN
-  INSERT INTO pages_fts(pages_fts, rowid, title, content_text, tags)
-  VALUES ('delete', old.rowid, old.title, old.content_text, old.tags);
-  INSERT INTO pages_fts(rowid, title, content_text, tags)
-  VALUES (new.rowid, new.title, new.content_text, new.tags);
+  INSERT INTO pages_fts(pages_fts, rowid, title, subtitle, content_text, tags)
+  VALUES ('delete', old.rowid, old.title, old.subtitle, old.content_text, old.tags);
+  INSERT INTO pages_fts(rowid, title, subtitle, content_text, tags)
+  VALUES (new.rowid, new.title, new.subtitle, new.content_text, new.tags);
 END;
 
 CREATE TRIGGER IF NOT EXISTS pages_fts_delete AFTER DELETE ON pages BEGIN
-  INSERT INTO pages_fts(pages_fts, rowid, title, content_text, tags)
-  VALUES ('delete', old.rowid, old.title, old.content_text, old.tags);
+  INSERT INTO pages_fts(pages_fts, rowid, title, subtitle, content_text, tags)
+  VALUES ('delete', old.rowid, old.title, old.subtitle, old.content_text, old.tags);
 END;
 ```
 
@@ -183,7 +215,7 @@ WHERE pages_fts MATCH ?
 ORDER BY rank
 ```
 
-Note: FTS snippet column index 1 = `content_text` (0=title, 1=content_text, 2=tags).
+Note: FTS snippet column index 2 = `content_text` (0=title, 1=subtitle, 2=content_text, 3=tags).
 
 ## Content Text Extraction (TypeScript)
 

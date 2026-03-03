@@ -253,16 +253,27 @@ Current state before Phase 0 work begins:
 
   **UIContext** — `apps/desktop/src/shared/context/UIContext.tsx` — owns navigation + UI state:
   ```ts
+  type ActiveViewId = 'today' | 'inbox' | string; // string = folderId
+
   interface UIContextValue {
     activePage: Page | null;
     setActivePage(page: Page | null): void;
-    activeFolderId: string | null;  // null = Inbox is selected
-    setActiveFolderId(id: string | null): void;
+    activeViewId: ActiveViewId;  // 'today' | 'inbox' | folderId
+    setActiveViewId(id: ActiveViewId): void;
+    rightPanel: 'editor' | 'calendar';
+    setRightPanel(panel: 'editor' | 'calendar'): void;
+    sidebarCollapsed: boolean;   // both left panels hidden; persisted to localStorage
+    setSidebarCollapsed(v: boolean): void;
   }
   ```
 
-  `activeFolderId` drives both the pages list (which pages to show) and new page creation
-  (which folder to assign). `null` means Inbox — pages where `folderId IS NULL`.
+  `activeViewId` drives the pages list:
+  - `'today'` → pages with page_schedules row today or overdue, status != done
+  - `'inbox'` → pages where `folder_id IS NULL`
+  - `folderId` → pages in that folder
+
+  `rightPanel` drives whether the right column shows the editor or the calendar.
+  Toggled via `Cmd+Shift+C`.
 
   `selectVault` uses `@tauri-apps/plugin-dialog` folder picker. Persist vault list via
   `@tauri-apps/plugin-store`. `updatePage` debounces 800ms. Adapter created once via lazy
@@ -375,7 +386,37 @@ _Goal: dogfoodable. You can open a vault, create pages, write content, and set m
       Replace CodeMirror. `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-task-list`, `@tiptap/extension-task-item`, `@tiptap/extension-placeholder`. **Storage format: Tiptap JSON** (not markdown) — direct `getJSON()`/`setContent()`, no conversion layer. Extract plain text via `extractText()` util for FTS. Markdown only at import/export boundary. Support: headings, bold, italic, strikethrough, code, code block, lists, interactive checkboxes. Note: task list checkboxes are inline doc elements, NOT wired to page `status` field. See `features/editor.md`.
 
 - [ ] **GOO-36** Auto-save + save indicator _(Urgent)_
-      800ms debounce after last keystroke. Flush immediately on window blur, app close, and `Mod+W`. Save indicator: subtle icon state change (not a toast). No manual save ever required.
+
+  No manual save, no save button. Strategy varies by field — see `features/editor.md` Auto-save for
+  the full spec. Summary:
+
+  **Debounced fields** (text input — user is mid-thought):
+  - Editor content: 800ms → `updatePage({ content, contentText })`
+  - Title: 500ms → `updatePage({ title })`
+  - Subtitle: 500ms → `updatePage({ subtitle })`
+  - All flush immediately on: `window.blur`, page switch (`activePage` change), app close, `Mod+W`
+
+  **Immediate fields** (discrete actions — user intent is complete):
+  - Status, priority, folder: save on click/select
+  - Tags: save on Enter/comma/blur (add) or × click (remove)
+  - Schedule: save on picker confirm/close (inserts/deletes `page_schedules` row)
+
+  **`useAutosave` hook** (`packages/core/src/hooks/useAutosave.ts`):
+  ```ts
+  function useAutosave<T>(
+    value: T,
+    saveFn: (val: T) => Promise<void>,
+    options?: { delay?: number }   // default 800ms
+  ): { isDirty: boolean; isSaving: boolean; saveError: Error | null }
+  ```
+  Used by `EditorPane`, `TitleField`, `SubtitleField`. Immediate-save fields call `updatePage`
+  directly — they don't use this hook.
+
+  **Save indicator** (in `MetadataHeader`, next to title):
+  - Clean: nothing shown
+  - Pending/saving: `●` dot (covers all fields as one signal)
+  - Just saved: `✓` fades out after 1.5s
+  - Error: `⚠` sticky; click → retry. Never silently drops data.
 
 - [ ] **GOO-60** Quick Add Modal _(Urgent)_
       `Cmd+N` from anywhere opens a small centered modal — the single entry point for new page
@@ -475,8 +516,26 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
 
 ### Sidebar
 
-- [ ] **GOO-14** Resizable collapsible three-panel layout _(High)_
-      Default: Folders 180px | Pages 280px | Editor flex. Drag handles between panels. Persist widths via Tauri store. Collapse left panel: button + `Cmd+\`. Right panel toggles Editor ↔ Calendar.
+- [ ] **GOO-14** Resizable three-panel layout _(High)_
+      Default: Left 180px | Pages 280px | Right flex. Drag handles between panels (rendered inside each panel's motion.div so they animate away on sidebar collapse). Persist widths via Tauri store. Right panel toggles Editor ↔ Calendar (`Cmd+Shift+C`) — left and pages panels remain visible in both modes.
+
+- [ ] **GOO-80** Sidebar collapse + navigation keyboard shortcuts _(High)_
+      Two states only — all-open or both-left-collapsed (no partial). `Cmd+\` toggles. `SidebarToggle` button in top-left of right panel header (always visible): `PanelLeftClose`/`PanelLeftOpen` lucide icons, tooltip shows shortcut. Both panels animate via framer-motion spring (stiffness 350, damping 35, width+opacity). State persisted to `localStorage`.
+
+      Navigation shortcuts (`allowInInputs: false`):
+      - `J` / `K` — next/previous page in current list (highlights but doesn't auto-open)
+      - `Enter` — open the highlighted page in editor
+      - `Escape` (from editor) — return focus to page list
+      - `Cmd+Shift+C` — toggle editor ↔ calendar (right panel)
+      - `Cmd+\` — toggle sidebar
+
+      When sidebar is collapsed and `J`/`K`/`Enter` fires, sidebar auto-expands first.
+
+- [ ] **GOO-81** Split view _(Low)_
+      Two `EditorPane` instances in the right panel. Hard limit: 2 panes, no further splitting. Orientations: L/R (default) or T/B, toggled post-split. `⊟` on primary pane toggles orientation; `×` on secondary pane closes split. Divider draggable, ratio persisted to localStorage. Active pane (last clicked/focused) receives page-list navigation. Only active when `rightPanel === 'editor'` — split is ignored in calendar mode. State: `UIContext.splitMode: 'none' | 'horizontal' | 'vertical'` + `splitPageId: string | null`. Keyboard: `Cmd+Shift+\` toggle split, `Cmd+Shift+[`/`]` move focus between panes. See `features/editor.md`.
+
+- [ ] **GOO-79** Today smart view + Inbox smart view _(High)_
+      Two pinned smart views at the top of the left panel above user folders. Today: pages with any `page_schedules` row where `date(scheduled_start) <= date('now')` and `status != 'done'`; grouped in page list as Overdue (collapsed) + Today sections; badge = total count. Inbox: pages where `folder_id IS NULL`; badge = count (hidden when 0). Both read-only sidebar entries — no delete/rename/reorder. `UIContext.activeViewId: 'today' | 'inbox' | folderId`.
 
 - [ ] **GOO-37** Folder CRUD _(High)_
       v1: flat list of folders — no nesting. Create: right-click → "New Folder" or "+" button, inline rename auto-focused. Rename: double-click. Delete: context menu → confirm (warn if pages inside). Color picker in context menu. Drag to reorder (`@dnd-kit/core` via `reorderFolders`).
@@ -603,6 +662,36 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
 
 - [ ] **GOO-41** Obsidian vault import — onboarding UI _(Medium)_
       UX wrapper around GOO-48. Flow: folder picker → scan preview ("Found 47 pages in 6 folders") → confirm → background import with progress → success summary ("47 imported, 2 skipped") → land in app with content. Wire into first-run experience (GOO-42). `.obsidian/` config dir ignored.
+
+- [ ] **GOO-74** Extended export formats _(Low)_
+      Expand beyond markdown to give users full data ownership and interop. Accessible from File → Export, with a format picker.
+
+  **Formats to add:**
+  - **JSON backup** — full-fidelity vault snapshot: all pages (id, title, body, metadata, tags), folders, and time blocks. This is the canonical backup format. Use for restore (import path TBD). Schema version field required for future migrations.
+  - **CSV** — flat task list export: title, status, priority, due date, tags, folder. For spreadsheets, Airtable, migration targets. Per-folder or full vault.
+  - **HTML** — rendered pages as standalone `.html` files. Clean output, no app chrome. Useful for archiving or pasting into external tools.
+  - **ICS/iCal** — export all scheduled pages and time blocks as calendar events. Import into Apple Calendar, Google Calendar, Fantastical. Events include page title, dates, and a link back to the page (deep-link via custom URL scheme).
+
+  **UX:** Same export dialog as GOO-49 with a "Format" dropdown added. JSON and ICS are vault-level exports; CSV and HTML can be per-folder or full vault. Per-page HTML and PDF already handled by GOO-65.
+
+  **Dependencies:** GOO-49 (vault export base), GOO-65 (per-page export, reuse HTML renderer)
+
+- [ ] **GOO-75** Third-party app import _(Low)_
+      "Switch to Pikos in 30 seconds." Import data from major todo/notes apps. Accessible from File → Import or first-run onboarding (GOO-42). Each importer maps the source format to Pikos pages + folders.
+
+  **Sources to support:**
+  - **Todoist** — JSON backup (Settings → Backups). Rich: projects → folders, tasks → pages, due dates, priorities, labels → tags, subtasks → child pages, comments → page body footnotes.
+  - **TickTick** — CSV export (Settings → Backup). Flat: list → folder, task title/notes/dates/priority/tags → page metadata.
+  - **Things 3** — TaskPaper (`.taskpaper`) via File → Export. Projects → folders, tasks → pages, tags, notes, scheduled dates.
+  - **Evernote** — ENEX (`.enex`) XML export. Notebooks → folders, notes → pages (body converted from ENML to markdown via unified/rehype). Large user base actively looking to migrate.
+  - **OPML** — generic outliner format (WorkFlowy, Dynalist, OmniOutliner). Outline nodes → page hierarchy.
+  - **Markdown folder** — already covered by GOO-41/GOO-48 (Obsidian interop).
+
+  **UX:** Import wizard — "What app are you coming from?" picker → file/folder picker → preview ("Found 124 tasks in 8 projects") → confirm → background import with progress → success summary. Duplicate detection by title+date to prevent re-importing.
+
+  **Implementation note:** Each importer is a pure function `(rawInput: string | object) => ImportResult` in `packages/core/src/importers/`. No Tauri deps — fully testable in Vitest. File reading handled by the Tauri command layer above.
+
+  **Dependencies:** GOO-49 (storage layer), GOO-42 (first-run onboarding hook)
 
 ---
 
@@ -1141,6 +1230,50 @@ _See `.agent/GTM.md` for full strategy. These are the concrete tasks it generate
   - What Pikos never collects (note content, always)
   - How to export your data (File → Export Vault)
     Lives at `/privacy` on the marketing site (Astro page).
+
+---
+
+---
+
+## Design decisions captured (not yet ticketed)
+
+- [ ] **GOO-76** Multiple schedule occurrences per page (`page_schedules` table) _(Medium)_
+
+  Add `page_schedules(id, page_id, scheduled_start, scheduled_end, created_at)` table. One page can
+  appear as multiple calendar blocks (e.g. "work on this task Tuesday AND Thursday"). Drag-to-schedule
+  inserts a new row; never overwrites. Deleting a block deletes the row, not the page.
+
+  `pages.scheduled_start/end` become denorms = earliest future `page_schedules` row. Calendar queries
+  `page_schedules JOIN pages` for block rendering. `pages.rrule` remains separate — for infinite
+  recurring templates that expand virtually via rrule.js (weekly standup etc.).
+
+  **Schema change:** Add table to `001_initial.sql`, add index `idx_page_schedules_start`.
+  **Tauri commands:** `create_page_schedule`, `delete_page_schedule`, `list_page_schedules(page_id)`,
+  `list_page_schedules_range(start, end)` for calendar day/week rendering.
+  **Dependencies:** GOO-29 (SQLite), GOO-21 (calendar — drag-to-schedule inserts here instead of updating pages)
+
+- [ ] **GOO-77** Subtitle field on pages _(Low)_
+
+  Add `subtitle TEXT` column to `pages`. One-sentence summary shown in `PageListItem` (line 2, muted,
+  truncated) and `PageBlock` in calendar (below title). Single-line input in metadata header — newlines
+  blocked. Optional: most pages won't have one. Include in FTS (shift content_text to column index 2).
+  AI summarization is V2 (via AI assistant plugin writing to this field).
+
+  **Schema change:** `subtitle TEXT` in `pages`, updated FTS triggers.
+  **Dependencies:** GOO-29 (SQLite), GOO-32 (metadata header)
+
+- [ ] **GOO-78** Focus Timer built-in plugin _(Medium)_
+
+  Sidebar panel: large timer display, Start/Stop button, optional "Attach to page" (defaults to active
+  page). Session log below: date, duration, page title link, trash icon to delete. Daily total at top.
+
+  Auto-discard: sessions < 10s auto-removed on stop. Sessions 10s–60s show inline "Remove?" prompt.
+  Sessions > 60s go directly to log.
+
+  **Data:** `focus_sessions(id, page_id?, started_at, ended_at, duration_s)` core table (not plugin
+  settings — needs indexing and reporting). Plugin reads/writes via `PluginContext.vault` methods or
+  direct Tauri commands for sessions.
+  **Dependencies:** GOO-29 (SQLite), GOO-56 (plugin system), though can ship as a non-plugin panel first
 
 ---
 

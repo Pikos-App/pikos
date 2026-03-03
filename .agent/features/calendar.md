@@ -8,12 +8,20 @@ Don't use an off-the-shelf calendar library (FullCalendar, etc.) — too opinion
 Build a lightweight custom renderer using `date-fns`.
 "Calendar should be BUTTERY." — product goal.
 
+## Product Role
+The calendar is a first-class scheduling surface — not a view-only calendar. It's where you
+time-block your pages, see what's on your plate, and mark things done. Completion can happen
+directly on calendar blocks without opening the editor.
+
 ## V1 Scope (GOO-21) — Day view first, weekly after
 - Day view (today, navigate prev/next day)
 - Time grid: 6am–11pm, 1-hour rows, 15-minute snap
 - Scheduled pages appear as blocks sized by duration (absolutely positioned by time %)
-- Click block → `setActivePage()` in VaultContext → opens page in editor
-- Resize bottom edge of block → updates `scheduledEnd` (15min snap)
+- Click block → `setActivePage()` in VaultContext → opens page in editor (right panel stays calendar)
+- Hover block → quick-action bar appears: `[✓ Done]` `[✕ Remove]` `[⋮]`
+  - `✓ Done` → `updatePage(id, { status: 'done' })` → block fades to muted/strikethrough
+  - `✕ Remove` → deletes the `page_schedules` row (not the page) → block disappears
+- Resize bottom edge of block → updates `scheduled_end` on `page_schedules` row (15min snap)
 - Navigate days: `[` / `]` keyboard shortcuts, "Today" button / `t` shortcut (`allowInInputs: false`)
 - `NowIndicator`: current time red line, auto-scrolls into view on mount
 - Toggle calendar/editor view: `Cmd+Shift+C` or toolbar button
@@ -56,6 +64,24 @@ CalDAV protocol — works with Fastmail, Google, Apple, Proton, etc. See full sp
 - All-day section at top
 
 ## Data Model
-- `scheduledStart` / `scheduledEnd`: ISO 8601 datetime strings
-- Pages without `scheduledStart` are unscheduled (shown in sidebar list only)
-- If `scheduledEnd` not set, default block height = 1 hour
+
+### Multiple Occurrences — `page_schedules` table
+One page can appear as multiple calendar blocks (e.g. "work on this task Tuesday AND Thursday").
+Each row in `page_schedules` = one calendar block. Drag-to-schedule inserts a new row; it never
+overwrites. To remove a block, delete the row (not the page).
+
+- `page_schedules(id, page_id, scheduled_start, scheduled_end, created_at)`
+- Calendar queries `page_schedules JOIN pages` — not `pages.scheduled_start` — for block rendering
+
+### Denorm on pages
+`pages.scheduled_start` / `pages.scheduled_end` remain as a denorm = the next upcoming
+`page_schedules` row for that page. Used by list views for "what's scheduled next" without
+a join. Kept in sync by a trigger or on the TS side after schedule mutations.
+
+### rrule distinction
+`pages.rrule` is for *infinite recurring templates* (e.g. weekly standup — generates virtual
+blocks via rrule.js at render time, no rows stored). Distinct from `page_schedules`, which is
+for explicit one-off or finite multi-occurrence scheduling.
+
+- Pages without any `page_schedules` rows are unscheduled (shown in sidebar list only)
+- If `scheduled_end` not set on a row, default block height = 1 hour

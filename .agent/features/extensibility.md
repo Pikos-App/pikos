@@ -136,8 +136,10 @@ v1 is dev-mode only — the plugin folder approach is perfect for building and t
 
 - **Performance monitor** (GOO-55) — could live as a built-in plugin rather than core
 - **Local AI assistant** (see Part 2) — built-in plugin
+- **Focus timer** (GOO-78) — built-in plugin. Sidebar panel: big timer, start/stop, optional page
+  association, session log with delete. Core DB table: `focus_sessions`. Sessions < 10s
+  auto-discarded; 10–60s shows "Remove?" prompt. Daily total at top of log.
 - **Kanban board** — register a panel with drag-to-reorder by status column
-- **Pomodoro timer** — panel + commands, writes `durationMinutes` to completed pages
 - **Habit tracker** — daily recurring pages in a designated folder
 - **GitHub Issues sync** — requires `network: true`, pulls issues as pages
 - **Template library** — `registerCommand` items that create pages from templates

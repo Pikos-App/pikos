@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "",
   "type": "module",
+  "packageManager": "pnpm@10.30.3",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -12,6 +13,9 @@
     "tauri": "tauri"
   },
   "license": "MIT",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
   "dependencies": {
     "@codemirror/commands": "^6.8.1",
     "@codemirror/lang-markdown": "^6.3.4",
