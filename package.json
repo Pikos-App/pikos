@@ -1,54 +1,18 @@
 {
   "name": "pkos",
-  "version": "0.1.0",
-  "description": "",
+  "private": true,
   "type": "module",
   "packageManager": "pnpm@10.30.3",
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "tauri": "tauri"
-  },
-  "license": "MIT",
-  "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
-  },
-  "dependencies": {
-    "@codemirror/commands": "^6.8.1",
-    "@codemirror/lang-markdown": "^6.3.4",
-    "@codemirror/language": "^6.11.3",
-    "@codemirror/state": "^6.5.2",
-    "@codemirror/view": "^6.38.2",
-    "@lezer/highlight": "^1.2.1",
-    "@lezer/markdown": "^1.4.3",
-    "@tauri-apps/api": "^2.7.0",
-    "@tauri-apps/plugin-fs": "^2.4.1",
-    "@tauri-apps/plugin-opener": "^2"
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint"
   },
   "devDependencies": {
-    "@lucide/svelte": "^0.515.0",
-    "@sveltejs/adapter-static": "^3.0.6",
-    "@sveltejs/kit": "^2.9.0",
-    "@sveltejs/vite-plugin-svelte": "^5.0.0",
-    "@tailwindcss/nesting": "^0.0.0-insiders.565cd3e",
-    "@tailwindcss/postcss": "^4.1.13",
-    "@tauri-apps/cli": "^2",
-    "autoprefixer": "^10.4.21",
-    "bits-ui": "^2.9.8",
-    "clsx": "^2.1.1",
-    "postcss": "^8.5.6",
-    "prettier": "^3.6.2",
-    "prettier-plugin-svelte": "^3.4.0",
-    "svelte": "^5.0.0",
-    "svelte-check": "^4.0.0",
-    "tailwind-merge": "^3.3.1",
-    "tailwind-variants": "^1.0.0",
-    "tailwindcss": "^4.1.13",
-    "tw-animate-css": "^1.3.8",
-    "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "turbo": "^2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
   }
 }

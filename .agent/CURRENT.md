@@ -13,7 +13,17 @@
   - Added `package-lock.json` to `.gitignore`
   - Ran `cargo update` — Rust crates now aligned with npm packages (tauri 2.10.2, tauri-plugin-opener 2.5.3)
   - Deleted `tailwind.config.js` (Flowbite leftover, unused with Tailwind v4)
-- [ ] Restructure into Turborepo monorepo (`apps/desktop/`, `packages/core/`, `packages/ui/`)
+- [x] Restructure into Turborepo monorepo
+  - `apps/desktop/` — all Svelte/Tauri app files moved here, package named `@pikos/desktop`
+  - `apps/mobile/` — placeholder
+  - `packages/core/` — placeholder (`@pikos/core`)
+  - `packages/ui/` — placeholder (`@pikos/ui`)
+  - `pnpm-workspace.yaml` created, 5 workspace projects resolved
+  - `turbo.json` created with `build`, `dev`, `typecheck`, `lint` tasks
+  - Root `package.json` is now lean workspace root (turbo as only devDep)
+  - Verified `pnpm tauri dev` works from `apps/desktop/`
+
+**GOO-7 complete.** Next: GOO-26 (remove Svelte, wire React into `apps/desktop/`).
 
 ## Repo Audit Summary (2026-03-01)
 
@@ -26,8 +36,8 @@
 
 ## Phase 0 Execution Order
 
-1. **GOO-7** Turborepo + pnpm monorepo ← next
-2. **GOO-26** Remove Svelte, wire React in `apps/desktop/`
+1. **GOO-7** Turborepo + pnpm monorepo ✓
+2. **GOO-26** Remove Svelte, wire React in `apps/desktop/` ✓
 3. **GOO-43** Strict TS base config
 4. **GOO-8** Biome + activate lefthook
 5. **GOO-44** React Compiler (Vite plugin)
