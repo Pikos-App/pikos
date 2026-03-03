@@ -1,1 +1,2 @@
-pnpm --filter @pikos/core vitest run
+# TODO(GOO-9): uncomment once Vitest is configured in packages/core
+# pnpm --filter @pikos/core vitest run
