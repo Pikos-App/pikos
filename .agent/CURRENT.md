@@ -38,9 +38,9 @@
 
 1. **GOO-7** Turborepo + pnpm monorepo ✓
 2. **GOO-26** Remove Svelte, wire React in `apps/desktop/` ✓
-3. **GOO-43** Strict TS base config
-4. **GOO-8** Biome + activate lefthook
-5. **GOO-44** React Compiler (Vite plugin)
+3. **GOO-43** Strict TS base config ✓
+4. **GOO-8** Biome + activate lefthook ✓
+5. **GOO-44** React Compiler (Vite plugin) ✓
 6. **GOO-40** shadcn (React) + Tailwind v4
 7. **GOO-45** Feature dirs + dependency-cruiser
 8. **GOO-9** Vitest + Playwright

@@ -24,6 +24,7 @@ Current state before Phase 0 work begins:
 - **Tests**: none. No Vitest, no Playwright.
 
 **Phase 0 execution order** (sequential, each reviewed before the next):
+
 1. GOO-7 — Turborepo + pnpm monorepo (structural foundation)
 2. GOO-26 — Remove Svelte, wire React into `apps/desktop/` (clean slate, not incremental)
 3. GOO-43 — Strict TS base config
@@ -40,7 +41,7 @@ Current state before Phase 0 work begins:
 
 ### Tooling — do first, all can run in parallel
 
-- [ ] **GOO-7** Monorepo with Turborepo _(Medium)_
+- [x] **GOO-7** Monorepo with Turborepo _(Medium)_
 
   ```
   pkos/
@@ -57,7 +58,7 @@ Current state before Phase 0 work begins:
 
   Tasks: init Turborepo, move app to `apps/desktop/`, create placeholder `apps/mobile/`, extract `packages/core`, configure `turbo.json` build pipeline, verify `tauri dev` still works.
 
-- [ ] **GOO-43** Strict TypeScript _(High)_
+- [x] **GOO-43** Strict TypeScript _(High)_
 
   ```json
   {
@@ -73,7 +74,7 @@ Current state before Phase 0 work begins:
 
   One `tsconfig.base.json` at root, extended by each package. Zero `// @ts-ignore` suppressions — fix errors, don't suppress.
 
-- [ ] **GOO-8** Biome JS _(Medium)_
+- [x] **GOO-8** Linting + formatting _(Medium)_ — implemented with ESLint v9 + Prettier (not Biome) for VS Code config consistency
       Replaces ESLint + Prettier. Single `biome.json` at root. `biome check --apply` in pre-commit hook.
       `lefthook.yml` is already committed at repo root. Activate after monorepo setup: `pnpm add -D lefthook && lefthook install`.
 
@@ -83,7 +84,7 @@ Current state before Phase 0 work begins:
       Initial components: `button`, `input`, `textarea`, `checkbox` `dialog`, `popover`, `calendar`, `dropdown-menu`, `separator`, `badge`, `tooltip`, `scroll-area`, `accordion`. Keep a flat component structure (not atomic). Not for feature components. You decide on if each component should be inside of its own directory or not. Decide if components get test coverage. Do not use barrel files. Components should be performant, accessible, and not prone to re-render issues.
       Dark mode: class-based (`dark:`), stored in localStorage, applied to `<html>`.
 
-- [ ] **GOO-44** React Compiler _(Medium)_
+- [x] **GOO-44** React Compiler _(Medium)_
       `babel-plugin-react-compiler` in Vite config from day 1. No manual `useMemo`/`useCallback`/`React.memo` — compiler handles it. Fix rule violations; don't disable the compiler.
 
 - [ ] **GOO-45** Feature-based directory structure + dependency-cruiser _(Medium)_
@@ -91,7 +92,7 @@ Current state before Phase 0 work begins:
       When implementing: add a `depcruise` step to the `quality` job in `.github/workflows/ci.yml`.
 
 - [~] **GOO-5** GitHub Actions CI _(Medium)_ — **broken, fix last in Phase 0**
-      `.github/workflows/ci.yml` committed but broken — references pnpm workspaces (`@pikos/desktop`, `@pikos/core`), Turborepo, and Biome, none of which exist yet. Fix after all other Phase 0 tasks are done (step 9). Three jobs: `quality` (Biome + tsc) → `test` (Vitest + Playwright) → `build` (turbo build). Playwright report uploaded as artifact on failure. Intentionally keep minute consumption low.
+  `.github/workflows/ci.yml` committed but broken — references pnpm workspaces (`@pikos/desktop`, `@pikos/core`), Turborepo, and Biome, none of which exist yet. Fix after all other Phase 0 tasks are done (step 9). Three jobs: `quality` (Biome + tsc) → `test` (Vitest + Playwright) → `build` (turbo build). Playwright report uploaded as artifact on failure. Intentionally keep minute consumption low.
 
 - [ ] **GOO-9** Testing: Vitest + Playwright _(Medium)_
       Set up from day one — don't defer testing infrastructure until the app is built.
@@ -100,7 +101,7 @@ Current state before Phase 0 work begins:
 
 ### React Migration Core
 
-- [ ] **GOO-26** Migrate Svelte → React + TypeScript _(Urgent)_
+- [x] **GOO-26** Migrate Svelte → React + TypeScript _(Urgent)_
       Clean slate replacement — do not port Svelte components, just delete them. The monorepo (GOO-7) must land first so this work happens inside `apps/desktop/`.
       **Delete all Svelte artifacts:** `src/routes/`, `src/components/` (all `.svelte`), `src/stores/`, `svelte.config.js`, `components.json` (points to shadcn-svelte, wrong), `tailwind.config.js` (Flowbite leftover), `postcss.config.js` (will be rebuilt), `package-lock.json` (switching to pnpm).
       **Remove deps:** `@sveltejs/kit`, `@sveltejs/adapter-static`, `svelte`, `svelte-check`, `@sveltejs/vite-plugin-svelte`, `bits-ui`, `prettier`, `prettier-plugin-svelte`, `codemirror` packages (replacing with Tiptap later).
@@ -118,9 +119,9 @@ Current state before Phase 0 work begins:
 
   // Multi-vault: each vault = separate SQLite file. Config (vault list) in plugin-store.
   export interface Vault {
-    id: string;              // UUID
+    id: string; // UUID
     name: string;
-    dbPath: string;          // absolute path to vault .sqlite file
+    dbPath: string; // absolute path to vault .sqlite file
     createdAt: string;
     lastOpenedAt: string | null;
   }
@@ -130,7 +131,7 @@ Current state before Phase 0 work begins:
     id: string;
     name: string;
     parentId: string | null; // always null in v1; nested folders not implemented
-    sortOrder: number;       // manual position in the flat folder list
+    sortOrder: number; // manual position in the flat folder list
     color?: string;
     icon?: string;
     createdAt: string;
@@ -144,21 +145,21 @@ Current state before Phase 0 work begins:
     id: string;
     folderId: string | null;
     title: string;
-    content: string;          // Tiptap JSON string
+    content: string; // Tiptap JSON string
     status: PageStatus;
     priority: PagePriority;
     tags: string[];
-    sortOrder: number;        // manual position within folder (or inbox)
-    scheduledStart?: string;  // ISO 8601
+    sortOrder: number; // manual position within folder (or inbox)
+    scheduledStart?: string; // ISO 8601
     scheduledEnd?: string;
     completedAt?: string;
     durationMinutes?: number;
-    links?: string[];         // [[wikilink]] page UUIDs
+    links?: string[]; // [[wikilink]] page UUIDs
     parentId?: string | null; // sub-page nesting (GOO-12, max 3 levels)
-    rrule?: string;           // iCal RRULE string for infinite recurrence (e.g. "FREQ=WEEKLY;BYDAY=MO")
-                              // NULL = not a recurring template. Calendar expands dynamically via rrule.js.
-                              // Finite recurrence ("m/w/f for 2 weeks") produces N independent pages, no rrule.
-    lastOpenedAt?: string;    // updated on open → drives recent pages query
+    rrule?: string; // iCal RRULE string for infinite recurrence (e.g. "FREQ=WEEKLY;BYDAY=MO")
+    // NULL = not a recurring template. Calendar expands dynamically via rrule.js.
+    // Finite recurrence ("m/w/f for 2 weeks") produces N independent pages, no rrule.
+    lastOpenedAt?: string; // updated on open → drives recent pages query
     createdAt: string;
     updatedAt: string;
   }
@@ -232,12 +233,13 @@ Current state before Phase 0 work begins:
 - [ ] **GOO-30** VaultContext + UIContext _(High)_
 
   **VaultContext** — `apps/desktop/src/shared/context/VaultContext.tsx` — owns data + mutations:
+
   ```ts
   interface VaultContextValue {
     vault: Vault | null;
     pages: Page[];
     folders: Folder[];
-    tags: Tag[];           // derived reactively from pages[] — not stored separately
+    tags: Tag[]; // derived reactively from pages[] — not stored separately
     isLoading: boolean;
     selectVault(): Promise<void>;
     createPage(opts: { title?: string; folderId?: string | null }): Promise<Page>;
@@ -252,17 +254,18 @@ Current state before Phase 0 work begins:
   ```
 
   **UIContext** — `apps/desktop/src/shared/context/UIContext.tsx` — owns navigation + UI state:
+
   ```ts
-  type ActiveViewId = 'today' | 'inbox' | string; // string = folderId
+  type ActiveViewId = "today" | "inbox" | string; // string = folderId
 
   interface UIContextValue {
     activePage: Page | null;
     setActivePage(page: Page | null): void;
-    activeViewId: ActiveViewId;  // 'today' | 'inbox' | folderId
+    activeViewId: ActiveViewId; // 'today' | 'inbox' | folderId
     setActiveViewId(id: ActiveViewId): void;
-    rightPanel: 'editor' | 'calendar';
-    setRightPanel(panel: 'editor' | 'calendar'): void;
-    sidebarCollapsed: boolean;   // both left panels hidden; persisted to localStorage
+    rightPanel: "editor" | "calendar";
+    setRightPanel(panel: "editor" | "calendar"): void;
+    sidebarCollapsed: boolean; // both left panels hidden; persisted to localStorage
     setSidebarCollapsed(v: boolean): void;
   }
   ```
@@ -314,31 +317,31 @@ _Goal: dogfoodable. You can open a vault, create pages, write content, and set m
   ```ts
   // packages/core/src/nlp/parser.ts
   export interface ParsedInput {
-    title: string            // remaining text after tokens are extracted
-    scheduledStart?: string  // ISO 8601
-    scheduledEnd?: string    // ISO 8601 (derived from start + duration)
-    durationMinutes?: number
-    tags: string[]           // from #tag tokens
-    folderQuery?: string     // from ~folder (caller fuzzy-matches against folders[])
-    priority?: PagePriority  // from !urgent !high !medium !low
-    recurrence?: RecurrenceRule  // when set, caller creates one page per expanded date
+    title: string; // remaining text after tokens are extracted
+    scheduledStart?: string; // ISO 8601
+    scheduledEnd?: string; // ISO 8601 (derived from start + duration)
+    durationMinutes?: number;
+    tags: string[]; // from #tag tokens
+    folderQuery?: string; // from ~folder (caller fuzzy-matches against folders[])
+    priority?: PagePriority; // from !urgent !high !medium !low
+    recurrence?: RecurrenceRule; // when set, caller creates one page per expanded date
   }
 
   export type ParseResult =
-    | { type: 'single'; input: ParsedInput }
-    | { type: 'finite'; inputs: ParsedInput[]; count: number }   // expand to N pages
-    | { type: 'recurring'; input: ParsedInput; rrule: string }   // store rule on one page
+    | { type: "single"; input: ParsedInput }
+    | { type: "finite"; inputs: ParsedInput[]; count: number } // expand to N pages
+    | { type: "recurring"; input: ParsedInput; rrule: string }; // store rule on one page
 
   // Single entry point — returns one of the three result shapes.
-  export function parseInput(raw: string, now?: Date): ParseResult
+  export function parseInput(raw: string, now?: Date): ParseResult;
   ```
 
   **Two recurrence modes — the key architectural decision:**
 
-  | Recurrence type | Example | Output | Storage |
-  |---|---|---|---|
-  | **Finite** — has a natural end | `run m/w/f for 2 weeks` | N independent pages | N rows in `pages` table |
-  | **Infinite/ongoing** — no natural end | `daily standup every monday 1pm for 15m` | 1 template page | 1 row, `rrule` column set |
+  | Recurrence type                       | Example                                  | Output              | Storage                   |
+  | ------------------------------------- | ---------------------------------------- | ------------------- | ------------------------- |
+  | **Finite** — has a natural end        | `run m/w/f for 2 weeks`                  | N independent pages | N rows in `pages` table   |
+  | **Infinite/ongoing** — no natural end | `daily standup every monday 1pm for 15m` | 1 template page     | 1 row, `rrule` column set |
 
   The distinction is whether the NL implies a bounded window. "for 2 weeks", "3 times",
   "through march 15" → finite. "every monday", "daily", "every weekday" with no bound → infinite.
@@ -402,13 +405,15 @@ _Goal: dogfoodable. You can open a vault, create pages, write content, and set m
   - Schedule: save on picker confirm/close (inserts/deletes `page_schedules` row)
 
   **`useAutosave` hook** (`packages/core/src/hooks/useAutosave.ts`):
+
   ```ts
   function useAutosave<T>(
     value: T,
     saveFn: (val: T) => Promise<void>,
-    options?: { delay?: number }   // default 800ms
-  ): { isDirty: boolean; isSaving: boolean; saveError: Error | null }
+    options?: { delay?: number } // default 800ms
+  ): { isDirty: boolean; isSaving: boolean; saveError: Error | null };
   ```
+
   Used by `EditorPane`, `TitleField`, `SubtitleField`. Immediate-save fields call `updatePage`
   directly — they don't use this hook.
 
@@ -423,6 +428,7 @@ _Goal: dogfoodable. You can open a vault, create pages, write content, and set m
       creation. No more "instantly create empty page". The modal is always the first step.
 
   **Visual design** (matches provided screenshot):
+
   ```
   ┌──────────────────────────────────────────────────────────────┐
   │  What would you like to do?                                  │
@@ -430,6 +436,7 @@ _Goal: dogfoodable. You can open a vault, create pages, write content, and set m
   │  📅 Today   🚩   ⬇ Inbox                          [  Add  ] │
   └──────────────────────────────────────────────────────────────┘
   ```
+
   - Small modal, vertically centered, ~600px wide. Dark overlay behind.
   - Single text input, auto-focused on open. No other inputs.
   - Bottom row: live metadata chips + Add button.
@@ -447,11 +454,13 @@ _Goal: dogfoodable. You can open a vault, create pages, write content, and set m
 
   **NL parsing** (powered by GOO-19, runs on every keystroke):
   As the user types, tokens are extracted and chips update live:
+
   ```
   "Design review @tomorrow 2pm for 1h #work ~Projects !high"
        │               │        │      │       │         │
      title        tomorrow   14:00  60min  tag:work  Projects  priority:high
   ```
+
   Parsed metadata reflected immediately in chips. Unrecognised tokens stay in the title.
   If `~Projects` doesn't match any folder name → chip shown in amber (no match).
 
@@ -459,8 +468,8 @@ _Goal: dogfoodable. You can open a vault, create pages, write content, and set m
   1. `parseInput(raw)` → returns `ParseResult` (single | finite | recurring)
   2. Fuzzy-match `folderQuery` against `folders[]` → resolve to `folderId`
   3. **Confirmation step** (shown before any writes):
-     - `type: 'recurring'` → always show: *"This will create a repeating event. [FREQ=WEEKLY;BYDAY=MO,WE,FR — every M/W/F]. [Confirm] [Cancel]"*
-     - `type: 'finite'` with `count ≥ 3` → show: *"This will add 5 pages to your calendar. [Confirm] [Cancel]"*
+     - `type: 'recurring'` → always show: _"This will create a repeating event. [FREQ=WEEKLY;BYDAY=MO,WE,FR — every M/W/F]. [Confirm] [Cancel]"_
+     - `type: 'finite'` with `count ≥ 3` → show: _"This will add 5 pages to your calendar. [Confirm] [Cancel]"_
      - `type: 'single'` or `type: 'finite'` with `count < 3` → no confirmation, create immediately
   4. On confirm (or no confirmation needed):
      - `type: 'single'`: `createPage(input)` → 1 page
@@ -559,6 +568,7 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
   native menu (Pikos > Preferences), `Cmd+,`, command palette (`Cmd+K` → "Settings").
 
   **Nav structure at launch:**
+
   ```
   General
   Appearance
@@ -596,12 +606,14 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
 
   **Vaults panel:**
   The authoritative place to manage all known vaults (the `Vault[]` array in plugin-store).
+
   ```
   My Vault         ~/Documents/Pikos/my-vault    [Open]  [···]
   Work Notes       ~/Documents/Pikos/work        [Open]  [···]
   ───────────────────────────────────────────────────────────
   [+ Add Vault]   [+ Create New Vault]
   ```
+
   `[···]` context menu: Rename, Show in Finder, Remove from list (does NOT delete the SQLite file).
   "Remove from list" is safe — the vault file stays on disk, user can re-add it via "Add Vault".
   Active vault is highlighted. Switching vaults reloads VaultContext with the new adapter.
@@ -631,7 +643,10 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
       `packages/core/src/import/markdown-import.ts`. Uses `gray-matter`.
 
   ```ts
-  export async function importMarkdownVault(dirPath: string, adapter: StorageAdapter): Promise<ImportResult>;
+  export async function importMarkdownVault(
+    dirPath: string,
+    adapter: StorageAdapter
+  ): Promise<ImportResult>;
   // ImportResult: { imported: number; skipped: number; errors: Array<{file, reason}> }
   ```
 
@@ -713,20 +728,20 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
 
   ```ts
   export interface Command {
-    execute(): Promise<void>   // already done — only used to re-do
-    undo(): Promise<void>      // revert the mutation
-    label: string              // human-readable, shown in undo toast: "Undo: Deleted 'Design review'"
+    execute(): Promise<void>; // already done — only used to re-do
+    undo(): Promise<void>; // revert the mutation
+    label: string; // human-readable, shown in undo toast: "Undo: Deleted 'Design review'"
   }
 
   export class CommandHistory {
-    static shared: CommandHistory  // singleton, lives in VaultContext
-    push(cmd: Command): void       // call AFTER a mutation completes; clears redo stack
-    undo(): Promise<void>          // Cmd+Z
-    redo(): Promise<void>          // Cmd+Shift+Z
-    canUndo: boolean
-    canRedo: boolean
-    readonly undoLabel: string | null   // e.g. "Undo: Deleted 'Design review'"
-    readonly redoLabel: string | null
+    static shared: CommandHistory; // singleton, lives in VaultContext
+    push(cmd: Command): void; // call AFTER a mutation completes; clears redo stack
+    undo(): Promise<void>; // Cmd+Z
+    redo(): Promise<void>; // Cmd+Shift+Z
+    canUndo: boolean;
+    canRedo: boolean;
+    readonly undoLabel: string | null; // e.g. "Undo: Deleted 'Design review'"
+    readonly redoLabel: string | null;
   }
   ```
 
@@ -748,7 +763,7 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
 
   **UI feedback:**
   - `Cmd+Z` / `Cmd+Shift+Z` from non-editor surface trigger undo/redo.
-  - Toast notification (bottom-right, 2s): *"Deleted 'Design review' · Undo"* — tapping "Undo" in the toast also triggers undo.
+  - Toast notification (bottom-right, 2s): _"Deleted 'Design review' · Undo"_ — tapping "Undo" in the toast also triggers undo.
   - No persistent undo history UI — just the keyboard shortcuts and toast.
 
   **History limit:** 50 entries (ring buffer). Older entries are dropped silently.
@@ -766,15 +781,15 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
 
   **What gets measured** — instrument these call sites with `performance.mark()` / `performance.measure()`:
 
-  | Metric | Start mark | End mark | Budget (target / acceptable) |
-  |---|---|---|---|
-  | `page.open` | user clicks page in list | editor content rendered | <50ms / <150ms |
-  | `page.save` | debounce flush fires | DB write acknowledged | <100ms / <300ms |
-  | `search.fts` | FTS Tauri command issued | results rendered | <50ms / <200ms |
-  | `search.fuzzy` | title search keypress | results rendered | <16ms / <50ms |
-  | `vault.load` | VaultProvider mount | pages + folders in state | <300ms / <1000ms |
-  | `pages.list.render` | folder selected | list fully painted | <32ms / <100ms |
-  | `folder.switch` | folder clicked | page list updated | <16ms / <50ms |
+  | Metric              | Start mark               | End mark                 | Budget (target / acceptable) |
+  | ------------------- | ------------------------ | ------------------------ | ---------------------------- |
+  | `page.open`         | user clicks page in list | editor content rendered  | <50ms / <150ms               |
+  | `page.save`         | debounce flush fires     | DB write acknowledged    | <100ms / <300ms              |
+  | `search.fts`        | FTS Tauri command issued | results rendered         | <50ms / <200ms               |
+  | `search.fuzzy`      | title search keypress    | results rendered         | <16ms / <50ms                |
+  | `vault.load`        | VaultProvider mount      | pages + folders in state | <300ms / <1000ms             |
+  | `pages.list.render` | folder selected          | list fully painted       | <32ms / <100ms               |
+  | `folder.switch`     | folder clicked           | page list updated        | <16ms / <50ms                |
 
   Budget colors: green = at target, yellow = acceptable, red = over budget.
 
@@ -799,15 +814,16 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
 
   **`PerfMonitor` — `packages/core/src/perf/PerfMonitor.ts`**
   Pure TS, no DOM/Tauri deps (uses `performance` global — available in both browser and Tauri WebView).
+
   ```ts
   export class PerfMonitor {
-    static shared: PerfMonitor  // singleton
-    enabled: boolean            // false by default; toggled via settings
-    mark(name: string): void    // performance.mark(`pikos:${name}:start`)
-    measure(name: string): number | null  // performance.measure → returns duration ms, pushes to ring buffer
-    getSamples(metric: string): Sample[]  // last N samples
-    getStats(metric: string): { p50: number; p95: number; last: number; count: number } | null
-    flush(): DailyAggregate[]   // called once/day, returns rows to write to perf_log
+    static shared: PerfMonitor; // singleton
+    enabled: boolean; // false by default; toggled via settings
+    mark(name: string): void; // performance.mark(`pikos:${name}:start`)
+    measure(name: string): number | null; // performance.measure → returns duration ms, pushes to ring buffer
+    getSamples(metric: string): Sample[]; // last N samples
+    getStats(metric: string): { p50: number; p95: number; last: number; count: number } | null;
+    flush(): DailyAggregate[]; // called once/day, returns rows to write to perf_log
   }
   ```
 
@@ -950,16 +966,16 @@ _These are depth features for power users. Not needed for core value. Build afte
 
   **What gets logged** — one entry per outbound request, recorded in Rust before the request fires:
 
-  | Field | Example | Notes |
-  |---|---|---|
-  | `timestamp` | `2026-03-01T14:32:01Z` | ISO 8601 |
-  | `source` | `caldav`, `ai-agent`, `plugin:pomodoro`, `updater` | Which feature triggered it |
-  | `direction` | `outbound` / `inbound` | Always outbound for requests; inbound for responses |
-  | `host` | `caldav.fastmail.com` | Host only — never full URL (could contain tokens/paths with sensitive info) |
-  | `bytes_sent` | `1240` | Request body size |
-  | `bytes_received` | `8430` | Response body size |
-  | `status` | `200`, `timeout`, `error` | HTTP status or failure reason |
-  | `duration_ms` | `340` | Round-trip time |
+  | Field            | Example                                            | Notes                                                                       |
+  | ---------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
+  | `timestamp`      | `2026-03-01T14:32:01Z`                             | ISO 8601                                                                    |
+  | `source`         | `caldav`, `ai-agent`, `plugin:pomodoro`, `updater` | Which feature triggered it                                                  |
+  | `direction`      | `outbound` / `inbound`                             | Always outbound for requests; inbound for responses                         |
+  | `host`           | `caldav.fastmail.com`                              | Host only — never full URL (could contain tokens/paths with sensitive info) |
+  | `bytes_sent`     | `1240`                                             | Request body size                                                           |
+  | `bytes_received` | `8430`                                             | Response body size                                                          |
+  | `status`         | `200`, `timeout`, `error`                          | HTTP status or failure reason                                               |
+  | `duration_ms`    | `340`                                              | Round-trip time                                                             |
 
   **What is never logged**: full URLs, query parameters, request/response bodies, credentials,
   API keys. Host-level visibility only.
@@ -1003,13 +1019,13 @@ _These are depth features for power users. Not needed for core value. Build afte
   wraps `reqwest` + logger — plugins never call `reqwest` directly.
 
   **New Tauri command:**
+
   ```rust
   #[tauri::command]
   async fn get_network_log(logger: State<'_, NetworkLogger>) -> Result<Vec<NetworkEntry>, String>
   ```
 
   **UI — two surfaces:**
-
   1. **Status bar indicator** (always visible when network activity occurs)
      A small dot in the window's bottom status bar that pulses briefly on any outbound request.
      Color: neutral (not alarming — network activity is expected for CalDAV/AI). Clicking it
@@ -1059,8 +1075,9 @@ _These are depth features for power users. Not needed for core value. Build afte
   `use_count` and update `last_used_at` rather than inserting a new row.
 
   **Ranking score** (computed in TS, no SQL needed — history table is small):
+
   ```ts
-  score = use_count / Math.log2(hoursSinceLastUse + 2)
+  score = use_count / Math.log2(hoursSinceLastUse + 2);
   // Recent + frequent = highest. Old + rare = lowest.
   ```
 
@@ -1190,7 +1207,7 @@ _See `.agent/GTM.md` for full strategy. These are the concrete tasks it generate
       Astro in `apps/marketing/` (monorepo). Deploys to Vercel or Cloudflare Pages.
 
   **Two pages, one codebase:**
-  - `/` — General audience. Headline: *"Your notes, tasks, and calendar. Private by default."* Visual, task-focused, approachable. App screenshot. Download button above the fold. No technical jargon (no SQLite, no Tauri, no file paths). Privacy story in plain language: "Nothing leaves your device."
+  - `/` — General audience. Headline: _"Your notes, tasks, and calendar. Private by default."_ Visual, task-focused, approachable. App screenshot. Download button above the fold. No technical jargon (no SQLite, no Tauri, no file paths). Privacy story in plain language: "Nothing leaves your device."
   - `/open` — Technical audience. Architecture, local-first philosophy, SQLite data ownership. "Why I built this" story. Links to GitHub. Mentions Homebrew. Speaks to the Obsidian+TickTick pain point with technical specifics.
 
   **Analytics**: [Plausible](https://plausible.io) — self-hosted (Docker, ~1 hr setup) or cloud ($9/mo). Aligns with privacy positioning: no cookies, no personal data, GDPR-compliant. Add `<script defer data-domain="..." src="https://plausible.io/js/script.js"></script>` to Astro layout. Track: page views, download button clicks, referrer. Nothing else needed.
@@ -1323,17 +1340,16 @@ _See `.agent/GTM.md` for full strategy. These are the concrete tasks it generate
   Talk to Pikos like a human. Natural-language queries and mutations spoken aloud — no typing required.
 
   **Example interactions:**
-  - *"When's my next appointment?"* → reads scheduled pages, answers conversationally
-  - *"When's the last time I mentioned Sarah?"* → FTS search across all content, returns date + excerpt
-  - *"Add a task: call the dentist tomorrow at 2pm"* → creates page via `vaultTools`, confirms aloud
-  - *"What did I work on last week?"* → `list_pages` filtered by last week's date range, summarised
-  - *"Mark the API refactor as done"* → fuzzy-matches page title, calls `update_page`
+  - _"When's my next appointment?"_ → reads scheduled pages, answers conversationally
+  - _"When's the last time I mentioned Sarah?"_ → FTS search across all content, returns date + excerpt
+  - _"Add a task: call the dentist tomorrow at 2pm"_ → creates page via `vaultTools`, confirms aloud
+  - _"What did I work on last week?"_ → `list_pages` filtered by last week's date range, summarised
+  - _"Mark the API refactor as done"_ → fuzzy-matches page title, calls `update_page`
 
   **Architecture:**
 
   Built as a built-in plugin on top of GOO-57's `AgentService` — voice is just a new input/output
   channel for the same tool-using agent loop. Three new pieces:
-
   1. **Speech-to-text (STT)**: transcribes microphone input to text, feeds into `AgentService`
      - Local: `whisper.cpp` sidecar (Tauri sidecar binary) — fully offline, private by default
      - Cloud fallback: user's own OpenAI Whisper API key (same key-in-keychain pattern as GOO-57)
