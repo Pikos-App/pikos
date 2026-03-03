@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  PNPM_VERSION: 10
+  PNPM_VERSION: 10.30.3
 
 jobs:
   # ── Job 1: Quality (fast, ~30s) ────────────────────────────────────────────
