@@ -1,0 +1,8 @@
+.agent/
+pnpm-lock.yaml
+pnpm-workspace.yaml
+apps/desktop/src-tauri/
+**/dist/
+**/build/
+**/node_modules/
+**/.turbo/

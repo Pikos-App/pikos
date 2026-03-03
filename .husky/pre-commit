@@ -1,5 +1,4 @@
-pnpm prettier --write --log-level warn $(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx|js|json|css|md)$' | tr '\n' ' ')
-pnpm eslint --fix $(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' | tr '\n' ' ')
+pnpm lint-staged
 pnpm --filter @pikos/desktop exec tsc --noEmit
 pnpm --filter @pikos/core exec tsc --noEmit
 git add -u
