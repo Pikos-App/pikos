@@ -1,4 +1,8 @@
-# Pikos Backlog
+# Pikos Backlog — Full Archive
+
+> **DO NOT LOAD THIS FILE WHOLE — it is 86KB.**
+> Use `BACKLOG_ACTIVE.md` for next-up tasks.
+> Grep this file by GOO number when you need a specific item's full spec.
 
 Full export from Linear (Goose Labs / GOO), 2026-02-28. Linear is now archived.
 Status: `[ ]` pending · `[~]` in progress · `[x]` done · `[-]` superseded/deferred
@@ -1323,6 +1327,7 @@ _See `.agent/GTM.md` for full strategy. These are the concrete tasks it generate
         Both off by default. Each links to a "What's collected?" disclosure.
 
 - [-] **GOO-47** Mobile: React Native placeholder _(Medium)_ — after desktop is solid.
+  **IMPORTANT — start here before any mobile migration:** Create 3 divergent mobile UI variants first. Each should have different menus, different interaction modes, and different scroll behavior. Present them for review, let the user pick and choose features, then build the chosen combination into the main app. Do not do a full migration without this design exploration step first.
 - [-] **GOO-71** Mobile: Home Screen widget _(Medium)_ — after GOO-47 (mobile app exists). Show today's agenda / overdue tasks on the iOS/Android Home Screen. iOS uses WidgetKit (Swift), Android uses Glance (Kotlin). Needs a native bridge from React Native to the widget data layer.
 - [-] **GOO-72** Mobile: Siri / system reminders integration _(Medium)_ — after GOO-47. "Hey Siri, remind me to walk the dog at 6pm" → creates a Pikos page with the reminder text + time. iOS: `INAddTasksIntent` (SiriKit Tasks domain). Android: Google Assistant intents. Both require a native extension, not doable in pure React Native — plan for bridging.
 - [-] **GOO-69** Public REST API (CRUD) _(Medium)_ — requires server infrastructure, after GOO-25 (sync). A lightweight authenticated API over the user's vault: `GET/POST /pages`, `GET/PUT/DELETE /pages/:id`, `GET /folders`. Auth: API keys (not OAuth — simpler for automation use cases). Rate-limited. The sync infrastructure (GOO-25) is a prerequisite — the API needs a server-side representation of the vault.
