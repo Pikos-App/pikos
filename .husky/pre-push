@@ -1,1 +1,1 @@
-pnpm --filter @pikos/core vitest run
+pnpm --filter @pikos/core test
