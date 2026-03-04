@@ -29,5 +29,12 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
     },
+  },
+  // shadcn/ui components export CVA variants alongside components — intentional pattern
+  {
+    files: ["**/components/ui/**/*.tsx"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
   }
 );

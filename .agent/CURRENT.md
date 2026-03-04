@@ -2,7 +2,7 @@
 
 ## Active Task
 
-**GOO-40** — shadcn/ui (React) + Tailwind CSS v4 — next up in Phase 0.
+**GOO-45** — Feature-based directory structure + dependency-cruiser.
 
 See `BACKLOG_ACTIVE.md` for full spec.
 
@@ -13,8 +13,8 @@ See `BACKLOG_ACTIVE.md` for full spec.
 3. GOO-43 — Strict TS base config ✓
 4. GOO-8 — Biome + lefthook ✓
 5. GOO-44 — React Compiler ✓
-6. **GOO-40** — shadcn + Tailwind v4 ← next
-7. GOO-45 — Feature dirs + dependency-cruiser
+6. GOO-40 — shadcn + Tailwind v4 ✓
+7. **GOO-45** — Feature dirs + dependency-cruiser ← next
 8. GOO-9 — Vitest + Playwright
 9. GOO-5 — Fix CI (last)
 

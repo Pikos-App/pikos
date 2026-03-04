@@ -8,11 +8,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ## Phase 0 — Tooling (remaining)
 
-- [ ] **GOO-40** shadcn/ui (React) + Tailwind CSS v4 _(High)_ — **next task**
-  `npx shadcn@latest init` in `apps/desktop`. Style: `new-york`, base color: `zinc`, CSS variables.
-  Tailwind v4 via `@theme` directive in CSS (no `tailwind.config.js`). Add `@tailwindcss/typography`.
-  Initial components: `button`, `input`, `textarea`, `checkbox`, `dialog`, `popover`, `calendar`, `dropdown-menu`, `separator`, `badge`, `tooltip`, `scroll-area`, `accordion`.
-  Dark mode: class-based (`dark:`), stored in localStorage, applied to `<html>`.
+- [x] **GOO-40** shadcn/ui (React) + Tailwind CSS v4 _(High)_
 
 - [ ] **GOO-45** Feature-based directory structure + dependency-cruiser _(Medium)_
   `src/features/<name>/{components,hooks,utils}` + `src/shared/`. Dependency-cruiser in CI: features don't import from other features; `packages/core` has no Tauri/React imports.
