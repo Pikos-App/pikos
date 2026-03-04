@@ -13,11 +13,11 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 - [x] **GOO-45** Feature-based directory structure + dependency-cruiser _(Medium)_
   `src/features/<name>/{components,hooks,utils}` + `src/shared/`. Dependency-cruiser in CI: features don't import from other features; `packages/core` has no Tauri/React imports.
 
-- [ ] **GOO-9** Testing: Vitest + Playwright _(Medium)_
+- [x] **GOO-9** Testing: Vitest + Playwright _(Medium)_
   `packages/core` → Vitest (jsdom, coverage via v8). `apps/desktop` → Playwright (Chromium, `VITE_TEST_MODE=true` swaps in `MockStorageAdapter`). Also `@testing-library/react` + `@testing-library/user-event` for component tests. Wire into `turbo.json`.
 
 - [~] **GOO-5** Fix GitHub Actions CI _(Medium)_ — fix last, after all Phase 0 tasks done
-  Three jobs: `quality` (Biome + tsc) → `test` (Vitest + Playwright) → `build` (turbo build).
+  Three jobs: `quality` (lint + prettier + tsc) → `test` (Vitest + Playwright) → `build` (turbo build).
 
 ---
 

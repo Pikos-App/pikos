@@ -1,7 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2020"]
+    "lib": ["ES2020"],
+    "types": ["node"]
   },
-  "include": ["src", "vitest.config.ts"]
+  "include": ["e2e"]
 }

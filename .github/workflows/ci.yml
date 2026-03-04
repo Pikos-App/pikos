@@ -40,6 +40,9 @@ jobs:
       - name: TypeScript — core
         run: pnpm --filter @pikos/core exec tsc --noEmit
 
+      - name: Dependency boundaries
+        run: pnpm depcruise
+
   # ── Job 2: Tests (GOO-9 — Vitest + Playwright not yet configured) ──────────
   test:
     name: Tests
@@ -59,12 +62,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # TODO(GOO-9): replace with real test steps once Vitest + Playwright are configured
+      - name: Install Playwright browsers
+        run: pnpm --filter @pikos/desktop exec playwright install --with-deps chromium
+
       - name: Unit tests (Vitest)
-        run: echo "Vitest not yet configured — see GOO-9"
+        run: pnpm turbo test
 
       - name: E2E tests (Playwright)
-        run: echo "Playwright not yet configured — see GOO-9"
+        run: pnpm --filter @pikos/desktop exec playwright test
 
   # ── Job 3: Build (depends on test) ────────────────────────────────────────
   build:

@@ -2,7 +2,7 @@
 
 ## Active Task
 
-**GOO-9** — Testing: Vitest + Playwright.
+**GOO-5** — Fix GitHub Actions CI.
 
 See `BACKLOG_ACTIVE.md` for full spec.
 
@@ -15,8 +15,8 @@ See `BACKLOG_ACTIVE.md` for full spec.
 5. GOO-44 — React Compiler ✓
 6. GOO-40 — shadcn + Tailwind v4 ✓
 7. GOO-45 — Feature dirs + dependency-cruiser ✓
-8. **GOO-9** — Vitest + Playwright ← next
-9. GOO-5 — Fix CI (last)
+8. GOO-9 — Vitest + Playwright ✓
+9. **GOO-5** — Fix CI (last) ← next
 
 ## Resolved Decisions
 
