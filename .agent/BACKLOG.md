@@ -79,10 +79,10 @@ Current state before Phase 0 work begins:
   One `tsconfig.base.json` at root, extended by each package. Zero `// @ts-ignore` suppressions — fix errors, don't suppress.
 
 - [x] **GOO-8** Linting + formatting _(Medium)_ — implemented with ESLint v9 + Prettier (not Biome) for VS Code config consistency
-      Replaces ESLint + Prettier. Single `biome.json` at root. `biome check --apply` in pre-commit hook.
+      ESLint (flat config, root `eslint.config.js`) + Prettier (`prettier-plugin-tailwindcss`). Pre-commit via lefthook.
       `lefthook.yml` is already committed at repo root. Activate after monorepo setup: `pnpm add -D lefthook && lefthook install`.
 
-- [ ] **GOO-40** shadcn/ui (React) + Tailwind CSS v4 _(High)_
+- [x] **GOO-40** shadcn/ui (React) + Tailwind CSS v4 _(High)_
       `npx shadcn@latest init` in `apps/desktop`. Style: `new-york`, base color: `zinc`, CSS variables.
       Tailwind v4: configured via `@theme` directive in CSS (no `tailwind.config.js`). Add `@tailwindcss/typography` for prose/editor content.
       Initial components: `button`, `input`, `textarea`, `checkbox` `dialog`, `popover`, `calendar`, `dropdown-menu`, `separator`, `badge`, `tooltip`, `scroll-area`, `accordion`. Keep a flat component structure (not atomic). Not for feature components. You decide on if each component should be inside of its own directory or not. Decide if components get test coverage. Do not use barrel files. Components should be performant, accessible, and not prone to re-render issues.
@@ -91,14 +91,14 @@ Current state before Phase 0 work begins:
 - [x] **GOO-44** React Compiler _(Medium)_
       `babel-plugin-react-compiler` in Vite config from day 1. No manual `useMemo`/`useCallback`/`React.memo` — compiler handles it. Fix rule violations; don't disable the compiler.
 
-- [ ] **GOO-45** Feature-based directory structure + dependency-cruiser _(Medium)_
+- [x] **GOO-45** Feature-based directory structure + dependency-cruiser _(Medium)_
       `src/features/<name>/{components,hooks,utils}` + `src/shared/`. `dependency-cruiser` in CI enforces: features don't import from other features; `packages/core` has no Tauri/React imports.
       When implementing: add a `depcruise` step to the `quality` job in `.github/workflows/ci.yml`.
 
 - [~] **GOO-5** GitHub Actions CI _(Medium)_ — **broken, fix last in Phase 0**
-  `.github/workflows/ci.yml` committed but broken — references pnpm workspaces (`@pikos/desktop`, `@pikos/core`), Turborepo, and Biome, none of which exist yet. Fix after all other Phase 0 tasks are done (step 9). Three jobs: `quality` (Biome + tsc) → `test` (Vitest + Playwright) → `build` (turbo build). Playwright report uploaded as artifact on failure. Intentionally keep minute consumption low.
+  `.github/workflows/ci.yml` committed but broken — references pnpm workspaces (`@pikos/desktop`, `@pikos/core`), Turborepo, and Biome, none of which exist yet. Fix after all other Phase 0 tasks are done (step 9). Three jobs: `quality` (lint + prettier + tsc) → `test` (Vitest + Playwright) → `build` (turbo build). Playwright report uploaded as artifact on failure. Intentionally keep minute consumption low.
 
-- [ ] **GOO-9** Testing: Vitest + Playwright _(Medium)_
+- [x] **GOO-9** Testing: Vitest + Playwright _(Medium)_
       Set up from day one — don't defer testing infrastructure until the app is built.
       `packages/core` → Vitest (pure TS, jsdom, coverage via v8). `apps/desktop` → Playwright (real Chromium, `VITE_TEST_MODE=true` swaps in `MockStorageAdapter`, no Tauri binary in CI). Wire both into `turbo.json` + GOO-5.
       Also install `@testing-library/react` + `@testing-library/user-event` in `apps/desktop` — for component-level Vitest tests (e.g. MetadataHeader renders correct status icon, tag autocomplete filters). Separate concern from Playwright E2E: RTL for unit/component behaviour, Playwright for full user flows.
@@ -530,7 +530,7 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, onboardi
 ### Sidebar
 
 - [ ] **GOO-14** Resizable three-panel layout _(High)_
-      Default: Left 180px | Pages 280px | Right flex. Drag handles between panels (rendered inside each panel's motion.div so they animate away on sidebar collapse). Persist widths via Tauri store. Right panel toggles Editor ↔ Calendar (`Cmd+Shift+C`) — left and pages panels remain visible in both modes.
+      Default: Left 180px | Pages 280px | Right flex. Drag handles between panels (rendered inside each panel's motion.div so they animate away on sidebar collapse). Persist widths to localStorage. Right panel toggles Editor ↔ Calendar (`Cmd+Shift+C`) — left and pages panels remain visible in both modes.
 
 - [ ] **GOO-80** Sidebar collapse + navigation keyboard shortcuts _(High)_
       Two states only — all-open or both-left-collapsed (no partial). `Cmd+\` toggles. `SidebarToggle` button in top-left of right panel header (always visible): `PanelLeftClose`/`PanelLeftOpen` lucide icons, tooltip shows shortcut. Both panels animate via framer-motion spring (stiffness 350, damping 35, width+opacity). State persisted to `localStorage`.

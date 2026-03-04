@@ -6,21 +6,6 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ---
 
-## Phase 0 — Tooling (remaining)
-
-- [x] **GOO-40** shadcn/ui (React) + Tailwind CSS v4 _(High)_
-
-- [x] **GOO-45** Feature-based directory structure + dependency-cruiser _(Medium)_
-  `src/features/<name>/{components,hooks,utils}` + `src/shared/`. Dependency-cruiser in CI: features don't import from other features; `packages/core` has no Tauri/React imports.
-
-- [x] **GOO-9** Testing: Vitest + Playwright _(Medium)_
-  `packages/core` → Vitest (jsdom, coverage via v8). `apps/desktop` → Playwright (Chromium, `VITE_TEST_MODE=true` swaps in `MockStorageAdapter`). Also `@testing-library/react` + `@testing-library/user-event` for component tests. Wire into `turbo.json`.
-
-- [~] **GOO-5** Fix GitHub Actions CI _(Medium)_ — fix last, after all Phase 0 tasks done
-  Three jobs: `quality` (lint + prettier + tsc) → `test` (Vitest + Playwright) → `build` (turbo build).
-
----
-
 ## Phase 1 — Foundation
 
 - [ ] **GOO-27** Core TypeScript types _(Urgent)_
@@ -76,7 +61,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ---
 
-## Phase 1 — Layout & Navigation
+## Phase 2 — Navigation & Organization
 
 - [ ] **GOO-14** Resizable three-panel layout _(High)_
   Left 180px | Pages 280px | Right flex. Drag to resize. Persist widths to localStorage.
@@ -92,4 +77,4 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ---
 
-_For Phase 2+ (calendar, search, settings, import/export, etc.) — grep `BACKLOG.md`._
+_For Phase 2+ full specs and later phases — grep `BACKLOG.md`._

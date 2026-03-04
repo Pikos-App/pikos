@@ -2,30 +2,18 @@
 
 ## Active Task
 
-**GOO-5** — Fix GitHub Actions CI.
+**GOO-27** — Core TypeScript types.
 
 See `BACKLOG_ACTIVE.md` for full spec.
 
-## Phase 0 Status
+## Phase Status
 
-1. GOO-7 — Turborepo + pnpm monorepo ✓
-2. GOO-26 — Remove Svelte, wire React ✓
-3. GOO-43 — Strict TS base config ✓
-4. GOO-8 — Biome + lefthook ✓
-5. GOO-44 — React Compiler ✓
-6. GOO-40 — shadcn + Tailwind v4 ✓
-7. GOO-45 — Feature dirs + dependency-cruiser ✓
-8. GOO-9 — Vitest + Playwright ✓
-9. **GOO-5** — Fix CI (last) ← next
-
-## Resolved Decisions
-
-Moved to `.agent/decisions.md` — load that file when specific decision context is needed.
+Phase 0 complete (GOO-7, 26, 43, 8, 44, 40, 45, 9, 5 ✓). Now in Phase 1.
 
 ## Open Questions
 
-None currently.
+None.
 
 ## Blockers
 
-None currently.
+None.
