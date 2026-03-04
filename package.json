@@ -8,11 +8,13 @@
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
+    "depcruise": "depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs",
     "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
     "@tailwindcss/typography": "^0.5.19",
+    "dependency-cruiser": "^17.3.8",
     "eslint": "^10.0.0",
     "eslint-plugin-react-compiler": "19.1.0-rc.2",
     "eslint-plugin-react-hooks": "^7.0.0",

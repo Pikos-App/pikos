@@ -10,7 +10,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 - [x] **GOO-40** shadcn/ui (React) + Tailwind CSS v4 _(High)_
 
-- [ ] **GOO-45** Feature-based directory structure + dependency-cruiser _(Medium)_
+- [x] **GOO-45** Feature-based directory structure + dependency-cruiser _(Medium)_
   `src/features/<name>/{components,hooks,utils}` + `src/shared/`. Dependency-cruiser in CI: features don't import from other features; `packages/core` has no Tauri/React imports.
 
 - [ ] **GOO-9** Testing: Vitest + Playwright _(Medium)_
