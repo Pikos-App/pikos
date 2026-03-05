@@ -16,6 +16,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@pikos/core": "workspace:*",
     "@tauri-apps/api": "^2.7.0",
     "@tauri-apps/plugin-fs": "^2.4.1",
     "@tauri-apps/plugin-opener": "^2",

@@ -11,7 +11,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 - [x] **GOO-27** Core TypeScript types _(Urgent)_
   `packages/core/src/types.ts`. Types: `Vault`, `Folder`, `Page`, `PageStatus`, `PagePriority`, `Tag`, `SearchResult`, `PageFilter`. No `path` field — IDs are UUIDs. See full type definitions in `BACKLOG.md` at GOO-27.
 
-- [ ] **GOO-28** StorageAdapter interface _(High)_
+- [x] **GOO-28** StorageAdapter interface _(High)_
   `packages/core/src/storage.ts`. Interface + `NewPage`/`PageUpdate`/`NewFolder`/`FolderUpdate` helpers.
   `TauriSQLiteAdapter` → `apps/desktop/src/shared/adapters/`. `MockStorageAdapter` → `packages/core/src/adapters/` (in-memory, for tests). Injection via `VITE_TEST_MODE`.
 

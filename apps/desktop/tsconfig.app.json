@@ -6,7 +6,9 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@pikos/core": ["../../packages/core/src/index.ts"],
+      "@pikos/core/*": ["../../packages/core/src/*"]
     }
   },
   "include": ["src"]

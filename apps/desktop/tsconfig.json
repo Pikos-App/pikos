@@ -2,7 +2,9 @@
   "files": [],
   "compilerOptions": {
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@pikos/core": ["../../packages/core/src/index.ts"],
+      "@pikos/core/*": ["../../packages/core/src/*"]
     }
   },
   "references": [

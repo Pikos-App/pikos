@@ -50,6 +50,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@pikos/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@tauri-apps/api':
         specifier: ^2.7.0
         version: 2.10.1
