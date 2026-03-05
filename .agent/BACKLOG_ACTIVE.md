@@ -18,7 +18,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 - [x] **GOO-29** Rust SQLite schema + Tauri CRUD commands _(High)_
   `Cargo.toml`: add `tauri-plugin-sql` (sqlite feature), `uuid` (v4). Schema in `src-tauri/migrations/001_initial.sql` with FTS5 triggers. Commands in `src-tauri/src/db/{pages,folders,search}.rs`. See `features/storage.md` for full spec.
 
-- [ ] **GOO-30** VaultContext + UIContext _(High)_
+- [x] **GOO-30** VaultContext + UIContext _(High)_
   VaultContext owns data + mutations (pages, folders, createPage, etc.) + lightweight event emitter (`page:created/updated/deleted`, `vault:loaded`).
   UIContext owns navigation: `activePage`, `activeViewId: 'today'|'inbox'|folderId`, `rightPanel: 'editor'|'calendar'`, `sidebarCollapsed`. See `BACKLOG.md` GOO-30 for full interface definitions.
 
