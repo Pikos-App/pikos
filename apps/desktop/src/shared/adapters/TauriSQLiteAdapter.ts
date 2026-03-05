@@ -1,9 +1,17 @@
 // TauriSQLiteAdapter — calls Rust Tauri commands for all storage operations.
-// Lives in apps/desktop (has Tauri deps). Do NOT import from packages/core.
+// Lives in apps/desktop (Tauri deps). Types imported from @pikos/core (no Tauri).
 
 import { invoke } from "@tauri-apps/api/core";
 import type { Folder, Page, PageFilter, SearchResult } from "@pikos/core";
 import type { FolderUpdate, NewFolder, NewPage, PageUpdate, StorageAdapter } from "@pikos/core";
+
+/**
+ * Open (or create) the SQLite vault at `path` and run migrations.
+ * Must be called by VaultContext before any storage operations.
+ */
+export function connectDb(path: string): Promise<void> {
+  return invoke<void>("connect_db", { path });
+}
 
 export class TauriSQLiteAdapter implements StorageAdapter {
   // ─── Pages ──────────────────────────────────────────────────────────────────

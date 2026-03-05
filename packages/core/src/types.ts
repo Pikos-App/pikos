@@ -56,6 +56,8 @@ export interface Page {
   rrule?: string; // iCal RRULE string — infinite recurring template
   // NULL = not a template. Calendar expands virtual blocks via rrule.js.
   // Finite recurrence produces N independent pages (each with rrule = null).
+  rruleExdates?: string[]; // ISO date strings excluded from rrule expansion (e.g. skipped weeks)
+  timezone?: string; // IANA timezone e.g. 'America/New_York'; undefined = system default
   lastOpenedAt?: string; // ISO 8601; updated on open → drives recent-pages query
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
@@ -72,6 +74,8 @@ export interface PageSchedule {
   scheduledStart: string; // ISO 8601
   scheduledEnd?: string; // ISO 8601; null = 1-hour default block height
   scheduledAllDay: boolean; // true = all-day event (no time grid position)
+  status: "not_started" | "done" | "skipped"; // per-occurrence completion state
+  originalRruleDate?: string; // set when this row materialises/overrides a virtual rrule occurrence
   createdAt: string; // ISO 8601
 }
 
@@ -98,6 +102,19 @@ export interface SearchResult {
   id: string;
   title: string;
   excerpt: string; // highlighted snippet with <mark> tags from FTS5 snippet()
+}
+
+// ─── FocusSession ─────────────────────────────────────────────────────────────
+// Recorded by the built-in focus timer (GOO-78).
+// page_id is optional — timer can run without a page association.
+// Sessions < 10s are auto-discarded; never written to DB.
+
+export interface FocusSession {
+  id: string; // UUID
+  pageId?: string; // optional page being worked on
+  startedAt: string; // ISO 8601
+  endedAt?: string; // ISO 8601; undefined while in progress
+  durationS?: number; // denorm seconds; undefined while in progress
 }
 
 // ─── Filters ─────────────────────────────────────────────────────────────────

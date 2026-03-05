@@ -15,7 +15,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
   `packages/core/src/storage.ts`. Interface + `NewPage`/`PageUpdate`/`NewFolder`/`FolderUpdate` helpers.
   `TauriSQLiteAdapter` → `apps/desktop/src/shared/adapters/`. `MockStorageAdapter` → `packages/core/src/adapters/` (in-memory, for tests). Injection via `VITE_TEST_MODE`.
 
-- [ ] **GOO-29** Rust SQLite schema + Tauri CRUD commands _(High)_
+- [x] **GOO-29** Rust SQLite schema + Tauri CRUD commands _(High)_
   `Cargo.toml`: add `tauri-plugin-sql` (sqlite feature), `uuid` (v4). Schema in `src-tauri/migrations/001_initial.sql` with FTS5 triggers. Commands in `src-tauri/src/db/{pages,folders,search}.rs`. See `features/storage.md` for full spec.
 
 - [ ] **GOO-30** VaultContext + UIContext _(High)_
@@ -30,6 +30,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 - [ ] **GOO-15** Vault selection + persistence _(Urgent)_
   First-launch welcome screen: "Create New Vault" + "Open Existing Vault". Tauri `dialog.open` folder picker. Config in Tauri app data dir via `@tauri-apps/plugin-store`. Remove any hardcoded paths.
+  **Auto-reopen**: on subsequent launches, skip welcome screen and call `connectDb(vault.dbPath)` directly for the vault with the most recent `lastOpenedAt`. Only show welcome screen when no vaults are known.
 
 ---
 
@@ -53,8 +54,13 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 - [ ] **GOO-33** Page status toggle _(High)_
   Three-state cycle: `not_started → in_progress → done`. Checkbox/icon in page list + metadata header. Completing sets `completedAt`.
 
-- [ ] **GOO-34** Scheduled date/time picker _(High)_
-  Calendar popover + time input in metadata header. Updates `page_schedules` row (GOO-76 — multiple occurrences per page).
+- [ ] **GOO-76** `page_schedules` Tauri CRUD commands _(High)_ — **blocks GOO-34, GOO-79**
+  Backend for calendar scheduling. Commands: `create_page_schedule(page_id, scheduled_start, scheduled_end?, scheduled_all_day)`, `delete_page_schedule(id)`, `list_page_schedules(page_id)`, `list_page_schedules_range(start, end)` for calendar day/week rendering.
+  After insert/delete, also update the `pages.scheduled_start/end` denorm to the earliest future row for that page (or NULL if none remain).
+  Lives in `src-tauri/src/db/schedules.rs`. Register in `lib.rs`.
+
+- [ ] **GOO-34** Scheduled date/time picker _(High)_ — **requires GOO-76**
+  Calendar popover + time input in metadata header. Updates `page_schedules` row via `create_page_schedule` / `delete_page_schedule`.
 
 - [ ] **GOO-35** Priority selector _(Medium)_
   Dropdown in metadata header. 5 levels: none / urgent / high / medium / low. Shown as colored badge in page list.
@@ -74,6 +80,11 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 - [ ] **GOO-37** Folder CRUD _(High)_
   Create / rename / delete folders. Left panel folder list. Drag to reorder (via `reorderFolders`). No nesting in v1.
+  **Delete UX (GOO-88)**: deleting a folder with pages must not silently destroy data. Current schema uses `ON DELETE SET NULL` — pages become inbox items, nothing is lost. UI should show a confirmation: "X pages will be moved to Inbox. Delete folder?" with a count. No "move to another folder" picker needed for v1.
+
+- [ ] **GOO-88** Folder delete confirmation dialog _(High)_ — implement alongside GOO-37
+  When deleting a non-empty folder: count pages in that folder, show modal: "Delete [name]? X pages will be moved to Inbox." Primary action: "Delete & Move to Inbox". Cancel aborts. Empty folders delete immediately with no prompt.
+  Decision deferred to UX implementation — no code needed until GOO-37.
 
 ---
 
