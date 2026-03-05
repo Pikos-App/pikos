@@ -28,7 +28,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
   - `useKeyboardListener()` — mounts `Keyboard.handle` on `window` keydown; call once in `App.tsx`.
   Chord support via 400ms timeout between keystrokes. Expose `Keyboard.pushScope`/`popScope` via a `useKeyboardScope(scope)` hook for modal/dialog use.
 
-- [ ] **GOO-23** Design system: typography, color, dark mode _(High)_
+- [x] **GOO-23** Design system: typography, color, dark mode _(High)_
   **Must come before GOO-15** (welcome screen has UI). Dark mode first. Linear/Arc/Obsidian inspired. CSS custom properties via `@theme` in `app.css` — shadcn's vars are the base, extend with dark-mode overrides + typography scale. System font stack. No gradients, minimal shadows.
 
 - [ ] **GOO-15** Vault selection + persistence _(Urgent)_

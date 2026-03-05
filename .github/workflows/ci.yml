@@ -10,44 +10,12 @@ env:
   PNPM_VERSION: 10.30.3
 
 jobs:
-  # ── Job 1: Quality (fast, ~30s) ────────────────────────────────────────────
-  quality:
-    name: Format, Lint & Types
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Prettier
-        run: pnpm prettier --check .
-
-      - name: ESLint
-        run: pnpm eslint .
-
-      - name: TypeScript — desktop
-        run: pnpm --filter @pikos/desktop exec tsc --noEmit
-
-      - name: TypeScript — core
-        run: pnpm --filter @pikos/core exec tsc --noEmit
-
-      - name: Dependency boundaries
-        run: pnpm depcruise
-
-  # ── Job 2: Tests (GOO-9 — Vitest + Playwright not yet configured) ──────────
+  # ── Job 1: Tests ────────────────────────────────────────────────────────────
+  # Quality checks (typecheck, lint, prettier, depcruise) run locally via
+  # the pre-push git hook. CI owns tests + build which need a clean environment.
   test:
     name: Tests
     runs-on: ubuntu-latest
-    needs: quality
     steps:
       - uses: actions/checkout@v4
 
@@ -61,17 +29,17 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright browsers
-        run: pnpm --filter @pikos/desktop exec playwright install --with-deps chromium
 
       - name: Unit tests (Vitest)
         run: pnpm turbo test
 
+      - name: Install Playwright browsers
+        run: pnpm --filter @pikos/desktop exec playwright install --with-deps chromium
+
       - name: E2E tests (Playwright)
         run: pnpm --filter @pikos/desktop exec playwright test
 
-  # ── Job 3: Build (depends on test) ────────────────────────────────────────
+  # ── Job 2: Build ────────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest

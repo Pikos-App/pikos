@@ -12,7 +12,7 @@
 
 ```
 pnpm typecheck                                                    # turbo tsc --noEmit
-pnpm exec turbo lint --force                                      # ESLint (--force busts cache)
+pnpm exec turbo lint                                              # ESLint
 pnpm exec prettier --check "apps/desktop/src/**/*.{ts,tsx,css}"  # Prettier check
 # To fix: pnpm exec prettier --write <file>
 ```

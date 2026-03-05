@@ -1,1 +1,5 @@
+pnpm typecheck
+pnpm exec turbo lint
+pnpm exec prettier --check "apps/desktop/src/**/*.{ts,tsx,css}" "packages/core/src/**/*.ts"
+pnpm depcruise
 pnpm --filter @pikos/core test
