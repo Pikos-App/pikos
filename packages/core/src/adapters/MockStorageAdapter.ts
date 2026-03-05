@@ -1,8 +1,25 @@
 // MockStorageAdapter — in-memory implementation for Vitest + Playwright tests.
 // Injected via VITE_TEST_MODE. Zero Tauri deps.
 
-import type { Folder, Page, PageFilter, SearchResult } from "../types";
-import type { FolderUpdate, NewFolder, NewPage, PageUpdate, StorageAdapter } from "../storage";
+import type {
+  Folder,
+  Page,
+  PageFilter,
+  PageRecurrenceRule,
+  PageSchedule,
+  SearchResult,
+} from "../types";
+import type {
+  FolderUpdate,
+  NewFolder,
+  NewPage,
+  NewPageSchedule,
+  NewRecurrenceRule,
+  PageScheduleUpdate,
+  PageUpdate,
+  RecurrenceRuleUpdate,
+  StorageAdapter,
+} from "../storage";
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -42,6 +59,8 @@ function matchesFilter(page: Page, filter: PageFilter): boolean {
 export class MockStorageAdapter implements StorageAdapter {
   private pages = new Map<string, Page>();
   private folders = new Map<string, Folder>();
+  private schedules = new Map<string, PageSchedule>();
+  private rules = new Map<string, PageRecurrenceRule>();
 
   // ─── Pages ──────────────────────────────────────────────────────────────────
 
@@ -145,5 +164,125 @@ export class MockStorageAdapter implements StorageAdapter {
       if (folder) this.folders.set(id, { ...folder, sortOrder: i, updatedAt: now() });
     });
     return Promise.resolve();
+  }
+
+  // ─── Schedules ──────────────────────────────────────────────────────────────
+
+  createPageSchedule(data: NewPageSchedule): Promise<PageSchedule> {
+    const schedule: PageSchedule = {
+      id: uuid(),
+      pageId: data.pageId,
+      scheduledStart: data.scheduledStart,
+      ...(data.scheduledEnd !== undefined && { scheduledEnd: data.scheduledEnd }),
+      ...(data.timezone !== undefined && { timezone: data.timezone }),
+      ...(data.ruleId !== undefined && { ruleId: data.ruleId }),
+      ...(data.originalDate !== undefined && { originalDate: data.originalDate }),
+      status: "not_started",
+      createdAt: now(),
+    };
+    this.schedules.set(schedule.id, schedule);
+    this._refreshDenorm(data.pageId);
+    return Promise.resolve(schedule);
+  }
+
+  updatePageSchedule(id: string, updates: PageScheduleUpdate): Promise<PageSchedule> {
+    const existing = this.schedules.get(id);
+    if (!existing) return Promise.reject(new Error(`Schedule not found: ${id}`));
+    const updated = { ...existing };
+    if (updates.scheduledStart !== undefined) updated.scheduledStart = updates.scheduledStart;
+    if (updates.status !== undefined) updated.status = updates.status;
+    if (updates.scheduledEnd === null) delete updated.scheduledEnd;
+    else if (updates.scheduledEnd !== undefined) updated.scheduledEnd = updates.scheduledEnd;
+    this.schedules.set(id, updated);
+    this._refreshDenorm(existing.pageId);
+    return Promise.resolve(updated);
+  }
+
+  deletePageSchedule(id: string): Promise<void> {
+    const schedule = this.schedules.get(id);
+    this.schedules.delete(id);
+    if (schedule) this._refreshDenorm(schedule.pageId);
+    return Promise.resolve();
+  }
+
+  listPageSchedules(pageId: string): Promise<PageSchedule[]> {
+    const results = [...this.schedules.values()]
+      .filter((s) => s.pageId === pageId)
+      .sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart));
+    return Promise.resolve(results);
+  }
+
+  listPageSchedulesRange(start: string, end: string): Promise<PageSchedule[]> {
+    const results = [...this.schedules.values()].filter((s) => {
+      const sDate = s.scheduledStart.slice(0, 10);
+      const eDate = s.scheduledEnd ? s.scheduledEnd.slice(0, 10) : null;
+      if (eDate === null) return sDate >= start && sDate <= end;
+      return sDate <= end && eDate >= start;
+    });
+    return Promise.resolve(
+      results.sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart))
+    );
+  }
+
+  // ─── Recurrence rules ────────────────────────────────────────────────────────
+
+  createRecurrenceRule(data: NewRecurrenceRule): Promise<PageRecurrenceRule> {
+    const rule: PageRecurrenceRule = {
+      id: uuid(),
+      pageId: data.pageId,
+      rrule: data.rrule,
+      rruleExdates: data.rruleExdates ?? [],
+      scheduledStart: data.scheduledStart,
+      ...(data.scheduledEnd !== undefined && { scheduledEnd: data.scheduledEnd }),
+      timezone: data.timezone,
+      createdAt: now(),
+    };
+    this.rules.set(rule.id, rule);
+    return Promise.resolve(rule);
+  }
+
+  updateRecurrenceRule(id: string, updates: RecurrenceRuleUpdate): Promise<PageRecurrenceRule> {
+    const existing = this.rules.get(id);
+    if (!existing) return Promise.reject(new Error(`Recurrence rule not found: ${id}`));
+    const updated = { ...existing };
+    if (updates.rrule !== undefined) updated.rrule = updates.rrule;
+    if (updates.rruleExdates !== undefined) updated.rruleExdates = updates.rruleExdates;
+    if (updates.scheduledStart !== undefined) updated.scheduledStart = updates.scheduledStart;
+    if (updates.timezone !== undefined) updated.timezone = updates.timezone;
+    if (updates.scheduledEnd === null) delete updated.scheduledEnd;
+    else if (updates.scheduledEnd !== undefined) updated.scheduledEnd = updates.scheduledEnd;
+    this.rules.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  deleteRecurrenceRule(id: string): Promise<void> {
+    this.rules.delete(id);
+    return Promise.resolve();
+  }
+
+  getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null> {
+    const rule = [...this.rules.values()].find((r) => r.pageId === pageId) ?? null;
+    return Promise.resolve(rule);
+  }
+
+  // ─── Private helpers ─────────────────────────────────────────────────────────
+
+  private _refreshDenorm(pageId: string): void {
+    const page = this.pages.get(pageId);
+    if (!page) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const next = [...this.schedules.values()]
+      .filter((s) => s.pageId === pageId && !s.ruleId && s.scheduledStart >= today)
+      .sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart))[0];
+    const updated = { ...page, updatedAt: now() };
+    if (next) {
+      updated.scheduledStart = next.scheduledStart;
+      if (next.scheduledEnd) updated.scheduledEnd = next.scheduledEnd;
+      else delete updated.scheduledEnd;
+    } else {
+      delete updated.scheduledStart;
+      delete updated.scheduledEnd;
+    }
+    this.pages.set(pageId, updated);
   }
 }

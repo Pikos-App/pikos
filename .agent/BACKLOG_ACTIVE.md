@@ -54,10 +54,8 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 - [ ] **GOO-33** Page status toggle _(High)_
   Three-state cycle: `not_started → in_progress → done`. Checkbox/icon in page list + metadata header. Completing sets `completedAt`.
 
-- [ ] **GOO-76** `page_schedules` Tauri CRUD commands _(High)_ — **blocks GOO-34, GOO-79**
-  Backend for calendar scheduling. Commands: `create_page_schedule(page_id, scheduled_start, scheduled_end?, scheduled_all_day)`, `delete_page_schedule(id)`, `list_page_schedules(page_id)`, `list_page_schedules_range(start, end)` for calendar day/week rendering.
-  After insert/delete, also update the `pages.scheduled_start/end` denorm to the earliest future row for that page (or NULL if none remain).
-  Lives in `src-tauri/src/db/schedules.rs`. Register in `lib.rs`.
+- [x] **GOO-76** Schedule + recurrence Tauri commands _(High)_
+  `src-tauri/src/db/schedules.rs`. Two tables: `page_schedules` (explicit blocks) + `page_recurrence_rules` (rrule templates). All-day inferred from start format. Denorm refresh on every insert/delete.
 
 - [ ] **GOO-34** Scheduled date/time picker _(High)_ — **requires GOO-76**
   Calendar popover + time input in metadata header. Updates `page_schedules` row via `create_page_schedule` / `delete_page_schedule`.

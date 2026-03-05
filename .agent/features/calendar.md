@@ -180,55 +180,10 @@ CalDAV protocol — works with Fastmail, Google, Apple, Proton, etc. See full sp
 
 ## Data Model
 
-### `page_schedules` table (full schema)
-```sql
-CREATE TABLE page_schedules (
-  id                   TEXT PRIMARY KEY,   -- UUID
-  page_id              TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
-  scheduled_start      TEXT NOT NULL,      -- 'YYYY-MM-DD' or ISO 8601 datetime
-  scheduled_end        TEXT,               -- same format as start; NULL = single day / 1h default
-  scheduled_all_day    INTEGER NOT NULL DEFAULT 0,  -- 1 = all-day/multi-day; 0 = timed block
-  status               TEXT NOT NULL DEFAULT 'not_started', -- 'not_started'|'done'|'skipped'
-  original_rrule_date  TEXT,              -- if set, this row overrides a specific virtual rrule occurrence
-  created_at           TEXT NOT NULL
-);
-```
+Schema source of truth: `apps/desktop/src-tauri/migrations/001_initial.sql`
 
-### Recurring fields on `pages`
-- `pages.rrule` — iCal RRULE string; NULL if not a recurring template
-- `pages.rrule_exdates` — JSON array of ISO date strings excluded from rrule expansion (default `'[]'`)
-- `pages.timezone` — IANA timezone string; NULL = system default; used by `rrule.js` for DST-correct expansion
+Two tables own scheduling:
+- **`page_recurrence_rules`** — one row per recurring page; owns the RRULE string, exdates, timezone, and base occurrence times
+- **`page_schedules`** — one row per explicit calendar block; `rule_id` + `original_date` set only when overriding a virtual rrule occurrence
 
-### Denorm on `pages`
-`pages.scheduled_start` / `pages.scheduled_end` = the **earliest future** `page_schedules`
-row for that page. Used by list views for "what's scheduled next" without joining.
-- Updated by the Rust `create_page_schedule` and `delete_page_schedule` commands after
-  every mutation (not via a DB trigger — kept on the application side for clarity)
-- When no future schedule rows exist, both columns are set to NULL
-
-### rrule vs page_schedules
-| | `page_schedules` | `pages.rrule` |
-|---|---|---|
-| Use case | Explicit one-off or multiple specific dates | Infinite recurring template |
-| Storage | DB rows, one per occurrence | Single iCal RRULE string on the page |
-| Calendar rendering | Read rows directly | Expanded virtually via `rrule.js` |
-| Editable in v1 | Yes — add/remove rows individually | Set or clear the whole rule |
-| Mix on same page? | No — a page uses one or the other | No |
-
-### Calendar queries
-```sql
--- Blocks for a given day (timed + all-day)
-SELECT ps.*, p.title, p.status, p.priority
-FROM page_schedules ps
-JOIN pages p ON p.id = ps.page_id
-WHERE date(ps.scheduled_start) <= '2026-03-04'
-  AND (ps.scheduled_end IS NULL OR date(ps.scheduled_end) >= '2026-03-04')
-ORDER BY ps.scheduled_start ASC;
-
--- Today smart view (list panel)
-SELECT DISTINCT p.*
-FROM page_schedules ps
-JOIN pages p ON p.id = ps.page_id
-WHERE date(ps.scheduled_start) <= date('now')
-  AND p.status != 'done';
-```
+`pages.scheduled_start` / `pages.scheduled_end` are denorms (next upcoming `page_schedules` row). Updated by the Rust commands after every insert/delete — never via DB trigger.

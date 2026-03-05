@@ -23,9 +23,6 @@ struct PageRow {
     duration_mins: Option<i64>,
     links: Option<String>, // JSON array
     parent_id: Option<String>,
-    rrule: Option<String>,
-    rrule_exdates: String, // JSON array
-    timezone: Option<String>,
     last_opened_at: Option<String>,
     created_at: String,
     updated_at: String,
@@ -52,9 +49,6 @@ pub struct Page {
     pub duration_minutes: Option<i64>,
     pub links: Vec<String>,
     pub parent_id: Option<String>,
-    pub rrule: Option<String>,
-    pub rrule_exdates: Vec<String>,
-    pub timezone: Option<String>,
     pub last_opened_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -68,8 +62,6 @@ impl From<PageRow> for Page {
             .as_deref()
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_default();
-        let rrule_exdates: Vec<String> =
-            serde_json::from_str(&row.rrule_exdates).unwrap_or_default();
         Page {
             id: row.id,
             folder_id: row.folder_id,
@@ -87,9 +79,6 @@ impl From<PageRow> for Page {
             duration_minutes: row.duration_mins,
             links,
             parent_id: row.parent_id,
-            rrule: row.rrule,
-            rrule_exdates,
-            timezone: row.timezone,
             last_opened_at: row.last_opened_at,
             created_at: row.created_at,
             updated_at: row.updated_at,
@@ -118,10 +107,6 @@ pub struct NewPage {
     #[serde(default)]
     pub links: Vec<String>,
     pub parent_id: Option<String>,
-    pub rrule: Option<String>,
-    #[serde(default)]
-    pub rrule_exdates: Vec<String>,
-    pub timezone: Option<String>,
     pub last_opened_at: Option<String>,
 }
 
@@ -144,9 +129,6 @@ pub struct PageUpdate {
     pub duration_minutes: Option<serde_json::Value>,
     pub links: Option<Vec<String>>,
     pub parent_id: Option<serde_json::Value>,
-    pub rrule: Option<serde_json::Value>,
-    pub rrule_exdates: Option<Vec<String>>,
-    pub timezone: Option<serde_json::Value>,
     pub last_opened_at: Option<serde_json::Value>,
 }
 
@@ -217,15 +199,12 @@ pub async fn create_page(state: State<'_, DbState>, data: NewPage) -> Result<Pag
     let sort_order = next_sort_order(&pool, data.folder_id.as_deref()).await;
     let tags_json = serde_json::to_string(&data.tags).unwrap_or_else(|_| "[]".to_string());
     let links_json = serde_json::to_string(&data.links).unwrap_or_else(|_| "[]".to_string());
-    let rrule_exdates_json =
-        serde_json::to_string(&data.rrule_exdates).unwrap_or_else(|_| "[]".to_string());
 
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
          priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
-         duration_mins, links, parent_id, rrule, rrule_exdates, timezone, last_opened_at,
-         created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         duration_mins, links, parent_id, last_opened_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&data.folder_id)
@@ -243,9 +222,6 @@ pub async fn create_page(state: State<'_, DbState>, data: NewPage) -> Result<Pag
     .bind(data.duration_minutes)
     .bind(&links_json)
     .bind(&data.parent_id)
-    .bind(&data.rrule)
-    .bind(&rrule_exdates_json)
-    .bind(&data.timezone)
     .bind(&data.last_opened_at)
     .bind(&now)
     .bind(&now)
@@ -333,16 +309,7 @@ pub async fn update_page(
     push_nullable_str!(updates.scheduled_end, "scheduled_end");
     push_nullable_str!(updates.completed_at, "completed_at");
     push_nullable_str!(updates.parent_id, "parent_id");
-    push_nullable_str!(updates.rrule, "rrule");
-    push_nullable_str!(updates.timezone, "timezone");
     push_nullable_str!(updates.last_opened_at, "last_opened_at");
-
-    if let Some(v) = updates.rrule_exdates {
-        let json = serde_json::to_string(&v).unwrap_or_else(|_| "[]".to_string());
-        sep.push("rrule_exdates = ");
-        sep.push_bind_unseparated(json);
-        has_updates = true;
-    }
 
     // Nullable integer field
     if let Some(val) = updates.duration_minutes {

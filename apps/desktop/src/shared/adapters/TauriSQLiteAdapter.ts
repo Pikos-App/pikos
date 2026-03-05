@@ -2,8 +2,25 @@
 // Lives in apps/desktop (Tauri deps). Types imported from @pikos/core (no Tauri).
 
 import { invoke } from "@tauri-apps/api/core";
-import type { Folder, Page, PageFilter, SearchResult } from "@pikos/core";
-import type { FolderUpdate, NewFolder, NewPage, PageUpdate, StorageAdapter } from "@pikos/core";
+import type {
+  Folder,
+  Page,
+  PageFilter,
+  PageRecurrenceRule,
+  PageSchedule,
+  SearchResult,
+} from "@pikos/core";
+import type {
+  FolderUpdate,
+  NewFolder,
+  NewPage,
+  NewPageSchedule,
+  NewRecurrenceRule,
+  PageScheduleUpdate,
+  PageUpdate,
+  RecurrenceRuleUpdate,
+  StorageAdapter,
+} from "@pikos/core";
 
 /**
  * Open (or create) the SQLite vault at `path` and run migrations.
@@ -68,5 +85,45 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   reorderFolders(orderedIds: string[]): Promise<void> {
     return invoke<void>("reorder_folders", { orderedIds });
+  }
+
+  // ─── Schedules ──────────────────────────────────────────────────────────────
+
+  createPageSchedule(data: NewPageSchedule): Promise<PageSchedule> {
+    return invoke<PageSchedule>("create_page_schedule", { data });
+  }
+
+  updatePageSchedule(id: string, updates: PageScheduleUpdate): Promise<PageSchedule> {
+    return invoke<PageSchedule>("update_page_schedule", { id, updates });
+  }
+
+  deletePageSchedule(id: string): Promise<void> {
+    return invoke<void>("delete_page_schedule", { id });
+  }
+
+  listPageSchedules(pageId: string): Promise<PageSchedule[]> {
+    return invoke<PageSchedule[]>("list_page_schedules", { pageId });
+  }
+
+  listPageSchedulesRange(start: string, end: string): Promise<PageSchedule[]> {
+    return invoke<PageSchedule[]>("list_page_schedules_range", { start, end });
+  }
+
+  // ─── Recurrence rules ────────────────────────────────────────────────────────
+
+  createRecurrenceRule(data: NewRecurrenceRule): Promise<PageRecurrenceRule> {
+    return invoke<PageRecurrenceRule>("create_recurrence_rule", { data });
+  }
+
+  updateRecurrenceRule(id: string, updates: RecurrenceRuleUpdate): Promise<PageRecurrenceRule> {
+    return invoke<PageRecurrenceRule>("update_recurrence_rule", { id, updates });
+  }
+
+  deleteRecurrenceRule(id: string): Promise<void> {
+    return invoke<void>("delete_recurrence_rule", { id });
+  }
+
+  getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null> {
+    return invoke<PageRecurrenceRule | null>("get_recurrence_rule", { pageId });
   }
 }

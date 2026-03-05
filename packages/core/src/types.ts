@@ -53,29 +53,43 @@ export interface Page {
   durationMinutes?: number; // planned duration (not focus-session time)
   links?: string[]; // [[wikilink]] target page UUIDs; stored as JSON array
   parentId?: string | null; // sub-page nesting (GOO-12, max 3 levels)
-  rrule?: string; // iCal RRULE string — infinite recurring template
-  // NULL = not a template. Calendar expands virtual blocks via rrule.js.
-  // Finite recurrence produces N independent pages (each with rrule = null).
-  rruleExdates?: string[]; // ISO date strings excluded from rrule expansion (e.g. skipped weeks)
-  timezone?: string; // IANA timezone e.g. 'America/New_York'; undefined = system default
   lastOpenedAt?: string; // ISO 8601; updated on open → drives recent-pages query
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
 }
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────
-// One calendar occurrence for a page (from page_schedules table).
-// Distinct from rrule-based virtual occurrences — those are expanded at render
-// time with no DB row. Multiple rows = multiple blocks on the calendar.
+// One explicit calendar block (from page_schedules table).
+// All-day vs timed is inferred from scheduledStart format:
+//   'YYYY-MM-DD'          → all-day (no timezone needed)
+//   'YYYY-MM-DDTHH:MM:SS' → timed   (timezone required)
+// ruleId + originalDate are only set when this row overrides a virtual
+// recurrence occurrence; both are null for plain one-off schedules.
 
 export interface PageSchedule {
   id: string; // UUID
   pageId: string;
-  scheduledStart: string; // ISO 8601
-  scheduledEnd?: string; // ISO 8601; null = 1-hour default block height
-  scheduledAllDay: boolean; // true = all-day event (no time grid position)
-  status: "not_started" | "done" | "skipped"; // per-occurrence completion state
-  originalRruleDate?: string; // set when this row materialises/overrides a virtual rrule occurrence
+  scheduledStart: string; // 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS' local wall-clock
+  scheduledEnd?: string; // same format; null = single day or 1h default
+  timezone?: string; // IANA e.g. 'America/New_York'; required for timed events
+  ruleId?: string; // links override rows back to their PageRecurrenceRule
+  originalDate?: string; // the virtual rrule date this row overrides ('YYYY-MM-DD')
+  status: "not_started" | "done" | "skipped";
+  createdAt: string; // ISO 8601
+}
+
+// ─── PageRecurrenceRule ────────────────────────────────────────────────────────
+// One row per recurring page. Calendar expands virtual occurrences via rrule.js.
+// Exceptions: rruleExdates (skip) or a page_schedules row with ruleId set (override).
+
+export interface PageRecurrenceRule {
+  id: string; // UUID
+  pageId: string;
+  rrule: string; // iCal RRULE string e.g. 'FREQ=WEEKLY;BYDAY=MO'
+  rruleExdates: string[]; // ISO date strings excluded from expansion
+  scheduledStart: string; // base occurrence start (local wall-clock)
+  scheduledEnd?: string; // base occurrence end; undefined = 1h default
+  timezone: string; // IANA timezone — required for DST-correct expansion
   createdAt: string; // ISO 8601
 }
 

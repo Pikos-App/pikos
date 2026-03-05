@@ -7,8 +7,11 @@ use db::{
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders, update_folder,
     },
-    pages::{
-        create_page, delete_page, get_page, list_pages, reorder_pages, update_page,
+    pages::{create_page, delete_page, get_page, list_pages, reorder_pages, update_page},
+    schedules::{
+        create_page_schedule, create_recurrence_rule, delete_page_schedule,
+        delete_recurrence_rule, get_recurrence_rule, list_page_schedules,
+        list_page_schedules_range, update_page_schedule, update_recurrence_rule,
     },
     search::search_pages,
 };
@@ -41,6 +44,17 @@ pub fn run() {
             delete_folder,
             list_folders,
             reorder_folders,
+            // Schedules
+            create_page_schedule,
+            update_page_schedule,
+            delete_page_schedule,
+            list_page_schedules,
+            list_page_schedules_range,
+            // Recurrence rules
+            create_recurrence_rule,
+            update_recurrence_rule,
+            delete_recurrence_rule,
+            get_recurrence_rule,
             // Search
             search_pages,
         ])
