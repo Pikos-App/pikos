@@ -44,12 +44,13 @@ export interface SearchResult {
 **SQL:**
 ```sql
 SELECT pages.id, pages.title,
-  snippet(pages_fts, 1, '<mark>', '</mark>', '…', 20) as excerpt
+  snippet(pages_fts, 2, '<mark>', '</mark>', '…', 20) as excerpt
 FROM pages_fts
 JOIN pages ON pages.rowid = pages_fts.rowid
 WHERE pages_fts MATCH ?
 ORDER BY rank
 ```
-Note: snippet column index 1 = `content_text` (0=title, 1=content_text, 2=tags).
+Note: FTS column indices — 0=title, 1=subtitle, 2=content_text, 3=tags.
+snippet() uses index 2 (content_text) to highlight where the body match occurred.
 
 **Result display:** title + highlighted excerpt snippet. Full page loaded from VaultContext on selection.

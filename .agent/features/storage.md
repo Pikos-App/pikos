@@ -89,15 +89,18 @@ CREATE INDEX IF NOT EXISTS idx_pages_rrule          ON pages(rrule) WHERE rrule 
 -- When you drag-to-schedule, a new row is inserted here instead of overwriting pages.scheduled_start.
 -- pages.scheduled_start/end are now DENORMS = earliest future row in page_schedules (for list views).
 CREATE TABLE IF NOT EXISTS page_schedules (
-  id              TEXT PRIMARY KEY,   -- UUID
-  page_id         TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
-  scheduled_start TEXT NOT NULL,      -- ISO 8601
-  scheduled_end   TEXT,               -- ISO 8601; NULL = 1h default
-  created_at      TEXT NOT NULL
+  id                TEXT PRIMARY KEY,   -- UUID
+  page_id           TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  scheduled_start   TEXT NOT NULL,      -- ISO 8601
+  scheduled_end     TEXT,               -- ISO 8601; NULL = 1h default
+  scheduled_all_day INTEGER NOT NULL DEFAULT 0,
+                                        -- BOOLEAN: 1 = all-day event (no time component rendered)
+  created_at        TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_page_schedules_page    ON page_schedules(page_id);
 CREATE INDEX IF NOT EXISTS idx_page_schedules_start   ON page_schedules(scheduled_start);
+CREATE INDEX IF NOT EXISTS idx_page_schedules_all_day ON page_schedules(scheduled_all_day) WHERE scheduled_all_day = 1;
 
 -- ─── Focus Sessions ───────────────────────────────────────────────────────────
 -- Core table (used by the built-in Focus Timer plugin via PluginContext).
@@ -208,14 +211,15 @@ async fn reorder_pages(db: State<'_, DbPool>, folder_id: Option<String>, ordered
 
 ```sql
 SELECT pages.id, pages.title,
-  snippet(pages_fts, 1, '<mark>', '</mark>', '…', 20) AS excerpt
+  snippet(pages_fts, 2, '<mark>', '</mark>', '…', 20) AS excerpt
 FROM pages_fts
 JOIN pages ON pages.rowid = pages_fts.rowid
 WHERE pages_fts MATCH ?
 ORDER BY rank
 ```
 
-Note: FTS snippet column index 2 = `content_text` (0=title, 1=subtitle, 2=content_text, 3=tags).
+Note: FTS column indices — 0=title, 1=subtitle, 2=content_text, 3=tags.
+snippet() uses index 2 (content_text) to show where the match appears in the note body.
 
 ## Content Text Extraction (TypeScript)
 
@@ -240,6 +244,34 @@ export function extractText(node: TiptapNode): string {
 ```ts
 const contentText = extractText(JSON.parse(content));
 await adapter.updatePage(id, { content, contentText });
+```
+
+## Additional TypeScript Types
+
+These types are defined in `packages/core/src/types.ts` alongside `Page` / `Folder`.
+
+```ts
+// One calendar occurrence for a page (from page_schedules table).
+// Distinct from rrule-based virtual occurrences (those are expanded at render time, no DB row).
+export interface PageSchedule {
+  id: string;             // UUID
+  pageId: string;
+  scheduledStart: string; // ISO 8601
+  scheduledEnd?: string;  // ISO 8601; null = 1-hour default block
+  scheduledAllDay: boolean;
+  createdAt: string;
+}
+
+// A completed focus-timer session (focus_sessions table).
+// page_id is optional — user may run a timer without associating it to a page.
+// Sessions < 10s are auto-discarded by the plugin; never written to DB.
+export interface FocusSession {
+  id: string;           // UUID
+  pageId?: string;      // optional association
+  startedAt: string;   // ISO 8601
+  endedAt?: string;    // ISO 8601; null while in progress
+  durationS?: number;  // denorm seconds; null while in progress
+}
 ```
 
 ## StorageAdapter Interface (TypeScript)

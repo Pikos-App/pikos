@@ -8,7 +8,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ## Phase 1 — Foundation
 
-- [ ] **GOO-27** Core TypeScript types _(Urgent)_
+- [x] **GOO-27** Core TypeScript types _(Urgent)_
   `packages/core/src/types.ts`. Types: `Vault`, `Folder`, `Page`, `PageStatus`, `PagePriority`, `Tag`, `SearchResult`, `PageFilter`. No `path` field — IDs are UUIDs. See full type definitions in `BACKLOG.md` at GOO-27.
 
 - [ ] **GOO-28** StorageAdapter interface _(High)_

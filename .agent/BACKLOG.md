@@ -1384,3 +1384,275 @@ _See `.agent/GTM.md` for full strategy. These are the concrete tasks it generate
 
   **Dependencies:** GOO-57 (AI agent — voice is its input channel), GOO-56 (plugin system).
   `whisper.cpp` sidecar: Tauri `sidecar` config in `tauri.conf.json`, bundled binary per platform.
+
+- [ ] **GOO-87** Native desktop notification system _(High)_
+  See `features/notifications.md` for full design.
+
+  Remind users of scheduled pages via OS notifications (macOS Notification Center,
+  Windows Toast, Linux libnotify) plus in-app banners when the window is focused.
+  Fully local — zero network required.
+
+  **Notification types:**
+  - **Pre-event reminder** — N minutes before `scheduled_start` (default 10 min, configurable per-page)
+  - **Overdue alert** — fires once per day per page when `scheduled_end` is past and `status ≠ done`
+  - **Focus session end** — when GOO-78 timer expires (opt-in)
+  - **Daily digest** — morning summary of today's pages (opt-in, default 8am)
+
+  **Schema additions** (add to `001_initial.sql` migration or a new `002_notifications.sql`):
+  ```sql
+  CREATE TABLE page_reminders (
+    id             TEXT PRIMARY KEY,
+    page_id        TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    minutes_before INTEGER NOT NULL,
+    created_at     INTEGER NOT NULL
+  );
+  CREATE TABLE notification_log (
+    id            TEXT PRIMARY KEY,
+    page_id       TEXT,
+    schedule_id   TEXT,
+    type          TEXT NOT NULL,  -- 'reminder' | 'overdue' | 'digest' | 'focus'
+    fired_at      INTEGER NOT NULL,
+    snoozed_until INTEGER,
+    action        TEXT            -- 'dismissed' | 'done' | 'snoozed' | 'opened'
+  );
+  ```
+
+  **Scheduler:** Rust Tokio background task (not JS `setInterval` — JS timers can be
+  throttled when the webview is backgrounded). Polls every 30 seconds. Registered in
+  `lib.rs` via `tauri::async_runtime::spawn`. Source: `src-tauri/src/notifications/`.
+
+  **Tauri dep:** `tauri-plugin-notification` (add to `Cargo.toml` + `tauri.conf.json`
+  permissions). Wraps `UNUserNotificationCenter` on macOS.
+
+  **Action buttons (macOS/Windows):** `[Done]` marks page complete without opening the
+  app. `[Snooze]` sub-menu: 15 min / 1 hour / tomorrow morning. `[Open]` focuses the
+  window and navigates to the page.
+
+  **In-app banner:** When Pikos window is focused, suppress the OS notification and
+  show a slide-in toast (top-right, Framer Motion, 8s auto-dismiss) instead.
+
+  **Per-page config:** Bell icon in metadata header (GOO-32) → popover with reminder
+  time options. Supports multiple reminders per page (e.g. 1h before + 10min before).
+
+  **Settings panel:** Enable/disable, default lead time, quiet hours, digest time,
+  notification style (banner vs alert on macOS).
+
+  **Dependencies:** GOO-29 (SQLite), GOO-34 (scheduled date picker), GOO-76
+  (`page_schedules`), GOO-32 (metadata header for bell icon UI).
+
+- [-] **GOO-82** Messaging bot platform — shared foundation _(Medium — Deferred, after GOO-57)_
+
+  Talk to your vault from any chat app. The same `AgentService` from GOO-57 powers the responses;
+  this ticket is the infrastructure that bridges a chat platform to it.
+
+  **The core problem:** Pikos is a local desktop app. Discord and WhatsApp deliver messages via
+  outbound webhook to a public URL — impossible without a server. Two strategies:
+
+  | Strategy | Works for | Tradeoff |
+  |---|---|---|
+  | Long-polling | Telegram (official), Discord (via gateway WS) | Runs inside Tauri, no server needed |
+  | Relay server | All platforms | Small Cloudflare Worker or Fly.io instance forwards webhooks to the local app |
+
+  Recommend **long-polling first** (zero infra, privacy-preserving). Relay is an optional advanced
+  path users who want WhatsApp or want guaranteed delivery can opt into.
+
+  **Shared pieces (all platforms build on these):**
+
+  1. **`MessagingAdapter` interface** — `packages/core/src/messaging/adapter.ts`
+     ```ts
+     interface MessagingAdapter {
+       platform: 'telegram' | 'discord' | 'whatsapp'
+       start(): Promise<void>   // begin polling or webhook listen
+       stop(): Promise<void>
+       send(chatId: string, text: string, options?: MessageOptions): Promise<void>
+     }
+     ```
+     Each platform ships its own implementation. The rest of the system only talks to this interface.
+
+  2. **Identity & auth** — Only the vault owner can use the bot. Binding flow:
+     - User opens Settings → Messaging → "Link Telegram account"
+     - Pikos generates a one-time token, user sends `/bind <token>` to the bot
+     - Pikos stores `(platform, platform_user_id)` in SQLite — all future messages verified against this
+     - No token = no response. The bot silently ignores unrecognised senders.
+
+  3. **Session context** — Conversation state stored in memory (ring buffer, last 20 turns per platform).
+     Feeds into `AgentService` as the chat history so the model has conversation context.
+     Cleared after 30 min of inactivity.
+
+  4. **Rate limiting** — Max 30 messages/min per bound account. Excess → "Slow down a bit." response.
+     Prevents accidental loops from automation.
+
+  5. **Notification dispatch** — Shared scheduler that sends proactive messages (reminders, digests)
+     through whichever adapters are active. See GOO-86.
+
+  6. **Privacy model** — No vault content leaves the device in long-polling mode. In relay mode,
+     messages transit through the relay encrypted (user's own relay → user's own device). Relay sees
+     ciphertext only if user follows the E2E relay setup. Disclosure shown in onboarding.
+
+  **Settings UI** — New "Messaging" section in Settings (sidebar tab). Per-platform cards: status
+  (linked / unlinked), "Link account" / "Unlink" button, notification toggles.
+
+  **Dependencies:** GOO-57 (AgentService — messaging is another I/O channel, same pattern as voice).
+
+- [-] **GOO-83** Telegram bot integration _(Medium — Deferred, after GOO-82)_
+
+  Most practical first platform: Telegram Bot API supports **long-polling** natively, so no server or
+  relay is needed — the bot runs entirely inside Tauri as a background task.
+
+  **Setup:** User creates a bot via @BotFather → pastes token into Pikos Settings → Pikos starts
+  polling `getUpdates`. Takes < 2 min. No coding required.
+
+  **Command surface (slash commands + free-form NL):**
+
+  | Input | Behaviour |
+  |---|---|
+  | `/today` | Sends today's scheduled pages + overdue tasks as a formatted list |
+  | `/inbox` | Lists Inbox (unscheduled, unfiled) pages |
+  | `/add Buy oat milk tomorrow 9am` | NL parse via GOO-19 → creates page, confirms with inline keyboard |
+  | `/done <title fragment>` | Fuzzy-matches page, marks `status = done`, confirms |
+  | `/find <query>` | FTS search, returns top 5 results with excerpt |
+  | `/note` | Starts a capture session — next message becomes a new page body |
+  | Free-form text | Routed through AgentService (GOO-57) for full conversational response |
+  | Photo / file | Attachment saved as page with image embedded; title extracted from caption |
+
+  **Message formatting:** Telegram supports MarkdownV2. Task lists render as:
+  ```
+  ✅ Review PRs — done
+  ⏳ Write tests — in progress  @2pm today
+  ○  Deploy staging
+  ```
+  Dates shown in user's local timezone (stored UTC, formatted at send time).
+
+  **Inline keyboard on `/add`:** After NL parse, reply includes:
+  `[✓ Create]  [Edit date]  [Set priority]  [Cancel]`
+  Tap to confirm or adjust before writing to vault. Confirmation required for any write.
+
+  **Notifications:** When GOO-86 is active, this adapter delivers the scheduled dispatches.
+
+  **Implementation:** `TelegramAdapter` in `apps/desktop/src/features/messaging/telegram/`.
+  Uses `node-telegram-bot-api` or raw `fetch` to `api.telegram.org`. Polling runs in a `setInterval`
+  inside a Tauri background window (or just the main window — no separate process needed).
+
+  **Dependencies:** GOO-82 (shared foundation), GOO-57 (AgentService), GOO-19 (NL parser).
+
+- [-] **GOO-84** Discord bot integration _(Medium — Deferred, after GOO-82)_
+
+  Talk to your vault from a personal Discord server or DM-to-self. Useful for users who live in
+  Discord all day — capture a task without leaving the app.
+
+  **Architecture choice:** Discord's bot API uses a persistent **WebSocket gateway** (not HTTP
+  webhooks) — so like Telegram, this can run locally inside Tauri without a public server.
+  `discord.js` or raw WebSocket to `gateway.discord.gg`.
+
+  **Setup:** User creates a Discord Application + Bot token at discord.com/developers → pastes token
+  into Pikos Settings. Bot should be added to a private personal server (not shared) — this is the
+  privacy boundary. DM-to-bot also works.
+
+  **Channel scope:** Pikos only responds in channels it's explicitly granted access to (configured in
+  Settings). Default: respond only to DMs to the bot. This prevents accidental leaks to shared servers.
+
+  **Command surface:** Same as Telegram (GOO-83) — slash commands registered via Discord's
+  Application Commands API so they autocomplete in the Discord UI:
+  - `/today`, `/inbox`, `/add`, `/done`, `/find`, `/note`
+  - Free-form DMs routed to AgentService
+
+  **Rich embeds:** Discord supports embeds for structured output:
+  ```
+  ┌──────────────────────────────────┐
+  │ 📋 Today — 3 items               │
+  │──────────────────────────────────│
+  │ ⏰ 9:00am  Review PRs            │
+  │ ⏰ 2:00pm  Deploy staging        │
+  │ ⚠️  Overdue  Write tests          │
+  └──────────────────────────────────┘
+  ```
+  Buttons on task embeds: `✓ Done` | `Reschedule` | `Open in Pikos`
+
+  **"Open in Pikos" deep link:** `pikos://page/<uuid>` — Tauri custom scheme handler focuses the
+  app and navigates to that page. Same mechanism as GOO-68 share links.
+
+  **Implementation:** `DiscordAdapter` in `apps/desktop/src/features/messaging/discord/`.
+  Dependency: `discord.js` (or lighter `@discordjs/ws` + `@discordjs/rest`).
+
+  **Privacy note:** Discord messages transit Discord's servers by design. The bot response content
+  (task titles, note excerpts) will appear in Discord. Users should be aware of this — shown in
+  onboarding. Recommend using a private server or DM-to-bot.
+
+  **Dependencies:** GOO-82 (shared foundation), GOO-57 (AgentService), GOO-19 (NL parser).
+
+- [-] **GOO-85** WhatsApp integration _(Low — Deferred, after GOO-84, approach TBD)_
+
+  WhatsApp is the world's most-used messenger but has no official bot API for personal accounts.
+  Options, in order of viability:
+
+  | Approach | Viability | Notes |
+  |---|---|---|
+  | WhatsApp Business Cloud API | Medium | Free tier, requires Meta business account + phone number verification. Messages go through Meta's servers. Personal use is technically allowed for small volumes. |
+  | Unofficial clients (`whatsapp-web.js`) | Low | Scrapes WhatsApp Web. ToS violation. Account ban risk. Not suitable for a productivity app. |
+  | Signal instead | High (alternative) | Signal has an unofficial but stable bot lib (`signal-cli`). Same privacy positioning as Pikos. Worth considering as a WhatsApp substitute. |
+  | Matrix bridge | Medium | Matrix + WhatsApp bridge (via `mautrix-whatsapp`) — self-hosted, routes WA messages into a Matrix room that Pikos can read via Matrix client. High setup complexity. |
+
+  **Recommended path:** Implement Signal support under this ticket (same user intent — "chat app I
+  use daily"), with WhatsApp Business Cloud API as a secondary option for users who set it up.
+
+  **Signal (`signal-cli` sidecar):** `signal-cli` is a Java CLI that can run as a Tauri sidecar
+  (like `whisper.cpp` in GOO-63). Register a separate phone number (e.g. a free Google Voice number)
+  for the bot. User links their Signal account to that number. No server needed — runs entirely local.
+
+  **WhatsApp Business Cloud API:** Meta provides free-tier webhook access. Requires a relay (small
+  Cloudflare Worker) to forward webhooks to the local app. User must create a Meta Business account,
+  set up a phone number, and agree to Meta's messaging policies. Document this setup clearly.
+
+  **Both share the same `MessagingAdapter` interface** — the rest of the system doesn't care which.
+
+  **Scope note:** Defer until GOO-83 (Telegram) and GOO-84 (Discord) are stable and there's real
+  user demand for WhatsApp/Signal. This is a "nice to have" for users whose primary communication
+  lives in WhatsApp.
+
+  **Dependencies:** GOO-82 (shared foundation), GOO-84 (Discord done first to prove the pattern).
+
+- [-] **GOO-86** Proactive notifications via messaging _(Medium — Deferred, after GOO-83)_
+
+  The reverse direction: Pikos reaching out to you, not you reaching out to Pikos. Scheduled
+  dispatches sent through whichever messaging adapter(s) the user has linked.
+
+  **Notification types:**
+
+  | Type | Trigger | Content |
+  |---|---|---|
+  | Morning digest | Daily at user-configured time (default 8am) | Today's scheduled pages, overdue carry-overs |
+  | Due reminder | N minutes before `scheduled_start` | "Reminder: _Review PRs_ in 15 min" |
+  | Overdue alert | Page past `scheduled_end` with `status ≠ done` | "Overdue: _Write tests_ (was 2pm)" with `[Done]` / `[Reschedule]` buttons |
+  | Completion summary | End of day (default 6pm) | Count done/total for the day, streak if applicable |
+  | Focus session end | When focus timer (GOO-78) expires | "25min done! Take a break 🎉" |
+
+  **Interaction:** Notification messages include inline action buttons where the platform supports them
+  (Telegram: inline keyboard, Discord: message components). `[Done]`, `[Snooze 1h]`, `[Open]`.
+  Tapping `[Done]` marks the page complete without opening the app.
+
+  **User control:**
+  - Per-type toggles in Settings → Messaging → Notifications
+  - Quiet hours: "Don't notify between 10pm – 8am"
+  - Per-page opt-out: `remind: false` flag in page metadata (toggle in metadata header)
+  - Max 1 overdue alert per page per day — no spam for chronically deferred tasks
+
+  **Implementation:** `NotificationScheduler` service in `packages/core/src/messaging/scheduler.ts`.
+  Runs as a `setInterval` (check every minute) inside the Tauri window. On match, calls
+  `MessagingAdapter.send()` on all linked adapters. Scheduler state persisted in SQLite
+  (`notification_log` table — prevents duplicate sends on app restart).
+
+  ```sql
+  CREATE TABLE notification_log (
+    id TEXT PRIMARY KEY,
+    page_id TEXT,          -- NULL for digest/summary types
+    type TEXT NOT NULL,    -- 'digest' | 'reminder' | 'overdue' | 'summary' | 'focus'
+    platform TEXT NOT NULL,
+    sent_at INTEGER NOT NULL
+  );
+  ```
+
+  **Privacy:** No external service required in long-polling mode. Messages stay between the local
+  app and the user's own bot token/chat. Same privacy story as GOO-83/84.
+
+  **Dependencies:** GOO-83 (Telegram adapter — first delivery target), GOO-82 (shared scheduler
+  dispatch), GOO-78 (focus timer — for focus session notifications).

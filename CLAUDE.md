@@ -29,6 +29,16 @@ pnpm exec prettier --check "apps/desktop/src/**/*.{ts,tsx,css}"  # Prettier chec
 - **Never load `BACKLOG.md` whole** — grep/search by GOO number when needed
 - Use `.agent/BACKLOG_ACTIVE.md` for next-up items (next ~20 actionable tasks)
 
+## Quality bar
+
+Pikos competes with NotePlan, Obsidian, TickTick, and Linear. It wins by being the only app that combines notes, tasks, and calendar — local-first, no account required, and fast enough to feel native.
+
+Every decision must hold to three standards:
+
+- **Performance**: Every interaction must feel instant. No sluggish renders, no unnecessary re-renders, no bundle bloat. If it's slow, it's not done.
+- **Security**: Data never leaves the device without explicit user action. No telemetry, no hidden network calls, no unsafe data handling. User trust is the product.
+- **Approachability**: A non-technical user should be able to create a task, write a note, and schedule it without reading docs. Power features exist but are never in the way.
+
 ## Stack
 
 Tauri 2 + React 19 + TypeScript (strict) + SQLite + Tiptap + shadcn/ui + Tailwind v4
