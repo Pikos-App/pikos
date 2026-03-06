@@ -27,8 +27,8 @@ pub(crate) fn now_iso() -> String {
     chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
 }
 
-/// Open (or create) a SQLite vault at the given path and run migrations.
-/// Called by VaultContext when the user opens or creates a vault.
+/// Open (or create) a SQLite workspace at the given path and run migrations.
+/// Called by WorkspaceContext when the user opens or creates a workspace.
 #[tauri::command]
 pub async fn connect_db(path: String, state: tauri::State<'_, DbState>) -> Result<(), String> {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()

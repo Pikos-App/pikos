@@ -1,14 +1,14 @@
 // @pikos/core — central type definitions
 // No Tauri / React / DOM dependencies — safe to import in tests and packages.
 
-// ─── Vault ───────────────────────────────────────────────────────────────────
-// Multi-vault: each vault is a separate SQLite file. The list of known vaults
-// lives in @tauri-apps/plugin-store (JSON config, not SQLite).
+// ─── Workspace ───────────────────────────────────────────────────────────────
+// Multi-workspace: each workspace is a separate SQLite file. The list of known
+// workspaces lives in @tauri-apps/plugin-store (JSON config, not SQLite).
 
-export interface Vault {
+export interface Workspace {
   id: string; // UUID, stable across renames
   name: string; // display name (user-editable)
-  dbPath: string; // absolute path to the vault .sqlite file
+  dbPath: string; // absolute path to the workspace .sqlite file
   createdAt: string; // ISO 8601
   lastOpenedAt: string | null;
 }

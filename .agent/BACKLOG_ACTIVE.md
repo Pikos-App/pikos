@@ -8,35 +8,15 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ## Phase 1 — Foundation
 
-- [x] **GOO-27** Core TypeScript types _(Urgent)_
-  `packages/core/src/types.ts`. Types: `Vault`, `Folder`, `Page`, `PageStatus`, `PagePriority`, `Tag`, `SearchResult`, `PageFilter`. No `path` field — IDs are UUIDs. See full type definitions in `BACKLOG.md` at GOO-27.
+- [ ] **GOO-90** App-level error boundary _(Medium)_ — **do before GOO-15**
+  Wrap `<AppShell>` in a React error boundary. GOO-15 introduces real vault I/O paths; if VaultContext throws, the app goes blank with no recovery UI. Minimum: catch render/mount errors and show "Something went wrong — please relaunch" with a reset button. Use `react-error-boundary` or a simple class component ErrorBoundary in `apps/desktop/src/shared/`. One boundary around `<AppShell>` is sufficient for Phase 1.
 
-- [x] **GOO-28** StorageAdapter interface _(High)_
-  `packages/core/src/storage.ts`. Interface + `NewPage`/`PageUpdate`/`NewFolder`/`FolderUpdate` helpers.
-  `TauriSQLiteAdapter` → `apps/desktop/src/shared/adapters/`. `MockStorageAdapter` → `packages/core/src/adapters/` (in-memory, for tests). Injection via `VITE_TEST_MODE`.
-
-- [x] **GOO-29** Rust SQLite schema + Tauri CRUD commands _(High)_
-  `Cargo.toml`: add `tauri-plugin-sql` (sqlite feature), `uuid` (v4). Schema in `src-tauri/migrations/001_initial.sql` with FTS5 triggers. Commands in `src-tauri/src/db/{pages,folders,search}.rs`. See `features/storage.md` for full spec.
-
-- [x] **GOO-30** VaultContext + UIContext _(High)_
-  VaultContext owns data + mutations (pages, folders, createPage, etc.) + lightweight event emitter (`page:created/updated/deleted`, `vault:loaded`).
-  UIContext owns navigation: `activePage`, `activeViewId: 'today'|'inbox'|folderId`, `rightPanel: 'editor'|'calendar'`, `sidebarCollapsed`. See `BACKLOG.md` GOO-30 for full interface definitions.
-
-- [x] **GOO-31** Port keyboard system to React hooks _(High)_
-  The `Keyboard` singleton in `registry.ts` is already done — do not modify it. This task adds two hooks:
-  - `useKeyboardShortcut(combo, handler, opts?)` — registers/unregisters a binding on mount/unmount.
-  - `useKeyboardListener()` — mounts `Keyboard.handle` on `window` keydown; call once in `App.tsx`.
-  Chord support via 400ms timeout between keystrokes. Expose `Keyboard.pushScope`/`popScope` via a `useKeyboardScope(scope)` hook for modal/dialog use.
-
-- [x] **GOO-23** Design system: typography, color, dark mode _(High)_
-  **Must come before GOO-15** (welcome screen has UI). Dark mode first. Linear/Arc/Obsidian inspired. CSS custom properties via `@theme` in `app.css` — shadcn's vars are the base, extend with dark-mode overrides + typography scale. System font stack. No gradients, minimal shadows.
-
-- [ ] **GOO-15** Vault selection + persistence _(Urgent)_
-  First-launch welcome screen: "Create New Vault".
-  **Persistence**: vault registry stored via `@tauri-apps/plugin-store` as `Vault[]` JSON.
-  **Auto-reopen**: on subsequent launches, find vault with most recent `lastOpenedAt`, call `connectDb(path)` (already stubbed in VaultContext) then `loadVaultData()`. Skip welcome screen entirely.
-  **Stale path**: if DB file no longer exists at stored path, show "Vault not found" error with option to re-select location or remove from list.
-  Only show welcome screen when no vaults are known.
+- [ ] **GOO-15** Workspace auto-create + persistence _(Urgent)_
+  **First launch**: silently create workspace DB at `appDataDir/default.sqlite` (Tauri `appDataDir()`). Show a simple welcome/onboarding screen (app name + "Get started") — not a file picker. User never sees file paths.
+  **Persistence**: workspace registry stored via `@tauri-apps/plugin-store` as `Workspace[]` JSON.
+  **Auto-reopen**: on subsequent launches, find workspace with most recent `lastOpenedAt`, call `connectDb(path)` (already stubbed in WorkspaceContext) then `loadWorkspaceData()`. Skip welcome screen entirely.
+  **Stale path**: if DB file no longer exists at stored path, recreate at same path (or show minimal error with "Reset" option).
+  **Multiple workspaces**: Settings → "Manage Workspaces" only — not exposed in main UI.
 
 ---
 
@@ -45,6 +25,9 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 - [ ] **GOO-14** Resizable three-panel layout _(High)_
   Left 180px | Pages 280px | Right flex. Drag to resize. Persist widths to localStorage.
   **Also wire App.tsx**: replace the three empty `<div>`s with real panel components (`<Sidebar>`, `<PageListPanel>`, `<EditorPanel>`). Without this, Phase 2 UI tasks have nowhere to render.
+
+- [ ] **GOO-91** `list_pages_today` Rust command _(High)_ — **do before GOO-89**
+  `src-tauri/src/db/pages.rs`. The Today view cannot be served by `list_pages` — it filters `pages.scheduled_start` (the denorm), not the actual `page_schedules` table. Need a JOIN: `SELECT DISTINCT pages.* FROM pages JOIN page_schedules ON page_schedules.page_id = pages.id WHERE date(page_schedules.scheduled_start) <= date('now') AND pages.status != 'done'`. New command: `list_pages_today`. Register in `lib.rs`. Add to `StorageAdapter` interface, `TauriSQLiteAdapter`, and `MockStorageAdapter`.
 
 - [ ] **GOO-89** Page list panel _(High)_ — **requires GOO-14**
   Middle column. Renders pages for the active view (`UIContext.activeViewId`):
@@ -65,6 +48,15 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 - [ ] **GOO-80** Sidebar collapse + navigation keyboard shortcuts _(High)_ — **requires GOO-79**
   Binary collapse (all-open OR both-left-collapsed). `Cmd+\` toggles. framer-motion spring (stiffness 350, damping 35). `J`/`K` = prev/next page, `Enter` = open, `Escape` from editor = focus page list, `Cmd+Shift+C` = toggle editor/calendar. J/K/Enter auto-expand if collapsed. `sidebarCollapsed` is already live in UIContext.
+
+- [ ] **GOO-92** Derive `activePage` from `activePageId` in UIContext _(High)_ — **do before GOO-10**
+  UIContext stores `activePage: Page | null` as a snapshot. Once the editor is live, `VaultContext.updatePage` (debounced) will leave UIContext holding stale data — the editor reads old content. Fix: store `activePageId: string | null` instead; derive the page via `useVault().pages.find(...)` or a `useActivePage()` convenience hook. Update call sites. Breaking change to UIContext shape — must land before GOO-10 builds on the current API.
+
+- [ ] **GOO-93** Foundation micro-fixes _(Medium)_ — **do before GOO-10 / GOO-36**
+  Three small bugs found in audit, each <10 lines:
+  1. **Timer leak**: `VaultContext.deletePage` doesn't cancel the pending debounce timer — `adapter.updatePage` fires ~800ms after deletion. Fix: clear `debounceTimers` + `pendingPatches` for the ID in `deletePage`.
+  2. **`content_text` NOT NULL**: `createPage` in VaultContext passes no `contentText`; Rust binds NULL to a `NOT NULL` column. Fix: pass `contentText: ""` explicitly in the `createPage` call.
+  3. **`reorder_pages` folder guard**: Rust command ignores `folder_id` — sorts any IDs regardless of folder, risking cross-folder corruption. Fix: add `WHERE folder_id = ?` (or `WHERE folder_id IS NULL`) to each UPDATE.
 
 - [ ] **GOO-10** Tiptap WYSIWYG editor _(Urgent)_
   `@tiptap/react`, `@tiptap/starter-kit`, task-list, task-item, placeholder extensions. Storage format: Tiptap JSON in SQLite (`content` column). Editor subscribes to `UIContext.activePage` to know what to load/save. On each save, extract plain text via `editor.getText()` and write to `content_text` for FTS — piggyback on the 800ms autosave, no separate debounce needed. Markdown only at import/export boundary. Task-list checkboxes NOT wired to page `status`. See `features/editor.md`.

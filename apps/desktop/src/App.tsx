@@ -1,5 +1,5 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { VaultProvider } from "@/shared/context/VaultContext";
+import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 import { UIProvider } from "@/shared/context/UIContext";
 import { useKeyboardListener } from "@/shared/keyboard/useKeyboard";
 
@@ -20,12 +20,12 @@ function AppShell() {
 
 export default function App() {
   return (
-    <VaultProvider>
+    <WorkspaceProvider>
       <UIProvider>
         <TooltipProvider>
           <AppShell />
         </TooltipProvider>
       </UIProvider>
-    </VaultProvider>
+    </WorkspaceProvider>
   );
 }

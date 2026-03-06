@@ -1,8 +1,8 @@
 "use client";
 
-// VaultContext — owns all data + mutations: pages, folders, tags.
-// Adapter is created once on mount; vault connection is triggered by selectVault().
-// selectVault() is a stub — full implementation lives in GOO-15 (welcome screen).
+// WorkspaceContext — owns all data + mutations: pages, folders, tags.
+// Adapter is created once on mount; workspace connection is triggered by selectWorkspace().
+// selectWorkspace() is a stub — full implementation lives in GOO-15 (welcome screen).
 
 import {
   createContext,
@@ -13,35 +13,35 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Folder, Page, Tag, Vault } from "@pikos/core";
+import type { Folder, Page, Tag, Workspace } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import type { FolderUpdate, PageUpdate, StorageAdapter } from "@pikos/core";
 import { TauriSQLiteAdapter, connectDb } from "@/shared/adapters/TauriSQLiteAdapter";
 
 // ─── Event emitter ────────────────────────────────────────────────────────────
 
-type VaultEvent = "page:created" | "page:updated" | "page:deleted" | "vault:loaded";
+type WorkspaceEvent = "page:created" | "page:updated" | "page:deleted" | "workspace:loaded";
 
 interface EventPayloadMap {
   "page:created": Page;
   "page:updated": Page;
   "page:deleted": string;
-  "vault:loaded": Vault;
+  "workspace:loaded": Workspace;
 }
 
 type AnyHandler = (payload: unknown) => void;
 
 // ─── Context shape ────────────────────────────────────────────────────────────
 
-export interface VaultContextValue {
-  vault: Vault | null;
+export interface WorkspaceContextValue {
+  workspace: Workspace | null;
   pages: Page[];
   folders: Folder[];
   /** Derived reactively from pages[].tags — never stored separately. */
   tags: Tag[];
   isLoading: boolean;
-  /** Opens a folder picker and connects the chosen vault. Full UI in GOO-15. */
-  selectVault(): Promise<void>;
+  /** Auto-creates or reopens the workspace. Full UI in GOO-15. */
+  selectWorkspace(): Promise<void>;
   createPage(opts: { title?: string; folderId?: string | null }): Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage(id: string, patch: PageUpdate): void;
@@ -51,10 +51,13 @@ export interface VaultContextValue {
   deleteFolder(id: string): Promise<void>;
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void>;
   reorderFolders(orderedIds: string[]): Promise<void>;
-  on<E extends VaultEvent>(event: E, handler: (payload: EventPayloadMap[E]) => void): () => void;
+  on<E extends WorkspaceEvent>(
+    event: E,
+    handler: (payload: EventPayloadMap[E]) => void
+  ): () => void;
 }
 
-const VaultContext = createContext<VaultContextValue | null>(null);
+const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 // ─── Derived tags ─────────────────────────────────────────────────────────────
 
@@ -80,14 +83,14 @@ function deriveTags(pages: Page[]): Tag[] {
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-export function VaultProvider({ children }: { children: ReactNode }) {
+export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [adapter] = useState<StorageAdapter>(() =>
     import.meta.env["VITE_TEST_MODE"] === "true"
       ? new MockStorageAdapter()
       : new TauriSQLiteAdapter()
   );
 
-  const [vault, setVault] = useState<Vault | null>(null);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -95,12 +98,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   // Lightweight event emitter
   const listenersRef = useRef(new Map<string, Set<AnyHandler>>());
 
-  const emit = useCallback(<E extends VaultEvent>(event: E, payload: EventPayloadMap[E]) => {
+  const emit = useCallback(<E extends WorkspaceEvent>(event: E, payload: EventPayloadMap[E]) => {
     listenersRef.current.get(event)?.forEach((h) => h(payload as unknown));
   }, []);
 
   const on = useCallback(
-    <E extends VaultEvent>(event: E, handler: (payload: EventPayloadMap[E]) => void) => {
+    <E extends WorkspaceEvent>(event: E, handler: (payload: EventPayloadMap[E]) => void) => {
       let set = listenersRef.current.get(event);
       if (!set) {
         set = new Set();
@@ -114,8 +117,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // Load all data after vault connection
-  const loadVaultData = useCallback(async () => {
+  // Load all data after workspace connection
+  const loadWorkspaceData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [loadedPages, loadedFolders] = await Promise.all([
@@ -129,28 +132,29 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     }
   }, [adapter]);
 
-  // selectVault — stub; full vault selection UX is GOO-15
-  const selectVault = useCallback((): Promise<void> => {
-    // TODO GOO-15: open dialog, persist vault config, call connectDb(path)
+  // selectWorkspace — stub; full workspace UX is GOO-15
+  // GOO-15 will auto-create at appDataDir on first launch instead of prompting
+  const selectWorkspace = useCallback((): Promise<void> => {
+    // TODO GOO-15: auto-create workspace at appDataDir, persist config, call connectDb(path)
     // For now, connect to a test DB so the app is usable during development
     if (!(import.meta.env.DEV === true && import.meta.env["VITE_TEST_MODE"] !== "true")) {
       return Promise.resolve();
     }
     const testPath = "/tmp/pikos-dev.sqlite";
-    const devVault: Vault = {
+    const devWorkspace: Workspace = {
       id: "dev",
-      name: "Dev Vault",
+      name: "Dev Workspace",
       dbPath: testPath,
       createdAt: new Date().toISOString(),
       lastOpenedAt: new Date().toISOString(),
     };
     return connectDb(testPath)
-      .then(() => loadVaultData())
+      .then(() => loadWorkspaceData())
       .then(() => {
-        setVault(devVault);
-        emit("vault:loaded", devVault);
+        setWorkspace(devWorkspace);
+        emit("workspace:loaded", devWorkspace);
       });
-  }, [loadVaultData, emit]);
+  }, [loadWorkspaceData, emit]);
 
   // ─── Debounced updatePage ──────────────────────────────────────────────────
 
@@ -283,14 +287,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   // ─── Context value ────────────────────────────────────────────────────────
 
-  const value = useMemo<VaultContextValue>(
+  const value = useMemo<WorkspaceContextValue>(
     () => ({
-      vault,
+      workspace,
       pages,
       folders,
       tags,
       isLoading,
-      selectVault,
+      selectWorkspace,
       createPage,
       updatePage,
       deletePage,
@@ -302,12 +306,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       on,
     }),
     [
-      vault,
+      workspace,
       pages,
       folders,
       tags,
       isLoading,
-      selectVault,
+      selectWorkspace,
       createPage,
       updatePage,
       deletePage,
@@ -320,13 +324,13 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 // eslint-disable-next-line react-refresh/only-export-components
-export function useVault(): VaultContextValue {
-  const ctx = useContext(VaultContext);
-  if (!ctx) throw new Error("useVault must be used within <VaultProvider>");
+export function useWorkspace(): WorkspaceContextValue {
+  const ctx = useContext(WorkspaceContext);
+  if (!ctx) throw new Error("useWorkspace must be used within <WorkspaceProvider>");
   return ctx;
 }

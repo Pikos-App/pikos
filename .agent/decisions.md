@@ -5,8 +5,8 @@ Settled architectural and product decisions. Load this file only when you need c
 - **App name**: Pikos (`productName` + `identifier` in `tauri.conf.json`), repo name is pkos.
 - **src-tauri location**: `apps/desktop/src-tauri/` (sibling of frontend; `frontendDist: "../dist"`)
 - **Package manager**: pnpm (already in tauri.conf.json — delete package-lock.json on migration)
-- **Storage**: SQLite as source of truth, no filesystem storage
-- **State**: VaultContext + UIContext (no Zustand)
+- **Storage**: SQLite as source of truth for structured data. Images/attachments stored on filesystem (see Image uploads below).
+- **State**: WorkspaceContext + UIContext (no Zustand)
 - **Recent pages**: `last_opened_at` column in pages table — persists across restarts
 - **New page UX (Cmd+N)**: Quick Add Modal (GOO-60) — small centered modal from anywhere, NL input, live metadata chips (date/priority/folder), Enter to create. No more "instantly create empty page". GOO-19 (NL parser) is a Phase 1 dependency of this, not Phase 5.
 - **NL recurrence**: "run m/w/f at 3pm for 45m" creates multiple independent pages — one per day matched. Recurrence window defaults to next occurrence of each day unless a duration/count/through-date is specified.
@@ -17,7 +17,7 @@ Settled architectural and product decisions. Load this file only when you need c
 - **Editor storage format**: Tiptap JSON in SQLite (`content` column). No markdown in the edit loop. `content_text` column holds extracted plain text for FTS. Markdown only at import/export boundary.
 - **`tiptap-markdown` not needed** at runtime — drop from dependencies
 - **Linear**: archived — `.agent/` is now the source of truth
-- **Multi-vault**: Each vault = separate SQLite file. Vault registry stored in `@tauri-apps/plugin-store` as `Vault[]` (JSON). `Vault` type gains `id: string` + `lastOpenedAt: string | null`. No vault_id column inside vault DB — vaults are self-contained.
+- **Multi-workspace**: Each workspace = separate SQLite file. Workspace registry stored in `@tauri-apps/plugin-store` as `Workspace[]` (JSON). `Workspace` type has `id: string` + `lastOpenedAt: string | null`. No workspace_id column inside workspace DB — workspaces are self-contained. UI label: "Workspace". TypeScript type: `Workspace`. Hidden from default UI — most users have one and never see the concept. "Manage Workspaces" only in Settings.
 - **Manual sort order**: `sort_order INTEGER` on both `folders` and `pages`. Assigned `max+1` on create. Batch-updated via `reorder_pages` / `reorder_folders` Tauri commands. `sortOrder` excluded from `NewPage`/`NewFolder`.
 - **No nested folders in v1**: `parent_id` column stays in schema (no migration later) but always `NULL`. Not exposed in UI. Flat list like TickTick.
 - **Product vision**: One app replacing Obsidian (content) + TickTick (tasks + scheduling). Every page is simultaneously a note and a task. Calendar is the primary scheduling surface.
@@ -35,6 +35,10 @@ Settled architectural and product decisions. Load this file only when you need c
 - **Undo/redo**: GOO-62. `CommandHistory` singleton (50-entry ring buffer). App-level undo for metadata + CRUD; Tiptap handles editor-internal undo. `Cmd+Z` / `Cmd+Shift+Z`. Toast with inline "Undo" link.
 - **Inbox**: Pages with `folderId = NULL`. Pinned special row at top of sidebar (not a real DB folder). `UIContext.activeViewId = 'inbox'`.
 - **New page folder assignment** (priority order): (1) active folder → use it; (2) inbox selected → inbox; (3) no sidebar context → `Settings.defaultFolderId` (defaults to null = inbox).
-- **VaultContext / UIContext split**: VaultContext owns data + mutations. UIContext owns navigation state. Kept separate to avoid unnecessary re-renders.
-- **Audience**: Broad — anyone wanting private notes + tasks + calendar. Not filtered to technical users. Never expose file paths, SQLite, or vault internals in default UI.
+- **WorkspaceContext / UIContext split**: WorkspaceContext owns data + mutations. UIContext owns navigation state. Kept separate to avoid unnecessary re-renders.
+- **Audience**: Broad — anyone wanting private notes + tasks + calendar. Not filtered to technical users. Never expose file paths, SQLite, or workspace internals in default UI.
 - **Dual landing pages**: `/` (general, approachable) + `/open` (technical, architecture). (GOO-53)
+
+- **Image uploads**: Images stored in a sibling `assets/` directory next to the workspace SQLite file (e.g. `~/Library/Application Support/pikos/assets/{uuid}.{ext}`). DB stores the relative path only (e.g. `assets/abc123.png`) — never an absolute path, so the workspace stays portable across machines and backups. Displayed via Tauri's `convertFileSrc()` which serves local files through the `asset://` protocol. Requires `"asset"` protocol listed under `security.assetProtocol.enable = true` and the assets dir added to `security.assetProtocol.scope` in `tauri.conf.json`. Editor integration: custom Tiptap `Image` extension — drop or paste triggers a Tauri `save_asset` command (Rust: copies file into assets dir, returns relative path), then inserts an image node. No BLOBs in SQLite — keeps DB small and reads fast.
+
+- **Workspace auto-create**: On first launch, Pikos silently creates a default workspace DB at `{appDataDir}/default.sqlite` using Tauri's `app_data_dir()` — no file picker, no path exposed to the user. A brief welcome screen ("Welcome to Pikos" + "Get started") is shown once, then never again. On every subsequent launch the workspace with the most recent `lastOpenedAt` is opened automatically; the welcome screen is skipped. Multiple workspaces are a power-user feature accessible only via Settings → "Manage Workspaces". If the DB file is missing at its stored path (e.g. after a failed migration), recreate it at the same path rather than prompting — data loss is better surfaced via a dedicated recovery flow than a confusing file picker on startup.
