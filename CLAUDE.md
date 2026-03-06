@@ -19,7 +19,7 @@ pnpm exec prettier --check "apps/desktop/src/**/*.{ts,tsx,css}"  # Prettier chec
 
 ## End-of-session cleanup (mandatory)
 
-1. Mark completed task `[x]` then remove it from `BACKLOG_ACTIVE.md`
+1. Remove completed task from `BACKLOG_ACTIVE.md`
 2. Update `CURRENT.md` active task to the next pending item
 3. Collapse completed phase history in `CURRENT.md` to a single summary line
 4. Keep `CURRENT.md` under 20 lines

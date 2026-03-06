@@ -6,6 +6,10 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "store:allow-load",
+    "store:allow-set",
+    "store:allow-get",
+    "store:allow-save",
     "fs:default",
     "fs:allow-remove",
     "fs:allow-write-text-file",

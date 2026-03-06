@@ -31,6 +31,11 @@ pub(crate) fn now_iso() -> String {
 /// Called by WorkspaceContext when the user opens or creates a workspace.
 #[tauri::command]
 pub async fn connect_db(path: String, state: tauri::State<'_, DbState>) -> Result<(), String> {
+    // Ensure the parent directory exists (e.g. ~/Library/Application Support/com.pikos.app/)
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(

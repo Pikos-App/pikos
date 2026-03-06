@@ -2,21 +2,8 @@
 
 Next-up items only (Phase 1 + Phase 2). For Phase 3+ specs — grep `BACKLOG.md` by GOO number.
 
-Status: `[ ]` pending · `[~]` in progress · `[x]` done
+Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
----
-
-## Phase 1 — Foundation
-
-- [x] **GOO-90** App-level error boundary _(Medium)_ — **do before GOO-15**
-  Wrap `<AppShell>` in a React error boundary. GOO-15 introduces real workspace I/O; if WorkspaceContext throws, the app goes blank. Minimum: catch render/mount errors and show "Something went wrong — please relaunch" with a reset button. Use `react-error-boundary` or a simple class component in `apps/desktop/src/shared/`. One boundary around `<AppShell>` is sufficient.
-
-- [ ] **GOO-15** Workspace auto-create + persistence _(Urgent)_
-  **First launch**: silently create workspace DB at `appDataDir/default.sqlite` (Tauri `appDataDir()`). Show a simple welcome/onboarding screen (app name + "Get started") — not a file picker. User never sees file paths.
-  **Persistence**: workspace registry stored via `@tauri-apps/plugin-store` as `Workspace[]` JSON.
-  **Auto-reopen**: on subsequent launches, find workspace with most recent `lastOpenedAt`, call `connectDb(path)` (already stubbed in WorkspaceContext) then `loadWorkspaceData()`. Skip welcome screen entirely.
-  **Stale path**: if DB file no longer exists at stored path, recreate at same path (or show minimal error with "Reset" option).
-  **Multiple workspaces**: Settings → "Manage Workspaces" only — not exposed in main UI.
 
 ---
 
@@ -24,7 +11,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 - [ ] **GOO-14** Resizable three-panel layout _(High)_
   Default: Left 180px | Pages 280px | Right flex. Drag handles between panels (rendered inside each panel's `motion.div` so they animate away on sidebar collapse). Persist widths to localStorage.
-  **Also wire App.tsx**: replace the three empty `<div>`s with real panel components (`<Sidebar>`, `<PageListPanel>`, `<EditorPanel>`). Right panel toggles Editor ↔ Calendar (`Cmd+Shift+C`) — left and pages panels remain visible in both modes. Without this, Phase 2 UI tasks have nowhere to render.
+  **Also wire App.tsx**: replace the three empty `<div>`s with real panel components (`<Sidebar>`, `<PageListPanel>`, `<EditorPanel>`). Right panel toggles Editor ↔ Calendar (`Cmd+Shift+C`) — left and pages panels remain visible in both modes. Without this, Phase 2 UI tasks have nowhere to render. Add in some placeholder text so I can easily identify each section.
 
 - [ ] **GOO-91** `list_pages_today` Rust command _(High)_ — **do before GOO-89**
   `src-tauri/src/db/pages.rs`. Today smart view requires a JOIN against `page_schedules` — `list_pages` cannot serve it. Correct query:

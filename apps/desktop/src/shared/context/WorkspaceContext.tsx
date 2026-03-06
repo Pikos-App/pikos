@@ -1,13 +1,13 @@
 "use client";
 
 // WorkspaceContext — owns all data + mutations: pages, folders, tags.
-// Adapter is created once on mount; workspace connection is triggered by selectWorkspace().
-// selectWorkspace() is a stub — full implementation lives in GOO-15 (welcome screen).
+// GOO-15: auto-creates/reopens workspace on mount via @tauri-apps/plugin-store.
 
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -39,8 +39,9 @@ export interface WorkspaceContextValue {
   folders: Folder[];
   /** Derived reactively from pages[].tags — never stored separately. */
   tags: Tag[];
+  /** True while the workspace is being initialised or data is being loaded. */
   isLoading: boolean;
-  /** Auto-creates or reopens the workspace. Full UI in GOO-15. */
+  /** First-launch: create default workspace + connect. Subsequent: already handled on mount. */
   selectWorkspace(): Promise<void>;
   createPage(opts: { title?: string; folderId?: string | null }): Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
@@ -93,7 +94,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Start true so we don't flash the welcome screen before init completes
+  const [isLoading, setIsLoading] = useState(true);
 
   // Lightweight event emitter
   const listenersRef = useRef(new Map<string, Set<AnyHandler>>());
@@ -132,28 +134,110 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [adapter]);
 
-  // selectWorkspace — stub; full workspace UX is GOO-15
-  // GOO-15 will auto-create at appDataDir on first launch instead of prompting
-  const selectWorkspace = useCallback((): Promise<void> => {
-    // TODO GOO-15: auto-create workspace at appDataDir, persist config, call connectDb(path)
-    // For now, connect to a test DB so the app is usable during development
-    if (!(import.meta.env.DEV === true && import.meta.env["VITE_TEST_MODE"] !== "true")) {
-      return Promise.resolve();
+  // ─── Auto-init on mount ────────────────────────────────────────────────────
+  // Attempts to reopen the most recently used workspace from the store.
+  // On first launch (empty store) → sets isLoading=false, workspace stays null → WelcomeScreen.
+
+  useEffect(() => {
+    if (import.meta.env["VITE_TEST_MODE"] === "true") {
+      // Test mode: no Tauri APIs available; skip auto-init and show welcome
+      setIsLoading(false);
+      return;
     }
-    const testPath = "/tmp/pikos-dev.sqlite";
-    const devWorkspace: Workspace = {
-      id: "dev",
-      name: "Dev Workspace",
-      dbPath: testPath,
-      createdAt: new Date().toISOString(),
-      lastOpenedAt: new Date().toISOString(),
-    };
-    return connectDb(testPath)
-      .then(() => loadWorkspaceData())
-      .then(() => {
-        setWorkspace(devWorkspace);
-        emit("workspace:loaded", devWorkspace);
-      });
+
+    async function initWorkspace() {
+      try {
+        const { load } = await import("@tauri-apps/plugin-store");
+        const store = await load("workspaces.json", { autoSave: false });
+        const workspaces = (await store.get<Workspace[]>("workspaces")) ?? [];
+
+        if (workspaces.length === 0) {
+          setIsLoading(false);
+          return;
+        }
+
+        // Find most recently opened workspace
+        const sorted = [...workspaces].sort((a, b) => {
+          const ta = a.lastOpenedAt ?? "";
+          const tb = b.lastOpenedAt ?? "";
+          return tb.localeCompare(ta);
+        });
+        const ws = sorted[0]!;
+
+        // connectDb uses create_if_missing — silently recreates if file is gone (stale path)
+        await connectDb(ws.dbPath);
+
+        // Update lastOpenedAt in the registry
+        const now = new Date().toISOString();
+        const updated: Workspace = { ...ws, lastOpenedAt: now };
+        const updatedList = workspaces.map((w) => (w.id === ws.id ? updated : w));
+        await store.set("workspaces", updatedList);
+        await store.save();
+
+        await loadWorkspaceData();
+        setWorkspace(updated);
+        emit("workspace:loaded", updated);
+      } catch (e) {
+        console.error("[WorkspaceContext] auto-init failed:", e);
+        setIsLoading(false);
+      }
+    }
+
+    void initWorkspace();
+  }, [loadWorkspaceData, emit]);
+
+  // ─── selectWorkspace ───────────────────────────────────────────────────────
+  // Called by WelcomeScreen "Get started". Creates the default workspace on first launch.
+
+  const selectWorkspace = useCallback(async (): Promise<void> => {
+    if (import.meta.env["VITE_TEST_MODE"] === "true") {
+      // Test mode: set a mock workspace so the app shell renders
+      const mockWs: Workspace = {
+        id: "mock",
+        name: "Test Workspace",
+        dbPath: ":memory:",
+        createdAt: new Date().toISOString(),
+        lastOpenedAt: new Date().toISOString(),
+      };
+      await loadWorkspaceData();
+      setWorkspace(mockWs);
+      emit("workspace:loaded", mockWs);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const [{ appDataDir }, { load }] = await Promise.all([
+        import("@tauri-apps/api/path"),
+        import("@tauri-apps/plugin-store"),
+      ]);
+
+      const dataDir = await appDataDir();
+      const sep = dataDir.endsWith("/") || dataDir.endsWith("\\") ? "" : "/";
+      const dbPath = `${dataDir}${sep}default.sqlite`;
+
+      const ws: Workspace = {
+        id: crypto.randomUUID(),
+        name: "My Workspace",
+        dbPath,
+        createdAt: new Date().toISOString(),
+        lastOpenedAt: new Date().toISOString(),
+      };
+
+      await connectDb(dbPath);
+
+      const store = await load("workspaces.json", { autoSave: false });
+      const existing = (await store.get<Workspace[]>("workspaces")) ?? [];
+      await store.set("workspaces", [...existing, ws]);
+      await store.save();
+
+      await loadWorkspaceData();
+      setWorkspace(ws);
+      emit("workspace:loaded", ws);
+    } catch (e) {
+      console.error("[WorkspaceContext] selectWorkspace failed:", e);
+      setIsLoading(false);
+    }
   }, [loadWorkspaceData, emit]);
 
   // ─── Debounced updatePage ──────────────────────────────────────────────────
@@ -198,6 +282,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         title: title ?? "",
         folderId: folderId ?? null,
         content: "",
+        contentText: "",
         status: "not_started",
         priority: 0,
         tags: [],
@@ -211,6 +296,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const deletePage = useCallback(
     async (id: string) => {
+      // Cancel any pending debounced write for this page (GOO-93 fix)
+      const timer = debounceTimers.current.get(id);
+      if (timer !== undefined) clearTimeout(timer);
+      debounceTimers.current.delete(id);
+      pendingPatches.current.delete(id);
+
       await adapter.deletePage(id);
       setPages((prev) => prev.filter((p) => p.id !== id));
       emit("page:deleted", id);

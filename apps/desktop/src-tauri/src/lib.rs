@@ -22,6 +22,7 @@ pub fn run() {
         .manage(DbState::new())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .on_window_event(|_window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
