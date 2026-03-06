@@ -2,6 +2,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 import { UIProvider } from "@/shared/context/UIContext";
 import { useKeyboardListener } from "@/shared/keyboard/useKeyboard";
+import { ErrorBoundary } from "@/shared/ErrorBoundary";
 
 function AppShell() {
   useKeyboardListener();
@@ -20,12 +21,14 @@ function AppShell() {
 
 export default function App() {
   return (
-    <WorkspaceProvider>
-      <UIProvider>
-        <TooltipProvider>
-          <AppShell />
-        </TooltipProvider>
-      </UIProvider>
-    </WorkspaceProvider>
+    <ErrorBoundary>
+      <WorkspaceProvider>
+        <UIProvider>
+          <TooltipProvider>
+            <AppShell />
+          </TooltipProvider>
+        </UIProvider>
+      </WorkspaceProvider>
+    </ErrorBoundary>
   );
 }

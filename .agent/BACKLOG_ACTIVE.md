@@ -8,7 +8,7 @@ Status: `[ ]` pending · `[~]` in progress · `[x]` done
 
 ## Phase 1 — Foundation
 
-- [ ] **GOO-90** App-level error boundary _(Medium)_ — **do before GOO-15**
+- [x] **GOO-90** App-level error boundary _(Medium)_ — **do before GOO-15**
   Wrap `<AppShell>` in a React error boundary. GOO-15 introduces real workspace I/O; if WorkspaceContext throws, the app goes blank. Minimum: catch render/mount errors and show "Something went wrong — please relaunch" with a reset button. Use `react-error-boundary` or a simple class component in `apps/desktop/src/shared/`. One boundary around `<AppShell>` is sufficient.
 
 - [ ] **GOO-15** Workspace auto-create + persistence _(Urgent)_
