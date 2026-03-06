@@ -16,6 +16,9 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, import/e
 - [ ] **GOO-81** Split view _(Low)_
       Two `EditorPane` instances in the right panel. Hard limit: 2 panes. Orientations: L/R (default) or T/B, toggled post-split. `⊟` on primary pane toggles orientation; `×` on secondary closes split. Divider draggable, ratio persisted to localStorage. Active pane (last clicked/focused) receives page-list navigation. Only active when `rightPanel === 'editor'`. State: `UIContext.splitMode: 'none' | 'horizontal' | 'vertical'` + `splitPageId: string | null`. Keyboard: `Cmd+Shift+\` toggle split, `Cmd+Shift+[`/`]` move focus between panes.
 
+- [ ] **GOO-94** Page CRUD actions _(High)_
+      "+" button in page list header creates a new page in the active view. Right-click context menu on page list items: Rename (focuses editor title), Delete (confirmation if non-empty), Move to folder (popover). Uses shadcn ContextMenu + AlertDialog. Implement alongside GOO-89.
+
 - [ ] **GOO-16** Page completion + DnD reordering _(Medium)_
       Completed pages → strikethrough + muted → collapse into "Completed" accordion at bottom (UI toggle button). Drag handle for manual reordering (`@dnd-kit/core` via `reorderPages`). `completedAt` timestamp on done.
 

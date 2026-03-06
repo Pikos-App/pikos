@@ -24,6 +24,16 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   ```
   New Tauri command `list_pages_today`. Register in `lib.rs`. Add method to `StorageAdapter` interface in `packages/core/src/storage.ts`, implement in `TauriSQLiteAdapter` and `MockStorageAdapter`.
 
+- [ ] **GOO-94** Page CRUD actions _(High)_ — **requires GOO-37, implement alongside GOO-89**
+  Inline create and context menu for page list items.
+  - **"+" button** in page list panel header → `createPage({ folderId: activeViewId if folder, else null })` → sets new page as active, opens editor. Skips NL parsing.
+  - **Context menu** (right-click on any `PageListItem`):
+    - **Rename** → focuses the title field in the editor (just calls `setActivePage` + emits a `focus-title` event that the metadata header listens for). No inline rename in the list itself.
+    - **Delete** → if `content` is non-empty or page has any `page_schedules` rows: show confirmation modal "Delete [title]? This cannot be undone." Primary: "Delete". Cancel: no-op. Empty pages delete immediately with no prompt.
+    - **Move to folder** → popover showing folder list + "Inbox" option. Selecting calls `updatePage({ folderId })`. Active folder pre-selected.
+  - Context menu implemented with shadcn `ContextMenu`. Confirmation modal reuses shadcn `AlertDialog`.
+  Component lives in `apps/desktop/src/features/pages/components/`.
+
 - [ ] **GOO-89** Page list panel _(High)_ — **requires GOO-14**
   Middle column. Renders pages for the active view (`UIContext.activeViewId`):
   - `'today'` → call `listPagesToday()` (GOO-91)
