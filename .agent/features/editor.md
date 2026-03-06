@@ -1,7 +1,7 @@
 # Feature: Tiptap Editor
 
 ## Status
-Not started. Blocked by React migration + VaultContext.
+Not started. Blocked by React migration + WorkspaceContext.
 
 ## Goal
 Replace the current CodeMirror editor with Tiptap (ProseMirror-based WYSIWYG).
@@ -132,7 +132,7 @@ function useAutosave<T>(
 - The caller is responsible for wiring `window.blur` flush via a `useEffect`
 
 `EditorPane`, `TitleField`, and `SubtitleField` each instantiate their own `useAutosave`.
-They share the same `updatePage()` from VaultContext but track dirty state independently.
+They share the same `updatePage()` from WorkspaceContext but track dirty state independently.
 
 ### Save indicator
 A single indicator per page — not per field. Lives in the `MetadataHeader` next to the title.
@@ -153,7 +153,7 @@ States:
 If `updatePage()` rejects:
 1. `saveError` is set on the relevant `useAutosave` instance
 2. Indicator switches to ⚠ state
-3. The in-memory value in VaultContext is still current — nothing is lost, just not persisted
+3. The in-memory value in WorkspaceContext is still current — nothing is lost, just not persisted
 4. On next edit (any field) the save is retried automatically
 5. If the error persists, the indicator stays ⚠ — user can click it for a "Retry now" action
 

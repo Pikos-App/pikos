@@ -1,16 +1,16 @@
 ---
 name: react-patterns
-description: React coding conventions and architectural patterns for the Pikos codebase. Reference when writing components, hooks, context providers, or wiring storage. Covers VaultContext, UIContext, StorageAdapter injection, React Compiler rules, and file naming.
+description: React coding conventions and architectural patterns for the Pikos codebase. Reference when writing components, hooks, context providers, or wiring storage. Covers WorkspaceContext, UIContext, StorageAdapter injection, React Compiler rules, and file naming.
 compatibility: React 19, babel-plugin-react-compiler, TypeScript strict mode, Tailwind v4
 ---
 
 # React Patterns for This Codebase
 
-## VaultContext — data state
+## WorkspaceContext — data state
 
 ```typescript
-// apps/desktop/src/shared/context/VaultContext.tsx
-interface VaultContextValue {
+// apps/desktop/src/shared/context/WorkspaceContext.tsx
+interface WorkspaceContextValue {
   pages: Page[]
   folders: Folder[]
   activePage: Page | null
@@ -21,18 +21,18 @@ interface VaultContextValue {
   // ... etc
 }
 
-const VaultContext = createContext<VaultContextValue | null>(null)
+const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
 
-export function VaultProvider({ children }: { children: React.ReactNode }) {
+export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const adapter = useStorageAdapter()
   const [pages, setPages] = useState<Page[]>([])
   // ...
-  return <VaultContext.Provider value={...}>{children}</VaultContext.Provider>
+  return <WorkspaceContext.Provider value={...}>{children}</WorkspaceContext.Provider>
 }
 
-export function useVault() {
-  const ctx = useContext(VaultContext)
-  if (!ctx) throw new Error('useVault must be used within VaultProvider')
+export function useWorkspace() {
+  const ctx = useContext(WorkspaceContext)
+  if (!ctx) throw new Error('useWorkspace must be used within WorkspaceProvider')
   return ctx
 }
 ```
@@ -57,10 +57,10 @@ interface UIContextValue {
 
 ## StorageAdapter injection
 
-The adapter is created once inside `VaultProvider` using a lazy state initializer — no separate `StorageContext` needed:
+The adapter is created once inside `WorkspaceProvider` using a lazy state initializer — no separate `StorageContext` needed:
 
 ```typescript
-// Inside VaultProvider (apps/desktop/src/shared/context/VaultContext.tsx)
+// Inside WorkspaceProvider (apps/desktop/src/shared/context/WorkspaceContext.tsx)
 const [adapter] = useState<StorageAdapter>(() =>
   import.meta.env.VITE_TEST_MODE === 'true'
     ? new MockStorageAdapter()
@@ -93,7 +93,7 @@ All code uses strict mode + `noUncheckedIndexedAccess` + `exactOptionalPropertyT
 - Co-locate styles with components using Tailwind classes (no CSS modules)
 - Named exports only: `export function MyComponent()` — no default exports
 - Props interfaces declared directly above the component: `interface MyComponentProps { ... }`
-- No prop drilling more than 2 levels — use context or lift to VaultContext
+- No prop drilling more than 2 levels — use context or lift to WorkspaceContext
 
 ## File naming
 

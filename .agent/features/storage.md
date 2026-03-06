@@ -154,7 +154,7 @@ ORDER BY last_opened_at DESC
 LIMIT 10;
 ```
 
-`VaultContext.setActivePage()` calls `updatePage(id, { lastOpenedAt: new Date().toISOString() })` on every page open.
+`WorkspaceContext.setActivePage()` calls `updatePage(id, { lastOpenedAt: new Date().toISOString() })` on every page open.
 
 ## Tauri Commands (Rust signatures)
 
@@ -313,11 +313,11 @@ export interface StorageAdapter {
 
 ## Adapter Injection
 
-No separate `StorageContext` needed. The adapter is created once inside `VaultProvider` using a lazy state initializer:
+No separate `StorageContext` needed. The adapter is created once inside `WorkspaceProvider` using a lazy state initializer:
 
 ```ts
-// apps/desktop/src/shared/context/VaultContext.tsx
-export function VaultProvider({ children }: { children: React.ReactNode }) {
+// apps/desktop/src/shared/context/WorkspaceContext.tsx
+export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [adapter] = useState<StorageAdapter>(() =>
     import.meta.env.VITE_TEST_MODE === "true" ? new MockStorageAdapter() : new TauriSQLiteAdapter()
   );
@@ -327,43 +327,43 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
 
 `useState` lazy initializer runs once on mount — adapter instance is stable for the component lifetime.
 
-## Multi-Vault
+## Multi-Workspace
 
-Each vault is a **separate SQLite file**. The list of known vaults is tracked in a lightweight
+Each workspace is a **separate SQLite file**. The list of known workspaces is tracked in a lightweight
 config stored via `@tauri-apps/plugin-store` (JSON, not SQLite — no schema migration needed for config).
 
-### Vault config shape (`@tauri-apps/plugin-store`, key: `vaults`)
+### Workspace config shape (`@tauri-apps/plugin-store`, key: `workspaces`)
 
 ```ts
 // packages/core/src/types.ts
-export interface Vault {
+export interface Workspace {
   id: string; // UUID, stable identifier across renames
   name: string; // display name (user-editable)
-  dbPath: string; // absolute path to the vault .sqlite file
+  dbPath: string; // absolute path to the workspace .sqlite file
   createdAt: string; // ISO 8601
   lastOpenedAt: string | null;
 }
 ```
 
-Stored as `Vault[]` under the key `"vaults"` in plugin-store. `lastOpenedAt` determines which
-vault to auto-open on launch. The vault's own SQLite file contains no knowledge of other vaults.
+Stored as `Workspace[]` under the key `"workspaces"` in plugin-store. `lastOpenedAt` determines which
+workspace to auto-open on launch. The workspace's own SQLite file contains no knowledge of other workspaces.
 
-### Why separate files (not one DB with a vault_id column)
+### Why separate files (not one DB with a workspace_id column)
 
-- Each vault file is self-contained → drag-and-drop backup, share with collaborators
-- No cross-contamination if a vault file is corrupted
-- Sync (Phase 4) will be per-vault, tied to a user account — separate files map cleanly
+- Each workspace file is self-contained → drag-and-drop backup, share with collaborators
+- No cross-contamination if a workspace file is corrupted
+- Sync (Phase 4) will be per-workspace, tied to a user account — separate files map cleanly
 
-### `VaultContext.selectVault()`
+### `WorkspaceContext.selectWorkspace()`
 
-Open vault picker dialog → user selects folder → create `<folder>/pikos.db` if new, or open
-existing. Upsert `Vault` record in plugin-store. Set as `lastOpenedAt`. Connect adapter to
+Open workspace picker dialog → user selects folder → create `<folder>/pikos.db` if new, or open
+existing. Upsert `Workspace` record in plugin-store. Set as `lastOpenedAt`. Connect adapter to
 the new DB path.
 
 ## DB Location
 
-Each vault: user-chosen folder (via `@tauri-apps/plugin-dialog` folder picker). Default suggestion:
-`~/Documents/Pikos/<vault-name>/pikos.db`. Stored as absolute path in `Vault.dbPath`.
+Each workspace: user-chosen folder (via `@tauri-apps/plugin-dialog` folder picker). Default suggestion:
+`~/Documents/Pikos/<workspace-name>/pikos.db`. Stored as absolute path in `Workspace.dbPath`.
 
 ## Privacy Story
 

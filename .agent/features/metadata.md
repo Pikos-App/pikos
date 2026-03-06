@@ -1,7 +1,7 @@
 # Feature: Metadata Header
 
 ## Status
-Not started. Blocked by React migration + VaultContext.
+Not started. Blocked by React migration + WorkspaceContext.
 
 ## Goal
 A collapsible header above the editor that surfaces all page metadata fields in a clean UI.
@@ -103,4 +103,4 @@ Icon-based selector, Linear-inspired.
 - [ ] Priority selector (GOO-35)
 - [ ] Date/time picker (GOO-34)
 - [ ] Tags display + add/remove
-- [ ] All changes call `updatePage()` from VaultContext
+- [ ] All changes call `updatePage()` from WorkspaceContext

@@ -33,7 +33,7 @@ declares its permissions in a `plugin.json` manifest. The user approves permissi
   "name": "Pomodoro Timer",
   "version": "1.0.0",
   "description": "25-minute focus blocks, tracked against pages",
-  "permissions": ["vault:read", "vault:write", "ui:panel", "ui:command"],
+  "permissions": ["workspace:read", "workspace:write", "ui:panel", "ui:command"],
   "network": false
 }
 ```
@@ -51,7 +51,7 @@ The context is the only way a plugin can interact with the app.
 // packages/core/src/plugin/PluginContext.ts
 export interface PluginContext {
   // Data access — scoped to permissions
-  vault: {
+  workspace: {
     getPage(id: string): Promise<Page | null>
     createPage(data: NewPage): Promise<Page>
     updatePage(id: string, updates: PageUpdate): Promise<Page>
@@ -93,7 +93,7 @@ export interface PluginContext {
 
   // App events (read-only subscriptions)
   events: {
-    on(event: 'page:created' | 'page:updated' | 'page:deleted' | 'page:opened' | 'vault:loaded',
+    on(event: 'page:created' | 'page:updated' | 'page:deleted' | 'page:opened' | 'workspace:loaded',
        handler: (payload: unknown) => void): () => void  // returns unsubscribe fn
   }
 
@@ -108,7 +108,7 @@ export interface PluginContext {
 }
 ```
 
-The `vault` sub-object is a direct pass-through to `StorageAdapter` — no new abstraction needed.
+The `workspace` sub-object is a direct pass-through to `StorageAdapter` — no new abstraction needed.
 This means the plugin API is automatically consistent with the core app.
 
 ### Security model
@@ -116,8 +116,8 @@ This means the plugin API is automatically consistent with the core app.
 | Concern | Approach |
 |---|---|
 | Data exfiltration | Network off by default; explicit permission + user approval to enable. All requests visible in network monitor (GOO-58). |
-| FS access beyond vault | Tauri CSP + allowlist: plugins cannot access arbitrary file paths |
-| Vault data leakage between plugins | Each plugin gets its own `PluginContext` instance; no shared state |
+| FS access beyond workspace | Tauri CSP + allowlist: plugins cannot access arbitrary file paths |
+| Workspace data leakage between plugins | Each plugin gets its own `PluginContext` instance; no shared state |
 | Malicious plugins | v1: local plugins only (user installs manually); no auto-update, no marketplace trust yet |
 | Tauri command injection | Plugins route through `PluginContext` only, never call `invoke()` directly |
 
@@ -151,9 +151,9 @@ The plugin system doesn't need to be built now, but a few choices made in Phase 
 
 1. **`packages/core` stays framework-agnostic** — the `StorageAdapter` interface is the plugin
    data API. Already true; just don't pollute `packages/core` with React deps.
-2. **VaultContext events** — when implementing `VaultContext`, emit events via a lightweight
+2. **WorkspaceContext events** — when implementing `WorkspaceContext`, emit events via a lightweight
    `EventEmitter` (or just an array of listeners) on `createPage`, `updatePage`, etc. Plugins
-   subscribe to these. Cost: ~10 lines in VaultContext. Payoff: plugins get reactive updates.
+   subscribe to these. Cost: ~10 lines in WorkspaceContext. Payoff: plugins get reactive updates.
 3. **UI registration points** — `App.tsx` should have clearly marked extension points
    (sidebar panels slot, command palette registry) that the plugin system later populates.
    Even if unused for now, the slots should be architecturally obvious.
@@ -164,7 +164,7 @@ The plugin system doesn't need to be built now, but a few choices made in Phase 
 
 ### What it is
 
-An opt-in AI assistant that has **structured, tool-based access** to your vault — not just reading
+An opt-in AI assistant that has **structured, tool-based access** to your workspace — not just reading
 markdown text, but understanding and manipulating pages, tasks, folders, and calendar events as
 typed data. The power comes from the structured data model: the agent knows a page's status,
 priority, schedule, and tags, and can set them precisely.
@@ -193,7 +193,7 @@ Example interactions:
                      │
           ┌──────────┴──────────┐
           │                     │
-   ModelProvider          VaultToolSet
+   ModelProvider          WorkspaceToolSet
    (swappable)            (StorageAdapter wrapper)
           │
    ┌──────┴──────┐
@@ -212,7 +212,7 @@ Example interactions:
 
 **Cloud model (user's API key) — opt-in**
 - User provides their own Anthropic or OpenAI API key (stored in OS keychain, never in SQLite)
-- Pikos sends only the relevant context (search results, current page) — never the full vault
+- Pikos sends only the relevant context (search results, current page) — never the full workspace
 - More capable for complex summarization, cross-page reasoning
 - Explicit disclosure: "Using this feature sends selected note excerpts to [Anthropic/OpenAI]"
 
@@ -225,10 +225,10 @@ what Phase 0–3 already builds:
 
 ```ts
 // packages/core/src/agent/tools.ts
-export const vaultTools = [
+export const workspaceTools = [
   {
     name: "search_pages",
-    description: "Full-text search across all pages in the vault",
+    description: "Full-text search across all pages in the workspace",
     inputSchema: { query: z.string() },
     run: (adapter) => (input) => adapter.searchPages(input.query)
   },
@@ -277,7 +277,7 @@ writes" mode for power users who trust the agent.
 
 ### Context management
 
-The agent doesn't receive the full vault on every message — that would be slow and expensive.
+The agent doesn't receive the full workspace on every message — that would be slow and expensive.
 Instead, it gets a lightweight "ambient context" + tool access to fetch more:
 
 **Ambient context (always included in system prompt):**
@@ -330,7 +330,7 @@ Tool calls that write data show a confirmation step inline:
 
 | Concern | Approach |
 |---|---|
-| Data leaving device (cloud model) | Only context relevant to the query is sent. Never the full vault. Explicit disclosure before first use. |
+| Data leaving device (cloud model) | Only context relevant to the query is sent. Never the full workspace. Explicit disclosure before first use. |
 | API key storage | OS keychain (`keyring` crate), never in SQLite or any file |
 | Agent executing destructive ops | Write ops require explicit user confirmation by default |
 | Prompt injection via note content | Sanitize page content before injecting into prompt. Don't trust note content as instructions. |
@@ -360,7 +360,7 @@ ctx.agent.registerTool({
 ## Backlog items generated
 
 - **GOO-56** Plugin system foundation _(Deferred)_ — `PluginContext` API, local plugin loading,
-  permission model, VaultContext event emitter. Implement after Phase 4 is stable.
-- **GOO-57** AI agent / personal assistant _(Deferred)_ — `AgentService`, `vaultTools`, model
+  permission model, WorkspaceContext event emitter. Implement after Phase 4 is stable.
+- **GOO-57** AI agent / personal assistant _(Deferred)_ — `AgentService`, `workspaceTools`, model
   provider abstraction (Ollama + cloud), agent panel UI, confirmation flow.
   Dependency: GOO-56 (plugin system) for the `ctx.agent.registerTool` extension point.

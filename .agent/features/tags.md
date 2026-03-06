@@ -47,8 +47,8 @@ Tags
 ```
 
 ## Tag Autocomplete
-When adding a tag in MetadataHeader, autocomplete from existing tags in the vault.
-Derive from VaultContext: `tags` derived via `useMemo` from `pages[]`.
+When adding a tag in MetadataHeader, autocomplete from existing tags in the workspace.
+Derive from WorkspaceContext: `tags` derived via `useMemo` from `pages[]`.
 
 ## Tag Type (packages/core)
 ```ts
@@ -59,12 +59,12 @@ export interface Tag {
   pageIds: string[];
 }
 ```
-Derived reactively in VaultContext — not a separate DB table.
+Derived reactively in WorkspaceContext — not a separate DB table.
 
 ## Tasks
 - [ ] `TagBadge` component in `packages/ui`
 - [ ] Tag add/remove in `MetadataHeader`
-- [ ] Derive `tags: Tag[]` in VaultContext from `pages` array
+- [ ] Derive `tags: Tag[]` in WorkspaceContext from `pages` array
 - [ ] Tags panel in sidebar (collapsible section)
 - [ ] Tag view (replaces pages list for selected tag)
 - [ ] Tag filter in pages list filter bar (GOO-38)

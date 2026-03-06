@@ -46,7 +46,7 @@ The Svelte prototype established some useful patterns worth knowing, but none ar
 | Concept | Svelte prototype had | Fresh build approach |
 |---------|---------------------|---------------------|
 | App shell | `src/routes/+page.svelte` | `App.tsx` with `react-resizable-panels` |
-| State | Svelte stores | VaultContext + UIContext |
+| State | Svelte stores | WorkspaceContext + UIContext |
 | Storage | Tauri FS plugin (reads .md files) | SQLite via TauriSQLiteAdapter |
 | Keyboard | `registry.ts` singleton ✓ | **Copy as-is** to `shared/keyboard/registry.ts`. Note: menu shortcuts (Cmd+N, Cmd+W) move out of the registry and into Tauri menu event listeners when GOO-24 is built. |
 | Modal state | `uiStore.ts` writable | UIContext |
@@ -71,7 +71,7 @@ features/
   search/
     components/   CommandPalette.tsx
 shared/
-  context/        VaultContext.tsx, UIContext.tsx
+  context/        WorkspaceContext.tsx, UIContext.tsx
   keyboard/       registry.ts, actions.ts, useKeyboard.ts
   hooks/          useStorageAdapter.ts
   adapters/       TauriSQLiteAdapter.ts   ← Tauri-specific, NOT in packages/core
@@ -113,8 +113,8 @@ date-fns
 # Note: tiptap-markdown NOT needed — storage is Tiptap JSON, not markdown
 
 # Tauri plugins (add as needed)
-@tauri-apps/plugin-dialog    # vault folder picker (GOO-15)
-@tauri-apps/plugin-store     # layout + vault config persistence (GOO-14)
+@tauri-apps/plugin-dialog    # workspace folder picker (GOO-15)
+@tauri-apps/plugin-store     # layout + workspace config persistence (GOO-14)
 @tauri-apps/plugin-sql       # (via Rust Cargo.toml, JS types come with it)
 @tauri-apps/plugin-updater   # auto-updates (GOO-50) — add before first external release
 
@@ -129,7 +129,7 @@ chrono-node
 ```
 
 ## Key Decisions
-- **No Zustand** — VaultContext (React context) for data state, UIContext for UI state
+- **No Zustand** — WorkspaceContext (React context) for data state, UIContext for UI state
 - **No filesystem as storage** — StorageAdapter always goes through SQLite (or Mock in tests)
 - **`TauriSQLiteAdapter` lives in `apps/desktop/`**, not `packages/core` — it has Tauri deps
 - **`packages/core` is pure TS** — zero Tauri/React/DOM imports (must be shareable with mobile)
@@ -142,13 +142,13 @@ chrono-node
 1. Monorepo scaffold (Turborepo + pnpm workspaces, move `src-tauri/` to `apps/desktop/`)
 2. Strict TS config
 3. Vite + React entry (delete `svelte.config.js`, update `vite.config.ts`)
-4. `packages/core/src/types.ts` — Page, Folder, Vault, Tag, PageFilter
+4. `packages/core/src/types.ts` — Page, Folder, Workspace, Tag, PageFilter
 5. `StorageAdapter` interface + `MockStorageAdapter`
 6. `TauriSQLiteAdapter` + Rust commands (pairs with GOO-29)
-7. `VaultContext` + `UIContext`
+7. `WorkspaceContext` + `UIContext`
 8. App shell: three-panel stub layout (static, no data)
 9. Keyboard registry → `useKeyboard` hook
-10. Pages list wired to VaultContext
-11. Folders wired to VaultContext
+10. Pages list wired to WorkspaceContext
+11. Folders wired to WorkspaceContext
 12. Command palette (replaces PageSwitcher)
 13. Tiptap editor (separate feature — GOO-10)

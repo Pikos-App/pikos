@@ -59,7 +59,7 @@ Do not create, edit, or delete any files until the user approves the plan. If th
 
 ## Rules
 
-- Steps must be concrete and discoverable — "create `VaultContext.tsx` with `pages` and `activePage` state" not "set up context"
+- Steps must be concrete and discoverable — "create `WorkspaceContext.tsx` with `pages` and `activePage` state" not "set up context"
 - Keep scope boundaries explicit — saying what's out is as valuable as what's in
 - 6–10 steps is the right size; fewer means the task is too simple to need a plan, more means you need to break it into sub-plans
 - Include a testing or verification step when the task is non-trivial

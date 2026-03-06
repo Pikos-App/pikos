@@ -1,7 +1,7 @@
 "use client";
 
 // UIContext — owns navigation and UI state.
-// No data fetching — subscribe to VaultContext for pages/folders.
+// No data fetching — subscribe to WorkspaceContext for pages/folders.
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { Page } from "@pikos/core";

@@ -280,8 +280,8 @@ Notifications blocked by system              ← shown only if permission denied
 - No data leaves the device. Ever.
 - Notification content: title + start time only by default. Subtitle (GOO-77) included
   if set and the user hasn't disabled it. Note body never appears in notifications.
-- `notification_log` stored in SQLite (same vault DB) — not exported unless user
-  explicitly exports their vault.
+- `notification_log` stored in SQLite (same workspace DB) — not exported unless user
+  explicitly exports their workspace.
 - No analytics on notification interaction rates. Snooze/done actions are logged only
   locally (in `notification_log.action`) for dedup purposes.
 

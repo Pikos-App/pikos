@@ -2,7 +2,7 @@
 
 ## Active Task
 
-**GOO-15** — Vault selection + persistence.
+**GOO-15** — Workspace selection + persistence.
 
 See `BACKLOG_ACTIVE.md` for full spec.
 

@@ -1,7 +1,7 @@
 # Feature: Sidebar Navigation
 
 ## Status
-Not started. Depends on: VaultContext (GOO-30), React migration (GOO-26).
+Not started. Depends on: WorkspaceContext (GOO-30), React migration (GOO-26).
 
 ## Product Vision
 Pikos replaces both Obsidian (rich content, folders, backlinks, search) and TickTick (task lists,
@@ -89,12 +89,12 @@ All shortcuts registered via `useKeyboard` with `allowInInputs: false` unless no
 - When sidebar is collapsed, `J`/`K`/`Enter` still work — they just auto-expand the
   sidebar before opening so the user can see what they navigated to
 
-## Vault Selection (GOO-15)
+## Workspace Selection (GOO-15)
 - First-launch: welcome screen (full window, no panels) with three options:
-  - "Create New Vault" → folder picker → creates `pikos.db` in that folder → open app
-  - "Open Existing Vault" → folder picker → opens an existing Pikos `pikos.db` → open app
+  - "Create New Workspace" → folder picker → creates `pikos.db` in that folder → open app
+  - "Open Existing Workspace" → folder picker → opens an existing Pikos `pikos.db` → open app
   - "Import from Obsidian" → triggers GOO-41 import flow → open app with content
-- Vault list stored in `@tauri-apps/plugin-store` (see multi-vault design in `features/storage.md`)
+- Workspace list stored in `@tauri-apps/plugin-store` (see multi-workspace design in `features/storage.md`)
 
 ## Smart Views
 
@@ -178,6 +178,6 @@ Shows pages in the selected folder (or inbox). Controlled by `UIContext.activeFo
   Filters persist per session.
 
 ## First-Run Onboarding (GOO-42)
-- New vault: empty state — inbox shown, friendly prompt + keyboard shortcut hints
+- New workspace: empty state — inbox shown, friendly prompt + keyboard shortcut hints
 - Obsidian import: progress bar → lands in app with content in inbox (unfiled) or folders
   (if import preserved directory structure as folders)

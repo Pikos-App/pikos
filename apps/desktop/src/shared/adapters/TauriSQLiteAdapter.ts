@@ -23,8 +23,8 @@ import type {
 } from "@pikos/core";
 
 /**
- * Open (or create) the SQLite vault at `path` and run migrations.
- * Must be called by VaultContext before any storage operations.
+ * Open (or create) the SQLite workspace at `path` and run migrations.
+ * Must be called by WorkspaceContext before any storage operations.
  */
 export function connectDb(path: string): Promise<void> {
   return invoke<void>("connect_db", { path });

@@ -117,7 +117,7 @@ acceptable for single-user, single-machine use. Timezone normalization is a sync
 - All-day section at top of day column (for `scheduled_all_day = 1` blocks)
 - Multi-day banners shown in all-day section for each day they span
 - Scheduled pages appear as blocks sized by duration (absolutely positioned by time %)
-- Click block → `setActivePage()` in VaultContext → opens page in editor (right panel stays calendar)
+- Click block → `setActivePage()` in WorkspaceContext → opens page in editor (right panel stays calendar)
 - Hover block → quick-action bar appears: `[✓ Done]` `[✕ Remove]` `[⋮]`
   - `✓ Done` → `updatePage(id, { status: 'done', completedAt: now })` → block fades to muted/strikethrough
   - `✕ Remove` → `deletePageSchedule(scheduleId)` — removes the calendar row, not the page

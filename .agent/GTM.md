@@ -35,11 +35,10 @@ Pikos is for **anyone** who wants their notes, tasks, and calendar in one place 
 | General users | "My to-dos, notes, and calendar, all in one place. Fast. No sign-up." | "Nothing goes to the cloud." |
 | Power users / developers | "Local SQLite, no servers, structured data, open format I can inspect." | "The data file is yours. Here's where it lives." |
 
-The product pitch and UX defaults should serve the general user. Power-user depth (vault paths, keyboard shortcuts, advanced filters, future API) is progressively disclosed — available but never required.
+The product pitch and UX defaults should serve the general user. Power-user depth (workspace paths, keyboard shortcuts, advanced filters, future API) is progressively disclosed — available but never required.
 
 **What this means for the app:**
 - Default experience: dead simple. Create a task. Add a note. See your calendar. No setup wizard, no concepts to learn.
-- The word "vault" is fine and intuitive (like a safe) — but never expose file paths or SQLite in the default UI.
 - Power features (nested folders, advanced filters, wikilinks, import/export) live behind discoverable surfaces, not in the critical path.
 - Performance and reliability are table stakes, not differentiators. The app must feel instant at all times.
 

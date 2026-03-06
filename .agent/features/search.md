@@ -9,16 +9,16 @@ Upgrade the existing `PageSwitcher` modal into the app's primary command hub.
 **Triggers:**
 - `Cmd+P` → page title search (fuzzy, replaces current PageSwitcher)
 - `Cmd+P` twice → switches to content search
-- `Cmd+K` → actions palette (create page, switch vault, open settings, etc.)
+- `Cmd+K` → actions palette (create page, switch workspace, open settings, etc.)
 
 **Layout:**
 - Full-width input at top
 - Results: recent pages section + fuzzy matches
-- Actions section: "New Page", "Switch Vault", keyboard shortcut hints
+- Actions section: "New Page", "Switch Workspace", keyboard shortcut hints
 - Keyboard nav: ↑↓ arrows, Enter to select, Esc to close
 
 **Two search code paths:**
-- **Title search** — `fuse.js` against `pages[]` in VaultContext memory. Immediate, no DB round-trip. Typo-tolerant with relevance scoring.
+- **Title search** — `fuse.js` against `pages[]` in WorkspaceContext memory. Immediate, no DB round-trip. Typo-tolerant with relevance scoring.
 - **Content search** — FTS5 via `search_pages` Tauri command, triggered on `Cmd+P` double-tap. Returns `SearchResult[]` with highlighted excerpts.
 
 **Natural language in input:**
@@ -53,4 +53,4 @@ ORDER BY rank
 Note: FTS column indices — 0=title, 1=subtitle, 2=content_text, 3=tags.
 snippet() uses index 2 (content_text) to highlight where the body match occurred.
 
-**Result display:** title + highlighted excerpt snippet. Full page loaded from VaultContext on selection.
+**Result display:** title + highlighted excerpt snippet. Full page loaded from WorkspaceContext on selection.
