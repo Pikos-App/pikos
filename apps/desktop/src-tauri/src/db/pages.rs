@@ -425,6 +425,22 @@ pub async fn list_pages(
 }
 
 #[tauri::command]
+pub async fn list_pages_today(state: State<'_, DbState>) -> Result<Vec<Page>, String> {
+    let pool = state.get_pool().await?;
+    let rows = sqlx::query_as::<_, PageRow>(
+        "SELECT DISTINCT pages.* FROM pages
+         JOIN page_schedules ON page_schedules.page_id = pages.id
+         WHERE date(page_schedules.scheduled_start) <= date('now')
+           AND pages.status != 'done'
+         ORDER BY pages.sort_order ASC",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().map(Page::from).collect())
+}
+
+#[tauri::command]
 pub async fn reorder_pages(
     state: State<'_, DbState>,
     folder_id: Option<String>,

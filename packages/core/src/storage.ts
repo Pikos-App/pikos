@@ -63,6 +63,8 @@ export interface StorageAdapter {
   updatePage(id: string, updates: PageUpdate): Promise<Page>;
   deletePage(id: string): Promise<void>;
   listPages(filter?: PageFilter): Promise<Page[]>;
+  /** Pages with any page_schedules row <= today, status != done, sorted by sortOrder. */
+  listPagesToday(): Promise<Page[]>;
   /** orderedIds = complete ordered list for that folderId (null = inbox/no folder) */
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void>;
   /** Returns excerpts (SearchResult), not full pages */

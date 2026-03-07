@@ -99,6 +99,19 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve(filtered.sort((a, b) => a.sortOrder - b.sortOrder));
   }
 
+  listPagesToday(): Promise<Page[]> {
+    const today = new Date().toISOString().slice(0, 10);
+    const pageIds = new Set(
+      [...this.schedules.values()]
+        .filter((s) => s.scheduledStart.slice(0, 10) <= today)
+        .map((s) => s.pageId)
+    );
+    const results = [...this.pages.values()]
+      .filter((p) => pageIds.has(p.id) && p.status !== "done")
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    return Promise.resolve(results);
+  }
+
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void> {
     orderedIds.forEach((id, i) => {
       const page = this.pages.get(id);

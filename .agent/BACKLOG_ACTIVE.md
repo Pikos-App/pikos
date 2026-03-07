@@ -9,16 +9,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ## Phase 2 — Editor & Metadata
 
-- [ ] **GOO-91** `list_pages_today` Rust command _(High)_ — **do before GOO-89**
-  `src-tauri/src/db/pages.rs`. Today smart view requires a JOIN against `page_schedules` — `list_pages` cannot serve it. Correct query:
-  ```sql
-  SELECT DISTINCT pages.* FROM pages
-  JOIN page_schedules ON page_schedules.page_id = pages.id
-  WHERE date(page_schedules.scheduled_start) <= date('now')
-    AND pages.status != 'done'
-  ORDER BY pages.sort_order ASC
-  ```
-  New Tauri command `list_pages_today`. Register in `lib.rs`. Add method to `StorageAdapter` interface in `packages/core/src/storage.ts`, implement in `TauriSQLiteAdapter` and `MockStorageAdapter`.
 
 - [ ] **GOO-94** Page CRUD actions _(High)_ — **requires GOO-37, implement alongside GOO-89**
   Inline create and context menu for page list items.

@@ -53,6 +53,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<Page[]>("list_pages", { filter: filter ?? null });
   }
 
+  listPagesToday(): Promise<Page[]> {
+    return invoke<Page[]>("list_pages_today");
+  }
+
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void> {
     return invoke<void>("reorder_pages", { folderId, orderedIds });
   }
