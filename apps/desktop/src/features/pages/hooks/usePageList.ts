@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
 import { getVisiblePages } from "@/features/pages/utils/pageFilters";
-import type { Page } from "@pikos/core";
+import type { Page, PageStatus } from "@pikos/core";
 
 export function usePageList() {
   const { pages, folders, createPage, updatePage, deletePage } = useWorkspace();
@@ -60,6 +60,13 @@ export function usePageList() {
     [updatePage]
   );
 
+  const handleToggleStatus = useCallback(
+    (pageId: string, currentStatus: PageStatus) => {
+      updatePage(pageId, { status: currentStatus === "done" ? "not_started" : "done" });
+    },
+    [updatePage]
+  );
+
   return {
     visiblePages,
     folders,
@@ -74,6 +81,7 @@ export function usePageList() {
     handleDeleteConfirm,
     handleDeleteCancel,
     handleMoveToFolder,
+    handleToggleStatus,
     handleSelectPage: setActivePage,
   };
 }

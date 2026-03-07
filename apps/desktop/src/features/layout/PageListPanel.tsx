@@ -29,6 +29,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
     handleDeleteConfirm,
     handleDeleteCancel,
     handleMoveToFolder,
+    handleToggleStatus,
     handleSelectPage,
   } = usePageList();
 
@@ -42,20 +43,18 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-          Pages
-        </span>
+        <span className="text-sm font-semibold text-foreground">Pages</span>
         <button
-          className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           title="New Page"
           onClick={() => void handleCreatePage()}
         >
-          <Plus size={14} />
+          <Plus size={15} />
         </button>
       </div>
 
       {/* Page list */}
-      <div className="flex flex-col gap-0.5 overflow-y-auto p-1">
+      <div className="flex flex-col overflow-y-auto">
         {visiblePages.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground italic">No pages</p>
         ) : (
@@ -74,6 +73,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
                   onRenameCancel={handleRenameCancel}
                   onDelete={() => handleDeleteRequest(page)}
                   onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
+                  onToggleStatus={() => handleToggleStatus(page.id, page.status)}
                 />
               </Fragment>
             ))}

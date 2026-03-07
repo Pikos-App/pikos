@@ -10,7 +10,7 @@ interface SidebarProps {
 export function Sidebar({ width, onResizeStart }: SidebarProps) {
   return (
     <div
-      className="relative flex shrink-0 flex-col overflow-hidden border-r border-border bg-background"
+      className="group relative flex shrink-0 flex-col overflow-hidden border-r border-border bg-background"
       style={{ width }}
     >
       <div className="min-h-0 flex-1 overflow-y-auto">

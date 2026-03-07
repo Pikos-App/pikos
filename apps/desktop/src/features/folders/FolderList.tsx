@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CalendarDays, Inbox, Plus } from "lucide-react";
+import { CalendarDays, Inbox, Plus, Search } from "lucide-react";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { FolderItem } from "./components/FolderItem";
@@ -32,28 +32,34 @@ export function FolderList() {
       <div className="flex flex-col gap-0.5 px-1 py-2">
         <SmartViewEntry
           label="Today"
-          icon={<CalendarDays size={14} />}
+          icon={<CalendarDays size={16} />}
           isActive={activeViewId === "today"}
           onSelect={() => setActiveViewId("today")}
         />
         <SmartViewEntry
           label="Inbox"
-          icon={<Inbox size={14} />}
+          icon={<Inbox size={16} />}
           isActive={activeViewId === "inbox"}
           onSelect={() => setActiveViewId("inbox")}
         />
 
-        <div className="mt-3 mb-0.5 flex items-center justify-between pr-1 pl-2">
-          <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-            Folders
-          </span>
-          <button
-            className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-            title="New Folder"
-            onClick={() => void handleCreateFolder()}
-          >
-            <Plus size={12} />
-          </button>
+        <div className="mt-4 mb-1 flex items-center justify-between pr-1 pl-2">
+          <span className="text-sm font-semibold text-foreground">Folders</span>
+          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="Search"
+            >
+              <Search size={15} />
+            </button>
+            <button
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="New Folder"
+              onClick={() => void handleCreateFolder()}
+            >
+              <Plus size={15} />
+            </button>
+          </div>
         </div>
 
         <SortableContext items={folderIds} strategy={verticalListSortingStrategy}>

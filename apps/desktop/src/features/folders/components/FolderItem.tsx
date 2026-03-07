@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDndMonitor } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Folder as FolderIcon } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -84,6 +85,13 @@ export function FolderItem({
           onRenameCommit={onRenameCommit}
           onRenameCancel={onRenameCancel}
           inputRef={inputRef}
+          prefix={
+            <FolderIcon
+              size={16}
+              className="shrink-0"
+              style={{ color: folder.color ?? undefined }}
+            />
+          }
           className="items-center gap-2"
           dragRef={setNodeRef}
           dragStyle={{
@@ -92,10 +100,6 @@ export function FolderItem({
           }}
           dragProps={{ ...attributes, ...listeners }}
         >
-          <span
-            className="h-2 w-2 shrink-0 rounded-full"
-            style={{ backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)" }}
-          />
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
         </SidebarListItem>
       </ContextMenuTrigger>

@@ -21,6 +21,8 @@ interface SidebarListItemProps extends React.HTMLAttributes<HTMLDivElement> {
   dragStyle?: React.CSSProperties;
   /** Merged dnd-kit attributes + listeners ({ ...attributes, ...listeners }). */
   dragProps?: Record<string, unknown>;
+  /** Always rendered before children/input (e.g. an icon that stays visible during rename). */
+  prefix?: React.ReactNode;
   /** Rendered when not renaming. */
   children: React.ReactNode;
 }
@@ -41,6 +43,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
       dragRef,
       dragStyle,
       dragProps,
+      prefix,
       children,
       ...rest
     }: SidebarListItemProps,
@@ -63,7 +66,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
         {...rest}
         {...(dragProps as React.HTMLAttributes<HTMLDivElement>)}
         className={cn(
-          "flex cursor-pointer rounded px-2 py-1.5 text-sm select-none",
+          "flex cursor-pointer rounded px-2 py-2.5 text-sm select-none",
           isDragOver
             ? "bg-primary/10 text-foreground ring-1 ring-primary/40"
             : isActive
@@ -77,26 +80,28 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
           onRenameStart();
         }}
       >
-        {isRenaming ? (
-          <input
-            ref={inputRef}
-            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none"
-            defaultValue={label}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commit();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                onRenameCancel();
-              }
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          children
-        )}
+        {prefix}
+        <div className="relative min-w-0 flex-1">
+          <div className={cn("flex min-w-0", isRenaming && "invisible")}>{children}</div>
+          {isRenaming && (
+            <input
+              ref={inputRef}
+              className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug text-foreground outline-none"
+              defaultValue={label}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  onRenameCancel();
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+        </div>
       </div>
     );
   }

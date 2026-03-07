@@ -1,5 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Check } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -10,9 +11,18 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
-import { SidebarListItem } from "@/shared/components/SidebarListItem";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import type { Folder, Page } from "@pikos/core";
+
+function formatDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+  });
+}
 
 interface PageListItemProps {
   page: Page;
@@ -25,6 +35,7 @@ interface PageListItemProps {
   onRenameCancel: () => void;
   onDelete: () => void;
   onMoveToFolder: (folderId: string | null) => void;
+  onToggleStatus: () => void;
 }
 
 export function PageListItem({
@@ -38,6 +49,7 @@ export function PageListItem({
   onRenameCancel,
   onDelete,
   onMoveToFolder,
+  onToggleStatus,
 }: PageListItemProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: page.id,
@@ -47,31 +59,94 @@ export function PageListItem({
   });
   const { inputRef, prepareRenameFromMenu, contextMenuContentProps } = useInlineRename(isRenaming);
 
+  const isDone = page.status === "done";
+
+  function commit() {
+    const trimmed = inputRef.current?.value.trim() ?? "";
+    if (trimmed) onRenameCommit(trimmed);
+    else onRenameCancel();
+  }
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <SidebarListItem
-          isActive={isActive}
-          isRenaming={isRenaming}
-          label={page.title}
-          onSelect={onSelect}
-          onRenameStart={onRenameStart}
-          onRenameCommit={onRenameCommit}
-          onRenameCancel={onRenameCancel}
-          inputRef={inputRef}
-          className="flex-col gap-0.5"
-          dragRef={setNodeRef}
-          dragStyle={{
+        <div
+          ref={setNodeRef}
+          style={{
             transform: CSS.Transform.toString(transform),
             opacity: isDragging ? 0 : 1,
           }}
-          dragProps={{ ...attributes, ...listeners }}
-        >
-          <span className="truncate font-medium">{page.title || "Untitled"}</span>
-          {page.subtitle && (
-            <span className="truncate text-xs text-muted-foreground">{page.subtitle}</span>
+          {...attributes}
+          {...listeners}
+          className={cn(
+            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-3 text-sm select-none",
+            isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
           )}
-        </SidebarListItem>
+          onClick={isRenaming ? undefined : onSelect}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            onRenameStart();
+          }}
+        >
+          {/* Checkbox */}
+          <button
+            className={cn(
+              "mt-0.5 flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-[2px] border transition-colors",
+              isDone
+                ? "border-foreground/40 bg-foreground/10"
+                : "border-muted-foreground/40 hover:border-foreground/60"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStatus();
+            }}
+          >
+            {isDone && <Check size={8} strokeWidth={2.5} />}
+          </button>
+
+          {/* Content */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="relative min-w-0 flex-1">
+                <span
+                  className={cn(
+                    "block truncate leading-snug font-medium",
+                    isRenaming && "invisible",
+                    isDone && "text-muted-foreground line-through"
+                  )}
+                >
+                  {page.title || "Untitled"}
+                </span>
+                {isRenaming && (
+                  <input
+                    ref={inputRef}
+                    className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug font-medium text-foreground outline-none"
+                    defaultValue={page.title}
+                    onBlur={commit}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commit();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        onRenameCancel();
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                )}
+              </div>
+              {page.scheduledStart && (
+                <span className="shrink-0 text-[11px] leading-snug text-muted-foreground">
+                  {formatDate(page.scheduledStart)}
+                </span>
+              )}
+            </div>
+            {page.subtitle && (
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">{page.subtitle}</p>
+            )}
+          </div>
+        </div>
       </ContextMenuTrigger>
 
       <ContextMenuContent {...contextMenuContentProps}>

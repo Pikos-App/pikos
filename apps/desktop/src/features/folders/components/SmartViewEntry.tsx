@@ -11,7 +11,7 @@ export function SmartViewEntry({ label, icon, isActive, onSelect }: SmartViewEnt
   return (
     <button
       className={cn(
-        "flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm select-none",
+        "flex w-full items-center gap-2.5 rounded px-2 py-2.5 text-sm select-none",
         isActive
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"

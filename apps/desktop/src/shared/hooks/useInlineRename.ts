@@ -12,8 +12,11 @@ export function useInlineRename(isRenaming: boolean) {
   useEffect(() => {
     if (isRenaming) {
       requestAnimationFrame(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
+        const el = inputRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(el.value.length, el.value.length);
+        }
       });
     }
   }, [isRenaming]);
