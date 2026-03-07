@@ -1,0 +1,103 @@
+import { type RefCallback, forwardRef } from "react";
+import { cn } from "@/lib/utils";
+
+interface SidebarListItemProps extends React.HTMLAttributes<HTMLDivElement> {
+  isActive: boolean;
+  isRenaming: boolean;
+  /** Default value for the inline rename input. */
+  label: string;
+  onSelect: () => void;
+  onRenameStart: () => void;
+  onRenameCommit: (value: string) => void;
+  onRenameCancel: () => void;
+  /** inputRef from useInlineRename — attached to the rename input. */
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  /** Extra flex layout classes, e.g. "items-center gap-2" or "flex-col gap-0.5". */
+  className?: string;
+  /** Highlights the item as a valid drop target for a dragged page. */
+  isDragOver?: boolean;
+  // DnD — all optional; omit for non-draggable items
+  dragRef?: RefCallback<HTMLDivElement>;
+  dragStyle?: React.CSSProperties;
+  /** Merged dnd-kit attributes + listeners ({ ...attributes, ...listeners }). */
+  dragProps?: Record<string, unknown>;
+  /** Rendered when not renaming. */
+  children: React.ReactNode;
+}
+
+export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
+  function SidebarListItem(
+    {
+      isActive,
+      isRenaming,
+      label,
+      onSelect,
+      onRenameStart,
+      onRenameCommit,
+      onRenameCancel,
+      inputRef,
+      className,
+      isDragOver = false,
+      dragRef,
+      dragStyle,
+      dragProps,
+      children,
+      ...rest
+    }: SidebarListItemProps,
+    ref
+  ) {
+    function commit() {
+      const trimmed = inputRef.current?.value.trim() ?? "";
+      if (trimmed) onRenameCommit(trimmed);
+      else onRenameCancel();
+    }
+
+    return (
+      <div
+        ref={(node) => {
+          if (typeof ref === "function") ref(node);
+          else if (ref) ref.current = node;
+          if (dragRef) dragRef(node as HTMLDivElement);
+        }}
+        style={dragStyle}
+        {...rest}
+        {...(dragProps as React.HTMLAttributes<HTMLDivElement>)}
+        className={cn(
+          "flex cursor-pointer rounded px-2 py-1.5 text-sm select-none",
+          isDragOver
+            ? "bg-primary/10 text-foreground ring-1 ring-primary/40"
+            : isActive
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+          className
+        )}
+        onClick={isRenaming ? undefined : onSelect}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          onRenameStart();
+        }}
+      >
+        {isRenaming ? (
+          <input
+            ref={inputRef}
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none"
+            defaultValue={label}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                onRenameCancel();
+              }
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          children
+        )}
+      </div>
+    );
+  }
+);

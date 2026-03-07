@@ -10,15 +10,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 ## Phase 2 — Editor & Metadata
 
 
-- [ ] **GOO-94** Page CRUD actions _(High)_ — **requires GOO-37, implement alongside GOO-89**
-  Inline create and context menu for page list items.
-  - **"+" button** in page list panel header → `createPage({ folderId: activeViewId if folder, else null })` → sets new page as active, opens editor. Skips NL parsing.
-  - **Context menu** (right-click on any `PageListItem`):
-    - **Rename** → focuses the title field in the editor (just calls `setActivePage` + emits a `focus-title` event that the metadata header listens for). No inline rename in the list itself.
-    - **Delete** → if `content` is non-empty or page has any `page_schedules` rows: show confirmation modal "Delete [title]? This cannot be undone." Primary: "Delete". Cancel: no-op. Empty pages delete immediately with no prompt.
-    - **Move to folder** → popover showing folder list + "Inbox" option. Selecting calls `updatePage({ folderId })`. Active folder pre-selected.
-  - Context menu implemented with shadcn `ContextMenu`. Confirmation modal reuses shadcn `AlertDialog`.
-  Component lives in `apps/desktop/src/features/pages/components/`.
 
 - [ ] **GOO-89** Page list panel _(High)_ — **requires GOO-14**
   Middle column. Renders pages for the active view (`UIContext.activeViewId`):
@@ -195,6 +186,39 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 - [ ] **GOO-34** Scheduled date/time picker _(High)_ — **requires GOO-76**
   shadcn Popover with mini calendar + time input. Quick chips: Today, Tomorrow, Monday, Next week. Duration shortcuts: 15min, 30min, 1h, 2h. Writes `scheduledStart`/`scheduledEnd` via `create_page_schedule` / `delete_page_schedule`.
+
+---
+
+- [ ] **GOO-99** Enhanced folder delete modal _(Medium)_ — **requires GOO-37 ✓**
+  When deleting a folder that contains pages, replace the current fixed "move to Inbox" confirmation with two explicit choices:
+  - **Move pages** (default) — folder selector dropdown pre-filled with "Inbox"; user can pick any other existing folder. On confirm: moves all pages in the deleted folder to the chosen destination (`updatePage({ folderId })` for each), then deletes the folder.
+  - **Archive pages** — moves all pages to a hidden `archived` status (`status = 'archived'`) rather than deleting them. Pages disappear from all normal views but are recoverable via a future Archive view (GOO-TBD). On confirm: bulk-updates `status = 'archived'` for all pages in folder, then deletes the folder.
+
+  Modal structure (shadcn `AlertDialog` + `Select` + `RadioGroup` or two `Button` variants):
+  ```
+  Delete "Project Alpha"?
+  ○ Move pages to: [Inbox ▾]
+  ○ Archive pages  (recoverable)
+  [Cancel]  [Confirm]
+  ```
+  `FolderDeleteDialog` component in `apps/desktop/src/features/folders/components/`. `WorkspaceContext` may need a `bulkUpdatePages` or `archiveFolder` helper if individual `updatePage` calls are too chatty.
+
+---
+
+## Developer Tooling
+
+- [ ] **GOO-95** Dev: seed command — reset UI preferences _(Low)_
+  Script or Tauri dev command to wipe `localStorage` and plugin-store settings keys back to defaults. Useful when testing first-run flows or settings panels. Can be a `pnpm dev:reset-ui` script that opens the app with a `?resetUI=1` query param cleared on startup, or a hidden `Cmd+Shift+Option+R` chord in dev builds only.
+
+- [ ] **GOO-96** Dev: seed command — populate workspace _(Low)_
+  Script that inserts a realistic dataset (folders, pages with varied status/priority/tags/schedules) into the active SQLite workspace. Goal: fill the UI for screenshot/demo/dev without manual entry. Invoke via `pnpm dev:seed`. Should be idempotent (no-op if seed marker page exists). ~20 pages across 4 folders + a few page_schedules rows.
+
+---
+
+## Phase 2 — Appearance
+
+- [ ] **GOO-97** Theme selector _(Medium)_ — **do before GOO-59**
+  Lightweight standalone theme toggle, ships before the full Settings modal (GOO-59). Three options: System / Light / Dark. Store in `localStorage` under `pikos:theme`. Apply to `<html data-theme="...">`. Render as a `ToggleGroup` or segmented control in the right-panel header (top-right, small icon row). `useTheme()` hook in `apps/desktop/src/shared/hooks/useTheme.ts`. GOO-59 Appearance panel will wire into the same key — no migration needed.
 
 ---
 

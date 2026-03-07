@@ -1,6 +1,8 @@
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
+import { Fragment } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CalendarDays, Inbox, Plus } from "lucide-react";
+import { InsertionLine } from "@/shared/components/InsertionLine";
+import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { FolderItem } from "./components/FolderItem";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { SmartViewEntry } from "./components/SmartViewEntry";
@@ -15,7 +17,6 @@ export function FolderList() {
     setRenamingId,
     pendingDelete,
     handleCreateFolder,
-    handleDragEnd,
     handleRenameCommit,
     handleDeleteRequest,
     handleDeleteConfirm,
@@ -23,7 +24,8 @@ export function FolderList() {
     handleColorChange,
   } = useFolderList();
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const folderIds = folders.map((f) => f.id);
+  const insertBeforeId = useInsertionLine(folderIds);
 
   return (
     <>
@@ -54,11 +56,11 @@ export function FolderList() {
           </button>
         </div>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={folders.map((f) => f.id)} strategy={verticalListSortingStrategy}>
-            {folders.map((folder) => (
+        <SortableContext items={folderIds} strategy={verticalListSortingStrategy}>
+          {folders.map((folder) => (
+            <Fragment key={folder.id}>
+              {insertBeforeId === folder.id && <InsertionLine />}
               <FolderItem
-                key={folder.id}
                 folder={folder}
                 isActive={activeViewId === folder.id}
                 isRenaming={renamingId === folder.id}
@@ -69,9 +71,10 @@ export function FolderList() {
                 onDelete={() => handleDeleteRequest(folder)}
                 onColorChange={(color) => handleColorChange(folder.id, color)}
               />
-            ))}
-          </SortableContext>
-        </DndContext>
+            </Fragment>
+          ))}
+          {insertBeforeId === null && <InsertionLine />}
+        </SortableContext>
 
         {folders.length === 0 && (
           <p className="px-2 py-1 text-xs text-muted-foreground italic">No folders yet</p>

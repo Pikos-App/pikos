@@ -1,0 +1,79 @@
+import { useCallback, useMemo, useState } from "react";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useUI } from "@/shared/context/UIContext";
+import { getVisiblePages } from "@/features/pages/utils/pageFilters";
+import type { Page } from "@pikos/core";
+
+export function usePageList() {
+  const { pages, folders, createPage, updatePage, deletePage } = useWorkspace();
+  const { activeViewId, activePage, setActivePage } = useUI();
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Page | null>(null);
+
+  const visiblePages = useMemo(() => getVisiblePages(pages, activeViewId), [pages, activeViewId]);
+
+  /** Create a page in the active folder and immediately enter rename mode. */
+  const handleCreatePage = useCallback(async () => {
+    const folderId = activeViewId !== "today" && activeViewId !== "inbox" ? activeViewId : null;
+    const page = await createPage({ folderId });
+    setActivePage(page);
+    setRenamingId(page.id);
+  }, [activeViewId, createPage, setActivePage]);
+
+  const handleRenameCommit = useCallback(
+    (id: string, title: string) => {
+      updatePage(id, { title });
+      setRenamingId(null);
+    },
+    [updatePage]
+  );
+
+  const handleRenameCancel = useCallback(() => setRenamingId(null), []);
+
+  /** Delete with confirmation if page is non-empty or has a schedule. */
+  const handleDeleteRequest = useCallback(
+    (page: Page) => {
+      const isEmpty = page.content === "" && !page.scheduledStart;
+      if (isEmpty) {
+        if (activePage?.id === page.id) setActivePage(null);
+        void deletePage(page.id);
+      } else {
+        setPendingDelete(page);
+      }
+    },
+    [deletePage, activePage, setActivePage]
+  );
+
+  const handleDeleteConfirm = useCallback(() => {
+    if (!pendingDelete) return;
+    if (activePage?.id === pendingDelete.id) setActivePage(null);
+    void deletePage(pendingDelete.id);
+    setPendingDelete(null);
+  }, [pendingDelete, deletePage, activePage, setActivePage]);
+
+  const handleDeleteCancel = useCallback(() => setPendingDelete(null), []);
+
+  const handleMoveToFolder = useCallback(
+    (pageId: string, folderId: string | null) => {
+      updatePage(pageId, { folderId });
+    },
+    [updatePage]
+  );
+
+  return {
+    visiblePages,
+    folders,
+    activePage,
+    renamingId,
+    setRenamingId,
+    pendingDelete,
+    handleCreatePage,
+    handleRenameCommit,
+    handleRenameCancel,
+    handleDeleteRequest,
+    handleDeleteConfirm,
+    handleDeleteCancel,
+    handleMoveToFolder,
+    handleSelectPage: setActivePage,
+  };
+}

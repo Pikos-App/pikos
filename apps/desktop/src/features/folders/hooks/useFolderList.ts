@@ -1,6 +1,4 @@
 import { useCallback, useState } from "react";
-import { type DragEndEvent } from "@dnd-kit/core";
-import { arrayMove } from "@dnd-kit/sortable";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
 import type { Folder } from "@pikos/core";
@@ -18,7 +16,6 @@ export interface FolderListState {
   setRenamingId: (id: string | null) => void;
   pendingDelete: PendingDelete | null;
   handleCreateFolder: () => Promise<void>;
-  handleDragEnd: (event: DragEndEvent) => void;
   handleRenameCommit: (id: string, name: string) => void;
   handleDeleteRequest: (folder: Folder) => void;
   handleDeleteConfirm: () => void;
@@ -27,8 +24,7 @@ export interface FolderListState {
 }
 
 export function useFolderList(): FolderListState {
-  const { folders, pages, createFolder, updateFolder, deleteFolder, reorderFolders } =
-    useWorkspace();
+  const { folders, pages, createFolder, updateFolder, deleteFolder } = useWorkspace();
   const { activeViewId, setActiveViewId } = useUI();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -38,18 +34,6 @@ export function useFolderList(): FolderListState {
     setRenamingId(folder.id);
     setActiveViewId(folder.id);
   }, [createFolder, setActiveViewId]);
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-      const oldIdx = folders.findIndex((f) => f.id === active.id);
-      const newIdx = folders.findIndex((f) => f.id === over.id);
-      if (oldIdx === -1 || newIdx === -1) return;
-      void reorderFolders(arrayMove(folders, oldIdx, newIdx).map((f) => f.id));
-    },
-    [folders, reorderFolders]
-  );
 
   const handleRenameCommit = useCallback(
     (id: string, name: string) => {
@@ -96,7 +80,6 @@ export function useFolderList(): FolderListState {
     setRenamingId,
     pendingDelete,
     handleCreateFolder,
-    handleDragEnd,
     handleRenameCommit,
     handleDeleteRequest,
     handleDeleteConfirm,

@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { useDndMonitor } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -11,65 +9,43 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { cn } from "@/lib/utils";
 import { SidebarListItem } from "@/shared/components/SidebarListItem";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
-import type { Folder } from "@pikos/core";
+import type { Folder, Page } from "@pikos/core";
 
-const COLORS = [
-  { value: "#ef4444", label: "Red" },
-  { value: "#f97316", label: "Orange" },
-  { value: "#eab308", label: "Yellow" },
-  { value: "#22c55e", label: "Green" },
-  { value: "#3b82f6", label: "Blue" },
-  { value: "#8b5cf6", label: "Purple" },
-  { value: "#ec4899", label: "Pink" },
-  { value: "#6b7280", label: "Gray" },
-] as const;
-
-export interface FolderItemProps {
-  folder: Folder;
+interface PageListItemProps {
+  page: Page;
   isActive: boolean;
   isRenaming: boolean;
+  folders: Folder[];
   onSelect: () => void;
   onRenameStart: () => void;
-  onRenameCommit: (name: string) => void;
+  onRenameCommit: (title: string) => void;
   onRenameCancel: () => void;
   onDelete: () => void;
-  onColorChange: (color: string) => void;
+  onMoveToFolder: (folderId: string | null) => void;
 }
 
-export function FolderItem({
-  folder,
+export function PageListItem({
+  page,
   isActive,
   isRenaming,
+  folders,
   onSelect,
   onRenameStart,
   onRenameCommit,
   onRenameCancel,
   onDelete,
-  onColorChange,
-}: FolderItemProps) {
+  onMoveToFolder,
+}: PageListItemProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
-    id: folder.id,
-    data: { type: "folder", folderId: folder.id },
+    id: page.id,
+    data: { type: "page" },
     disabled: isRenaming,
     transition: null,
   });
   const { inputRef, prepareRenameFromMenu, contextMenuContentProps } = useInlineRename(isRenaming);
-
-  // Highlight when a page (not a folder) is dragged over this item.
-  const [isPageOver, setIsPageOver] = useState(false);
-  useDndMonitor({
-    onDragOver({ active, over }) {
-      setIsPageOver(over?.id === folder.id && active.data.current?.type === "page");
-    },
-    onDragEnd() {
-      setIsPageOver(false);
-    },
-    onDragCancel() {
-      setIsPageOver(false);
-    },
-  });
 
   return (
     <ContextMenu>
@@ -77,14 +53,13 @@ export function FolderItem({
         <SidebarListItem
           isActive={isActive}
           isRenaming={isRenaming}
-          isDragOver={isPageOver}
-          label={folder.name}
+          label={page.title}
           onSelect={onSelect}
           onRenameStart={onRenameStart}
           onRenameCommit={onRenameCommit}
           onRenameCancel={onRenameCancel}
           inputRef={inputRef}
-          className="items-center gap-2"
+          className="flex-col gap-0.5"
           dragRef={setNodeRef}
           dragStyle={{
             transform: CSS.Transform.toString(transform),
@@ -92,11 +67,10 @@ export function FolderItem({
           }}
           dragProps={{ ...attributes, ...listeners }}
         >
-          <span
-            className="h-2 w-2 shrink-0 rounded-full"
-            style={{ backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)" }}
-          />
-          <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+          <span className="truncate font-medium">{page.title || "Untitled"}</span>
+          {page.subtitle && (
+            <span className="truncate text-xs text-muted-foreground">{page.subtitle}</span>
+          )}
         </SidebarListItem>
       </ContextMenuTrigger>
 
@@ -105,15 +79,27 @@ export function FolderItem({
           Rename
         </ContextMenuItem>
         <ContextMenuSub>
-          <ContextMenuSubTrigger>Color</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger>Move to Folder</ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            {COLORS.map(({ value, label }) => (
-              <ContextMenuItem key={value} onSelect={() => onColorChange(value)}>
+            <ContextMenuItem
+              onSelect={() => onMoveToFolder(null)}
+              className={cn(page.folderId === null && "font-medium")}
+            >
+              Inbox
+            </ContextMenuItem>
+            {folders.map((folder) => (
+              <ContextMenuItem
+                key={folder.id}
+                onSelect={() => onMoveToFolder(folder.id)}
+                className={cn(page.folderId === folder.id && "font-medium")}
+              >
                 <span
-                  className="mr-2 h-3 w-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: value }}
+                  className="mr-2 h-2 w-2 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)",
+                  }}
                 />
-                {label}
+                {folder.name}
               </ContextMenuItem>
             ))}
           </ContextMenuSubContent>

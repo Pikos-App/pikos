@@ -1,0 +1,42 @@
+import { useEffect, useRef } from "react";
+
+/**
+ * Shared rename state for sidebar list items (folders, pages).
+ * Manages the input ref, focus-on-activate, and Radix focus-restore suppression
+ * when rename is triggered from a context menu.
+ */
+export function useInlineRename(isRenaming: boolean) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suppressRef = useRef(false);
+
+  useEffect(() => {
+    if (isRenaming) {
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+    }
+  }, [isRenaming]);
+
+  /**
+   * Call instead of `onRenameStart` when triggered from a ContextMenuItem.
+   * Sets the suppress flag so Radix doesn't steal focus back from the input
+   * when the menu closes.
+   */
+  function prepareRenameFromMenu(onRenameStart: () => void) {
+    suppressRef.current = true;
+    onRenameStart();
+  }
+
+  /** Spread onto <ContextMenuContent> to suppress focus restore after menu-triggered rename. */
+  const contextMenuContentProps = {
+    onCloseAutoFocus(e: Event) {
+      if (suppressRef.current) {
+        e.preventDefault();
+        suppressRef.current = false;
+      }
+    },
+  } as const;
+
+  return { inputRef, prepareRenameFromMenu, contextMenuContentProps };
+}

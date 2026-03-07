@@ -261,6 +261,7 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, import/e
 
 - [ ] **GOO-12** Page parent/child relationships _(Medium)_
       `parentId` stored as DB column (already in schema). Max 3 levels of nesting. Children shown as indented list below parent in pages panel.
+      **Open question**: when a parent page is marked `done`, should children auto-complete? Leaning yes (with undo toast) — common in task managers. Decide before implementing status toggle (GOO-33).
 
 - [ ] **GOO-13** `[[wikilink]]` syntax + backlinks _(Medium)_
       Typing `[[` → autocomplete popup with matching page titles. Click wikilink → navigate to page. Backlinks panel shows inbound links. Extracted links stored in `page.links[]` JSON column.
@@ -297,6 +298,12 @@ _See `.agent/GTM.md` for full strategy._
       Add `subtitle TEXT` column to `pages`. One-sentence summary shown in `PageListItem` (line 2, muted, truncated) and `PageBlock` in calendar (below title). Single-line input in metadata header — newlines blocked. Include in FTS. AI summarization is v2.
       **Schema**: `subtitle TEXT` in `pages`, updated FTS triggers.
       **Dependencies**: GOO-29 (done), GOO-32 (metadata header).
+
+- [ ] **GOO-98** Nested folders _(Low)_
+      **Decision needed before implementing folder CRUD.** Options:
+      - **Flat only (v1)**: simplest, avoids tree complexity in sidebar + queries. Folders = namespaces.
+      - **Nested (advanced setting, off by default)**: sidebar becomes a tree, `parent_folder_id` column needed (not in current schema). Max depth TBD (2–3 levels recommended). Off by default keeps the UI approachable.
+      Leaning: **off by default, enable in Settings > General**. If nested is enabled, folder picker (GOO-94 Move to folder) becomes a tree picker. FTS and page list queries unaffected (filter by `folder_id` only — no recursive walk needed for listing). Schema: add `parent_folder_id TEXT REFERENCES folders(id)` migration.
 
 - [ ] **GOO-78** Focus Timer built-in plugin _(Medium)_
       Sidebar panel: large timer display, Start/Stop button, optional "Attach to page" (defaults to active page). Session log: date, duration, page title link, trash icon. Daily total at top.
