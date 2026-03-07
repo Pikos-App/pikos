@@ -5,20 +5,11 @@ import { useKeyboardListener } from "@/shared/keyboard/useKeyboard";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { WelcomeScreen } from "@/features/workspace/WelcomeScreen";
+import { ThreePanelLayout } from "@/features/layout/ThreePanelLayout";
 
 function AppShell() {
   useKeyboardListener();
-
-  return (
-    <div className="flex h-screen bg-background text-foreground">
-      {/* Left panel — sidebar (180px) */}
-      <div className="w-[180px] shrink-0 border-r border-border" />
-      {/* Middle panel — page list (280px) */}
-      <div className="w-[280px] shrink-0 border-r border-border" />
-      {/* Right panel — editor / calendar */}
-      <div className="flex-1" />
-    </div>
-  );
+  return <ThreePanelLayout />;
 }
 
 function WorkspaceGate() {

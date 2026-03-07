@@ -9,10 +9,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ## Phase 2 — Editor & Metadata
 
-- [ ] **GOO-14** Resizable three-panel layout _(High)_
-  Default: Left 180px | Pages 280px | Right flex. Drag handles between panels (rendered inside each panel's `motion.div` so they animate away on sidebar collapse). Persist widths to localStorage.
-  **Also wire App.tsx**: replace the three empty `<div>`s with real panel components (`<Sidebar>`, `<PageListPanel>`, `<EditorPanel>`). Right panel toggles Editor ↔ Calendar (`Cmd+Shift+C`) — left and pages panels remain visible in both modes. Without this, Phase 2 UI tasks have nowhere to render. Add in some placeholder text so I can easily identify each section.
-
 - [ ] **GOO-91** `list_pages_today` Rust command _(High)_ — **do before GOO-89**
   `src-tauri/src/db/pages.rs`. Today smart view requires a JOIN against `page_schedules` — `list_pages` cannot serve it. Correct query:
   ```sql
