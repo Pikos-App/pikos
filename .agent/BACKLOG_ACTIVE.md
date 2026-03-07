@@ -11,17 +11,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 
 
-- [ ] **GOO-89** Page list panel _(High)_ — **requires GOO-14**
-  Middle column. Renders pages for the active view (`UIContext.activeViewId`):
-  - `'today'` → call `listPagesToday()` (GOO-91)
-  - `'inbox'` → pages where `folderId === null`
-  - `folderId` → pages where `folderId === id`
-  Sorted by `sortOrder`. Each item shows title, subtitle, status badge, priority indicator. Clicking a page calls `setActivePage`. Active page highlighted. Empty state per view. Keyboard nav (J/K/Enter) wired via `useKeyboardShortcut`.
-
-
-- [ ] **GOO-79** Today smart view + Inbox smart view _(High)_ — **requires GOO-37**
-  Two pinned smart views at top of left panel above user folders. Today: pages with any `page_schedules` row where `date(scheduled_start) <= date('now')` and `status != 'done'`; grouped in page list as Overdue (collapsed) + Today sections; badge = total count. Inbox: pages where `folder_id IS NULL`; badge = count (hidden when 0). Both read-only sidebar entries — no delete/rename/reorder.
-
 - [ ] **GOO-80** Sidebar collapse + navigation keyboard shortcuts _(High)_ — **requires GOO-79**
   Two states only — all-open or both-left-collapsed (no partial). `Cmd+\` toggles. `SidebarToggle` button in top-left of right panel header (always visible): `PanelLeftClose`/`PanelLeftOpen` lucide icons, tooltip shows shortcut. Both panels animate via framer-motion spring (stiffness 350, damping 35, width+opacity). State persisted to `localStorage`.
 

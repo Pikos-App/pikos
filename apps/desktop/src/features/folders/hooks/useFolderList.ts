@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
 import type { Folder } from "@pikos/core";
@@ -15,6 +15,8 @@ export interface FolderListState {
   renamingId: string | null;
   setRenamingId: (id: string | null) => void;
   pendingDelete: PendingDelete | null;
+  todayCount: number;
+  inboxCount: number;
   handleCreateFolder: () => Promise<void>;
   handleRenameCommit: (id: string, name: string) => void;
   handleDeleteRequest: (folder: Folder) => void;
@@ -28,6 +30,15 @@ export function useFolderList(): FolderListState {
   const { activeViewId, setActiveViewId } = useUI();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+
+  const todayCount = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return pages.filter(
+      (p) => p.scheduledStart && p.scheduledStart.slice(0, 10) <= today && p.status !== "done"
+    ).length;
+  }, [pages]);
+
+  const inboxCount = useMemo(() => pages.filter((p) => p.folderId === null).length, [pages]);
 
   const handleCreateFolder = useCallback(async () => {
     const folder = await createFolder({ name: "New Folder" });
@@ -79,6 +90,8 @@ export function useFolderList(): FolderListState {
     renamingId,
     setRenamingId,
     pendingDelete,
+    todayCount,
+    inboxCount,
     handleCreateFolder,
     handleRenameCommit,
     handleDeleteRequest,

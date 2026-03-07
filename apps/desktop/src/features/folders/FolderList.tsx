@@ -16,6 +16,8 @@ export function FolderList() {
     renamingId,
     setRenamingId,
     pendingDelete,
+    todayCount,
+    inboxCount,
     handleCreateFolder,
     handleRenameCommit,
     handleDeleteRequest,
@@ -34,12 +36,14 @@ export function FolderList() {
           label="Today"
           icon={<CalendarDays size={16} />}
           isActive={activeViewId === "today"}
+          badge={todayCount}
           onSelect={() => setActiveViewId("today")}
         />
         <SmartViewEntry
           label="Inbox"
           icon={<Inbox size={16} />}
           isActive={activeViewId === "inbox"}
+          badge={inboxCount}
           onSelect={() => setActiveViewId("inbox")}
         />
 

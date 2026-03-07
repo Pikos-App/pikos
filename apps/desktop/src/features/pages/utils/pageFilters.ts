@@ -13,3 +13,12 @@ export function getVisiblePages(pages: Page[], activeViewId: string): Page[] {
   }
   return pages.filter((p) => p.folderId === activeViewId);
 }
+
+/** Splits today-view pages into overdue (before today) and today (today only). */
+export function groupTodayPages(pages: Page[]): { overdue: Page[]; today: Page[] } {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return {
+    overdue: pages.filter((p) => p.scheduledStart && p.scheduledStart.slice(0, 10) < todayStr),
+    today: pages.filter((p) => p.scheduledStart && p.scheduledStart.slice(0, 10) === todayStr),
+  };
+}
