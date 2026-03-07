@@ -13,14 +13,14 @@ export type ActiveViewId = "today" | "inbox" | (string & NonNullable<unknown>);
 
 export interface UIContextValue {
   activePage: Page | null;
-  setActivePage(page: Page | null): void;
+  setActivePage: (page: Page | null) => void;
   activeViewId: ActiveViewId;
-  setActiveViewId(id: ActiveViewId): void;
+  setActiveViewId: (id: ActiveViewId) => void;
   rightPanel: "editor" | "calendar";
-  setRightPanel(panel: "editor" | "calendar"): void;
+  setRightPanel: (panel: "editor" | "calendar") => void;
   /** Both left panels hidden. Persisted to localStorage. */
   sidebarCollapsed: boolean;
-  setSidebarCollapsed(v: boolean): void;
+  setSidebarCollapsed: (v: boolean) => void;
 }
 
 const UIContext = createContext<UIContextValue | null>(null);

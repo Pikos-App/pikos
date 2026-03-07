@@ -1,4 +1,6 @@
-// Sidebar — left panel (folders, smart views). Default 180px, resizable.
+// Sidebar — left panel (smart views + folders). Default 180px, resizable.
+
+import { FolderList } from "@/features/folders/FolderList";
 
 interface SidebarProps {
   width: number;
@@ -8,10 +10,12 @@ interface SidebarProps {
 export function Sidebar({ width, onResizeStart }: SidebarProps) {
   return (
     <div
-      className="relative flex shrink-0 flex-col border-r border-border bg-background"
+      className="relative flex shrink-0 flex-col overflow-hidden border-r border-border bg-background"
       style={{ width }}
     >
-      <div className="p-4 text-xs text-muted-foreground">Sidebar</div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <FolderList />
+      </div>
 
       {/* Drag handle — right edge */}
       <div

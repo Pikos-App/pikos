@@ -27,11 +27,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   - `folderId` → pages where `folderId === id`
   Sorted by `sortOrder`. Each item shows title, subtitle, status badge, priority indicator. Clicking a page calls `setActivePage`. Active page highlighted. Empty state per view. Keyboard nav (J/K/Enter) wired via `useKeyboardShortcut`.
 
-- [ ] **GOO-37** Folder CRUD _(High)_
-  v1: flat list of folders — no nesting. Create: right-click → "New Folder" or "+" button, inline rename auto-focused. Rename: double-click. Delete: context menu → confirmation (GOO-88). Color picker in context menu. Drag to reorder (`@dnd-kit/core` via `reorderFolders`).
-
-- [ ] **GOO-88** Folder delete confirmation dialog _(High)_ — implement alongside GOO-37
-  When deleting a non-empty folder: count pages in that folder, show modal: "Delete [name]? X pages will be moved to Inbox." Primary action: "Delete & Move to Inbox". Cancel aborts. Empty folders delete immediately with no prompt.
 
 - [ ] **GOO-79** Today smart view + Inbox smart view _(High)_ — **requires GOO-37**
   Two pinned smart views at top of left panel above user folders. Today: pages with any `page_schedules` row where `date(scheduled_start) <= date('now')` and `status != 'done'`; grouped in page list as Overdue (collapsed) + Today sections; badge = total count. Inbox: pages where `folder_id IS NULL`; badge = count (hidden when 0). Both read-only sidebar entries — no delete/rename/reorder.

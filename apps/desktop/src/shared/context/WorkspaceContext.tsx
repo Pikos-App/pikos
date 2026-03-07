@@ -42,20 +42,20 @@ export interface WorkspaceContextValue {
   /** True while the workspace is being initialised or data is being loaded. */
   isLoading: boolean;
   /** First-launch: create default workspace + connect. Subsequent: already handled on mount. */
-  selectWorkspace(): Promise<void>;
-  createPage(opts: { title?: string; folderId?: string | null }): Promise<Page>;
+  selectWorkspace: () => Promise<void>;
+  createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
-  updatePage(id: string, patch: PageUpdate): void;
-  deletePage(id: string): Promise<void>;
-  createFolder(opts: { name: string; color?: string }): Promise<Folder>;
-  updateFolder(id: string, updates: FolderUpdate): Promise<void>;
-  deleteFolder(id: string): Promise<void>;
-  reorderPages(folderId: string | null, orderedIds: string[]): Promise<void>;
-  reorderFolders(orderedIds: string[]): Promise<void>;
-  on<E extends WorkspaceEvent>(
+  updatePage: (id: string, patch: PageUpdate) => void;
+  deletePage: (id: string) => Promise<void>;
+  createFolder: (opts: { name: string; color?: string }) => Promise<Folder>;
+  updateFolder: (id: string, updates: FolderUpdate) => Promise<void>;
+  deleteFolder: (id: string) => Promise<void>;
+  reorderPages: (folderId: string | null, orderedIds: string[]) => Promise<void>;
+  reorderFolders: (orderedIds: string[]) => Promise<void>;
+  on: <E extends WorkspaceEvent>(
     event: E,
     handler: (payload: EventPayloadMap[E]) => void
-  ): () => void;
+  ) => () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
