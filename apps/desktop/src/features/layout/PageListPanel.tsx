@@ -233,22 +233,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
             {visiblePages.map((page) => (
               <Fragment key={page.id}>
                 {insertBeforeId === page.id && <InsertionLine />}
-                <PageListItem
-                  page={page}
-                  isActive={activePage?.id === page.id}
-                  isHighlighted={highlightedPageId === page.id}
-                  isRenaming={renamingId === page.id}
-                  folders={folders}
-                  onSelect={() => handleSelectPage(page)}
-                  onRenameStart={() => setRenamingId(page.id)}
-                  onRenameCommit={(title) => handleRenameCommit(page.id, title)}
-                  onRenameCancel={handleRenameCancel}
-                  onDelete={() => handleDeleteRequest(page)}
-                  onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
-                  onToggleStatus={() => handleToggleStatus(page.id, page.status)}
-                  showRelative={showRelative}
-                  onToggleDateFormat={toggleDateFormat}
-                />
+                {renderPageItem(page)}
               </Fragment>
             ))}
             {insertBeforeId === null && <InsertionLine />}

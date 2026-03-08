@@ -53,7 +53,8 @@ function formatDate(iso: string): { label: string; isPast: boolean; tooltip: str
         minute: "2-digit",
       });
 
-  // Timed event today → just show the time, date is implied
+  // Timed events today always show the time (past ones in red, upcoming as muted).
+  // This keeps them visually distinct from any all-day event on the same date.
   if (!isAllDay && isToday) {
     return { label: formatTime(date), isPast, tooltip };
   }
@@ -64,7 +65,8 @@ function formatDate(iso: string): { label: string; isPast: boolean; tooltip: str
     ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
   });
 
-  const label = isAllDay ? dateLabel : `${dateLabel} ${formatTime(date)}`;
+  // Timed non-today: show date only; time is available on hover via tooltip
+  const label = dateLabel;
   return { label, isPast, tooltip };
 }
 
@@ -117,9 +119,8 @@ function formatRelativeTime(iso: string): { label: string; isPast: boolean; tool
   const absHours = Math.round(abs / 3600000);
   // Within the day → relative only
   if (absHours < 24) return { label: `${absHours}hr`, isPast, tooltip };
-  // Multi-day → append time so the hour isn't lost
   const days = Math.round(abs / 86400000);
-  return { label: `${days}d · ${formatTime(date)}`, isPast, tooltip };
+  return { label: `${days}d`, isPast, tooltip };
 }
 
 interface PageListItemProps {

@@ -2,13 +2,32 @@ import type { Page } from "@pikos/core";
 
 export type SortMode = "manual" | "date" | "title";
 
+/**
+ * Convert a scheduledStart ISO string to a sort key (milliseconds).
+ * All-day strings ('YYYY-MM-DD') are parsed as local midnight (00:00:00)
+ * so they sort before timed items on the same day.
+ * Timed strings are parsed as Date so JS DST normalization applies.
+ */
+function toSortMs(iso: string): number {
+  if (iso.length === 10) {
+    const y = parseInt(iso.slice(0, 4));
+    const m = parseInt(iso.slice(5, 7)) - 1;
+    const d = parseInt(iso.slice(8, 10));
+    return new Date(y, m, d, 0, 0, 0).getTime();
+  }
+  return new Date(iso).getTime();
+}
+
 /** Sort a page list by the given mode. Returns a new array. */
 export function sortPages(pages: Page[], mode: SortMode): Page[] {
   if (mode === "date") {
     return [...pages].sort((a, b) => {
-      const aKey = a.scheduledStart ?? a.createdAt;
-      const bKey = b.scheduledStart ?? b.createdAt;
-      return aKey.localeCompare(bKey);
+      const aHas = a.scheduledStart != null;
+      const bHas = b.scheduledStart != null;
+      // Unscheduled items sink to the bottom
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      if (!aHas) return 0;
+      return toSortMs(a.scheduledStart!) - toSortMs(b.scheduledStart!);
     });
   }
   if (mode === "title") {
@@ -51,7 +70,7 @@ export function groupTodayPages(pages: Page[]): { overdue: Page[]; today: Page[]
   }
 
   function byScheduledStart(a: Page, b: Page): number {
-    return (a.scheduledStart ?? "").localeCompare(b.scheduledStart ?? "");
+    return toSortMs(a.scheduledStart ?? "") - toSortMs(b.scheduledStart ?? "");
   }
 
   return {
