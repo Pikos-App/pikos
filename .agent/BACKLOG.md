@@ -19,6 +19,19 @@ _Goal: the app is fully usable day-to-day. Folders, filters, tags, DnD, import/e
 - [ ] **GOO-94** Page CRUD actions _(High)_
       "+" button in page list header creates a new page in the active view. Right-click context menu on page list items: Rename (focuses editor title), Delete (confirmation if non-empty), Move to folder (popover). Uses shadcn ContextMenu + AlertDialog. Implement alongside GOO-89.
 
+- [ ] **GOO-100** Multi-select pages + bulk actions _(Medium)_
+      Checkbox appears on hover on each page list item (or when any item is already selected). Click checkbox or `Cmd+click` a page to enter selection mode. `Cmd+A` selects all in current view. `Esc` clears selection.
+
+      **Action bar**: sticky strip at the bottom of the page list panel while items are selected. Shows count ("3 selected") + actions:
+      - **Move to folder** — folder picker popover → `updatePage({ folderId })` for each
+      - **Status** — status picker → `updatePage({ status })` for each
+      - **Priority** — priority picker → `updatePage({ priority })` for each
+      - **Delete** — confirmation dialog → `deletePage()` for each (with undo toast, single undo entry via `CommandHistory`)
+
+      Selection state is local to the page list component (`useState<Set<string>>`). Does not affect `activePageId` — opening a page from the editor while items are selected clears selection.
+
+      Dependencies: GOO-33 (status toggle), GOO-35 (priority selector), GOO-94 (CRUD actions).
+
 - [ ] **GOO-16** Page completion + DnD reordering _(Medium)_
       Completed pages → strikethrough + muted → collapse into "Completed" accordion at bottom (UI toggle button). Drag handle for manual reordering (`@dnd-kit/core` via `reorderPages`). `completedAt` timestamp on done.
 

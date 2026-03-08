@@ -95,6 +95,43 @@ All code uses strict mode + `noUncheckedIndexedAccess` + `exactOptionalPropertyT
 - Props interfaces declared directly above the component: `interface MyComponentProps { ... }`
 - No prop drilling more than 2 levels — use context or lift to WorkspaceContext
 
+## Component structure
+
+Two distinct layers — keep them separate:
+
+**UI components** (`src/components/ui/` or `packages/ui/src/`): Pure presentational. Accept props only — no context, no side effects, no business knowledge. Reusable across features. Examples: `Button`, `Badge`, `Popover`. These come from shadcn or are generic primitives.
+
+**Feature components** (`src/features/<name>/components/`): Business-logic consumers. May call `useWorkspace()`, `useUI()`, fire Tauri commands, or own local state. Not reusable across features by design. Examples: `PageListItem`, `FolderRow`, `MetadataHeader`.
+
+Rules:
+- Compose UI components inside feature components — never the reverse
+- If a feature component is getting complex, extract sub-components into the same feature directory (not `components/ui/`)
+- Hooks with business logic live in `src/features/<name>/hooks/` or `src/shared/hooks/` if cross-feature
+- Shared non-UI logic (parsers, adapters, type utilities) lives in `packages/core/src/`
+
+## Test coverage
+
+**When to add tests:**
+
+| What | Write tests? | Location |
+|---|---|---|
+| Pure logic (NL parser, rrule expansion, date math) | Yes — always | `packages/core/src/__tests__/` |
+| `MockStorageAdapter` + context integration | Yes — for happy paths + error paths | `packages/core/src/__tests__/` |
+| `useAutosave`, `useActivePage`, shared hooks | Yes — if logic is non-trivial | `packages/core/src/__tests__/` |
+| shadcn/UI components (`Button`, etc.) | No | — |
+| Feature components (render output, snapshots) | No — too fragile | — |
+| Critical user flows (create page, editor autosave) | Yes — E2E via Playwright | `apps/desktop/e2e/` |
+
+**What to test:**
+- Edge cases in parsers: empty input, ambiguous dates, bounded vs infinite recurrence
+- Context mutations: createPage/updatePage/deletePage return correct state
+- Error paths in StorageAdapter: rejected promises propagate correctly
+
+**What not to test:**
+- Implementation details (internal state shape, private functions)
+- UI rendering or CSS classes
+- Things that can only fail if React or Tauri itself is broken
+
 ## File naming
 
 | Type | Convention | Example |
