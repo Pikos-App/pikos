@@ -28,19 +28,31 @@ The product Pikos replaces: Obsidian (notes) + TickTick (tasks + calendar). Neit
 
 Pikos is for **anyone** who wants their notes, tasks, and calendar in one place without their data living on someone else's server. The app should be as approachable as TickTick and as deep as Obsidian — but most users will never need the deep end.
 
-**Two real audiences, one app:**
+**Primary target: non-technical knowledge workers.** These are the people who pay, stay, and tell friends. They don't evaluate features — they evaluate the first 5 minutes. Technical users are useful for early feedback but are a bad primary market: vocal, high-churn, and increasingly "I'll just build my own."
 
-| Audience | How they think about the app | Privacy framing |
-|---|---|---|
-| General users | "My to-dos, notes, and calendar, all in one place. Fast. No sign-up." | "Nothing goes to the cloud." |
-| Power users / developers | "Local SQLite, no servers, structured data, open format I can inspect." | "The data file is yours. Here's where it lives." |
+**High-value non-technical segments:**
+- **Freelancers and consultants** — juggling projects, clients, deadlines, call notes. Currently cobbling Notion + Todoist + Google Calendar.
+- **Graduate students** — research notes, deadlines, reading lists. Obsidian is too complex, Notion is too slow.
+- **Writers and journalists** — notes tied to deadlines, research linked to tasks. No good native tool exists.
+- **Small business owners** — need task + calendar, don't want per-seat SaaS forever.
 
-The product pitch and UX defaults should serve the general user. Power-user depth (workspace paths, keyboard shortcuts, advanced filters, future API) is progressively disclosed — available but never required.
+**Two real audiences, one brand — two front doors:**
+
+| Audience | Primary channel | How they find Pikos | Privacy framing |
+|---|---|---|---|
+| General users | Marketing `/`, App Store, Reddit, YouTube | "My to-dos, notes, and calendar, all in one place. Fast. No sign-up." | "Nothing goes to the cloud." |
+| Power users / developers | `/open`, Hacker News, GitHub, Homebrew | "Local SQLite, no servers, structured data, open format I can inspect." | "The data file is yours. Here's where it lives." |
+
+The product pitch and UX defaults serve the general user. Power-user depth is progressively disclosed — available but never required.
 
 **What this means for the app:**
 - Default experience: dead simple. Create a task. Add a note. See your calendar. No setup wizard, no concepts to learn.
-- Power features (nested folders, advanced filters, wikilinks, import/export) live behind discoverable surfaces, not in the critical path.
-- Performance and reliability are table stakes, not differentiators. The app must feel instant at all times.
+- The empty state (day one, no data) must feel welcoming — not a blank canvas that requires a "system."
+- Import from Apple Reminders / Google Tasks / Todoist removes the switching cost objection.
+- Power features (advanced filters, wikilinks, import/export) live behind discoverable surfaces, not in the critical path.
+- Performance and reliability are table stakes. The app must feel instant at all times.
+
+**Tone:** Confident but not loud. "We built the thing we couldn't find" — not "the last app you'll ever need." Non-technical users trust calm, honest framing over marketing superlatives. Technical users see through hype instantly. Be the same voice in both rooms.
 
 ---
 
@@ -80,6 +92,18 @@ Invite 5–15 people directly. Technically comfortable friends — people who wo
 
 ---
 
+### Phase 2.5 — Landing page + email list (before public launch)
+
+**Don't wait for Phase 3 to have a web presence.** A simple landing page with an email capture field costs nothing and starts building an audience while the app is still being built.
+
+- One page: headline, 2–3 sentences, screenshot or mockup, email field ("Get notified when Pikos launches")
+- No promises about dates or features
+- Start collecting emails the day the page goes live — even 50 signups before launch is an audience
+
+**Milestone:** Page live, email capture working, at least one social post linking to it.
+
+---
+
 ### Phase 3 — Public launch
 
 Marketing site live. Download available to anyone. No sign-up required.
@@ -96,7 +120,7 @@ Marketing site live. Download available to anyone. No sign-up required.
 
 **Dual landing pages (same app, two entry points):**
 
-- `/` — General audience. Visual, task-focused, approachable. Headline: *"Your notes, tasks, and calendar. Private by default."* Shows the calendar + task list. No mention of SQLite, Tauri, or file paths. Download button prominent above the fold.
+- `/` — General audience. Visual, task-focused, approachable. Headline: *"Your notes, tasks, and calendar. Private by default."* Shows the calendar + task list. No mention of SQLite, Tauri, or file paths. Download button prominent above the fold. Focus on the feeling, not the feature list.
 - `/open` or `/for-developers` — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief "why I built this" story. Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
 
 The two pages let you run different SEO and social campaigns without the messaging feeling split. General landing page targets: "private notes app", "offline task manager", "notes app no account". Technical page targets: "local-first notes app", "obsidian alternative with tasks", "sqlite notes app".
@@ -110,6 +134,9 @@ The two pages let you run different SEO and social campaigns without the messagi
 - GitHub (open source or source-available — see below)
 - Personal social presence (occasional, not performative)
 - Hacker News / indie hackers when the time is right (one "Show HN" post, well-timed — link to technical page)
+- **Reddit:** r/productivity, r/macapps, r/selfhosted, r/ObsidianMD. Warm audiences with the exact pain point. Be a genuine participant, not a promoter.
+- **YouTube:** A single "why I built Pikos" video gets indexed permanently. Non-technical users discover apps through YouTube searches ("best notes app for Mac", "notion alternative offline") far more than HN. One honest, unpolished video beats a polished ad.
+- **Social proof:** Ask Phase 2 users for honest quotes. A few real testimonials on the landing page outperform any feature list for non-technical visitors.
 
 ---
 
@@ -129,6 +156,18 @@ The split is clean: the free app is a complete product, not a crippled demo. Syn
 
 **Pricing notes:** Obsidian Sync is $96/yr, NotePlan is $69.99/yr. Pikos can undercut both while being more integrated. Don't race to the bottom — $45/yr is reasonable and sustainable.
 
+**Sync options (decide before mobile ships):**
+
+| Option | Complexity | Privacy story | Non-technical UX |
+|---|---|---|---|
+| iCloud only | Low — Apple handles infra | Good ("stays in your iCloud") | Excellent — zero setup on Apple devices |
+| Custom relay (E2EE) | High — you own the server | Strongest ("we can't read it") | Requires explaining |
+| iCloud first, relay later | Medium | Good then great | Start simple, add later |
+
+iCloud-only sync is a legitimate long-term choice: zero infra cost, zero operational burden, excellent UX for the Apple-device majority, and a credible privacy story. The tradeoff is Windows/Android users get nothing. Given the macOS-first positioning this is acceptable, especially early. Decide before mobile, not before desktop launch.
+
+**Sync architecture note:** SQLite as source of truth makes sync tractable. CR-SQLite (CRDTs on SQLite) or an event log pattern are the two cleanest approaches. Don't build this until there are paying customers to justify the operational overhead.
+
 ---
 
 ## Distribution
@@ -138,7 +177,7 @@ The split is clean: the free app is a complete product, not a crippled demo. Syn
 | GitHub Releases                | Phase 2+ | Primary distribution, auto-updater source                                                                                                                                                |
 | Marketing site direct download | Phase 3+ | Links to GitHub Releases                                                                                                                                                                 |
 | Homebrew cask                  | Phase 3+ | Developer-friendly, one-line install                                                                                                                                                     |
-| Mac App Store                  | Future   | More friction (sandboxing, Apple review, 30% cut) — evaluate after public launch                                                                                                         |
+| Mac App Store                  | Phase 4+ | Primary non-technical discovery channel. 30% cut but reaches users who will never find a GitHub release. Evaluate after public launch — sandboxing adds work but the audience is worth it. |
 | Windows                        | Phase 3+ | Tauri builds `.msi`/`.exe`. No signing required to run; Windows Defender/SmartScreen will warn without a code signing cert — acceptable for early adopters, fix before wide distribution |
 | Linux                          | Phase 3+ | Tauri builds `.AppImage` + `.deb`. No signing required. Low friction to add to CI matrix.                                                                                                |
 
