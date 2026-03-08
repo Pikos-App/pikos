@@ -1,7 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
-import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
+import {
+  getCompletedTodayPages,
+  getVisiblePages,
+  sortPages,
+} from "@/features/pages/utils/pageFilters";
 import type { Page, PageStatus } from "@pikos/core";
 
 export function usePageList() {
@@ -16,6 +20,11 @@ export function usePageList() {
     if (activeViewId === "today") return filtered;
     return sortPages(filtered, getSortMode(activeViewId));
   }, [pages, activeViewId, getSortMode]);
+
+  const completedTodayPages = useMemo(
+    () => (activeViewId === "today" ? getCompletedTodayPages(pages) : []),
+    [pages, activeViewId]
+  );
 
   /** Create a page in the active folder and immediately enter rename mode. */
   const handleCreatePage = useCallback(async () => {
@@ -67,13 +76,18 @@ export function usePageList() {
 
   const handleToggleStatus = useCallback(
     (pageId: string, currentStatus: PageStatus) => {
-      updatePage(pageId, { status: currentStatus === "done" ? "not_started" : "done" });
+      const isDone = currentStatus === "done";
+      updatePage(pageId, {
+        status: isDone ? "not_started" : "done",
+        completedAt: isDone ? undefined : new Date().toISOString(),
+      });
     },
     [updatePage]
   );
 
   return {
     visiblePages,
+    completedTodayPages,
     folders,
     activePage,
     renamingId,

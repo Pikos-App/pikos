@@ -4,12 +4,15 @@ export type SortMode = "manual" | "date" | "title";
 
 /**
  * Convert a scheduledStart ISO string to a sort key (milliseconds).
- * All-day strings ('YYYY-MM-DD') are parsed as local midnight (00:00:00)
- * so they sort before timed items on the same day.
+ * All-day strings ('YYYY-MM-DD') for today sort at "now" so they land
+ * between overdue (past) and upcoming (future) timed items.
+ * All-day strings for other days sort at midnight (start of day).
  * Timed strings are parsed as Date so JS DST normalization applies.
  */
 function toSortMs(iso: string): number {
   if (iso.length === 10) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (iso === todayStr) return Date.now();
     const y = parseInt(iso.slice(0, 4));
     const m = parseInt(iso.slice(5, 7)) - 1;
     const d = parseInt(iso.slice(8, 10));
@@ -49,6 +52,19 @@ export function getVisiblePages(pages: Page[], activeViewId: string): Page[] {
     return pages.filter((p) => p.folderId === null);
   }
   return pages.filter((p) => p.folderId === activeViewId);
+}
+
+/** Returns pages completed today (status=done, completedAt is today). */
+export function getCompletedTodayPages(pages: Page[]): Page[] {
+  const today = new Date().toISOString().slice(0, 10);
+  return pages
+    .filter((p) => p.status === "done" && p.completedAt?.slice(0, 10) === today)
+    .sort((a, b) => {
+      // Most recently completed first
+      const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+      const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+      return bTime - aTime;
+    });
 }
 
 /** Splits today-view pages into overdue (before now) and today (today, not yet past).

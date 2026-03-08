@@ -25,6 +25,7 @@ interface PageListPanelProps {
 export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
   const {
     visiblePages,
+    completedTodayPages,
     folders,
     activePage,
     renamingId,
@@ -45,6 +46,10 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
   const [sortOpen, setSortOpen] = useState(false);
   const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
   const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage("pikos:overdueCollapsed", true);
+  const [completedCollapsed, setCompletedCollapsed] = useLocalStorage(
+    "pikos:completedCollapsed",
+    true
+  );
 
   function toggleDateFormat() {
     setShowRelative((v) => !v);
@@ -192,7 +197,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
 
       {/* Page list */}
       <div ref={listRef} className="flex flex-col overflow-y-auto">
-        {visiblePages.length === 0 ? (
+        {visiblePages.length === 0 && (!isTodayView || completedTodayPages.length === 0) ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground italic">
             {activeViewId === "today" ? "Nothing scheduled for today" : "No pages"}
           </p>
@@ -224,6 +229,22 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
                   </div>
                 )}
                 {today.map(renderPageItem)}
+              </>
+            )}
+            {completedTodayPages.length > 0 && (
+              <>
+                <button
+                  className="flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-accent/30"
+                  onClick={() => setCompletedCollapsed((v) => !v)}
+                >
+                  <ChevronRight
+                    size={12}
+                    className={cn("transition-transform", !completedCollapsed && "rotate-90")}
+                  />
+                  Completed
+                  <span className="ml-1 tabular-nums">· {completedTodayPages.length}</span>
+                </button>
+                {!completedCollapsed && completedTodayPages.map(renderPageItem)}
               </>
             )}
           </>

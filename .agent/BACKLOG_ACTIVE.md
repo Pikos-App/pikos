@@ -180,6 +180,17 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ---
 
+## UX — Completed Items
+
+- [ ] **GOO-102** Completed items in folder/inbox views — design decision _(Medium)_
+  Today view has a "Completed" accordion (GOO-101 ✓). Need to decide how completed items behave in folder and inbox views. Current: shown inline with strikethrough. Options under consideration:
+  - Per-folder opt-in accordion (task-oriented folders get accordion, knowledge-base folders stay inline)
+  - Global "Hide completed" toggle in sort menu
+  - Automatic: folders with >N completed items get the accordion
+  Key constraint: must stay simple and serve both task-manager and knowledge-base users without forcing a "task vs note" type distinction (TickTick's approach feels bolted-on). Every page is both. The UX should emerge from folder-level behavior, not page-level categorization.
+
+---
+
 ## Developer Tooling
 
 - [ ] **GOO-95** Dev: seed command — reset UI preferences _(Low)_
