@@ -146,27 +146,68 @@ After real users exist and feedback is incorporated.
 
 **Mobile:** GOO-47 (React Native). The `packages/core` pure-TS layer was designed for this from day one. When mobile ships, sync becomes the natural upgrade path.
 
-**Introduce paid sync:**
+#### Sync paths
 
-- Free: full desktop app, unlimited everything, local only
-- Paid (~$5/mo or $45/yr): cross-platform sync (desktop + mobile)
-- Self-hosted sync: free — respects the privacy positioning and builds goodwill with the audience that cares most
+There are two completely separate sync lanes. They don't need to overlap and shouldn't share a payment mechanism.
 
-The split is clean: the free app is a complete product, not a crippled demo. Sync is genuinely additive infrastructure, not a paywall over core features.
+```
+PATH A — APPLE ECOSYSTEM (Mac App Store + iPhone App Store)
+────────────────────────────────────────────────────────────
+Mac app      → purchased once from Mac App Store
+iPhone app   → purchased once from iOS App Store (when it ships)
+Sync         → iCloud, automatic, no account, no extra charge
+               (uses the user's existing iCloud storage — like Apple Notes)
+Revenue      → app purchase prices (Apple takes 30% / 15% for subscriptions)
 
-**Pricing notes:** Obsidian Sync is $96/yr, NotePlan is $69.99/yr. Pikos can undercut both while being more integrated. Don't race to the bottom — $45/yr is reasonable and sustainable.
+PATH B — DIRECT DOWNLOAD (website, Homebrew, GitHub)
+────────────────────────────────────────────────────────────
+Mac/Win/Linux → downloaded free from pikos.app
+Sync          → optional: create account → your relay server
+Revenue       → subscription via Paddle or Lemon Squeezy (you keep ~95%)
+```
 
-**Sync options (decide before mobile ships):**
+iCloud sync works in direct-download Mac apps too (users just need an Apple ID). This means a website user on Mac can sync to their iPhone via iCloud without ever buying the App Store version. See "The bypass question" below.
 
-| Option | Complexity | Privacy story | Non-technical UX |
-|---|---|---|---|
-| iCloud only | Low — Apple handles infra | Good ("stays in your iCloud") | Excellent — zero setup on Apple devices |
-| Custom relay (E2EE) | High — you own the server | Strongest ("we can't read it") | Requires explaining |
-| iCloud first, relay later | Medium | Good then great | Start simple, add later |
+#### Pricing
 
-iCloud-only sync is a legitimate long-term choice: zero infra cost, zero operational burden, excellent UX for the Apple-device majority, and a credible privacy story. The tradeoff is Windows/Android users get nothing. Given the macOS-first positioning this is acceptable, especially early. Decide before mobile, not before desktop launch.
+| What | Price | Notes |
+|---|---|---|
+| Mac app (App Store, one-time) | **$19.99** | Buy once, own forever. No subscription. |
+| iPhone app (App Store, one-time, future) | **$9.99** | Mobile companion. App Store only — iOS has no other distribution channel. |
+| Relay sync (annual, via your site) | **$39.99/yr** | Cross-platform sync. E2EE on your server. |
+| Relay sync (monthly, via your site) | **$4.99/mo** | Same as $59.88/yr — surface annual prominently. |
+| Self-hosted relay | **$0** | Run your own server. Builds goodwill with privacy audience. |
 
-**Sync architecture note:** SQLite as source of truth makes sync tractable. CR-SQLite (CRDTs on SQLite) or an event log pattern are the two cleanest approaches. Don't build this until there are paying customers to justify the operational overhead.
+**Why one-time purchase (not subscription) for the App Store:**
+- iCloud sync is included — there's nothing ongoing you're providing for App Store users
+- "Buy once, own forever" builds trust with non-technical users who are subscription-fatigued
+- Relay sync is already a recurring line; two subscriptions for one app is confusing
+- You can price higher with one-time; churn anxiety doesn't apply
+
+**Competitive context:** Obsidian Sync is $96/yr. NotePlan is $69.99/yr (subscription only). At $39.99/yr for relay sync, Pikos undercuts both while being more integrated. Don't race to the bottom — $39.99 is credibly premium.
+
+#### The bypass question
+
+A user can download Pikos free from the website, use iCloud sync, and never pay anything. **This is fine.** Here's why:
+
+1. **Zero marginal cost.** iCloud sync uses Apple's servers, not yours. You have no infrastructure cost from that user. The only "loss" is compared to an imaginary world where they found the App Store version instead.
+
+2. **The iPhone app is the natural paywall.** iOS apps can only be distributed through the App Store. When someone wants Mac + iPhone sync, they have to buy the iPhone app ($9.99). You don't need to engineer a lock — Apple's distribution rules are the lock.
+
+3. **Free users spread the product.** 1,000 people using it for free is 1,000 word-of-mouth vectors. The privacy-first audience doesn't respond well to friction or paywalls on a local app — goodwill has real value here.
+
+4. **Your paying customers are relay users.** Windows users, Android users, and cross-platform Apple users who want a non-iCloud sync option are the ones paying $39.99/yr. That segment can't bypass anything — they genuinely need your server.
+
+The only scenario worth caring about: if a significant number of Mac-only users who would have paid $19.99 on the App Store instead download for free and use iCloud. Even then, you've lost a one-time $14 (after Apple's cut) — not a subscription. Focus on making the App Store version the path of least resistance for non-technical users; the website is for people who actively seek direct downloads.
+
+#### Sync architecture
+
+SQLite as source of truth makes sync tractable. Two viable approaches:
+
+- **CR-SQLite (CRDTs on SQLite):** Automatic conflict resolution, no event log to maintain. More complex to set up.
+- **Event log pattern:** Append-only log of mutations, replay on merge. Simpler to reason about, easier to debug.
+
+Don't build relay sync until there are paying customers to justify the operational overhead. iCloud sync (Phase 4a) ships first — it's the proof that sync works before you invest in relay infrastructure.
 
 ---
 
@@ -215,13 +256,15 @@ Don't decide on a half-finished app. Revisit when Phase 2 feedback is incorporat
 
 ## Monetary model summary
 
-| Tier        | Price             | What you get                                                 |
-| ----------- | ----------------- | ------------------------------------------------------------ |
-| Free        | $0                | Full desktop app, unlimited notes/tasks/calendar, local only |
-| Sync        | ~$5/mo or ~$45/yr | Cross-platform sync (desktop + mobile)                       |
-| Self-hosted | $0                | Run your own sync server                                     |
+| Tier | Price | What you get | Revenue path |
+|---|---|---|---|
+| Free (direct download) | $0 | Full app, local only | — |
+| Mac app (App Store) | $19.99 one-time | Full app + iCloud sync | App Store (Apple takes 30%) |
+| iPhone app (App Store, future) | $9.99 one-time | Mobile companion + iCloud sync | App Store (Apple takes 30%) |
+| Relay sync | $39.99/yr or $4.99/mo | Cross-platform sync, E2EE | Paddle/Lemon Squeezy (~95% to you) |
+| Self-hosted relay | $0 | Run your own server | Goodwill |
 
-Free at launch. Introduce paid tier when sync + mobile are ready. No feature gating in the free tier — the privacy promise is the product, and charging for core features would undermine it.
+Free at launch. iCloud sync ships with Phase 4a (no extra charge, no relay infra needed). Relay sync and the paid subscription tier come with Phase 4b when Windows/Android users exist and ask for it. No feature gating in the free tier — the privacy promise is the product.
 
 ---
 
