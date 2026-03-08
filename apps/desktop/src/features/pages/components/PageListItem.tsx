@@ -15,7 +15,13 @@ import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import type { Folder, Page } from "@pikos/core";
 
 function formatDate(iso: string): string {
-  const date = new Date(iso);
+  // Date-only strings ('YYYY-MM-DD') must be parsed as local, not UTC.
+  // new Date('YYYY-MM-DD') treats them as UTC midnight, shifting the displayed
+  // date by one day for users west of UTC (e.g. Pacific = Mar 8 → Mar 7).
+  const isAllDay = iso.length === 10;
+  const date = isAllDay
+    ? new Date(parseInt(iso.slice(0, 4)), parseInt(iso.slice(5, 7)) - 1, parseInt(iso.slice(8, 10)))
+    : new Date(iso);
   const now = new Date();
   return date.toLocaleDateString("en-US", {
     month: "short",

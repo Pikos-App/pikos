@@ -14,11 +14,26 @@ export function getVisiblePages(pages: Page[], activeViewId: string): Page[] {
   return pages.filter((p) => p.folderId === activeViewId);
 }
 
-/** Splits today-view pages into overdue (before today) and today (today only). */
+/** Splits today-view pages into overdue (before now) and today (today, not yet past).
+ *
+ * All-day items ('YYYY-MM-DD') use date-only comparison so they stay in "today" all day.
+ * Timed items ('YYYY-MM-DDTHH:MM:SS') use a full datetime comparison so past-today
+ * times (e.g. 1:45 AM when it is now 10 AM) correctly appear in "overdue".
+ */
 export function groupTodayPages(pages: Page[]): { overdue: Page[]; today: Page[] } {
   const todayStr = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+
+  function isOverdue(p: Page): boolean {
+    if (!p.scheduledStart) return false;
+    // All-day format is exactly 'YYYY-MM-DD' (length 10)
+    if (p.scheduledStart.length === 10) return p.scheduledStart < todayStr;
+    // Timed: treat as past once the scheduled moment has passed
+    return new Date(p.scheduledStart) < now;
+  }
+
   return {
-    overdue: pages.filter((p) => p.scheduledStart && p.scheduledStart.slice(0, 10) < todayStr),
-    today: pages.filter((p) => p.scheduledStart && p.scheduledStart.slice(0, 10) === todayStr),
+    overdue: pages.filter(isOverdue),
+    today: pages.filter((p) => !isOverdue(p)),
   };
 }

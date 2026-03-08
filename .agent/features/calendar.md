@@ -6,7 +6,7 @@ Depends on: GOO-29 (SQLite), GOO-76 (page_schedules commands).
 
 ## Philosophy
 Don't use an off-the-shelf calendar library (FullCalendar, etc.) — too opinionated.
-Build a lightweight custom renderer using `date-fns`.
+Build a lightweight custom renderer using `date-fns` and `date-fns-tz`.
 "Calendar should be BUTTERY." — product goal.
 
 ## Product Role

@@ -10,6 +10,7 @@ import { PageDeleteDialog } from "@/features/pages/components/PageDeleteDialog";
 import { usePageList } from "@/features/pages/hooks/usePageList";
 import { groupTodayPages } from "@/features/pages/utils/pageFilters";
 import { useUI } from "@/shared/context/UIContext";
+import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 import { cn } from "@/lib/utils";
 
 interface PageListPanelProps {
@@ -42,6 +43,8 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
   const [overdueCollapsed, setOverdueCollapsed] = useState(true);
 
   const isTodayView = activeViewId === "today";
+  // Re-renders once per minute so overdue/today grouping stays current as time passes.
+  useMinuteTick();
   const { overdue, today } = isTodayView
     ? groupTodayPages(visiblePages)
     : { overdue: [], today: [] };

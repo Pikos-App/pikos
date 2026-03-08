@@ -2,9 +2,9 @@
 """
 seed-dst.py — Populate Pikos DB with pages around the US DST spring-forward.
 
-US Eastern DST 2026: clocks jump from 2:00 AM → 3:00 AM on Sunday, March 8.
-  Before transition: EST  (UTC-5)
-  After  transition: EDT  (UTC-4)
+US Pacific DST 2026: clocks jump from 2:00 AM → 3:00 AM on Sunday, March 8.
+  Before transition: PST  (UTC-8)
+  After  transition: PDT  (UTC-7)
 
 Run:
   python3 scripts/seed-dst.py [path/to/workspace.sqlite]
@@ -20,6 +20,7 @@ import os
 import uuid
 import json
 from datetime import datetime, timezone
+from typing import Optional
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,11 +39,11 @@ def tiptap(text: str) -> str:
 
 # ── page catalogue ────────────────────────────────────────────────────────────
 # Each entry: (title, subtitle, start_local, end_local, status, priority, tags)
-# start/end are local wall-clock times in America/New_York.
+# start/end are local wall-clock times in America/Los_Angeles (Pacific).
 # The 2:00–2:59 AM window on March 8 is the DST gap (those times don't exist).
 
 PAGES = [
-    # ── Saturday March 7 — normal EST ─────────────────────────────────────────
+    # ── Saturday March 7 — normal PST ─────────────────────────────────────────
     (
         "Pre-DST planning session",
         "Review tasks before clocks change",
@@ -85,7 +86,7 @@ PAGES = [
     # We include pages bracketing the gap so the UI can be tested.
     (
         "Just before the DST gap",
-        "Scheduled at 1:45 AM — last moment in EST",
+        "Scheduled at 1:45 AM — last moment in PST",
         "2026-03-08T01:45:00", "2026-03-08T02:00:00",
         "not_started", 2, ["dst", "edge-case"],
     ),
@@ -103,12 +104,12 @@ PAGES = [
     ),
     (
         "Just after the DST gap",
-        "Clocks now read 3:00 AM EDT — first valid time",
+        "Clocks now read 3:00 AM PDT — first valid time",
         "2026-03-08T03:00:00", "2026-03-08T03:30:00",
         "not_started", 2, ["dst", "edge-case"],
     ),
 
-    # ── Sunday March 8 — DST day, morning / afternoon ─────────────────────────
+    # ── Sunday March 8 — PDT day, morning / afternoon ─────────────────────────
     (
         "Sunday morning run",
         "Shorter sleep thanks to DST — go anyway",
@@ -117,7 +118,7 @@ PAGES = [
     ),
     (
         "DST day brunch",
-        "Meet at 10 AM EDT — remember it feels like 9",
+        "Meet at 10 AM PDT — remember it feels like 9",
         "2026-03-08T10:00:00", "2026-03-08T11:30:00",
         "not_started", 3, ["personal"],
     ),
@@ -129,13 +130,13 @@ PAGES = [
     ),
     (
         "Afternoon sync with east coast team",
-        "They're already on EDT; west coast still on PST",
+        "East coast already sprung forward same day; both on summer time",
         "2026-03-08T14:00:00", "2026-03-08T15:00:00",
         "not_started", 2, ["meeting"],
     ),
     (
         "Evening wrap-up",
-        "First full day on EDT — how did the app hold up?",
+        "First full day on PDT — how did the app hold up?",
         "2026-03-08T18:00:00", "2026-03-08T18:30:00",
         "not_started", 3, ["review", "dst"],
     ),
@@ -149,14 +150,14 @@ PAGES = [
     ),
     (
         "March 8 — DST begins (spring forward)",
-        "Clocks +1h at 2 AM → 3 AM in America/New_York",
+        "Clocks +1h at 2 AM → 3 AM in America/Los_Angeles",
         "2026-03-08", None,
         "not_started", 0, ["dst", "marker"],
     ),
 
     # ── Monday March 9 — first full day on EDT ────────────────────────────────
     (
-        "Monday standup — first day fully on EDT",
+        "Monday standup — first day fully on PDT",
         "Confirm recurring meetings didn't drift",
         "2026-03-09T09:00:00", "2026-03-09T09:30:00",
         "not_started", 3, ["standup", "dst"],
@@ -183,12 +184,12 @@ PAGES = [
     ),
 ]
 
-TIMEZONE = "America/New_York"
+TIMEZONE = "America/Los_Angeles"
 
 # ── database helpers ──────────────────────────────────────────────────────────
 
-def insert_page(cur, folder_id: str | None, title: str, subtitle: str,
-                content_text: str, status: str, priority: int, tags: list[str],
+def insert_page(cur, folder_id: Optional[str], title: str, subtitle: str,
+                content_text: str, status: str, priority: int, tags: list,
                 sort_order: int) -> str:
     page_id = uid()
     ts = now_iso()
@@ -210,8 +211,8 @@ def insert_page(cur, folder_id: str | None, title: str, subtitle: str,
     return page_id
 
 
-def insert_schedule(cur, page_id: str, start: str, end: str | None,
-                    timezone: str | None) -> str:
+def insert_schedule(cur, page_id: str, start: str, end: Optional[str],
+                    timezone: Optional[str]) -> str:
     sched_id = uid()
     ts = now_iso()
     cur.execute(
@@ -225,7 +226,7 @@ def insert_schedule(cur, page_id: str, start: str, end: str | None,
     return sched_id
 
 
-def update_page_denorm(cur, page_id: str, start: str, end: str | None) -> None:
+def update_page_denorm(cur, page_id: str, start: str, end: Optional[str]) -> None:
     """Keep pages.scheduled_start/end in sync (denorm of next upcoming schedule)."""
     cur.execute(
         "UPDATE pages SET scheduled_start=?, scheduled_end=? WHERE id=?",
@@ -316,7 +317,7 @@ def seed(db_path: str) -> None:
     print(f"\n  Done — {inserted} pages seeded into '{db_path}'")
     print(f"  Folder: 'DST Testing'")
     print(f"  Timezone: {TIMEZONE}")
-    print(f"  Date range: 2026-03-07 (EST) → 2026-03-09 (EDT)")
+    print(f"  Date range: 2026-03-07 (PST) → 2026-03-09 (PDT)")
     print(f"\n  DST gap pages (2:00–2:59 AM on March 8) are marked with [gap] tags.")
     print(f"  Compare today (Mar 7) vs tomorrow (Mar 8) in the Pikos calendar.")
 
