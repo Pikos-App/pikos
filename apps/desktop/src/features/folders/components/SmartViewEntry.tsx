@@ -6,14 +6,25 @@ interface SmartViewEntryProps {
   isActive: boolean;
   badge?: number;
   onSelect: () => void;
+  dragRef?: (node: HTMLElement | null) => void;
+  isDragOver?: boolean;
 }
 
-export function SmartViewEntry({ label, icon, isActive, badge, onSelect }: SmartViewEntryProps) {
+export function SmartViewEntry({
+  label,
+  icon,
+  isActive,
+  badge,
+  onSelect,
+  dragRef,
+  isDragOver,
+}: SmartViewEntryProps) {
   return (
     <button
+      ref={dragRef}
       className={cn(
         "flex w-full items-center gap-2.5 rounded px-2 py-2.5 text-sm select-none",
-        isActive
+        isActive || isDragOver
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
       )}

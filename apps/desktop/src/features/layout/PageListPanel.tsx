@@ -130,6 +130,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
         onRenameCommit={(title) => handleRenameCommit(page.id, title)}
         onRenameCancel={handleRenameCancel}
         onDelete={() => handleDeleteRequest(page)}
+        dragDisabled={sortMode !== "manual"}
         onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
         onToggleStatus={() => handleToggleStatus(page.id, page.status)}
         showRelative={showRelative}

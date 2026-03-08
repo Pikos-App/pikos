@@ -314,10 +314,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       await adapter.reorderPages(folderId, orderedIds);
       setPages((prev) => {
         const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
-        return [...prev].sort((a, b) => {
-          const ai = indexMap.get(a.id) ?? a.sortOrder;
-          const bi = indexMap.get(b.id) ?? b.sortOrder;
-          return ai - bi;
+        return prev.map((p) => {
+          const newOrder = indexMap.get(p.id);
+          return newOrder !== undefined ? { ...p, sortOrder: newOrder } : p;
         });
       });
     },

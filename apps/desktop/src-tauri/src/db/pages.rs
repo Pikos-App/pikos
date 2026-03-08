@@ -1,7 +1,18 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use tauri::State;
 
 use super::{now_iso, DbState};
+
+/// Deserializes a field that may be missing OR explicitly null.
+/// - Missing field → `None` (via `#[serde(default)]` on the struct)
+/// - Explicit `null` → `Some(Value::Null)`
+/// - Any other value → `Some(value)`
+fn deserialize_nullable<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    serde_json::Value::deserialize(deserializer).map(Some)
+}
 
 // ─── DB row (snake_case matches column names) ─────────────────────────────────
 
@@ -114,8 +125,10 @@ pub struct NewPage {
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PageUpdate {
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     pub folder_id: Option<serde_json::Value>,
     pub title: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     pub subtitle: Option<serde_json::Value>,
     pub content: Option<String>,
     pub content_text: Option<String>,
@@ -123,12 +136,18 @@ pub struct PageUpdate {
     pub priority: Option<i64>,
     pub tags: Option<Vec<String>>,
     pub sort_order: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     pub scheduled_start: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     pub scheduled_end: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     pub completed_at: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     pub duration_minutes: Option<serde_json::Value>,
     pub links: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     pub parent_id: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_nullable")]
     pub last_opened_at: Option<serde_json::Value>,
 }
 

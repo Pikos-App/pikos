@@ -1,4 +1,5 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
+import { useDndMonitor, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CalendarDays, Inbox, Plus, Search } from "lucide-react";
 import { InsertionLine } from "@/shared/components/InsertionLine";
@@ -29,6 +30,23 @@ export function FolderList() {
   const folderIds = folders.map((f) => f.id);
   const insertBeforeId = useInsertionLine(folderIds);
 
+  const { setNodeRef: inboxDropRef } = useDroppable({
+    id: "inbox-drop",
+    data: { type: "folder", folderId: null },
+  });
+  const [isPageOverInbox, setIsPageOverInbox] = useState(false);
+  useDndMonitor({
+    onDragOver({ active, over }) {
+      setIsPageOverInbox(over?.id === "inbox-drop" && active.data.current?.type === "page");
+    },
+    onDragEnd() {
+      setIsPageOverInbox(false);
+    },
+    onDragCancel() {
+      setIsPageOverInbox(false);
+    },
+  });
+
   return (
     <>
       <div className="flex flex-col gap-0.5 px-1 py-2">
@@ -45,6 +63,8 @@ export function FolderList() {
           isActive={activeViewId === "inbox"}
           badge={inboxCount}
           onSelect={() => setActiveViewId("inbox")}
+          dragRef={inboxDropRef}
+          isDragOver={isPageOverInbox}
         />
 
         <div className="mt-4 mb-1 flex items-center justify-between pr-1 pl-2">
