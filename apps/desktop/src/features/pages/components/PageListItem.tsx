@@ -12,9 +12,18 @@ import {
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
+import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 import type { Folder, Page } from "@pikos/core";
 
-function formatDate(iso: string): string {
+// Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p
+function formatTime(date: Date): string {
+  const h = date.getHours() % 12 || 12;
+  const m = date.getMinutes().toString().padStart(2, "0");
+  const ampm = date.getHours() >= 12 ? "p" : "a";
+  return `${h}:${m}${ampm}`;
+}
+
+function formatDate(iso: string): { label: string; isPast: boolean; tooltip: string } {
   // Date-only strings ('YYYY-MM-DD') must be parsed as local, not UTC.
   // new Date('YYYY-MM-DD') treats them as UTC midnight, shifting the displayed
   // date by one day for users west of UTC (e.g. Pacific = Mar 8 → Mar 7).
@@ -23,16 +32,100 @@ function formatDate(iso: string): string {
     ? new Date(parseInt(iso.slice(0, 4)), parseInt(iso.slice(5, 7)) - 1, parseInt(iso.slice(8, 10)))
     : new Date(iso);
   const now = new Date();
-  return date.toLocaleDateString("en-US", {
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrowMidnight = new Date(todayMidnight.getTime() + 86400000);
+  const isPast = isAllDay ? date < todayMidnight : date < now;
+  const isToday = date >= todayMidnight && date < tomorrowMidnight;
+
+  const tooltip = isAllDay
+    ? date.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : date.toLocaleString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+
+  // Timed event today → just show the time, date is implied
+  if (!isAllDay && isToday) {
+    return { label: formatTime(date), isPast, tooltip };
+  }
+
+  const dateLabel = date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
   });
+
+  const label = isAllDay ? dateLabel : `${dateLabel} ${formatTime(date)}`;
+  return { label, isPast, tooltip };
+}
+
+function formatRelativeTime(iso: string): { label: string; isPast: boolean; tooltip: string } {
+  const isAllDay = iso.length === 10;
+  const tooltip = isAllDay
+    ? new Date(
+        parseInt(iso.slice(0, 4)),
+        parseInt(iso.slice(5, 7)) - 1,
+        parseInt(iso.slice(8, 10))
+      ).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : new Date(iso).toLocaleString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+
+  if (isAllDay) {
+    const date = new Date(
+      parseInt(iso.slice(0, 4)),
+      parseInt(iso.slice(5, 7)) - 1,
+      parseInt(iso.slice(8, 10))
+    );
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((date.getTime() - todayMidnight.getTime()) / 86400000);
+    if (diffDays === 0) return { label: "today", isPast: false, tooltip };
+    if (diffDays < 0) return { label: `${Math.abs(diffDays)}d`, isPast: true, tooltip };
+    return { label: `${diffDays}d`, isPast: false, tooltip };
+  }
+
+  // Timed event
+  const date = new Date(iso);
+  const diffMs = date.getTime() - Date.now();
+  const isPast = diffMs < 0;
+  const abs = Math.abs(diffMs);
+  const absMins = Math.round(abs / 60000);
+
+  // Within the hour → relative only (already time-informative)
+  if (absMins < 60)
+    return { label: absMins === 0 ? "now" : `${absMins}m`, isPast: isPast && absMins > 0, tooltip };
+  const absHours = Math.round(abs / 3600000);
+  // Within the day → relative only
+  if (absHours < 24) return { label: `${absHours}hr`, isPast, tooltip };
+  // Multi-day → append time so the hour isn't lost
+  const days = Math.round(abs / 86400000);
+  return { label: `${days}d · ${formatTime(date)}`, isPast, tooltip };
 }
 
 interface PageListItemProps {
   page: Page;
   isActive: boolean;
+  isHighlighted?: boolean;
   isRenaming: boolean;
   folders: Folder[];
   onSelect: () => void;
@@ -42,11 +135,14 @@ interface PageListItemProps {
   onDelete: () => void;
   onMoveToFolder: (folderId: string | null) => void;
   onToggleStatus: () => void;
+  showRelative?: boolean;
+  onToggleDateFormat?: () => void;
 }
 
 export function PageListItem({
   page,
   isActive,
+  isHighlighted = false,
   isRenaming,
   folders,
   onSelect,
@@ -56,6 +152,8 @@ export function PageListItem({
   onDelete,
   onMoveToFolder,
   onToggleStatus,
+  showRelative = false,
+  onToggleDateFormat,
 }: PageListItemProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: page.id,
@@ -65,6 +163,7 @@ export function PageListItem({
   });
   const { inputRef, prepareRenameFromMenu, contextMenuContentProps } = useInlineRename(isRenaming);
 
+  useMinuteTick();
   const isDone = page.status === "done";
 
   function commit() {
@@ -78,6 +177,7 @@ export function PageListItem({
       <ContextMenuTrigger asChild>
         <div
           ref={setNodeRef}
+          data-page-id={page.id}
           style={{
             transform: CSS.Transform.toString(transform),
             opacity: isDragging ? 0 : 1,
@@ -86,7 +186,8 @@ export function PageListItem({
           {...listeners}
           className={cn(
             "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-3 text-sm select-none",
-            isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
+            isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+            isHighlighted && !isActive && "ring-1 ring-primary/50 ring-inset"
           )}
           onClick={isRenaming ? undefined : onSelect}
           onDoubleClick={(e) => {
@@ -142,11 +243,27 @@ export function PageListItem({
                   />
                 )}
               </div>
-              {page.scheduledStart && (
-                <span className="shrink-0 text-[11px] leading-snug text-muted-foreground">
-                  {formatDate(page.scheduledStart)}
-                </span>
-              )}
+              {page.scheduledStart &&
+                (() => {
+                  const { label, isPast, tooltip } = showRelative
+                    ? formatRelativeTime(page.scheduledStart)
+                    : formatDate(page.scheduledStart);
+                  return (
+                    <span
+                      title={tooltip}
+                      className={cn(
+                        "shrink-0 cursor-pointer text-[11px] leading-snug hover:opacity-80",
+                        isPast ? "text-red-500" : "text-muted-foreground"
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleDateFormat?.();
+                      }}
+                    >
+                      {label}
+                    </span>
+                  );
+                })()}
             </div>
             {page.subtitle && (
               <p className="mt-0.5 truncate text-xs text-muted-foreground">{page.subtitle}</p>

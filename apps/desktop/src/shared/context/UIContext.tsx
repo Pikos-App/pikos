@@ -5,6 +5,8 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { Page } from "@pikos/core";
+import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
+import type { SortMode } from "@/features/pages/utils/pageFilters";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,12 +22,13 @@ export interface UIContextValue {
   setRightPanel: (panel: "editor" | "calendar") => void;
   /** Both left panels hidden. Persisted to localStorage. */
   sidebarCollapsed: boolean;
-  setSidebarCollapsed: (v: boolean) => void;
+  setSidebarCollapsed: (v: boolean | ((prev: boolean) => boolean)) => void;
+  /** Per-view sort mode. Persisted to localStorage. */
+  getSortMode: (viewId: string) => SortMode;
+  setSortMode: (viewId: string, mode: SortMode) => void;
 }
 
 const UIContext = createContext<UIContextValue | null>(null);
-
-const SIDEBAR_KEY = "pikos:sidebarCollapsed";
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
@@ -33,22 +36,23 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [activePage, setActivePage] = useState<Page | null>(null);
   const [activeViewId, setActiveViewId] = useState<ActiveViewId>("inbox");
   const [rightPanel, setRightPanel] = useState<"editor" | "calendar">("editor");
-  const [sidebarCollapsed, setSidebarCollapsedState] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(SIDEBAR_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
+  const [sortModes, setSortModes] = useLocalStorage<Record<string, SortMode>>(
+    "pikos:sortModes",
+    {}
+  );
 
-  const setSidebarCollapsed = useCallback((v: boolean) => {
-    setSidebarCollapsedState(v);
-    try {
-      localStorage.setItem(SIDEBAR_KEY, String(v));
-    } catch {
-      // localStorage unavailable (e.g. private browsing) — ignore
-    }
-  }, []);
+  const getSortMode = useCallback(
+    (viewId: string): SortMode => sortModes[viewId] ?? "manual",
+    [sortModes]
+  );
+
+  const setSortMode = useCallback(
+    (viewId: string, mode: SortMode) => {
+      setSortModes((prev) => ({ ...prev, [viewId]: mode }));
+    },
+    [setSortModes]
+  );
 
   const value = useMemo<UIContextValue>(
     () => ({
@@ -60,8 +64,18 @@ export function UIProvider({ children }: { children: ReactNode }) {
       setRightPanel,
       sidebarCollapsed,
       setSidebarCollapsed,
+      getSortMode,
+      setSortMode,
     }),
-    [activePage, activeViewId, rightPanel, sidebarCollapsed, setSidebarCollapsed]
+    [
+      activePage,
+      activeViewId,
+      rightPanel,
+      sidebarCollapsed,
+      setSidebarCollapsed,
+      getSortMode,
+      setSortMode,
+    ]
   );
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

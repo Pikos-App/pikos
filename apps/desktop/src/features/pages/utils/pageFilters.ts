@@ -1,5 +1,23 @@
 import type { Page } from "@pikos/core";
 
+export type SortMode = "manual" | "date" | "title";
+
+/** Sort a page list by the given mode. Returns a new array. */
+export function sortPages(pages: Page[], mode: SortMode): Page[] {
+  if (mode === "date") {
+    return [...pages].sort((a, b) => {
+      const aKey = a.scheduledStart ?? a.createdAt;
+      const bKey = b.scheduledStart ?? b.createdAt;
+      return aKey.localeCompare(bKey);
+    });
+  }
+  if (mode === "title") {
+    return [...pages].sort((a, b) => a.title.localeCompare(b.title));
+  }
+  // manual — sort by sortOrder ascending
+  return [...pages].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
 /** Returns the pages visible for the given view, in sort order. */
 export function getVisiblePages(pages: Page[], activeViewId: string): Page[] {
   if (activeViewId === "today") {
@@ -32,8 +50,12 @@ export function groupTodayPages(pages: Page[]): { overdue: Page[]; today: Page[]
     return new Date(p.scheduledStart) < now;
   }
 
+  function byScheduledStart(a: Page, b: Page): number {
+    return (a.scheduledStart ?? "").localeCompare(b.scheduledStart ?? "");
+  }
+
   return {
-    overdue: pages.filter(isOverdue),
-    today: pages.filter((p) => !isOverdue(p)),
+    overdue: pages.filter(isOverdue).sort(byScheduledStart),
+    today: pages.filter((p) => !isOverdue(p)).sort(byScheduledStart),
   };
 }

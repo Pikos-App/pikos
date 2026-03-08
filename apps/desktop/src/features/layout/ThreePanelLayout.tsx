@@ -1,11 +1,18 @@
 import { DndContext, DragOverlay, closestCenter } from "@dnd-kit/core";
+import { motion } from "framer-motion";
 import { Sidebar } from "./Sidebar";
 import { PageListPanel } from "./PageListPanel";
 import { EditorPanel } from "./EditorPanel";
 import { usePanelResize } from "./usePanelResize";
 import { useThreePanelDnD } from "./useThreePanelDnD";
+import { useUI } from "@/shared/context/UIContext";
+import { cn } from "@/lib/utils";
+
+const PANEL_SPRING = { type: "spring" as const, stiffness: 350, damping: 35 };
 
 export function ThreePanelLayout() {
+  const { sidebarCollapsed } = useUI();
+
   const left = usePanelResize({
     storageKey: "pikos:leftPanelWidth",
     defaultWidth: 180,
@@ -36,8 +43,34 @@ export function ThreePanelLayout() {
       onDragCancel={handleDragCancel}
     >
       <div className="flex h-screen bg-background text-foreground">
-        <Sidebar width={left.width} onResizeStart={left.onResizeStart} />
-        <PageListPanel width={mid.width} onResizeStart={mid.onResizeStart} />
+        <motion.div
+          animate={{
+            width: sidebarCollapsed ? 0 : left.width,
+            opacity: sidebarCollapsed ? 0 : 1,
+          }}
+          transition={PANEL_SPRING}
+          className={cn(
+            "h-full shrink-0 overflow-hidden",
+            sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
+          )}
+        >
+          <Sidebar width={left.width} onResizeStart={left.onResizeStart} />
+        </motion.div>
+
+        <motion.div
+          animate={{
+            width: sidebarCollapsed ? 0 : mid.width,
+            opacity: sidebarCollapsed ? 0 : 1,
+          }}
+          transition={PANEL_SPRING}
+          className={cn(
+            "h-full shrink-0 overflow-hidden",
+            sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
+          )}
+        >
+          <PageListPanel width={mid.width} onResizeStart={mid.onResizeStart} />
+        </motion.div>
+
         <EditorPanel />
       </div>
 

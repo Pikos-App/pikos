@@ -76,6 +76,7 @@ const [adapter] = useState<StorageAdapter>(() =>
 `babel-plugin-react-compiler` is enabled in Vite from day 1.
 
 - **Do NOT** manually add `useMemo` / `useCallback` — compiler handles memoization
+- Do not use single letter variable names, prefer descriptive names for props, state, and functions
 - Follow React rules strictly: no mutation of state/props, no conditional hooks
 - If the compiler emits an error, fix the rule violation — never disable the compiler
 

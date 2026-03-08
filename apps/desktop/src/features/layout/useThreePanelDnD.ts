@@ -9,12 +9,12 @@ import {
 import { arrayMove } from "@dnd-kit/sortable";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
-import { getVisiblePages } from "@/features/pages/utils/pageFilters";
+import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
 import type { Folder, Page } from "@pikos/core";
 
 export function useThreePanelDnD() {
   const { pages, folders, reorderPages, reorderFolders, updatePage } = useWorkspace();
-  const { activeViewId } = useUI();
+  const { activeViewId, getSortMode, setSortMode } = useUI();
 
   const [activePageData, setActivePageData] = useState<Page | null>(null);
   const [activeFolderData, setActiveFolderData] = useState<Folder | null>(null);
@@ -41,7 +41,13 @@ export function useThreePanelDnD() {
     if (at === "page" && ot === "page") {
       // No reordering in Today view — pages there are sorted by schedule date.
       if (activeViewId === "today") return;
-      const visible = getVisiblePages(pages, activeViewId);
+      // Auto-switch to manual sort when the user drags a page.
+      const currentSortMode = getSortMode(activeViewId);
+      if (currentSortMode !== "manual") {
+        setSortMode(activeViewId, "manual");
+      }
+      // Use sorted order (matching what the list panel displays) so indices are correct.
+      const visible = sortPages(getVisiblePages(pages, activeViewId), currentSortMode);
       const oldIdx = visible.findIndex((p) => p.id === active.id);
       const newIdx = visible.findIndex((p) => p.id === over.id);
       if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;

@@ -1,16 +1,21 @@
 import { useCallback, useMemo, useState } from "react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
-import { getVisiblePages } from "@/features/pages/utils/pageFilters";
+import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
 import type { Page, PageStatus } from "@pikos/core";
 
 export function usePageList() {
   const { pages, folders, createPage, updatePage, deletePage } = useWorkspace();
-  const { activeViewId, activePage, setActivePage } = useUI();
+  const { activeViewId, activePage, setActivePage, getSortMode } = useUI();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Page | null>(null);
 
-  const visiblePages = useMemo(() => getVisiblePages(pages, activeViewId), [pages, activeViewId]);
+  const visiblePages = useMemo(() => {
+    const filtered = getVisiblePages(pages, activeViewId);
+    // Today view has its own date-based grouping; skip extra sort.
+    if (activeViewId === "today") return filtered;
+    return sortPages(filtered, getSortMode(activeViewId));
+  }, [pages, activeViewId, getSortMode]);
 
   /** Create a page in the active folder and immediately enter rename mode. */
   const handleCreatePage = useCallback(async () => {

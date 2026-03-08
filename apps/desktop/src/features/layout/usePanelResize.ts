@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useLayoutEffect } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
+import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 interface PanelResizeOptions {
   storageKey: string;
@@ -18,14 +19,7 @@ export function usePanelResize({
   min,
   max,
 }: PanelResizeOptions): PanelResize {
-  const [width, setWidth] = useState(() => {
-    try {
-      const v = localStorage.getItem(storageKey);
-      return v ? parseInt(v, 10) : defaultWidth;
-    } catch {
-      return defaultWidth;
-    }
-  });
+  const [width, setWidth] = useLocalStorage(storageKey, defaultWidth);
 
   const widthRef = useRef(width);
   useLayoutEffect(() => {
@@ -41,11 +35,6 @@ export function usePanelResize({
       const onMove = (ev: MouseEvent) => {
         const w = Math.max(min, Math.min(max, startWidth + ev.clientX - startX));
         setWidth(w);
-        try {
-          localStorage.setItem(storageKey, String(w));
-        } catch {
-          /* ignore */
-        }
       };
       const onUp = () => {
         document.removeEventListener("mousemove", onMove);
@@ -54,7 +43,7 @@ export function usePanelResize({
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [storageKey, min, max]
+    [setWidth, min, max]
   );
 
   return { width, onResizeStart };

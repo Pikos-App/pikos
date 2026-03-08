@@ -9,20 +9,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ## Phase 2 — Editor & Metadata
 
-
-
-- [ ] **GOO-80** Sidebar collapse + navigation keyboard shortcuts _(High)_ — **requires GOO-79**
-  Two states only — all-open or both-left-collapsed (no partial). `Cmd+\` toggles. `SidebarToggle` button in top-left of right panel header (always visible): `PanelLeftClose`/`PanelLeftOpen` lucide icons, tooltip shows shortcut. Both panels animate via framer-motion spring (stiffness 350, damping 35, width+opacity). State persisted to `localStorage`.
-
-  Navigation shortcuts (`allowInInputs: false`):
-  - `J` / `K` — next/previous page in current list (highlights but doesn't auto-open)
-  - `Enter` — open the highlighted page in editor
-  - `Escape` (from editor) — return focus to page list
-  - `Cmd+Shift+C` — toggle editor ↔ calendar (right panel)
-  - `Cmd+\` — toggle sidebar
-
-  When sidebar is collapsed and `J`/`K`/`Enter` fires, sidebar auto-expands first.
-
 - [ ] **GOO-92** Derive `activePage` from `activePageId` in UIContext _(High)_ — **do before GOO-10**
   UIContext currently stores `activePage: Page | null` as a full snapshot. Once GOO-10 (editor) is live, debounced `WorkspaceContext.updatePage` calls will leave UIContext stale — the editor renders outdated content. Fix: store `activePageId: string | null` in UIContext instead; expose a `useActivePage()` hook in `apps/desktop/src/shared/hooks/` that reads `useWorkspace().pages.find(p => p.id === activePageId) ?? null`. Update `setActivePage` to accept `Page | string | null` for backwards DX. Breaking interface change to UIContext — must land before GOO-10.
 

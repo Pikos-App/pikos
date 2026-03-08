@@ -170,18 +170,11 @@
     font-weight: 600;
   }
 
-  /* Scrollbars — subtle, macOS-style */
+  /* Hide scrollbars — rely on macOS/iOS overlay scrollbars */
+  * {
+    scrollbar-width: none; /* Firefox */
+  }
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-border;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/30;
+    display: none; /* Chrome / Safari / Tauri */
   }
 }
