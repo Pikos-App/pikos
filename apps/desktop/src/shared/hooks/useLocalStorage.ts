@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 
 function readItem<T>(key: string, fallback: T): T {
   try {
@@ -25,16 +25,13 @@ export function useLocalStorage<T>(
 ): [T, (value: T | ((prev: T) => T)) => void] {
   const [state, setStateRaw] = useState<T>(() => readItem(key, defaultValue));
 
-  const setState = useCallback(
-    (value: T | ((prev: T) => T)) => {
-      setStateRaw((prev) => {
-        const next = typeof value === "function" ? (value as (p: T) => T)(prev) : value;
-        writeItem(key, next);
-        return next;
-      });
-    },
-    [key]
-  );
+  function setState(value: T | ((prev: T) => T)) {
+    setStateRaw((prev) => {
+      const next = typeof value === "function" ? (value as (p: T) => T)(prev) : value;
+      writeItem(key, next);
+      return next;
+    });
+  }
 
   return [state, setState];
 }

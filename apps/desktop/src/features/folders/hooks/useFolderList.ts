@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
 import type { Folder } from "@pikos/core";
@@ -31,57 +31,48 @@ export function useFolderList(): FolderListState {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
 
-  const todayCount = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    return pages.filter(
-      (p) => p.scheduledStart && p.scheduledStart.slice(0, 10) <= today && p.status !== "done"
-    ).length;
-  }, [pages]);
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = pages.filter(
+    (p) => p.scheduledStart && p.scheduledStart.slice(0, 10) <= today && p.status !== "done"
+  ).length;
 
-  const inboxCount = useMemo(() => pages.filter((p) => p.folderId === null).length, [pages]);
+  const inboxCount = pages.filter((p) => p.folderId === null).length;
 
-  const handleCreateFolder = useCallback(async () => {
+  async function handleCreateFolder() {
     const folder = await createFolder({ name: "New Folder" });
     setRenamingId(folder.id);
     setActiveViewId(folder.id);
-  }, [createFolder, setActiveViewId]);
+  }
 
-  const handleRenameCommit = useCallback(
-    (id: string, name: string) => {
-      void updateFolder(id, { name });
-      setRenamingId(null);
-    },
-    [updateFolder]
-  );
+  function handleRenameCommit(id: string, name: string) {
+    void updateFolder(id, { name });
+    setRenamingId(null);
+  }
 
-  const handleDeleteRequest = useCallback(
-    (folder: Folder) => {
-      const pageCount = pages.filter((p) => p.folderId === folder.id).length;
-      if (pageCount === 0) {
-        void deleteFolder(folder.id);
-        if (activeViewId === folder.id) setActiveViewId("inbox");
-      } else {
-        setPendingDelete({ folder, pageCount });
-      }
-    },
-    [pages, deleteFolder, activeViewId, setActiveViewId]
-  );
+  function handleDeleteRequest(folder: Folder) {
+    const pageCount = pages.filter((p) => p.folderId === folder.id).length;
+    if (pageCount === 0) {
+      void deleteFolder(folder.id);
+      if (activeViewId === folder.id) setActiveViewId("inbox");
+    } else {
+      setPendingDelete({ folder, pageCount });
+    }
+  }
 
-  const handleDeleteConfirm = useCallback(() => {
+  function handleDeleteConfirm() {
     if (!pendingDelete) return;
     void deleteFolder(pendingDelete.folder.id);
     if (activeViewId === pendingDelete.folder.id) setActiveViewId("inbox");
     setPendingDelete(null);
-  }, [pendingDelete, deleteFolder, activeViewId, setActiveViewId]);
+  }
 
-  const handleDeleteCancel = useCallback(() => setPendingDelete(null), []);
+  function handleDeleteCancel() {
+    setPendingDelete(null);
+  }
 
-  const handleColorChange = useCallback(
-    (id: string, color: string) => {
-      void updateFolder(id, { color });
-    },
-    [updateFolder]
-  );
+  function handleColorChange(id: string, color: string) {
+    void updateFolder(id, { color });
+  }
 
   return {
     folders,

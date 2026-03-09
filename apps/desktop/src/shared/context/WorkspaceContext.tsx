@@ -3,16 +3,7 @@
 // WorkspaceContext — owns all data + mutations: pages, folders, tags.
 // GOO-15: auto-creates/reopens workspace on mount via @tauri-apps/plugin-store.
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Folder, Page, Tag, Workspace } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import type { FolderUpdate, PageUpdate, StorageAdapter } from "@pikos/core";
@@ -100,27 +91,25 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // Lightweight event emitter
   const listenersRef = useRef(new Map<string, Set<AnyHandler>>());
 
-  const emit = useCallback(<E extends WorkspaceEvent>(event: E, payload: EventPayloadMap[E]) => {
+  function emit<E extends WorkspaceEvent>(event: E, payload: EventPayloadMap[E]) {
     listenersRef.current.get(event)?.forEach((h) => h(payload as unknown));
-  }, []);
+  }
 
-  const on = useCallback(
-    <E extends WorkspaceEvent>(event: E, handler: (payload: EventPayloadMap[E]) => void) => {
-      let set = listenersRef.current.get(event);
-      if (!set) {
-        set = new Set();
-        listenersRef.current.set(event, set);
-      }
-      set.add(handler as AnyHandler);
-      return () => {
-        listenersRef.current.get(event)?.delete(handler as AnyHandler);
-      };
-    },
-    []
-  );
+  function on<E extends WorkspaceEvent>(event: E, handler: (payload: EventPayloadMap[E]) => void) {
+    let set = listenersRef.current.get(event);
+    if (!set) {
+      set = new Set();
+      listenersRef.current.set(event, set);
+    }
+    set.add(handler as AnyHandler);
+    return () => {
+      listenersRef.current.get(event)?.delete(handler as AnyHandler);
+    };
+  }
 
-  // Load all data after workspace connection
-  const loadWorkspaceData = useCallback(async () => {
+  // Shared helper — loads pages + folders from adapter. Stored in a ref so both
+  // the mount effect and selectWorkspace can call it without dep-array issues.
+  const loadWorkspaceDataRef = useRef(async () => {
     setIsLoading(true);
     try {
       const [loadedPages, loadedFolders] = await Promise.all([
@@ -132,7 +121,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [adapter]);
+  });
 
   // ─── Auto-init on mount ────────────────────────────────────────────────────
   // Attempts to reopen the most recently used workspace from the store.
@@ -174,9 +163,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         await store.set("workspaces", updatedList);
         await store.save();
 
-        await loadWorkspaceData();
+        await loadWorkspaceDataRef.current();
         setWorkspace(updated);
-        emit("workspace:loaded", updated);
+        listenersRef.current.get("workspace:loaded")?.forEach((h) => h(updated as unknown));
       } catch (e) {
         console.error("[WorkspaceContext] auto-init failed:", e);
         setIsLoading(false);
@@ -184,12 +173,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     void initWorkspace();
-  }, [loadWorkspaceData, emit]);
+  }, [adapter]);
 
   // ─── selectWorkspace ───────────────────────────────────────────────────────
   // Called by WelcomeScreen "Get started". Creates the default workspace on first launch.
 
-  const selectWorkspace = useCallback(async (): Promise<void> => {
+  async function selectWorkspace(): Promise<void> {
     if (import.meta.env["VITE_TEST_MODE"] === "true") {
       // Test mode: set a mock workspace so the app shell renders
       const mockWs: Workspace = {
@@ -199,7 +188,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
         lastOpenedAt: new Date().toISOString(),
       };
-      await loadWorkspaceData();
+      await loadWorkspaceDataRef.current();
       setWorkspace(mockWs);
       emit("workspace:loaded", mockWs);
       return;
@@ -231,188 +220,145 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       await store.set("workspaces", [...existing, ws]);
       await store.save();
 
-      await loadWorkspaceData();
+      await loadWorkspaceDataRef.current();
       setWorkspace(ws);
       emit("workspace:loaded", ws);
     } catch (e) {
       console.error("[WorkspaceContext] selectWorkspace failed:", e);
       setIsLoading(false);
     }
-  }, [loadWorkspaceData, emit]);
+  }
 
   // ─── Debounced updatePage ──────────────────────────────────────────────────
 
   const pendingPatches = useRef<Map<string, PageUpdate>>(new Map());
   const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  const updatePage = useCallback(
-    (id: string, patch: PageUpdate): void => {
-      // Optimistic local update — instant UI feedback
-      setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  function updatePage(id: string, patch: PageUpdate): void {
+    // Optimistic local update — instant UI feedback
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
 
-      // Accumulate patch for batched DB write
-      const existing = pendingPatches.current.get(id) ?? {};
-      pendingPatches.current.set(id, { ...existing, ...patch });
+    // Accumulate patch for batched DB write
+    const existing = pendingPatches.current.get(id) ?? {};
+    pendingPatches.current.set(id, { ...existing, ...patch });
 
-      const prevTimer = debounceTimers.current.get(id);
-      if (prevTimer !== undefined) clearTimeout(prevTimer);
+    const prevTimer = debounceTimers.current.get(id);
+    if (prevTimer !== undefined) clearTimeout(prevTimer);
 
-      const timer = setTimeout(() => {
-        const accumulated = pendingPatches.current.get(id);
-        if (!accumulated) return;
-        pendingPatches.current.delete(id);
-        debounceTimers.current.delete(id);
+    const timer = setTimeout(() => {
+      const accumulated = pendingPatches.current.get(id);
+      if (!accumulated) return;
+      pendingPatches.current.delete(id);
+      debounceTimers.current.delete(id);
 
-        void adapter.updatePage(id, accumulated).then((updated) => {
-          setPages((prev) => prev.map((p) => (p.id === id ? updated : p)));
-          emit("page:updated", updated);
-        });
-      }, 800);
+      void adapter.updatePage(id, accumulated).then((updated) => {
+        setPages((prev) => prev.map((p) => (p.id === id ? updated : p)));
+        emit("page:updated", updated);
+      });
+    }, 800);
 
-      debounceTimers.current.set(id, timer);
-    },
-    [adapter, emit]
-  );
+    debounceTimers.current.set(id, timer);
+  }
 
   // ─── Pages ────────────────────────────────────────────────────────────────
 
-  const createPage = useCallback(
-    async ({ title, folderId }: { title?: string; folderId?: string | null }) => {
-      const page = await adapter.createPage({
-        title: title ?? "",
-        folderId: folderId ?? null,
-        content: "",
-        contentText: "",
-        status: "not_started",
-        priority: 0,
-        tags: [],
+  async function createPage({ title, folderId }: { title?: string; folderId?: string | null }) {
+    const page = await adapter.createPage({
+      title: title ?? "",
+      folderId: folderId ?? null,
+      content: "",
+      contentText: "",
+      status: "not_started",
+      priority: 0,
+      tags: [],
+    });
+    setPages((prev) => [...prev, page]);
+    emit("page:created", page);
+    return page;
+  }
+
+  async function deletePage(id: string) {
+    // Cancel any pending debounced write for this page (GOO-93 fix)
+    const timer = debounceTimers.current.get(id);
+    if (timer !== undefined) clearTimeout(timer);
+    debounceTimers.current.delete(id);
+    pendingPatches.current.delete(id);
+
+    await adapter.deletePage(id);
+    setPages((prev) => prev.filter((p) => p.id !== id));
+    emit("page:deleted", id);
+  }
+
+  async function reorderPages(folderId: string | null, orderedIds: string[]) {
+    await adapter.reorderPages(folderId, orderedIds);
+    setPages((prev) => {
+      const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
+      return prev.map((p) => {
+        const newOrder = indexMap.get(p.id);
+        return newOrder !== undefined ? { ...p, sortOrder: newOrder } : p;
       });
-      setPages((prev) => [...prev, page]);
-      emit("page:created", page);
-      return page;
-    },
-    [adapter, emit]
-  );
-
-  const deletePage = useCallback(
-    async (id: string) => {
-      // Cancel any pending debounced write for this page (GOO-93 fix)
-      const timer = debounceTimers.current.get(id);
-      if (timer !== undefined) clearTimeout(timer);
-      debounceTimers.current.delete(id);
-      pendingPatches.current.delete(id);
-
-      await adapter.deletePage(id);
-      setPages((prev) => prev.filter((p) => p.id !== id));
-      emit("page:deleted", id);
-    },
-    [adapter, emit]
-  );
-
-  const reorderPages = useCallback(
-    async (folderId: string | null, orderedIds: string[]) => {
-      await adapter.reorderPages(folderId, orderedIds);
-      setPages((prev) => {
-        const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
-        return prev.map((p) => {
-          const newOrder = indexMap.get(p.id);
-          return newOrder !== undefined ? { ...p, sortOrder: newOrder } : p;
-        });
-      });
-    },
-    [adapter]
-  );
+    });
+  }
 
   // ─── Folders ──────────────────────────────────────────────────────────────
 
-  const createFolder = useCallback(
-    async ({ name, color }: { name: string; color?: string }) => {
-      const folder = await adapter.createFolder({
-        name,
-        ...(color !== undefined && { color }),
-        parentId: null,
+  async function createFolder({ name, color }: { name: string; color?: string }) {
+    const folder = await adapter.createFolder({
+      name,
+      ...(color !== undefined && { color }),
+      parentId: null,
+    });
+    setFolders((prev) => [...prev, folder]);
+    return folder;
+  }
+
+  async function updateFolder(id: string, updates: FolderUpdate) {
+    const updated = await adapter.updateFolder(id, updates);
+    setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
+  }
+
+  async function deleteFolder(id: string) {
+    await adapter.deleteFolder(id);
+    setFolders((prev) => prev.filter((f) => f.id !== id));
+    // Pages in the deleted folder become inbox items (ON DELETE SET NULL in DB)
+    setPages((prev) => prev.map((p) => (p.folderId === id ? { ...p, folderId: null } : p)));
+  }
+
+  async function reorderFolders(orderedIds: string[]) {
+    await adapter.reorderFolders(orderedIds);
+    setFolders((prev) => {
+      const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
+      return [...prev].sort((a, b) => {
+        const ai = indexMap.get(a.id) ?? a.sortOrder;
+        const bi = indexMap.get(b.id) ?? b.sortOrder;
+        return ai - bi;
       });
-      setFolders((prev) => [...prev, folder]);
-      return folder;
-    },
-    [adapter]
-  );
-
-  const updateFolder = useCallback(
-    async (id: string, updates: FolderUpdate) => {
-      const updated = await adapter.updateFolder(id, updates);
-      setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
-    },
-    [adapter]
-  );
-
-  const deleteFolder = useCallback(
-    async (id: string) => {
-      await adapter.deleteFolder(id);
-      setFolders((prev) => prev.filter((f) => f.id !== id));
-      // Pages in the deleted folder become inbox items (ON DELETE SET NULL in DB)
-      setPages((prev) => prev.map((p) => (p.folderId === id ? { ...p, folderId: null } : p)));
-    },
-    [adapter]
-  );
-
-  const reorderFolders = useCallback(
-    async (orderedIds: string[]) => {
-      await adapter.reorderFolders(orderedIds);
-      setFolders((prev) => {
-        const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
-        return [...prev].sort((a, b) => {
-          const ai = indexMap.get(a.id) ?? a.sortOrder;
-          const bi = indexMap.get(b.id) ?? b.sortOrder;
-          return ai - bi;
-        });
-      });
-    },
-    [adapter]
-  );
+    });
+  }
 
   // ─── Derived tags ──────────────────────────────────────────────────────────
 
-  const tags = useMemo(() => deriveTags(pages), [pages]);
+  const tags = deriveTags(pages);
 
   // ─── Context value ────────────────────────────────────────────────────────
 
-  const value = useMemo<WorkspaceContextValue>(
-    () => ({
-      workspace,
-      pages,
-      folders,
-      tags,
-      isLoading,
-      selectWorkspace,
-      createPage,
-      updatePage,
-      deletePage,
-      createFolder,
-      updateFolder,
-      deleteFolder,
-      reorderPages,
-      reorderFolders,
-      on,
-    }),
-    [
-      workspace,
-      pages,
-      folders,
-      tags,
-      isLoading,
-      selectWorkspace,
-      createPage,
-      updatePage,
-      deletePage,
-      createFolder,
-      updateFolder,
-      deleteFolder,
-      reorderPages,
-      reorderFolders,
-      on,
-    ]
-  );
+  const value: WorkspaceContextValue = {
+    workspace,
+    pages,
+    folders,
+    tags,
+    isLoading,
+    selectWorkspace,
+    createPage,
+    updatePage,
+    deletePage,
+    createFolder,
+    updateFolder,
+    deleteFolder,
+    reorderPages,
+    reorderFolders,
+    on,
+  };
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }

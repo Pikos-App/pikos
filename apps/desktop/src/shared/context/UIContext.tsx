@@ -3,7 +3,7 @@
 // UIContext — owns navigation and UI state.
 // No data fetching — subscribe to WorkspaceContext for pages/folders.
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { Page } from "@pikos/core";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 import type { SortMode } from "@/features/pages/utils/pageFilters";
@@ -44,48 +44,32 @@ export function UIProvider({ children }: { children: ReactNode }) {
     {}
   );
 
-  const setActivePage = useCallback((page: Page | string | null) => {
+  function setActivePage(page: Page | string | null) {
     if (page === null) setActivePageId(null);
     else if (typeof page === "string") setActivePageId(page);
     else setActivePageId(page.id);
-  }, []);
+  }
 
-  const getSortMode = useCallback(
-    (viewId: string): SortMode => sortModes[viewId] ?? "manual",
-    [sortModes]
-  );
+  function getSortMode(viewId: string): SortMode {
+    return sortModes[viewId] ?? "manual";
+  }
 
-  const setSortMode = useCallback(
-    (viewId: string, mode: SortMode) => {
-      setSortModes((prev) => ({ ...prev, [viewId]: mode }));
-    },
-    [setSortModes]
-  );
+  function setSortMode(viewId: string, mode: SortMode) {
+    setSortModes((prev) => ({ ...prev, [viewId]: mode }));
+  }
 
-  const value = useMemo<UIContextValue>(
-    () => ({
-      activePageId,
-      setActivePage,
-      activeViewId,
-      setActiveViewId,
-      rightPanel,
-      setRightPanel,
-      sidebarCollapsed,
-      setSidebarCollapsed,
-      getSortMode,
-      setSortMode,
-    }),
-    [
-      activePageId,
-      setActivePage,
-      activeViewId,
-      rightPanel,
-      sidebarCollapsed,
-      setSidebarCollapsed,
-      getSortMode,
-      setSortMode,
-    ]
-  );
+  const value: UIContextValue = {
+    activePageId,
+    setActivePage,
+    activeViewId,
+    setActiveViewId,
+    rightPanel,
+    setRightPanel,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    getSortMode,
+    setSortMode,
+  };
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;
 }

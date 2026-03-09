@@ -5,18 +5,17 @@ import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { useCallback } from "react";
 
 export function EditorPanel() {
   const ui = useUI();
 
-  const togglePanel = useCallback(() => {
+  function togglePanel() {
     ui.setRightPanel(ui.rightPanel === "editor" ? "calendar" : "editor");
-  }, [ui]);
+  }
 
-  const toggleSidebar = useCallback(() => {
+  function toggleSidebar() {
     ui.setSidebarCollapsed(!ui.sidebarCollapsed);
-  }, [ui]);
+  }
 
   useKeyboardShortcut("Mod+Shift+C", togglePanel);
   useKeyboardShortcut("Mod+\\", toggleSidebar);

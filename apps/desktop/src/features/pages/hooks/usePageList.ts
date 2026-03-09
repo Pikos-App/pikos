@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
@@ -16,76 +16,63 @@ export function usePageList() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Page | null>(null);
 
-  const visiblePages = useMemo(() => {
-    const filtered = getVisiblePages(pages, activeViewId);
-    // Today view has its own date-based grouping; skip extra sort.
-    if (activeViewId === "today") return filtered;
-    return sortPages(filtered, getSortMode(activeViewId));
-  }, [pages, activeViewId, getSortMode]);
+  const filtered = getVisiblePages(pages, activeViewId);
+  // Today view has its own date-based grouping; skip extra sort.
+  const visiblePages =
+    activeViewId === "today" ? filtered : sortPages(filtered, getSortMode(activeViewId));
 
-  const completedTodayPages = useMemo(
-    () => (activeViewId === "today" ? getCompletedTodayPages(pages) : []),
-    [pages, activeViewId]
-  );
+  const completedTodayPages = activeViewId === "today" ? getCompletedTodayPages(pages) : [];
 
   /** Create a page in the active folder and immediately enter rename mode. */
-  const handleCreatePage = useCallback(async () => {
+  async function handleCreatePage() {
     const folderId = activeViewId !== "today" && activeViewId !== "inbox" ? activeViewId : null;
     const page = await createPage({ folderId });
     setActivePage(page);
     setRenamingId(page.id);
-  }, [activeViewId, createPage, setActivePage]);
+  }
 
-  const handleRenameCommit = useCallback(
-    (id: string, title: string) => {
-      updatePage(id, { title });
-      setRenamingId(null);
-    },
-    [updatePage]
-  );
+  function handleRenameCommit(id: string, title: string) {
+    updatePage(id, { title });
+    setRenamingId(null);
+  }
 
-  const handleRenameCancel = useCallback(() => setRenamingId(null), []);
+  function handleRenameCancel() {
+    setRenamingId(null);
+  }
 
   /** Delete with confirmation if page is non-empty or has a schedule. */
-  const handleDeleteRequest = useCallback(
-    (page: Page) => {
-      const isEmpty = page.content === "" && !page.scheduledStart;
-      if (isEmpty) {
-        if (activePage?.id === page.id) setActivePage(null);
-        void deletePage(page.id);
-      } else {
-        setPendingDelete(page);
-      }
-    },
-    [deletePage, activePage, setActivePage]
-  );
+  function handleDeleteRequest(page: Page) {
+    const isEmpty = page.content === "" && !page.scheduledStart;
+    if (isEmpty) {
+      if (activePage?.id === page.id) setActivePage(null);
+      void deletePage(page.id);
+    } else {
+      setPendingDelete(page);
+    }
+  }
 
-  const handleDeleteConfirm = useCallback(() => {
+  function handleDeleteConfirm() {
     if (!pendingDelete) return;
     if (activePage?.id === pendingDelete.id) setActivePage(null);
     void deletePage(pendingDelete.id);
     setPendingDelete(null);
-  }, [pendingDelete, deletePage, activePage, setActivePage]);
+  }
 
-  const handleDeleteCancel = useCallback(() => setPendingDelete(null), []);
+  function handleDeleteCancel() {
+    setPendingDelete(null);
+  }
 
-  const handleMoveToFolder = useCallback(
-    (pageId: string, folderId: string | null) => {
-      updatePage(pageId, { folderId });
-    },
-    [updatePage]
-  );
+  function handleMoveToFolder(pageId: string, folderId: string | null) {
+    updatePage(pageId, { folderId });
+  }
 
-  const handleToggleStatus = useCallback(
-    (pageId: string, currentStatus: PageStatus) => {
-      const isDone = currentStatus === "done";
-      updatePage(pageId, {
-        status: isDone ? "not_started" : "done",
-        completedAt: isDone ? null : new Date().toISOString(),
-      });
-    },
-    [updatePage]
-  );
+  function handleToggleStatus(pageId: string, currentStatus: PageStatus) {
+    const isDone = currentStatus === "done";
+    updatePage(pageId, {
+      status: isDone ? "not_started" : "done",
+      completedAt: isDone ? null : new Date().toISOString(),
+    });
+  }
 
   return {
     visiblePages,

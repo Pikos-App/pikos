@@ -13,10 +13,8 @@ compatibility: React 19, babel-plugin-react-compiler, TypeScript strict mode, Ta
 interface WorkspaceContextValue {
   pages: Page[]
   folders: Folder[]
-  activePage: Page | null
-  setActivePage: (page: Page | null) => void
   createPage: (input: CreatePageInput) => Promise<Page>
-  updatePage: (id: string, update: PageUpdate) => Promise<void>
+  updatePage: (id: string, update: PageUpdate) => void  // debounced 800ms
   deletePage: (id: string) => Promise<void>
   // ... etc
 }

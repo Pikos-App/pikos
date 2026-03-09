@@ -1,6 +1,6 @@
 // PageListPanel — middle panel (page list for active view). Default 280px, resizable.
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowUpDown, Check, ChevronRight, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SortMode } from "@/features/pages/utils/pageFilters";
@@ -76,32 +76,29 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
     el?.scrollIntoView({ block: "nearest" });
   }, [highlightedPageId]);
 
-  const moveHighlight = useCallback(
-    (direction: 1 | -1) => {
-      if (sidebarCollapsed) setSidebarCollapsed(false);
-      setHighlighted((prev) => {
-        if (!visiblePages.length) return null;
-        const prevId = prev?.viewId === activeViewId ? prev.pageId : null;
-        const idx = prevId !== null ? visiblePages.findIndex((p) => p.id === prevId) : -1;
-        let newIdx: number;
-        if (idx === -1) {
-          newIdx = direction === 1 ? 0 : visiblePages.length - 1;
-        } else {
-          newIdx = Math.max(0, Math.min(visiblePages.length - 1, idx + direction));
-        }
-        const pageId = visiblePages[newIdx]?.id;
-        return pageId !== undefined ? { viewId: activeViewId, pageId } : null;
-      });
-    },
-    [sidebarCollapsed, setSidebarCollapsed, visiblePages, activeViewId]
-  );
+  function moveHighlight(direction: 1 | -1) {
+    if (sidebarCollapsed) setSidebarCollapsed(false);
+    setHighlighted((prev) => {
+      if (!visiblePages.length) return null;
+      const prevId = prev?.viewId === activeViewId ? prev.pageId : null;
+      const idx = prevId !== null ? visiblePages.findIndex((p) => p.id === prevId) : -1;
+      let newIdx: number;
+      if (idx === -1) {
+        newIdx = direction === 1 ? 0 : visiblePages.length - 1;
+      } else {
+        newIdx = Math.max(0, Math.min(visiblePages.length - 1, idx + direction));
+      }
+      const pageId = visiblePages[newIdx]?.id;
+      return pageId !== undefined ? { viewId: activeViewId, pageId } : null;
+    });
+  }
 
-  const openHighlighted = useCallback(() => {
+  function openHighlighted() {
     if (!highlightedPageId) return;
     if (sidebarCollapsed) setSidebarCollapsed(false);
     const page = visiblePages.find((p) => p.id === highlightedPageId);
     if (page) handleSelectPage(page);
-  }, [highlightedPageId, sidebarCollapsed, setSidebarCollapsed, visiblePages, handleSelectPage]);
+  }
 
   useKeyboardShortcut("J", () => moveHighlight(1), { allowInInputs: false });
   useKeyboardShortcut("K", () => moveHighlight(-1), { allowInInputs: false });
