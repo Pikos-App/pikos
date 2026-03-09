@@ -14,8 +14,10 @@ import type { SortMode } from "@/features/pages/utils/pageFilters";
 export type ActiveViewId = "today" | "inbox" | (string & NonNullable<unknown>);
 
 export interface UIContextValue {
-  activePage: Page | null;
-  setActivePage: (page: Page | null) => void;
+  /** ID of the currently selected page. Derive the full Page via useActivePage(). */
+  activePageId: string | null;
+  /** Accepts Page, string ID, or null — all equivalent. */
+  setActivePage: (page: Page | string | null) => void;
   activeViewId: ActiveViewId;
   setActiveViewId: (id: ActiveViewId) => void;
   rightPanel: "editor" | "calendar";
@@ -33,7 +35,7 @@ const UIContext = createContext<UIContextValue | null>(null);
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function UIProvider({ children }: { children: ReactNode }) {
-  const [activePage, setActivePage] = useState<Page | null>(null);
+  const [activePageId, setActivePageId] = useState<string | null>(null);
   const [activeViewId, setActiveViewId] = useState<ActiveViewId>("inbox");
   const [rightPanel, setRightPanel] = useState<"editor" | "calendar">("editor");
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
@@ -41,6 +43,12 @@ export function UIProvider({ children }: { children: ReactNode }) {
     "pikos:sortModes",
     {}
   );
+
+  const setActivePage = useCallback((page: Page | string | null) => {
+    if (page === null) setActivePageId(null);
+    else if (typeof page === "string") setActivePageId(page);
+    else setActivePageId(page.id);
+  }, []);
 
   const getSortMode = useCallback(
     (viewId: string): SortMode => sortModes[viewId] ?? "manual",
@@ -56,7 +64,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<UIContextValue>(
     () => ({
-      activePage,
+      activePageId,
       setActivePage,
       activeViewId,
       setActiveViewId,
@@ -68,7 +76,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
       setSortMode,
     }),
     [
-      activePage,
+      activePageId,
+      setActivePage,
       activeViewId,
       rightPanel,
       sidebarCollapsed,

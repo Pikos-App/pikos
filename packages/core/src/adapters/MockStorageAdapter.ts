@@ -42,10 +42,10 @@ function matchesFilter(page: Page, filter: PageFilter): boolean {
   if (filter.tags !== undefined && filter.tags.length > 0) {
     if (!filter.tags.every((t) => page.tags.includes(t))) return false;
   }
-  if (filter.scheduledAfter !== undefined && page.scheduledStart !== undefined) {
+  if (filter.scheduledAfter !== undefined && page.scheduledStart != null) {
     if (page.scheduledStart < filter.scheduledAfter) return false;
   }
-  if (filter.scheduledBefore !== undefined && page.scheduledStart !== undefined) {
+  if (filter.scheduledBefore !== undefined && page.scheduledStart != null) {
     if (page.scheduledStart > filter.scheduledBefore) return false;
   }
   if (filter.query !== undefined && filter.query.length > 0) {

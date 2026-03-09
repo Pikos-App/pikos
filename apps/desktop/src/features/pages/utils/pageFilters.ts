@@ -2,6 +2,15 @@ import type { Page } from "@pikos/core";
 
 export type SortMode = "manual" | "date" | "title";
 
+/** Local YYYY-MM-DD string (avoids UTC date mismatch in late-evening timezones). */
+function localToday(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /**
  * Convert a scheduledStart ISO string to a sort key (milliseconds).
  * All-day strings ('YYYY-MM-DD') for today sort at "now" so they land
@@ -11,8 +20,7 @@ export type SortMode = "manual" | "date" | "title";
  */
 function toSortMs(iso: string): number {
   if (iso.length === 10) {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    if (iso === todayStr) return Date.now();
+    if (iso === localToday()) return Date.now();
     const y = parseInt(iso.slice(0, 4));
     const m = parseInt(iso.slice(5, 7)) - 1;
     const d = parseInt(iso.slice(8, 10));
@@ -43,7 +51,7 @@ export function sortPages(pages: Page[], mode: SortMode): Page[] {
 /** Returns the pages visible for the given view, in sort order. */
 export function getVisiblePages(pages: Page[], activeViewId: string): Page[] {
   if (activeViewId === "today") {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     return pages.filter(
       (p) => p.scheduledStart && p.scheduledStart.slice(0, 10) <= today && p.status !== "done"
     );
@@ -56,7 +64,7 @@ export function getVisiblePages(pages: Page[], activeViewId: string): Page[] {
 
 /** Returns pages completed today (status=done, completedAt is today). */
 export function getCompletedTodayPages(pages: Page[]): Page[] {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   return pages
     .filter((p) => p.status === "done" && p.completedAt?.slice(0, 10) === today)
     .sort((a, b) => {
@@ -74,7 +82,7 @@ export function getCompletedTodayPages(pages: Page[]): Page[] {
  * times (e.g. 1:45 AM when it is now 10 AM) correctly appear in "overdue".
  */
 export function groupTodayPages(pages: Page[]): { overdue: Page[]; today: Page[] } {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localToday();
   const now = new Date();
 
   function isOverdue(p: Page): boolean {

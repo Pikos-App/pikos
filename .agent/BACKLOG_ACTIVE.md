@@ -9,14 +9,7 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ## Phase 2 — Editor & Metadata
 
-- [ ] **GOO-92** Derive `activePage` from `activePageId` in UIContext _(High)_ — **do before GOO-10**
-  UIContext currently stores `activePage: Page | null` as a full snapshot. Once GOO-10 (editor) is live, debounced `WorkspaceContext.updatePage` calls will leave UIContext stale — the editor renders outdated content. Fix: store `activePageId: string | null` in UIContext instead; expose a `useActivePage()` hook in `apps/desktop/src/shared/hooks/` that reads `useWorkspace().pages.find(p => p.id === activePageId) ?? null`. Update `setActivePage` to accept `Page | string | null` for backwards DX. Breaking interface change to UIContext — must land before GOO-10.
 
-- [ ] **GOO-93** Foundation micro-fixes _(Medium)_ — **do before GOO-10 / GOO-36**
-  Three small bugs in WorkspaceContext/Rust, each <10 lines:
-  1. **Timer leak in deletePage**: `WorkspaceContext.deletePage` doesn't cancel the pending debounce timer. ~800ms later, `adapter.updatePage` fires on a deleted row. Fix: `debounceTimers.current.get(id)` clear + `pendingPatches.current.delete(id)` at top of `deletePage`.
-  2. **`content_text` NOT NULL violation**: `WorkspaceContext.createPage` doesn't pass `contentText`; Rust binds NULL to a `NOT NULL DEFAULT ''` column. Fix: pass `contentText: ""` in the `createPage` call.
-  3. **`reorder_pages` missing folder guard**: Rust command discards `folder_id`, updating sort_order for any IDs regardless of folder. Fix: add `AND folder_id = ?` (or `AND folder_id IS NULL`) to each UPDATE inside the transaction.
 
 - [ ] **GOO-10** Tiptap WYSIWYG editor _(Urgent)_
   Install: `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-task-list`, `@tiptap/extension-task-item`, `@tiptap/extension-placeholder`. **Storage format: Tiptap JSON** (not markdown) — direct `getJSON()`/`setContent()`, no conversion layer. Extract plain text via `editor.getText()` for FTS — write to `content_text` on every autosave (piggyback on 800ms debounce, no separate debounce needed). Support: headings, bold, italic, strikethrough, code, code block, lists, interactive checkboxes. Task-list checkboxes are inline doc elements — NOT wired to page `status` field. Editor subscribes to `activePageId` (GOO-92) to know what to load/save. See `features/editor.md`.

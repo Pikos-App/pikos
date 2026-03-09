@@ -38,7 +38,7 @@ export interface Page {
   id: string; // UUID
   folderId: string | null;
   title: string;
-  subtitle?: string; // one-sentence summary; shown in page list + calendar blocks; in FTS
+  subtitle?: string | null; // one-sentence summary; shown in page list + calendar blocks; in FTS
   content: string; // Tiptap JSON string (NOT markdown)
   // Internal FTS denorm — extracted plain text from Tiptap JSON.
   // Written by the adapter on every content save; never rendered in UI directly.
@@ -47,13 +47,13 @@ export interface Page {
   priority: PagePriority;
   tags: string[]; // stored as JSON array in SQLite
   sortOrder: number; // manual position within folder (or inbox)
-  scheduledStart?: string; // ISO 8601 — denorm of next upcoming page_schedules row
-  scheduledEnd?: string; // ISO 8601 — denorm of next upcoming page_schedules row
-  completedAt?: string; // ISO 8601
-  durationMinutes?: number; // planned duration (not focus-session time)
+  scheduledStart?: string | null; // ISO 8601 — denorm of next upcoming page_schedules row
+  scheduledEnd?: string | null; // ISO 8601 — denorm of next upcoming page_schedules row
+  completedAt?: string | null; // ISO 8601
+  durationMinutes?: number | null; // planned duration (not focus-session time)
   links?: string[]; // [[wikilink]] target page UUIDs; stored as JSON array
   parentId?: string | null; // sub-page nesting (GOO-12, max 3 levels)
-  lastOpenedAt?: string; // ISO 8601; updated on open → drives recent-pages query
+  lastOpenedAt?: string | null; // ISO 8601; updated on open → drives recent-pages query
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
 }

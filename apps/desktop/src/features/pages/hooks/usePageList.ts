@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useActivePage } from "@/shared/hooks/useActivePage";
 import {
   getCompletedTodayPages,
   getVisiblePages,
@@ -10,7 +11,8 @@ import type { Page, PageStatus } from "@pikos/core";
 
 export function usePageList() {
   const { pages, folders, createPage, updatePage, deletePage } = useWorkspace();
-  const { activeViewId, activePage, setActivePage, getSortMode } = useUI();
+  const { activeViewId, setActivePage, getSortMode } = useUI();
+  const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Page | null>(null);
 
@@ -79,7 +81,7 @@ export function usePageList() {
       const isDone = currentStatus === "done";
       updatePage(pageId, {
         status: isDone ? "not_started" : "done",
-        completedAt: isDone ? undefined : new Date().toISOString(),
+        completedAt: isDone ? null : new Date().toISOString(),
       });
     },
     [updatePage]

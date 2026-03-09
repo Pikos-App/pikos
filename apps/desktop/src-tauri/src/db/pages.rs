@@ -469,15 +469,31 @@ pub async fn reorder_pages(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let now = now_iso();
     for (i, id) in ordered_ids.iter().enumerate() {
-        sqlx::query("UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ?")
-            .bind(i as i64)
-            .bind(&now)
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+        match &folder_id {
+            Some(fid) => {
+                sqlx::query(
+                    "UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ? AND folder_id = ?",
+                )
+                .bind(i as i64)
+                .bind(&now)
+                .bind(id)
+                .bind(fid)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?;
+            }
+            None => {
+                sqlx::query(
+                    "UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ? AND folder_id IS NULL",
+                )
+                .bind(i as i64)
+                .bind(&now)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?;
+            }
+        }
     }
-    // Suppress unused variable warning — folder_id is passed through from TS for clarity
-    let _ = folder_id;
     tx.commit().await.map_err(|e| e.to_string())
 }
