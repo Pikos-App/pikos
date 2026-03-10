@@ -1,7 +1,8 @@
 # Feature: Metadata Header
 
 ## Status
-Not started. Blocked by React migration + WorkspaceContext.
+Not started. Unblocked — React migration, WorkspaceContext, and Tiptap editor (GOO-10) are all shipped.
+Next: GOO-109 (title/subtitle) ships first as the lightweight version, then GOO-32 adds the full collapsible metadata row.
 
 ## Goal
 A collapsible header above the editor that surfaces all page metadata fields in a clean UI.

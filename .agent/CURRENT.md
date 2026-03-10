@@ -2,13 +2,13 @@
 
 ## Active Task
 
-**GOO-10** — Tiptap WYSIWYG editor.
+**GOO-109** — Title + subtitle above editor (Urgent). Ship before GOO-32.
 
-See `BACKLOG_ACTIVE.md` for full spec.
+See `BACKLOG_ACTIVE.md` for full spec. See `features/editor.md` for architecture context.
 
 ## Phase Status
 
-Phase 0 complete (GOO-7, 26, 43, 8, 44, 40, 45, 9, 5 ✓). Phase 1 complete (GOO-27, 28, 29, 30, 31, 23, 90, 15 ✓). Phase 2 started: GOO-14, GOO-91, GOO-37, GOO-88, GOO-94, GOO-89, GOO-79, GOO-80, GOO-92, GOO-93 ✓.
+Phase 0–1 complete. Phase 2 started: GOO-14, 91, 37, 88, 94, 89, 79, 80, 92, 93, 10 ✓.
 
 ## Open Questions
 

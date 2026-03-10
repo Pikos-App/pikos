@@ -1,26 +1,35 @@
 # Feature: Tiptap Editor
 
 ## Status
-Not started. Blocked by React migration + WorkspaceContext.
+**Phase 1 shipped** (GOO-10 ✓). Core editing, autosave, page switching, FTS integration all working.
+Phase 2 in progress: title/subtitle (GOO-109), slash menu (GOO-103), bubble menu (GOO-104), keyboard scoping (GOO-106–108, 111).
 
 ## Goal
 Replace the current CodeMirror editor with Tiptap (ProseMirror-based WYSIWYG).
 Storage format is Tiptap JSON in SQLite. Markdown only appears at the import/export boundary.
 
-## Packages
+## Packages (installed)
 ```
 @tiptap/react
-@tiptap/starter-kit
+@tiptap/starter-kit          # bold, italic, strike, code, lists, blockquote, code block, heading, hr
 @tiptap/extension-task-list
 @tiptap/extension-task-item
 @tiptap/extension-placeholder
+@tiptap/extension-typography  # smart quotes, dashes, ellipsis
+@tiptap/extension-link        # autolink + link-on-paste
+@tiptap/extension-underline
+tiptap-markdown               # markdown paste → Tiptap JSON (runtime, paste only — not import/export)
 ```
-`tiptap-markdown` is NOT used at runtime — only needed if markdown import/export is added later.
 
 ## Components
-- `EditorPane` — root editor wrapper, owns Tiptap instance + auto-save
-- `MetadataHeader` — above the editor: title, status, priority, scheduled date, tags
-- `EditorToolbar` — optional floating/fixed toolbar (Phase 2)
+- `EditorPane` — root editor wrapper, owns Tiptap instance + auto-save (`features/editor/components/EditorPane.tsx`)
+- `MetadataHeader` — above the editor: title, status, priority, scheduled date, tags (not yet built — GOO-32)
+- `SlashMenu` — `/` command palette for block insertion (not yet built — GOO-103)
+- `BubbleToolbar` — floating format toolbar on text selection (not yet built — GOO-104)
+
+## Hooks
+- `useAutosave` — generic debounced save with flush-on-unmount (`features/editor/hooks/useAutosave.ts`)
+- `useEditorPage` — loads full Page when activePageId changes, handles race conditions (`features/editor/hooks/useEditorPage.ts`)
 
 ## No Tabs — explicit decision
 There are no tabs in the editor. Ever. The page list panel is the navigation mechanism — it
@@ -116,23 +125,26 @@ This ensures no data loss when a user types and immediately switches away.
 
 ### `useAutosave` hook
 Shared hook used by editor content, title, and subtitle. Not used by immediate-save fields.
+Lives in `apps/desktop/src/features/editor/hooks/useAutosave.ts`.
 
 ```ts
-// packages/core/src/hooks/useAutosave.ts
 function useAutosave<T>(
   value: T,
   saveFn: (val: T) => Promise<void>,
   options: { delay?: number } = {}   // default delay: 800ms
-): { isDirty: boolean; isSaving: boolean; saveError: Error | null }
+): { isDirty: boolean; isSaving: boolean; saveError: Error | null; flush: () => void }
 ```
 
+- Compares `value` by reference (`===`) — caller must produce new refs on actual changes
+- EditorPane uses a `contentVersion` counter (incremented on keystroke) as `value`, not the content itself — avoids serializing JSON on every keystroke
 - Debounces `saveFn(value)` by `delay` ms
 - Flushes on unmount (covers page switch + app close)
-- Returns `isDirty` (unsaved changes exist), `isSaving` (async in-flight), `saveError`
-- The caller is responsible for wiring `window.blur` flush via a `useEffect`
+- Returns `isDirty`, `isSaving`, `saveError`, and imperative `flush()` callback
+- The caller wires `window.blur` → `flush()` via a `useEffect`
 
-`EditorPane`, `TitleField`, and `SubtitleField` each instantiate their own `useAutosave`.
-They share the same `updatePage()` from WorkspaceContext but track dirty state independently.
+`EditorPane` currently uses `useAutosave`. `TitleField` and `SubtitleField` will each get their
+own instance when GOO-109 ships. They share `updatePage()` from WorkspaceContext but track dirty
+state independently.
 
 ### Save indicator
 A single indicator per page — not per field. Lives in the `MetadataHeader` next to the title.
@@ -177,7 +189,7 @@ These are **two separate things**:
 | | Tiptap Task List | Page Status |
 |--|--|--|
 | What | Inline `[ ]` / `[x]` checkboxes inside the document body | The page-level `status` field (`not_started` / `in_progress` / `done`) |
-| Where | Stored in `content` markdown string as `- [ ] item` | Stored as `status` column in SQLite |
+| Where | Stored in `content` Tiptap JSON (taskList/taskItem nodes) | Stored as `status` column in SQLite |
 | UI | Rendered as interactive checkboxes within the editor | Status toggle in `MetadataHeader` |
 | Scope | Individual to-do items within a page | The completion state of the page as a whole |
 
@@ -187,18 +199,25 @@ Do NOT wire task list checkbox state to the page `status` field.
 - Editor shortcuts run in `editor` scope (pushed on focus, popped on blur)
 - Global shortcuts (`Mod+P`, `Mod+N`, etc.) remain active in all scopes
 
-## Phase 1 Extensions
-- Bold, italic, strikethrough (`StarterKit` covers these)
+## Phase 1 Extensions (shipped)
+- Bold, italic, strikethrough (`StarterKit`)
 - Headings H1–H3
 - Bullet list, ordered list
-- Task list with interactive checkboxes (`TaskList` + `TaskItem`)
-- Code block
+- Task list with interactive checkboxes (`TaskList` + `TaskItem`, nested: true)
+- Code block (with `.editor-code-block` class)
+- Blockquote, horizontal rule
 - Placeholder text when editor is empty
-- Markdown paste (via `tiptap-markdown`)
+- Markdown paste → Tiptap JSON (via `tiptap-markdown`, `transformPastedText: true`)
+- Smart typography — quotes, dashes, ellipsis (`Typography`)
+- Link — autolink + link-on-paste (`Link`, `openOnClick: false`)
+- Underline (`Underline`)
 
 ## Phase 2 Extensions
-- Link with preview
-- Image (inline)
+- Slash command menu — `/` to insert block types (GOO-103)
+- Bubble menu — floating toolbar on text selection (GOO-104)
+- Drag handle — grip icon for block reorder (GOO-105)
+- Link editing dialog — UI to add/edit/remove links (no GOO yet — Link extension is installed but no interactive UI)
+- Image (inline, with asset upload via Tauri)
 - Table
 - `[[wikilink]]` autocomplete (GOO-13)
 - Mentions (@page links)
@@ -220,9 +239,40 @@ swap. Tiptap is a configuration/extension layer over ProseMirror — stripping i
 extension logic intact, just removes the DX wrapper. `EditorPane` isolation is what makes this
 feasible without an app-wide refactor.
 
+## Architecture Notes (implementation details)
+
+### Single ProseMirror instance
+The editor reuses one Tiptap instance across page switches via `editor.commands.setContent()` —
+no destroy/recreate. This makes page switching instant.
+
+### Content stored in ref, not state
+`contentJsonRef` holds current Tiptap JSON. A `contentVersion` counter (state) increments on
+each keystroke to trigger autosave scheduling. This avoids re-renders on every keystroke.
+
+### Two-layer debouncing
+1. `useAutosave` debounces 800ms from last keystroke → calls `updatePage()`
+2. `WorkspaceContext.updatePage()` accumulates patches and debounces 800ms before DB write
+This means worst-case latency from keystroke to disk is ~1.6s, but the optimistic update in
+WorkspaceContext makes the UI always current.
+
+### Page loading (useEditorPage)
+- Watches `UIContext.activePageId`
+- Calls `WorkspaceContext.getPage(id)` for full Page (with content)
+- Handles race conditions via `loadingIdRef` (prevents stale loads from slower requests)
+- Listens to `page:updated` events for external updates
+
+### Content validation
+On load, content is parsed as JSON with `try/catch`. Corrupted content gracefully falls back to
+an empty document. `extractText()` also never throws.
+
 ## Acceptance Criteria
-- Editing a page saves Tiptap JSON to SQLite with no data loss
-- `content_text` is correctly extracted and FTS search finds the page
-- Exported markdown (via GOO-49) is Obsidian-readable
-- No raw markdown syntax visible while typing (WYSIWYG)
-- Task checkboxes are interactive within the document body
+- [x] Editing a page saves Tiptap JSON to SQLite with no data loss
+- [x] `content_text` is correctly extracted and FTS search finds the page
+- [ ] Exported markdown (via GOO-49) is Obsidian-readable
+- [x] No raw markdown syntax visible while typing (WYSIWYG)
+- [x] Task checkboxes are interactive within the document body
+- [x] Markdown pasted from clipboard converts to Tiptap nodes
+- [ ] Title + subtitle editable above editor (GOO-109)
+- [ ] Save indicator visible in header (GOO-36)
+- [ ] Slash command menu for block insertion (GOO-103)
+- [ ] Bubble toolbar on text selection (GOO-104)

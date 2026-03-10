@@ -10,32 +10,28 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 ## Phase 2 — Editor & Metadata
 
 
-
-- [~] **GOO-10** Tiptap WYSIWYG editor _(Urgent)_
-  Install: `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-task-list`, `@tiptap/extension-task-item`, `@tiptap/extension-placeholder`. **Storage format: Tiptap JSON** (not markdown) — direct `getJSON()`/`setContent()`, no conversion layer. Extract plain text via `editor.getText()` for FTS — write to `content_text` on every autosave (piggyback on 800ms debounce, no separate debounce needed). Support: headings, bold, italic, strikethrough, code, code block, lists, interactive checkboxes. Task-list checkboxes are inline doc elements — NOT wired to page `status` field. Editor subscribes to `activePageId` (GOO-92) to know what to load/save. See `features/editor.md`.
-
 - [ ] **GOO-110** Page click switches to editor panel _(High)_
   Clicking a page in the page list (inbox, folder, today view) should automatically switch the right panel to "editor" if it's currently showing "calendar". Users expect clicking a page to open it — having to manually toggle back to editor is friction. In `PageListPanel` (or wherever `setActivePage` is called on click), add `ui.setRightPanel("editor")` alongside `ui.setActivePage(page)`.
 
-- [ ] **GOO-109** Title + subtitle above editor _(Urgent)_ — **requires GOO-10**, **ship before GOO-32**
+- [ ] **GOO-109** Title + subtitle above editor _(Urgent)_ — **ship before GOO-32**
   Render an inline-editable title and subtitle directly above the Tiptap editor body, inside the same scrollable content area (not in a fixed header). Title: large, bold, placeholder "Untitled". Subtitle: smaller, muted, placeholder "Add a description…". Both are plain `contentEditable` or controlled `<input>`/`<textarea>` — NOT Tiptap instances (avoids nested editor complexity). Autosave via `useAutosave` (title 500ms, subtitle 500ms). `Enter` in title moves focus to subtitle; `Enter` in subtitle moves focus to editor. `Backspace` in empty subtitle moves focus back to title. This is the lightweight version — GOO-32 adds the full collapsible metadata row (status, priority, schedule, tags) below. Component: render inside `EditorPane` above `<EditorContent>`.
 
-- [ ] **GOO-103** Slash command menu _(High)_ — **requires GOO-10**
+- [ ] **GOO-103** Slash command menu _(High)_
   Type `/` in the editor to open a filterable command palette for inserting block types. Powered by `@tiptap/suggestion` (free). Items: Heading 1/2/3, Bullet list, Ordered list, Task list, Code block, Blockquote, Horizontal rule. Keyboard navigable (↑/↓/Enter/Esc). Fuzzy filter on typing. Renders as a floating popover anchored to the cursor. Component: `apps/desktop/src/features/editor/components/SlashMenu.tsx`.
 
-- [ ] **GOO-104** Bubble menu on text selection _(High)_ — **requires GOO-10**
+- [ ] **GOO-104** Bubble menu on text selection _(High)_
   Select text to show a floating toolbar with Bold, Italic, Strikethrough, Code, Underline, Link. Uses `@tiptap/extension-bubble-menu` (free). Appears above selection, disappears on deselect. Buttons show active state (e.g. bold button highlighted when cursor is in bold text). Minimal, dark-themed, compact. Component: `apps/desktop/src/features/editor/components/BubbleToolbar.tsx`.
 
-- [ ] **GOO-105** Editor drag handle _(Medium)_ — **requires GOO-10**
-  Hover left of any block to show a grip icon for drag-reorder. Custom ProseMirror NodeView plugin (the official `@tiptap/extension-drag-handle` is paid). Grip appears on hover with subtle fade-in. Drag creates a drop indicator line between blocks. Works with all block types (paragraphs, headings, lists, code blocks). Component: `apps/desktop/src/features/editor/components/DragHandle.tsx`.
+- [ ] **GOO-105** Editor drag handle _(Medium)_
+  Hover left of any block to show a grip icon for drag-reorder. Custom ProseMirror NodeView plugin (the official `@tiptap/extension-drag-handle` is paid). Grip appears on hover with subtle fade-in. Drag creates a drop indicator line between blocks. Works with all block types (paragraphs, headings, lists, code blocks). Component: `apps/desktop/src/features/editor/components/DragHandle.tsx`. Before you get started on this one - are you intending to build this functionality from scratch since the dep is paid? How complex would this task be? Worth building in its current task priority?
 
-- [ ] **GOO-106** Editor keyboard scope integration _(Medium)_ — **requires GOO-10**
-  Wire editor focus/blur into the keyboard registry: `pushScope('editor')` on focus, `popScope('editor')` on blur. Global shortcuts (`Cmd+P`, `Cmd+N`, `Cmd+W`) remain active in all scopes. Editor-specific shortcuts only fire when the editor scope is active. Prevents conflicts between editor key combos and app-level shortcuts.
+- [ ] **GOO-106** Editor keyboard scope integration _(Medium)_
+  Wire editor focus/blur into the keyboard registry: `pushScope('editor')` on focus, `popScope('editor')` on blur. Global shortcuts (`Cmd+P`, `Cmd+N`, `Cmd+W`) remain active in all scopes. Editor-specific shortcuts only fire when the editor scope is active. Prevents conflicts between editor key combos and app-level shortcuts. Also we should update command + \ to work when editor is focused so we can rapidly switch into full editor/calendar.
 
-- [ ] **GOO-107** Cmd+A scoped to editor _(High)_ — **requires GOO-10**
+- [ ] **GOO-107** Cmd+A scoped to editor _(High)_
   When the editor is focused, `Cmd+A` should select all content within the editor only — not the entire page/app. ProseMirror handles this natively when focused, but if focus leaks or the event bubbles, the browser's default select-all kicks in and highlights the sidebar/page list too. Ensure the editor traps `Cmd+A` when it has focus. If the editor is NOT focused (e.g. focus is on page list or sidebar), `Cmd+A` should do nothing or select within that context — never cross panel boundaries.
 
-- [ ] **GOO-111** Escape key exits editor focus _(High)_ — **requires GOO-10**
+- [ ] **GOO-111** Escape key exits editor focus _(High)_
   Pressing `Esc` when the editor is focused should blur the editor and return focus to the page list panel. This is the primary "exit" gesture — users should never feel trapped in the editor. Considerations:
   - If a slash menu, bubble menu, or any popover is open, first `Esc` closes the popover; second `Esc` exits the editor.
   - If text is selected, first `Esc` deselects (collapses to cursor); second `Esc` exits.
@@ -43,40 +39,21 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   - `Enter` on a page list item should re-focus the editor (round-trip: Esc out → navigate → Enter back in).
   - Wire via ProseMirror keymap (`Escape` handler) inside `EditorPane`, not the global keyboard registry (avoid conflict with modal/popover Esc handling).
 
-- [ ] **GOO-108** Tab key behavior in editor _(High)_ — **requires GOO-10**
+- [ ] **GOO-108** Tab key behavior in editor _(High)_
   Tab inside the editor should indent list items / task items (standard editor behavior), NOT move focus to the next focusable DOM element. Currently Tab may be bubbling to the browser's default tab-index navigation. Fix: intercept Tab/Shift+Tab in the editor's ProseMirror keymap. In lists: indent/outdent. In code blocks: insert tab character (2 spaces). Outside lists/code: either indent the paragraph or do nothing (NOT move focus). Shift+Tab in lists: outdent. `Esc` should be the explicit way to leave the editor and return focus to the app shell (page list).
 
-- [ ] **GOO-36** Auto-save + save indicator _(Urgent)_ — **requires GOO-10**
-  No manual save, no save button. Strategy varies by field:
+- [ ] **GOO-36** Save indicator UI _(Urgent)_ — **requires GOO-109**
+  The `useAutosave` hook and editor content debounce are already shipped (GOO-10). What remains:
+  - **Save indicator component** — visual feedback next to title in MetadataHeader (requires GOO-109/GOO-32 first)
+  - States: (nothing) = clean, `●` = pending/saving, `✓` = saved (fades 1.5s), `⚠` = error (sticky, click → retry)
+  - Consolidates all fields (title + content + subtitle) into one signal
+  - Wire title/subtitle `useAutosave` instances (done as part of GOO-109)
+  - Toast is NOT used — too noisy for continuous autosave
+  - Error state must be sticky — silent data loss is unacceptable
 
-  **Debounced fields** (user is mid-thought):
-  - Editor content: 800ms → `updatePage({ content, contentText })`
-  - Title: 500ms → `updatePage({ title })`
-  - Subtitle: 500ms → `updatePage({ subtitle })`
-  - All flush immediately on: `window.blur`, page switch (`activePageId` change), app close, `Mod+W`
+  Before implementing this - let's check in - it might not be worth having a save indicator since if we don't lose people's content we won't have trust loss and need a signal for success states. We should have an error state though.
 
-  **Immediate fields** (discrete action — intent is complete):
-  - Status, priority, folder: save on click/select
-  - Tags: save on Enter/comma/blur (add) or × click (remove)
-  - Schedule: save on picker confirm/close (inserts/deletes `page_schedules` row)
-
-  **`useAutosave` hook** (`packages/core/src/hooks/useAutosave.ts`):
-  ```ts
-  function useAutosave<T>(
-    value: T,
-    saveFn: (val: T) => Promise<void>,
-    options?: { delay?: number } // default 800ms
-  ): { isDirty: boolean; isSaving: boolean; saveError: Error | null };
-  ```
-  Used by `EditorPane`, `TitleField`, `SubtitleField`. Immediate-save fields call `updatePage` directly.
-
-  **Save indicator** (in `MetadataHeader`, next to title):
-  - Clean: nothing shown
-  - Pending/saving: `●` dot (covers all fields as one signal)
-  - Just saved: `✓` fades out after 1.5s
-  - Error: `⚠` sticky; click → retry. Never silently drops data.
-
-- [ ] **GOO-32** Collapsible metadata header _(Urgent)_ — **requires GOO-10**
+- [ ] **GOO-32** Collapsible metadata header _(Urgent)_
   ```
   ┌──────────────────────────────────────────┐
   │ ● My Page Title                  [↑ hide]│  ← collapsed (title always visible)
@@ -87,8 +64,14 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   ```
   Title always visible, inline-editable. Expand/collapse: CSS `grid-template-rows: 0 → 1fr` (no layout jump). Persist state per-page in localStorage. `Cmd+Shift+M` toggle. `Tab` through fields. `Esc` returns focus to editor. Rendered by `EditorPanel`, not the editor itself. See `features/metadata.md`.
 
+- [ ] **GOO-112** Link editing UI _(Medium)_
+  Link extension is installed (`@tiptap/extension-link`) with autolink + link-on-paste, but there's no interactive UI to add/edit/remove links. Users need: (1) a way to add a link to selected text (bubble menu button, GOO-104 dependency), (2) clicking an existing link shows a small popover with URL + edit/unlink buttons, (3) `Cmd+K` shortcut to insert/edit link (standard across Google Docs, Notion, Obsidian). Component: `apps/desktop/src/features/editor/components/LinkPopover.tsx`.
+
+- [ ] **GOO-113** Editor accessibility _(High)_
+  The editor needs WCAG 2.1 AA compliance per project standards. Currently missing: `role="textbox"` and `aria-label` on the editor container, `aria-live` region for save state announcements, visible focus indicator on the editor container, keyboard-accessible task list checkboxes, placeholder text announced to screen readers (currently CSS-only). Should be done alongside or right after GOO-106 (keyboard scope).
+
 - [ ] **GOO-33** Page status toggle _(High)_
-  Three-state cycle: `not_started` (○) → `in_progress` (◑) → `done` (✓). Click cycles. Done: strikethrough + muted in pages list, `completedAt` set. Writes to `status` DB column. Icon in both page list + metadata header.
+  Three-state cycle: `not_started` (○) → `in_progress` (◑) → `done` (✓). Click cycles. Done: strikethrough + muted in pages list, `completedAt` set. Writes to `status` DB column. Icon in both page list + metadata header. I actually don't think we need the in_progress status - thoughts?
 
 - [ ] **GOO-35** Priority selector _(Medium)_
   Icon-based: None (— muted), Urgent (!! red), High (! orange), Medium (·· yellow), Low (· blue). Linear-inspired. Dropdown in metadata header. Shown as colored badge in page list. Writes `priority` column (0–4).

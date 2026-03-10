@@ -15,7 +15,7 @@ Settled architectural and product decisions. Load this file only when you need c
 - **Task list vs page status**: Tiptap task list = inline checkboxes in document body; page `status` field = separate metadata — these are NOT linked.
 - **Auto-save debounce**: 800ms (flush on blur/close/Mod+W)
 - **Editor storage format**: Tiptap JSON in SQLite (`content` column). No markdown in the edit loop. `content_text` column holds extracted plain text for FTS. Markdown only at import/export boundary.
-- **`tiptap-markdown` not needed** at runtime — drop from dependencies
+- **`tiptap-markdown` used at runtime** for paste support only (`transformPastedText: true`, `transformCopiedText: false`). Converts pasted markdown → Tiptap JSON. NOT used for import/export or in the edit loop.
 - **Linear**: archived — `.agent/` is now the source of truth
 - **Multi-workspace**: Each workspace = separate SQLite file. Workspace registry stored in `@tauri-apps/plugin-store` as `Workspace[]` (JSON). `Workspace` type has `id: string` + `lastOpenedAt: string | null`. No workspace_id column inside workspace DB — workspaces are self-contained. UI label: "Workspace". TypeScript type: `Workspace`. Hidden from default UI — most users have one and never see the concept. "Manage Workspaces" only in Settings.
 - **Manual sort order**: `sort_order INTEGER` on both `folders` and `pages`. Assigned `max+1` on create. Batch-updated via `reorder_pages` / `reorder_folders` Tauri commands. `sortOrder` excluded from `NewPage`/`NewFolder`.
