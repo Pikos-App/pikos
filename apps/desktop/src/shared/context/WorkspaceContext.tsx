@@ -40,6 +40,8 @@ export interface WorkspaceContextValue {
   createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage: (id: string, patch: PageUpdate) => void;
+  /** Immediately flush any pending debounced write for a page. */
+  flushPage: (id: string) => Promise<void>;
   deletePage: (id: string) => Promise<void>;
   createFolder: (opts: { name: string; color?: string }) => Promise<Folder>;
   updateFolder: (id: string, updates: FolderUpdate) => Promise<void>;
@@ -264,6 +266,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     debounceTimers.current.set(id, timer);
   }
 
+  async function flushPage(id: string): Promise<void> {
+    const timer = debounceTimers.current.get(id);
+    if (timer !== undefined) clearTimeout(timer);
+    debounceTimers.current.delete(id);
+
+    const accumulated = pendingPatches.current.get(id);
+    if (!accumulated) return;
+    pendingPatches.current.delete(id);
+
+    const updated = await adapter.updatePage(id, accumulated);
+    const { content: _, contentText: _ct, ...summary } = updated;
+    setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
+    emit("page:updated", updated);
+  }
+
   // ─── Pages ────────────────────────────────────────────────────────────────
 
   async function createPage({ title, folderId }: { title?: string; folderId?: string | null }) {
@@ -361,6 +378,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     selectWorkspace,
     createPage,
     updatePage,
+    flushPage,
     deletePage,
     createFolder,
     updateFolder,

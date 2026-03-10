@@ -4,3 +4,4 @@
 export * from "./types";
 export * from "./storage";
 export * from "./adapters/MockStorageAdapter";
+export { extractText } from "./utils/extractText";

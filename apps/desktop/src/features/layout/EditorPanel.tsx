@@ -3,8 +3,9 @@
 
 import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { EditorPane } from "@/features/editor";
 
 export function EditorPanel() {
   const ui = useUI();
@@ -23,20 +24,18 @@ export function EditorPanel() {
   return (
     <div className="flex flex-1 flex-col bg-background">
       <div className="flex items-center border-b border-border px-2 py-1.5">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                onClick={toggleSidebar}
-                aria-label="Toggle sidebar"
-              >
-                {ui.sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Toggle sidebar ⌘\</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={toggleSidebar}
+              aria-label="Toggle sidebar"
+            >
+              {ui.sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Toggle sidebar ⌘\</TooltipContent>
+        </Tooltip>
 
         <div className="flex-1" />
 
@@ -44,6 +43,14 @@ export function EditorPanel() {
           {ui.rightPanel === "editor" ? "Editor" : "Calendar"}
         </span>
       </div>
+
+      {ui.rightPanel === "editor" ? (
+        <EditorPane />
+      ) : (
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          <p className="text-xs">Calendar — coming soon</p>
+        </div>
+      )}
     </div>
   );
 }
