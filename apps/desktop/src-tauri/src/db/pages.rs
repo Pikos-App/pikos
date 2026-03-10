@@ -97,6 +97,86 @@ impl From<PageRow> for Page {
     }
 }
 
+// ─── Summary row (no content/content_text — for list views) ──────────────
+
+#[derive(sqlx::FromRow)]
+struct PageSummaryRow {
+    id: String,
+    folder_id: Option<String>,
+    title: String,
+    subtitle: Option<String>,
+    status: String,
+    priority: i64,
+    tags: String,
+    sort_order: i64,
+    scheduled_start: Option<String>,
+    scheduled_end: Option<String>,
+    completed_at: Option<String>,
+    duration_mins: Option<i64>,
+    links: Option<String>,
+    parent_id: Option<String>,
+    last_opened_at: Option<String>,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageSummary {
+    pub id: String,
+    pub folder_id: Option<String>,
+    pub title: String,
+    pub subtitle: Option<String>,
+    pub status: String,
+    pub priority: i64,
+    pub tags: Vec<String>,
+    pub sort_order: i64,
+    pub scheduled_start: Option<String>,
+    pub scheduled_end: Option<String>,
+    pub completed_at: Option<String>,
+    pub duration_minutes: Option<i64>,
+    pub links: Vec<String>,
+    pub parent_id: Option<String>,
+    pub last_opened_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<PageSummaryRow> for PageSummary {
+    fn from(row: PageSummaryRow) -> Self {
+        let tags: Vec<String> = serde_json::from_str(&row.tags).unwrap_or_default();
+        let links: Vec<String> = row
+            .links
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
+        PageSummary {
+            id: row.id,
+            folder_id: row.folder_id,
+            title: row.title,
+            subtitle: row.subtitle,
+            status: row.status,
+            priority: row.priority,
+            tags,
+            sort_order: row.sort_order,
+            scheduled_start: row.scheduled_start,
+            scheduled_end: row.scheduled_end,
+            completed_at: row.completed_at,
+            duration_minutes: row.duration_mins,
+            links,
+            parent_id: row.parent_id,
+            last_opened_at: row.last_opened_at,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }
+    }
+}
+
+const SUMMARY_COLUMNS: &str =
+    "id, folder_id, title, subtitle, status, priority, tags, sort_order, \
+     scheduled_start, scheduled_end, completed_at, duration_mins, links, \
+     parent_id, last_opened_at, created_at, updated_at";
+
 // ─── Input types ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -376,11 +456,12 @@ pub async fn delete_page(state: State<'_, DbState>, id: String) -> Result<(), St
 pub async fn list_pages(
     state: State<'_, DbState>,
     filter: Option<PageFilter>,
-) -> Result<Vec<Page>, String> {
+) -> Result<Vec<PageSummary>, String> {
     let pool = state.get_pool().await?;
 
-    let mut builder =
-        sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT * FROM pages WHERE 1=1");
+    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
+        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE 1=1"
+    ));
 
     if let Some(ref f) = filter {
         if let Some(ref folder_val) = f.folder_id {
@@ -424,39 +505,45 @@ pub async fn list_pages(
     builder.push(" ORDER BY sort_order ASC");
 
     let rows = builder
-        .build_query_as::<PageRow>()
+        .build_query_as::<PageSummaryRow>()
         .fetch_all(&pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut pages: Vec<Page> = rows.into_iter().map(Page::from).collect();
+    let mut summaries: Vec<PageSummary> = rows.into_iter().map(PageSummary::from).collect();
 
     // Tags filter is post-query (JSON array in SQLite is opaque)
     if let Some(f) = &filter {
         if let Some(filter_tags) = &f.tags {
             if !filter_tags.is_empty() {
-                pages.retain(|p| filter_tags.iter().all(|t| p.tags.contains(t)));
+                summaries.retain(|p| filter_tags.iter().all(|t| p.tags.contains(t)));
             }
         }
     }
 
-    Ok(pages)
+    Ok(summaries)
 }
 
 #[tauri::command]
-pub async fn list_pages_today(state: State<'_, DbState>) -> Result<Vec<Page>, String> {
+pub async fn list_pages_today(state: State<'_, DbState>) -> Result<Vec<PageSummary>, String> {
     let pool = state.get_pool().await?;
-    let rows = sqlx::query_as::<_, PageRow>(
-        "SELECT DISTINCT pages.* FROM pages
+    let query = format!(
+        "SELECT DISTINCT {cols} FROM pages
          JOIN page_schedules ON page_schedules.page_id = pages.id
          WHERE date(page_schedules.scheduled_start) <= date('now')
            AND pages.status != 'done'
          ORDER BY pages.sort_order ASC",
-    )
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok(rows.into_iter().map(Page::from).collect())
+        cols = SUMMARY_COLUMNS
+            .split(", ")
+            .map(|c| format!("pages.{c}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let rows = sqlx::query_as::<_, PageSummaryRow>(&query)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().map(PageSummary::from).collect())
 }
 
 #[tauri::command]

@@ -7,14 +7,14 @@ import {
   getVisiblePages,
   sortPages,
 } from "@/features/pages/utils/pageFilters";
-import type { Page, PageStatus } from "@pikos/core";
+import type { PageSummary, PageStatus } from "@pikos/core";
 
 export function usePageList() {
   const { pages, folders, createPage, updatePage, deletePage } = useWorkspace();
   const { activeViewId, setActivePage, getSortMode } = useUI();
   const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<Page | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PageSummary | null>(null);
 
   const filtered = getVisiblePages(pages, activeViewId);
   // Today view has its own date-based grouping; skip extra sort.
@@ -41,8 +41,8 @@ export function usePageList() {
   }
 
   /** Delete with confirmation if page is non-empty or has a schedule. */
-  function handleDeleteRequest(page: Page) {
-    const isEmpty = page.content === "" && !page.scheduledStart;
+  function handleDeleteRequest(page: PageSummary) {
+    const isEmpty = page.title === "" && !page.scheduledStart;
     if (isEmpty) {
       if (activePage?.id === page.id) setActivePage(null);
       void deletePage(page.id);

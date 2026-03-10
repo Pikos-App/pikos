@@ -4,7 +4,7 @@
 // GOO-15: auto-creates/reopens workspace on mount via @tauri-apps/plugin-store.
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { Folder, Page, Tag, Workspace } from "@pikos/core";
+import type { Folder, Page, PageSummary, Tag, Workspace } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import type { FolderUpdate, PageUpdate, StorageAdapter } from "@pikos/core";
 import { TauriSQLiteAdapter, connectDb } from "@/shared/adapters/TauriSQLiteAdapter";
@@ -26,8 +26,11 @@ type AnyHandler = (payload: unknown) => void;
 
 export interface WorkspaceContextValue {
   workspace: Workspace | null;
-  pages: Page[];
+  /** Lightweight summaries (no content) — use getPage() to load full content. */
+  pages: PageSummary[];
   folders: Folder[];
+  /** Load full page with content — use when opening the editor. */
+  getPage: (id: string) => Promise<Page | null>;
   /** Derived reactively from pages[].tags — never stored separately. */
   tags: Tag[];
   /** True while the workspace is being initialised or data is being loaded. */
@@ -53,7 +56,7 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 // ─── Derived tags ─────────────────────────────────────────────────────────────
 
-function deriveTags(pages: Page[]): Tag[] {
+function deriveTags(pages: PageSummary[]): Tag[] {
   const map = new Map<string, { count: number; ids: string[] }>();
   for (const page of pages) {
     for (const tag of page.tags) {
@@ -83,7 +86,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [pages, setPages] = useState<Page[]>([]);
+  const [pages, setPages] = useState<PageSummary[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   // Start true so we don't flash the welcome screen before init completes
   const [isLoading, setIsLoading] = useState(true);
@@ -137,7 +140,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     async function initWorkspace() {
       try {
         const { load } = await import("@tauri-apps/plugin-store");
-        const store = await load("workspaces.json", { autoSave: false });
+        const store = await load("workspaces.json", { autoSave: false, defaults: {} });
         const workspaces = (await store.get<Workspace[]>("workspaces")) ?? [];
 
         if (workspaces.length === 0) {
@@ -215,7 +218,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       await connectDb(dbPath);
 
-      const store = await load("workspaces.json", { autoSave: false });
+      const store = await load("workspaces.json", { autoSave: false, defaults: {} });
       const existing = (await store.get<Workspace[]>("workspaces")) ?? [];
       await store.set("workspaces", [...existing, ws]);
       await store.save();
@@ -252,7 +255,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       debounceTimers.current.delete(id);
 
       void adapter.updatePage(id, accumulated).then((updated) => {
-        setPages((prev) => prev.map((p) => (p.id === id ? updated : p)));
+        const { content: _, contentText: _ct, ...summary } = updated;
+        setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
         emit("page:updated", updated);
       });
     }, 800);
@@ -272,7 +276,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       priority: 0,
       tags: [],
     });
-    setPages((prev) => [...prev, page]);
+    const { content: _, contentText: _ct, ...summary } = page;
+    setPages((prev) => [...prev, summary]);
     emit("page:created", page);
     return page;
   }
@@ -342,10 +347,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   // ─── Context value ────────────────────────────────────────────────────────
 
+  function getPage(id: string): Promise<Page | null> {
+    return adapter.getPage(id);
+  }
+
   const value: WorkspaceContextValue = {
     workspace,
     pages,
     folders,
+    getPage,
     tags,
     isLoading,
     selectWorkspace,

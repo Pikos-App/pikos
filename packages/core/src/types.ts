@@ -131,6 +131,13 @@ export interface FocusSession {
   durationS?: number; // denorm seconds; undefined while in progress
 }
 
+// ─── PageSummary ─────────────────────────────────────────────────────────
+// Lightweight projection for list views — excludes content and contentText.
+// Used by listPageSummaries / listPageSummariesToday to avoid pulling large
+// Tiptap JSON blobs over IPC for every page in a folder.
+
+export type PageSummary = Omit<Page, "content" | "contentText">;
+
 // ─── Filters ─────────────────────────────────────────────────────────────────
 
 export interface PageFilter {

@@ -10,13 +10,13 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
 import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
-import type { Folder, Page } from "@pikos/core";
+import type { Folder, PageSummary } from "@pikos/core";
 
 export function useThreePanelDnD() {
   const { pages, folders, reorderPages, reorderFolders, updatePage } = useWorkspace();
   const { activeViewId, getSortMode } = useUI();
 
-  const [activePageData, setActivePageData] = useState<Page | null>(null);
+  const [activePageData, setActivePageData] = useState<PageSummary | null>(null);
   const [activeFolderData, setActiveFolderData] = useState<Folder | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));

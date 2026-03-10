@@ -7,6 +7,7 @@ import type {
   PageFilter,
   PageRecurrenceRule,
   PageSchedule,
+  PageSummary,
   SearchResult,
 } from "./types";
 
@@ -62,9 +63,10 @@ export interface StorageAdapter {
   createPage(data: NewPage): Promise<Page>;
   updatePage(id: string, updates: PageUpdate): Promise<Page>;
   deletePage(id: string): Promise<void>;
-  listPages(filter?: PageFilter): Promise<Page[]>;
+  /** List pages without content — use getPage() for full content. */
+  listPages(filter?: PageFilter): Promise<PageSummary[]>;
   /** Pages with any page_schedules row <= today, status != done, sorted by sortOrder. */
-  listPagesToday(): Promise<Page[]>;
+  listPagesToday(): Promise<PageSummary[]>;
   /** orderedIds = complete ordered list for that folderId (null = inbox/no folder) */
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void>;
   /** Returns excerpts (SearchResult), not full pages */

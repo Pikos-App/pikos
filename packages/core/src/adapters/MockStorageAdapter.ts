@@ -7,6 +7,7 @@ import type {
   PageFilter,
   PageRecurrenceRule,
   PageSchedule,
+  PageSummary,
   SearchResult,
 } from "../types";
 import type {
@@ -31,6 +32,11 @@ function now(): string {
 
 function nextSortOrder(items: { sortOrder: number }[]): number {
   return items.length === 0 ? 0 : Math.max(...items.map((i) => i.sortOrder)) + 1;
+}
+
+function toSummary(page: Page): PageSummary {
+  const { content: _, contentText: _ct, ...summary } = page;
+  return summary;
 }
 
 function matchesFilter(page: Page, filter: PageFilter): boolean {
@@ -93,13 +99,13 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
-  listPages(filter?: PageFilter): Promise<Page[]> {
+  listPages(filter?: PageFilter): Promise<PageSummary[]> {
     const all = [...this.pages.values()];
     const filtered = filter ? all.filter((p) => matchesFilter(p, filter)) : all;
-    return Promise.resolve(filtered.sort((a, b) => a.sortOrder - b.sortOrder));
+    return Promise.resolve(filtered.sort((a, b) => a.sortOrder - b.sortOrder).map(toSummary));
   }
 
-  listPagesToday(): Promise<Page[]> {
+  listPagesToday(): Promise<PageSummary[]> {
     const today = new Date().toISOString().slice(0, 10);
     const pageIds = new Set(
       [...this.schedules.values()]
@@ -109,7 +115,7 @@ export class MockStorageAdapter implements StorageAdapter {
     const results = [...this.pages.values()]
       .filter((p) => pageIds.has(p.id) && p.status !== "done")
       .sort((a, b) => a.sortOrder - b.sortOrder);
-    return Promise.resolve(results);
+    return Promise.resolve(results.map(toSummary));
   }
 
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void> {

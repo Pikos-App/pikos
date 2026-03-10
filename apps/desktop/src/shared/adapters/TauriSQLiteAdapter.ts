@@ -8,6 +8,7 @@ import type {
   PageFilter,
   PageRecurrenceRule,
   PageSchedule,
+  PageSummary,
   SearchResult,
 } from "@pikos/core";
 import type {
@@ -49,12 +50,12 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<void>("delete_page", { id });
   }
 
-  listPages(filter?: PageFilter): Promise<Page[]> {
-    return invoke<Page[]>("list_pages", { filter: filter ?? null });
+  listPages(filter?: PageFilter): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("list_pages", { filter: filter ?? null });
   }
 
-  listPagesToday(): Promise<Page[]> {
-    return invoke<Page[]>("list_pages_today");
+  listPagesToday(): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("list_pages_today");
   }
 
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void> {

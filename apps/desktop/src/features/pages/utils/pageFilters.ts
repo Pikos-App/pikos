@@ -1,4 +1,4 @@
-import type { Page } from "@pikos/core";
+import type { PageSummary } from "@pikos/core";
 
 export type SortMode = "manual" | "date" | "title";
 
@@ -30,7 +30,7 @@ function toSortMs(iso: string): number {
 }
 
 /** Sort a page list by the given mode. Returns a new array. */
-export function sortPages(pages: Page[], mode: SortMode): Page[] {
+export function sortPages(pages: PageSummary[], mode: SortMode): PageSummary[] {
   if (mode === "date") {
     return [...pages].sort((a, b) => {
       const aHas = a.scheduledStart != null;
@@ -49,7 +49,7 @@ export function sortPages(pages: Page[], mode: SortMode): Page[] {
 }
 
 /** Returns the pages visible for the given view, in sort order. */
-export function getVisiblePages(pages: Page[], activeViewId: string): Page[] {
+export function getVisiblePages(pages: PageSummary[], activeViewId: string): PageSummary[] {
   if (activeViewId === "today") {
     const today = localToday();
     return pages.filter(
@@ -63,7 +63,7 @@ export function getVisiblePages(pages: Page[], activeViewId: string): Page[] {
 }
 
 /** Returns pages completed today (status=done, completedAt is today). */
-export function getCompletedTodayPages(pages: Page[]): Page[] {
+export function getCompletedTodayPages(pages: PageSummary[]): PageSummary[] {
   const today = localToday();
   return pages
     .filter((p) => p.status === "done" && p.completedAt?.slice(0, 10) === today)
@@ -81,11 +81,14 @@ export function getCompletedTodayPages(pages: Page[]): Page[] {
  * Timed items ('YYYY-MM-DDTHH:MM:SS') use a full datetime comparison so past-today
  * times (e.g. 1:45 AM when it is now 10 AM) correctly appear in "overdue".
  */
-export function groupTodayPages(pages: Page[]): { overdue: Page[]; today: Page[] } {
+export function groupTodayPages(pages: PageSummary[]): {
+  overdue: PageSummary[];
+  today: PageSummary[];
+} {
   const todayStr = localToday();
   const now = new Date();
 
-  function isOverdue(p: Page): boolean {
+  function isOverdue(p: PageSummary): boolean {
     if (!p.scheduledStart) return false;
     // All-day format is exactly 'YYYY-MM-DD' (length 10)
     if (p.scheduledStart.length === 10) return p.scheduledStart < todayStr;
@@ -93,7 +96,7 @@ export function groupTodayPages(pages: Page[]): { overdue: Page[]; today: Page[]
     return new Date(p.scheduledStart) < now;
   }
 
-  function byScheduledStart(a: Page, b: Page): number {
+  function byScheduledStart(a: PageSummary, b: PageSummary): number {
     return toSortMs(a.scheduledStart ?? "") - toSortMs(b.scheduledStart ?? "");
   }
 

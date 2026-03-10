@@ -4,7 +4,7 @@
 // No data fetching — subscribe to WorkspaceContext for pages/folders.
 
 import { createContext, useContext, useState, type ReactNode } from "react";
-import type { Page } from "@pikos/core";
+import type { PageSummary } from "@pikos/core";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 import type { SortMode } from "@/features/pages/utils/pageFilters";
 
@@ -17,7 +17,7 @@ export interface UIContextValue {
   /** ID of the currently selected page. Derive the full Page via useActivePage(). */
   activePageId: string | null;
   /** Accepts Page, string ID, or null — all equivalent. */
-  setActivePage: (page: Page | string | null) => void;
+  setActivePage: (page: PageSummary | string | null) => void;
   activeViewId: ActiveViewId;
   setActiveViewId: (id: ActiveViewId) => void;
   rightPanel: "editor" | "calendar";
@@ -44,7 +44,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     {}
   );
 
-  function setActivePage(page: Page | string | null) {
+  function setActivePage(page: PageSummary | string | null) {
     if (page === null) setActivePageId(null);
     else if (typeof page === "string") setActivePageId(page);
     else setActivePageId(page.id);

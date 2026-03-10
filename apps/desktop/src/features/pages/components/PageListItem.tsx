@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
-import type { Folder, Page } from "@pikos/core";
+import type { Folder, PageSummary } from "@pikos/core";
 
 // Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p
 function formatTime(date: Date): string {
@@ -124,7 +124,7 @@ function formatRelativeTime(iso: string): { label: string; isPast: boolean; tool
 }
 
 interface PageListItemProps {
-  page: Page;
+  page: PageSummary;
   isActive: boolean;
   isHighlighted?: boolean;
   isRenaming: boolean;
