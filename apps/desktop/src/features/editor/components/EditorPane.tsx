@@ -247,7 +247,13 @@ export function EditorPane() {
     <div className="flex flex-1 flex-col overflow-hidden" data-save-state={saveState}>
       {editor && <FormatToolbar editor={editor} />}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[720px] px-8 py-6">
+        {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
+        <div
+          className="mx-auto min-h-full w-full max-w-[720px] cursor-text px-8 py-6"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) editor?.commands.focus("end");
+          }}
+        >
           {page && (
             <TitleField key={page.id} page={page} onFocusEditor={() => editor?.commands.focus()} />
           )}

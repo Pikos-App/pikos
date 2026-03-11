@@ -9,9 +9,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ## Phase 2 — Editor & Metadata
 
-
-<!-- BUNDLE: GOO-106 + GOO-107 + GOO-108 + GOO-111 — all ProseMirror keymap work, do in one session -->
-
 - [ ] **GOO-106** Editor keyboard scope integration _(Medium)_
   Wire editor focus/blur into the keyboard registry: `pushScope('editor')` on focus, `popScope('editor')` on blur. Global shortcuts (`Cmd+P`, `Cmd+N`, `Cmd+W`) remain active in all scopes. Editor-specific shortcuts only fire when the editor scope is active. Prevents conflicts between editor key combos and app-level shortcuts. Also we should update command + \ to work when editor is focused so we can rapidly switch into full editor/calendar.
 
@@ -19,7 +16,7 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   When the editor is focused, `Cmd+A` should select all content within the editor only — not the entire page/app. ProseMirror handles this natively when focused, but if focus leaks or the event bubbles, the browser's default select-all kicks in and highlights the sidebar/page list too. Ensure the editor traps `Cmd+A` when it has focus. If the editor is NOT focused (e.g. focus is on page list or sidebar), `Cmd+A` should do nothing or select within that context — never cross panel boundaries.
 
 - [ ] **GOO-108** Tab key behavior in editor _(High)_
-  Tab inside the editor should indent list items / task items (standard editor behavior), NOT move focus to the next focusable DOM element. Currently Tab may be bubbling to the browser's default tab-index navigation. Fix: intercept Tab/Shift+Tab in the editor's ProseMirror keymap. In lists: indent/outdent. In code blocks: insert tab character (2 spaces). Outside lists/code: either indent the paragraph or do nothing (NOT move focus). Shift+Tab in lists: outdent. `Esc` should be the explicit way to leave the editor and return focus to the app shell (page list).
+  Tab inside the editor should indent the cursor / list items / task items (standard editor behavior), NOT move focus to the next focusable DOM element. Currently Tab may be bubbling to the browser's default tab-index navigation. Fix: intercept Tab/Shift+Tab in the editor's ProseMirror keymap. In lists: indent/outdent. In code blocks: insert tab character (2 spaces). Outside lists/code: either indent the paragraph or do nothing (NOT move focus). Shift+Tab in lists: outdent. `Esc` should be the explicit way to leave the editor and return focus to the app shell (page list).
 
 - [ ] **GOO-111** Escape key exits editor focus _(High)_
   Pressing `Esc` when the editor is focused should blur the editor and return focus to the page list panel. This is the primary "exit" gesture — users should never feel trapped in the editor. Considerations:
@@ -28,8 +25,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   - On exit: `editor.commands.blur()`, then focus the active page item in the page list (so `J`/`K` navigation works immediately).
   - `Enter` on a page list item should re-focus the editor (round-trip: Esc out → navigate → Enter back in).
   - Wire via ProseMirror keymap (`Escape` handler) inside `EditorPane`, not the global keyboard registry (avoid conflict with modal/popover Esc handling).
-
-<!-- END BUNDLE -->
 
 - [ ] **GOO-112** Link editing UI _(Medium)_ — **requires GOO-104**
   Link extension is installed (`@tiptap/extension-link`) with autolink + link-on-paste, but there's no interactive UI to add/edit/remove links. Users need: (1) a way to add a link to selected text (bubble menu button, GOO-104 dependency), (2) clicking an existing link shows a small popover with URL + edit/unlink buttons, (3) `Cmd+K` shortcut to insert/edit link (standard across Google Docs, Notion, Obsidian). Component: `apps/desktop/src/features/editor/components/LinkPopover.tsx`.

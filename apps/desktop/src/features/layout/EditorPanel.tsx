@@ -18,8 +18,8 @@ export function EditorPanel() {
     ui.setSidebarCollapsed(!ui.sidebarCollapsed);
   }
 
-  useKeyboardShortcut("Mod+Shift+C", togglePanel);
-  useKeyboardShortcut("Mod+\\", toggleSidebar);
+  useKeyboardShortcut("Mod+Shift+C", togglePanel, { allowInInputs: true });
+  useKeyboardShortcut("Mod+\\", toggleSidebar, { allowInInputs: true });
 
   return (
     <div className="flex flex-1 flex-col bg-background">
