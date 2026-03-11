@@ -1,4 +1,5 @@
-pnpm typecheck
+pnpm --filter @pikos/desktop exec tsc --noEmit
+pnpm --filter @pikos/core exec tsc --noEmit
 pnpm exec turbo lint
 pnpm exec prettier --check "apps/desktop/src/**/*.{ts,tsx,css}" "packages/core/src/**/*.ts"
 pnpm depcruise

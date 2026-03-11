@@ -232,7 +232,7 @@ export function EditorPane() {
     }
 
     // setContent without emitting an update (avoids triggering autosave for loaded content)
-    editor.commands.setContent(doc ?? { type: "doc", content: [{ type: "paragraph" }] }, false);
+    editor.commands.setContent(doc ?? { type: "doc", content: [{ type: "paragraph" }] }, { emitUpdate: false });
     contentJsonRef.current = doc ? page.content : "";
 
     // Focus editor after loading
