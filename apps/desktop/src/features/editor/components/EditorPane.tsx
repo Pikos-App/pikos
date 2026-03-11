@@ -17,6 +17,7 @@ import type { Page } from "@pikos/core";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
 import type { JSONContent } from "@tiptap/react";
+import { SlashMenuExtension } from "./SlashMenu";
 
 // ─── Extensions ────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ const extensions = [
     transformPastedText: true,
     transformCopiedText: false,
   }),
+  SlashMenuExtension,
 ];
 
 // ─── TitleSubtitleFields ───────────────────────────────────────────────────────

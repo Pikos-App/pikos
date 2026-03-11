@@ -10,20 +10,19 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 ## Phase 2 — Editor & Metadata
 
 
-- [ ] **GOO-103** Slash command menu _(High)_
-  Type `/` in the editor to open a filterable command palette for inserting block types. Powered by `@tiptap/suggestion` (free). Items: Heading 1/2/3, Bullet list, Ordered list, Task list, Code block, Blockquote, Horizontal rule. Keyboard navigable (↑/↓/Enter/Esc). Fuzzy filter on typing. Renders as a floating popover anchored to the cursor. Component: `apps/desktop/src/features/editor/components/SlashMenu.tsx`.
-
 - [ ] **GOO-104** Bubble menu on text selection _(High)_
   Select text to show a floating toolbar with Bold, Italic, Strikethrough, Code, Underline, Link. Uses `@tiptap/extension-bubble-menu` (free). Appears above selection, disappears on deselect. Buttons show active state (e.g. bold button highlighted when cursor is in bold text). Minimal, dark-themed, compact. Component: `apps/desktop/src/features/editor/components/BubbleToolbar.tsx`.
 
-- [ ] **GOO-105** Editor drag handle _(Medium)_
-  Hover left of any block to show a grip icon for drag-reorder. Custom ProseMirror NodeView plugin (the official `@tiptap/extension-drag-handle` is paid). Grip appears on hover with subtle fade-in. Drag creates a drop indicator line between blocks. Works with all block types (paragraphs, headings, lists, code blocks). Component: `apps/desktop/src/features/editor/components/DragHandle.tsx`. Before you get started on this one - are you intending to build this functionality from scratch since the dep is paid? How complex would this task be? Worth building in its current task priority?
+<!-- BUNDLE: GOO-106 + GOO-107 + GOO-108 + GOO-111 — all ProseMirror keymap work, do in one session -->
 
 - [ ] **GOO-106** Editor keyboard scope integration _(Medium)_
   Wire editor focus/blur into the keyboard registry: `pushScope('editor')` on focus, `popScope('editor')` on blur. Global shortcuts (`Cmd+P`, `Cmd+N`, `Cmd+W`) remain active in all scopes. Editor-specific shortcuts only fire when the editor scope is active. Prevents conflicts between editor key combos and app-level shortcuts. Also we should update command + \ to work when editor is focused so we can rapidly switch into full editor/calendar.
 
 - [ ] **GOO-107** Cmd+A scoped to editor _(High)_
   When the editor is focused, `Cmd+A` should select all content within the editor only — not the entire page/app. ProseMirror handles this natively when focused, but if focus leaks or the event bubbles, the browser's default select-all kicks in and highlights the sidebar/page list too. Ensure the editor traps `Cmd+A` when it has focus. If the editor is NOT focused (e.g. focus is on page list or sidebar), `Cmd+A` should do nothing or select within that context — never cross panel boundaries.
+
+- [ ] **GOO-108** Tab key behavior in editor _(High)_
+  Tab inside the editor should indent list items / task items (standard editor behavior), NOT move focus to the next focusable DOM element. Currently Tab may be bubbling to the browser's default tab-index navigation. Fix: intercept Tab/Shift+Tab in the editor's ProseMirror keymap. In lists: indent/outdent. In code blocks: insert tab character (2 spaces). Outside lists/code: either indent the paragraph or do nothing (NOT move focus). Shift+Tab in lists: outdent. `Esc` should be the explicit way to leave the editor and return focus to the app shell (page list).
 
 - [ ] **GOO-111** Escape key exits editor focus _(High)_
   Pressing `Esc` when the editor is focused should blur the editor and return focus to the page list panel. This is the primary "exit" gesture — users should never feel trapped in the editor. Considerations:
@@ -33,19 +32,10 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   - `Enter` on a page list item should re-focus the editor (round-trip: Esc out → navigate → Enter back in).
   - Wire via ProseMirror keymap (`Escape` handler) inside `EditorPane`, not the global keyboard registry (avoid conflict with modal/popover Esc handling).
 
-- [ ] **GOO-108** Tab key behavior in editor _(High)_
-  Tab inside the editor should indent list items / task items (standard editor behavior), NOT move focus to the next focusable DOM element. Currently Tab may be bubbling to the browser's default tab-index navigation. Fix: intercept Tab/Shift+Tab in the editor's ProseMirror keymap. In lists: indent/outdent. In code blocks: insert tab character (2 spaces). Outside lists/code: either indent the paragraph or do nothing (NOT move focus). Shift+Tab in lists: outdent. `Esc` should be the explicit way to leave the editor and return focus to the app shell (page list).
+<!-- END BUNDLE -->
 
-- [ ] **GOO-36** Save indicator UI _(Urgent)_ — **requires GOO-109**
-  The `useAutosave` hook and editor content debounce are already shipped (GOO-10). What remains:
-  - **Save indicator component** — visual feedback next to title in MetadataHeader (requires GOO-109/GOO-32 first)
-  - States: (nothing) = clean, `●` = pending/saving, `✓` = saved (fades 1.5s), `⚠` = error (sticky, click → retry)
-  - Consolidates all fields (title + content + subtitle) into one signal
-  - Wire title/subtitle `useAutosave` instances (done as part of GOO-109)
-  - Toast is NOT used — too noisy for continuous autosave
-  - Error state must be sticky — silent data loss is unacceptable
-
-  Before implementing this - let's check in - it might not be worth having a save indicator since if we don't lose people's content we won't have trust loss and need a signal for success states. We should have an error state though.
+- [ ] **GOO-112** Link editing UI _(Medium)_ — **requires GOO-104**
+  Link extension is installed (`@tiptap/extension-link`) with autolink + link-on-paste, but there's no interactive UI to add/edit/remove links. Users need: (1) a way to add a link to selected text (bubble menu button, GOO-104 dependency), (2) clicking an existing link shows a small popover with URL + edit/unlink buttons, (3) `Cmd+K` shortcut to insert/edit link (standard across Google Docs, Notion, Obsidian). Component: `apps/desktop/src/features/editor/components/LinkPopover.tsx`.
 
 - [ ] **GOO-32** Collapsible metadata header _(Urgent)_
   ```
@@ -58,17 +48,21 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   ```
   Title always visible, inline-editable. Expand/collapse: CSS `grid-template-rows: 0 → 1fr` (no layout jump). Persist state per-page in localStorage. `Cmd+Shift+M` toggle. `Tab` through fields. `Esc` returns focus to editor. Rendered by `EditorPanel`, not the editor itself. See `features/metadata.md`.
 
-- [ ] **GOO-112** Link editing UI _(Medium)_
-  Link extension is installed (`@tiptap/extension-link`) with autolink + link-on-paste, but there's no interactive UI to add/edit/remove links. Users need: (1) a way to add a link to selected text (bubble menu button, GOO-104 dependency), (2) clicking an existing link shows a small popover with URL + edit/unlink buttons, (3) `Cmd+K` shortcut to insert/edit link (standard across Google Docs, Notion, Obsidian). Component: `apps/desktop/src/features/editor/components/LinkPopover.tsx`.
+- [ ] **GOO-36** Save indicator UI _(Urgent)_ — **requires GOO-32**
+  The `useAutosave` hook and editor content debounce are already shipped (GOO-10). What remains:
+  - **Save indicator component** — visual feedback next to title in MetadataHeader (requires GOO-32 first)
+  - States: (nothing) = clean, `●` = pending/saving, `✓` = saved (fades 1.5s), `⚠` = error (sticky, click → retry)
+  - Consolidates all fields (title + content + subtitle) into one signal
+  - Wire title/subtitle `useAutosave` instances (done as part of GOO-109)
+  - Toast is NOT used — too noisy for continuous autosave
+  - Error state must be sticky — silent data loss is unacceptable
 
-- [ ] **GOO-113** Editor accessibility _(High)_
-  The editor needs WCAG 2.1 AA compliance per project standards. Currently missing: `role="textbox"` and `aria-label` on the editor container, `aria-live` region for save state announcements, visible focus indicator on the editor container, keyboard-accessible task list checkboxes, placeholder text announced to screen readers (currently CSS-only). Should be done alongside or right after GOO-106 (keyboard scope).
+  Before implementing this - let's check in - it might not be worth having a save indicator since if we don't lose people's content we won't have trust loss and need a signal for success states. We should have an error state though.
 
 - [ ] **GOO-33** Page status toggle _(High)_
   Three-state cycle: `not_started` (○) → `in_progress` (◑) → `done` (✓). Click cycles. Done: strikethrough + muted in pages list, `completedAt` set. Writes to `status` DB column. Icon in both page list + metadata header. I actually don't think we need the in_progress status - thoughts?
 
-- [ ] **GOO-35** Priority selector _(Medium)_
-  Icon-based: None (— muted), Urgent (!! red), High (! orange), Medium (·· yellow), Low (· blue). Linear-inspired. Dropdown in metadata header. Shown as colored badge in page list. Writes `priority` column (0–4).
+<!-- BUNDLE: GOO-19 + GOO-60 — direct dependency pair, pure-TS parser then modal consumer -->
 
 - [ ] **GOO-19** NL page creation parser _(High)_ — **required by GOO-60**
   `packages/core/src/nlp/parser.ts`. Pure TS, zero DOM/Tauri deps.
@@ -160,6 +154,17 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   **Progressive enhancement**: Phase 1 ships without folder chip (hidden until GOO-37 ships).
   Component: `apps/desktop/src/features/pages/components/QuickAddModal.tsx`
   Registered globally in `App.tsx` via `useKeyboardShortcut('Mod+N', ...)`.
+
+<!-- END BUNDLE -->
+
+- [ ] **GOO-35** Priority selector _(Medium)_
+  Icon-based: None (— muted), Urgent (!! red), High (! orange), Medium (·· yellow), Low (· blue). Linear-inspired. Dropdown in metadata header. Shown as colored badge in page list. Writes `priority` column (0–4).
+
+- [ ] **GOO-113** Editor accessibility _(High)_
+  The editor needs WCAG 2.1 AA compliance per project standards. Currently missing: `role="textbox"` and `aria-label` on the editor container, `aria-live` region for save state announcements, visible focus indicator on the editor container, keyboard-accessible task list checkboxes, placeholder text announced to screen readers (currently CSS-only). Should be done alongside or right after GOO-106 (keyboard scope).
+
+- [ ] **GOO-105** Editor drag handle _(Medium)_
+  Hover left of any block to show a grip icon for drag-reorder. Custom ProseMirror NodeView plugin (the official `@tiptap/extension-drag-handle` is paid). Grip appears on hover with subtle fade-in. Drag creates a drop indicator line between blocks. Works with all block types (paragraphs, headings, lists, code blocks). Component: `apps/desktop/src/features/editor/components/DragHandle.tsx`. Before you get started on this one - are you intending to build this functionality from scratch since the dep is paid? How complex would this task be? Worth building in its current task priority?
 
 - [ ] **GOO-34** Scheduled date/time picker _(High)_ — **requires GOO-76**
   shadcn Popover with mini calendar + time input. Quick chips: Today, Tomorrow, Monday, Next week. Duration shortcuts: 15min, 30min, 1h, 2h. Writes `scheduledStart`/`scheduledEnd` via `create_page_schedule` / `delete_page_schedule`.
