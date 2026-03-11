@@ -236,11 +236,6 @@ export function EditorPane() {
       emitUpdate: false,
     });
     contentJsonRef.current = doc ? page.content : "";
-
-    // Focus editor after loading
-    requestAnimationFrame(() => {
-      editor.commands.focus("end");
-    });
   }, [editor, page, isLoading]);
 
   // ─── Autosave: debounce content → updatePage ─────────────────────────────

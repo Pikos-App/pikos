@@ -11,7 +11,7 @@ import type { PageSummary, PageStatus } from "@pikos/core";
 
 export function usePageList() {
   const { pages, folders, createPage, updatePage, deletePage } = useWorkspace();
-  const { activeViewId, setActivePage, getSortMode } = useUI();
+  const { activeViewId, setActivePage, setRightPanel, getSortMode } = useUI();
   const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PageSummary | null>(null);
@@ -90,6 +90,9 @@ export function usePageList() {
     handleDeleteCancel,
     handleMoveToFolder,
     handleToggleStatus,
-    handleSelectPage: setActivePage,
+    handleSelectPage: (page: PageSummary | string | null) => {
+      setActivePage(page);
+      if (page !== null) setRightPanel("editor");
+    },
   };
 }

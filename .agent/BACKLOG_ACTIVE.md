@@ -10,10 +10,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 ## Phase 2 — Editor & Metadata
 
 
-- [ ] **GOO-110** Page click switches to editor panel _(High)_
-  Clicking a page in the page list (inbox, folder, today view) should automatically switch the right panel to "editor" if it's currently showing "calendar". Users expect clicking a page to open it — having to manually toggle back to editor is friction. In `PageListPanel` (or wherever `setActivePage` is called on click), add `ui.setRightPanel("editor")` alongside `ui.setActivePage(page)`.
-
-
 - [ ] **GOO-103** Slash command menu _(High)_
   Type `/` in the editor to open a filterable command palette for inserting block types. Powered by `@tiptap/suggestion` (free). Items: Heading 1/2/3, Bullet list, Ordered list, Task list, Code block, Blockquote, Horizontal rule. Keyboard navigable (↑/↓/Enter/Esc). Fuzzy filter on typing. Renders as a floating popover anchored to the cursor. Component: `apps/desktop/src/features/editor/components/SlashMenu.tsx`.
 
