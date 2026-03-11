@@ -10,9 +10,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 ## Phase 2 — Editor & Metadata
 
 
-- [ ] **GOO-104** Bubble menu on text selection _(High)_
-  Select text to show a floating toolbar with Bold, Italic, Strikethrough, Code, Underline, Link. Uses `@tiptap/extension-bubble-menu` (free). Appears above selection, disappears on deselect. Buttons show active state (e.g. bold button highlighted when cursor is in bold text). Minimal, dark-themed, compact. Component: `apps/desktop/src/features/editor/components/BubbleToolbar.tsx`.
-
 <!-- BUNDLE: GOO-106 + GOO-107 + GOO-108 + GOO-111 — all ProseMirror keymap work, do in one session -->
 
 - [ ] **GOO-106** Editor keyboard scope integration _(Medium)_
@@ -43,10 +40,12 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   │ ● My Page Title                  [↑ hide]│  ← collapsed (title always visible)
   ├──────────────────────────────────────────┤
   │ ○ Status  ↑ Priority  📅 Mar 3 · 3pm  #tag│  ← expanded row 1
-  │ Parent: / Project Alpha                  │  ← expanded row 2
+  │ Description: One-sentence summary…       │  ← expanded row 2
+  │ Parent: / Project Alpha                  │  ← expanded row 3
   └──────────────────────────────────────────┘
   ```
   Title always visible, inline-editable. Expand/collapse: CSS `grid-template-rows: 0 → 1fr` (no layout jump). Persist state per-page in localStorage. `Cmd+Shift+M` toggle. `Tab` through fields. `Esc` returns focus to editor. Rendered by `EditorPanel`, not the editor itself. See `features/metadata.md`.
+  **Note:** Subtitle/description field was removed from above the editor (GOO-109 follow-up) — it now lives here alongside status/priority/tags. Still stored in `pages.subtitle` column. Used in page list previews and calendar blocks.
 
 - [ ] **GOO-36** Save indicator UI _(Urgent)_ — **requires GOO-32**
   The `useAutosave` hook and editor content debounce are already shipped (GOO-10). What remains:

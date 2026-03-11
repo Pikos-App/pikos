@@ -230,6 +230,7 @@ export function PageListItem({
                 {isRenaming && (
                   <input
                     ref={inputRef}
+                    autoComplete="off"
                     className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug font-medium text-foreground outline-none"
                     defaultValue={page.title}
                     onBlur={commit}

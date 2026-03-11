@@ -86,6 +86,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
           {isRenaming && (
             <input
               ref={inputRef}
+              autoComplete="off"
               className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug text-foreground outline-none"
               defaultValue={label}
               onBlur={commit}

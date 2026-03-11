@@ -18,6 +18,7 @@ import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
 import type { JSONContent } from "@tiptap/react";
 import { SlashMenuExtension } from "./SlashMenu";
+import { FormatToolbar } from "./FormatToolbar";
 
 // ─── Extensions ────────────────────────────────────────────────────────────────
 
@@ -51,36 +52,31 @@ const extensions = [
 // Rendered above the editor. Uses key={page.id} in parent so state resets on
 // page switch; useAutosave flushes on unmount (covers page switch + app close).
 
-interface TitleSubtitleFieldsProps {
+interface TitleFieldProps {
   page: Page;
   onFocusEditor: () => void;
 }
 
-function TitleSubtitleFields({ page, onFocusEditor }: TitleSubtitleFieldsProps) {
+function TitleField({ page, onFocusEditor }: TitleFieldProps) {
   const { updatePage } = useWorkspace();
-  const titleRef = useRef<HTMLInputElement>(null);
-  const subtitleRef = useRef<HTMLTextAreaElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
 
   const [titleValue, setTitleValue] = useState(page.title ?? "");
-  const [subtitleValue, setSubtitleValue] = useState(page.subtitle ?? "");
 
-  // Track last external values to detect changes from outside (e.g. page list rename).
-  // "Derive during render" pattern — avoids useEffect → setState cascades.
+  // Detect external title changes (e.g. page list rename) — derive during render.
+  // Always update prevExternalTitle so we don't re-trigger on the same value,
+  // but only apply to titleValue when the field isn't focused — prevents our own
+  // autosave round-trip from reverting in-progress edits.
   // See: https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
   const [prevExternalTitle, setPrevExternalTitle] = useState(page.title ?? "");
-  const [prevExternalSubtitle, setPrevExternalSubtitle] = useState(page.subtitle ?? "");
-
   if ((page.title ?? "") !== prevExternalTitle) {
     setPrevExternalTitle(page.title ?? "");
-    setTitleValue(page.title ?? "");
-  }
-  if ((page.subtitle ?? "") !== prevExternalSubtitle) {
-    setPrevExternalSubtitle(page.subtitle ?? "");
-    setSubtitleValue(page.subtitle ?? "");
+    if (!isFocused) {
+      setTitleValue(page.title ?? "");
+    }
   }
 
-  // Title autosave (500ms debounce)
-  const { flush: flushTitle } = useAutosave(
+  const { flush } = useAutosave(
     titleValue,
     (val) => {
       updatePage(page.id, { title: val });
@@ -89,89 +85,37 @@ function TitleSubtitleFields({ page, onFocusEditor }: TitleSubtitleFieldsProps) 
     { delay: 500 }
   );
 
-  // Subtitle autosave (500ms debounce)
-  const { flush: flushSubtitle } = useAutosave(
-    subtitleValue,
-    (val) => {
-      updatePage(page.id, { subtitle: val });
-      return Promise.resolve();
-    },
-    { delay: 500 }
-  );
-
-  // Flush both on window blur (user Cmd+Tab away)
   useEffect(() => {
     function handleBlur() {
-      void flushTitle();
-      void flushSubtitle();
+      void flush();
     }
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
-  }, [flushTitle, flushSubtitle]);
-
-  // Focus an input/textarea and place cursor at end.
-  // setSelectionRange is deferred so it runs after the browser's default focus behaviour.
-  function focusAtEnd(el: HTMLInputElement | HTMLTextAreaElement | null) {
-    if (!el) return;
-    el.focus();
-    requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
-  }
-
-  // Auto-resize subtitle textarea to fit content
-  function adjustSubtitleHeight() {
-    const el = subtitleRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }
-
-  useEffect(() => {
-    adjustSubtitleHeight();
-  });
+  }, [flush]);
 
   return (
-    <div className="mb-4">
+    <div className="mb-6">
       <input
-        ref={titleRef}
         type="text"
         value={titleValue}
         onChange={(e) => setTitleValue(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            focusAtEnd(subtitleRef.current);
-          }
-        }}
-        onFocus={(e) => {
-          const el = e.target;
-          requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
-        }}
-        placeholder="Untitled"
-        className="w-full bg-transparent text-3xl font-bold tracking-tight outline-none placeholder:text-muted-foreground/30"
-      />
-      <textarea
-        ref={subtitleRef}
-        value={subtitleValue}
-        onChange={(e) => {
-          setSubtitleValue(e.target.value);
-        }}
-        onFocus={(e) => {
-          const el = e.target;
-          requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
             onFocusEditor();
           }
-          if (e.key === "Backspace" && subtitleValue === "") {
-            e.preventDefault();
-            focusAtEnd(titleRef.current);
-          }
         }}
-        placeholder="Add a description…"
-        rows={1}
-        className="mt-1 w-full resize-none overflow-hidden bg-transparent text-sm text-muted-foreground outline-none placeholder:text-muted-foreground/30"
+        onFocus={(e) => {
+          setIsFocused(true);
+          const el = e.target;
+          requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
+        }}
+        onBlur={() => {
+          setIsFocused(false);
+        }}
+        autoComplete="off"
+        placeholder="Untitled"
+        className="w-full bg-transparent text-4xl font-bold tracking-tight outline-none placeholder:text-muted-foreground/30"
       />
     </div>
   );
@@ -185,6 +129,7 @@ export function EditorPane() {
 
   // Track which page the editor currently shows (to detect page switches)
   const currentPageIdRef = useRef<string | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Content stored in a ref (not state) to avoid triggering React re-renders
   // on every keystroke. A version counter drives the autosave schedule.
@@ -238,6 +183,11 @@ export function EditorPane() {
       emitUpdate: false,
     });
     contentJsonRef.current = doc ? page.content : "";
+
+    // Scroll after content is rendered — rAF defers until after Tiptap's DOM update
+    requestAnimationFrame(() => {
+      scrollContainerRef.current?.scrollTo({ top: 0 });
+    });
   }, [editor, page, isLoading]);
 
   // ─── Autosave: debounce content → updatePage ─────────────────────────────
@@ -295,14 +245,11 @@ export function EditorPane() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden" data-save-state={saveState}>
-      <div className="flex-1 overflow-y-auto">
+      {editor && <FormatToolbar editor={editor} />}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[720px] px-8 py-6">
           {page && (
-            <TitleSubtitleFields
-              key={page.id}
-              page={page}
-              onFocusEditor={() => editor?.commands.focus()}
-            />
+            <TitleField key={page.id} page={page} onFocusEditor={() => editor?.commands.focus()} />
           )}
           <EditorContent editor={editor} />
         </div>
