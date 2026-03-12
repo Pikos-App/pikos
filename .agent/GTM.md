@@ -62,41 +62,67 @@ The combination is the moat: fast + private + tasks + calendar + notes in one ap
 
 ---
 
-## Launch Phases
+## Launch Roadmap (2026 Timeline)
 
-### Phase 1 — Dogfood (current)
+> Baseline: March 12, 2026. Current state: Phase 2 in progress, editor core largely shipped.
 
-Build it for personal use. Replace Obsidian + TickTick completely.
+### Timeline overview
 
-**Milestone:** 30 consecutive days using Pikos as the primary tool without falling back to Obsidian or TickTick. This is the only meaningful quality bar before sharing with anyone.
+```
+Mar 2026  ──────────────── Phase 2A core editor & metadata
+Apr 2026  ─────── Phase 2B calendar (pulled forward) + search/commands
+May 2026  ─────── Shipping infrastructure + friends beta
+Jun 2026  ─────── Friends beta feedback loop + fixes
+Jul 2026  ─────── Marketing site, video demos, branding
+Aug 2026  ──────────────── Public launch 🚀
+```
 
-Nothing to distribute, no marketing. Just build.
+Pace assumptions: part-time (~a few focused hours/day). If full-time, compress by ~6–8 weeks.
 
 ---
 
-### Phase 2 — Friends beta
+### Phase 1 — Dogfood (complete)
+
+Built it for personal use. The sole quality bar was 30 consecutive days using Pikos as the primary tool without falling back to Obsidian or TickTick.
+
+---
+
+### Phase 2 — Friends Beta
+
+**Target: late May 2026**
 
 Invite 5–15 people directly. Technically comfortable friends — people who won't be blocked by a rough edge but will tell you honestly what's broken.
 
-**Prerequisites before this phase:**
+#### Gate checklist — must ship before inviting anyone
 
-- GOO-52: Notarized macOS builds (unsigned apps trigger Gatekeeper, non-technical friends can't install them). Windows/Linux builds available but signing optional at this stage — technical friends can dismiss SmartScreen.
-- GOO-50: Auto-updater wired (so you can push fixes without asking people to reinstall)
-- Core flows working: create page, edit, schedule, calendar view
+- [ ] GOO-32 Collapsible metadata header
+- [ ] GOO-33 Page status toggle
+- [ ] GOO-35 Priority selector
+- [ ] GOO-19 NL parser + GOO-60 Quick Add Modal (`Cmd+N` flow)
+- [ ] GOO-34 Scheduled date/time picker
+- [ ] **GOO-21 Calendar day view** ← _pulled forward from Phase 4, required for the core pitch_
+- [ ] **GOO-39 Drag page → calendar** ← _pulled forward, required for the core pitch_
+- [ ] GOO-51 App icon + branding (unsigned Gatekeeper DMG looks unfinished)
+- [ ] GOO-52 macOS notarized builds + GitHub Releases CI pipeline ← _external dep: Apple Developer account_
+- [ ] GOO-50 Auto-updater (so you can push fixes without asking people to reinstall)
+
+**What to skip** until after friends beta feedback: settings modal, import/export, tags, command palette, undo/redo, search. These don't block the core loop.
 
 **Distribution:** Direct download link from GitHub Releases. No marketing site needed yet.
 
-**Feedback approach:** Direct conversations. Not a survey. Ask "what did you reach for that wasn't there?"
+**Feedback approach:** Direct conversations. Not a survey. Ask "what did you reach for that wasn't there?" One useful session beats a hundred form responses.
 
 **Milestone:** 3+ people using it regularly for ≥2 weeks without prompting.
 
 ---
 
-### Phase 2.5 — Landing page + email list (before public launch)
+### Phase 2.5 — Landing page + email list
 
-**Don't wait for Phase 3 to have a web presence.** A simple landing page with an email capture field costs nothing and starts building an audience while the app is still being built.
+**Target: April/May 2026 (before friends beta even starts)**
 
-- One page: headline, 2–3 sentences, screenshot or mockup, email field ("Get notified when Pikos launches")
+A simple landing page with an email capture field costs nothing and starts building an audience now.
+
+- One page: headline, 2–3 sentences, screenshot, email field ("Get notified when Pikos launches")
 - No promises about dates or features
 - Start collecting emails the day the page goes live — even 50 signups before launch is an audience
 
@@ -104,51 +130,67 @@ Invite 5–15 people directly. Technically comfortable friends — people who wo
 
 ---
 
-### Phase 3 — Public launch
+### Phase 3 — Public Launch
+
+**Target: August 2026** _(compress to late June/July if full-time)_
 
 Marketing site live. Download available to anyone. No sign-up required.
 
-**What "launch" means here:** Not a Product Hunt moment with a spike of traffic. A quiet, permanent public presence. The goal is for someone Googling "obsidian alternative with tasks" or "local-first calendar notes app" to find Pikos and be able to download it immediately.
+**What "launch" means here:** Not a Product Hunt spike. A quiet, permanent public presence. The goal is for someone Googling "obsidian alternative with tasks" or "local-first calendar notes app" to find Pikos and be able to download it immediately.
 
-**Prerequisites:**
+#### Gate checklist — must ship before marketing site goes live with a download button
 
-- GOO-53: Marketing site live with download button + Plausible analytics
-- GOO-54: Privacy policy (honest, plain language, one page)
-- GOO-51: App icon and branding finalized
-- GOO-52: All three platform builds in CI (macOS signed + notarized, Windows + Linux)
-- App is genuinely stable and has survived Phase 2
+- [ ] All friends beta gate items (above) ✓
+- [ ] GOO-17 Command palette (`Cmd+P`)
+- [ ] GOO-18 FTS5 full-text search
+- [ ] GOO-62 Undo/redo
+- [ ] GOO-97 Theme selector (system/light/dark)
+- [ ] GOO-53 Marketing site live — two pages: `/` (general) + `/open` (technical)
+- [ ] GOO-54 Privacy policy at `/privacy`
+- [ ] App stable after 2+ weeks friends beta feedback incorporated
+- [ ] Video demo recorded (1× "why I built Pikos" style, honest and unpolished)
+- [ ] Open source decision made (source-available / MIT / closed — see below)
 
-**Dual landing pages (same app, two entry points):**
+#### Dual landing pages (same app, two entry points)
 
-- `/` — General audience. Visual, task-focused, approachable. Headline: *"Your notes, tasks, and calendar. Private by default."* Shows the calendar + task list. No mention of SQLite, Tauri, or file paths. Download button prominent above the fold. Focus on the feeling, not the feature list.
-- `/open` or `/for-developers` — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief "why I built this" story. Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
+- **`/`** — General audience. Visual, task-focused, approachable. Headline: *"Your notes, tasks, and calendar. Private by default."* Shows the calendar + task list. No mention of SQLite, Tauri, or file paths. Download button prominent above the fold. Focus on the feeling, not the feature list.
+- **`/open`** — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief "why I built this" story. Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
 
-The two pages let you run different SEO and social campaigns without the messaging feeling split. General landing page targets: "private notes app", "offline task manager", "notes app no account". Technical page targets: "local-first notes app", "obsidian alternative with tasks", "sqlite notes app".
+The two pages let you run different SEO and social campaigns without the messaging feeling split.
+- General: "private notes app", "offline task manager", "notes app no account"
+- Technical: "local-first notes app", "obsidian alternative with tasks", "sqlite notes app"
 
-**Credibility angle:** Technical blog posts about interesting decisions (Tauri + SQLite, local-first design, React Compiler) drive developer discovery organically and feed the `/for-developers` page.
+#### Launch channels
 
-**Channels:**
+| Channel | Notes |
+|---|---|
+| Marketing site | General + technical pages; direct, organic, social |
+| **Reddit** | r/productivity, r/macapps, r/selfhosted, r/ObsidianMD. High-intent audience with the exact pain point. Be a genuine participant, not a promoter. |
+| **YouTube** | One "why I built Pikos" video. Non-technical users discover apps via YouTube far more than HN. Honest and unpolished beats polished ad. |
+| Hacker News | One well-timed "Show HN" post — link to `/open`. Do this after a few Reddit posts land well so you have momentum. |
+| GitHub | Source-available or open source. Builds technical credibility and is an organic discovery channel. |
+| Personal social | Occasional, not performative. Link to both landing pages. |
+| Email list | The Phase 2.5 list gets the launch announcement first. Even 50 people is a real audience. |
 
-- Marketing site — general page (direct, organic, social)
-- Marketing site — technical page (Hacker News, developer communities, GitHub)
-- GitHub (open source or source-available — see below)
-- Personal social presence (occasional, not performative)
-- Hacker News / indie hackers when the time is right (one "Show HN" post, well-timed — link to technical page)
-- **Reddit:** r/productivity, r/macapps, r/selfhosted, r/ObsidianMD. Warm audiences with the exact pain point. Be a genuine participant, not a promoter.
-- **YouTube:** A single "why I built Pikos" video gets indexed permanently. Non-technical users discover apps through YouTube searches ("best notes app for Mac", "notion alternative offline") far more than HN. One honest, unpolished video beats a polished ad.
-- **Social proof:** Ask Phase 2 users for honest quotes. A few real testimonials on the landing page outperform any feature list for non-technical visitors.
+**Credibility angle:** Technical blog posts about interesting decisions (Tauri + SQLite, local-first design, React 19 compiler) drive developer discovery organically and feed the `/open` page.
+
+**Social proof:** Ask Phase 2 beta users for honest quotes. A few real testimonials on the landing page outperform any feature list for non-technical visitors.
 
 ---
 
-### Phase 4 — Growth & monetization
+### Phase 4 — Growth & Monetization
+
+**Target: Q4 2026 / 2027**
 
 After real users exist and feedback is incorporated.
 
-**Mobile:** GOO-47 (React Native). The `packages/core` pure-TS layer was designed for this from day one. When mobile ships, sync becomes the natural upgrade path.
+#### Mac App Store
+
+Primary non-technical discovery channel. Sandboxing adds work but the audience is worth it. Submit after Phase 3 proves stability. GOO-52-MAS.
 
 #### Sync paths
 
-There are two completely separate sync lanes. They don't need to overlap and shouldn't share a payment mechanism.
+Two completely separate sync lanes — they don't need to overlap and shouldn't share a payment mechanism.
 
 ```
 PATH A — APPLE ECOSYSTEM (Mac App Store + iPhone App Store)
@@ -166,95 +208,74 @@ Sync          → optional: create account → your relay server
 Revenue       → subscription via Paddle or Lemon Squeezy (you keep ~95%)
 ```
 
-iCloud sync works in direct-download Mac apps too (users just need an Apple ID). This means a website user on Mac can sync to their iPhone via iCloud without ever buying the App Store version. See "The bypass question" below.
+iCloud sync works in direct-download Mac apps too (users just need an Apple ID). This means a website user on Mac can sync to their iPhone via iCloud without ever buying the App Store version.
+
+**The bypass question:** A user can download Pikos free from the website, use iCloud sync, and never pay anything. This is fine — zero marginal cost, and free users spread the product. The iPhone App Store app is the natural paywall for Apple ecosystem users. The paying customers for relay sync are Windows/Android users who can't bypass anything — they genuinely need your server.
 
 #### Pricing
 
 | What | Price | Notes |
 |---|---|---|
 | Mac app (App Store, one-time) | **$19.99** | Buy once, own forever. No subscription. |
-| iPhone app (App Store, one-time, future) | **$9.99** | Mobile companion. App Store only — iOS has no other distribution channel. |
+| iPhone app (App Store, one-time, future) | **$9.99** | Mobile companion. App Store only. |
 | Relay sync (annual, via your site) | **$39.99/yr** | Cross-platform sync. E2EE on your server. |
 | Relay sync (monthly, via your site) | **$4.99/mo** | Same as $59.88/yr — surface annual prominently. |
 | Self-hosted relay | **$0** | Run your own server. Builds goodwill with privacy audience. |
 
-**Why one-time purchase (not subscription) for the App Store:**
-- iCloud sync is included — there's nothing ongoing you're providing for App Store users
-- "Buy once, own forever" builds trust with non-technical users who are subscription-fatigued
+**Why one-time purchase (not subscription) for App Store:**
+- iCloud sync has no ongoing infra cost to justify a subscription
+- "Buy once, own forever" builds trust with subscription-fatigued users
 - Relay sync is already a recurring line; two subscriptions for one app is confusing
-- You can price higher with one-time; churn anxiety doesn't apply
+- Churn anxiety doesn't apply to one-time pricing
 
-**Competitive context:** Obsidian Sync is $96/yr. NotePlan is $69.99/yr (subscription only). At $39.99/yr for relay sync, Pikos undercuts both while being more integrated. Don't race to the bottom — $39.99 is credibly premium.
+**Competitive context:** Obsidian Sync is $96/yr. NotePlan is $69.99/yr (subscription only). At $39.99/yr for relay sync, Pikos undercuts both while being more integrated.
 
-#### The bypass question
+**Don't build relay infrastructure until there are paying customers to justify the operational overhead.** iCloud sync ships first — it's the proof that sync works.
 
-A user can download Pikos free from the website, use iCloud sync, and never pay anything. **This is fine.** Here's why:
+#### Mobile
 
-1. **Zero marginal cost.** iCloud sync uses Apple's servers, not yours. You have no infrastructure cost from that user. The only "loss" is compared to an imaginary world where they found the App Store version instead.
-
-2. **The iPhone app is the natural paywall.** iOS apps can only be distributed through the App Store. When someone wants Mac + iPhone sync, they have to buy the iPhone app ($9.99). You don't need to engineer a lock — Apple's distribution rules are the lock.
-
-3. **Free users spread the product.** 1,000 people using it for free is 1,000 word-of-mouth vectors. The privacy-first audience doesn't respond well to friction or paywalls on a local app — goodwill has real value here.
-
-4. **Your paying customers are relay users.** Windows users, Android users, and cross-platform Apple users who want a non-iCloud sync option are the ones paying $39.99/yr. That segment can't bypass anything — they genuinely need your server.
-
-The only scenario worth caring about: if a significant number of Mac-only users who would have paid $19.99 on the App Store instead download for free and use iCloud. Even then, you've lost a one-time $14 (after Apple's cut) — not a subscription. Focus on making the App Store version the path of least resistance for non-technical users; the website is for people who actively seek direct downloads.
-
-#### Sync architecture
-
-SQLite as source of truth makes sync tractable. Two viable approaches:
-
-- **CR-SQLite (CRDTs on SQLite):** Automatic conflict resolution, no event log to maintain. More complex to set up.
-- **Event log pattern:** Append-only log of mutations, replay on merge. Simpler to reason about, easier to debug.
-
-Don't build relay sync until there are paying customers to justify the operational overhead. iCloud sync (Phase 4a) ships first — it's the proof that sync works before you invest in relay infrastructure.
+`packages/core` pure-TS layer was designed for React Native from day one. When mobile ships, sync becomes the natural upgrade path. GOO-47.
 
 ---
 
 ## Distribution
 
-| Channel                        | When     | Notes                                                                                                                                                                                    |
-| ------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub Releases                | Phase 2+ | Primary distribution, auto-updater source                                                                                                                                                |
-| Marketing site direct download | Phase 3+ | Links to GitHub Releases                                                                                                                                                                 |
-| Homebrew cask                  | Phase 3+ | Developer-friendly, one-line install                                                                                                                                                     |
-| Mac App Store                  | Phase 4+ | Primary non-technical discovery channel. 30% cut but reaches users who will never find a GitHub release. Evaluate after public launch — sandboxing adds work but the audience is worth it. |
-| Windows                        | Phase 3+ | Tauri builds `.msi`/`.exe`. No signing required to run; Windows Defender/SmartScreen will warn without a code signing cert — acceptable for early adopters, fix before wide distribution |
-| Linux                          | Phase 3+ | Tauri builds `.AppImage` + `.deb`. No signing required. Low friction to add to CI matrix.                                                                                                |
+| Channel | When | Notes |
+|---|---|---|
+| GitHub Releases | Phase 2+ | Primary distribution, auto-updater source |
+| Marketing site direct download | Phase 3 | Links to GitHub Releases |
+| Homebrew cask | Phase 3 | Developer-friendly, one-line install |
+| Mac App Store | Phase 4 | Primary non-technical discovery. Sandboxing adds work. |
+| Windows | Phase 3 | Tauri builds `.msi`/`.exe`. SmartScreen warns without signing cert — acceptable for early adopters. |
+| Linux | Phase 3 | Tauri builds `.AppImage` + `.deb`. No signing required. Low friction to add to CI matrix. |
 
 ---
 
-## Platform targets + signing complexity
+## Platform Signing
 
-**Goal: Mac + Windows + Linux from Phase 3.** Tauri supports all three with minimal extra effort once the Mac build is working.
+| Platform | Signing | Cost |
+|---|---|---|
+| macOS | Required (Gatekeeper blocks unsigned apps) | $99/yr Apple Developer |
+| Windows | Optional — SmartScreen warns but doesn't block | ~$300–500/yr OV cert (skip for Phase 2, add before wide launch) |
+| Linux | Not applicable | $0 |
 
-| Platform | Signing                                        | Complexity                                                      | Cost                             |
-| -------- | ---------------------------------------------- | --------------------------------------------------------------- | -------------------------------- |
-| macOS    | Required (Gatekeeper blocks unsigned apps)     | Moderate — one-time cert setup (~2-3 hrs), then fully automated | $99/yr (Apple Developer)         |
-| Windows  | Optional — SmartScreen warns but doesn't block | Low — skip for Phase 2, add OV cert before wide launch          | ~$300–500/yr (OV cert from a CA) |
-| Linux    | Not applicable                                 | Trivial — add ubuntu runner to CI matrix                        | $0                               |
-
-**macOS notarization in practice:** Apple requires apps to be signed with a Developer ID cert and submitted to their notarization service. The `tauri-apps/tauri-action` GitHub Action automates all of this — you set up secrets once (certificate, passwords, Apple ID, team ID) and every release tag triggers a full build → sign → notarize → upload pipeline. The one-time setup takes a few hours; after that it's push-and-done.
-
-**Windows SmartScreen:** Without a code signing cert, Windows shows "Unknown publisher — this may harm your computer." Technical users can bypass it (More info → Run anyway). Acceptable for Phase 2 friends beta; get a cert before wide public distribution.
+**macOS notarization in practice:** `tauri-apps/tauri-action` GitHub Action automates sign → notarize → upload. Set up secrets once (certificate, passwords, Apple ID, team ID) and every `git tag v*` triggers the full pipeline.
 
 ---
 
-## Open source question
+## Open Source Decision
 
-**Decision deferred — decide before Phase 3 launch.**
+**Decide before Phase 3 launch.** Options:
 
-Options on the table:
-
-- **Source-available** (code is public, use is restricted): lets developers audit privacy claims; doesn't hand SaaS competitors a free hosted version
-- **Fully open source** (MIT/Apache): easier community contributions; harder monetization
-- **Closed source / download-only**: simpler, no decision to maintain; less credibility signal for privacy-focused audience
+- **Source-available** (code public, use restricted): lets developers audit privacy claims; doesn't hand SaaS competitors a free hosted version
+- **Fully open source** (MIT/Apache): easier contributions; harder monetization
+- **Closed source**: simpler; less credibility for privacy-focused audience
 
 Don't decide on a half-finished app. Revisit when Phase 2 feedback is incorporated and the codebase is something worth showing.
 
 ---
 
-## Monetary model summary
+## Monetary Model Summary
 
 | Tier | Price | What you get | Revenue path |
 |---|---|---|---|
@@ -264,7 +285,7 @@ Don't decide on a half-finished app. Revisit when Phase 2 feedback is incorporat
 | Relay sync | $39.99/yr or $4.99/mo | Cross-platform sync, E2EE | Paddle/Lemon Squeezy (~95% to you) |
 | Self-hosted relay | $0 | Run your own server | Goodwill |
 
-Free at launch. iCloud sync ships with Phase 4a (no extra charge, no relay infra needed). Relay sync and the paid subscription tier come with Phase 4b when Windows/Android users exist and ask for it. No feature gating in the free tier — the privacy promise is the product.
+Free at launch. iCloud sync ships with Phase 4a (no extra charge, no relay infra needed). Relay sync and the paid subscription tier come with Phase 4b when Windows/Android users exist and ask for it.
 
 ---
 
@@ -274,3 +295,4 @@ Free at launch. iCloud sync ships with Phase 4a (no extra charge, no relay infra
 - **GOO-52** macOS signing + notarization + GitHub Releases pipeline
 - **GOO-53** Marketing site — Astro in `apps/marketing/` (monorepo)
 - **GOO-54** Privacy policy — simple, plain language, one page
+- **GOO-52-MAS** Mac App Store submission (Phase 4)
