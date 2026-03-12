@@ -7,12 +7,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ---
 
-## 🔄 Active
-
-**GOO-106/107/108/111** — Editor keyboard scope bundle _(see CURRENT.md)_
-
----
-
 ## Phase 2A — Core Editor & Metadata
 
 _Goal: every interaction in the editor and page header feels complete and intentional._

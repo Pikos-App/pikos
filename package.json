@@ -14,25 +14,25 @@
     "seed": "tsx scripts/seed/index.ts"
   },
   "dependencies": {
-    "@faker-js/faker": "^9.9.0",
-    "better-sqlite3": "^11.9.1"
+    "@faker-js/faker": "^10.3.0",
+    "better-sqlite3": "^12.6.2"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "tsx": "^4.19.4",
-    "@eslint/js": "^10.0.0",
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/typography": "^0.5.19",
-    "dependency-cruiser": "^17.3.8",
-    "eslint": "^10.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "dependency-cruiser": "^17.3.9",
+    "eslint": "^10.0.3",
     "eslint-plugin-react-compiler": "19.1.0-rc.2",
-    "eslint-plugin-react-hooks": "^7.0.0",
-    "eslint-plugin-react-refresh": "^0.5.0",
-    "husky": "^9.0.0",
-    "lint-staged": "^16.3.1",
-    "prettier": "^3.8.0",
-    "prettier-plugin-tailwindcss": "^0.7.0",
-    "turbo": "^2.8.14",
-    "typescript-eslint": "^8.0.0"
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.3",
+    "prettier": "^3.8.1",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "tsx": "^4.21.0",
+    "turbo": "^2.8.16",
+    "typescript-eslint": "^8.57.0"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
