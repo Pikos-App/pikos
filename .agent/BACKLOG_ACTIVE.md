@@ -1,17 +1,23 @@
 # Pikos — Active Backlog
 
-Next-up items only (Phase 1 + Phase 2). For Phase 3+ specs — grep `BACKLOG.md` by GOO number.
+Working queue from Phase 2 through Public Launch. Ordered by the sequence things need to ship.
+For post-launch specs — grep `BACKLOG.md` by GOO number.
 
 Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
+---
+
+## 🔄 Active
+
+**GOO-106/107/108/111** — Editor keyboard scope bundle _(see CURRENT.md)_
 
 ---
 
-## Phase 2 — Editor & Metadata
+## Phase 2A — Core Editor & Metadata
 
+_Goal: every interaction in the editor and page header feels complete and intentional._
 
-- [ ] **GOO-112** Link editing UI _(Medium)_ — **requires GOO-104**
-  Link extension is installed (`@tiptap/extension-link`) with autolink + link-on-paste, but there's no interactive UI to add/edit/remove links. Users need: (1) a way to add a link to selected text (bubble menu button, GOO-104 dependency), (2) clicking an existing link shows a small popover with URL + edit/unlink buttons, (3) `Cmd+K` shortcut to insert/edit link (standard across Google Docs, Notion, Obsidian). Component: `apps/desktop/src/features/editor/components/LinkPopover.tsx`.
+### Metadata Header (dependency anchor — do first)
 
 - [ ] **GOO-32** Collapsible metadata header _(Urgent)_
   ```
@@ -26,6 +32,12 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
   Title always visible, inline-editable. Expand/collapse: CSS `grid-template-rows: 0 → 1fr` (no layout jump). Persist state per-page in localStorage. `Cmd+Shift+M` toggle. `Tab` through fields. `Esc` returns focus to editor. Rendered by `EditorPanel`, not the editor itself. See `features/metadata.md`.
   **Note:** Subtitle/description field was removed from above the editor (GOO-109 follow-up) — it now lives here alongside status/priority/tags. Still stored in `pages.subtitle` column. Used in page list previews and calendar blocks.
 
+- [ ] **GOO-33** Page status toggle _(High)_
+  Three-state cycle: `not_started` (○) → `in_progress` (◑) → `done` (✓). Click cycles. Done: strikethrough + muted in pages list, `completedAt` set. Writes to `status` DB column. Icon in both page list + metadata header. I actually don't think we need the in_progress status - thoughts?
+
+- [ ] **GOO-35** Priority selector _(Medium)_
+  Icon-based: None (— muted), Urgent (!! red), High (! orange), Medium (·· yellow), Low (· blue). Linear-inspired. Dropdown in metadata header. Shown as colored badge in page list. Writes `priority` column (0–4).
+
 - [ ] **GOO-36** Save indicator UI _(Urgent)_ — **requires GOO-32**
   The `useAutosave` hook and editor content debounce are already shipped (GOO-10). What remains:
   - **Save indicator component** — visual feedback next to title in MetadataHeader (requires GOO-32 first)
@@ -37,8 +49,7 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
   Before implementing this - let's check in - it might not be worth having a save indicator since if we don't lose people's content we won't have trust loss and need a signal for success states. We should have an error state though.
 
-- [ ] **GOO-33** Page status toggle _(High)_
-  Three-state cycle: `not_started` (○) → `in_progress` (◑) → `done` (✓). Click cycles. Done: strikethrough + muted in pages list, `completedAt` set. Writes to `status` DB column. Icon in both page list + metadata header. I actually don't think we need the in_progress status - thoughts?
+### Page Creation
 
 <!-- BUNDLE: GOO-19 + GOO-60 — direct dependency pair, pure-TS parser then modal consumer -->
 
@@ -135,12 +146,18 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 <!-- END BUNDLE -->
 
-- [] **GOO-108** Tab key behavior in editor _(High)_
+### Scheduling
+
+- [ ] **GOO-34** Scheduled date/time picker _(High)_ — **requires GOO-76**
+  shadcn Popover with mini calendar + time input. Quick chips: Today, Tomorrow, Monday, Next week. Duration shortcuts: 15min, 30min, 1h, 2h. Writes `scheduledStart`/`scheduledEnd` via `create_page_schedule` / `delete_page_schedule`.
+
+### Editor Enhancements
+
+- [ ] **GOO-108** Tab key behavior in editor _(High)_
   Tab/Shift+Tab intercepted — no longer moves browser focus. Lists: indent/outdent ✓. Task items: indent/outdent ✓. Code blocks: insert/remove 2 spaces ✓. **Remaining:** Tab in normal paragraphs should insert/remove indentation (insertText with spaces not working in paragraph nodes — needs investigation).
 
-
-- [ ] **GOO-35** Priority selector _(Medium)_
-  Icon-based: None (— muted), Urgent (!! red), High (! orange), Medium (·· yellow), Low (· blue). Linear-inspired. Dropdown in metadata header. Shown as colored badge in page list. Writes `priority` column (0–4).
+- [ ] **GOO-112** Link editing UI _(Medium)_ — **requires GOO-104**
+  Link extension is installed (`@tiptap/extension-link`) with autolink + link-on-paste, but there's no interactive UI to add/edit/remove links. Users need: (1) a way to add a link to selected text (bubble menu button, GOO-104 dependency), (2) clicking an existing link shows a small popover with URL + edit/unlink buttons, (3) `Cmd+K` shortcut to insert/edit link (standard across Google Docs, Notion, Obsidian). Component: `apps/desktop/src/features/editor/components/LinkPopover.tsx`.
 
 - [ ] **GOO-113** Editor accessibility _(High)_
   The editor needs WCAG 2.1 AA compliance per project standards. Currently missing: `role="textbox"` and `aria-label` on the editor container, `aria-live` region for save state announcements, visible focus indicator on the editor container, keyboard-accessible task list checkboxes, placeholder text announced to screen readers (currently CSS-only). Should be done alongside or right after GOO-106 (keyboard scope).
@@ -149,10 +166,19 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 - [ ] **GOO-105** Editor drag handle _(Medium)_
   Hover left of any block to show a grip icon for drag-reorder. Custom ProseMirror NodeView plugin (the official `@tiptap/extension-drag-handle` is paid). Grip appears on hover with subtle fade-in. Drag creates a drop indicator line between blocks. Works with all block types (paragraphs, headings, lists, code blocks). Component: `apps/desktop/src/features/editor/components/DragHandle.tsx`. Before you get started on this one - are you intending to build this functionality from scratch since the dep is paid? How complex would this task be? Worth building in its current task priority?
 
-- [ ] **GOO-34** Scheduled date/time picker _(High)_ — **requires GOO-76**
-  shadcn Popover with mini calendar + time input. Quick chips: Today, Tomorrow, Monday, Next week. Duration shortcuts: 15min, 30min, 1h, 2h. Writes `scheduledStart`/`scheduledEnd` via `create_page_schedule` / `delete_page_schedule`.
-
 ---
+
+## Phase 2B — Appearance & UX Polish
+
+- [ ] **GOO-97** Theme selector _(Medium)_ — **do before GOO-59**
+  Lightweight standalone theme toggle, ships before the full Settings modal (GOO-59). Three options: System / Light / Dark. Store in `localStorage` under `pikos:theme`. Apply to `<html data-theme="...">`. Render as a `ToggleGroup` or segmented control in the right-panel header (top-right, small icon row). `useTheme()` hook in `apps/desktop/src/shared/hooks/useTheme.ts`. GOO-59 Appearance panel will wire into the same key — no migration needed.
+
+- [ ] **GOO-102** Completed items in folder/inbox views — design decision _(Medium)_
+  Today view has a "Completed" accordion (GOO-101 ✓). Need to decide how completed items behave in folder and inbox views. Current: shown inline with strikethrough. Options under consideration:
+  - Per-folder opt-in accordion (task-oriented folders get accordion, knowledge-base folders stay inline)
+  - Global "Hide completed" toggle in sort menu
+  - Automatic: folders with >N completed items get the accordion
+  Key constraint: must stay simple and serve both task-manager and knowledge-base users without forcing a "task vs note" type distinction (TickTick's approach feels bolted-on). Every page is both. The UX should emerge from folder-level behavior, not page-level categorization.
 
 - [ ] **GOO-99** Enhanced folder delete modal _(Medium)_ — **requires GOO-37 ✓**
   When deleting a folder that contains pages, replace the current fixed "move to Inbox" confirmation with two explicit choices:
@@ -170,18 +196,95 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ---
 
-## UX — Completed Items
+## 📅 Calendar — Pulled Forward
 
-- [ ] **GOO-102** Completed items in folder/inbox views — design decision _(Medium)_
-  Today view has a "Completed" accordion (GOO-101 ✓). Need to decide how completed items behave in folder and inbox views. Current: shown inline with strikethrough. Options under consideration:
-  - Per-folder opt-in accordion (task-oriented folders get accordion, knowledge-base folders stay inline)
-  - Global "Hide completed" toggle in sort menu
-  - Automatic: folders with >N completed items get the accordion
-  Key constraint: must stay simple and serve both task-manager and knowledge-base users without forcing a "task vs note" type distinction (TickTick's approach feels bolted-on). Every page is both. The UX should emerge from folder-level behavior, not page-level categorization.
+_Core product promise: notes + tasks + calendar. Must ship before friends beta._
+
+- [ ] **GOO-21** Custom day/weekly calendar view _(High — friends beta blocker)_
+  **v1: day view only.** Custom renderer with `date-fns`, no off-the-shelf calendar library.
+  ```
+  CalendarView
+  ├── CalendarHeader (prev/next/today, [ / ] shortcuts)
+  ├── TimeGutter (hour labels: 6am–11pm)
+  ├── DayColumn
+  │   ├── HourCells (drop targets, 15min increments)
+  │   ├── PageBlocks (absolute position by time %)
+  │   └── NowIndicator (current time red line, auto-scrolls on mount)
+  ```
+  Block click → `setActivePage()`. Resize bottom edge → update `scheduledEnd`. Toggle calendar/editor: `Cmd+Shift+C`. Jump to today: `t`.
+
+- [ ] **GOO-39** Drag page → calendar to schedule _(High — friends beta blocker)_ — **requires GOO-21**
+  `@dnd-kit/core`. Drag handle on `PageListItem` hover. Drop → `createPageSchedule({ scheduledStart, scheduledEnd })`. 15min snap.
 
 ---
 
-## Developer Tooling
+## 🔍 Search & Commands — Minimum Quality Bar
+
+_Without these the app feels half-finished to any organic user. Ship before public launch._
+
+- [ ] **GOO-17** Command palette _(High — public launch blocker)_
+  `Cmd+P` → fuzzy page title search. `Cmd+P` twice (chord) → content search mode. `Cmd+K` → actions (new page, switch workspace, settings). Recent pages section.
+  Title search: client-side fuzzy via `fuse.js` against `pages[]` in WorkspaceContext (immediate, no DB round-trip). Content search: FTS5 via `search_pages` Tauri command (debounced). See `features/search.md`. It seems like this could use some more thought though — maybe we want server-side search, then we can return the data that's needed to navigate to the folder/page? This should be insanely fast regardless of how many pages/folders there are. Content search should also be ripping fast and top tier — highlight matching words/partial.
+
+- [ ] **GOO-18** FTS5 content search _(High — public launch blocker)_
+  FTS5 virtual table on `pages.content` + `pages.title` + `pages.tags`. Tauri command `search_pages(query)`. Updates on save. Highlighted excerpt snippets via FTS5 `snippet()`.
+
+- [ ] **GOO-62** Undo/redo _(High — public launch blocker)_
+  App-level command history for metadata mutations and CRUD — separate from Tiptap's own undo. `CommandHistory` singleton in `packages/core/src/history/CommandHistory.ts`.
+
+  ```ts
+  export interface Command {
+    execute(): Promise<void>; // re-do only
+    undo(): Promise<void>;
+    label: string; // e.g. "Deleted 'Design review'"
+  }
+  export class CommandHistory {
+    static shared: CommandHistory;
+    push(cmd: Command): void; // call AFTER mutation; clears redo stack
+    undo(): Promise<void>;    // Cmd+Z
+    redo(): Promise<void>;    // Cmd+Shift+Z
+    canUndo: boolean;
+    canRedo: boolean;
+    readonly undoLabel: string | null;
+    readonly redoLabel: string | null;
+  }
+  ```
+
+  Mutations that push a Command: create/delete/rename page, move page to folder, change status/priority/scheduled date, create/delete/rename folder.
+  **Bulk undo**: Quick Add Modal creating N pages wraps all creates in one Command.
+  **UI**: `Cmd+Z` / `Cmd+Shift+Z`. Toast: "Deleted 'Design review' · Undo". History limit: 50 entries (ring buffer).
+
+---
+
+## 🚀 Friends Beta Gate
+
+_Must ship before sharing with anyone outside the team. External blocker: Apple Developer account ($99/yr)._
+
+- [ ] **GOO-51** App branding _(Medium — friends beta blocker)_
+  Icon, wordmark, color palette. Needed before any public presence. Tauri uses `apps/desktop/src-tauri/icons/` — multiple sizes required (32×32 to 512×512 + `.icns` for macOS).
+
+- [ ] **GOO-52** Cross-platform builds + signing + GitHub Releases pipeline _(High — friends beta blocker)_
+  `release.yml` triggered on `git tag v*`. Matrix: macOS (notarized via Apple Developer Program, `tauri-apps/tauri-action`), Windows (SmartScreen warning OK for Phase 2 beta), Linux (AppImage + deb, no signing needed).
+  **One-time setup:** Apple Developer account → Developer ID cert → notarization credentials as GitHub secrets. `tauri-apps/tauri-action` automates sign + notarize on every tagged release. Budget ~2–3 hrs for first-time setup.
+
+- [ ] **GOO-50** Auto-updater _(Medium — friends beta blocker)_
+  `tauri-plugin-updater`. Check on launch → non-blocking banner ("Version X.X available — restart to update") → download + install + relaunch. Update server: GitHub Releases. Wire in before any external release.
+
+---
+
+## 🌐 Public Launch Gate (Phase 3)
+
+_Required before the marketing site goes live and the download button appears._
+
+- [ ] **GOO-53** Marketing site _(Medium — public launch blocker)_
+  Astro in `apps/marketing/`. Two pages: `/` (general audience, approachable, no technical jargon) + `/open` (architecture, local-first philosophy). Analytics: Plausible (privacy-aligned). See `features/marketing-site.md`.
+
+- [ ] **GOO-54** Privacy policy _(Low — public launch blocker)_
+  Plain language, one page at `/privacy`. Cover: what stays on device (everything), what leaves only with opt-in, what is never collected (note content), how to export.
+
+---
+
+## 🔧 Developer Tooling
 
 - [ ] **GOO-95** Dev: seed command — reset UI preferences _(Low)_
   Script or Tauri dev command to wipe `localStorage` and plugin-store settings keys back to defaults. Useful when testing first-run flows or settings panels. Can be a `pnpm dev:reset-ui` script that opens the app with a `?resetUI=1` query param cleared on startup, or a hidden `Cmd+Shift+Option+R` chord in dev builds only.
@@ -191,11 +294,4 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ---
 
-## Phase 2 — Appearance
-
-- [ ] **GOO-97** Theme selector _(Medium)_ — **do before GOO-59**
-  Lightweight standalone theme toggle, ships before the full Settings modal (GOO-59). Three options: System / Light / Dark. Store in `localStorage` under `pikos:theme`. Apply to `<html data-theme="...">`. Render as a `ToggleGroup` or segmented control in the right-panel header (top-right, small icon row). `useTheme()` hook in `apps/desktop/src/shared/hooks/useTheme.ts`. GOO-59 Appearance panel will wire into the same key — no migration needed.
-
----
-
-_For Phase 3+ full specs — grep `BACKLOG.md` by GOO number._
+_For post-launch V1, power features, and long-term roadmap — grep `BACKLOG.md` by GOO number._
