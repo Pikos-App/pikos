@@ -345,3 +345,12 @@ _See `.agent/GTM.md` for full strategy._
 - [-] **GOO-85** WhatsApp / Signal integration — post GOO-84, approach TBD.
 - [-] **GOO-86** Proactive notifications via messaging — post GOO-83.
 - [-] **GOO-6** Component library repo — absorbed into `packages/ui` in monorepo.
+
+- [ ] **GOO-111** Escape key exits editor focus _(High)_
+  Pressing `Esc` when the editor is focused should blur the editor and return focus to the page list panel. This is the primary "exit" gesture — users should never feel trapped in the editor. Considerations:
+  - If a slash menu, bubble menu, or any popover is open, first `Esc` closes the popover; second `Esc` exits the editor.
+  - If text is selected, first `Esc` deselects (collapses to cursor); second `Esc` exits.
+  - On exit: `editor.commands.blur()`, then focus the active page item in the page list (so `J`/`K` navigation works immediately).
+  - `Enter` on a page list item should re-focus the editor (round-trip: Esc out → navigate → Enter back in).
+  - Wire via ProseMirror keymap (`Escape` handler) inside `EditorPane`, not the global keyboard registry (avoid conflict with modal/popover Esc handling).
+  **Deferred note:** Attempted via `addProseMirrorPlugins`. Core issue: Tiptap reverses the extensions array when building plugins (last extension = highest priority), so ordering `EscapeBlurExtension` before `SlashMenuExtension` should give Suggestion higher priority — but the slash menu still doesn't close first. Root cause unclear; possibly the slash menu popup shows while suggestion state is already inactive. Needs investigation before implementing.

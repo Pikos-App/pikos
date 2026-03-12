@@ -12,6 +12,7 @@ import Link from "@tiptap/extension-link";
 import Underline from "@tiptap/extension-underline";
 import { Markdown } from "tiptap-markdown";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { Keyboard } from "@/shared/keyboard/registry";
 import { extractText } from "@pikos/core";
 import type { Page } from "@pikos/core";
 import { useAutosave } from "../hooks/useAutosave";
@@ -19,6 +20,7 @@ import { useEditorPage } from "../hooks/useEditorPage";
 import type { JSONContent } from "@tiptap/react";
 import { SlashMenuExtension } from "./SlashMenu";
 import { FormatToolbar } from "./FormatToolbar";
+import { TabIndent } from "../extensions/TabIndent";
 
 // ─── Extensions ────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ const extensions = [
     transformCopiedText: false,
   }),
   SlashMenuExtension,
+  TabIndent,
 ];
 
 // ─── TitleSubtitleFields ───────────────────────────────────────────────────────
@@ -147,6 +150,8 @@ export function EditorPane() {
       contentJsonRef.current = JSON.stringify(e.getJSON());
       setContentVersion((v) => v + 1);
     },
+    onFocus: () => Keyboard.pushScope("editor"),
+    onBlur: () => Keyboard.popScope("editor"),
   });
 
   // ─── Page switch: load content into existing editor instance ──────────────

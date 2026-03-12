@@ -9,22 +9,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ## Phase 2 — Editor & Metadata
 
-- [ ] **GOO-106** Editor keyboard scope integration _(Medium)_
-  Wire editor focus/blur into the keyboard registry: `pushScope('editor')` on focus, `popScope('editor')` on blur. Global shortcuts (`Cmd+P`, `Cmd+N`, `Cmd+W`) remain active in all scopes. Editor-specific shortcuts only fire when the editor scope is active. Prevents conflicts between editor key combos and app-level shortcuts. Also we should update command + \ to work when editor is focused so we can rapidly switch into full editor/calendar.
-
-- [ ] **GOO-107** Cmd+A scoped to editor _(High)_
-  When the editor is focused, `Cmd+A` should select all content within the editor only — not the entire page/app. ProseMirror handles this natively when focused, but if focus leaks or the event bubbles, the browser's default select-all kicks in and highlights the sidebar/page list too. Ensure the editor traps `Cmd+A` when it has focus. If the editor is NOT focused (e.g. focus is on page list or sidebar), `Cmd+A` should do nothing or select within that context — never cross panel boundaries.
-
-- [ ] **GOO-108** Tab key behavior in editor _(High)_
-  Tab inside the editor should indent the cursor / list items / task items (standard editor behavior), NOT move focus to the next focusable DOM element. Currently Tab may be bubbling to the browser's default tab-index navigation. Fix: intercept Tab/Shift+Tab in the editor's ProseMirror keymap. In lists: indent/outdent. In code blocks: insert tab character (2 spaces). Outside lists/code: either indent the paragraph or do nothing (NOT move focus). Shift+Tab in lists: outdent. `Esc` should be the explicit way to leave the editor and return focus to the app shell (page list).
-
-- [ ] **GOO-111** Escape key exits editor focus _(High)_
-  Pressing `Esc` when the editor is focused should blur the editor and return focus to the page list panel. This is the primary "exit" gesture — users should never feel trapped in the editor. Considerations:
-  - If a slash menu, bubble menu, or any popover is open, first `Esc` closes the popover; second `Esc` exits the editor.
-  - If text is selected, first `Esc` deselects (collapses to cursor); second `Esc` exits.
-  - On exit: `editor.commands.blur()`, then focus the active page item in the page list (so `J`/`K` navigation works immediately).
-  - `Enter` on a page list item should re-focus the editor (round-trip: Esc out → navigate → Enter back in).
-  - Wire via ProseMirror keymap (`Escape` handler) inside `EditorPane`, not the global keyboard registry (avoid conflict with modal/popover Esc handling).
 
 - [ ] **GOO-112** Link editing UI _(Medium)_ — **requires GOO-104**
   Link extension is installed (`@tiptap/extension-link`) with autolink + link-on-paste, but there's no interactive UI to add/edit/remove links. Users need: (1) a way to add a link to selected text (bubble menu button, GOO-104 dependency), (2) clicking an existing link shows a small popover with URL + edit/unlink buttons, (3) `Cmd+K` shortcut to insert/edit link (standard across Google Docs, Notion, Obsidian). Component: `apps/desktop/src/features/editor/components/LinkPopover.tsx`.
@@ -151,11 +135,16 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 <!-- END BUNDLE -->
 
+- [] **GOO-108** Tab key behavior in editor _(High)_
+  Tab/Shift+Tab intercepted — no longer moves browser focus. Lists: indent/outdent ✓. Task items: indent/outdent ✓. Code blocks: insert/remove 2 spaces ✓. **Remaining:** Tab in normal paragraphs should insert/remove indentation (insertText with spaces not working in paragraph nodes — needs investigation).
+
+
 - [ ] **GOO-35** Priority selector _(Medium)_
   Icon-based: None (— muted), Urgent (!! red), High (! orange), Medium (·· yellow), Low (· blue). Linear-inspired. Dropdown in metadata header. Shown as colored badge in page list. Writes `priority` column (0–4).
 
 - [ ] **GOO-113** Editor accessibility _(High)_
   The editor needs WCAG 2.1 AA compliance per project standards. Currently missing: `role="textbox"` and `aria-label` on the editor container, `aria-live` region for save state announcements, visible focus indicator on the editor container, keyboard-accessible task list checkboxes, placeholder text announced to screen readers (currently CSS-only). Should be done alongside or right after GOO-106 (keyboard scope).
+  **Note (from GOO-111):** Add `tabIndex={-1}` to the root `<div>` in `PageListItem.tsx` so that after Escape blurs the editor, the active page list item is properly focusable and receives visual focus. Currently the div is not natively focusable so `el.focus()` silently no-ops.
 
 - [ ] **GOO-105** Editor drag handle _(Medium)_
   Hover left of any block to show a grip icon for drag-reorder. Custom ProseMirror NodeView plugin (the official `@tiptap/extension-drag-handle` is paid). Grip appears on hover with subtle fade-in. Drag creates a drop indicator line between blocks. Works with all block types (paragraphs, headings, lists, code blocks). Component: `apps/desktop/src/features/editor/components/DragHandle.tsx`. Before you get started on this one - are you intending to build this functionality from scratch since the dep is paid? How complex would this task be? Worth building in its current task priority?
