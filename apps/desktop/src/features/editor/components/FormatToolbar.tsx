@@ -19,6 +19,7 @@ import {
 
 interface FormatToolbarProps {
   editor: Editor;
+  onAddLink?: () => void;
 }
 
 interface ToolbarButton {
@@ -32,7 +33,7 @@ interface ButtonGroup {
   buttons: ToolbarButton[];
 }
 
-export function FormatToolbar({ editor }: FormatToolbarProps) {
+export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
   const {
     isBold,
     isItalic,
@@ -147,12 +148,10 @@ export function FormatToolbar({ editor }: FormatToolbarProps) {
           isActive: isLink,
           command: () => {
             if (isLink) {
-              editor.chain().focus().unsetLink().run();
+              editor.chain().focus().extendMarkRange("link").unsetLink().run();
               return;
             }
-            const url = window.prompt("URL");
-            if (!url) return;
-            editor.chain().focus().setLink({ href: url }).run();
+            onAddLink?.();
           },
         },
       ],
@@ -160,7 +159,7 @@ export function FormatToolbar({ editor }: FormatToolbarProps) {
   ];
 
   return (
-    <div className="flex items-center gap-1 border-b border-border px-4 py-1.5">
+    <div data-format-toolbar className="flex items-center gap-1 border-b border-border px-4 py-1.5">
       {groups.map((group, gi) => (
         <div key={gi} className="flex items-center">
           {gi > 0 && <div className="mx-1.5 h-4 w-px bg-border" />}

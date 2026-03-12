@@ -20,7 +20,9 @@ import { useEditorPage } from "../hooks/useEditorPage";
 import type { JSONContent } from "@tiptap/react";
 import { SlashMenuExtension } from "./SlashMenu";
 import { FormatToolbar } from "./FormatToolbar";
+import { LinkPopover } from "./LinkPopover";
 import { TabIndent } from "../extensions/TabIndent";
+import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 // ─── Extensions ────────────────────────────────────────────────────────────────
 
@@ -154,6 +156,22 @@ export function EditorPane() {
     onBlur: () => Keyboard.popScope("editor"),
   });
 
+  // ─── Prevent native <a> navigation inside editor ───────────────────────────
+  // Links are rendered as <a> by Tiptap but clicking should only place the cursor
+  // (the LinkPopover handles opening links explicitly via its Open button).
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom;
+    function handleClick(e: Event) {
+      const target = (e as MouseEvent).target as HTMLElement;
+      if (target.closest("a")) {
+        e.preventDefault();
+      }
+    }
+    dom.addEventListener("click", handleClick);
+    return () => dom.removeEventListener("click", handleClick);
+  }, [editor]);
+
   // ─── Page switch: load content into existing editor instance ──────────────
   // All mutations here are refs or external system calls (Tiptap) — no setState.
 
@@ -222,6 +240,18 @@ export function EditorPane() {
   // Expose save state for the save indicator (MetadataHeader will consume this via context later)
   const saveState = saveError ? "error" : isSaving ? "saving" : isDirty ? "dirty" : "clean";
 
+  // ─── Link popover state ───────────────────────────────────────────────────
+  const [isAddingLink, setIsAddingLink] = useState(false);
+
+  useKeyboardShortcut(
+    "Mod+K",
+    () => {
+      if (!editor) return;
+      setIsAddingLink(true);
+    },
+    { scope: "editor", allowInInputs: true }
+  );
+
   // ─── Empty state ─────────────────────────────────────────────────────────
 
   if (!page && !isLoading) {
@@ -250,7 +280,16 @@ export function EditorPane() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden" data-save-state={saveState}>
-      {editor && <FormatToolbar editor={editor} />}
+      {editor && (
+        <>
+          <FormatToolbar editor={editor} onAddLink={() => setIsAddingLink(true)} />
+          <LinkPopover
+            editor={editor}
+            isAddingLink={isAddingLink}
+            onAddingLinkChange={setIsAddingLink}
+          />
+        </>
+      )}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         <div
