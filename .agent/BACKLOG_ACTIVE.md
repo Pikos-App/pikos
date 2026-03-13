@@ -11,26 +11,17 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 _Goal: every interaction in the editor and page header feels complete and intentional._
 
-### Metadata Header (dependency anchor — do first)
 
-- [ ] **GOO-32** Collapsible metadata header _(Urgent)_
-  ```
-  ┌──────────────────────────────────────────┐
-  │ ● My Page Title                  [↑ hide]│  ← collapsed (title always visible)
-  ├──────────────────────────────────────────┤
-  │ ○ Status  ↑ Priority  📅 Mar 3 · 3pm  #tag│  ← expanded row 1
-  │ Description: One-sentence summary…       │  ← expanded row 2
-  │ Parent: / Project Alpha                  │  ← expanded row 3
-  └──────────────────────────────────────────┘
-  ```
-  Title always visible, inline-editable. Expand/collapse: CSS `grid-template-rows: 0 → 1fr` (no layout jump). Persist state per-page in localStorage. `Cmd+Shift+M` toggle. `Tab` through fields. `Esc` returns focus to editor. Rendered by `EditorPanel`, not the editor itself. See `features/metadata.md`.
-  **Note:** Subtitle/description field was removed from above the editor (GOO-109 follow-up) — it now lives here alongside status/priority/tags. Still stored in `pages.subtitle` column. Used in page list previews and calendar blocks.
-
-- [ ] **GOO-33** Page status toggle _(High)_
-  Three-state cycle: `not_started` (○) → `in_progress` (◑) → `done` (✓). Click cycles. Done: strikethrough + muted in pages list, `completedAt` set. Writes to `status` DB column. Icon in both page list + metadata header. I actually don't think we need the in_progress status - thoughts?
 
 - [ ] **GOO-35** Priority selector _(Medium)_
   Icon-based: None (— muted), Urgent (!! red), High (! orange), Medium (·· yellow), Low (· blue). Linear-inspired. Dropdown in metadata header. Shown as colored badge in page list. Writes `priority` column (0–4).
+
+- [ ] **GOO-115** Optimistic page state updates _(High)_
+  All metadata mutations (title, subtitle, status, priority, tags, scheduled date) must update the UI immediately — before the DB write resolves. On DB error, roll back to the previous value and surface an error state (exact error UI TBD — likely tied to GOO-36 save indicator error state).
+  - `WorkspaceContext` holds `pages[]` as source of truth — mutations should update that array synchronously before calling the Tauri command
+  - Pattern: snapshot old value → apply optimistic update to context → fire DB write → on error, restore snapshot
+  - Affects: `MetadataHeader` (title, subtitle, status, priority, scheduled), `FolderItem`/page list (title, status, priority chips), any future calendar block edits
+  - Consider a thin `useOptimisticPage(pageId)` hook that wraps `updatePage` and owns the rollback logic, so each callsite doesn't reimplement it
 
 - [ ] **GOO-36** Save indicator UI _(Urgent)_ — **requires GOO-32**
   The `useAutosave` hook and editor content debounce are already shipped (GOO-10). What remains:
@@ -149,6 +140,9 @@ _Goal: every interaction in the editor and page header feels complete and intent
 
 - [ ] **GOO-108** Tab key behavior in editor _(High)_
   Tab/Shift+Tab intercepted — no longer moves browser focus. Lists: indent/outdent ✓. Task items: indent/outdent ✓. Code blocks: insert/remove 2 spaces ✓. **Remaining:** Tab in normal paragraphs should insert/remove indentation (insertText with spaces not working in paragraph nodes — needs investigation).
+
+- [ ] **GOO-114** Bubble format toolbar _(Medium)_ — **replaces removed persistent FormatToolbar**
+  Selection-triggered floating toolbar. Appears anchored above the selection when text is selected in the editor. Buttons: Bold, Italic, Underline, Strikethrough, Code, Link (triggers LinkPopover), H1/H2/H3, bullet list, ordered list. Hides on click-outside or selection collapse. Use Tiptap's `BubbleMenu` component (`@tiptap/extension-bubble-menu` — already part of `@tiptap/starter-kit` peer deps). Position: above selection, centered, with a subtle drop-shadow and border. `FormatToolbar.tsx` contains all the button logic — reuse it inside `BubbleMenu`.
 
 - [ ] **GOO-112** Link editing UI _(Medium)_ — **requires GOO-104**
   Link extension is installed (`@tiptap/extension-link`) with autolink + link-on-paste, but there's no interactive UI to add/edit/remove links. Users need: (1) a way to add a link to selected text (bubble menu button, GOO-104 dependency), (2) clicking an existing link shows a small popover with URL + edit/unlink buttons, (3) `Cmd+K` shortcut to insert/edit link (standard across Google Docs, Notion, Obsidian). Component: `apps/desktop/src/features/editor/components/LinkPopover.tsx`.

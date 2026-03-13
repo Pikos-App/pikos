@@ -1,5 +1,6 @@
 // EditorPanel — right panel. Toggles between editor and calendar via Cmd+Shift+C.
-// SidebarToggle button (top-left) collapses/expands both left panels via Cmd+\.
+// Sidebar toggle is a persistent button at the top-left corner of this panel —
+// always accessible regardless of page state or which view is active.
 
 import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -10,38 +11,40 @@ import { EditorPane } from "@/features/editor";
 export function EditorPanel() {
   const ui = useUI();
 
-  function togglePanel() {
-    ui.setRightPanel(ui.rightPanel === "editor" ? "calendar" : "editor");
-  }
+  useKeyboardShortcut(
+    "Mod+Shift+C",
+    () => {
+      ui.setRightPanel(ui.rightPanel === "editor" ? "calendar" : "editor");
+    },
+    { allowInInputs: true }
+  );
 
-  function toggleSidebar() {
-    ui.setSidebarCollapsed(!ui.sidebarCollapsed);
-  }
-
-  useKeyboardShortcut("Mod+Shift+C", togglePanel, { allowInInputs: true });
-  useKeyboardShortcut("Mod+\\", toggleSidebar, { allowInInputs: true });
+  useKeyboardShortcut(
+    "Mod+\\",
+    () => {
+      ui.setSidebarCollapsed(!ui.sidebarCollapsed);
+    },
+    { allowInInputs: true }
+  );
 
   return (
-    <div className="flex flex-1 flex-col bg-background">
-      <div className="flex items-center border-b border-border px-2 py-1.5">
+    <div className="relative flex flex-1 flex-col bg-background">
+      {/* Sidebar toggle — persistent, always visible, top-left corner of editor panel */}
+      <div className="absolute top-2 left-2 z-10">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
-              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              onClick={toggleSidebar}
-              aria-label="Toggle sidebar"
+              onClick={() => ui.setSidebarCollapsed(!ui.sidebarCollapsed)}
+              aria-label={ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-muted-foreground"
             >
               {ui.sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Toggle sidebar ⌘\</TooltipContent>
+          <TooltipContent side="bottom">
+            {ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} ⌘\
+          </TooltipContent>
         </Tooltip>
-
-        <div className="flex-1" />
-
-        <span className="pr-2 text-xs text-muted-foreground">
-          {ui.rightPanel === "editor" ? "Editor" : "Calendar"}
-        </span>
       </div>
 
       {ui.rightPanel === "editor" ? (

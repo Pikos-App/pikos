@@ -1,5 +1,6 @@
 // EditorPane — Tiptap WYSIWYG editor. Reuses a single ProseMirror instance
 // across page switches (setContent instead of destroy/recreate) for instant switching.
+// MetadataHeader (title, subtitle, status/priority/date/tags) sits above this component.
 
 import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -14,12 +15,11 @@ import { Markdown } from "tiptap-markdown";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { extractText } from "@pikos/core";
-import type { Page } from "@pikos/core";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
+import { MetadataHeader } from "./MetadataHeader";
 import type { JSONContent } from "@tiptap/react";
 import { SlashMenuExtension } from "./SlashMenu";
-import { FormatToolbar } from "./FormatToolbar";
 import { LinkPopover } from "./LinkPopover";
 import { TabIndent } from "../extensions/TabIndent";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -52,79 +52,6 @@ const extensions = [
   SlashMenuExtension,
   TabIndent,
 ];
-
-// ─── TitleSubtitleFields ───────────────────────────────────────────────────────
-// Rendered above the editor. Uses key={page.id} in parent so state resets on
-// page switch; useAutosave flushes on unmount (covers page switch + app close).
-
-interface TitleFieldProps {
-  page: Page;
-  onFocusEditor: () => void;
-}
-
-function TitleField({ page, onFocusEditor }: TitleFieldProps) {
-  const { updatePage } = useWorkspace();
-  const [isFocused, setIsFocused] = useState(false);
-
-  const [titleValue, setTitleValue] = useState(page.title ?? "");
-
-  // Detect external title changes (e.g. page list rename) — derive during render.
-  // Always update prevExternalTitle so we don't re-trigger on the same value,
-  // but only apply to titleValue when the field isn't focused — prevents our own
-  // autosave round-trip from reverting in-progress edits.
-  // See: https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
-  const [prevExternalTitle, setPrevExternalTitle] = useState(page.title ?? "");
-  if ((page.title ?? "") !== prevExternalTitle) {
-    setPrevExternalTitle(page.title ?? "");
-    if (!isFocused) {
-      setTitleValue(page.title ?? "");
-    }
-  }
-
-  const { flush } = useAutosave(
-    titleValue,
-    (val) => {
-      updatePage(page.id, { title: val });
-      return Promise.resolve();
-    },
-    { delay: 500 }
-  );
-
-  useEffect(() => {
-    function handleBlur() {
-      void flush();
-    }
-    window.addEventListener("blur", handleBlur);
-    return () => window.removeEventListener("blur", handleBlur);
-  }, [flush]);
-
-  return (
-    <div className="mb-6">
-      <input
-        type="text"
-        value={titleValue}
-        onChange={(e) => setTitleValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onFocusEditor();
-          }
-        }}
-        onFocus={(e) => {
-          setIsFocused(true);
-          const el = e.target;
-          requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
-        }}
-        onBlur={() => {
-          setIsFocused(false);
-        }}
-        autoComplete="off"
-        placeholder="Untitled"
-        className="w-full bg-transparent text-4xl font-bold tracking-tight outline-none placeholder:text-muted-foreground/30"
-      />
-    </div>
-  );
-}
 
 // ─── EditorPane ────────────────────────────────────────────────────────────────
 
@@ -280,27 +207,24 @@ export function EditorPane() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden" data-save-state={saveState}>
+      {page && (
+        <MetadataHeader key={page.id} page={page} onFocusEditor={() => editor?.commands.focus()} />
+      )}
       {editor && (
-        <>
-          <FormatToolbar editor={editor} onAddLink={() => setIsAddingLink(true)} />
-          <LinkPopover
-            editor={editor}
-            isAddingLink={isAddingLink}
-            onAddingLinkChange={setIsAddingLink}
-          />
-        </>
+        <LinkPopover
+          editor={editor}
+          isAddingLink={isAddingLink}
+          onAddingLinkChange={setIsAddingLink}
+        />
       )}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         <div
-          className="mx-auto min-h-full w-full max-w-[720px] cursor-text px-8 py-6"
+          className="mx-auto min-h-full w-full max-w-[720px] cursor-text px-8 pt-3 pb-8"
           onClick={(e) => {
             if (e.target === e.currentTarget) editor?.commands.focus("end");
           }}
         >
-          {page && (
-            <TitleField key={page.id} page={page} onFocusEditor={() => editor?.commands.focus()} />
-          )}
           <EditorContent editor={editor} />
         </div>
       </div>

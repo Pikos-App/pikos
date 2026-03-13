@@ -37,7 +37,7 @@ export function FolderList() {
   const [isPageOverInbox, setIsPageOverInbox] = useState(false);
   useDndMonitor({
     onDragOver({ active, over }) {
-      setIsPageOverInbox(over?.id === "inbox-drop" && active.data.current?.type === "page");
+      setIsPageOverInbox(over?.id === "inbox-drop" && active.data.current?.["type"] === "page");
     },
     onDragEnd() {
       setIsPageOverInbox(false);

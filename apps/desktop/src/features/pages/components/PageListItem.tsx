@@ -167,7 +167,6 @@ export function PageListItem({
   const { inputRef, prepareRenameFromMenu, contextMenuContentProps } = useInlineRename(isRenaming);
 
   useMinuteTick();
-  const isDone = page.status === "done";
 
   function commit() {
     const trimmed = inputRef.current?.value.trim() ?? "";
@@ -202,16 +201,17 @@ export function PageListItem({
           <button
             className={cn(
               "mt-0.5 flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-[2px] border transition-colors",
-              isDone
+              page.status === "done"
                 ? "border-foreground/40 bg-foreground/10"
                 : "border-muted-foreground/40 hover:border-foreground/60"
             )}
+            aria-label={page.status === "done" ? "Mark not done" : "Mark done"}
             onClick={(e) => {
               e.stopPropagation();
               onToggleStatus();
             }}
           >
-            {isDone && <Check size={8} strokeWidth={2.5} />}
+            {page.status === "done" && <Check size={8} strokeWidth={2.5} />}
           </button>
 
           {/* Content */}
@@ -222,7 +222,7 @@ export function PageListItem({
                   className={cn(
                     "block truncate leading-snug font-medium",
                     isRenaming && "invisible",
-                    isDone && "text-muted-foreground line-through"
+                    page.status === "done" && "text-muted-foreground line-through"
                   )}
                 >
                   {page.title || "Untitled"}

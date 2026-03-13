@@ -76,5 +76,7 @@ Status: `[ ]` pending · `[-]` superseded/deferred/do not start
 - [-] **GOO-84** Discord bot — post GOO-82.
 - [-] **GOO-85** WhatsApp / Signal integration — post GOO-84, approach TBD.
 - [-] **GOO-86** Proactive notifications via messaging — post GOO-83.
+- [-] **GOO-99** Settings toggle to disable the status system _(Low)_
+  Settings > General > "Use status & tasks" toggle. When off, the status checkbox+label is hidden from the metadata byline and page list items, and smart views (Today/Inbox) still function but without status-based filtering. Intended for pure note-taking users who find task UI noisy.
 - [-] **GOO-6** Component library repo — absorbed into `packages/ui` in monorepo.
 - [-] **GOO-42** First-run + onboarding — superseded by GOO-15 (auto-creates workspace at appDataDir).

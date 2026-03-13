@@ -62,7 +62,7 @@ export function FolderItem({
   const [isPageOver, setIsPageOver] = useState(false);
   useDndMonitor({
     onDragOver({ active, over }) {
-      setIsPageOver(over?.id === folder.id && active.data.current?.type === "page");
+      setIsPageOver(over?.id === folder.id && active.data.current?.["type"] === "page");
     },
     onDragEnd() {
       setIsPageOver(false);
