@@ -35,6 +35,8 @@ export interface WorkspaceContextValue {
   tags: Tag[];
   /** True while the workspace is being initialised or data is being loaded. */
   isLoading: boolean;
+  /** Reload pages + folders from the DB (e.g. after an external seed). */
+  reload: () => Promise<void>;
   /** First-launch: create default workspace + connect. Subsequent: already handled on mount. */
   selectWorkspace: () => Promise<void>;
   createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
@@ -346,6 +348,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setPages((prev) => prev.map((p) => (p.folderId === id ? { ...p, folderId: null } : p)));
   }
 
+  async function reload() {
+    await loadWorkspaceDataRef.current();
+  }
+
   async function reorderFolders(orderedIds: string[]) {
     await adapter.reorderFolders(orderedIds);
     setFolders((prev) => {
@@ -385,6 +391,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     deleteFolder,
     reorderPages,
     reorderFolders,
+    reload,
     on,
   };
 

@@ -7,7 +7,12 @@
     <script>
       (function () {
         var t = localStorage.getItem("pikos-theme");
-        if (t !== "light") document.documentElement.classList.add("dark");
+        // "system" follows OS preference; anything else (including null) defaults to dark.
+        var dark =
+          t === "system"
+            ? window.matchMedia("(prefers-color-scheme: dark)").matches
+            : t !== "light";
+        if (dark) document.documentElement.classList.add("dark");
       })();
     </script>
   </head>

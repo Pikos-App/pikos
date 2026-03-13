@@ -28,6 +28,9 @@ export interface UIContextValue {
   /** Per-view sort mode. Persisted to localStorage. */
   getSortMode: (viewId: string) => SortMode;
   setSortMode: (viewId: string, mode: SortMode) => void;
+  /** Settings overlay open state. */
+  settingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
 }
 
 const UIContext = createContext<UIContextValue | null>(null);
@@ -39,6 +42,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [activeViewId, setActiveViewId] = useState<ActiveViewId>("inbox");
   const [rightPanel, setRightPanel] = useState<"editor" | "calendar">("editor");
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sortModes, setSortModes] = useLocalStorage<Record<string, SortMode>>(
     "pikos:sortModes",
     {}
@@ -69,6 +73,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setSidebarCollapsed,
     getSortMode,
     setSortMode,
+    settingsOpen,
+    setSettingsOpen,
   };
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

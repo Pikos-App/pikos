@@ -6,10 +6,16 @@ import { ErrorBoundary } from "@/shared/ErrorBoundary";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { WelcomeScreen } from "@/features/workspace/WelcomeScreen";
 import { ThreePanelLayout } from "@/features/layout/ThreePanelLayout";
+import { SettingsPage } from "@/features/settings/SettingsPage";
 
 function AppShell() {
   useKeyboardListener();
-  return <ThreePanelLayout />;
+  return (
+    <>
+      <ThreePanelLayout />
+      <SettingsPage />
+    </>
+  );
 }
 
 function WorkspaceGate() {

@@ -1,6 +1,7 @@
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
 
+pub mod dev;
 pub mod folders;
 pub mod pages;
 pub mod schedules;
