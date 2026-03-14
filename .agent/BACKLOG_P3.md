@@ -80,3 +80,6 @@ Status: `[ ]` pending · `[-]` superseded/deferred/do not start
   Settings > General > "Use status & tasks" toggle. When off, the status checkbox+label is hidden from the metadata byline and page list items, and smart views (Today/Inbox) still function but without status-based filtering. Intended for pure note-taking users who find task UI noisy.
 - [-] **GOO-6** Component library repo — absorbed into `packages/ui` in monorepo.
 - [-] **GOO-42** First-run + onboarding — superseded by GOO-15 (auto-creates workspace at appDataDir).
+
+## misc backlog notes - to be sorted.
+- [-] Add settings for priority - allow users to turn on priority coloring in the page item list (either colored checkboxes or colored dot next to the date). Default off in the list. Already implemented: show in the page / allow to sort list by priority

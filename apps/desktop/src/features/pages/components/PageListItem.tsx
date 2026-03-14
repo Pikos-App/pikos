@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
-import type { Folder, PageSummary } from "@pikos/core";
+import type { Folder, PagePriority, PageSummary } from "@pikos/core";
 
 // Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p
 function formatTime(date: Date): string {
@@ -137,6 +137,7 @@ interface PageListItemProps {
   onDelete: () => void;
   onMoveToFolder: (folderId: string | null) => void;
   onToggleStatus: () => void;
+  onPriorityChange: (priority: PagePriority) => void;
   showRelative?: boolean;
   onToggleDateFormat?: () => void;
 }
@@ -155,6 +156,7 @@ export function PageListItem({
   onDelete,
   onMoveToFolder,
   onToggleStatus,
+  onPriorityChange: _onPriorityChange,
   showRelative = false,
   onToggleDateFormat,
 }: PageListItemProps) {
@@ -197,13 +199,17 @@ export function PageListItem({
             onRenameStart();
           }}
         >
-          {/* Checkbox */}
+          {/* Checkbox — border color encodes priority when not done */}
           <button
             className={cn(
               "mt-0.5 flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-[2px] border transition-colors",
               page.status === "done"
                 ? "border-foreground/40 bg-foreground/10"
-                : "border-muted-foreground/40 hover:border-foreground/60"
+                : page.priority === 1
+                  ? "border-red-500 hover:border-red-400"
+                  : page.priority === 2
+                    ? "border-orange-500 hover:border-orange-400"
+                    : "border-muted-foreground/40 hover:border-foreground/60"
             )}
             aria-label={page.status === "done" ? "Mark not done" : "Mark done"}
             onClick={(e) => {
@@ -247,27 +253,29 @@ export function PageListItem({
                   />
                 )}
               </div>
-              {page.scheduledStart &&
-                (() => {
-                  const { label, isPast, tooltip } = showRelative
-                    ? formatRelativeTime(page.scheduledStart)
-                    : formatDate(page.scheduledStart);
-                  return (
-                    <span
-                      title={tooltip}
-                      className={cn(
-                        "shrink-0 cursor-pointer text-[11px] leading-snug hover:opacity-80",
-                        isPast ? "text-red-500" : "text-muted-foreground"
-                      )}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleDateFormat?.();
-                      }}
-                    >
-                      {label}
-                    </span>
-                  );
-                })()}
+              <div className="flex shrink-0 items-center gap-1.5">
+                {page.scheduledStart &&
+                  (() => {
+                    const { label, isPast, tooltip } = showRelative
+                      ? formatRelativeTime(page.scheduledStart)
+                      : formatDate(page.scheduledStart);
+                    return (
+                      <span
+                        title={tooltip}
+                        className={cn(
+                          "shrink-0 cursor-pointer text-[11px] leading-snug hover:opacity-80",
+                          isPast ? "text-red-500" : "text-muted-foreground"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleDateFormat?.();
+                        }}
+                      >
+                        {label}
+                      </span>
+                    );
+                  })()}
+              </div>
             </div>
             {page.subtitle && (
               <p className="mt-0.5 truncate text-xs text-muted-foreground">{page.subtitle}</p>

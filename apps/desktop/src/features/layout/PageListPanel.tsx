@@ -39,6 +39,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
     handleDeleteCancel,
     handleMoveToFolder,
     handleToggleStatus,
+    handlePriorityChange,
     handleSelectPage,
   } = usePageList();
   const { activeViewId, sidebarCollapsed, setSidebarCollapsed, getSortMode, setSortMode } = useUI();
@@ -130,6 +131,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
         dragDisabled={sortMode !== "manual"}
         onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
         onToggleStatus={() => handleToggleStatus(page.id, page.status)}
+        onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
         showRelative={showRelative}
         onToggleDateFormat={toggleDateFormat}
       />
@@ -162,6 +164,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
                   [
                     { value: "date", label: "Date" },
                     { value: "title", label: "Title" },
+                    { value: "priority", label: "Priority" },
                     { value: "manual", label: "Manual" },
                   ] as { value: SortMode; label: string }[]
                 ).map(({ value, label }) => (

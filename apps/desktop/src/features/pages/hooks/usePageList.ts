@@ -7,7 +7,7 @@ import {
   getVisiblePages,
   sortPages,
 } from "@/features/pages/utils/pageFilters";
-import type { PageSummary, PageStatus } from "@pikos/core";
+import type { PagePriority, PageSummary, PageStatus } from "@pikos/core";
 
 export function usePageList() {
   const { pages, folders, createPage, updatePage, deletePage } = useWorkspace();
@@ -74,6 +74,10 @@ export function usePageList() {
     });
   }
 
+  function handlePriorityChange(pageId: string, priority: PagePriority) {
+    updatePage(pageId, { priority });
+  }
+
   return {
     visiblePages,
     completedTodayPages,
@@ -90,6 +94,7 @@ export function usePageList() {
     handleDeleteCancel,
     handleMoveToFolder,
     handleToggleStatus,
+    handlePriorityChange,
     handleSelectPage: (page: PageSummary | string | null) => {
       setActivePage(page);
       if (page !== null) setRightPanel("editor");

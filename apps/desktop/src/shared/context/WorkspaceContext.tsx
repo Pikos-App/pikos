@@ -50,6 +50,10 @@ export interface WorkspaceContextValue {
   deleteFolder: (id: string) => Promise<void>;
   reorderPages: (folderId: string | null, orderedIds: string[]) => Promise<void>;
   reorderFolders: (orderedIds: string[]) => Promise<void>;
+  /** Create or update the one-off schedule block for a page. */
+  scheduleOnce: (pageId: string, start: string, end?: string) => Promise<void>;
+  /** Delete all one-off schedule blocks for a page. */
+  clearSchedule: (pageId: string) => Promise<void>;
   on: <E extends WorkspaceEvent>(
     event: E,
     handler: (payload: EventPayloadMap[E]) => void
@@ -348,6 +352,60 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setPages((prev) => prev.map((p) => (p.folderId === id ? { ...p, folderId: null } : p)));
   }
 
+  async function scheduleOnce(pageId: string, start: string, end?: string): Promise<void> {
+    // Optimistic update
+    setPages((prev) =>
+      prev.map((p) =>
+        p.id === pageId ? { ...p, scheduledStart: start, scheduledEnd: end ?? null } : p
+      )
+    );
+    try {
+      const schedules = await adapter.listPageSchedules(pageId);
+      const existing = schedules.find((s) => !s.ruleId);
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (existing) {
+        await adapter.updatePageSchedule(existing.id, {
+          scheduledStart: start,
+          scheduledEnd: end ?? null,
+        });
+      } else {
+        await adapter.createPageSchedule({
+          pageId,
+          scheduledStart: start,
+          scheduledEnd: end,
+          timezone: tz,
+        });
+      }
+    } catch (e) {
+      // Revert on failure
+      const page = await adapter.getPage(pageId);
+      if (page) {
+        const { content: _, contentText: _ct, ...summary } = page;
+        setPages((prev) => prev.map((p) => (p.id === pageId ? summary : p)));
+      }
+      throw e;
+    }
+  }
+
+  async function clearSchedule(pageId: string): Promise<void> {
+    // Optimistic update
+    setPages((prev) =>
+      prev.map((p) => (p.id === pageId ? { ...p, scheduledStart: null, scheduledEnd: null } : p))
+    );
+    try {
+      const schedules = await adapter.listPageSchedules(pageId);
+      const oneOffs = schedules.filter((s) => !s.ruleId);
+      await Promise.all(oneOffs.map((s) => adapter.deletePageSchedule(s.id)));
+    } catch (e) {
+      const page = await adapter.getPage(pageId);
+      if (page) {
+        const { content: _, contentText: _ct, ...summary } = page;
+        setPages((prev) => prev.map((p) => (p.id === pageId ? summary : p)));
+      }
+      throw e;
+    }
+  }
+
   async function reload() {
     await loadWorkspaceDataRef.current();
   }
@@ -391,6 +449,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     deleteFolder,
     reorderPages,
     reorderFolders,
+    scheduleOnce,
+    clearSchedule,
     reload,
     on,
   };

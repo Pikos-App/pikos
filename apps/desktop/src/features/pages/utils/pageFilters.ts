@@ -1,6 +1,6 @@
 import type { PageSummary } from "@pikos/core";
 
-export type SortMode = "manual" | "date" | "title";
+export type SortMode = "manual" | "date" | "title" | "priority";
 
 /** Local YYYY-MM-DD string (avoids UTC date mismatch in late-evening timezones). */
 function localToday(): string {
@@ -43,6 +43,21 @@ export function sortPages(pages: PageSummary[], mode: SortMode): PageSummary[] {
   }
   if (mode === "title") {
     return [...pages].sort((a, b) => a.title.localeCompare(b.title));
+  }
+  if (mode === "priority") {
+    // Lower priority number = higher urgency (1=urgent … 4=low). 0=none sinks to bottom.
+    // Within the same priority tier, sort by date ascending (soonest/most overdue first).
+    // Unscheduled items within a tier sort after scheduled ones.
+    return [...pages].sort((a, b) => {
+      const aP = a.priority === 0 ? 5 : a.priority;
+      const bP = b.priority === 0 ? 5 : b.priority;
+      if (aP !== bP) return aP - bP;
+      const aHas = a.scheduledStart != null;
+      const bHas = b.scheduledStart != null;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      if (!aHas) return 0;
+      return toSortMs(a.scheduledStart!) - toSortMs(b.scheduledStart!);
+    });
   }
   // manual — sort by sortOrder ascending
   return [...pages].sort((a, b) => a.sortOrder - b.sortOrder);

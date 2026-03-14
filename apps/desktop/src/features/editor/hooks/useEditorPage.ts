@@ -20,7 +20,7 @@ interface EditorPageState {
  */
 export function useEditorPage(): EditorPageState {
   const { activePageId } = useUI();
-  const { getPage, on } = useWorkspace();
+  const { getPage, on, pages } = useWorkspace();
   const [loadedPage, setLoadedPage] = useState<Page | null>(null);
 
   // Track the ID we're currently loading to avoid race conditions
@@ -52,10 +52,30 @@ export function useEditorPage(): EditorPageState {
     });
   }, [on]);
 
+  // Merge context summary (optimistic state) into loadedPage so that schedule,
+  // status, priority and other metadata changes from scheduleOnce/updatePage
+  // are reflected immediately without waiting for page:updated events.
+  const summary = pages.find((p) => p.id === activePageId);
+
   // Derive: page is only valid when it matches the active selection.
   // When activePageId changes to null or a different ID, page becomes null
   // automatically — no setState needed.
-  const page = activePageId !== null && loadedPage?.id === activePageId ? loadedPage : null;
+  const page: Page | null = (() => {
+    if (activePageId === null || !loadedPage || loadedPage.id !== activePageId) return null;
+    if (!summary) return loadedPage;
+    return {
+      ...loadedPage,
+      scheduledStart: summary.scheduledStart,
+      scheduledEnd: summary.scheduledEnd,
+      status: summary.status,
+      priority: summary.priority,
+      durationMinutes: summary.durationMinutes,
+      title: summary.title,
+      subtitle: summary.subtitle,
+      tags: summary.tags,
+      folderId: summary.folderId,
+    };
+  })();
   const isLoading = activePageId !== null && page === null;
 
   return { page, isLoading };

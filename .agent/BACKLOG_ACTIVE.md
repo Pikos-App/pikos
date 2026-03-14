@@ -13,8 +13,6 @@ _Goal: every interaction in the editor and page header feels complete and intent
 
 
 
-- [ ] **GOO-35** Priority selector _(Medium)_
-  Icon-based: None (— muted), Urgent (!! red), High (! orange), Medium (·· yellow), Low (· blue). Linear-inspired. Dropdown in metadata header. Shown as colored badge in page list. Writes `priority` column (0–4).
 
 - [ ] **GOO-115** Optimistic page state updates _(High)_
   All metadata mutations (title, subtitle, status, priority, tags, scheduled date) must update the UI immediately — before the DB write resolves. On DB error, roll back to the previous value and surface an error state (exact error UI TBD — likely tied to GOO-36 save indicator error state).

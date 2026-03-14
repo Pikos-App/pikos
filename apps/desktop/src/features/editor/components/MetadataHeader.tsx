@@ -1,65 +1,16 @@
 // MetadataHeader — page metadata panel rendered above the editor scroll area.
 // key={page.id} in parent resets all state on page switch.
-// GOO-35/34: priority / date chips become interactive in follow-on tickets.
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Calendar, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useAutosave } from "../hooks/useAutosave";
-import type { Page, PageStatus } from "@pikos/core";
-
-// ─── Date formatting ──────────────────────────────────────────────────────────
-// Parses 'YYYY-MM-DD' as local (not UTC) to avoid day-shift for UTC− timezones.
-
-function formatScheduledDate(iso: string): { label: string; isPast: boolean } {
-  const isAllDay = iso.length === 10;
-  const date = isAllDay
-    ? new Date(parseInt(iso.slice(0, 4)), parseInt(iso.slice(5, 7)) - 1, parseInt(iso.slice(8, 10)))
-    : new Date(iso);
-
-  const now = new Date();
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrowMidnight = new Date(todayMidnight.getTime() + 86_400_000);
-  const isToday = date >= todayMidnight && date < tomorrowMidnight;
-  const isTomorrow =
-    date >= tomorrowMidnight && date < new Date(tomorrowMidnight.getTime() + 86_400_000);
-  const isPast = isAllDay ? date < todayMidnight : date < now;
-
-  if (isToday && !isAllDay) {
-    const h = date.getHours() % 12 || 12;
-    const m = date.getMinutes().toString().padStart(2, "0");
-    const ampm = date.getHours() >= 12 ? "pm" : "am";
-    return { label: `Today ${h}:${m}${ampm}`, isPast: date < now };
-  }
-  if (isToday) return { label: "Today", isPast: false };
-  if (isTomorrow) return { label: "Tomorrow", isPast: false };
-
-  if (!isAllDay) {
-    const h = date.getHours() % 12 || 12;
-    const m = date.getMinutes().toString().padStart(2, "0");
-    const ampm = date.getHours() >= 12 ? "pm" : "am";
-    const dateStr = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return { label: `${dateStr} ${h}:${m}${ampm}`, isPast };
-  }
-
-  return { label: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }), isPast };
-}
+import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
+import { DateSchedulePopover } from "./DateSchedulePopover";
+import type { Page, PagePriority, PageStatus } from "@pikos/core";
 
 // ─── Byline ───────────────────────────────────────────────────────────────────
 // Flat inline metadata row. No pill backgrounds — reads as a document byline.
-// Priority 0 omitted (adds noise without signal).
-// GOO-35/34: priority / date chips become interactive in follow-on tickets.
-
-const PRIORITY_CONFIG: Record<
-  Page["priority"],
-  { label: string; icon: string; className: string } | null
-> = {
-  0: null,
-  1: { label: "Urgent", icon: "!!", className: "text-red-500" },
-  2: { label: "High", icon: "!", className: "text-orange-500" },
-  3: { label: "Medium", icon: "··", className: "text-yellow-500" },
-  4: { label: "Low", icon: "·", className: "text-blue-400/80" },
-};
 
 function BylineSeparator() {
   return (
@@ -72,11 +23,12 @@ function BylineSeparator() {
 function Byline({
   page,
   onStatusChange,
+  onPriorityChange,
 }: {
   page: Page;
   onStatusChange: (status: PageStatus) => void;
+  onPriorityChange: (priority: PagePriority) => void;
 }) {
-  const priorityCfg = PRIORITY_CONFIG[page.priority];
   const isDone = page.status === "done";
 
   return (
@@ -95,41 +47,13 @@ function Byline({
         <span className="inline-block w-[2.5rem]">{isDone ? "Done" : "Open"}</span>
       </button>
 
-      {priorityCfg && (
-        <>
-          <BylineSeparator />
-          {/* Priority — GOO-35: add onClick */}
-          <span
-            className={priorityCfg.className}
-            title={`Priority: ${priorityCfg.label} (coming soon)`}
-          >
-            {priorityCfg.icon} {priorityCfg.label}
-          </span>
-        </>
-      )}
-
-      {/* Date — GOO-34: add onClick */}
+      {/* Priority selector — GOO-35 */}
       <BylineSeparator />
-      {page.scheduledStart ? (
-        (() => {
-          const { label, isPast } = formatScheduledDate(page.scheduledStart);
-          const overdue = isPast && !isDone;
-          return (
-            <span
-              className={`inline-flex items-center gap-1 ${overdue ? "text-red-500" : ""}`}
-              title={`Scheduled: ${label}`}
-            >
-              <Calendar size={15} aria-hidden="true" />
-              {label}
-            </span>
-          );
-        })()
-      ) : (
-        <span className="inline-flex items-center gap-1" title="No date scheduled (coming soon)">
-          <Calendar size={15} aria-hidden="true" />
-          Schedule
-        </span>
-      )}
+      <PriorityDropdown priority={page.priority} onSelect={onPriorityChange} variant="byline" />
+
+      {/* Date — GOO-34 */}
+      <BylineSeparator />
+      <DateSchedulePopover page={page} />
 
       {page.tags.map((tag) => (
         <Fragment key={tag}>
@@ -156,6 +80,10 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
       status,
       completedAt: status === "done" ? new Date().toISOString() : null,
     });
+  }
+
+  function handlePriorityChange(priority: PagePriority) {
+    updatePage(page.id, { priority });
   }
 
   // ── Title ──────────────────────────────────────────────────────────────────
@@ -387,7 +315,11 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
           className={`mt-1 max-h-[4.5rem] w-full resize-none overflow-hidden bg-transparent text-base text-muted-foreground outline-none placeholder:text-muted-foreground/30 ${subtitleShake ? "animate-shake" : ""}`}
         />
 
-        <Byline page={page} onStatusChange={handleStatusChange} />
+        <Byline
+          page={page}
+          onStatusChange={handleStatusChange}
+          onPriorityChange={handlePriorityChange}
+        />
       </div>
     </div>
   );
