@@ -11,6 +11,7 @@
     "test": "turbo test",
     "depcruise": "depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs",
     "prepare": "husky",
+    "check": "bash scripts/check.sh",
     "seed": "tsx scripts/seed/index.ts"
   },
   "dependencies": {

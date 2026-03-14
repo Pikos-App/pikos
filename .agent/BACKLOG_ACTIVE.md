@@ -10,16 +10,7 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 ## Phase 2A — Core Editor & Metadata
 
 _Goal: every interaction in the editor and page header feels complete and intentional._
-
-
-
-
-- [ ] **GOO-115** Optimistic page state updates _(High)_
-  All metadata mutations (title, subtitle, status, priority, tags, scheduled date) must update the UI immediately — before the DB write resolves. On DB error, roll back to the previous value and surface an error state (exact error UI TBD — likely tied to GOO-36 save indicator error state).
-  - `WorkspaceContext` holds `pages[]` as source of truth — mutations should update that array synchronously before calling the Tauri command
-  - Pattern: snapshot old value → apply optimistic update to context → fire DB write → on error, restore snapshot
-  - Affects: `MetadataHeader` (title, subtitle, status, priority, scheduled), `FolderItem`/page list (title, status, priority chips), any future calendar block edits
-  - Consider a thin `useOptimisticPage(pageId)` hook that wraps `updatePage` and owns the rollback logic, so each callsite doesn't reimplement it
+                                                                                               
 
 - [ ] **GOO-36** Save indicator UI _(Urgent)_ — **requires GOO-32**
   The `useAutosave` hook and editor content debounce are already shipped (GOO-10). What remains:

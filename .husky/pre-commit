@@ -1,4 +1,0 @@
-pnpm lint-staged
-pnpm --filter @pikos/desktop exec tsc --noEmit
-pnpm --filter @pikos/core exec tsc --noEmit
-git add -u

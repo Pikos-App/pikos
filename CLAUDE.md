@@ -11,10 +11,8 @@
 ## Post-task checks (mandatory — run after every task before marking done)
 
 ```
-pnpm typecheck                                                    # turbo tsc --noEmit
-pnpm exec turbo lint                                              # ESLint
-pnpm exec prettier --check "apps/desktop/src/**/*.{ts,tsx,css}"  # Prettier check
-# To fix: pnpm exec prettier --write <file>
+pnpm check   # typecheck + lint + prettier + depcruise — all in parallel
+# To fix formatting: pnpm exec prettier --write <file>
 ```
 
 ## End-of-session cleanup (mandatory)
