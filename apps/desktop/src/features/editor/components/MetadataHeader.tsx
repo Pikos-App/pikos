@@ -4,7 +4,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import { useAutosave } from "../hooks/useAutosave";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { DateSchedulePopover } from "./DateSchedulePopover";
 import type { Page, PagePriority, PageStatus } from "@pikos/core";
@@ -73,7 +72,7 @@ interface MetadataHeaderProps {
 }
 
 export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
-  const { updatePage } = useWorkspace();
+  const { updatePage, flushPage } = useWorkspace();
 
   function handleStatusChange(status: PageStatus) {
     updatePage(page.id, {
@@ -98,15 +97,6 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
     setPrevTitle(page.title ?? "");
     if (!titleFocused) setTitleValue(page.title ?? "");
   }
-
-  const { flush: flushTitle } = useAutosave(
-    titleValue,
-    (val) => {
-      updatePage(page.id, { title: val });
-      return Promise.resolve();
-    },
-    { delay: 500 }
-  );
 
   // Auto-resize on valid value changes (no revert logic — handled in onChange/onPaste).
   useEffect(() => {
@@ -137,6 +127,7 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
       return;
     }
     setTitleValue(next);
+    updatePage(page.id, { title: next });
   }
 
   function handleTitlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -162,10 +153,12 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
       }
       el.value = titleValue; // restore; setTitleValue below re-renders correctly
       setTitleValue(next.slice(0, lo));
+      updatePage(page.id, { title: next.slice(0, lo) });
       triggerShake();
     } else {
       el.value = titleValue;
       setTitleValue(next);
+      updatePage(page.id, { title: next });
     }
   }
 
@@ -181,15 +174,6 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
     setPrevSubtitle(page.subtitle ?? "");
     if (!subtitleFocused) setSubtitleValue(page.subtitle ?? "");
   }
-
-  const { flush: flushSubtitle } = useAutosave(
-    subtitleValue,
-    (val) => {
-      updatePage(page.id, { subtitle: val });
-      return Promise.resolve();
-    },
-    { delay: 500 }
-  );
 
   useEffect(() => {
     const el = subtitleRef.current;
@@ -210,6 +194,7 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
       return;
     }
     setSubtitleValue(next);
+    updatePage(page.id, { subtitle: next });
   }
 
   function handleSubtitlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -233,11 +218,13 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
       }
       el.value = subtitleValue;
       setSubtitleValue(next.slice(0, lo));
+      updatePage(page.id, { subtitle: next.slice(0, lo) });
       setSubtitleShake(true);
       setTimeout(() => setSubtitleShake(false), 300);
     } else {
       el.value = subtitleValue;
       setSubtitleValue(next);
+      updatePage(page.id, { subtitle: next });
     }
   }
 
@@ -245,12 +232,11 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
 
   useEffect(() => {
     function handleBlur() {
-      void flushTitle();
-      void flushSubtitle();
+      void flushPage(page.id);
     }
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
-  }, [flushTitle, flushSubtitle]);
+  }, [flushPage, page.id]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

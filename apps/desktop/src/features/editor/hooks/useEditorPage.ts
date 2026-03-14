@@ -63,18 +63,7 @@ export function useEditorPage(): EditorPageState {
   const page: Page | null = (() => {
     if (activePageId === null || !loadedPage || loadedPage.id !== activePageId) return null;
     if (!summary) return loadedPage;
-    return {
-      ...loadedPage,
-      scheduledStart: summary.scheduledStart,
-      scheduledEnd: summary.scheduledEnd,
-      status: summary.status,
-      priority: summary.priority,
-      durationMinutes: summary.durationMinutes,
-      title: summary.title,
-      subtitle: summary.subtitle,
-      tags: summary.tags,
-      folderId: summary.folderId,
-    };
+    return { ...loadedPage, ...summary };
   })();
   const isLoading = activePageId !== null && page === null;
 

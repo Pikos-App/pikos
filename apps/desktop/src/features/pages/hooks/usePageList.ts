@@ -31,6 +31,10 @@ export function usePageList() {
     setRenamingId(page.id);
   }
 
+  function handleRenameChange(id: string, title: string) {
+    updatePage(id, { title });
+  }
+
   function handleRenameCommit(id: string, title: string) {
     updatePage(id, { title });
     setRenamingId(null);
@@ -87,6 +91,7 @@ export function usePageList() {
     setRenamingId,
     pendingDelete,
     handleCreatePage,
+    handleRenameChange,
     handleRenameCommit,
     handleRenameCancel,
     handleDeleteRequest,

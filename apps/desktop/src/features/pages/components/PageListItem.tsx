@@ -132,6 +132,7 @@ interface PageListItemProps {
   folders: Folder[];
   onSelect: () => void;
   onRenameStart: () => void;
+  onRenameChange?: (title: string) => void;
   onRenameCommit: (title: string) => void;
   onRenameCancel: () => void;
   onDelete: () => void;
@@ -151,6 +152,7 @@ export function PageListItem({
   folders,
   onSelect,
   onRenameStart,
+  onRenameChange,
   onRenameCommit,
   onRenameCancel,
   onDelete,
@@ -239,6 +241,7 @@ export function PageListItem({
                     autoComplete="off"
                     className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug font-medium text-foreground outline-none"
                     defaultValue={page.title}
+                    onChange={(e) => onRenameChange?.(e.target.value)}
                     onBlur={commit}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {

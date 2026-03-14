@@ -54,6 +54,10 @@ export interface WorkspaceContextValue {
   scheduleOnce: (pageId: string, start: string, end?: string) => Promise<void>;
   /** Delete all one-off schedule blocks for a page. */
   clearSchedule: (pageId: string) => Promise<void>;
+  /** Per-page error state from failed debounced writes or scheduling mutations. */
+  pageErrors: Map<string, string>;
+  /** Dismiss the error indicator for a page. */
+  clearPageError: (id: string) => void;
   on: <E extends WorkspaceEvent>(
     event: E,
     handler: (payload: EventPayloadMap[E]) => void
@@ -244,8 +248,39 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const pendingPatches = useRef<Map<string, PageUpdate>>(new Map());
   const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const snapshotsRef = useRef<Map<string, PageSummary>>(new Map());
+  const [pageErrors, setPageErrors] = useState<Map<string, string>>(new Map());
+
+  // ─── Per-page mutation queue ───────────────────────────────────────────────
+  // Serialises concurrent DB writes for the same page so that a fast debounced
+  // write and a concurrent scheduleOnce can never interleave or clobber each other.
+
+  const mutationQueues = useRef<Map<string, Promise<void>>>(new Map());
+
+  function enqueue(pageId: string, fn: () => Promise<void>): Promise<void> {
+    const prev = mutationQueues.current.get(pageId) ?? Promise.resolve();
+    // Pass fn as both fulfilment and rejection handler so the queue never stalls
+    // on a previous error.
+    const next = prev.then(fn, fn);
+    mutationQueues.current.set(pageId, next);
+    return next;
+  }
+
+  function clearPageError(id: string): void {
+    setPageErrors((prev) => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  }
 
   function updatePage(id: string, patch: PageUpdate): void {
+    // Snapshot current state before the first pending patch (used for rollback on DB error)
+    if (!pendingPatches.current.has(id)) {
+      const current = pages.find((p) => p.id === id);
+      if (current) snapshotsRef.current.set(id, current);
+    }
+
     // Optimistic local update — instant UI feedback
     setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
 
@@ -262,10 +297,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       pendingPatches.current.delete(id);
       debounceTimers.current.delete(id);
 
-      void adapter.updatePage(id, accumulated).then((updated) => {
-        const { content: _, contentText: _ct, ...summary } = updated;
-        setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
-        emit("page:updated", updated);
+      void enqueue(id, async () => {
+        try {
+          const updated = await adapter.updatePage(id, accumulated);
+          snapshotsRef.current.delete(id);
+          const { content: _, contentText: _ct, ...summary } = updated;
+          setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
+          emit("page:updated", updated);
+        } catch (err: unknown) {
+          const snapshot = snapshotsRef.current.get(id);
+          snapshotsRef.current.delete(id);
+          if (snapshot) {
+            setPages((prev) => prev.map((p) => (p.id === id ? snapshot : p)));
+          }
+          setPageErrors((prev) =>
+            new Map(prev).set(id, err instanceof Error ? err.message : String(err))
+          );
+        }
       });
     }, 800);
 
@@ -281,10 +329,25 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (!accumulated) return;
     pendingPatches.current.delete(id);
 
-    const updated = await adapter.updatePage(id, accumulated);
-    const { content: _, contentText: _ct, ...summary } = updated;
-    setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
-    emit("page:updated", updated);
+    return enqueue(id, async () => {
+      try {
+        const updated = await adapter.updatePage(id, accumulated);
+        snapshotsRef.current.delete(id);
+        const { content: _, contentText: _ct, ...summary } = updated;
+        setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
+        emit("page:updated", updated);
+      } catch (err) {
+        const snapshot = snapshotsRef.current.get(id);
+        snapshotsRef.current.delete(id);
+        if (snapshot) {
+          setPages((prev) => prev.map((p) => (p.id === id ? snapshot : p)));
+        }
+        setPageErrors((prev) =>
+          new Map(prev).set(id, err instanceof Error ? err.message : String(err))
+        );
+        throw err;
+      }
+    });
   }
 
   // ─── Pages ────────────────────────────────────────────────────────────────
@@ -318,7 +381,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
 
   async function reorderPages(folderId: string | null, orderedIds: string[]) {
-    await adapter.reorderPages(folderId, orderedIds);
+    const snapshot = [...pages];
     setPages((prev) => {
       const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
       return prev.map((p) => {
@@ -326,6 +389,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         return newOrder !== undefined ? { ...p, sortOrder: newOrder } : p;
       });
     });
+    try {
+      await adapter.reorderPages(folderId, orderedIds);
+    } catch {
+      setPages(snapshot);
+    }
   }
 
   // ─── Folders ──────────────────────────────────────────────────────────────
@@ -353,65 +421,118 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
 
   async function scheduleOnce(pageId: string, start: string, end?: string): Promise<void> {
+    const snapshot = pages.find((p) => p.id === pageId);
     // Optimistic update
     setPages((prev) =>
       prev.map((p) =>
         p.id === pageId ? { ...p, scheduledStart: start, scheduledEnd: end ?? null } : p
       )
     );
-    try {
-      const schedules = await adapter.listPageSchedules(pageId);
-      const existing = schedules.find((s) => !s.ruleId);
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (existing) {
-        await adapter.updatePageSchedule(existing.id, {
-          scheduledStart: start,
-          scheduledEnd: end ?? null,
-        });
-      } else {
-        await adapter.createPageSchedule({
-          pageId,
-          scheduledStart: start,
-          scheduledEnd: end,
-          timezone: tz,
-        });
+    return enqueue(pageId, async () => {
+      try {
+        const schedules = await adapter.listPageSchedules(pageId);
+        const existing = schedules.find((s) => !s.ruleId);
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (existing) {
+          await adapter.updatePageSchedule(existing.id, {
+            scheduledStart: start,
+            scheduledEnd: end ?? null,
+          });
+        } else {
+          await adapter.createPageSchedule({
+            pageId,
+            scheduledStart: start,
+            ...(end !== undefined && { scheduledEnd: end }),
+            timezone: tz,
+          });
+        }
+      } catch (e) {
+        if (snapshot) {
+          setPages((prev) => prev.map((p) => (p.id === pageId ? snapshot : p)));
+        }
+        setPageErrors((prev) =>
+          new Map(prev).set(pageId, e instanceof Error ? e.message : String(e))
+        );
+        throw e;
       }
-    } catch (e) {
-      // Revert on failure
-      const page = await adapter.getPage(pageId);
-      if (page) {
-        const { content: _, contentText: _ct, ...summary } = page;
-        setPages((prev) => prev.map((p) => (p.id === pageId ? summary : p)));
-      }
-      throw e;
-    }
+    });
   }
 
   async function clearSchedule(pageId: string): Promise<void> {
+    const snapshot = pages.find((p) => p.id === pageId);
     // Optimistic update
     setPages((prev) =>
       prev.map((p) => (p.id === pageId ? { ...p, scheduledStart: null, scheduledEnd: null } : p))
     );
-    try {
-      const schedules = await adapter.listPageSchedules(pageId);
-      const oneOffs = schedules.filter((s) => !s.ruleId);
-      await Promise.all(oneOffs.map((s) => adapter.deletePageSchedule(s.id)));
-    } catch (e) {
-      const page = await adapter.getPage(pageId);
-      if (page) {
-        const { content: _, contentText: _ct, ...summary } = page;
-        setPages((prev) => prev.map((p) => (p.id === pageId ? summary : p)));
+    return enqueue(pageId, async () => {
+      try {
+        const schedules = await adapter.listPageSchedules(pageId);
+        const oneOffs = schedules.filter((s) => !s.ruleId);
+        await Promise.all(oneOffs.map((s) => adapter.deletePageSchedule(s.id)));
+      } catch (e) {
+        if (snapshot) {
+          setPages((prev) => prev.map((p) => (p.id === pageId ? snapshot : p)));
+        }
+        setPageErrors((prev) =>
+          new Map(prev).set(pageId, e instanceof Error ? e.message : String(e))
+        );
+        throw e;
       }
-      throw e;
-    }
+    });
   }
+
+  // ─── Flush on window close ────────────────────────────────────────────────
+  // Tauri's Rust side calls prevent_close() so we get a chance here to flush
+  // any debounced writes, wait for all in-flight mutations, then destroy.
+
+  useEffect(() => {
+    if (import.meta.env["VITE_TEST_MODE"] === "true") return;
+
+    let unlisten: (() => void) | undefined;
+
+    async function register() {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const win = getCurrentWindow();
+      unlisten = await win.onCloseRequested(async (event) => {
+        event.preventDefault();
+
+        // Synchronously cancel all pending timers and add their writes to the queue
+        for (const id of Array.from(pendingPatches.current.keys())) {
+          const timer = debounceTimers.current.get(id);
+          if (timer !== undefined) clearTimeout(timer);
+          debounceTimers.current.delete(id);
+          const accumulated = pendingPatches.current.get(id);
+          if (!accumulated) continue;
+          pendingPatches.current.delete(id);
+          // Inline enqueue: best-effort write, swallow errors since we're closing
+          const prev = mutationQueues.current.get(id) ?? Promise.resolve();
+          const next = prev
+            .then(() => adapter.updatePage(id, accumulated))
+            .then(
+              () => undefined,
+              () => undefined
+            );
+          mutationQueues.current.set(id, next);
+        }
+
+        // Wait for all in-flight mutations (debounced writes + scheduleOnce etc.) to settle
+        await Promise.allSettled(Array.from(mutationQueues.current.values()));
+        await win.destroy();
+      });
+    }
+
+    void register();
+    return () => {
+      unlisten?.();
+    };
+  }, [adapter]);
 
   async function reload() {
     await loadWorkspaceDataRef.current();
   }
 
   async function reorderFolders(orderedIds: string[]) {
-    await adapter.reorderFolders(orderedIds);
+    const snapshot = [...folders];
     setFolders((prev) => {
       const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
       return [...prev].sort((a, b) => {
@@ -420,6 +541,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         return ai - bi;
       });
     });
+    try {
+      await adapter.reorderFolders(orderedIds);
+    } catch {
+      setFolders(snapshot);
+    }
   }
 
   // ─── Derived tags ──────────────────────────────────────────────────────────
@@ -452,6 +578,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     scheduleOnce,
     clearSchedule,
     reload,
+    pageErrors,
+    clearPageError,
     on,
   };
 

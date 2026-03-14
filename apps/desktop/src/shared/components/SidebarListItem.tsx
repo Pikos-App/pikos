@@ -1,7 +1,7 @@
 import { type RefCallback, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
-interface SidebarListItemProps extends React.HTMLAttributes<HTMLDivElement> {
+interface SidebarListItemProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "prefix"> {
   isActive: boolean;
   isRenaming: boolean;
   /** Default value for the inline rename input. */

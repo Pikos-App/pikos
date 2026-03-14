@@ -22,7 +22,7 @@ export function useThreePanelDnD() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   function handleDragStart({ active }: DragStartEvent) {
-    const type = active.data.current?.type as string | undefined;
+    const type = active.data.current?.["type"] as string | undefined;
     if (type === "page") {
       setActivePageData(pages.find((p) => p.id === active.id) ?? null);
     } else if (type === "folder") {
@@ -35,8 +35,8 @@ export function useThreePanelDnD() {
     setActiveFolderData(null);
     if (!over || active.id === over.id) return;
 
-    const at = active.data.current?.type as string | undefined;
-    const ot = over.data.current?.type as string | undefined;
+    const at = active.data.current?.["type"] as string | undefined;
+    const ot = over.data.current?.["type"] as string | undefined;
 
     if (at === "page" && ot === "page") {
       // Only reorder in manual sort mode — other modes lock DnD.
@@ -54,7 +54,7 @@ export function useThreePanelDnD() {
       );
     } else if (at === "page" && ot === "folder") {
       // folderId stored in droppable data; null means Inbox.
-      const folderId = (over.data.current?.folderId as string | null | undefined) ?? null;
+      const folderId = (over.data.current?.["folderId"] as string | null | undefined) ?? null;
       updatePage(String(active.id), { folderId });
     } else if (at === "folder" && ot === "folder") {
       const oldIdx = folders.findIndex((f) => f.id === active.id);

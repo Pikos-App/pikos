@@ -32,6 +32,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
     setRenamingId,
     pendingDelete,
     handleCreatePage,
+    handleRenameChange,
     handleRenameCommit,
     handleRenameCancel,
     handleDeleteRequest,
@@ -125,6 +126,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
         folders={folders}
         onSelect={() => handleSelectPage(page)}
         onRenameStart={() => setRenamingId(page.id)}
+        onRenameChange={(title) => handleRenameChange(page.id, title)}
         onRenameCommit={(title) => handleRenameCommit(page.id, title)}
         onRenameCancel={handleRenameCancel}
         onDelete={() => handleDeleteRequest(page)}
