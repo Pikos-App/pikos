@@ -70,14 +70,18 @@ The combination is the moat: fast + private + tasks + calendar + notes in one ap
 
 ```
 Mar 2026  ──────────────── Phase 2A core editor & metadata
+          ──────────────── Marketing site scaffolding + Phase 2.5 landing page (parallel track)
 Apr 2026  ─────── Phase 2B calendar (pulled forward) + search/commands
+          ─────── Landing page live with email capture
 May 2026  ─────── Shipping infrastructure + friends beta
 Jun 2026  ─────── Friends beta feedback loop + fixes
-Jul 2026  ─────── Marketing site, video demos, branding
+Jul 2026  ─────── Full marketing site (/ + /open + /download), video demos, branding
 Aug 2026  ──────────────── Public launch 🚀
 ```
 
 Pace assumptions: part-time (~a few focused hours/day). If full-time, compress by ~6–8 weeks.
+
+Marketing site development runs in parallel to desktop app work — it doesn't block or depend on Phase 2 completion.
 
 ---
 
@@ -118,15 +122,17 @@ Invite 5–15 people directly. Technically comfortable friends — people who wo
 
 ### Phase 2.5 — Landing page + email list
 
-**Target: April/May 2026 (before friends beta even starts)**
+**Target: March/April 2026 (building in parallel with Phase 2A)**
 
-A simple landing page with an email capture field costs nothing and starts building an audience now.
+Marketing site development starts now as a parallel workstream. The Phase 2.5 landing page is the first deliverable — a focused single-page site that starts building an audience immediately.
 
-- One page: headline, 2–3 sentences, screenshot, email field ("Get notified when Pikos launches")
+- One page: hero headline, 2–3 sentences, app screenshot/mockup, email capture ("Get notified when Pikos launches")
 - No promises about dates or features
+- Stack: Astro in `apps/marketing/` (same monorepo), Tailwind CSS, deployed to Cloudflare Pages
 - Start collecting emails the day the page goes live — even 50 signups before launch is an audience
+- This page evolves into the full marketing site (Phase 3) rather than being thrown away
 
-**Milestone:** Page live, email capture working, at least one social post linking to it.
+**Milestone:** Page live at pikos.app, email capture working, at least one social post linking to it.
 
 ---
 
