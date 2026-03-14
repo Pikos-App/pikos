@@ -262,8 +262,11 @@ _Must ship before sharing with anyone outside the team. External blocker: Apple 
 
 _Required before the marketing site goes live and the download button appears._
 
-- [ ] **GOO-53** Marketing site _(Medium — public launch blocker)_
-  Astro in `apps/marketing/`. Two pages: `/` (general audience, approachable, no technical jargon) + `/open` (architecture, local-first philosophy). Analytics: Plausible (privacy-aligned). See `features/marketing-site.md`.
+- [~] **GOO-53** Marketing site _(Medium — parallel track, public launch blocker)_
+  Astro in `apps/marketing/` — scaffolded and ready for development. Building in two phases:
+  **Phase 2.5 (now):** Single landing page at `/` with hero + email capture. Get pikos.app live.
+  **Phase 3 (July):** Full site — `/` expanded, `/open`, `/download`, `/changelog`.
+  See `features/marketing-site.md` for full spec.
 
 - [ ] **GOO-54** Privacy policy _(Low — public launch blocker)_
   Plain language, one page at `/privacy`. Cover: what stays on device (everything), what leaves only with opt-in, what is never collected (note content), how to export.

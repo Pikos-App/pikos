@@ -4,6 +4,36 @@ GOO-53 · Astro in `apps/marketing/` (monorepo sibling of `apps/desktop/`)
 
 ---
 
+## Build phases
+
+Development runs in parallel with the desktop app. Ship incrementally:
+
+### Phase 2.5 — Landing page (March/April 2026)
+Single page at `/`. Hero + pitch + screenshot + email capture. No download links yet (app isn't public). Goal: start building an email list and establish pikos.app as a live presence.
+
+Deliverables:
+- [ ] Astro project scaffolded in `apps/marketing/`
+- [ ] Single landing page with hero, pitch copy, screenshot placeholder, email capture
+- [ ] Cloudflare Pages deployment pipeline (push-to-deploy from `main`)
+- [ ] Email capture endpoint (Cloudflare Worker → ConvertKit/Resend)
+- [ ] Plausible analytics installed
+- [ ] OG image + meta tags for social sharing
+- [ ] Mobile responsive
+
+### Phase 3 — Full site (July 2026, before public launch)
+Expand to all pages. Download links go live. Real screenshots replace placeholders.
+
+Deliverables:
+- [ ] `/` expanded with full section order (social proof, features, comparison, pricing)
+- [ ] `/open` technical landing page
+- [ ] `/privacy` privacy policy
+- [ ] `/download` platform hub with working links
+- [ ] `/changelog` auto-rendered from CHANGELOG.md
+- [ ] Real app screenshots and social proof quotes from beta users
+- [ ] sitemap.xml, robots.txt, 404 page
+
+---
+
 ## Goals
 
 1. Convert general users (non-technical, Apple ecosystem) into downloads and App Store purchases.
