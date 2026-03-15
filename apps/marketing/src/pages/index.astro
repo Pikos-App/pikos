@@ -2,7 +2,7 @@
 import Base from "../layouts/Base.astro";
 ---
 
-<Base title="Pikos — Notes, tasks, and calendar. Your Mac. Your data.">
+<Base title="Pikos - Notes, tasks, and calendar. Your Mac. Your data.">
 
   <main class="mx-auto max-w-6xl px-8 py-20">
 
@@ -11,59 +11,88 @@ import Base from "../layouts/Base.astro";
 
       <!-- Left: copy -->
       <div class="max-w-xl shrink-0">
-        <h1 class="text-6xl font-bold tracking-tight text-gray-900 leading-tight">
+        <div class="flex items-center justify-between">
+          <p class="text-base text-gray-500 dark:text-gray-400">Most people juggle three apps to stay organized. You shouldn't have to.</p>
+          <button
+            id="theme-toggle"
+            aria-label="Toggle dark mode"
+            class="ml-4 shrink-0 cursor-pointer rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          >
+            <!-- Moon — shown in light mode -->
+            <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+            </svg>
+            <!-- Sun — shown in dark mode -->
+            <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="hidden">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+            </svg>
+          </button>
+        </div>
+
+        <h1 class="mt-4 text-6xl font-bold tracking-tight text-gray-900 leading-tight dark:text-gray-50">
           Notes, tasks,<br />and calendar.<br />
           <span class="text-orange-500">One app.</span>
         </h1>
 
-        <p class="mt-6 text-xl leading-relaxed text-gray-500">
-          One app for everything you need to think, plan, and do — all stored locally on your Mac.
+        <p class="mt-6 text-xl leading-relaxed text-gray-500 dark:text-gray-400">
+          Everything you need to think, plan, and do — nothing leaves your Mac unless you want it to.
         </p>
 
-        <ul class="mt-5 space-y-2 text-sm text-gray-500">
+        <ul class="mt-5 space-y-2 text-sm text-gray-500 dark:text-gray-400">
           <li class="flex items-start gap-2">
             <span class="mt-0.5 text-orange-400">→</span>
-            Buy once, own forever — no subscription, no account required
+            Buy once, own forever. No subscription, no account required.
           </li>
           <li class="flex items-start gap-2">
             <span class="mt-0.5 text-orange-400">→</span>
-            Your data stays on your Mac. Syncs across devices free via iCloud.
+            Syncs across your devices automatically with the iCloud you already have.
           </li>
           <li class="flex items-start gap-2">
             <span class="mt-0.5 text-orange-400">→</span>
-            Search everything instantly — notes, tasks, and events, all at once.
+            Search everything instantly. Notes, tasks, and events, all at once.
           </li>
         </ul>
 
         <div class="mt-8">
           <a
             href="#waitlist"
-            class="inline-flex items-center justify-center rounded-lg bg-orange-500 px-7 py-3.5 text-base font-medium text-white transition-colors hover:bg-orange-400 focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 focus:outline-none"
+            class="inline-flex items-center justify-center rounded-lg bg-orange-500 px-7 py-3.5 text-base font-medium text-white transition-colors hover:bg-orange-400 focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 focus:outline-none dark:focus:ring-offset-gray-950"
           >
             Get early access
           </a>
-          <p class="mt-3 text-sm text-gray-400">We'll email you when it's ready. No newsletters, no noise.</p>
+          <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">We'll email you when it's ready. No newsletters, no noise.</p>
         </div>
       </div>
 
       <!-- Right: product screenshot -->
       <div class="w-full min-w-0">
-        <img
-          src="/product-image.png"
-          alt="Pikos app showing a weekly review page with notes, task status, and calendar scheduling"
-          class="w-full rounded-xl shadow-xl"
-          width="1390"
-          height="868"
-        />
+        <div class="relative rounded-xl lg:scale-[1.2] lg:origin-left ring-1 ring-black/8 dark:ring-white/10">
+          <img
+            src="/pikos-notes-tasks-calendar-light.webp"
+            alt="Pikos app showing a weekly review page with notes, task status, and calendar scheduling"
+            class="w-full rounded-xl shadow-xl transition-opacity duration-200 dark:opacity-0"
+            width="1600"
+            height="1001"
+          />
+          <img
+            src="/pikos-notes-tasks-calendar-dark.webp"
+            alt=""
+            aria-hidden="true"
+            class="absolute inset-0 w-full rounded-xl shadow-xl opacity-0 transition-opacity duration-200 dark:opacity-100"
+            width="1600"
+            height="1001"
+          />
+        </div>
       </div>
 
     </div>
 
     <!-- Concept section -->
     <section class="mt-28 max-w-4xl">
-      <p class="text-2xl font-semibold text-gray-800">Every page is a note, a task, and a calendar item.</p>
-      <p class="mt-2 text-base leading-relaxed text-gray-500">
-        Write it once — it's already all three. No converting, no copying, no switching apps.
+      <p class="text-2xl font-semibold text-gray-800 dark:text-gray-100">Write it once. It's a note, a task, and a calendar event.</p>
+      <p class="mt-2 text-base leading-relaxed text-gray-500 dark:text-gray-400">
+        No converting, no copying, no switching apps. Instant, the moment you type it.
       </p>
 
       <!-- Desktop diagram (md+) -->
@@ -92,46 +121,46 @@ import Base from "../layouts/Base.astro";
         </svg>
 
         <!-- Note (top-left) -->
-        <div class="absolute left-0 top-0 h-36 w-52 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div class="absolute left-0 top-0 h-36 w-52 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true">
             <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
             <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
             <path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>
           </svg>
-          <h3 class="mt-2 text-sm font-semibold text-gray-900">Note</h3>
-          <p class="mt-1 text-xs leading-relaxed text-gray-500">A real writing surface — rich text, headings, checklists, and linked pages.</p>
+          <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Note</h3>
+          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">A real writing surface. Rich text, headings, checklists, and linked pages.</p>
         </div>
 
         <!-- Task (bottom-left) -->
-        <div class="absolute bottom-0 left-0 h-36 w-52 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div class="absolute bottom-0 left-0 h-36 w-52 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true">
             <path d="m9 11 3 3L22 4"/>
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
           </svg>
-          <h3 class="mt-2 text-sm font-semibold text-gray-900">Task</h3>
-          <p class="mt-1 text-xs leading-relaxed text-gray-500">Status, priority, due date. Recurring tasks show up in Today and Inbox.</p>
+          <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Task</h3>
+          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Add status, priority, and a due date. Recurring tasks just appear.</p>
         </div>
 
         <!-- Page (center) -->
-        <div class="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-2 border-orange-300 bg-orange-50 shadow-md">
+        <div class="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-2 border-orange-300 bg-orange-50 shadow-md dark:border-orange-700 dark:bg-orange-950">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-orange-500" aria-hidden="true">
             <rect width="7" height="9" x="3" y="3" rx="1"/>
             <rect width="7" height="5" x="14" y="3" rx="1"/>
             <rect width="7" height="9" x="14" y="12" rx="1"/>
             <rect width="7" height="5" x="3" y="16" rx="1"/>
           </svg>
-          <span class="mt-1.5 text-sm font-bold text-gray-900">Page</span>
+          <span class="mt-1.5 text-sm font-bold text-gray-900 dark:text-gray-100">Page</span>
         </div>
 
         <!-- Calendar (right) -->
-        <div class="absolute right-0 top-1/2 h-36 w-52 -translate-y-1/2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div class="absolute right-0 top-1/2 h-36 w-52 -translate-y-1/2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true">
             <path d="M8 2v4"/><path d="M16 2v4"/>
             <rect width="18" height="18" x="3" y="4" rx="2"/>
             <path d="M3 10h18"/>
           </svg>
-          <h3 class="mt-2 text-sm font-semibold text-gray-900">Calendar item</h3>
-          <p class="mt-1 text-xs leading-relaxed text-gray-500">Block time and see when you'll actually get it done, not just when it's due.</p>
+          <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Calendar item</h3>
+          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Block time and see when you'll actually get it done, not just when it's due.</p>
         </div>
       </div>
 
@@ -139,79 +168,79 @@ import Base from "../layouts/Base.astro";
       <div class="mt-10 flex flex-col items-center md:hidden">
 
         <!-- Note -->
-        <div class="w-full max-w-xs rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div class="w-full max-w-xs rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true">
             <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
             <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
             <path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>
           </svg>
-          <h3 class="mt-2 text-sm font-semibold text-gray-900">Note</h3>
-          <p class="mt-1 text-xs leading-relaxed text-gray-500">A real writing surface — rich text, headings, checklists, linked pages.</p>
+          <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Note</h3>
+          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">A real writing surface. Rich text, headings, checklists, linked pages.</p>
         </div>
 
         <!-- Connector: line → Page circle → line -->
         <div class="flex flex-col items-center">
-          <div class="h-6 w-px border-l border-dashed border-orange-300"></div>
-          <div class="flex h-16 w-16 flex-col items-center justify-center rounded-full border-2 border-orange-300 bg-orange-50 shadow-sm">
+          <div class="h-6 w-px border-l border-dashed border-orange-300 dark:border-orange-700"></div>
+          <div class="flex h-16 w-16 flex-col items-center justify-center rounded-full border-2 border-orange-300 bg-orange-50 shadow-sm dark:border-orange-700 dark:bg-orange-950">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-orange-500" aria-hidden="true">
               <rect width="7" height="9" x="3" y="3" rx="1"/>
               <rect width="7" height="5" x="14" y="3" rx="1"/>
               <rect width="7" height="9" x="14" y="12" rx="1"/>
               <rect width="7" height="5" x="3" y="16" rx="1"/>
             </svg>
-            <span class="mt-0.5 text-xs font-bold text-gray-900">Page</span>
+            <span class="mt-0.5 text-xs font-bold text-gray-900 dark:text-gray-100">One entry</span>
           </div>
-          <div class="h-6 w-px border-l border-dashed border-orange-300"></div>
+          <div class="h-6 w-px border-l border-dashed border-orange-300 dark:border-orange-700"></div>
         </div>
 
         <!-- Task -->
-        <div class="w-full max-w-xs rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div class="w-full max-w-xs rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true">
             <path d="m9 11 3 3L22 4"/>
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
           </svg>
-          <h3 class="mt-2 text-sm font-semibold text-gray-900">Task</h3>
-          <p class="mt-1 text-xs leading-relaxed text-gray-500">Status, priority, due date. Recurring tasks surface automatically in Today and Inbox.</p>
+          <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Task</h3>
+          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Status, priority, due date. Recurring tasks surface automatically in Today and Inbox.</p>
         </div>
 
         <!-- Connector: plain line -->
-        <div class="h-6 w-px border-l border-dashed border-orange-300"></div>
+        <div class="h-6 w-px border-l border-dashed border-orange-300 dark:border-orange-700"></div>
 
         <!-- Calendar -->
-        <div class="w-full max-w-xs rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div class="w-full max-w-xs rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true">
             <path d="M8 2v4"/><path d="M16 2v4"/>
             <rect width="18" height="18" x="3" y="4" rx="2"/>
             <path d="M3 10h18"/>
           </svg>
-          <h3 class="mt-2 text-sm font-semibold text-gray-900">Calendar item</h3>
-          <p class="mt-1 text-xs leading-relaxed text-gray-500">Block time for it and see when you'll actually get it done, not just when it's due.</p>
+          <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Calendar item</h3>
+          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Block time for it and see when you'll actually get it done, not just when it's due.</p>
         </div>
 
       </div>
     </section>
 
     <!-- Email capture -->
-    <section id="waitlist" class="mt-24 border-t border-gray-100 pt-16">
-      <h2 class="text-2xl font-bold text-gray-900">Be first to try it.</h2>
-      <p class="mt-2 text-gray-500">
+    <section id="waitlist" class="mt-24 border-t border-gray-100 pt-16 dark:border-gray-800">
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-50">Get early access.</h2>
+      <p class="mt-2 text-gray-500 dark:text-gray-400">
         One email when Pikos launches. No newsletters, no noise.
       </p>
 
       <div class="mt-5 flex flex-wrap gap-3">
-        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
           <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
           Buy once, own forever
         </span>
-        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
           <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-          Free iCloud sync
+          iCloud sync built in
         </span>
-        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
           <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
           No account required
         </span>
-        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
           <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
           Your data stays on your Mac
         </span>
@@ -223,11 +252,11 @@ import Base from "../layouts/Base.astro";
           name="email"
           required
           placeholder="you@example.com"
-          class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-base text-gray-900 placeholder:text-gray-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/30 focus:outline-none sm:max-w-xs"
+          class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-base text-gray-900 placeholder:text-gray-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/30 focus:outline-none sm:max-w-xs dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-orange-500"
         />
         <button
           type="submit"
-          class="cursor-pointer rounded-lg bg-orange-500 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-orange-400 focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 focus:outline-none"
+          class="cursor-pointer rounded-lg bg-orange-500 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-orange-400 focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 focus:outline-none dark:focus:ring-offset-gray-950"
         >
           Get early access
         </button>
@@ -239,7 +268,7 @@ import Base from "../layouts/Base.astro";
     <!-- Footer -->
     <footer class="mt-16 pt-16">
       <div class="flex flex-col items-center gap-2">
-        <p class="text-sm text-gray-400">
+        <p class="text-sm text-gray-400 dark:text-gray-500">
           Pikos by <a href="https://alexking.dev" class="text-orange-500 hover:underline">Alex</a>
         </p>
       </div>
@@ -252,16 +281,47 @@ import Base from "../layouts/Base.astro";
   :global(body) {
     background-color: #fafaf9;
   }
+
+  :global(html.dark body) {
+    background-color: #030712;
+  }
 </style>
 
 <script>
+  // Theme toggle
+  const toggle = document.getElementById("theme-toggle")!;
+  const html = document.documentElement;
+  const iconMoon = document.getElementById("icon-moon")!;
+  const iconSun = document.getElementById("icon-sun")!;
+
+  function applyTheme(dark: boolean) {
+    html.classList.toggle("dark", dark);
+    iconMoon.classList.toggle("hidden", dark);
+    iconSun.classList.toggle("hidden", !dark);
+  }
+
+  toggle.addEventListener("click", () => {
+    const dark = !html.classList.contains("dark");
+    localStorage.setItem("theme", dark ? "dark" : "light");
+    applyTheme(dark);
+  });
+
+  // Keep in sync if user changes system preference and hasn't set a manual override
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+    if (!localStorage.getItem("theme")) applyTheme(e.matches);
+  });
+
+  // Sync icon with whatever the anti-flash script already set
+  applyTheme(html.classList.contains("dark"));
+
+  // Email form
   const form = document.getElementById("email-form") as HTMLFormElement;
   const message = document.getElementById("form-message") as HTMLElement;
 
   form?.addEventListener("submit", (e) => {
     e.preventDefault();
     const email = new FormData(form).get("email") as string;
-    message.textContent = `Got it — we'll reach out to ${email} when Pikos is ready.`;
+    message.textContent = `Got it! We'll reach out to ${email} when Pikos is ready.`;
     message.className = "mt-3 text-sm text-green-600";
     form.reset();
   });

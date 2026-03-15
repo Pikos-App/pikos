@@ -20,12 +20,26 @@ const ogImage = new URL("/og.png", Astro.site);
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
+    <!-- Set dark class before first paint to prevent flash -->
+    <script is:inline>
+      const stored = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (stored === "dark" || (!stored && prefersDark)) {
+        document.documentElement.classList.add("dark");
+      }
+      // Add after theme is set so transitions don't fire on initial load
+      document.documentElement.classList.add("theme-ready");
+    </script>
 
     <title>{title}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={Astro.url} />
+    <meta name="theme-color" content="#f97316" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#030712" media="(prefers-color-scheme: dark)" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Pikos" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={ogImage} />
@@ -40,7 +54,7 @@ const ogImage = new URL("/og.png", Astro.site);
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="sitemap" href="/sitemap-index.xml" />
   </head>
-  <body class="bg-white text-gray-900 antialiased">
+  <body class="bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100">
     <slot />
   </body>
 </html>

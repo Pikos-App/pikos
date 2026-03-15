@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+/* Use class-based dark mode so a JS toggle can override the system preference */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Smooth dark/light transition — skip it on initial page load */
+html.theme-ready,
+html.theme-ready * {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
