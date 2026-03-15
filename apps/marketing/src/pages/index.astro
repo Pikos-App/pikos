@@ -67,7 +67,11 @@ import Base from "../layouts/Base.astro";
 
       <!-- Right: product screenshot -->
       <div class="w-full min-w-0">
-        <div class="relative rounded-xl lg:scale-[1.2] lg:origin-left ring-1 ring-black/8 dark:ring-white/10">
+        <button
+          id="screenshot-btn"
+          aria-label="View full-size screenshot"
+          class="group relative w-full cursor-zoom-in rounded-xl lg:scale-[1.2] lg:origin-left ring-1 ring-black/8 dark:ring-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
+        >
           <img
             src="/pikos-notes-tasks-calendar-light.webp"
             alt="Pikos app showing a weekly review page with notes, task status, and calendar scheduling"
@@ -82,6 +86,34 @@ import Base from "../layouts/Base.astro";
             class="absolute inset-0 w-full rounded-xl shadow-xl opacity-0 transition-opacity duration-200 dark:opacity-100"
             width="1600"
             height="1001"
+          />
+          <div class="absolute inset-0 rounded-xl bg-black/0 transition-colors duration-200 group-hover:bg-black/5 dark:group-hover:bg-white/5"></div>
+        </button>
+      </div>
+
+      <!-- Lightbox -->
+      <div
+        id="lightbox"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Full-size screenshot"
+        class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm"
+      >
+        <!-- Container: 80vw × 80vh, centred -->
+        <div class="relative w-[80vw] max-w-[80vw]">
+          <button
+            id="lightbox-close"
+            aria-label="Close"
+            class="absolute -right-3 -top-3 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-gray-900 text-white shadow-lg ring-1 ring-white/20 transition-colors hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-white/60"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+          <img
+            id="lightbox-img"
+            src=""
+            alt="Pikos app showing a weekly review page with notes, task status, and calendar scheduling"
+            class="w-full rounded-xl shadow-2xl"
+            style="max-height: 80vh; object-fit: contain;"
           />
         </div>
       </div>
@@ -313,6 +345,37 @@ import Base from "../layouts/Base.astro";
 
   // Sync icon with whatever the anti-flash script already set
   applyTheme(html.classList.contains("dark"));
+
+  // Lightbox
+  const screenshotBtn = document.getElementById("screenshot-btn")!;
+  const lightbox = document.getElementById("lightbox")!;
+  const lightboxImg = document.getElementById("lightbox-img") as HTMLImageElement;
+  const lightboxClose = document.getElementById("lightbox-close")!;
+
+  function openLightbox() {
+    const dark = html.classList.contains("dark");
+    lightboxImg.src = dark
+      ? "/pikos-notes-tasks-calendar-dark.webp"
+      : "/pikos-notes-tasks-calendar-light.webp";
+    lightbox.classList.remove("hidden");
+    lightbox.classList.add("flex");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeLightbox() {
+    lightbox.classList.add("hidden");
+    lightbox.classList.remove("flex");
+    document.body.style.overflow = "";
+  }
+
+  screenshotBtn.addEventListener("click", openLightbox);
+  lightboxClose.addEventListener("click", closeLightbox);
+  lightbox.addEventListener("click", (e) => {
+    if (e.target === lightbox) closeLightbox();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLightbox();
+  });
 
   // Email form
   const form = document.getElementById("email-form") as HTMLFormElement;
