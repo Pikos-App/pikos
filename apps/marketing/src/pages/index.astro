@@ -70,7 +70,7 @@ import Base from "../layouts/Base.astro";
         <button
           id="screenshot-btn"
           aria-label="View full-size screenshot"
-          class="group relative w-full cursor-zoom-in rounded-xl ring-1 ring-black/8 dark:ring-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400"
+          class="group relative w-full rounded-xl ring-1 ring-black/8 dark:ring-white/10 pointer-events-none md:pointer-events-auto md:cursor-zoom-in md:focus:outline-none md:focus:ring-2 md:focus:ring-orange-400"
         >
           <img
             src="/pikos-notes-tasks-calendar-light.webp"
@@ -87,7 +87,7 @@ import Base from "../layouts/Base.astro";
             width="1600"
             height="1001"
           />
-          <div class="absolute inset-0 rounded-xl bg-black/0 transition-colors duration-200 group-hover:bg-black/5 dark:group-hover:bg-white/5"></div>
+          <div class="absolute inset-0 rounded-xl bg-black/0 transition-colors duration-200 md:group-hover:bg-black/5 md:dark:group-hover:bg-white/5"></div>
         </button>
       </div>
 
@@ -220,7 +220,7 @@ import Base from "../layouts/Base.astro";
               <rect width="7" height="9" x="14" y="12" rx="1"/>
               <rect width="7" height="5" x="3" y="16" rx="1"/>
             </svg>
-            <span class="mt-0.5 text-xs font-bold text-gray-900 dark:text-gray-100">One entry</span>
+            <span class="mt-0.5 text-xs font-bold text-gray-900 dark:text-gray-100">Page</span>
           </div>
           <div class="h-6 w-px border-l border-dashed border-orange-300 dark:border-orange-700"></div>
         </div>
@@ -353,6 +353,7 @@ import Base from "../layouts/Base.astro";
   const lightboxClose = document.getElementById("lightbox-close")!;
 
   function openLightbox() {
+    if (window.innerWidth < 768) return;
     const dark = html.classList.contains("dark");
     lightboxImg.src = dark
       ? "/pikos-notes-tasks-calendar-dark.webp"
