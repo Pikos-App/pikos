@@ -253,14 +253,32 @@ _Must ship before sharing with anyone outside the team. External blocker: Apple 
 
 _Required before the marketing site goes live and the download button appears._
 
-- [~] **GOO-53** Marketing site _(Medium — parallel track, public launch blocker)_
-  Astro in `apps/marketing/` — scaffolded and ready for development. Building in two phases:
-  **Phase 2.5 (now):** Single landing page at `/` with hero + email capture. Get pikos.app live.
-  **Phase 3 (July):** Full site — `/` expanded, `/open`, `/download`, `/changelog`.
-  See `features/marketing-site.md` for full spec.
+- [ ] **GOO-53** Marketing site Phase 3 _(Medium — public launch blocker)_
+  Phase 2.5 ✓ (landing page + email capture form live at pikos.app). Remaining for Phase 3:
+  `/open` (open metrics), `/download` (release links), `/changelog`. See `features/marketing-site.md`.
 
-- [ ] **GOO-54** Privacy policy _(Low — public launch blocker)_
-  Plain language, one page at `/privacy`. Cover: what stays on device (everything), what leaves only with opt-in, what is never collected (note content), how to export.
+- [ ] **GOO-116** Email capture backend integration _(High — public launch blocker)_
+  The email form on the landing page is UI-only. Wire it to an email service so captured addresses are stored and can be emailed on launch.
+  - Pick provider: Resend Audiences, Loops, or ConvertKit (all have free tiers; Loops is nicest for simple launch lists)
+  - Add a serverless handler or use the provider's form endpoint directly (no server needed if using a hosted form endpoint)
+  - On submit: POST to provider API → return success/error to UI → show confirmation state ("You're on the list!")
+  - Double-opt-in not required for a launch waitlist
+  - Store API key as env var in hosting platform (not in repo)
+
+- [ ] **GOO-117** Marketing site analytics _(Medium — public launch blocker)_
+  Lightweight, privacy-first page view tracking. No cookies, no fingerprinting — consistent with the product promise.
+  - Recommended: Plausible (self-hosted or $9/mo cloud) or Fathom. Both are GDPR-compliant out of the box.
+  - Alternative: roll a minimal hit counter using a Cloudflare Worker + KV (free tier, zero third-party) — fits the local-first brand story.
+  - Add the script tag to the Astro layout so all pages are tracked automatically.
+  - Verify no PII is collected and document the provider choice in `features/marketing-site.md`.
+
+- [ ] **GOO-118** About page on marketing site _(Low — public launch blocker)_
+  Short `/about` page: who built it and why, the local-first philosophy, contact/feedback link.
+  - One page, no photos required — words carry it.
+  - Link from footer next to Privacy.
+
+- [ ] **GOO-54** Privacy policy on marketing site _(Low — public launch blocker)_
+  Plain language, one page at `/privacy`. Cover: what stays on device (everything), what leaves only with opt-in (email address you typed in), what is never collected (note content), how to export data. Link from footer.
 
 ---
 
