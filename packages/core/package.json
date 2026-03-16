@@ -17,5 +17,9 @@
     "jsdom": "^28.1.0",
     "typescript": "~5.9.3",
     "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "chrono-node": "^2.9.0",
+    "rrule": "^2.8.1"
   }
 }

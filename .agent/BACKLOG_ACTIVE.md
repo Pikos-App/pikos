@@ -11,80 +11,8 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 _Goal: every interaction in the editor and page header feels complete and intentional._
                                                                                                
-
-- [ ] **GOO-36** Save indicator UI _(Urgent)_ — **requires GOO-32**
-  The `useAutosave` hook and editor content debounce are already shipped (GOO-10). What remains:
-  - **Save indicator component** — visual feedback next to title in MetadataHeader (requires GOO-32 first)
-  - States: (nothing) = clean, `●` = pending/saving, `✓` = saved (fades 1.5s), `⚠` = error (sticky, click → retry)
-  - Consolidates all fields (title + content + subtitle) into one signal
-  - Wire title/subtitle `useAutosave` instances (done as part of GOO-109)
-  - Toast is NOT used — too noisy for continuous autosave
-  - Error state must be sticky — silent data loss is unacceptable
-
-  Before implementing this - let's check in - it might not be worth having a save indicator since if we don't lose people's content we won't have trust loss and need a signal for success states. We should have an error state though.
-
-### Page Creation
-
-<!-- BUNDLE: GOO-19 + GOO-60 — direct dependency pair, pure-TS parser then modal consumer -->
-
-- [ ] **GOO-19** NL page creation parser _(High)_ — **required by GOO-60**
-  `packages/core/src/nlp/parser.ts`. Pure TS, zero DOM/Tauri deps.
-
-  ```ts
-  export interface ParsedInput {
-    title: string;           // remaining text after tokens extracted
-    scheduledStart?: string; // ISO 8601
-    scheduledEnd?: string;   // ISO 8601 (derived from start + duration)
-    durationMinutes?: number;
-    tags: string[];
-    folderQuery?: string;    // caller fuzzy-matches against folders[]
-    priority?: PagePriority;
-  }
-
-  export type ParseResult =
-    | { type: 'single'; input: ParsedInput }
-    | { type: 'finite'; inputs: ParsedInput[]; count: number }  // N independent pages
-    | { type: 'recurring'; input: ParsedInput; rrule: string }; // 1 template page
-
-  export function parseInput(raw: string, now?: Date): ParseResult;
-  ```
-
-  **Two recurrence modes:**
-
-  | Type | Example | Output | Storage |
-  |---|---|---|---|
-  | Finite — bounded window | `run m/w/f for 2 weeks` | N independent pages | N rows in `pages` |
-  | Infinite/ongoing | `daily standup every monday 1pm` | 1 template page | 1 row, `rrule` set |
-
-  "for 2 weeks", "3 times", "through march 15" → finite. "every monday", "daily", "every weekday" with no bound → infinite (stored RRULE).
-
-  **Token syntax:**
-
-  | Token | Examples | Result |
-  |---|---|---|
-  | Date | `@today` `@tomorrow` `@monday` `@march5` | `scheduledStart` |
-  | Time | `9pm` `at 3:30pm` `14:00` | sets time on scheduledStart |
-  | Duration | `for 1h` `for 30min` `for 2 hours` | `durationMinutes` → `scheduledEnd` |
-  | Finite recurrence | `m/w/f` `mon/wed/fri` `weekdays` | expands to N pages |
-  | Finite window | `for 2 weeks` `3 times` `through march 15` | bounds the expansion |
-  | Infinite recurrence | `every monday` `daily` `every weekday` | → stored RRULE |
-  | Tag | `#work` `#design` | `tags[]` |
-  | Folder | `~Projects` `~inbox` | `folderQuery` |
-  | Priority | `!urgent` `!high` `!medium` `!low` | `priority` |
-
-  **Examples:**
-
-  | Input | Result |
-  |---|---|
-  | `run m/w/f at 3pm for 45m` | finite: 3 pages (next Mon/Wed/Fri, 15:00, 45min) |
-  | `gym m/w/f for 1h through march 31` | finite: all Mon/Wed/Fri until Mar 31 |
-  | `daily standup every monday 1pm for 15m` | recurring: 1 page, `FREQ=WEEKLY;BYDAY=MO` |
-  | `morning run daily at 7am for 30m` | recurring: 1 page, `FREQ=DAILY` |
-  | `review sprint weekdays at 9am 3 times` | finite: 3 pages (next 3 weekdays, 9am) |
-
-  **Default finite window**: no window specified + days present + no "every" → next single occurrence of each day. "m/w/f" → 3 pages. Prevents runaway creation.
-
-  **Libraries**: `rrule` (npm) for RRULE parsing/expansion (CalDAV compatible); `chrono-node` for NL date/time.
+- [ ] **GOO-19b** NL parser: optional `@` for date tokens _(Low — explore)_
+  Currently `@monday`, `@today`, `@march20` require the `@` prefix. Explore whether bare day/date words (`monday`, `today`, `march 20`) can be parsed without `@` — chrono-node already handles them, but the risk is false positives in titles (e.g. `meeting notes monday` → accidentally schedules). Options: (a) allow bare dates only when no other title words follow, (b) require `@` always (current, safe), (c) treat bare recognized dates as a lower-confidence signal shown in the chip but not applied until confirmed. Needs UX thought before implementation.
 
 - [ ] **GOO-60** Quick Add Modal _(Urgent)_ — **requires GOO-19**
   `Cmd+N` from anywhere opens a small centered modal. Single entry point for new page creation.
@@ -117,8 +45,6 @@ _Goal: every interaction in the editor and page header feels complete and intent
   **Progressive enhancement**: Phase 1 ships without folder chip (hidden until GOO-37 ships).
   Component: `apps/desktop/src/features/pages/components/QuickAddModal.tsx`
   Registered globally in `App.tsx` via `useKeyboardShortcut('Mod+N', ...)`.
-
-<!-- END BUNDLE -->
 
 ### Scheduling
 
