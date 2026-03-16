@@ -144,7 +144,7 @@ export function EditorPane() {
 
   const pageId = page?.id ?? null;
 
-  const { isDirty, isSaving, saveError, flush } = useAutosave(
+  const { saveError, flush } = useAutosave(
     contentVersion,
     (_version: number) => {
       if (!pageId || contentJsonRef.current === "") return Promise.resolve();
@@ -163,9 +163,6 @@ export function EditorPane() {
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
   }, [flush]);
-
-  // Expose save state for the save indicator (MetadataHeader will consume this via context later)
-  const saveState = saveError ? "error" : isSaving ? "saving" : isDirty ? "dirty" : "clean";
 
   // ─── Link popover state ───────────────────────────────────────────────────
   const [isAddingLink, setIsAddingLink] = useState(false);
@@ -206,9 +203,15 @@ export function EditorPane() {
   // ─── Editor ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden" data-save-state={saveState}>
+    <div className="flex flex-1 flex-col overflow-hidden">
       {page && (
-        <MetadataHeader key={page.id} page={page} onFocusEditor={() => editor?.commands.focus()} />
+        <MetadataHeader
+          key={page.id}
+          page={page}
+          onFocusEditor={() => editor?.commands.focus()}
+          contentSaveError={saveError}
+          onRetryContent={() => void flush()}
+        />
       )}
       {editor && (
         <LinkPopover

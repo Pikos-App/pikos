@@ -2,10 +2,11 @@
 // key={page.id} in parent resets all state on page switch.
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Check } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { DateSchedulePopover } from "./DateSchedulePopover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Page, PagePriority, PageStatus } from "@pikos/core";
 
 // ─── Byline ───────────────────────────────────────────────────────────────────
@@ -23,10 +24,14 @@ function Byline({
   page,
   onStatusChange,
   onPriorityChange,
+  saveError,
+  onErrorClick,
 }: {
   page: Page;
   onStatusChange: (status: PageStatus) => void;
   onPriorityChange: (priority: PagePriority) => void;
+  saveError?: string | null;
+  onErrorClick?: () => void;
 }) {
   const isDone = page.status === "done";
 
@@ -60,6 +65,28 @@ function Byline({
           <span>#{tag}</span>
         </Fragment>
       ))}
+
+      {/* Save error — sticky, click to retry */}
+      {saveError != null && (
+        <>
+          <BylineSeparator />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onErrorClick}
+                aria-label="Save failed — click to retry"
+                className="inline-flex items-center gap-1 rounded text-amber-500/70 transition-colors hover:text-amber-500 focus:outline-none"
+              >
+                <AlertTriangle size={12} strokeWidth={2} />
+                <span>Not saved</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[260px]">
+              {saveError}
+            </TooltipContent>
+          </Tooltip>
+        </>
+      )}
     </div>
   );
 }
@@ -69,10 +96,26 @@ function Byline({
 interface MetadataHeaderProps {
   page: Page;
   onFocusEditor: () => void;
+  contentSaveError?: Error | null;
+  onRetryContent?: () => void;
 }
 
-export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
-  const { updatePage, flushPage } = useWorkspace();
+export function MetadataHeader({
+  page,
+  onFocusEditor,
+  contentSaveError,
+  onRetryContent,
+}: MetadataHeaderProps) {
+  const { updatePage, flushPage, pageErrors, clearPageError } = useWorkspace();
+
+  const metadataError = pageErrors.get(page.id) ?? null;
+  const hasError = !!(metadataError ?? contentSaveError);
+  const errorMessage = metadataError ?? contentSaveError?.message ?? null;
+
+  function handleErrorClick() {
+    clearPageError(page.id);
+    onRetryContent?.();
+  }
 
   function handleStatusChange(status: PageStatus) {
     updatePage(page.id, {
@@ -305,6 +348,8 @@ export function MetadataHeader({ page, onFocusEditor }: MetadataHeaderProps) {
           page={page}
           onStatusChange={handleStatusChange}
           onPriorityChange={handlePriorityChange}
+          saveError={hasError ? (errorMessage ?? "Save failed") : null}
+          onErrorClick={handleErrorClick}
         />
       </div>
     </div>

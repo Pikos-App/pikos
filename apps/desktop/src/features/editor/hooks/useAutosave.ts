@@ -85,8 +85,11 @@ export function useAutosave<T>(
     };
   }, [value, delay]);
 
-  // Flush on unmount (covers page switch + app close)
+  // Flush on unmount (covers page switch + app close).
+  // mountedRef is reset to true on each mount so StrictMode's remount cycle
+  // doesn't permanently disable setState calls.
   useEffect(() => {
+    mountedRef.current = true;
     // Capture ref value per lint rule — the ref is stable but the linter
     // can't prove it, so we copy to a local variable for the cleanup closure.
     const save = doSave.current;
