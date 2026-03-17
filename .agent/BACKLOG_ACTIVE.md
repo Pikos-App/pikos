@@ -9,9 +9,15 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ## Phase 2A — Core Editor & Metadata
 
-_Goal: every interaction in the editor and page header feels complete and intentional._
+Need to do some refinement of quick add dialog and NLP with its current functionality.
+If I type "Run monday 2pm for 30m" it parses monday, then 2pm (for today/tomorrow depending on time), then parsed 30m and sets the time for today. Maybe parsing on space bar keypress is not the best, because doing "monday 2pm" parses monday, then 2pm - and how would it know to set it to monday at 2pm vs today at 2pm? And duration seems totally broken.
+When I stop typing it adds a new space to the input - which is kind of awkward if the thing before my cursor is not parsed. For example typing ~ then pausing 800ms the input adds a space after the ~, which then doesn't parse to a folder if I keep typing.
+I'd also like !0-4 to translate to priority.
 
-# GOO-60 Phase 2a: Tag Chips in Quick Add
+! Next step: work with opus to do some planning on this - then get prompts for sonnet to work on.
+! Also look into whether or not tags should be a table - ie tags + page_tags so we can do smart adding and such. Do this before doing quick add tags.
+
+- [] GOO-60 Phase 2a: Tag Chips in Quick Add
 
 ## Summary
 
@@ -33,6 +39,7 @@ Add visual tag chips to the Quick Add modal's metadata row. Tags are already bei
 ### Tag chips in the metadata row
 
 Add tag chips between the FolderChip and the Add button:
+Need to answer - what happens if there are many tags? How do you remove tags?
 
 ```
 📅 Today  ·  🚩  ·  📁 Inbox  ·  #meeting  #work          [Add]
@@ -161,11 +168,15 @@ Style to match the existing chip row aesthetic — keep it subtle and small so i
 - Enter without space: type `run #meeting` and hit Enter → tag is parsed in final pass and saved.
 - Reopen modal → tag state is empty (reset on open).
 
-# GOO-60 Phase 2b: Recurring & Batch Page Confirmation
+---
+
+- [] GOO-60 Phase 2b: Recurring & Batch Page Confirmation
 
 ## Summary
 
 When the NLP parser returns a recurring or finite-batch result, show a confirmation step before creating pages. Currently the Quick Add submit flow only handles `type: 'single'`. This task adds support for `type: 'recurring'` and `type: 'finite'` results with an intermediate confirmation dialog.
+
+Note to self - when doing recurring scheduling with NLP, what should we show on the schedule button? The date picker doesn't account for recurring events yet. This is a big ol topic with a lot of UI/UX concerns. So maybe better to hold off on recurring until I get further along in the calenar.
 
 ---
 
@@ -398,22 +409,17 @@ During the debounce preview and space-parse, if the result is `recurring` or `fi
 - [ ] **GOO-114** Bubble format toolbar _(Medium)_ — **replaces removed persistent FormatToolbar**
   Selection-triggered floating toolbar. Appears anchored above the selection when text is selected in the editor. Buttons: Bold, Italic, Underline, Strikethrough, Code, Link (triggers LinkPopover), H1/H2/H3, bullet list, ordered list. Hides on click-outside or selection collapse. Use Tiptap's `BubbleMenu` component (`@tiptap/extension-bubble-menu` — already part of `@tiptap/starter-kit` peer deps). Position: above selection, centered, with a subtle drop-shadow and border. `FormatToolbar.tsx` contains all the button logic — reuse it inside `BubbleMenu`.
 
-- [ ] **GOO-112** Link editing UI _(Medium)_ — **requires GOO-104**
-  Link extension is installed (`@tiptap/extension-link`) with autolink + link-on-paste, but there's no interactive UI to add/edit/remove links. Users need: (1) a way to add a link to selected text (bubble menu button, GOO-104 dependency), (2) clicking an existing link shows a small popover with URL + edit/unlink buttons, (3) `Cmd+K` shortcut to insert/edit link (standard across Google Docs, Notion, Obsidian). Component: `apps/desktop/src/features/editor/components/LinkPopover.tsx`.
-
 - [ ] **GOO-113** Editor accessibility _(High)_
   The editor needs WCAG 2.1 AA compliance per project standards. Currently missing: `role="textbox"` and `aria-label` on the editor container, `aria-live` region for save state announcements, visible focus indicator on the editor container, keyboard-accessible task list checkboxes, placeholder text announced to screen readers (currently CSS-only). Should be done alongside or right after GOO-106 (keyboard scope).
   **Note (from GOO-111):** Add `tabIndex={-1}` to the root `<div>` in `PageListItem.tsx` so that after Escape blurs the editor, the active page list item is properly focusable and receives visual focus. Currently the div is not natively focusable so `el.focus()` silently no-ops.
 
 - [ ] **GOO-105** Editor drag handle _(Medium)_
+- NOTE: we can deprioritize this for post launch.
   Hover left of any block to show a grip icon for drag-reorder. Custom ProseMirror NodeView plugin (the official `@tiptap/extension-drag-handle` is paid). Grip appears on hover with subtle fade-in. Drag creates a drop indicator line between blocks. Works with all block types (paragraphs, headings, lists, code blocks). Component: `apps/desktop/src/features/editor/components/DragHandle.tsx`. Before you get started on this one - are you intending to build this functionality from scratch since the dep is paid? How complex would this task be? Worth building in its current task priority?
 
 ---
 
 ## Phase 2B — Appearance & UX Polish
-
-- [ ] **GOO-97** Theme selector _(Medium)_ — **do before GOO-59**
-  Lightweight standalone theme toggle, ships before the full Settings modal (GOO-59). Three options: System / Light / Dark. Store in `localStorage` under `pikos:theme`. Apply to `<html data-theme="...">`. Render as a `ToggleGroup` or segmented control in the right-panel header (top-right, small icon row). `useTheme()` hook in `apps/desktop/src/shared/hooks/useTheme.ts`. GOO-59 Appearance panel will wire into the same key — no migration needed.
 
 - [ ] **GOO-102** Completed items in folder/inbox views — design decision _(Medium)_
   Today view has a "Completed" accordion (GOO-101 ✓). Need to decide how completed items behave in folder and inbox views. Current: shown inline with strikethrough. Options under consideration:
