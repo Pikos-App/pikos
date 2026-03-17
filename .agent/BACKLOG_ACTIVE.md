@@ -219,3 +219,58 @@ _Required before the marketing site goes live and the download button appears._
 ---
 
 _For post-launch V1, power features, and long-term roadmap — grep `BACKLOG.md` by GOO number._
+
+
+To Document:
+- Marketing Site
+  - help content - create new folders, pages, quick add dialog and NLP, keyboard shortcuts
+- General
+  - git ignore build dir
+- Editor
+  - bubble menu for editor (removed toolbar since it was looking dated)
+  - refine style of flashing cursor
+  - when searching in a file, show highlighted word / partial word, also show occurrence in scroll bar (like arc / vscode)
+  - word count / character count / links / backlinks / etc
+  - right clicking to show context menu in editor
+  - spell checker / squiggly lines
+  - tab and shift+tab are not working in editor - need opus
+  - when editing title, it should sync real time (local state, then debounce to db)
+  - slash dropdown moves menu item to where mouse was, doesn't stay at top
+  - bubble menu should be one tab index with left and right arrow movement
+  - editor is still recommending to capitalize things
+  - if there's a `/` in the content, the slash menu opens immediately upon opening editor
+  - highlighting text
+- Settings
+  - disable bubble menu above text on highlight
+  - disable slash commands
+  - doing both would be simply markdown editor
+  - Configurable metadata fields on the page, scheduled date, start date, end date, location, etc
+  - sync with reminders 
+- Questions
+  - How does sharing work w/ icloud sync?
+  - Can I have the code be open without showing my commit history? Why would I want this? Don't want to fully show how its made... or that I'm comparing it to other products directly?
+  - Pikos name, meaning, copyright, etc. Is it a good name for a notes/tasks/calendar app? So far looks good. Got good domain (pikos.app), no copyrights in software.
+- Calendar
+  - when on the ticktick calendar, opening a task shows a small modal, can't search content, and when I switch to a different app (like my browser, the modal closes) (although this doesn't seem consistent, sometimes it stays open).
+  - Page editor should be first class, not a small modal that is pretty inconvenient for content management.
+- List View
+  - Compact view for page list - don't show subtitle (more UI efficient)
+  - Add sorting for... additional categories?
+  - Navigate items with up and down keyboard, enter to open editor
+  - Should i auto focus editor on enter key press? What about the checkbox on the UI - reachable? Too focused on keyboard navigation? Probably.
+- Reflections
+  - Editor functionality (indent, outdent, link popover, link behavior) is tough for Claude - lots of rate limi consumed to progress a little bit at a time.
+  - Upgrade to claude max?
+- Performance
+  - How do I handle querying and pagination? Does the app need all data at all times? List views, completed states, calendar view, searching, etc. TickTick does 30 completed w/ view more - not sure about huge directories with hundreds of incomplete. 
+- Observability
+  - I'd like to track how many downloads have occurred through the site. And how many downloads have occurred through the app store. No tracking should be invasive or go against the privacy policy (tbd).
+- Marketing site
+  - Optimize marketing site for AI surfacing / recommendations - AEO (answer engine optimization). AI can pull the right meaning from your site.
+  - balance phrasing and terminology - don't want to risk legal troubles with claims / encouraging things.
+  - comparison page for similar products? 
+- For Later
+  - Further down the road - habit tracking, maybe a habits folder where you can set habits and their schedule through the normal UI - maybe using rrule. Then provide basic visuals on completion rates. Low priority.
+  - Add password protection / biometric access? How would that work with no recovery code?
+  - Under "Today" could do a "Priority" list, which shows items in priority order. Maybe not valuable enough for the prime real estate. Could conditionally render it if any items have priority.
+  - page location? Like a Google Calendar item.

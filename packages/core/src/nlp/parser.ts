@@ -246,11 +246,13 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     // Check if a time component was explicitly set
     hasTime = result.start.isCertain("hour") || result.start.isCertain("minute");
 
-    // Check if date is explicitly set
+    // Check if date is explicitly set.
+    // bare weekday names ("monday", "this wednesday") are certain on "weekday" but not "day"
     const hasDate =
       result.start.isCertain("day") ||
       result.start.isCertain("month") ||
-      result.start.isCertain("year");
+      result.start.isCertain("year") ||
+      result.start.isCertain("weekday");
 
     if (hasTime && !hasDate) {
       // Time without date: today if future, tomorrow if past

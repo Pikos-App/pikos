@@ -113,6 +113,7 @@ Status: `[ ]` pending · `[-]` superseded/deferred
 
 - [ ] **GOO-41** Obsidian workspace import — onboarding UI _(Medium)_ — **requires GOO-48**
   UX wrapper around GOO-48. Flow: folder picker → scan preview ("Found 47 pages in 6 folders") → confirm → background import with progress → success summary. `.obsidian/` config dir ignored.
+  - other import considerations (todoist, ticktick, apple notes, reminders, others?)
 
 - [ ] **GOO-49** Export: SQLite (Tiptap JSON) → Markdown _(Medium)_
   `packages/core/src/export/markdown-export.ts`.
