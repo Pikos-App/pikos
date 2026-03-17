@@ -5,9 +5,10 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check } from "lucide-react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
+import { FolderChip } from "@/features/pages/components/FolderChip";
 import { DateSchedulePopover } from "./DateSchedulePopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Page, PagePriority, PageStatus } from "@pikos/core";
+import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
 
 // ─── Byline ───────────────────────────────────────────────────────────────────
 // Flat inline metadata row. No pill backgrounds — reads as a document byline.
@@ -22,13 +23,17 @@ function BylineSeparator() {
 
 function Byline({
   page,
+  folders,
   onStatusChange,
+  onFolderChange,
   onPriorityChange,
   saveError,
   onErrorClick,
 }: {
   page: Page;
+  folders: Folder[];
   onStatusChange: (status: PageStatus) => void;
+  onFolderChange: (folderId: string | null) => void;
   onPriorityChange: (priority: PagePriority) => void;
   saveError?: string | null;
   onErrorClick?: () => void;
@@ -51,13 +56,17 @@ function Byline({
         <span className="inline-block w-[2.5rem]">{isDone ? "Done" : "Open"}</span>
       </button>
 
-      {/* Priority selector — GOO-35 */}
+      {/* Folder */}
       <BylineSeparator />
-      <PriorityDropdown priority={page.priority} onSelect={onPriorityChange} variant="byline" />
+      <FolderChip folders={folders} value={page.folderId} onChange={onFolderChange} />
 
       {/* Date — GOO-34 */}
       <BylineSeparator />
       <DateSchedulePopover page={page} />
+
+      {/* Priority selector — GOO-35 */}
+      <BylineSeparator />
+      <PriorityDropdown priority={page.priority} onSelect={onPriorityChange} variant="byline" />
 
       {page.tags.map((tag) => (
         <Fragment key={tag}>
@@ -106,7 +115,7 @@ export function MetadataHeader({
   contentSaveError,
   onRetryContent,
 }: MetadataHeaderProps) {
-  const { updatePage, flushPage, pageErrors, clearPageError } = useWorkspace();
+  const { folders, updatePage, flushPage, pageErrors, clearPageError } = useWorkspace();
 
   const metadataError = pageErrors.get(page.id) ?? null;
   const hasError = !!(metadataError ?? contentSaveError);
@@ -122,6 +131,10 @@ export function MetadataHeader({
       status,
       completedAt: status === "done" ? new Date().toISOString() : null,
     });
+  }
+
+  function handleFolderChange(folderId: string | null) {
+    updatePage(page.id, { folderId });
   }
 
   function handlePriorityChange(priority: PagePriority) {
@@ -346,7 +359,9 @@ export function MetadataHeader({
 
         <Byline
           page={page}
+          folders={folders}
           onStatusChange={handleStatusChange}
+          onFolderChange={handleFolderChange}
           onPriorityChange={handlePriorityChange}
           saveError={hasError ? (errorMessage ?? "Save failed") : null}
           onErrorClick={handleErrorClick}

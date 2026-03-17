@@ -7,6 +7,7 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { WelcomeScreen } from "@/features/workspace/WelcomeScreen";
 import { ThreePanelLayout } from "@/features/layout/ThreePanelLayout";
 import { SettingsPage } from "@/features/settings/SettingsPage";
+import { QuickAddDialog } from "@/features/pages/components/QuickAddDialog";
 
 function AppShell() {
   useKeyboardListener();
@@ -14,6 +15,7 @@ function AppShell() {
     <>
       <ThreePanelLayout />
       <SettingsPage />
+      <QuickAddDialog />
     </>
   );
 }

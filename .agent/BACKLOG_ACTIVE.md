@@ -10,46 +10,385 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 ## Phase 2A — Core Editor & Metadata
 
 _Goal: every interaction in the editor and page header feels complete and intentional._
-                                                                                               
-- [ ] **GOO-19b** NL parser: optional `@` for date tokens _(Low — explore)_
-  Currently `@monday`, `@today`, `@march20` require the `@` prefix. Explore whether bare day/date words (`monday`, `today`, `march 20`) can be parsed without `@` — chrono-node already handles them, but the risk is false positives in titles (e.g. `meeting notes monday` → accidentally schedules). Options: (a) allow bare dates only when no other title words follow, (b) require `@` always (current, safe), (c) treat bare recognized dates as a lower-confidence signal shown in the chip but not applied until confirmed. Needs UX thought before implementation.
 
-- [ ] **GOO-60** Quick Add Modal _(Urgent)_ — **requires GOO-19**
-  `Cmd+N` from anywhere opens a small centered modal. Single entry point for new page creation.
+# GOO-60 Phase 2a: Tag Chips in Quick Add
 
-  **Visual design:**
-  ```
-  ┌──────────────────────────────────────────────────────────────┐
-  │  What would you like to do?                                  │
-  ├──────────────────────────────────────────────────────────────┤
-  │  📅 Today   🚩   ⬇ Inbox                          [  Add  ] │
-  └──────────────────────────────────────────────────────────────┘
-  ```
-  Small modal, vertically centered, ~600px wide. Dark overlay. Single text input, auto-focused. `Enter` or `Add` → create. `Esc` or click-outside → cancel (no page created). Empty input → shake animation, no create.
+## Summary
 
-  **Metadata chips** (bottom row, update live from NL parsing):
-  - **📅 Date** — defaults to Today. NL input overrides. Click → shadcn calendar popover + time input. Click active chip → clear.
-  - **🚩 Priority** — defaults to None. NL `!high` etc. overrides. Click → priority picker.
-  - **⬇ Folder** — defaults to active folder from `UIContext.activeViewId` (when it's a folderId), else "Inbox". NL `~folder` overrides (fuzzy-matched against `folders[]`). Click → folder picker.
+Add visual tag chips to the Quick Add modal's metadata row. Tags are already being parsed by the NLP parser (`#tag` syntax) and saved on submit via `updatePage`, but they have no visual representation in the chip row. This task adds tag chips so users can see, remove, and manually add tags before submitting.
 
-  **On submit:**
-  1. `parseInput(raw)` → `ParseResult`
-  2. Fuzzy-match `folderQuery` against `folders[]` → resolve to `folderId`
-  3. **Confirmation step** (before any writes):
-     - `type: 'recurring'` → always confirm (show RRULE summary)
-     - `type: 'finite'` with `count ≥ 3` → confirm ("This will add X pages to your calendar.")
-     - `type: 'single'` or finite `count < 3` → create immediately
-  4. On confirm: `createPage()` for each result (single → 1, finite → N, recurring → 1 template)
-  5. Close modal. `setActivePage(newPage)` → open page in editor.
+---
 
-  **Progressive enhancement**: Phase 1 ships without folder chip (hidden until GOO-37 ships).
-  Component: `apps/desktop/src/features/pages/components/QuickAddModal.tsx`
-  Registered globally in `App.tsx` via `useKeyboardShortcut('Mod+N', ...)`.
+## Current state
 
-### Scheduling
+- NLP parser recognizes `#tag` tokens and returns them in `parsed.tags: string[]`.
+- On submit, tags are applied via `updatePage(page.id, { tags: parsed.tags })`.
+- The chip row currently shows: DateChip · PriorityChip · FolderChip · [Add].
+- Tags parsed from input are captured but invisible to the user.
 
-- [ ] **GOO-34** Scheduled date/time picker _(High)_ — **requires GOO-76**
-  shadcn Popover with mini calendar + time input. Quick chips: Today, Tomorrow, Monday, Next week. Duration shortcuts: 15min, 30min, 1h, 2h. Writes `scheduledStart`/`scheduledEnd` via `create_page_schedule` / `delete_page_schedule`.
+---
+
+## What to build
+
+### Tag chips in the metadata row
+
+Add tag chips between the FolderChip and the Add button:
+
+```
+📅 Today  ·  🚩  ·  📁 Inbox  ·  #meeting  #work          [Add]
+```
+
+Each tag is a small pill/chip showing the tag name with a `#` prefix. Tags appear as they're parsed (on space press or 800ms debounce, same as other fields).
+
+### Chip layout
+
+- Tags sit after the FolderChip separator.
+- Each tag chip is a small pill: muted background, tag text, and a small × button to remove.
+- If there are no tags, nothing is shown (no empty state placeholder for tags — the row just ends at the folder chip).
+- Tags should wrap if they overflow, but practically the modal is 600px wide and users won't add many tags in a quick-add flow, so a single flex row with `flex-wrap` is fine.
+
+### Tag chip interactions
+
+- **Parsed from input:** `#meeting` is typed → on space/debounce, tag chip appears, `#meeting` is stripped from input.
+- **Remove a tag:** click the × on a tag chip → tag is removed from the tag state array. The stripped text is NOT re-inserted into the input.
+- **Manual add:** For Phase 2a, there is no manual tag picker/popover. Tags can only be added via NLP input (`#tagname`). A tag picker popover is a future enhancement.
+- **Duplicate handling:** If the user types `#work` and `#work` is already in the tag list, don't add it again. Deduplicate silently.
+
+### Tag state
+
+Add a `tagsValue` state array alongside the existing chip states:
+
+```typescript
+const [tagsValue, setTagsValue] = useState<string[]>([]);
+```
+
+Reset to `[]` in `openDialog()`.
+
+### Parse integration
+
+In `runParseAndStrip()` and the debounce effect, when `parsed.tags` has entries:
+
+```typescript
+if (parsed.tags && parsed.tags.length > 0) {
+  setTagsValue(prev => {
+    const combined = [...prev, ...parsed.tags];
+    return [...new Set(combined)]; // deduplicate
+  });
+}
+```
+
+Note: tags **accumulate** across multiple parse passes (unlike date/priority/folder which overwrite). Typing `#meeting` then later `#work` should result in both tags being present. This is different from the other chip fields.
+
+### Submit integration
+
+In `handleSubmit`, use `tagsValue` (merged with any final-pass parsed tags) instead of only `parsed.tags`:
+
+```typescript
+const finalTags = [...new Set([...tagsValue, ...(parsed?.tags ?? [])])];
+// ...
+if (finalTags.length > 0) patch.tags = finalTags;
+```
+
+---
+
+## Tag chip component
+
+Build a small inline component (can live in the same file or extracted):
+
+```typescript
+function TagChip({ tag, onRemove }: { tag: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+      #{tag}
+      <button
+        onClick={onRemove}
+        aria-label={`Remove tag ${tag}`}
+        className="ml-0.5 text-muted-foreground/60 hover:text-foreground transition-colors"
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+```
+
+Style to match the existing chip row aesthetic — keep it subtle and small so it doesn't dominate the row.
+
+---
+
+## Updated chip row JSX
+
+```tsx
+<div className="flex items-center gap-2 border-t border-border/40 px-4 py-2.5 flex-wrap">
+  <DateTimePicker value={dateValue} onChange={setDateValue} />
+  <BylineSeparator />
+  <PriorityDropdown priority={priorityValue} onSelect={setPriorityValue} variant="byline" />
+  <BylineSeparator />
+  <FolderChip folders={folders} value={folderValue} onChange={setFolderValue} />
+
+  {tagsValue.length > 0 && (
+    <>
+      <BylineSeparator />
+      {tagsValue.map(tag => (
+        <TagChip
+          key={tag}
+          tag={tag}
+          onRemove={() => setTagsValue(prev => prev.filter(t => t !== tag))}
+        />
+      ))}
+    </>
+  )}
+
+  <button
+    onClick={() => void handleSubmit()}
+    className="ml-auto ..."
+  >
+    Add
+  </button>
+</div>
+```
+
+---
+
+## Testing checklist
+
+- Type `run #meeting ` → tag chip "meeting" appears, input shows "run ".
+- Type `#work ` after → both "meeting" and "work" chips visible.
+- Type `#meeting ` again → no duplicate, still just one "meeting" chip.
+- Click × on "work" chip → "work" removed, "meeting" remains.
+- Submit → page created with `tags: ["meeting"]`.
+- 800ms debounce: type `run #meeting` and pause → tag chip appears (debounce preview + strip).
+- Enter without space: type `run #meeting` and hit Enter → tag is parsed in final pass and saved.
+- Reopen modal → tag state is empty (reset on open).
+
+# GOO-60 Phase 2b: Recurring & Batch Page Confirmation
+
+## Summary
+
+When the NLP parser returns a recurring or finite-batch result, show a confirmation step before creating pages. Currently the Quick Add submit flow only handles `type: 'single'`. This task adds support for `type: 'recurring'` and `type: 'finite'` results with an intermediate confirmation dialog.
+
+---
+
+## Current state
+
+In `handleSubmit` and `runParseAndStrip`, the parsed result is extracted with a fallback that collapses everything to single:
+
+```typescript
+const parsed =
+  result.type === "single"
+    ? result.input
+    : result.type === "finite"
+      ? result.inputs[0]  // ← only takes the first, ignores the rest
+      : result.input;
+```
+
+This needs to handle all three types properly.
+
+---
+
+## Parse result types
+
+Check the actual return type of `parseInput` in the codebase. Based on the existing code, it returns a discriminated union roughly like:
+
+```typescript
+type ParseResult =
+  | { type: "single"; input: ParsedInput }
+  | { type: "finite"; inputs: ParsedInput[]; count: number }
+  | { type: "recurring"; input: ParsedInput; rrule: string }
+```
+
+Verify the exact shape — the `rrule` field name and any additional metadata on the recurring type may differ.
+
+---
+
+## Confirmation rules
+
+| Result type | Condition | Behavior |
+|---|---|---|
+| `single` | always | Create immediately, no confirmation (unchanged) |
+| `finite` | `count < 3` | Create immediately, no confirmation |
+| `finite` | `count >= 3` | Show confirmation dialog |
+| `recurring` | always | Show confirmation dialog |
+
+---
+
+## Confirmation dialog
+
+When confirmation is required, show a secondary dialog (or replace the Quick Add content) with:
+
+### For finite batch (`count >= 3`):
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Create multiple pages?                                      │
+│                                                              │
+│  This will create 5 pages:                                   │
+│                                                              │
+│  · "Morning run" — Mon Mar 16                                │
+│  · "Morning run" — Tue Mar 17                                │
+│  · "Morning run" — Wed Mar 18                                │
+│  · "Morning run" — Thu Mar 19                                │
+│  · "Morning run" — Fri Mar 20                                │
+│                                                              │
+│                              [ Cancel ]  [ Create 5 pages ]  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- Show the list of pages that will be created with their titles and dates.
+- If the list is long (>10), show the first 5 and last 2 with "... and N more" in between.
+- "Cancel" returns to the Quick Add input (don't close the modal, don't lose input state).
+- "Create N pages" creates all of them.
+
+### For recurring:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Create recurring page?                                      │
+│                                                              │
+│  "Morning run"                                               │
+│  Every weekday at 7:00 AM                                    │
+│  Starting Mon Mar 16                                         │
+│                                                              │
+│                              [ Cancel ]  [ Create ]          │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- Display the RRULE in human-readable form. Use `rrule.js`'s `toText()` method if available, or write a simple formatter for common patterns (daily, weekly, weekdays, monthly).
+- Show the start date.
+- "Cancel" returns to the Quick Add input.
+- "Create" creates the recurring page.
+
+### Dialog implementation
+
+Use a shadcn `AlertDialog` (or similar confirmation pattern) that overlays on top of the Quick Add dialog. The Quick Add stays open underneath — if the user cancels, they're right back where they were.
+
+---
+
+## Updated submit flow
+
+```typescript
+async function handleSubmit() {
+  const finalValue = inputValue.trim();
+  if (!finalValue) { /* shake, return */ }
+
+  const result = parseInput(finalValue);
+
+  // Check if confirmation is needed
+  if (result.type === "recurring") {
+    setConfirmation({ type: "recurring", result });
+    return; // Don't create yet — wait for confirmation
+  }
+
+  if (result.type === "finite" && result.count >= 3) {
+    setConfirmation({ type: "finite", result });
+    return;
+  }
+
+  // Single or finite with count < 3 — create immediately
+  await createFromResult(result);
+}
+```
+
+### Confirmation state
+
+```typescript
+const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
+
+type ConfirmationState =
+  | { type: "recurring"; result: RecurringParseResult }
+  | { type: "finite"; result: FiniteParseResult };
+```
+
+When confirmation is dismissed: `setConfirmation(null)` — returns to Quick Add input.
+When confirmed: call `createFromResult(confirmation.result)` then close everything.
+
+---
+
+## Page creation for each type
+
+Extract a shared `createFromResult` function:
+
+```typescript
+async function createFromResult(result: ParseResult) {
+  if (result.type === "single" || (result.type === "finite" && result.count < 3)) {
+    const inputs = result.type === "single" ? [result.input] : result.inputs;
+    for (const input of inputs) {
+      await createSinglePage(input);
+    }
+    // Navigate to the first created page
+  }
+
+  if (result.type === "finite" && result.count >= 3) {
+    for (const input of result.inputs) {
+      await createSinglePage(input);
+    }
+    // Navigate to the first created page
+  }
+
+  if (result.type === "recurring") {
+    // Create a single page with recurrence rule attached.
+    // Check how PageRecurrenceRule is created in the codebase —
+    // there may be an adapter method like createRecurrenceRule().
+    // The page gets one PageRecurrenceRule row; the calendar expands
+    // virtual occurrences via rrule.js at render time.
+    await createRecurringPage(result.input, result.rrule);
+  }
+
+  setConfirmation(null);
+  setOpen(false);
+  setActivePage(firstCreatedPage.id);
+}
+```
+
+### `createSinglePage` helper
+
+Encapsulates the existing create → updatePage → scheduleOnce flow:
+
+```typescript
+async function createSinglePage(parsed: ParsedInput): Promise<Page> {
+  const resolvedFolderId = /* folder resolution logic, same as current */;
+  const page = await createPage({ title: parsed.title, folderId: resolvedFolderId });
+
+  const patch: PageUpdate = {};
+  if (priorityValue !== 0) patch.priority = priorityValue;
+  if (parsed.tags.length > 0) patch.tags = [...new Set([...tagsValue, ...parsed.tags])];
+  if (parsed.durationMinutes) patch.durationMinutes = parsed.durationMinutes;
+  if (Object.keys(patch).length > 0) updatePage(page.id, patch);
+
+  if (parsed.scheduledStart) {
+    await scheduleOnce(page.id, parsed.scheduledStart, parsed.scheduledEnd);
+  }
+
+  return page;
+}
+```
+
+### `createRecurringPage` helper
+
+Check the codebase for how `PageRecurrenceRule` rows are created. There's likely an adapter method. The recurring page is a single page with a recurrence rule — the calendar expands virtual occurrences. If no adapter method exists yet, this may need to be added to the `WorkspaceContext` (flag it and ask rather than implementing a new adapter method blindly).
+
+---
+
+## Chip preview for recurring/finite
+
+During the debounce preview and space-parse, if the result is `recurring` or `finite`:
+
+- DateChip should show the **first** scheduled date (same as current behavior).
+- Consider showing a small indicator that this is recurring/batch — e.g., a repeat icon (🔁) next to the date chip, or the date chip text could say "Every weekday" instead of a single date. Keep it simple — this is a nice-to-have, not a blocker.
+
+---
+
+## Testing checklist
+
+- Type `run every weekday at 7am` → Enter → recurring confirmation dialog appears with RRULE summary.
+- Cancel on confirmation → returns to Quick Add, input preserved.
+- Confirm → recurring page created, modal closes, editor opens page.
+- Type `run mon tue wed thu fri` (or whatever syntax produces finite with 5 entries) → Enter → batch confirmation shows 5 pages listed.
+- Cancel → returns to Quick Add.
+- Confirm → 5 pages created, editor opens the first one.
+- Type `run mon tue` (finite, count=2, below threshold) → Enter → creates immediately, no confirmation.
+- Type `run tomorrow` (single) → Enter → creates immediately, no confirmation (unchanged).
+- Verify chip state (priority, tags, folder) is correctly applied to ALL pages in a batch create.
 
 ### Editor Enhancements
 
@@ -226,6 +565,7 @@ To Document:
   - help content - create new folders, pages, quick add dialog and NLP, keyboard shortcuts
 - General
   - git ignore build dir
+  - the app should not auto correct anything (capitalize, fix spelling, etc)
 - Editor
   - bubble menu for editor (removed toolbar since it was looking dated)
   - refine style of flashing cursor
@@ -274,3 +614,7 @@ To Document:
   - Add password protection / biometric access? How would that work with no recovery code?
   - Under "Today" could do a "Priority" list, which shows items in priority order. Maybe not valuable enough for the prime real estate. Could conditionally render it if any items have priority.
   - page location? Like a Google Calendar item.
+
+
+To Categorize
+- app shifts slightly when using trackpad to scroll
