@@ -132,12 +132,18 @@ export function QuickAddDialog() {
     const hasTime = parsed.scheduledStart?.includes("T") ?? false;
     setEndDateValue(hasTime ? (parsed.scheduledEnd ?? null) : null);
     setPriorityValue(
-      parsed.priority === undefined ? 0 : parsed.priority === null ? 0 : NLP_PRIORITY_MAP[parsed.priority]
+      parsed.priority === undefined
+        ? 0
+        : parsed.priority === null
+          ? 0
+          : NLP_PRIORITY_MAP[parsed.priority]
     );
 
     if (parsed.folderQuery) {
       const match = fuzzyMatchFolder(parsed.folderQuery, folders);
-      setFolderValue(match ? match.id : parsed.folderQuery.toLowerCase() === "inbox" ? null : folderValue);
+      setFolderValue(
+        match ? match.id : parsed.folderQuery.toLowerCase() === "inbox" ? null : folderValue
+      );
     } else {
       setFolderValue(defaultFolderId);
     }
