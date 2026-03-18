@@ -50,7 +50,6 @@ export interface Page {
   scheduledStart?: string | null; // ISO 8601 — denorm of next upcoming page_schedules row
   scheduledEnd?: string | null; // ISO 8601 — denorm of next upcoming page_schedules row
   completedAt?: string | null; // ISO 8601
-  durationMinutes?: number | null; // planned duration (not focus-session time)
   links?: string[]; // [[wikilink]] target page UUIDs; stored as JSON array
   parentId?: string | null; // sub-page nesting (GOO-12, max 3 levels)
   lastOpenedAt?: string | null; // ISO 8601; updated on open → drives recent-pages query

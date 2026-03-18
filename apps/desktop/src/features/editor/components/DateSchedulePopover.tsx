@@ -10,26 +10,28 @@ interface DateSchedulePopoverProps {
 }
 
 export function DateSchedulePopover({ page }: DateSchedulePopoverProps) {
-  const { scheduleOnce, clearSchedule, updatePage } = useWorkspace();
+  const { scheduleOnce, clearSchedule } = useWorkspace();
 
   function handleDateChange(iso: string | null) {
     if (iso) {
-      void scheduleOnce(page.id, iso);
+      void scheduleOnce(page.id, iso, page.scheduledEnd ?? undefined);
     } else {
       void clearSchedule(page.id);
     }
   }
 
-  function handleDurationChange(minutes: number | null) {
-    updatePage(page.id, { durationMinutes: minutes });
+  function handleEndChange(endIso: string | null) {
+    if (page.scheduledStart) {
+      void scheduleOnce(page.id, page.scheduledStart, endIso ?? undefined);
+    }
   }
 
   return (
     <DateTimePicker
       value={page.scheduledStart ?? null}
       onChange={handleDateChange}
-      durationMinutes={page.durationMinutes ?? null}
-      onDurationChange={handleDurationChange}
+      endValue={page.scheduledEnd ?? null}
+      onEndChange={handleEndChange}
       isDone={page.status === "done"}
     />
   );

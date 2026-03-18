@@ -1,7 +1,8 @@
 // QuickAddDialog — GOO-60
 // Cmd+N (macOS) / Ctrl+N opens a centered dialog for quick page creation.
-// NLP parsing fires on Space/Enter (strip-and-chip): recognized tokens are
-// removed from the input and reflected in the metadata chips below.
+// NLP parsing previews on-type (debounced 200ms) — chips update as you type
+// but input text is never modified. On submit, the parser extracts the clean
+// title and all metadata from the full input.
 
 import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -66,6 +67,7 @@ export function QuickAddDialog() {
   // ── Chip state (last-write-wins: NLP or manual override) ─────────────────────
 
   const [dateValue, setDateValue] = useState<string | null>(null);
+  const [endDateValue, setEndDateValue] = useState<string | null>(null);
   const [priorityValue, setPriorityValue] = useState<PagePriority>(0);
   const [folderValue, setFolderValue] = useState<string | null>(null);
 
@@ -74,6 +76,7 @@ export function QuickAddDialog() {
   function openDialog() {
     setInputValue("");
     setDateValue(null);
+    setEndDateValue(null);
     setPriorityValue(0);
     setFolderValue(defaultFolderId);
     setOpen(true);
@@ -109,14 +112,12 @@ export function QuickAddDialog() {
     return () => clearTimeout(id);
   }, [open]);
 
-  // ── Parse-and-strip ───────────────────────────────────────────────────────────
-  // Runs after Space is pressed (or the debounce fires). Extracts recognized NLP
-  // tokens from the input, updates the corresponding chips, and replaces the input
-  // with the clean title.
+  // ── Preview (parse-only, never modifies input) ──────────────────────────────
+  // Runs on debounce. Parses the full input and updates chip previews.
   // Last-write-wins: this overwrites chip state including any manual overrides,
   // because the input text is the source of truth for token values.
 
-  function runParseAndStrip(raw: string) {
+  function runPreview(raw: string) {
     const result = parseInput(raw);
     const parsed =
       result.type === "single"
@@ -126,47 +127,44 @@ export function QuickAddDialog() {
           : result.input;
     if (!parsed) return;
 
-    // Only update chips for fields the parser actually found.
     if (parsed.scheduledStart !== undefined) {
       setDateValue(parsed.scheduledStart);
+    }
+    // End time only applies when a specific time is set (not all-day).
+    const hasTime = (parsed.scheduledStart ?? dateValue)?.includes("T") ?? false;
+    if (parsed.scheduledEnd !== undefined && hasTime) {
+      setEndDateValue(parsed.scheduledEnd);
+    } else if (!hasTime) {
+      setEndDateValue(null);
     }
     if (parsed.priority !== undefined) {
       setPriorityValue(NLP_PRIORITY_MAP[parsed.priority]);
     }
     if (parsed.folderQuery) {
       const match = fuzzyMatchFolder(parsed.folderQuery, folders);
-      if (match) setFolderValue(match.id);
-    }
-
-    // Replace input with clean title, keeping a trailing space for continued typing.
-    const cleanTitle = parsed.title.replace(/\s{2,}/g, " ").trimStart();
-    const next = cleanTitle ? cleanTitle + " " : "";
-    setInputValue(next);
-
-    requestAnimationFrame(() => {
-      const input = inputRef.current;
-      if (input) {
-        const len = input.value.length;
-        input.setSelectionRange(len, len);
+      if (match) {
+        setFolderValue(match.id);
+      } else if (parsed.folderQuery.toLowerCase() === "inbox") {
+        setFolderValue(null);
       }
-    });
+    }
   }
 
-  // ── Debounce parse ────────────────────────────────────────────────────────────
-  // "A Space press you forgot to do." Fires 800ms after the user stops typing —
-  // long enough to avoid mid-keystroke noise — then calls runParseAndStrip(),
-  // identical to the Space handler. Stripping also happens on Space and Enter.
+  // ── Debounce preview ─────────────────────────────────────────────────────────
+  // Fires 200ms after the user stops typing. Parses the full input and updates
+  // chip previews — never modifies the input text.
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!inputValue.trim()) {
         setDateValue(null);
+        setEndDateValue(null);
         setPriorityValue(0);
         setFolderValue(defaultFolderId);
         return;
       }
-      runParseAndStrip(inputValue);
-    }, 800);
+      runPreview(inputValue);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [inputValue, folders, defaultFolderId]);
@@ -177,14 +175,6 @@ export function QuickAddDialog() {
     if (event.key === "Enter") {
       event.preventDefault();
       void handleSubmit();
-      return;
-    }
-
-    if (event.key === " ") {
-      // Let the space character enter the input first, then parse.
-      requestAnimationFrame(() => {
-        runParseAndStrip(inputRef.current?.value ?? inputValue);
-      });
     }
   }
 
@@ -199,7 +189,7 @@ export function QuickAddDialog() {
       return;
     }
 
-    // Final parse pass — catches tokens typed without a trailing space.
+    // Parse the full, unstripped input on submit.
     const result = parseInput(trimmed);
     const parsed =
       result.type === "single"
@@ -212,14 +202,19 @@ export function QuickAddDialog() {
     let resolvedFolderId = folderValue;
     if (parsed?.folderQuery) {
       const match = fuzzyMatchFolder(parsed.folderQuery, folders);
-      if (match) resolvedFolderId = match.id;
+      if (match) {
+        resolvedFolderId = match.id;
+      } else if (parsed.folderQuery.toLowerCase() === "inbox") {
+        resolvedFolderId = null;
+      }
     }
 
-    // Merge: fresh parse results override chip state; chip state is the fallback.
+    // Merge: parsed values override chip state; chip state is the fallback.
     const resolvedDate = parsed?.scheduledStart ?? dateValue;
     const resolvedPriority =
       parsed?.priority !== undefined ? NLP_PRIORITY_MAP[parsed.priority] : priorityValue;
 
+    // Use parsed.title (tokens already stripped by parser) as the page title.
     const title = parsed?.title || trimmed;
 
     const page = await createPage({ title, folderId: resolvedFolderId });
@@ -227,11 +222,13 @@ export function QuickAddDialog() {
     const patch: PageUpdate = {};
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
     if (parsed?.tags && parsed.tags.length > 0) patch.tags = parsed.tags;
-    if (parsed?.durationMinutes) patch.durationMinutes = parsed.durationMinutes;
     if (Object.keys(patch).length > 0) updatePage(page.id, patch);
 
     if (resolvedDate) {
-      await scheduleOnce(page.id, resolvedDate);
+      // End time: parsed scheduledEnd takes precedence over chip state.
+      const hasTime = resolvedDate.includes("T");
+      const resolvedEnd = hasTime ? (parsed?.scheduledEnd ?? endDateValue ?? undefined) : undefined;
+      await scheduleOnce(page.id, resolvedDate, resolvedEnd);
     }
 
     setOpen(false);
@@ -269,7 +266,12 @@ export function QuickAddDialog() {
 
           <BylineSeparator />
 
-          <DateTimePicker value={dateValue} onChange={setDateValue} />
+          <DateTimePicker
+            value={dateValue}
+            onChange={setDateValue}
+            endValue={endDateValue}
+            onEndChange={setEndDateValue}
+          />
 
           <BylineSeparator />
 

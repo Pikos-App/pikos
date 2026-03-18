@@ -74,12 +74,17 @@ function computeEndTimeLabel(hour24: number, minute: number, durationMinutes: nu
 
 function formatTriggerLabel(
   iso: string,
-  durationMinutes: number | null | undefined,
+  endIso: string | null | undefined,
   isDone: boolean
 ): { label: string; isPast: boolean } {
   const date = parseLocalISO(iso);
   const isAllDay = iso.length === 10;
-  const durationSuffix = durationMinutes ? ` · ${formatDurationLabel(durationMinutes)}` : "";
+  const durationMinutes =
+    !isAllDay && endIso && endIso.length > 10
+      ? Math.round((parseLocalISO(endIso).getTime() - parseLocalISO(iso).getTime()) / 60000)
+      : null;
+  const durationSuffix =
+    durationMinutes && durationMinutes > 0 ? ` · ${formatDurationLabel(durationMinutes)}` : "";
 
   const isPast = isAllDay ? date < startOfDay(new Date()) : date < new Date();
 
@@ -265,10 +270,10 @@ interface DateTimePickerProps {
   value: string | null;
   /** Called with an ISO string when a date/time is selected, or null to clear. */
   onChange: (iso: string | null) => void;
-  /** Duration in minutes, shown in the duration section and trigger label. */
-  durationMinutes?: number | null;
-  /** Called when user picks a duration. Optional — hides duration section if absent. */
-  onDurationChange?: (minutes: number | null) => void;
+  /** End ISO 8601 datetime — duration is calculated as endValue − value. Optional — hides duration section if absent. */
+  endValue?: string | null;
+  /** Called when user picks a duration preset (sets the end ISO). Optional — hides duration section if absent. */
+  onEndChange?: (iso: string | null) => void;
   /** When true, past dates are not highlighted red. */
   isDone?: boolean;
 }
@@ -276,8 +281,8 @@ interface DateTimePickerProps {
 export function DateTimePicker({
   value,
   onChange,
-  durationMinutes,
-  onDurationChange,
+  endValue,
+  onEndChange,
   isDone = false,
 }: DateTimePickerProps) {
   const [open, setOpen] = useState(false);
@@ -483,7 +488,15 @@ export function DateTimePicker({
   // ── Duration actions ──────────────────────────────────────────────────────────
 
   function selectDuration(minutes: number | null) {
-    onDurationChange?.(minutes);
+    if (!onEndChange) return;
+    if (minutes === null) {
+      onEndChange(null);
+      return;
+    }
+    const startDate = value ? parseLocalISO(value) : null;
+    if (!startDate || value!.length <= 10) return; // no timed start
+    const endDate = new Date(startDate.getTime() + minutes * 60000);
+    onEndChange(toISODateTime(endDate, endDate.getHours(), endDate.getMinutes()));
   }
 
   function applyCustomDuration() {
@@ -504,8 +517,14 @@ export function DateTimePicker({
 
   const hasDate = value !== null;
   const { label: triggerLabel, isPast } = value
-    ? formatTriggerLabel(value, durationMinutes, isDone)
+    ? formatTriggerLabel(value, endValue, isDone)
     : { label: "Schedule", isPast: false };
+
+  // Duration in minutes derived from start/end — only meaningful for timed events.
+  const durationMinutes =
+    value && value.length > 10 && endValue && endValue.length > 10
+      ? Math.round((parseLocalISO(endValue).getTime() - parseLocalISO(value).getTime()) / 60000)
+      : null;
 
   const endTimeLabel =
     selectedTime !== null && durationMinutes != null && durationMinutes > 0
@@ -516,7 +535,7 @@ export function DateTimePicker({
     durationMinutes != null &&
     !DURATION_PRESETS.some((preset) => preset.minutes === durationMinutes);
 
-  const showDurationSection = onDurationChange !== undefined && selectedTime !== null;
+  const showDurationSection = onEndChange !== undefined && selectedTime !== null;
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -729,7 +748,7 @@ export function DateTimePicker({
                 );
               })}
 
-              <div className="flex w-12 shrink-0 items-center">
+              <div className="flex shrink-0 items-center whitespace-nowrap">
                 {customDurationActive ? (
                   <input
                     autoFocus

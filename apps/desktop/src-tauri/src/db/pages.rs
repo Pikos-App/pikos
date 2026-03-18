@@ -31,7 +31,6 @@ struct PageRow {
     scheduled_start: Option<String>,
     scheduled_end: Option<String>,
     completed_at: Option<String>,
-    duration_mins: Option<i64>,
     links: Option<String>, // JSON array
     parent_id: Option<String>,
     last_opened_at: Option<String>,
@@ -57,7 +56,6 @@ pub struct Page {
     pub scheduled_start: Option<String>,
     pub scheduled_end: Option<String>,
     pub completed_at: Option<String>,
-    pub duration_minutes: Option<i64>,
     pub links: Vec<String>,
     pub parent_id: Option<String>,
     pub last_opened_at: Option<String>,
@@ -87,7 +85,6 @@ impl From<PageRow> for Page {
             scheduled_start: row.scheduled_start,
             scheduled_end: row.scheduled_end,
             completed_at: row.completed_at,
-            duration_minutes: row.duration_mins,
             links,
             parent_id: row.parent_id,
             last_opened_at: row.last_opened_at,
@@ -112,7 +109,6 @@ struct PageSummaryRow {
     scheduled_start: Option<String>,
     scheduled_end: Option<String>,
     completed_at: Option<String>,
-    duration_mins: Option<i64>,
     links: Option<String>,
     parent_id: Option<String>,
     last_opened_at: Option<String>,
@@ -134,7 +130,6 @@ pub struct PageSummary {
     pub scheduled_start: Option<String>,
     pub scheduled_end: Option<String>,
     pub completed_at: Option<String>,
-    pub duration_minutes: Option<i64>,
     pub links: Vec<String>,
     pub parent_id: Option<String>,
     pub last_opened_at: Option<String>,
@@ -162,7 +157,6 @@ impl From<PageSummaryRow> for PageSummary {
             scheduled_start: row.scheduled_start,
             scheduled_end: row.scheduled_end,
             completed_at: row.completed_at,
-            duration_minutes: row.duration_mins,
             links,
             parent_id: row.parent_id,
             last_opened_at: row.last_opened_at,
@@ -174,7 +168,7 @@ impl From<PageSummaryRow> for PageSummary {
 
 const SUMMARY_COLUMNS: &str =
     "id, folder_id, title, subtitle, status, priority, tags, sort_order, \
-     scheduled_start, scheduled_end, completed_at, duration_mins, links, \
+     scheduled_start, scheduled_end, completed_at, links, \
      parent_id, last_opened_at, created_at, updated_at";
 
 // ─── Input types ──────────────────────────────────────────────────────────────
@@ -194,7 +188,6 @@ pub struct NewPage {
     pub scheduled_start: Option<String>,
     pub scheduled_end: Option<String>,
     pub completed_at: Option<String>,
-    pub duration_minutes: Option<i64>,
     #[serde(default)]
     pub links: Vec<String>,
     pub parent_id: Option<String>,
@@ -222,8 +215,6 @@ pub struct PageUpdate {
     pub scheduled_end: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "deserialize_nullable")]
     pub completed_at: Option<serde_json::Value>,
-    #[serde(default, deserialize_with = "deserialize_nullable")]
-    pub duration_minutes: Option<serde_json::Value>,
     pub links: Option<Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_nullable")]
     pub parent_id: Option<serde_json::Value>,
@@ -302,8 +293,8 @@ pub async fn create_page(state: State<'_, DbState>, data: NewPage) -> Result<Pag
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
          priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
-         duration_mins, links, parent_id, last_opened_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         links, parent_id, last_opened_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&data.folder_id)
@@ -318,7 +309,6 @@ pub async fn create_page(state: State<'_, DbState>, data: NewPage) -> Result<Pag
     .bind(&data.scheduled_start)
     .bind(&data.scheduled_end)
     .bind(&data.completed_at)
-    .bind(data.duration_minutes)
     .bind(&links_json)
     .bind(&data.parent_id)
     .bind(&data.last_opened_at)
@@ -409,17 +399,6 @@ pub async fn update_page(
     push_nullable_str!(updates.completed_at, "completed_at");
     push_nullable_str!(updates.parent_id, "parent_id");
     push_nullable_str!(updates.last_opened_at, "last_opened_at");
-
-    // Nullable integer field
-    if let Some(val) = updates.duration_minutes {
-        sep.push("duration_mins = ");
-        match val {
-            serde_json::Value::Null => sep.push_bind_unseparated(None::<i64>),
-            serde_json::Value::Number(n) => sep.push_bind_unseparated(n.as_i64()),
-            _ => sep.push_bind_unseparated(None::<i64>),
-        };
-        has_updates = true;
-    }
 
     if !has_updates {
         return fetch_page(&pool, &id).await;

@@ -2,9 +2,9 @@
 
 ## Active Task
 
-**GOO-60** — Quick Add Modal (`Cmd+N`). Requires GOO-19 ✓.
+**GOO-119** — Quick Add: preview-on-type, strip-on-submit. Fixes date+time context loss, duration state loss, debounce space insertion.
 
-See `BACKLOG_ACTIVE.md` for full spec.
+Next: GOO-120 (!0-4 priority) → GOO-121 (tags table decision) → GOO-60 (tag chips).
 
 ## Phase Status
 
@@ -12,7 +12,7 @@ Phase 0–1 complete. Phase 2 started: GOO-14, 91, 37, 88, 94, 89, 79, 80, 92, 9
 
 ## Open Questions
 
-None.
+**GOO-121**: Should tags be normalized to `tags + page_tags` tables before building tag chips? See spec in BACKLOG_ACTIVE.md.
 
 ## Blockers
 

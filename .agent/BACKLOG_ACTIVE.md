@@ -9,15 +9,176 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ## Phase 2A — Core Editor & Metadata
 
-Need to do some refinement of quick add dialog and NLP with its current functionality.
-If I type "Run monday 2pm for 30m" it parses monday, then 2pm (for today/tomorrow depending on time), then parsed 30m and sets the time for today. Maybe parsing on space bar keypress is not the best, because doing "monday 2pm" parses monday, then 2pm - and how would it know to set it to monday at 2pm vs today at 2pm? And duration seems totally broken.
-When I stop typing it adds a new space to the input - which is kind of awkward if the thing before my cursor is not parsed. For example typing ~ then pausing 800ms the input adds a space after the ~, which then doesn't parse to a folder if I keep typing.
-I'd also like !0-4 to translate to priority.
+- [~] **GOO-119** Quick Add: preview-on-type, strip-on-submit _(High — prerequisite for GOO-60)_
 
-! Next step: work with opus to do some planning on this - then get prompts for sonnet to work on.
-! Also look into whether or not tags should be a table - ie tags + page_tags so we can do smart adding and such. Do this before doing quick add tags.
+### Summary
 
-- [] GOO-60 Phase 2a: Tag Chips in Quick Add
+Refactor the Quick Add parse architecture to fix three interconnected bugs caused by parse-and-strip-on-space:
+
+1. **Date+time context loss**: "Run monday 2pm" → space after "monday" strips it, then "2pm" parses as time-only (today/tomorrow) instead of "monday at 2pm". Chrono never sees the combined expression.
+2. **Duration state lost on submit**: "for 30m" is stripped from input but there's no `durationValue` chip state. Final parse of the clean title finds no duration → silently lost.
+3. **Debounce space insertion**: 800ms debounce always appends trailing space to input (`cleanTitle + " "`). If cursor is mid-token (e.g. `~` before typing folder name), the space breaks the token.
+
+### Architecture change
+
+Replace the current parse-and-strip-on-space flow with **preview-on-type, strip-on-submit**:
+
+**Current (broken):**
+- Space press → `runParseAndStrip()` → parse input, update chips, strip tokens from input, reposition cursor
+- Debounce (800ms) → same `runParseAndStrip()`
+- Submit → final parse of (already-stripped) input
+
+**New:**
+- Input change (debounced ~200ms) → `runPreview()` → parse full input, update chip previews. **Never modify input text.**
+- Submit (Enter / click Add) → parse full input → use parsed values merged with chip overrides → create page
+
+### What to change
+
+**QuickAddDialog.tsx:**
+
+1. **Delete `runParseAndStrip()`** — replace with `runPreview(raw: string)` that only calls `parseInput(raw)` and updates chip state (dateValue, priorityValue, folderValue). No `setInputValue`, no cursor manipulation.
+
+2. **Replace the space-press handler** (lines 183–188):
+   - Remove the `requestAnimationFrame(() => runParseAndStrip(...))` call on space press.
+   - The debounce effect already covers preview — space press needs no special handling.
+
+3. **Replace the debounce effect** (lines 160–172):
+   - Change from 800ms to ~200ms for responsiveness (chips should feel instant).
+   - Call `runPreview(inputValue)` instead of `runParseAndStrip(inputValue)`.
+   - Still reset chips to defaults when input is empty.
+
+4. **Update `handleSubmit()`** (lines 193–239):
+   - Parse `inputValue.trim()` (the full, unstripped input).
+   - Use `parsed.title` as the page title (parser already strips tokens from the title).
+   - Use `parsed.scheduledStart ?? dateValue` (unchanged — chip override still works).
+   - Use `parsed.durationMinutes` directly (no need for chip state — it's in the full input).
+   - Use `parsed.priority` with fallback to `priorityValue` (unchanged).
+   - Use `parsed.tags` directly (unchanged).
+   - Use `parsed.folderQuery` with fallback to `folderValue` (unchanged).
+
+5. **Remove the `handleKeyDown` space handler entirely** — only keep the Enter handler for submit.
+
+### Why this fixes all three bugs
+
+- **Date+time**: Chrono always sees the full input ("monday 2pm"), so it parses them as a combined expression.
+- **Duration**: Parsed from full input on submit; no intermediate state needed.
+- **Space insertion**: Input text is never modified by the parser. No trailing space, no cursor repositioning.
+
+### UX tradeoff
+
+Tokens stay visible in the input (e.g. user sees "Run monday 2pm #work" instead of "Run " after stripping). But chips clearly show interpreted values. This is more predictable and matches how TickTick, Todoist, and Linear handle NLP input.
+
+### Testing checklist
+
+- Type "Run monday 2pm" → date chip shows Monday at 2pm (not today at 2pm).
+- Type "Run monday 2pm for 30m" → date chip shows Monday at 2pm, submit creates page with durationMinutes=30 and scheduledEnd.
+- Type "meeting ~" then pause → no space inserted after `~`. Continue typing "Projects" → folder chip updates to Projects.
+- Type "#work !high tomorrow" → all three chips update as you type. Input still shows full text.
+- Manually change date chip via picker → type a new date token → NLP date overrides picker (last-write-wins preserved).
+- Submit with Enter (no trailing space) → page created correctly with all metadata.
+- Empty input → chips reset to defaults (folder=current, date=none, priority=none).
+
+---
+
+- [ ] **GOO-120** NLP: add `!0-4` numeric priority syntax _(Low)_
+
+### Summary
+
+Extend the NLP parser to support numeric priority shortcuts `!0` through `!4`.
+
+### Mapping
+
+| Syntax | Priority | Equivalent |
+|--------|----------|------------|
+| `!0` | none (clear) | — |
+| `!1` | urgent | `!urgent` |
+| `!2` | high | `!high` |
+| `!3` | medium | `!medium` |
+| `!4` | low | `!low` |
+
+### What to change
+
+**`packages/core/src/nlp/parser.ts`:**
+
+1. Add a second priority regex pass after the existing named priority regex (line 97–102):
+   ```typescript
+   // Numeric priority: !0 (none) through !4 (low)
+   const NUMERIC_PRIORITY_MAP: Record<string, PagePriority | null> = {
+     "0": null, // clear priority
+     "1": "urgent",
+     "2": "high",
+     "3": "medium",
+     "4": "low",
+   };
+   text = text.replace(/!([0-4])\b/g, (_, n: string) => {
+     const mapped = NUMERIC_PRIORITY_MAP[n];
+     if (mapped !== undefined) {
+       priority = mapped ?? undefined;
+     }
+     return " ";
+   });
+   ```
+   Note: `!0` should clear priority (set to `undefined`), so typing `!0` explicitly means "no priority".
+
+2. **QuickAddDialog.tsx**: Handle `priority === undefined` from NLP when `!0` is used — `NLP_PRIORITY_MAP` lookup should fall through to `priorityValue = 0` (the "no priority" state).
+
+### Testing
+
+- `task !1` → priority: "urgent"
+- `task !4` → priority: "low"
+- `task !0` → priority: undefined (none)
+- `task !1 !3` → priority: "medium" (last wins)
+- `task !5` → not matched, stays in title
+- `task !urgent` → still works (unchanged)
+
+---
+
+- [ ] **GOO-121** Evaluate tags normalization: tags + page_tags tables _(Medium — decision before GOO-60)_
+
+### Summary
+
+Currently tags are stored as a JSON array on `pages.tags TEXT`. Before building tag chips (GOO-60), decide whether to normalize to `tags(id, name)` + `page_tags(page_id, tag_id)` tables.
+
+### Why consider normalizing
+
+- **Autocomplete**: A `tags` table enables `SELECT name FROM tags WHERE name LIKE ?` for instant tag suggestions in Quick Add.
+- **Global rename/merge**: Renaming a tag is one UPDATE instead of parsing/updating every page's JSON array.
+- **Tag-based views**: `SELECT p.* FROM pages p JOIN page_tags pt ON p.id = pt.page_id WHERE pt.tag_id = ?` is cleaner and indexable vs JSON array scanning.
+- **Deduplication**: Normalized table enforces uniqueness; JSON arrays require app-level dedup.
+- **FTS**: Tag names can be included in FTS5 content via a simple JOIN.
+
+### Why keep JSON arrays
+
+- **Simpler**: No migration, no join tables, no extra queries on page create/update.
+- **Good enough for v1**: With <1000 pages, JSON array scanning is fast enough.
+- **Matches current code**: `updatePage({ tags: [...] })` already works.
+
+### Decision criteria
+
+- If we want tag autocomplete in Quick Add (likely yes for GOO-60 tag chips or shortly after) → normalize.
+- If we want tag-based smart views or filters (likely yes for Phase 3) → normalize.
+- If we just need to display parsed tags and save them → JSON is fine for now.
+
+### Recommendation
+
+Normalize now (before GOO-60). The migration is small (one `CREATE TABLE` + `CREATE TABLE` + backfill script), and it unblocks autocomplete which makes tag chips much more useful. Deferring means a harder migration later when pages have inconsistent tag data.
+
+### If normalizing, migration plan
+
+1. Add `tags(id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))` table.
+2. Add `page_tags(page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE, tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY (page_id, tag_id))` table.
+3. Backfill: parse existing `pages.tags` JSON arrays → insert into `tags` + `page_tags`.
+4. Keep `pages.tags` column as denormalized cache (or drop it — depends on query patterns).
+5. Add Rust commands: `get_tags`, `create_tag`, `add_tag_to_page`, `remove_tag_from_page`, `search_tags(query)`.
+6. Update `StorageAdapter` + `WorkspaceContext` to use normalized tables.
+
+### Action required
+
+Make a decision and document it in `.agent/decisions.md` before starting GOO-60.
+
+---
+
+- [ ] GOO-60 Phase 2a: Tag Chips in Quick Add
 
 ## Summary
 

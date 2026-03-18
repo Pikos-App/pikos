@@ -36,23 +36,31 @@ export function openDb(dbPath: string): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
-  // Apply migration if tables don't exist yet
-  const migrationPath = resolve(
+  // Apply migrations in order. Each is idempotent (CREATE IF NOT EXISTS / ALTER IF needed).
+  const migrationsDir = resolve(
     import.meta.dirname,
     "..",
     "..",
     "apps",
     "desktop",
     "src-tauri",
-    "migrations",
-    "001_initial.sql"
+    "migrations"
   );
-  if (existsSync(migrationPath)) {
-    const sql = readFileSync(migrationPath, "utf8");
-    db.exec(sql);
-    console.log(`  Applied migration: ${migrationPath}`);
-  } else {
-    console.warn(`  Warning: migration not found at ${migrationPath} — assuming schema exists`);
+  const migrations = ["001_initial.sql", "002_drop_duration_mins.sql"];
+  for (const filename of migrations) {
+    const migrationPath = resolve(migrationsDir, filename);
+    if (existsSync(migrationPath)) {
+      try {
+        const sql = readFileSync(migrationPath, "utf8");
+        db.exec(sql);
+        console.log(`  Applied migration: ${filename}`);
+      } catch {
+        // ALTER TABLE DROP COLUMN fails if the column is already gone — safe to ignore.
+        console.log(`  Skipped migration (already applied): ${filename}`);
+      }
+    } else {
+      console.warn(`  Warning: migration not found: ${migrationPath}`);
+    }
   }
 
   return db;
@@ -138,7 +146,6 @@ export interface PageData {
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
   completedAt?: string | null;
-  durationMins?: number | null;
 }
 
 export interface ScheduleData {
@@ -154,11 +161,11 @@ const insertPageStmt = (db: Database.Database) =>
     INSERT INTO pages
       (id, folder_id, title, subtitle, content, content_text,
        status, priority, tags, sort_order, scheduled_start, scheduled_end,
-       completed_at, duration_mins, created_at, updated_at)
+       completed_at, created_at, updated_at)
     VALUES
       (@id, @folderId, @title, @subtitle, @content, @contentText,
        @status, @priority, @tags, @sortOrder, @scheduledStart, @scheduledEnd,
-       @completedAt, @durationMins, @createdAt, @updatedAt)
+       @completedAt, @createdAt, @updatedAt)
   `);
 
 export function insertPage(db: Database.Database, page: PageData): string {
@@ -178,7 +185,6 @@ export function insertPage(db: Database.Database, page: PageData): string {
     scheduledStart: page.scheduledStart ?? null,
     scheduledEnd: page.scheduledEnd ?? null,
     completedAt: page.completedAt ?? null,
-    durationMins: page.durationMins ?? null,
     createdAt: ts,
     updatedAt: ts,
   });
