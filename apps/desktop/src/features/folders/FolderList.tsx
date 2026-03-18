@@ -1,17 +1,27 @@
 import { Fragment, useState } from "react";
+import type React from "react";
 import { useDndMonitor, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CalendarDays, Inbox, Plus, Search } from "lucide-react";
+import { ArrowUpDown, CalendarDays, Hash, Inbox, Plus, Search, Text } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { FolderItem } from "./components/FolderItem";
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
 import { SmartViewEntry } from "./components/SmartViewEntry";
 import { useFolderList } from "./hooks/useFolderList";
+import type { FolderSortOrder } from "./hooks/useFolderList";
+import { useUI } from "@/shared/context/UIContext";
 
 export function FolderList() {
   const {
     folders,
+    pageCountByFolder,
     activeViewId,
     setActiveViewId,
     renamingId,
@@ -19,6 +29,8 @@ export function FolderList() {
     pendingDelete,
     todayCount,
     inboxCount,
+    sortOrder,
+    setSortOrder,
     handleCreateFolder,
     handleRenameCommit,
     handleDeleteRequest,
@@ -26,6 +38,13 @@ export function FolderList() {
     handleDeleteCancel,
     handleColorChange,
   } = useFolderList();
+  const { openSortMenu, setOpenSortMenu } = useUI();
+
+  const SORT_OPTIONS: { value: FolderSortOrder; label: string; icon: React.ReactNode }[] = [
+    { value: "manual", label: "Manual", icon: <ArrowUpDown size={13} /> },
+    { value: "alphabetical", label: "Alphabetical", icon: <Text size={13} /> },
+    { value: "page-count", label: "Page count", icon: <Hash size={13} /> },
+  ];
 
   const folderIds = folders.map((f) => f.id);
   const insertBeforeId = useInsertionLine(folderIds);
@@ -76,6 +95,33 @@ export function FolderList() {
             >
               <Search size={15} />
             </button>
+            <DropdownMenu
+              open={openSortMenu === "folder-sort"}
+              onOpenChange={(open) => setOpenSortMenu(open ? "folder-sort" : null)}
+            >
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  title="Sort folders"
+                >
+                  <ArrowUpDown size={15} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                {SORT_OPTIONS.map((opt) => (
+                  <DropdownMenuItem
+                    key={opt.value}
+                    onSelect={() => setSortOrder(opt.value)}
+                    className="gap-2"
+                    data-active={sortOrder === opt.value}
+                  >
+                    {opt.icon}
+                    {opt.label}
+                    {sortOrder === opt.value && <span className="ml-auto text-primary">✓</span>}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <button
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               title="New Folder"
@@ -92,6 +138,7 @@ export function FolderList() {
               {insertBeforeId === folder.id && <InsertionLine />}
               <FolderItem
                 folder={folder}
+                pageCount={pageCountByFolder[folder.id] ?? 0}
                 isActive={activeViewId === folder.id}
                 isRenaming={renamingId === folder.id}
                 onSelect={() => setActiveViewId(folder.id)}

@@ -1,11 +1,12 @@
 // MetadataHeader — page metadata panel rendered above the editor scroll area.
 // key={page.id} in parent resets all state on page switch.
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check } from "lucide-react";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { FolderChip } from "@/features/pages/components/FolderChip";
+import { TagsPopover } from "@/features/pages/components/TagsPopover";
 import { DateSchedulePopover } from "./DateSchedulePopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
@@ -24,17 +25,21 @@ function BylineSeparator() {
 function Byline({
   page,
   folders,
+  allTags,
   onStatusChange,
   onFolderChange,
   onPriorityChange,
+  onTagToggle,
   saveError,
   onErrorClick,
 }: {
   page: Page;
   folders: Folder[];
+  allTags: string[];
   onStatusChange: (status: PageStatus) => void;
   onFolderChange: (folderId: string | null) => void;
   onPriorityChange: (priority: PagePriority) => void;
+  onTagToggle: (name: string) => void;
   saveError?: string | null;
   onErrorClick?: () => void;
 }) {
@@ -68,12 +73,9 @@ function Byline({
       <BylineSeparator />
       <PriorityDropdown priority={page.priority} onSelect={onPriorityChange} variant="byline" />
 
-      {page.tags.map((tag) => (
-        <Fragment key={tag}>
-          <BylineSeparator />
-          <span>#{tag}</span>
-        </Fragment>
-      ))}
+      {/* Tags popover */}
+      <BylineSeparator />
+      <TagsPopover allTags={allTags} selected={page.tags} onToggle={onTagToggle} />
 
       {/* Save error — sticky, click to retry */}
       {saveError != null && (
@@ -115,7 +117,8 @@ export function MetadataHeader({
   contentSaveError,
   onRetryContent,
 }: MetadataHeaderProps) {
-  const { folders, updatePage, flushPage, pageErrors, clearPageError } = useWorkspace();
+  const { folders, tags, updatePage, flushPage, pageErrors, clearPageError } = useWorkspace();
+  const allTagNames = tags.map((t) => t.name);
 
   const metadataError = pageErrors.get(page.id) ?? null;
   const hasError = !!(metadataError ?? contentSaveError);
@@ -139,6 +142,13 @@ export function MetadataHeader({
 
   function handlePriorityChange(priority: PagePriority) {
     updatePage(page.id, { priority });
+  }
+
+  function handleTagToggle(name: string) {
+    const next = page.tags.includes(name)
+      ? page.tags.filter((t) => t !== name)
+      : [...page.tags, name];
+    updatePage(page.id, { tags: next });
   }
 
   // ── Title ──────────────────────────────────────────────────────────────────
@@ -360,9 +370,11 @@ export function MetadataHeader({
         <Byline
           page={page}
           folders={folders}
+          allTags={allTagNames}
           onStatusChange={handleStatusChange}
           onFolderChange={handleFolderChange}
           onPriorityChange={handlePriorityChange}
+          onTagToggle={handleTagToggle}
           saveError={hasError ? (errorMessage ?? "Save failed") : null}
           onErrorClick={handleErrorClick}
         />

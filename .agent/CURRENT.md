@@ -2,9 +2,9 @@
 
 ## Active Task
 
-**GOO-60** — Phase 2a: Tag Chips in Quick Add.
+**GOO-60b** — Phase 2b: Recurring & Batch Page Confirmation.
 
-Next: GOO-60 (tag chips) → GOO-60b (recurring/batch confirmation) → GOO-108 (tab key).
+Next: GOO-60b (recurring/batch confirmation) → GOO-108 (tab key) → GOO-114 (bubble toolbar).
 
 ## Phase Status
 

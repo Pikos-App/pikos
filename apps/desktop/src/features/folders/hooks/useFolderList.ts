@@ -8,8 +8,11 @@ interface PendingDelete {
   pageCount: number;
 }
 
+export type FolderSortOrder = "manual" | "alphabetical" | "page-count";
+
 export interface FolderListState {
   folders: Folder[];
+  pageCountByFolder: Record<string, number>;
   activeViewId: string;
   setActiveViewId: (id: string) => void;
   renamingId: string | null;
@@ -17,6 +20,8 @@ export interface FolderListState {
   pendingDelete: PendingDelete | null;
   todayCount: number;
   inboxCount: number;
+  sortOrder: FolderSortOrder;
+  setSortOrder: (order: FolderSortOrder) => void;
   handleCreateFolder: () => Promise<void>;
   handleRenameCommit: (id: string, name: string) => void;
   handleDeleteRequest: (folder: Folder) => void;
@@ -30,6 +35,12 @@ export function useFolderList(): FolderListState {
   const { activeViewId, setActiveViewId } = useUI();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [sortOrder, setSortOrder] = useState<FolderSortOrder>("manual");
+
+  const pageCountByFolder: Record<string, number> = {};
+  for (const folder of folders) {
+    pageCountByFolder[folder.id] = pages.filter((p) => p.folderId === folder.id).length;
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const todayCount = pages.filter(
@@ -37,6 +48,20 @@ export function useFolderList(): FolderListState {
   ).length;
 
   const inboxCount = pages.filter((p) => p.folderId === null).length;
+
+  // "manual" — use workspace array order as-is; reorderFolders keeps it correct via optimistic
+  // update. Sorting by folder.sortOrder would revert the order since optimistic update doesn't
+  // update the sortOrder field on each Folder object (only the DB write does).
+  const sortedFolders =
+    sortOrder === "manual"
+      ? folders
+      : [...folders].sort((a, b) => {
+          if (sortOrder === "alphabetical") return a.name.localeCompare(b.name);
+          // page-count
+          const aCount = pages.filter((p) => p.folderId === a.id).length;
+          const bCount = pages.filter((p) => p.folderId === b.id).length;
+          return bCount - aCount;
+        });
 
   async function handleCreateFolder() {
     const folder = await createFolder({ name: "New Folder" });
@@ -75,7 +100,8 @@ export function useFolderList(): FolderListState {
   }
 
   return {
-    folders,
+    folders: sortedFolders,
+    pageCountByFolder,
     activeViewId,
     setActiveViewId,
     renamingId,
@@ -83,6 +109,8 @@ export function useFolderList(): FolderListState {
     pendingDelete,
     todayCount,
     inboxCount,
+    sortOrder,
+    setSortOrder,
     handleCreateFolder,
     handleRenameCommit,
     handleDeleteRequest,

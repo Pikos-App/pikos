@@ -31,6 +31,9 @@ export interface UIContextValue {
   /** Settings overlay open state. */
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
+  /** Which sort dropdown is open ('folder-sort' | 'page-sort' | null). Shared to ensure mutual exclusion. */
+  openSortMenu: string | null;
+  setOpenSortMenu: (id: string | null) => void;
 }
 
 const UIContext = createContext<UIContextValue | null>(null);
@@ -43,6 +46,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [rightPanel, setRightPanel] = useState<"editor" | "calendar">("editor");
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openSortMenu, setOpenSortMenu] = useState<string | null>(null);
   const [sortModes, setSortModes] = useLocalStorage<Record<string, SortMode>>(
     "pikos:sortModes",
     {}
@@ -75,6 +79,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setSortMode,
     settingsOpen,
     setSettingsOpen,
+    openSortMenu,
+    setOpenSortMenu,
   };
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

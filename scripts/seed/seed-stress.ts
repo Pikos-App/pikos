@@ -54,7 +54,6 @@ const FOLDER_COLORS = [
   "#f97316",
 ];
 
-const FOLDER_ICONS = ["📁", "🗂", "📂", "🗃", "📋", "📝", "🔖", "🏷", "📌", "🗒"];
 
 const TAGS_POOL = [
   "work",
@@ -199,7 +198,7 @@ export function run(dbPath: string = defaultDbPath()): void {
 
   // A few pages go to Inbox (folderId = null) — skip creating those folder slots
   for (let i = 0; i < FOLDER_COUNT; i++) {
-    const name = `${FOLDER_ICONS[i % FOLDER_ICONS.length]} ${faker.commerce.department()} · ${faker.word.noun()}`;
+    const name = `${faker.commerce.department()} · ${faker.word.noun()}`;
     const id = getOrCreateFolder(db, name, {
       color: FOLDER_COLORS[i % FOLDER_COLORS.length],
       sortOrder: i,

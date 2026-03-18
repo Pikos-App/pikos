@@ -57,10 +57,10 @@ interface Page {
 // ── Folders ───────────────────────────────────────────────────────────────────
 
 const FOLDERS: Record<string, { color: string; sortOrder: number }> = {
-  "🚀 Pikos Launch": { color: "#6366f1", sortOrder: 0 },
-  "🎨 Design": { color: "#ec4899", sortOrder: 1 },
-  "💡 Ideas": { color: "#f59e0b", sortOrder: 2 },
-  "🧘 Personal": { color: "#10b981", sortOrder: 3 },
+  "Pikos Launch": { color: "#6366f1", sortOrder: 0 },
+  "Design": { color: "#ec4899", sortOrder: 1 },
+  "Ideas": { color: "#f59e0b", sortOrder: 2 },
+  "Personal": { color: "#10b981", sortOrder: 3 },
 };
 
 // ── Pages ──────────────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ const PAGES: Page[] = [
   // ── 🚀 Pikos Launch ────────────────────────────────────────────────────────
 
   {
-    folder: "🚀 Pikos Launch",
+    folder: "Pikos Launch",
     title: "App Store submission checklist",
     subtitle: "Everything needed before hitting Submit in App Store Connect",
     content: tiptapDoc(
@@ -93,7 +93,7 @@ const PAGES: Page[] = [
     durationMins: 60,
   },
   {
-    folder: "🚀 Pikos Launch",
+    folder: "Pikos Launch",
     title: "Landing page copy — hero section",
     subtitle: "The 10-second pitch for someone landing from a Hacker News post",
     content: tiptapDoc(
@@ -116,7 +116,7 @@ const PAGES: Page[] = [
     tags: ["launch", "marketing", "writing"],
   },
   {
-    folder: "🚀 Pikos Launch",
+    folder: "Pikos Launch",
     title: "Beta feedback synthesis",
     subtitle: "Common patterns from 47 beta responses",
     content: tiptapDoc(
@@ -145,7 +145,7 @@ const PAGES: Page[] = [
     end: d(-2, 15, 30),
   },
   {
-    folder: "🚀 Pikos Launch",
+    folder: "Pikos Launch",
     title: "Hacker News Show HN post draft",
     subtitle: "Ask for feedback, not upvotes — link to /open for the technical crowd",
     content: tiptapDoc(
@@ -172,7 +172,7 @@ const PAGES: Page[] = [
     end: d(7, 10, 30),
   },
   {
-    folder: "🚀 Pikos Launch",
+    folder: "Pikos Launch",
     title: "Product Hunt launch day ops",
     subtitle: "Minute-by-minute schedule for the PH launch",
     content: tiptapDoc(
@@ -197,7 +197,7 @@ const PAGES: Page[] = [
   // ── 🎨 Design ─────────────────────────────────────────────────────────────
 
   {
-    folder: "🎨 Design",
+    folder: "Design",
     title: "Collapsible metadata header — GOO-32",
     subtitle: "Animated expand/collapse with CSS grid-template-rows trick",
     content: tiptapDoc(
@@ -220,7 +220,7 @@ const PAGES: Page[] = [
     durationMins: 120,
   },
   {
-    folder: "🎨 Design",
+    folder: "Design",
     title: "Icon system audit",
     subtitle: "Replace inconsistent icon usage with Lucide throughout",
     content: tiptapDoc(
@@ -238,7 +238,7 @@ const PAGES: Page[] = [
     tags: ["design"],
   },
   {
-    folder: "🎨 Design",
+    folder: "Design",
     title: "Dark mode token mapping",
     subtitle: "Map all Tailwind semantic tokens to light and dark values",
     content: tiptapDoc(
@@ -263,7 +263,7 @@ const PAGES: Page[] = [
     tags: ["design", "theme"],
   },
   {
-    folder: "🎨 Design",
+    folder: "Design",
     title: "Calendar block visual polish",
     subtitle: "Rounded corners, colour-coded by priority, hover state",
     content: tiptapDoc(
@@ -285,7 +285,7 @@ const PAGES: Page[] = [
   // ── 💡 Ideas ─────────────────────────────────────────────────────────────
 
   {
-    folder: "💡 Ideas",
+    folder: "Ideas",
     title: "Weekly review template",
     subtitle: "Structured prompt to ship every Sunday evening",
     content: tiptapDoc(
@@ -306,7 +306,7 @@ const PAGES: Page[] = [
     tags: ["template", "productivity"],
   },
   {
-    folder: "💡 Ideas",
+    folder: "Ideas",
     title: "Whiteboard integration concept",
     subtitle: "Freeform canvas inside a page — for spatial thinkers",
     content: tiptapDoc(
@@ -329,7 +329,7 @@ const PAGES: Page[] = [
     tags: ["idea", "future"],
   },
   {
-    folder: "💡 Ideas",
+    folder: "Ideas",
     title: "Command palette GOO-61",
     subtitle: "Cmd+P global search + actions — fastest navigation primitive",
     content: tiptapDoc(
@@ -355,7 +355,7 @@ const PAGES: Page[] = [
   // ── 🧘 Personal ──────────────────────────────────────────────────────────
 
   {
-    folder: "🧘 Personal",
+    folder: "Personal",
     title: "Morning pages — March 12",
     subtitle: "Stream of consciousness before the day starts",
     content: tiptapDoc(
@@ -373,7 +373,7 @@ const PAGES: Page[] = [
     durationMins: 30,
   },
   {
-    folder: "🧘 Personal",
+    folder: "Personal",
     title: "Run — 5k easy",
     subtitle: "Active recovery. No watch, just legs.",
     content: tiptapDoc(
@@ -388,7 +388,7 @@ const PAGES: Page[] = [
     durationMins: 38,
   },
   {
-    folder: "🧘 Personal",
+    folder: "Personal",
     title: "Dinner with Jamie — Friday",
     subtitle: "Reservations at Oleana, 7 PM",
     content: tiptapDoc(
@@ -459,7 +459,7 @@ export function run(dbPath: string = defaultDbPath()): void {
 
   // Marker
   insertPage(db, {
-    folderId: folderMap.get("🚀 Pikos Launch")!,
+    folderId: folderMap.get("Pikos Launch")!,
     title: MARKER,
     subtitle: "Delete this page to re-seed",
     content: tiptapDoc(paragraph("Demo seed marker.")),

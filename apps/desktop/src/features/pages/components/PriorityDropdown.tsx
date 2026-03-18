@@ -90,7 +90,7 @@ export function PriorityDropdown({
           // Fixed width prevents layout shift when switching between priority labels.
           <button
             className={cn(
-              "inline-flex cursor-pointer items-center gap-1 rounded transition-opacity hover:opacity-80 focus:outline-none",
+              "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded whitespace-nowrap transition-opacity hover:opacity-80 focus:outline-none",
               cfg.className
             )}
             aria-label={`Priority: ${cfg.label}`}

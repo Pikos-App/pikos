@@ -29,6 +29,7 @@ const COLORS = [
 
 export interface FolderItemProps {
   folder: Folder;
+  pageCount?: number;
   isActive: boolean;
   isRenaming: boolean;
   onSelect: () => void;
@@ -41,6 +42,7 @@ export interface FolderItemProps {
 
 export function FolderItem({
   folder,
+  pageCount,
   isActive,
   isRenaming,
   onSelect,
@@ -101,6 +103,11 @@ export function FolderItem({
           dragProps={{ ...attributes, ...listeners }}
         >
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+          {pageCount !== undefined && pageCount > 0 && (
+            <span className="shrink-0 text-[11px] text-muted-foreground/60 tabular-nums">
+              {pageCount > 99 ? "99+" : pageCount}
+            </span>
+          )}
         </SidebarListItem>
       </ContextMenuTrigger>
 

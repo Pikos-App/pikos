@@ -1,8 +1,22 @@
 // PageListPanel — middle panel (page list for active view). Default 280px, resizable.
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { ArrowUpDown, Check, ChevronRight, Plus } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type React from "react";
+import {
+  ArrowUpDown,
+  CalendarDays,
+  CaseSensitive,
+  ChevronRight,
+  Flag,
+  GripVertical,
+  Plus,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { SortMode } from "@/features/pages/utils/pageFilters";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { InsertionLine } from "@/shared/components/InsertionLine";
@@ -43,9 +57,16 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
     handlePriorityChange,
     handleSelectPage,
   } = usePageList();
-  const { activeViewId, sidebarCollapsed, setSidebarCollapsed, getSortMode, setSortMode } = useUI();
+  const {
+    activeViewId,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    getSortMode,
+    setSortMode,
+    openSortMenu,
+    setOpenSortMenu,
+  } = useUI();
   const sortMode = activeViewId !== "today" ? getSortMode(activeViewId) : "date";
-  const [sortOpen, setSortOpen] = useState(false);
   const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
   const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage("pikos:overdueCollapsed", true);
   const [completedCollapsed, setCompletedCollapsed] = useLocalStorage(
@@ -152,41 +173,39 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
         </span>
         <div className="flex items-center gap-0.5">
           {activeViewId !== "today" && (
-            <Popover open={sortOpen} onOpenChange={setSortOpen}>
-              <PopoverTrigger asChild>
+            <DropdownMenu
+              open={openSortMenu === "page-sort"}
+              onOpenChange={(open) => setOpenSortMenu(open ? "page-sort" : null)}
+            >
+              <DropdownMenuTrigger asChild>
                 <button
                   className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
                   title={`Sort: ${sortMode}`}
                 >
                   <ArrowUpDown size={13} />
                 </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-44 p-1" align="end">
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-40" align="end">
                 {(
                   [
-                    { value: "date", label: "Date" },
-                    { value: "title", label: "Title" },
-                    { value: "priority", label: "Priority" },
-                    { value: "manual", label: "Manual" },
-                  ] as { value: SortMode; label: string }[]
-                ).map(({ value, label }) => (
-                  <button
+                    { value: "date", label: "Date", icon: <CalendarDays size={13} /> },
+                    { value: "title", label: "Title", icon: <CaseSensitive size={13} /> },
+                    { value: "priority", label: "Priority", icon: <Flag size={13} /> },
+                    { value: "manual", label: "Manual", icon: <GripVertical size={13} /> },
+                  ] as { value: SortMode; label: string; icon: React.ReactNode }[]
+                ).map(({ value, label, icon }) => (
+                  <DropdownMenuItem
                     key={value}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
-                    onClick={() => {
-                      setSortMode(activeViewId, value);
-                      setSortOpen(false);
-                    }}
+                    className="gap-2"
+                    onSelect={() => setSortMode(activeViewId, value)}
                   >
-                    <Check
-                      size={13}
-                      className={sortMode === value ? "text-foreground" : "invisible"}
-                    />
+                    {icon}
                     {label}
-                  </button>
+                    {sortMode === value && <span className="ml-auto text-primary">✓</span>}
+                  </DropdownMenuItem>
                 ))}
-              </PopoverContent>
-            </Popover>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <button
             className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"

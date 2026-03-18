@@ -133,7 +133,7 @@ function healthLog(activity: string, duration: string, notes: string): string {
 const PAGES: PageSpec[] = [
   // ── Work — current sprint ──────────────────────────────────────────────────
   {
-    folder: "💼 Work",
+    folder: "Work",
     title: "Q1 product roadmap review",
     subtitle: "Align with leadership on March milestones before EOQ",
     body: meetingNotes(
@@ -149,7 +149,7 @@ const PAGES: PageSpec[] = [
     durationMins: 60,
   },
   {
-    folder: "💼 Work",
+    folder: "Work",
     title: "Ship GOO-104 bubble menu",
     subtitle: "Bold, italic, code, link buttons in editor selection popover",
     body: projectNote(
@@ -168,7 +168,7 @@ const PAGES: PageSpec[] = [
     tags: ["dev", "editor"],
   },
   {
-    folder: "💼 Work",
+    folder: "Work",
     title: "Fix calendar timezone offset on DST week",
     subtitle: "Blocks shift 1 hour after DST; root cause in rrule expansion",
     body: tiptapDoc(
@@ -195,7 +195,7 @@ const PAGES: PageSpec[] = [
     end: timedStr(daysFromToday(0), 16),
   },
   {
-    folder: "💼 Work",
+    folder: "Work",
     title: "Write release notes for v0.1.1",
     subtitle: "Changelog covering last 3 sprints",
     body: tiptapDoc(
@@ -222,7 +222,7 @@ const PAGES: PageSpec[] = [
     end: timedStr(daysFromToday(1), 10, 30),
   },
   {
-    folder: "💼 Work",
+    folder: "Work",
     title: "Design review — metadata header GOO-32",
     subtitle: "Collapsible row with status, priority, date, tags, subtitle",
     body: meetingNotes(
@@ -242,7 +242,7 @@ const PAGES: PageSpec[] = [
     end: timedStr(daysFromToday(2), 14),
   },
   {
-    folder: "💼 Work",
+    folder: "Work",
     title: "Weekly standup notes",
     subtitle: "Progress, blockers, next steps",
     body: meetingNotes(
@@ -263,7 +263,7 @@ const PAGES: PageSpec[] = [
     end: timedStr(daysFromToday(-1), 9, 30),
   },
   {
-    folder: "💼 Work",
+    folder: "Work",
     title: "Spike: iCloud sync architecture",
     subtitle: "Research NSUbiquitousKeyValueStore vs CloudKit for Phase 4a",
     body: tiptapDoc(
@@ -291,7 +291,7 @@ const PAGES: PageSpec[] = [
 
   // ── Projects ───────────────────────────────────────────────────────────────
   {
-    folder: "🗂 Projects",
+    folder: "Projects",
     title: "Home renovation — kitchen",
     subtitle: "Replace countertops, repaint cabinets, new backsplash tile",
     body: projectNote("Kitchen renovation", "Budget: $4,500. Target completion: end of April.", [
@@ -307,7 +307,7 @@ const PAGES: PageSpec[] = [
     tags: ["home", "project"],
   },
   {
-    folder: "🗂 Projects",
+    folder: "Projects",
     title: "Side project: recipe manager app",
     subtitle: "Simple local-first recipe organiser — for family, no account needed",
     body: projectNote(
@@ -327,7 +327,7 @@ const PAGES: PageSpec[] = [
     tags: ["project", "dev", "idea"],
   },
   {
-    folder: "🗂 Projects",
+    folder: "Projects",
     title: "Research: standing desk setup",
     subtitle: "Find a motorized frame under $600 that fits the alcove",
     body: tiptapDoc(
@@ -355,7 +355,7 @@ const PAGES: PageSpec[] = [
 
   // ── Personal ──────────────────────────────────────────────────────────────
   {
-    folder: "🧘 Personal",
+    folder: "Personal",
     title: "Morning run — 5k",
     subtitle: "Easy pace. Focus on cadence over speed.",
     body: healthLog(
@@ -371,7 +371,7 @@ const PAGES: PageSpec[] = [
     durationMins: 40,
   },
   {
-    folder: "🧘 Personal",
+    folder: "Personal",
     title: "Gym — upper body",
     subtitle: "Bench, overhead press, rows, curls",
     body: healthLog("Upper body lift", "50 min", "Bench: 3x8 @ 155 lb. New PR on OHP: 95 lb."),
@@ -383,7 +383,7 @@ const PAGES: PageSpec[] = [
     durationMins: 60,
   },
   {
-    folder: "🧘 Personal",
+    folder: "Personal",
     title: "Call mom — Sunday",
     subtitle: "Weekly check-in",
     body: tiptapDoc(
@@ -397,7 +397,7 @@ const PAGES: PageSpec[] = [
     end: timedStr(daysFromToday(4), 11, 45),
   },
   {
-    folder: "🧘 Personal",
+    folder: "Personal",
     title: "Journal — March 12",
     subtitle: "Mid-week reflection",
     body: journalEntry(
@@ -410,7 +410,7 @@ const PAGES: PageSpec[] = [
     tags: ["journal"],
   },
   {
-    folder: "🧘 Personal",
+    folder: "Personal",
     title: "Dentist appointment",
     subtitle: "Routine cleaning + X-rays",
     body: tiptapDoc(
@@ -427,7 +427,7 @@ const PAGES: PageSpec[] = [
 
   // ── Reading ───────────────────────────────────────────────────────────────
   {
-    folder: "📚 Reading",
+    folder: "Reading",
     title: "Four Thousand Weeks — Oliver Burkeman",
     subtitle: "Finite time, finite energy — stop optimising, start choosing",
     body: readingNote(
@@ -440,7 +440,7 @@ const PAGES: PageSpec[] = [
     tags: ["reading", "productivity"],
   },
   {
-    folder: "📚 Reading",
+    folder: "Reading",
     title: "Thinking in Systems — Donella Meadows",
     subtitle: "Systems thinking primer — feedback loops, stocks, flows",
     body: readingNote(
@@ -453,7 +453,7 @@ const PAGES: PageSpec[] = [
     tags: ["reading", "systems"],
   },
   {
-    folder: "📚 Reading",
+    folder: "Reading",
     title: "Article: Local-first software — Ink & Switch",
     subtitle: "Seven ideals for local-first apps — foundational read for Pikos",
     body: tiptapDoc(
@@ -548,10 +548,10 @@ export function run(dbPath: string = defaultDbPath()): void {
   folderMap.set("__INBOX__", null);
 
   const folderDefs: Array<{ key: string; color: string; sortOrder: number }> = [
-    { key: "💼 Work", color: "#3b82f6", sortOrder: 0 },
-    { key: "🗂 Projects", color: "#8b5cf6", sortOrder: 1 },
-    { key: "🧘 Personal", color: "#10b981", sortOrder: 2 },
-    { key: "📚 Reading", color: "#f59e0b", sortOrder: 3 },
+    { key: "Work", color: "#3b82f6", sortOrder: 0 },
+    { key: "Projects", color: "#8b5cf6", sortOrder: 1 },
+    { key: "Personal", color: "#10b981", sortOrder: 2 },
+    { key: "Reading", color: "#f59e0b", sortOrder: 3 },
   ];
 
   for (const { key, color, sortOrder } of folderDefs) {
@@ -561,7 +561,7 @@ export function run(dbPath: string = defaultDbPath()): void {
 
   // Marker
   insertPage(db, {
-    folderId: folderMap.get("💼 Work")!,
+    folderId: folderMap.get("Work")!,
     title: MARKER,
     subtitle: "Delete this page to re-seed",
     content: tiptapDoc(paragraph("Realistic seed marker.")),

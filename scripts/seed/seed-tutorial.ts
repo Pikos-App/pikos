@@ -57,12 +57,12 @@ export function run(dbPath: string = defaultDbPath()): void {
     return;
   }
 
-  const gettingStartedId = getOrCreateFolder(db, "✨ Getting started", {
+  const gettingStartedId = getOrCreateFolder(db, "Getting started", {
     color: "#6366f1",
     sortOrder: 0,
   });
 
-  const examplesId = getOrCreateFolder(db, "📖 Examples", {
+  const examplesId = getOrCreateFolder(db, "Examples", {
     color: "#10b981",
     sortOrder: 1,
   });
@@ -395,7 +395,7 @@ export function run(dbPath: string = defaultDbPath()): void {
   db.close();
 
   console.log(`  Done — tutorial data seeded.`);
-  console.log(`  Folders : ✨ Getting started · 📖 Examples`);
+  console.log(`  Folders : Getting started · Examples`);
   console.log(`  Inbox   : 1 page`);
   console.log(`\n  Tip: delete 'Getting started' and 'Examples' to remove tutorial content.`);
 }

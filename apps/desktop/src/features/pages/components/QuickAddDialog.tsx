@@ -12,6 +12,7 @@ import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { FolderChip } from "@/features/pages/components/FolderChip";
+import { TagsPopover } from "@/features/pages/components/TagsPopover";
 import { parseInput } from "@pikos/core";
 import { cn } from "@/lib/utils";
 import type { Folder, PagePriority, PageUpdate } from "@pikos/core";
@@ -44,7 +45,7 @@ function fuzzyMatchFolder(query: string, folders: Folder[]): Folder | null {
 
 function BylineSeparator() {
   return (
-    <span className="text-muted-foreground/20" aria-hidden="true">
+    <span className="shrink-0 text-muted-foreground/20" aria-hidden="true">
       ·
     </span>
   );
@@ -53,8 +54,9 @@ function BylineSeparator() {
 // ── QuickAddDialog ────────────────────────────────────────────────────────────
 
 export function QuickAddDialog() {
-  const { folders, createPage, updatePage, scheduleOnce } = useWorkspace();
-  const { activeViewId, setActivePage } = useUI();
+  const { folders, tags, createPage, updatePage, scheduleOnce } = useWorkspace();
+  const allTagNames = tags.map((t) => t.name);
+  const { activeViewId } = useUI();
 
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,12 +66,22 @@ export function QuickAddDialog() {
 
   const defaultFolderId = folders.find((folder) => folder.id === activeViewId)?.id ?? null;
 
-  // ── Chip state (last-write-wins: NLP or manual override) ─────────────────────
+  // ── Chip state ───────────────────────────────────────────────────────────────
+  // Each field has an NLP-set value and a "manually set" flag. runPreview only
+  // updates fields the user hasn't touched directly — manual selections survive typing.
+  // Tags are split further: nlpTags vs manualTags (union displayed).
 
   const [dateValue, setDateValue] = useState<string | null>(null);
   const [endDateValue, setEndDateValue] = useState<string | null>(null);
   const [priorityValue, setPriorityValue] = useState<PagePriority>(0);
   const [folderValue, setFolderValue] = useState<string | null>(null);
+  const [nlpTags, setNlpTags] = useState<string[]>([]);
+  const [manualTags, setManualTags] = useState<string[]>([]);
+  const tagsValue = [...new Set([...nlpTags, ...manualTags])];
+
+  const [dateManual, setDateManual] = useState(false);
+  const [priorityManual, setPriorityManual] = useState(false);
+  const [folderManual, setFolderManual] = useState(false);
 
   // ── Open handler ─────────────────────────────────────────────────────────────
 
@@ -79,6 +91,11 @@ export function QuickAddDialog() {
     setEndDateValue(null);
     setPriorityValue(0);
     setFolderValue(defaultFolderId);
+    setNlpTags([]);
+    setManualTags([]);
+    setDateManual(false);
+    setPriorityManual(false);
+    setFolderManual(false);
     setOpen(true);
   }
 
@@ -112,61 +129,62 @@ export function QuickAddDialog() {
     return () => clearTimeout(id);
   }, [open]);
 
-  // ── Preview (parse-only, never modifies input) ──────────────────────────────
-  // Runs on debounce. Parses the full input and updates chip previews.
-  // Last-write-wins: this overwrites chip state including any manual overrides,
-  // because the input text is the source of truth for token values.
-
-  function runPreview(raw: string) {
-    const result = parseInput(raw);
-    const parsed =
-      result.type === "single"
-        ? result.input
-        : result.type === "finite"
-          ? result.inputs[0]
-          : result.input;
-    if (!parsed) return;
-
-    // Always set all chip values from the parse result so removing a token resets the chip.
-    setDateValue(parsed.scheduledStart ?? null);
-    const hasTime = parsed.scheduledStart?.includes("T") ?? false;
-    setEndDateValue(hasTime ? (parsed.scheduledEnd ?? null) : null);
-    setPriorityValue(
-      parsed.priority === undefined
-        ? 0
-        : parsed.priority === null
-          ? 0
-          : NLP_PRIORITY_MAP[parsed.priority]
-    );
-
-    if (parsed.folderQuery) {
-      const match = fuzzyMatchFolder(parsed.folderQuery, folders);
-      setFolderValue(
-        match ? match.id : parsed.folderQuery.toLowerCase() === "inbox" ? null : folderValue
-      );
-    } else {
-      setFolderValue(defaultFolderId);
-    }
-  }
-
   // ── Debounce preview ─────────────────────────────────────────────────────────
   // Fires 200ms after the user stops typing. Parses the full input and updates
-  // chip previews — never modifies the input text.
+  // chip previews — never modifies the input text. Manual fields are preserved.
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!inputValue.trim()) {
-        setDateValue(null);
-        setEndDateValue(null);
-        setPriorityValue(0);
-        setFolderValue(defaultFolderId);
+        if (!dateManual) {
+          setDateValue(null);
+          setEndDateValue(null);
+        }
+        if (!priorityManual) setPriorityValue(0);
+        if (!folderManual) setFolderValue(defaultFolderId);
+        setNlpTags([]);
         return;
       }
-      runPreview(inputValue);
+
+      const result = parseInput(inputValue);
+      const parsed =
+        result.type === "single"
+          ? result.input
+          : result.type === "finite"
+            ? result.inputs[0]
+            : result.input;
+      if (!parsed) return;
+
+      if (!dateManual) {
+        setDateValue(parsed.scheduledStart ?? null);
+        const hasTime = parsed.scheduledStart?.includes("T") ?? false;
+        setEndDateValue(hasTime ? (parsed.scheduledEnd ?? null) : null);
+      }
+
+      if (!priorityManual) {
+        setPriorityValue(
+          parsed.priority === undefined || parsed.priority === null
+            ? 0
+            : NLP_PRIORITY_MAP[parsed.priority]
+        );
+      }
+
+      if (!folderManual) {
+        if (parsed.folderQuery) {
+          const match = fuzzyMatchFolder(parsed.folderQuery, folders);
+          setFolderValue(
+            match ? match.id : parsed.folderQuery.toLowerCase() === "inbox" ? null : folderValue
+          );
+        } else {
+          setFolderValue(defaultFolderId);
+        }
+      }
+
+      setNlpTags(parsed.tags.length > 0 ? [...new Set(parsed.tags)] : []);
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [inputValue, folders, defaultFolderId]);
+  }, [inputValue, folders, defaultFolderId, folderValue, dateManual, priorityManual, folderManual]);
 
   // ── Key handler ───────────────────────────────────────────────────────────────
 
@@ -222,9 +240,13 @@ export function QuickAddDialog() {
 
     const page = await createPage({ title, folderId: resolvedFolderId });
 
+    // Fresh NLP tags from re-parse + manual additions.
+    // manualTags is never overwritten by NLP, so this correctly handles removals.
+    const finalTags = [...new Set([...(parsed?.tags ?? []), ...manualTags])];
+
     const patch: PageUpdate = {};
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
-    if (parsed?.tags && parsed.tags.length > 0) patch.tags = parsed.tags;
+    if (finalTags.length > 0) patch.tags = finalTags;
     if (Object.keys(patch).length > 0) updatePage(page.id, patch);
 
     if (resolvedDate) {
@@ -235,7 +257,6 @@ export function QuickAddDialog() {
     }
 
     setOpen(false);
-    setActivePage(page.id);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -245,7 +266,7 @@ export function QuickAddDialog() {
       <DialogContent
         showCloseButton={false}
         aria-label="Quick add"
-        className="top-[22%] max-w-[600px] translate-y-0 gap-0 border-border/60 bg-card p-0 shadow-2xl"
+        className="top-[22%] translate-y-0 gap-0 border-border/60 bg-card p-0 shadow-2xl sm:max-w-[540px]"
       >
         <div className="px-4 pt-4 pb-3">
           <input
@@ -265,24 +286,59 @@ export function QuickAddDialog() {
 
         {/* Metadata chips + Add button */}
         <div className="flex items-center gap-2 border-t border-border/40 px-4 py-2.5 text-sm text-muted-foreground/60">
-          <FolderChip folders={folders} value={folderValue} onChange={setFolderValue} />
+          <FolderChip
+            folders={folders}
+            value={folderValue}
+            onChange={(id) => {
+              setFolderValue(id);
+              setFolderManual(true);
+            }}
+          />
 
           <BylineSeparator />
 
           <DateTimePicker
             value={dateValue}
-            onChange={setDateValue}
+            onChange={(d) => {
+              setDateValue(d);
+              setDateManual(true);
+            }}
             endValue={endDateValue}
-            onEndChange={setEndDateValue}
+            onEndChange={(d) => {
+              setEndDateValue(d);
+              setDateManual(true);
+            }}
           />
 
           <BylineSeparator />
 
-          <PriorityDropdown priority={priorityValue} onSelect={setPriorityValue} variant="byline" />
+          <PriorityDropdown
+            priority={priorityValue}
+            onSelect={(p) => {
+              setPriorityValue(p);
+              setPriorityManual(true);
+            }}
+            variant="byline"
+          />
+
+          <BylineSeparator />
+
+          <TagsPopover
+            allTags={allTagNames}
+            selected={tagsValue}
+            onToggle={(name) => {
+              if (tagsValue.includes(name)) {
+                setNlpTags((prev) => prev.filter((t) => t !== name));
+                setManualTags((prev) => prev.filter((t) => t !== name));
+              } else {
+                setManualTags((prev) => [...prev, name]);
+              }
+            }}
+          />
 
           <button
             onClick={() => void handleSubmit()}
-            className="ml-auto cursor-pointer rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="ml-auto shrink-0 cursor-pointer rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Add
           </button>

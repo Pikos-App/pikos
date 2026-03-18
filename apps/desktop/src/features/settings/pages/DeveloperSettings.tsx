@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useUI } from "@/shared/context/UIContext";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -49,6 +50,7 @@ type PendingAction = { type: "reset" } | { type: "seed"; scenario: SeedScenario 
 
 export function DeveloperSettings() {
   const { workspace, reload } = useWorkspace();
+  const { setSettingsOpen } = useUI();
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [running, setRunning] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
@@ -94,13 +96,9 @@ export function DeveloperSettings() {
     setLog(null);
     try {
       await invoke("reset_db");
-      const output = await invoke<string>("run_seed", {
-        scenario,
-        dbPath: workspace.dbPath,
-      });
+      await invoke("run_seed", { scenario, dbPath: workspace.dbPath });
       await reload();
-      setLog(output || "Seed complete.");
-      setLogError(false);
+      setSettingsOpen(false);
     } catch (e: unknown) {
       setLog(String(e));
       setLogError(true);

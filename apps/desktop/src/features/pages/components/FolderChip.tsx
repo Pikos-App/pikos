@@ -35,11 +35,11 @@ export function FolderChip({ folders, value, onChange }: FolderChipProps) {
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
-          className="inline-flex cursor-pointer items-center gap-1 rounded text-sm text-muted-foreground/60 transition-colors hover:text-muted-foreground focus:outline-none"
+          className="inline-flex min-w-0 cursor-pointer items-center gap-1 rounded text-sm text-muted-foreground/60 transition-colors hover:text-muted-foreground focus:outline-none"
           aria-label={`Folder: ${label}`}
         >
-          <FolderOpen size={13} aria-hidden="true" />
-          <span>{label}</span>
+          <FolderOpen size={13} className="shrink-0" aria-hidden="true" />
+          <span className="max-w-[100px] truncate">{label}</span>
         </button>
       </PopoverTrigger>
 

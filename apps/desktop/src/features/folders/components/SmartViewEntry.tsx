@@ -33,14 +33,7 @@ export function SmartViewEntry({
       <span className="shrink-0">{icon}</span>
       <span className="flex-1 text-left">{label}</span>
       {badge !== undefined && badge > 0 && (
-        <span
-          className={cn(
-            "ml-auto min-w-[18px] rounded-full px-1.5 py-0.5 text-center text-[11px] leading-none font-medium tabular-nums",
-            isActive
-              ? "bg-accent-foreground/15 text-accent-foreground"
-              : "bg-muted text-muted-foreground"
-          )}
-        >
+        <span className="ml-auto text-[11px] text-muted-foreground/60 tabular-nums">
           {badge > 99 ? "99+" : badge}
         </span>
       )}

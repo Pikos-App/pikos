@@ -544,7 +544,7 @@ export function DateTimePicker({
       <PopoverTrigger asChild>
         <button
           className={cn(
-            "inline-flex cursor-pointer items-center gap-1 rounded text-sm transition-colors hover:text-muted-foreground focus:outline-none",
+            "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded text-sm whitespace-nowrap transition-colors hover:text-muted-foreground focus:outline-none",
             isPast && "text-red-500 hover:text-red-400",
             !hasDate && "text-muted-foreground/60"
           )}
