@@ -127,26 +127,19 @@ export function QuickAddDialog() {
           : result.input;
     if (!parsed) return;
 
-    if (parsed.scheduledStart !== undefined) {
-      setDateValue(parsed.scheduledStart);
-    }
-    // End time only applies when a specific time is set (not all-day).
-    const hasTime = (parsed.scheduledStart ?? dateValue)?.includes("T") ?? false;
-    if (parsed.scheduledEnd !== undefined && hasTime) {
-      setEndDateValue(parsed.scheduledEnd);
-    } else if (!hasTime) {
-      setEndDateValue(null);
-    }
-    if (parsed.priority !== undefined) {
-      setPriorityValue(NLP_PRIORITY_MAP[parsed.priority]);
-    }
+    // Always set all chip values from the parse result so removing a token resets the chip.
+    setDateValue(parsed.scheduledStart ?? null);
+    const hasTime = parsed.scheduledStart?.includes("T") ?? false;
+    setEndDateValue(hasTime ? (parsed.scheduledEnd ?? null) : null);
+    setPriorityValue(
+      parsed.priority === undefined ? 0 : parsed.priority === null ? 0 : NLP_PRIORITY_MAP[parsed.priority]
+    );
+
     if (parsed.folderQuery) {
       const match = fuzzyMatchFolder(parsed.folderQuery, folders);
-      if (match) {
-        setFolderValue(match.id);
-      } else if (parsed.folderQuery.toLowerCase() === "inbox") {
-        setFolderValue(null);
-      }
+      setFolderValue(match ? match.id : parsed.folderQuery.toLowerCase() === "inbox" ? null : folderValue);
+    } else {
+      setFolderValue(defaultFolderId);
     }
   }
 
@@ -212,7 +205,11 @@ export function QuickAddDialog() {
     // Merge: parsed values override chip state; chip state is the fallback.
     const resolvedDate = parsed?.scheduledStart ?? dateValue;
     const resolvedPriority =
-      parsed?.priority !== undefined ? NLP_PRIORITY_MAP[parsed.priority] : priorityValue;
+      parsed?.priority !== undefined
+        ? parsed.priority === null
+          ? 0
+          : NLP_PRIORITY_MAP[parsed.priority]
+        : priorityValue;
 
     // Use parsed.title (tokens already stripped by parser) as the page title.
     const title = parsed?.title || trimmed;

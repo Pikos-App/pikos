@@ -134,6 +134,68 @@ describe("GOO-19 NL Page Creation Parser", () => {
     });
   });
 
+  // ─── GOO-120: Numeric priority shortcuts ──────────────────────────────────
+
+  describe("numeric priority shortcuts (!0-4)", () => {
+    it("!1 → urgent", () => {
+      const r = parseInput("task !1", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("urgent");
+      expect(r.input.title).toBe("task");
+    });
+
+    it("!2 → high", () => {
+      const r = parseInput("task !2", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("high");
+    });
+
+    it("!3 → medium", () => {
+      const r = parseInput("task !3", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("medium");
+    });
+
+    it("!4 → low", () => {
+      const r = parseInput("task !4", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("low");
+    });
+
+    it("!0 → null (explicitly cleared)", () => {
+      const r = parseInput("task !0", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBeNull();
+    });
+
+    it("!1 !3 → medium (last wins)", () => {
+      const r = parseInput("task !1 !3", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("medium");
+    });
+
+    it("!5 → not matched, stays in title", () => {
+      const r = parseInput("task !5", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("task !5");
+      expect(r.input.priority).toBeUndefined();
+    });
+
+    it("!urgent still works unchanged", () => {
+      const r = parseInput("task !urgent", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("urgent");
+    });
+  });
+
   // ─── 3. Time without date ──────────────────────────────────────────────────
 
   describe("time without date", () => {

@@ -10,7 +10,7 @@ export interface ParsedInput {
   durationMinutes?: number;
   tags: string[];
   folderQuery?: string;
-  priority?: PagePriority;
+  priority?: PagePriority | null; // null = explicitly cleared (!0); undefined = not mentioned
 }
 
 export type ParseResult =
@@ -95,9 +95,25 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   });
 
   // --- 3. Priority: !urgent !high !medium !low ---
-  let priority: PagePriority | undefined;
+  let priority: PagePriority | null | undefined;
   text = text.replace(/!(urgent|high|medium|low)\b/gi, (_, p: string) => {
     priority = p.toLowerCase() as PagePriority;
+    return " ";
+  });
+
+  // Numeric priority: !0 (none/clear) through !4 (low)
+  const NUMERIC_PRIORITY_MAP: Record<string, PagePriority | null> = {
+    "0": null,
+    "1": "urgent",
+    "2": "high",
+    "3": "medium",
+    "4": "low",
+  };
+  text = text.replace(/!([0-4])\b/g, (_, n: string) => {
+    const mapped = NUMERIC_PRIORITY_MAP[n];
+    if (mapped !== undefined) {
+      priority = mapped; // null means explicitly cleared (!0)
+    }
     return " ";
   });
 
