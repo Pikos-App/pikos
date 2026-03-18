@@ -30,6 +30,8 @@ Settled architectural and product decisions. Load this file only when you need c
 - **Subtitle**: `subtitle TEXT` on pages. One-sentence summary. Shown in `PageListItem` + `PageBlock`. Included in FTS. (GOO-77)
 - **Focus timer**: Built-in plugin (GOO-78). `focus_sessions` core table. Sessions <10s auto-discarded; 10–60s shows "Remove?" prompt.
 - **Indexes**: `folder_id+sort_order`, `status`, `scheduled_start`, `priority`, `last_opened_at`, `parent_id`, `completed_at`, `rrule` (partial, WHERE NOT NULL) — see `features/storage.md` for full list.
+
+- **Tags normalization (GOO-121)**: Tags are normalized to `tags(id, name UNIQUE)` + `page_tags(page_id, tag_id)` join table (migration 003). `pages.tags TEXT` is kept as a denorm JSON cache — FTS5 triggers continue reading it unchanged. `page_tags` is the source of truth; Rust `upsert_page_tags()` helper keeps both in sync on create/update. `search_tags(query)` command supports autocomplete (prefix match, case-insensitive, limit 20). `WorkspaceContext.searchTags()` exposes it to the frontend. Derived `Tag[]` (with pageIds) in WorkspaceContext still comes from in-memory pages array.
 - **RRule / recurrence**: Two modes: finite ("m/w/f for 2 weeks") → N independent pages, no rrule; infinite ("every monday 1pm") → 1 template page with `rrule TEXT`, calendar expands via `rrule.js`.
 - **Quick Add confirmation**: Shows confirmation when `ParseResult.type === 'recurring'` (always) or `type === 'finite' && count >= 3`. Single pages create immediately.
 - **Undo/redo**: GOO-62. `CommandHistory` singleton (50-entry ring buffer). App-level undo for metadata + CRUD; Tiptap handles editor-internal undo. `Cmd+Z` / `Cmd+Shift+Z`. Toast with inline "Undo" link.

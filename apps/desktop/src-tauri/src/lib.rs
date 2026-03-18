@@ -15,6 +15,7 @@ use db::{
         list_page_schedules_range, update_page_schedule, update_recurrence_rule,
     },
     search::search_pages,
+    tags::search_tags,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -60,6 +61,8 @@ pub fn run() {
             get_recurrence_rule,
             // Search
             search_pages,
+            // Tags
+            search_tags,
             // Dev / settings
             backup_db,
             get_db_stats,

@@ -66,6 +66,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<SearchResult[]>("search_pages", { query });
   }
 
+  searchTags(query: string): Promise<string[]> {
+    return invoke<string[]>("search_tags", { query });
+  }
+
   // ─── Folders ────────────────────────────────────────────────────────────────
 
   getFolder(id: string): Promise<Folder | null> {

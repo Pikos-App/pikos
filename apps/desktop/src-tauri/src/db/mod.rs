@@ -6,6 +6,7 @@ pub mod folders;
 pub mod pages;
 pub mod schedules;
 pub mod search;
+pub mod tags;
 
 /// Shared database state. None until connect_db is called.
 pub struct DbState(pub Mutex<Option<SqlitePool>>);

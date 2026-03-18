@@ -54,6 +54,8 @@ export interface WorkspaceContextValue {
   scheduleOnce: (pageId: string, start: string, end?: string) => Promise<void>;
   /** Delete all one-off schedule blocks for a page. */
   clearSchedule: (pageId: string) => Promise<void>;
+  /** Tag name prefix search — for autocomplete in tag chip inputs. */
+  searchTags: (query: string) => Promise<string[]>;
   /** Per-page error state from failed debounced writes or scheduling mutations. */
   pageErrors: Map<string, string>;
   /** Dismiss the error indicator for a page. */
@@ -558,6 +560,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return adapter.getPage(id);
   }
 
+  function searchTags(query: string): Promise<string[]> {
+    return adapter.searchTags(query);
+  }
+
   const value: WorkspaceContextValue = {
     workspace,
     pages,
@@ -577,6 +583,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     reorderFolders,
     scheduleOnce,
     clearSchedule,
+    searchTags,
     reload,
     pageErrors,
     clearPageError,

@@ -126,6 +126,17 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
+  searchTags(query: string): Promise<string[]> {
+    const q = query.toLowerCase();
+    const names = new Set<string>();
+    for (const page of this.pages.values()) {
+      for (const tag of page.tags) {
+        if (tag.toLowerCase().startsWith(q)) names.add(tag);
+      }
+    }
+    return Promise.resolve([...names].sort().slice(0, 20));
+  }
+
   searchPages(query: string): Promise<SearchResult[]> {
     const q = query.toLowerCase();
     const results: SearchResult[] = [];

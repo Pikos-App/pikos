@@ -71,6 +71,8 @@ export interface StorageAdapter {
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void>;
   /** Returns excerpts (SearchResult), not full pages */
   searchPages(query: string): Promise<SearchResult[]>;
+  /** Returns tag names whose prefix matches query — for autocomplete. */
+  searchTags(query: string): Promise<string[]>;
 
   // Folders
   getFolder(id: string): Promise<Folder | null>;

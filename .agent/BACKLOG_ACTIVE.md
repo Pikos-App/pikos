@@ -9,51 +9,6 @@ Status: `[ ]` pending · `[~]` in progress · Delete task when done.
 
 ## Phase 2A — Core Editor & Metadata
 
-- [ ] **GOO-121** Evaluate tags normalization: tags + page_tags tables _(Medium — decision before GOO-60)_
-
-### Summary
-
-Currently tags are stored as a JSON array on `pages.tags TEXT`. Before building tag chips (GOO-60), decide whether to normalize to `tags(id, name)` + `page_tags(page_id, tag_id)` tables.
-
-### Why consider normalizing
-
-- **Autocomplete**: A `tags` table enables `SELECT name FROM tags WHERE name LIKE ?` for instant tag suggestions in Quick Add.
-- **Global rename/merge**: Renaming a tag is one UPDATE instead of parsing/updating every page's JSON array.
-- **Tag-based views**: `SELECT p.* FROM pages p JOIN page_tags pt ON p.id = pt.page_id WHERE pt.tag_id = ?` is cleaner and indexable vs JSON array scanning.
-- **Deduplication**: Normalized table enforces uniqueness; JSON arrays require app-level dedup.
-- **FTS**: Tag names can be included in FTS5 content via a simple JOIN.
-
-### Why keep JSON arrays
-
-- **Simpler**: No migration, no join tables, no extra queries on page create/update.
-- **Good enough for v1**: With <1000 pages, JSON array scanning is fast enough.
-- **Matches current code**: `updatePage({ tags: [...] })` already works.
-
-### Decision criteria
-
-- If we want tag autocomplete in Quick Add (likely yes for GOO-60 tag chips or shortly after) → normalize.
-- If we want tag-based smart views or filters (likely yes for Phase 3) → normalize.
-- If we just need to display parsed tags and save them → JSON is fine for now.
-
-### Recommendation
-
-Normalize now (before GOO-60). The migration is small (one `CREATE TABLE` + `CREATE TABLE` + backfill script), and it unblocks autocomplete which makes tag chips much more useful. Deferring means a harder migration later when pages have inconsistent tag data.
-
-### If normalizing, migration plan
-
-1. Add `tags(id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))` table.
-2. Add `page_tags(page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE, tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY (page_id, tag_id))` table.
-3. Backfill: parse existing `pages.tags` JSON arrays → insert into `tags` + `page_tags`.
-4. Keep `pages.tags` column as denormalized cache (or drop it — depends on query patterns).
-5. Add Rust commands: `get_tags`, `create_tag`, `add_tag_to_page`, `remove_tag_from_page`, `search_tags(query)`.
-6. Update `StorageAdapter` + `WorkspaceContext` to use normalized tables.
-
-### Action required
-
-Make a decision and document it in `.agent/decisions.md` before starting GOO-60.
-
----
-
 - [ ] GOO-60 Phase 2a: Tag Chips in Quick Add
 
 ## Summary
