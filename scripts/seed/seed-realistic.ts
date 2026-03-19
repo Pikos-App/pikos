@@ -29,6 +29,7 @@ import {
   paragraph,
   bulletList,
   taskList,
+  nowLocalISO,
 } from "./_db.ts";
 
 const MARKER = "⚙️ [seed-realistic] Realistic life marker";
@@ -591,7 +592,7 @@ export function run(dbPath: string = defaultDbPath()): void {
       priority: spec.priority,
       tags: spec.tags,
       sortOrder: getSortOrder(folderId),
-      completedAt: spec.status === "done" ? new Date().toISOString() : null,
+      completedAt: spec.status === "done" ? nowLocalISO() : null,
       durationMins: spec.durationMins ?? null,
     });
 

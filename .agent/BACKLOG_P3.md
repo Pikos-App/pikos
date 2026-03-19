@@ -29,6 +29,10 @@ Status: `[ ]` pending · `[-]` superseded/deferred/do not start
 - [ ] **GOO-67** i18n / localization foundation _(Low)_
   `react-i18next` + `i18next`. All user-visible strings behind `t('key')`. Source locale: `en`. Locale files: `packages/core/src/locales/`. NL parser (GOO-19) stays English-only for v1 — Settings note: "Natural language input is English-only for now."
 
+- [ ] GOO-59 (Settings infrastructure) — this is sitting in P2 but you're already making decisions that need a settings surface (hide completed toggle, sort preferences, spell check, theme). Without a settings panel, these preferences have nowhere to live. I'd pull this into Active and do a minimal version: just General + Appearance + Editor panels. The Workspaces, Calendars, and plugin-related panels can stay stubbed or deferred.
+- [ ] GOO-24 (Native menu bar) — also in P2, but shipping a Mac app to friends without a proper menu bar will feel immediately unfinished. Cmd+W, Cmd+Q, standard Edit menu, basic View toggles. This is table stakes for a native Mac app and your target audience will notice.
+- [ ] GOO-49 (Export to Markdown) — friends beta users will ask "how do I get my stuff out?" on day one. Having export before anyone puts real data in builds trust, especially with the "your data, your device" promise. Import can wait, export can't.
+
 ---
 
 ## Design Decisions (not yet ticketed)

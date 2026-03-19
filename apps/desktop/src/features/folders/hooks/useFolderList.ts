@@ -39,7 +39,9 @@ export function useFolderList(): FolderListState {
 
   const pageCountByFolder: Record<string, number> = {};
   for (const folder of folders) {
-    pageCountByFolder[folder.id] = pages.filter((p) => p.folderId === folder.id).length;
+    pageCountByFolder[folder.id] = pages.filter(
+      (p) => p.folderId === folder.id && p.status !== "done"
+    ).length;
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -47,7 +49,7 @@ export function useFolderList(): FolderListState {
     (p) => p.scheduledStart && p.scheduledStart.slice(0, 10) <= today && p.status !== "done"
   ).length;
 
-  const inboxCount = pages.filter((p) => p.folderId === null).length;
+  const inboxCount = pages.filter((p) => p.folderId === null && p.status !== "done").length;
 
   // "manual" — use workspace array order as-is; reorderFolders keeps it correct via optimistic
   // update. Sorting by folder.sortOrder would revert the order since optimistic update doesn't
@@ -58,8 +60,8 @@ export function useFolderList(): FolderListState {
       : [...folders].sort((a, b) => {
           if (sortOrder === "alphabetical") return a.name.localeCompare(b.name);
           // page-count
-          const aCount = pages.filter((p) => p.folderId === a.id).length;
-          const bCount = pages.filter((p) => p.folderId === b.id).length;
+          const aCount = pages.filter((p) => p.folderId === a.id && p.status !== "done").length;
+          const bCount = pages.filter((p) => p.folderId === b.id && p.status !== "done").length;
           return bCount - aCount;
         });
 

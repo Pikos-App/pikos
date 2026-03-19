@@ -27,6 +27,7 @@ import {
   paragraph,
   bulletList,
   taskList,
+  nowLocalISO,
 } from "./_db.ts";
 
 const MARKER = "⚙️ [seed-dst] PST vs PDT edge cases";
@@ -271,7 +272,7 @@ export function run(dbPath: string = defaultDbPath()): void {
       priority: entry.priority,
       tags: entry.tags,
       sortOrder: i + 1,
-      completedAt: entry.status === "done" ? new Date().toISOString() : null,
+      completedAt: entry.status === "done" ? nowLocalISO() : null,
     });
 
     insertSchedule(db, {

@@ -4,10 +4,12 @@ import { useUI } from "@/shared/context/UIContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
 import {
   getCompletedTodayPages,
+  getCompletedViewPages,
   getVisiblePages,
   sortPages,
 } from "@/features/pages/utils/pageFilters";
 import type { PagePriority, PageSummary, PageStatus } from "@pikos/core";
+import { nowLocalISO } from "@/shared/utils/dates";
 
 export function usePageList() {
   const { pages, folders, createPage, updatePage, deletePage } = useWorkspace();
@@ -21,7 +23,10 @@ export function usePageList() {
   const visiblePages =
     activeViewId === "today" ? filtered : sortPages(filtered, getSortMode(activeViewId));
 
-  const completedTodayPages = activeViewId === "today" ? getCompletedTodayPages(pages) : [];
+  const completedPages =
+    activeViewId === "today"
+      ? getCompletedTodayPages(pages)
+      : getCompletedViewPages(pages, activeViewId);
 
   /** Create a page in the active folder and immediately enter rename mode. */
   async function handleCreatePage() {
@@ -74,7 +79,7 @@ export function usePageList() {
     const isDone = currentStatus === "done";
     updatePage(pageId, {
       status: isDone ? "not_started" : "done",
-      completedAt: isDone ? null : new Date().toISOString(),
+      completedAt: isDone ? null : nowLocalISO(),
     });
   }
 
@@ -84,7 +89,7 @@ export function usePageList() {
 
   return {
     visiblePages,
-    completedTodayPages,
+    completedPages,
     folders,
     activePage,
     renamingId,

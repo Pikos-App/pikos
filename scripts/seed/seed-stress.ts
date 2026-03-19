@@ -33,6 +33,7 @@ import {
   taskList,
   codeBlock,
   nowIso,
+  nowLocalISO,
 } from "./_db.ts";
 
 const MARKER = "⚙️ [seed-stress] Stress test marker";
@@ -238,7 +239,7 @@ export function run(dbPath: string = defaultDbPath()): void {
       priority: randPriority(),
       tags: randTags(),
       sortOrder: i,
-      completedAt: status === "done" ? new Date().toISOString() : null,
+      completedAt: status === "done" ? nowLocalISO() : null,
     });
     pageIds.push(id);
   }
@@ -256,7 +257,7 @@ export function run(dbPath: string = defaultDbPath()): void {
       priority: randPriority(),
       tags: randTags(),
       sortOrder: Math.floor(i / folderIds.length),
-      completedAt: status === "done" ? new Date().toISOString() : null,
+      completedAt: status === "done" ? nowLocalISO() : null,
     });
     pageIds.push(id);
 

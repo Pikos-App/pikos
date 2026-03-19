@@ -6,6 +6,55 @@ compatibility: React 19, babel-plugin-react-compiler, TypeScript strict mode, Ta
 
 # React Patterns for This Codebase
 
+## State management principles
+
+### Derive, don't sync
+
+If a value can be calculated from existing state or props, compute it during render — do not store it in state. Redundant state leads to sync bugs.
+
+```typescript
+// ❌ Redundant state + sync bug waiting to happen
+const [pages, setPages] = useState<Page[]>([])
+const [filteredPages, setFilteredPages] = useState<Page[]>([])
+useEffect(() => {
+  setFilteredPages(pages.filter(p => !p.archived))
+}, [pages])
+
+// ✅ Derived during render — always in sync
+const [pages, setPages] = useState<Page[]>([])
+const filteredPages = pages.filter(p => !p.archived)
+```
+
+This applies to counts, filtered lists, formatted strings, boolean flags, and anything else computable from source state. If you're writing `useEffect` + `setState` to keep two values in sync, you almost certainly want a derived value instead.
+
+### When useEffect is appropriate
+
+Effects are for synchronizing with external systems — not for reacting to state changes. Valid uses in this codebase:
+
+- Syncing Tiptap editor state with the storage adapter
+- Subscribing to Tauri event listeners (`listen()` / `unlisten()`)
+- Setting up keyboard shortcuts or DOM event listeners
+- Initializing SQLite connections on mount
+
+Invalid uses (refactor these if you find them):
+
+- Updating state B when state A changes → derive B from A
+- Resetting form state when a prop changes → use a `key` prop
+- Running logic in response to a user action → put it in the event handler
+- Fetching data when state changes → compute in the handler that changed state, or use a derived value
+
+### Reset state via key, not effects
+
+When a component needs to fully reset because a prop changed (e.g., switching between pages in the editor), use React's `key` mechanism:
+
+```typescript
+// ❌ Effect-based reset — causes double render
+useEffect(() => { setContent(''); setTitle(''); }, [pageId])
+
+// ✅ Key-based reset — React unmounts and remounts cleanly
+<PageEditor key={pageId} page={page} />
+```
+
 ## WorkspaceContext — data state
 
 ```typescript

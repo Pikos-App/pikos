@@ -10,6 +10,7 @@ import { TagsPopover } from "@/features/pages/components/TagsPopover";
 import { DateSchedulePopover } from "./DateSchedulePopover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
+import { nowLocalISO } from "@/shared/utils/dates";
 
 // ─── Byline ───────────────────────────────────────────────────────────────────
 // Flat inline metadata row. No pill backgrounds — reads as a document byline.
@@ -132,7 +133,7 @@ export function MetadataHeader({
   function handleStatusChange(status: PageStatus) {
     updatePage(page.id, {
       status,
-      completedAt: status === "done" ? new Date().toISOString() : null,
+      completedAt: status === "done" ? nowLocalISO() : null,
     });
   }
 

@@ -72,22 +72,35 @@ export function getVisiblePages(pages: PageSummary[], activeViewId: string): Pag
     );
   }
   if (activeViewId === "inbox") {
-    return pages.filter((p) => p.folderId === null);
+    return pages.filter((p) => p.folderId === null && p.status !== "done");
   }
-  return pages.filter((p) => p.folderId === activeViewId);
+  return pages.filter((p) => p.folderId === activeViewId && p.status !== "done");
 }
 
-/** Returns pages completed today (status=done, completedAt is today). */
+function sortByCompletedDesc(pages: PageSummary[]): PageSummary[] {
+  return [...pages].sort((a, b) => {
+    const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+    const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
+/** Returns pages completed today (status=done, completedAt is today). Used for Today view. */
 export function getCompletedTodayPages(pages: PageSummary[]): PageSummary[] {
   const today = localToday();
-  return pages
-    .filter((p) => p.status === "done" && p.completedAt?.slice(0, 10) === today)
-    .sort((a, b) => {
-      // Most recently completed first
-      const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-      const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
-      return bTime - aTime;
-    });
+  return sortByCompletedDesc(
+    pages.filter((p) => p.status === "done" && p.completedAt?.slice(0, 10) === today)
+  );
+}
+
+/** Returns completed pages for inbox or folder views. */
+export function getCompletedViewPages(pages: PageSummary[], activeViewId: string): PageSummary[] {
+  if (activeViewId === "inbox") {
+    return sortByCompletedDesc(pages.filter((p) => p.folderId === null && p.status === "done"));
+  }
+  return sortByCompletedDesc(
+    pages.filter((p) => p.folderId === activeViewId && p.status === "done")
+  );
 }
 
 /** Splits today-view pages into overdue (before now) and today (today, not yet past).
