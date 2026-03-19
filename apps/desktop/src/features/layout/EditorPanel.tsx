@@ -5,6 +5,7 @@
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CalendarView } from "@/features/calendar/CalendarView";
 import { EditorPane } from "@/features/editor";
 import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -48,13 +49,7 @@ export function EditorPanel() {
         </Tooltip>
       </div>
 
-      {ui.rightPanel === "editor" ? (
-        <EditorPane />
-      ) : (
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
-          <p className="text-xs">Calendar — coming soon</p>
-        </div>
-      )}
+      {ui.rightPanel === "editor" ? <EditorPane /> : <CalendarView />}
     </div>
   );
 }

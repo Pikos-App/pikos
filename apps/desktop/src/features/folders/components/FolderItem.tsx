@@ -105,7 +105,7 @@ export function FolderItem({
         >
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
           {pageCount !== undefined && pageCount > 0 && (
-            <span className="shrink-0 text-[11px] text-muted-foreground/60 tabular-nums">
+            <span className="shrink-0 text-sm text-muted-foreground/60 tabular-nums">
               {pageCount > 99 ? "99+" : pageCount}
             </span>
           )}

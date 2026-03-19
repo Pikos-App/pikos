@@ -268,7 +268,7 @@ export function PageListItem({
                     return (
                       <span
                         className={cn(
-                          "shrink-0 cursor-pointer text-[11px] leading-snug hover:opacity-80",
+                          "shrink-0 cursor-pointer text-sm leading-snug hover:opacity-80",
                           isPast ? "text-red-500" : "text-muted-foreground"
                         )}
                         onClick={(e) => {

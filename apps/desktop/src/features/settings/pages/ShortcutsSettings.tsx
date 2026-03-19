@@ -66,7 +66,7 @@ const GROUPS: ShortcutGroup[] = [
 
 function KeyBadge({ token }: { token: string }) {
   return (
-    <kbd className="inline-flex min-w-[1.5rem] items-center justify-center rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] leading-none text-foreground shadow-sm">
+    <kbd className="inline-flex min-w-[1.5rem] items-center justify-center rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-sm leading-none text-foreground shadow-sm">
       {token}
     </kbd>
   );
