@@ -11,9 +11,9 @@ export function WelcomeScreen() {
           Notes, tasks, and calendar — all in one place, local-first.
         </p>
         <button
-          onClick={() => void ctx.selectWorkspace()}
-          disabled={ctx.isLoading}
           className="rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          disabled={ctx.isLoading}
+          onClick={() => void ctx.selectWorkspace()}
         >
           {ctx.isLoading ? "Setting up…" : "Get started"}
         </button>

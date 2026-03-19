@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -11,10 +12,10 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, error: null };
+  state: State = { error: null, hasError: false };
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { error, hasError: true };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -22,7 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   reset = () => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ error: null, hasError: false });
   };
 
   render() {
@@ -33,7 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="text-sm text-muted-foreground">
             Please relaunch the app. If the problem persists, reset and try again.
           </p>
-          <Button variant="outline" onClick={this.reset}>
+          <Button onClick={this.reset} variant="outline">
             Reset
           </Button>
         </div>

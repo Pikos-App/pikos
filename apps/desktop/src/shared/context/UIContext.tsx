@@ -3,10 +3,11 @@
 // UIContext — owns navigation and UI state.
 // No data fetching — subscribe to WorkspaceContext for pages/folders.
 
-import { createContext, useContext, useState, type ReactNode } from "react";
 import type { PageSummary } from "@pikos/core";
-import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
+import { createContext, type ReactNode, useContext, useState } from "react";
+
 import type { SortMode } from "@/features/pages/utils/pageFilters";
+import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -73,21 +74,21 @@ export function UIProvider({ children }: { children: ReactNode }) {
 
   const value: UIContextValue = {
     activePageId,
-    setActivePage,
     activeViewId,
-    setActiveViewId,
-    rightPanel,
-    setRightPanel,
-    sidebarCollapsed,
-    setSidebarCollapsed,
     getSortMode,
+    openDialog,
+    openSortMenu,
+    rightPanel,
+    setActivePage,
+    setActiveViewId,
+    setOpenDialog,
+    setOpenSortMenu,
+    setRightPanel,
+    setSettingsOpen,
+    setSidebarCollapsed,
     setSortMode,
     settingsOpen,
-    setSettingsOpen,
-    openSortMenu,
-    setOpenSortMenu,
-    openDialog,
-    setOpenDialog,
+    sidebarCollapsed,
   };
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

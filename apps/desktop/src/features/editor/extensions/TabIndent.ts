@@ -8,10 +8,10 @@
 // TODO: tabbing (when the cursor is in the middle of a line) should probably insert a tab character instead of indenting the whole paragraph.
 
 import { Extension } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 const TAB = "  "; // 2 spaces (used in code blocks)
 const INDENT_SIZE = 2; // rem units per indent level
@@ -31,7 +31,6 @@ const tabIndentPluginKey = new PluginKey("tabIndent");
  * via `addGlobalAttributes` below.
  */
 export const PARAGRAPH_INDENT_ATTRIBUTE = {
-  types: ["paragraph", "heading"],
   attributes: {
     indent: {
       default: 0,
@@ -50,6 +49,7 @@ export const PARAGRAPH_INDENT_ATTRIBUTE = {
       },
     },
   },
+  types: ["paragraph", "heading"],
 };
 
 // ---------------------------------------------------------------------------
@@ -101,8 +101,6 @@ function setIndentForSelection(
 // ---------------------------------------------------------------------------
 
 export const TabIndent = Extension.create({
-  name: "tabIndent",
-
   // Register the indent attribute globally so paragraph/heading nodes
   // understand it without requiring a separate extension.
   addGlobalAttributes() {
@@ -120,7 +118,7 @@ export const TabIndent = Extension.create({
             if (event.key !== "Tab") return false;
             event.preventDefault();
 
-            const { state, dispatch } = view;
+            const { dispatch, state } = view;
 
             if (event.shiftKey) {
               if (editor.isActive("listItem")) {
@@ -155,6 +153,8 @@ export const TabIndent = Extension.create({
       }),
     ];
   },
+
+  name: "tabIndent",
 });
 
 /** Remove up to 2 leading spaces from the current line in a code block. */

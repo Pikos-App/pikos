@@ -3,11 +3,12 @@
 // WorkspaceContext — owns all data + mutations: pages, folders, tags.
 // GOO-15: auto-creates/reopens workspace on mount via @tauri-apps/plugin-store.
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Folder, Page, PageSummary, Tag, Workspace } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import type { FolderUpdate, PageUpdate, StorageAdapter } from "@pikos/core";
-import { TauriSQLiteAdapter, connectDb } from "@/shared/adapters/TauriSQLiteAdapter";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+
+import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
 
 // ─── Event emitter ────────────────────────────────────────────────────────────
 
@@ -199,11 +200,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (import.meta.env["VITE_TEST_MODE"] === "true") {
       // Test mode: set a mock workspace so the app shell renders
       const mockWs: Workspace = {
-        id: "mock",
-        name: "Test Workspace",
-        dbPath: ":memory:",
         createdAt: new Date().toISOString(),
+        dbPath: ":memory:",
+        id: "mock",
         lastOpenedAt: new Date().toISOString(),
+        name: "Test Workspace",
       };
       await loadWorkspaceDataRef.current();
       setWorkspace(mockWs);
@@ -223,11 +224,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const dbPath = `${dataDir}${sep}default.sqlite`;
 
       const ws: Workspace = {
-        id: crypto.randomUUID(),
-        name: "My Workspace",
-        dbPath,
         createdAt: new Date().toISOString(),
+        dbPath,
+        id: crypto.randomUUID(),
         lastOpenedAt: new Date().toISOString(),
+        name: "My Workspace",
       };
 
       await connectDb(dbPath);
@@ -354,15 +355,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   // ─── Pages ────────────────────────────────────────────────────────────────
 
-  async function createPage({ title, folderId }: { title?: string; folderId?: string | null }) {
+  async function createPage({ folderId, title }: { title?: string; folderId?: string | null }) {
     const page = await adapter.createPage({
-      title: title ?? "",
-      folderId: folderId ?? null,
       content: "",
       contentText: "",
-      status: "not_started",
+      folderId: folderId ?? null,
       priority: 0,
+      status: "not_started",
       tags: [],
+      title: title ?? "",
     });
     const { content: _, contentText: _ct, ...summary } = page;
     setPages((prev) => [...prev, summary]);
@@ -400,7 +401,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   // ─── Folders ──────────────────────────────────────────────────────────────
 
-  async function createFolder({ name, color }: { name: string; color?: string }) {
+  async function createFolder({ color, name }: { name: string; color?: string }) {
     const folder = await adapter.createFolder({
       name,
       ...(color !== undefined && { color }),
@@ -427,7 +428,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     // Optimistic update
     setPages((prev) =>
       prev.map((p) =>
-        p.id === pageId ? { ...p, scheduledStart: start, scheduledEnd: end ?? null } : p
+        p.id === pageId ? { ...p, scheduledEnd: end ?? null, scheduledStart: start } : p
       )
     );
     return enqueue(pageId, async () => {
@@ -437,8 +438,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (existing) {
           await adapter.updatePageSchedule(existing.id, {
-            scheduledStart: start,
             scheduledEnd: end ?? null,
+            scheduledStart: start,
           });
         } else {
           await adapter.createPageSchedule({
@@ -464,7 +465,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const snapshot = pages.find((p) => p.id === pageId);
     // Optimistic update
     setPages((prev) =>
-      prev.map((p) => (p.id === pageId ? { ...p, scheduledStart: null, scheduledEnd: null } : p))
+      prev.map((p) => (p.id === pageId ? { ...p, scheduledEnd: null, scheduledStart: null } : p))
     );
     return enqueue(pageId, async () => {
       try {
@@ -565,29 +566,29 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
 
   const value: WorkspaceContextValue = {
-    workspace,
-    pages,
+    clearPageError,
+    clearSchedule,
+    createFolder,
+    createPage,
+    deleteFolder,
+    deletePage,
+    flushPage,
     folders,
     getPage,
-    tags,
     isLoading,
-    selectWorkspace,
-    createPage,
-    updatePage,
-    flushPage,
-    deletePage,
-    createFolder,
-    updateFolder,
-    deleteFolder,
-    reorderPages,
-    reorderFolders,
-    scheduleOnce,
-    clearSchedule,
-    searchTags,
-    reload,
-    pageErrors,
-    clearPageError,
     on,
+    pageErrors,
+    pages,
+    reload,
+    reorderFolders,
+    reorderPages,
+    scheduleOnce,
+    searchTags,
+    selectWorkspace,
+    tags,
+    updateFolder,
+    updatePage,
+    workspace,
   };
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

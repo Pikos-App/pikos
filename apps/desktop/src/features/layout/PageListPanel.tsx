@@ -1,7 +1,6 @@
 // PageListPanel — middle panel (page list for active view). Default 280px, resizable.
 
-import { Fragment, useEffect, useRef, useState } from "react";
-import type React from "react";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   ArrowUpDown,
   CalendarDays,
@@ -11,60 +10,62 @@ import {
   GripVertical,
   Plus,
 } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import type React from "react";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { SortMode } from "@/features/pages/utils/pageFilters";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { InsertionLine } from "@/shared/components/InsertionLine";
-import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
-import { PageListItem } from "@/features/pages/components/PageListItem";
 import { PageDeleteDialog } from "@/features/pages/components/PageDeleteDialog";
+import { PageListItem } from "@/features/pages/components/PageListItem";
 import { usePageList } from "@/features/pages/hooks/usePageList";
+import type { SortMode } from "@/features/pages/utils/pageFilters";
 import { groupTodayPages } from "@/features/pages/utils/pageFilters";
+import { cn } from "@/lib/utils";
+import { InsertionLine } from "@/shared/components/InsertionLine";
 import { useUI } from "@/shared/context/UIContext";
+import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-import { cn } from "@/lib/utils";
 
 interface PageListPanelProps {
   width: number;
   onResizeStart: (e: React.MouseEvent) => void;
 }
 
-export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
+export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const {
-    visiblePages,
+    activePage,
     completedPages,
     folders,
-    activePage,
-    renamingId,
-    setRenamingId,
-    pendingDelete,
+    handleDeleteCancel,
+    handleDeleteConfirm,
+    handleDeleteRequest,
+    handleMoveToFolder,
+    handlePriorityChange,
+    handleRenameCancel,
     handleRenameChange,
     handleRenameCommit,
-    handleRenameCancel,
-    handleDeleteRequest,
-    handleDeleteConfirm,
-    handleDeleteCancel,
-    handleMoveToFolder,
-    handleToggleStatus,
-    handlePriorityChange,
     handleSelectPage,
+    handleToggleStatus,
+    pendingDelete,
+    renamingId,
+    setRenamingId,
+    visiblePages,
   } = usePageList();
   const {
     activeViewId,
-    sidebarCollapsed,
-    setSidebarCollapsed,
     getSortMode,
-    setSortMode,
     openSortMenu,
-    setOpenSortMenu,
     setOpenDialog,
+    setOpenSortMenu,
+    setSidebarCollapsed,
+    setSortMode,
+    sidebarCollapsed,
   } = useUI();
   const sortMode = activeViewId !== "today" ? getSortMode(activeViewId) : "date";
   const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
@@ -74,11 +75,11 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
   const [completedCollapseState, setCompletedCollapseState] = useState<{
     viewId: string;
     collapsed: boolean;
-  }>({ viewId: activeViewId, collapsed: true });
+  }>({ collapsed: true, viewId: activeViewId });
   const completedCollapsed =
     completedCollapseState.viewId !== activeViewId ? true : completedCollapseState.collapsed;
   function toggleCompletedCollapsed() {
-    setCompletedCollapseState({ viewId: activeViewId, collapsed: !completedCollapsed });
+    setCompletedCollapseState({ collapsed: !completedCollapsed, viewId: activeViewId });
   }
 
   function toggleDateFormat() {
@@ -119,7 +120,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
         newIdx = Math.max(0, Math.min(visiblePages.length - 1, idx + direction));
       }
       const pageId = visiblePages[newIdx]?.id;
-      return pageId !== undefined ? { viewId: activeViewId, pageId } : null;
+      return pageId !== undefined ? { pageId, viewId: activeViewId } : null;
     });
   }
 
@@ -146,24 +147,24 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
   function renderPageItem(page: (typeof visiblePages)[0]) {
     return (
       <PageListItem
-        key={page.id}
-        page={page}
+        dragDisabled={sortMode !== "manual"}
+        folders={folders}
         isActive={activePage?.id === page.id}
         isHighlighted={highlightedPageId === page.id}
         isRenaming={renamingId === page.id}
-        folders={folders}
-        onSelect={() => handleSelectPage(page)}
-        onRenameStart={() => setRenamingId(page.id)}
+        key={page.id}
+        onDelete={() => handleDeleteRequest(page)}
+        onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
+        onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
+        onRenameCancel={handleRenameCancel}
         onRenameChange={(title) => handleRenameChange(page.id, title)}
         onRenameCommit={(title) => handleRenameCommit(page.id, title)}
-        onRenameCancel={handleRenameCancel}
-        onDelete={() => handleDeleteRequest(page)}
-        dragDisabled={sortMode !== "manual"}
-        onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
-        onToggleStatus={() => handleToggleStatus(page.id, page.status)}
-        onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
-        showRelative={showRelative}
+        onRenameStart={() => setRenamingId(page.id)}
+        onSelect={() => handleSelectPage(page)}
         onToggleDateFormat={toggleDateFormat}
+        onToggleStatus={() => handleToggleStatus(page.id, page.status)}
+        page={page}
+        showRelative={showRelative}
       />
     );
   }
@@ -181,8 +182,8 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
         <div className="flex items-center gap-0.5">
           {activeViewId !== "today" && (
             <DropdownMenu
-              open={openSortMenu === "page-sort"}
               onOpenChange={(open) => setOpenSortMenu(open ? "page-sort" : null)}
+              open={openSortMenu === "page-sort"}
             >
               <DropdownMenuTrigger asChild>
                 <button
@@ -192,18 +193,18 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
                   <ArrowUpDown size={13} />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-40" align="end">
+              <DropdownMenuContent align="end" className="w-40">
                 {(
                   [
-                    { value: "date", label: "Date", icon: <CalendarDays size={13} /> },
-                    { value: "title", label: "Title", icon: <CaseSensitive size={13} /> },
-                    { value: "priority", label: "Priority", icon: <Flag size={13} /> },
-                    { value: "manual", label: "Manual", icon: <GripVertical size={13} /> },
+                    { icon: <CalendarDays size={13} />, label: "Date", value: "date" },
+                    { icon: <CaseSensitive size={13} />, label: "Title", value: "title" },
+                    { icon: <Flag size={13} />, label: "Priority", value: "priority" },
+                    { icon: <GripVertical size={13} />, label: "Manual", value: "manual" },
                   ] as { value: SortMode; label: string; icon: React.ReactNode }[]
-                ).map(({ value, label, icon }) => (
+                ).map(({ icon, label, value }) => (
                   <DropdownMenuItem
-                    key={value}
                     className="gap-2"
+                    key={value}
                     onSelect={() => setSortMode(activeViewId, value)}
                   >
                     {icon}
@@ -216,8 +217,8 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
           )}
           <button
             className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            title="New Page"
             onClick={() => setOpenDialog("quick-add")}
+            title="New Page"
           >
             <Plus size={15} />
           </button>
@@ -225,7 +226,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
       </div>
 
       {/* Page list */}
-      <div ref={listRef} className="flex flex-col overflow-y-auto">
+      <div className="flex flex-col overflow-y-auto" ref={listRef}>
         {visiblePages.length === 0 && completedPages.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground italic">
             {activeViewId === "today" ? "Nothing scheduled for today" : "No pages"}
@@ -240,8 +241,8 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
                   onClick={toggleOverdue}
                 >
                   <ChevronRight
-                    size={12}
                     className={cn("transition-transform", !overdueCollapsed && "rotate-90")}
+                    size={12}
                   />
                   Overdue
                   <span className="ml-1 tabular-nums">· {overdue.length}</span>
@@ -267,8 +268,8 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
                   onClick={toggleCompletedCollapsed}
                 >
                   <ChevronRight
-                    size={12}
                     className={cn("transition-transform", !completedCollapsed && "rotate-90")}
+                    size={12}
                   />
                   Completed
                   <span className="ml-1 tabular-nums">· {completedPages.length}</span>
@@ -296,8 +297,8 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
                   onClick={toggleCompletedCollapsed}
                 >
                   <ChevronRight
-                    size={12}
                     className={cn("transition-transform", !completedCollapsed && "rotate-90")}
+                    size={12}
                   />
                   Completed
                   <span className="ml-1 tabular-nums">· {completedPages.length}</span>
@@ -317,9 +318,9 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
 
       {pendingDelete && (
         <PageDeleteDialog
-          pageTitle={pendingDelete.title}
-          onConfirm={handleDeleteConfirm}
           onCancel={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
+          pageTitle={pendingDelete.title}
         />
       )}
     </div>

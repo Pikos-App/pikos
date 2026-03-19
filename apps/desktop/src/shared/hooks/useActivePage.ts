@@ -1,6 +1,7 @@
+import type { PageSummary } from "@pikos/core";
+
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import type { PageSummary } from "@pikos/core";
 
 /**
  * Derives the active page summary from activePageId in UIContext.

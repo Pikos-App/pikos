@@ -58,18 +58,18 @@ function parseCombo(combo: string): NormalizedCombo {
     }
   }
 
-  return { key, mod, ctrl, meta, alt, shift };
+  return { alt, ctrl, key, meta, mod, shift };
 }
 
 function normalizeEvent(e: KeyboardEvent): NormalizedCombo {
   const key = normalizeKey(e.key);
   return {
+    alt: e.altKey,
+    ctrl: e.ctrlKey,
     key,
+    meta: e.metaKey,
     // Mod maps to Meta on macOS and Control elsewhere
     mod: isMac ? e.metaKey : e.ctrlKey,
-    ctrl: e.ctrlKey,
-    meta: e.metaKey,
-    alt: e.altKey,
     shift: e.shiftKey,
   };
 }
@@ -121,56 +121,6 @@ function conflictKey(parsed: NormalizedCombo): string {
 }
 
 export const Keyboard = {
-  register(binding: Binding): void {
-    const scope = binding.scope ?? "global";
-    const parsed = parseCombo(binding.combo);
-
-    // Check conflicts in same scope
-    const signature = `${scope}::${conflictKey(parsed)}`;
-    for (const b of store.values()) {
-      const sig = `${b.scope ?? "global"}::${conflictKey(b.parsed)}`;
-      if (sig === signature) {
-        console.warn(
-          `Keyboard: conflict detected for combo ${binding.combo} in scope ${scope} (existing: ${b.id}).`
-        );
-      }
-    }
-
-    store.set(binding.id, { ...binding, scope, parsed });
-  },
-
-  unregister(id: string): void {
-    store.delete(id);
-  },
-
-  setActiveScopes(scopes: string[]): void {
-    activeScopes = scopes.length ? [...scopes] : ["global"];
-  },
-
-  pushScope(scope: string): void {
-    activeScopes = [...activeScopes, scope];
-  },
-
-  popScope(scope?: string): void {
-    if (!scope) {
-      activeScopes = activeScopes.slice(0, -1);
-      if (!activeScopes.length) activeScopes = ["global"];
-      return;
-    }
-    const idx = activeScopes.lastIndexOf(scope);
-    if (idx >= 0) {
-      activeScopes.splice(idx, 1);
-      if (!activeScopes.length) activeScopes = ["global"];
-    }
-  },
-
-  listActiveBindings(): Binding[] {
-    const activeSet = new Set(activeScopes);
-    return Array.from(store.values())
-      .filter((b) => activeSet.has(b.scope ?? "global"))
-      .map(({ parsed: _p, ...b }) => b);
-  },
-
   handle(e: KeyboardEvent): void {
     // Focus guard
     const targetIsEditable = isEditableTarget(e.target);
@@ -197,5 +147,55 @@ export const Keyboard = {
         return; // stop at first match in current top scope
       }
     }
+  },
+
+  listActiveBindings(): Binding[] {
+    const activeSet = new Set(activeScopes);
+    return Array.from(store.values())
+      .filter((b) => activeSet.has(b.scope ?? "global"))
+      .map(({ parsed: _p, ...b }) => b);
+  },
+
+  popScope(scope?: string): void {
+    if (!scope) {
+      activeScopes = activeScopes.slice(0, -1);
+      if (!activeScopes.length) activeScopes = ["global"];
+      return;
+    }
+    const idx = activeScopes.lastIndexOf(scope);
+    if (idx >= 0) {
+      activeScopes.splice(idx, 1);
+      if (!activeScopes.length) activeScopes = ["global"];
+    }
+  },
+
+  pushScope(scope: string): void {
+    activeScopes = [...activeScopes, scope];
+  },
+
+  register(binding: Binding): void {
+    const scope = binding.scope ?? "global";
+    const parsed = parseCombo(binding.combo);
+
+    // Check conflicts in same scope
+    const signature = `${scope}::${conflictKey(parsed)}`;
+    for (const b of store.values()) {
+      const sig = `${b.scope ?? "global"}::${conflictKey(b.parsed)}`;
+      if (sig === signature) {
+        console.warn(
+          `Keyboard: conflict detected for combo ${binding.combo} in scope ${scope} (existing: ${b.id}).`
+        );
+      }
+    }
+
+    store.set(binding.id, { ...binding, parsed, scope });
+  },
+
+  setActiveScopes(scopes: string[]): void {
+    activeScopes = scopes.length ? [...scopes] : ["global"];
+  },
+
+  unregister(id: string): void {
+    store.delete(id);
   },
 };

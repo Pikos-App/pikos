@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { useDndMonitor } from "@dnd-kit/core";
+import { useState } from "react";
 
 /**
  * Returns the id of the item *before which* the insertion line should render,
@@ -13,19 +13,19 @@ export function useInsertionLine(ids: string[]): string | null | undefined {
   const [overId, setOverId] = useState<string | null>(null);
 
   useDndMonitor({
-    onDragStart({ active }) {
-      setActiveId(String(active.id));
+    onDragCancel() {
+      setActiveId(null);
       setOverId(null);
-    },
-    onDragOver({ over }) {
-      setOverId(over ? String(over.id) : null);
     },
     onDragEnd() {
       setActiveId(null);
       setOverId(null);
     },
-    onDragCancel() {
-      setActiveId(null);
+    onDragOver({ over }) {
+      setOverId(over ? String(over.id) : null);
+    },
+    onDragStart({ active }) {
+      setActiveId(String(active.id));
       setOverId(null);
     },
   });

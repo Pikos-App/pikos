@@ -11,17 +11,16 @@ interface SmartViewEntryProps {
 }
 
 export function SmartViewEntry({
-  label,
+  badge,
+  dragRef,
   icon,
   isActive,
-  badge,
-  onSelect,
-  dragRef,
   isDragOver,
+  label,
+  onSelect,
 }: SmartViewEntryProps) {
   return (
     <button
-      ref={dragRef}
       className={cn(
         "flex w-full items-center gap-2.5 rounded px-2 py-2.5 text-sm select-none",
         isActive || isDragOver
@@ -29,6 +28,7 @@ export function SmartViewEntry({
           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
       )}
       onClick={onSelect}
+      ref={dragRef}
     >
       <span className="shrink-0">{icon}</span>
       <span className="flex-1 text-left">{label}</span>

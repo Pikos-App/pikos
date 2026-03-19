@@ -1,16 +1,17 @@
 // Sidebar — left panel (smart views + folders). Default 180px, resizable.
 
 import { Settings } from "lucide-react";
+
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FolderList } from "@/features/folders/FolderList";
 import { useUI } from "@/shared/context/UIContext";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SidebarProps {
   width: number;
   onResizeStart: (e: React.MouseEvent) => void;
 }
 
-export function Sidebar({ width, onResizeStart }: SidebarProps) {
+export function Sidebar({ onResizeStart, width }: SidebarProps) {
   const { setSettingsOpen } = useUI();
 
   return (
@@ -27,9 +28,9 @@ export function Sidebar({ width, onResizeStart }: SidebarProps) {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
-              onClick={() => setSettingsOpen(true)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               aria-label="Open settings"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => setSettingsOpen(true)}
             >
               <Settings className="h-3.5 w-3.5 shrink-0" />
               <span>Settings</span>

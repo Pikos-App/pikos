@@ -22,17 +22,6 @@ Status: `[ ]` pending · Delete task when done.
   The editor needs WCAG 2.1 AA compliance per project standards. Currently missing: `role="textbox"` and `aria-label` on the editor container, `aria-live` region for save state announcements, visible focus indicator on the editor container, keyboard-accessible task list checkboxes, placeholder text announced to screen readers (currently CSS-only). Should be done alongside or right after GOO-106 (keyboard scope).
   **Note (from GOO-111):** Add `tabIndex={-1}` to the root `<div>` in `PageListItem.tsx` so that after Escape blurs the editor, the active page list item is properly focusable and receives visual focus. Currently the div is not natively focusable so `el.focus()` silently no-ops.
 
-- [ ] When adding pages via + icon in page list, pressing enter should add a new page. Should it open the page itself? Probably so someone can create a new page and go right into editing it.
-
-## Quick Cleanup Items
-- git ignore build dir
-- the app should not auto correct anything (capitalize, fix spelling, etc)
-- refine style of flashing cursor
-- spell checker / squiggly lines?
-- slash dropdown moves menu item to where mouse was, doesn't stay at top item
-- if there's a `/` in the content, the slash menu opens immediately upon opening editor
-- app shifts slightly when using trackpad to scroll
-
 ## 🔍 Search & Commands — Minimum Quality Bar
 
 _Without these the app feels half-finished to any organic user. Ship before public launch._
@@ -118,8 +107,10 @@ _Required before the marketing site goes live and the download button appears._
 
 _For post-launch V1, power features, and long-term roadmap — grep `BACKLOG.md` by GOO number._
 
-
-
 Testing notes
 - Manual then NLP - should persist manual, NLP can be added then removed via input - currently manual persists and can't be overridden
 - NLP then manual - should remove NLP from input? Probably
+
+Additional Thoughts
+- when to do "view more" type of query slicing? For sure completed will need that. I assume FTS will work on all records, not just records shown on the UI.
+- page list virtualization

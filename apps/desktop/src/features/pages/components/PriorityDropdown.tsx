@@ -1,6 +1,8 @@
 // PriorityDropdown — GOO-35.
 // Linear-inspired priority selector. Used in MetadataHeader byline + PageListItem badge.
 
+import type { PagePriority } from "@pikos/core";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,7 +10,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { PagePriority } from "@pikos/core";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -21,34 +22,34 @@ interface PriorityConfig {
 
 const PRIORITY_CONFIG: Record<PagePriority, PriorityConfig> = {
   0: {
-    label: "Priority",
-    icon: "—",
-    className: "text-muted-foreground/40",
     badgeClassName: "text-muted-foreground/40",
+    className: "text-muted-foreground/40",
+    icon: "—",
+    label: "Priority",
   },
   1: {
-    label: "Urgent",
-    icon: "!!",
-    className: "text-red-500",
     badgeClassName: "text-red-500",
+    className: "text-red-500",
+    icon: "!!",
+    label: "Urgent",
   },
   2: {
-    label: "High",
-    icon: "!",
-    className: "text-orange-500",
     badgeClassName: "text-orange-500",
+    className: "text-orange-500",
+    icon: "!",
+    label: "High",
   },
   3: {
-    label: "Medium",
-    icon: "··",
-    className: "text-yellow-500",
     badgeClassName: "text-yellow-500",
+    className: "text-yellow-500",
+    icon: "··",
+    label: "Medium",
   },
   4: {
-    label: "Low",
-    icon: "·",
-    className: "text-blue-400/80",
     badgeClassName: "text-blue-400/80",
+    className: "text-blue-400/80",
+    icon: "·",
+    label: "Low",
   },
 };
 
@@ -64,8 +65,8 @@ interface PriorityDropdownProps {
 }
 
 export function PriorityDropdown({
-  priority,
   onSelect,
+  priority,
   variant = "byline",
 }: PriorityDropdownProps) {
   const cfg = PRIORITY_CONFIG[priority];
@@ -76,11 +77,11 @@ export function PriorityDropdown({
         {variant === "badge" ? (
           // Compact icon badge for page list — only shown when priority ≠ 0
           <button
+            aria-label={`Priority: ${cfg.label}`}
             className={cn(
               "flex shrink-0 cursor-pointer items-center justify-center rounded px-[3px] text-[11px] leading-none font-semibold transition-opacity hover:opacity-80 focus:outline-none",
               cfg.badgeClassName
             )}
-            aria-label={`Priority: ${cfg.label}`}
             onClick={(e) => e.stopPropagation()}
           >
             {cfg.icon}
@@ -89,11 +90,11 @@ export function PriorityDropdown({
           // Byline chip in MetadataHeader — always visible so user can set priority.
           // Fixed width prevents layout shift when switching between priority labels.
           <button
+            aria-label={`Priority: ${cfg.label}`}
             className={cn(
               "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded whitespace-nowrap transition-opacity hover:opacity-80 focus:outline-none",
               cfg.className
             )}
-            aria-label={`Priority: ${cfg.label}`}
           >
             <span className="text-sm font-medium">{cfg.icon}</span>
             <span className="text-sm">{cfg.label}</span>
@@ -106,9 +107,9 @@ export function PriorityDropdown({
           const c = PRIORITY_CONFIG[p];
           return (
             <DropdownMenuItem
+              className={cn("gap-2", priority === p && "font-medium")}
               key={p}
               onSelect={() => onSelect(p)}
-              className={cn("gap-2", priority === p && "font-medium")}
             >
               <span className={cn("w-5 shrink-0 text-center text-sm font-semibold", c.className)}>
                 {c.icon}

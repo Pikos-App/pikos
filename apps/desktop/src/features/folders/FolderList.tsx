@@ -1,8 +1,9 @@
-import { Fragment, useState } from "react";
-import type React from "react";
 import { useDndMonitor, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ArrowUpDown, CalendarDays, Hash, Inbox, Plus, Search, Text } from "lucide-react";
+import { Fragment, useState } from "react";
+import type React from "react";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,59 +11,60 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InsertionLine } from "@/shared/components/InsertionLine";
+import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
-import { FolderItem } from "./components/FolderItem";
+
 import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
+import { FolderItem } from "./components/FolderItem";
 import { SmartViewEntry } from "./components/SmartViewEntry";
 import { useFolderList } from "./hooks/useFolderList";
 import type { FolderSortOrder } from "./hooks/useFolderList";
-import { useUI } from "@/shared/context/UIContext";
 
 export function FolderList() {
   const {
-    folders,
-    pageCountByFolder,
     activeViewId,
-    setActiveViewId,
-    renamingId,
-    setRenamingId,
-    pendingDelete,
-    todayCount,
-    inboxCount,
-    sortOrder,
-    setSortOrder,
-    handleCreateFolder,
-    handleRenameCommit,
-    handleDeleteRequest,
-    handleDeleteConfirm,
-    handleDeleteCancel,
+    folders,
     handleColorChange,
+    handleCreateFolder,
+    handleDeleteCancel,
+    handleDeleteConfirm,
+    handleDeleteRequest,
+    handleRenameCommit,
+    inboxCount,
+    pageCountByFolder,
+    pendingDelete,
+    renamingId,
+    setActiveViewId,
+    setRenamingId,
+    setSortOrder,
+    sortOrder,
+    todayCount,
   } = useFolderList();
   const { openSortMenu, setOpenSortMenu } = useUI();
 
   const SORT_OPTIONS: { value: FolderSortOrder; label: string; icon: React.ReactNode }[] = [
-    { value: "manual", label: "Manual", icon: <ArrowUpDown size={13} /> },
-    { value: "alphabetical", label: "Alphabetical", icon: <Text size={13} /> },
-    { value: "page-count", label: "Page count", icon: <Hash size={13} /> },
+    { icon: <ArrowUpDown size={13} />, label: "Manual", value: "manual" },
+    { icon: <Text size={13} />, label: "Alphabetical", value: "alphabetical" },
+    { icon: <Hash size={13} />, label: "Page count", value: "page-count" },
   ];
 
   const folderIds = folders.map((f) => f.id);
   const insertBeforeId = useInsertionLine(folderIds);
 
   const { setNodeRef: inboxDropRef } = useDroppable({
+    data: { folderId: null, type: "folder" },
     id: "inbox-drop",
-    data: { type: "folder", folderId: null },
   });
   const [isPageOverInbox, setIsPageOverInbox] = useState(false);
   useDndMonitor({
-    onDragOver({ active, over }) {
-      setIsPageOverInbox(over?.id === "inbox-drop" && active.data.current?.["type"] === "page");
+    onDragCancel() {
+      setIsPageOverInbox(false);
     },
     onDragEnd() {
       setIsPageOverInbox(false);
     },
-    onDragCancel() {
-      setIsPageOverInbox(false);
+    onDragOver({ active, over }) {
+      setIsPageOverInbox(over?.id === "inbox-drop" && active.data.current?.["type"] === "page");
     },
   });
 
@@ -70,20 +72,20 @@ export function FolderList() {
     <>
       <div className="flex flex-col gap-0.5 px-1 py-2">
         <SmartViewEntry
-          label="Today"
+          badge={todayCount}
           icon={<CalendarDays size={16} />}
           isActive={activeViewId === "today"}
-          badge={todayCount}
+          label="Today"
           onSelect={() => setActiveViewId("today")}
         />
         <SmartViewEntry
-          label="Inbox"
+          badge={inboxCount}
+          dragRef={inboxDropRef}
           icon={<Inbox size={16} />}
           isActive={activeViewId === "inbox"}
-          badge={inboxCount}
-          onSelect={() => setActiveViewId("inbox")}
-          dragRef={inboxDropRef}
           isDragOver={isPageOverInbox}
+          label="Inbox"
+          onSelect={() => setActiveViewId("inbox")}
         />
 
         <div className="mt-4 mb-1 flex items-center justify-between pr-1 pl-2">
@@ -96,8 +98,8 @@ export function FolderList() {
               <Search size={15} />
             </button>
             <DropdownMenu
-              open={openSortMenu === "folder-sort"}
               onOpenChange={(open) => setOpenSortMenu(open ? "folder-sort" : null)}
+              open={openSortMenu === "folder-sort"}
             >
               <DropdownMenuTrigger asChild>
                 <button
@@ -110,10 +112,10 @@ export function FolderList() {
               <DropdownMenuContent align="end" className="w-40">
                 {SORT_OPTIONS.map((opt) => (
                   <DropdownMenuItem
-                    key={opt.value}
-                    onSelect={() => setSortOrder(opt.value)}
                     className="gap-2"
                     data-active={sortOrder === opt.value}
+                    key={opt.value}
+                    onSelect={() => setSortOrder(opt.value)}
                   >
                     {opt.icon}
                     {opt.label}
@@ -124,8 +126,8 @@ export function FolderList() {
             </DropdownMenu>
             <button
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              title="New Folder"
               onClick={() => void handleCreateFolder()}
+              title="New Folder"
             >
               <Plus size={15} />
             </button>
@@ -138,15 +140,15 @@ export function FolderList() {
               {insertBeforeId === folder.id && <InsertionLine />}
               <FolderItem
                 folder={folder}
-                pageCount={pageCountByFolder[folder.id] ?? 0}
                 isActive={activeViewId === folder.id}
                 isRenaming={renamingId === folder.id}
-                onSelect={() => setActiveViewId(folder.id)}
-                onRenameStart={() => setRenamingId(folder.id)}
-                onRenameCommit={(name) => handleRenameCommit(folder.id, name)}
-                onRenameCancel={() => setRenamingId(null)}
-                onDelete={() => handleDeleteRequest(folder)}
                 onColorChange={(color) => handleColorChange(folder.id, color)}
+                onDelete={() => handleDeleteRequest(folder)}
+                onRenameCancel={() => setRenamingId(null)}
+                onRenameCommit={(name) => handleRenameCommit(folder.id, name)}
+                onRenameStart={() => setRenamingId(folder.id)}
+                onSelect={() => setActiveViewId(folder.id)}
+                pageCount={pageCountByFolder[folder.id] ?? 0}
               />
             </Fragment>
           ))}
@@ -161,9 +163,9 @@ export function FolderList() {
       {pendingDelete && (
         <FolderDeleteDialog
           folderName={pendingDelete.folder.name}
-          pageCount={pendingDelete.pageCount}
-          onConfirm={handleDeleteConfirm}
           onCancel={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
+          pageCount={pendingDelete.pageCount}
         />
       )}
     </>

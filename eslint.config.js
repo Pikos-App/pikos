@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import perfectionist from "eslint-plugin-perfectionist";
 import reactCompiler from "eslint-plugin-react-compiler";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
@@ -30,12 +31,31 @@ export default tseslint.config(
       },
     },
     plugins: {
+      perfectionist,
       "react-compiler": reactCompiler,
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      "perfectionist/sort-imports": [
+        "error",
+        {
+          type: "natural",
+          groups: [
+            "side-effect",
+            "builtin",
+            "external",
+            "internal",
+            ["parent", "sibling", "index"],
+            "unknown",
+          ],
+        },
+      ],
+      "perfectionist/sort-named-imports": ["error", { type: "natural" }],
+      "perfectionist/sort-exports": ["error", { type: "natural" }],
+      "perfectionist/sort-objects": ["error", { type: "natural" }],
+      "perfectionist/sort-jsx-props": ["error", { type: "natural" }],
       "react-compiler/react-compiler": "error",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": [

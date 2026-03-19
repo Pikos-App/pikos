@@ -4,29 +4,30 @@
 // but input text is never modified. On submit, the parser extracts the clean
 // title and all metadata from the full input.
 
+import { parseInput } from "@pikos/core";
+import type { Folder, PagePriority, PageUpdate } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
+
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import { useUI } from "@/shared/context/UIContext";
-import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-import { DateTimePicker } from "@/shared/components/DateTimePicker";
-import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { FolderChip } from "@/features/pages/components/FolderChip";
+import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { TagsPopover } from "@/features/pages/components/TagsPopover";
-import { parseInput } from "@pikos/core";
 import { cn } from "@/lib/utils";
-import type { Folder, PagePriority, PageUpdate } from "@pikos/core";
+import { DateTimePicker } from "@/shared/components/DateTimePicker";
+import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 // ── NLP priority mapping ──────────────────────────────────────────────────────
 
 type NLPPriority = "urgent" | "high" | "medium" | "low";
 
 const NLP_PRIORITY_MAP: Record<NLPPriority, PagePriority> = {
-  urgent: 1,
   high: 2,
-  medium: 3,
   low: 4,
+  medium: 3,
+  urgent: 1,
 };
 
 // ── Folder fuzzy match ────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ function fuzzyMatchFolder(query: string, folders: Folder[]): Folder | null {
 
 function BylineSeparator() {
   return (
-    <span className="shrink-0 text-muted-foreground/20" aria-hidden="true">
+    <span aria-hidden="true" className="shrink-0 text-muted-foreground/20">
       ·
     </span>
   );
@@ -55,7 +56,7 @@ function BylineSeparator() {
 // ── QuickAddDialog ────────────────────────────────────────────────────────────
 
 export function QuickAddDialog() {
-  const { folders, tags, createPage, updatePage, scheduleOnce } = useWorkspace();
+  const { createPage, folders, scheduleOnce, tags, updatePage } = useWorkspace();
   const allTagNames = tags.map((t) => t.name);
   const { activeViewId, openDialog, setOpenDialog } = useUI();
 
@@ -246,7 +247,7 @@ export function QuickAddDialog() {
     // Use parsed.title (tokens already stripped by parser) as the page title.
     const title = parsed?.title || trimmed;
 
-    const page = await createPage({ title, folderId: resolvedFolderId });
+    const page = await createPage({ folderId: resolvedFolderId, title });
 
     // Fresh NLP tags from re-parse + manual additions.
     // manualTags is never overwritten by NLP, so this correctly handles removals.
@@ -299,11 +300,11 @@ export function QuickAddDialog() {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog onOpenChange={handleOpenChange} open={isOpen}>
       <DialogContent
-        showCloseButton={false}
         aria-label="Quick add"
         className="top-[22%] translate-y-0 gap-0 border-border/60 bg-card p-0 shadow-2xl sm:max-w-[540px]"
+        showCloseButton={false}
       >
         <div className="px-4 pt-4 pb-3">
           {addedFeedback !== null ? (
@@ -313,17 +314,17 @@ export function QuickAddDialog() {
             </p>
           ) : (
             <input
-              ref={inputRef}
-              value={inputValue}
-              onChange={(event) => setInputValue(event.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="What's on your mind?"
               autoComplete="off"
               className={cn(
                 "w-full bg-transparent text-base text-foreground outline-none",
                 "placeholder:text-muted-foreground/40",
                 shake && "animate-shake"
               )}
+              onChange={(event) => setInputValue(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="What's on your mind?"
+              ref={inputRef}
+              value={inputValue}
             />
           )}
         </div>
@@ -332,36 +333,36 @@ export function QuickAddDialog() {
         <div className="flex items-center gap-2 border-t border-border/40 px-4 py-2.5 text-sm text-muted-foreground/60">
           <FolderChip
             folders={folders}
-            value={folderValue}
             onChange={(id) => {
               setFolderValue(id);
               setFolderManual(true);
             }}
+            value={folderValue}
           />
 
           <BylineSeparator />
 
           <DateTimePicker
-            value={dateValue}
+            endValue={endDateValue}
             onChange={(d) => {
               setDateValue(d);
               setDateManual(true);
             }}
-            endValue={endDateValue}
             onEndChange={(d) => {
               setEndDateValue(d);
               setDateManual(true);
             }}
+            value={dateValue}
           />
 
           <BylineSeparator />
 
           <PriorityDropdown
-            priority={priorityValue}
             onSelect={(p) => {
               setPriorityValue(p);
               setPriorityManual(true);
             }}
+            priority={priorityValue}
             variant="byline"
           />
 
@@ -369,7 +370,6 @@ export function QuickAddDialog() {
 
           <TagsPopover
             allTags={allTagNames}
-            selected={tagsValue}
             onToggle={(name) => {
               if (tagsValue.includes(name)) {
                 setNlpTags((prev) => prev.filter((t) => t !== name));
@@ -378,11 +378,12 @@ export function QuickAddDialog() {
                 setManualTags((prev) => [...prev, name]);
               }
             }}
+            selected={tagsValue}
           />
 
           <button
-            onClick={() => void handleSubmit()}
             className="ml-auto shrink-0 cursor-pointer rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => void handleSubmit()}
           >
             Add
           </button>

@@ -112,5 +112,5 @@ export function useAutosave<T>(
     await doSave.current();
   });
 
-  return { isDirty, isSaving, saveError, flush: flush.current };
+  return { flush: flush.current, isDirty, isSaving, saveError };
 }

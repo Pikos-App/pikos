@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   type DragEndEvent,
   type DragStartEvent,
@@ -7,13 +6,15 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import { useUI } from "@/shared/context/UIContext";
-import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
 import type { Folder, PageSummary } from "@pikos/core";
+import { useState } from "react";
+
+import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
+import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 export function useThreePanelDnD() {
-  const { pages, folders, reorderPages, reorderFolders, updatePage } = useWorkspace();
+  const { folders, pages, reorderFolders, reorderPages, updatePage } = useWorkspace();
   const { activeViewId, getSortMode } = useUI();
 
   const [activePageData, setActivePageData] = useState<PageSummary | null>(null);
@@ -70,11 +71,11 @@ export function useThreePanelDnD() {
   }
 
   return {
-    sensors,
-    handleDragStart,
-    handleDragEnd,
-    handleDragCancel,
-    activePageData,
     activeFolderData,
+    activePageData,
+    handleDragCancel,
+    handleDragEnd,
+    handleDragStart,
+    sensors,
   };
 }

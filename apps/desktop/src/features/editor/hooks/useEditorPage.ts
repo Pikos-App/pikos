@@ -1,10 +1,11 @@
 // useEditorPage — loads full page content when activePageId changes.
 // Returns the full Page (with content) for the Tiptap editor.
 
+import type { Page } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
+
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import type { Page } from "@pikos/core";
 
 interface EditorPageState {
   /** Full page with content, or null if no page selected / still loading. */
@@ -67,5 +68,5 @@ export function useEditorPage(): EditorPageState {
   })();
   const isLoading = activePageId !== null && page === null;
 
-  return { page, isLoading };
+  return { isLoading, page };
 }

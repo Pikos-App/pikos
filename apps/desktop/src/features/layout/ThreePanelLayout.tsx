@@ -1,74 +1,76 @@
-import { DndContext, DragOverlay, closestCenter } from "@dnd-kit/core";
+import { closestCenter, DndContext, DragOverlay } from "@dnd-kit/core";
 import { motion } from "framer-motion";
-import { Sidebar } from "./Sidebar";
-import { PageListPanel } from "./PageListPanel";
+
+import { cn } from "@/lib/utils";
+import { useUI } from "@/shared/context/UIContext";
+
 import { EditorPanel } from "./EditorPanel";
+import { PageListPanel } from "./PageListPanel";
+import { Sidebar } from "./Sidebar";
 import { usePanelResize } from "./usePanelResize";
 import { useThreePanelDnD } from "./useThreePanelDnD";
-import { useUI } from "@/shared/context/UIContext";
-import { cn } from "@/lib/utils";
 
-const PANEL_SPRING = { type: "spring" as const, stiffness: 350, damping: 35 };
+const PANEL_SPRING = { damping: 35, stiffness: 350, type: "spring" as const };
 
 export function ThreePanelLayout() {
   const { sidebarCollapsed } = useUI();
 
   const left = usePanelResize({
-    storageKey: "pikos:leftPanelWidth",
     defaultWidth: 180,
-    min: 120,
     max: 320,
+    min: 120,
+    storageKey: "pikos:leftPanelWidth",
   });
   const mid = usePanelResize({
-    storageKey: "pikos:midPanelWidth",
     defaultWidth: 280,
-    min: 180,
     max: 480,
+    min: 180,
+    storageKey: "pikos:midPanelWidth",
   });
   const {
-    sensors,
-    handleDragStart,
-    handleDragEnd,
-    handleDragCancel,
-    activePageData,
     activeFolderData,
+    activePageData,
+    handleDragCancel,
+    handleDragEnd,
+    handleDragStart,
+    sensors,
   } = useThreePanelDnD();
 
   return (
     <DndContext
-      sensors={sensors}
       collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
+      onDragEnd={handleDragEnd}
+      onDragStart={handleDragStart}
+      sensors={sensors}
     >
       <div className="flex h-screen bg-background text-foreground">
         <motion.div
           animate={{
-            width: sidebarCollapsed ? 0 : left.width,
             opacity: sidebarCollapsed ? 0 : 1,
+            width: sidebarCollapsed ? 0 : left.width,
           }}
-          transition={PANEL_SPRING}
           className={cn(
             "h-full shrink-0 overflow-hidden",
             sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
           )}
+          transition={PANEL_SPRING}
         >
-          <Sidebar width={left.width} onResizeStart={left.onResizeStart} />
+          <Sidebar onResizeStart={left.onResizeStart} width={left.width} />
         </motion.div>
 
         <motion.div
           animate={{
-            width: sidebarCollapsed ? 0 : mid.width,
             opacity: sidebarCollapsed ? 0 : 1,
+            width: sidebarCollapsed ? 0 : mid.width,
           }}
-          transition={PANEL_SPRING}
           className={cn(
             "h-full shrink-0 overflow-hidden",
             sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
           )}
+          transition={PANEL_SPRING}
         >
-          <PageListPanel width={mid.width} onResizeStart={mid.onResizeStart} />
+          <PageListPanel onResizeStart={mid.onResizeStart} width={mid.width} />
         </motion.div>
 
         <EditorPanel />

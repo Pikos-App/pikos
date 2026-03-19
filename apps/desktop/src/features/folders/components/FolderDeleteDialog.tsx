@@ -18,12 +18,12 @@ interface FolderDeleteDialogProps {
 
 export function FolderDeleteDialog({
   folderName,
-  pageCount,
-  onConfirm,
   onCancel,
+  onConfirm,
+  pageCount,
 }: FolderDeleteDialogProps) {
   return (
-    <AlertDialog open onOpenChange={(open) => !open && onCancel()}>
+    <AlertDialog onOpenChange={(open) => !open && onCancel()} open>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete &quot;{folderName}&quot;?</AlertDialogTitle>

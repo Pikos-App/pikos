@@ -2,15 +2,6 @@
 // Injected via VITE_TEST_MODE. Zero Tauri deps.
 
 import type {
-  Folder,
-  Page,
-  PageFilter,
-  PageRecurrenceRule,
-  PageSchedule,
-  PageSummary,
-  SearchResult,
-} from "../types";
-import type {
   FolderUpdate,
   NewFolder,
   NewPage,
@@ -21,6 +12,15 @@ import type {
   RecurrenceRuleUpdate,
   StorageAdapter,
 } from "../storage";
+import type {
+  Folder,
+  Page,
+  PageFilter,
+  PageRecurrenceRule,
+  PageSchedule,
+  PageSummary,
+  SearchResult,
+} from "../types";
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -77,9 +77,9 @@ export class MockStorageAdapter implements StorageAdapter {
   createPage(data: NewPage): Promise<Page> {
     const page: Page = {
       ...data,
+      createdAt: now(),
       id: uuid(),
       sortOrder: nextSortOrder([...this.pages.values()]),
-      createdAt: now(),
       updatedAt: now(),
     };
     this.pages.set(page.id, page);
@@ -147,7 +147,7 @@ export class MockStorageAdapter implements StorageAdapter {
         const start = Math.max(0, idx - 40);
         const end = Math.min(text.length, idx + q.length + 40);
         const excerpt = text.slice(start, end).replace(q, `<mark>${q}</mark>`);
-        results.push({ id: page.id, title: page.title, excerpt });
+        results.push({ excerpt, id: page.id, title: page.title });
       }
     }
     return Promise.resolve(results);
@@ -162,9 +162,9 @@ export class MockStorageAdapter implements StorageAdapter {
   createFolder(data: NewFolder): Promise<Folder> {
     const folder: Folder = {
       ...data,
+      createdAt: now(),
       id: uuid(),
       sortOrder: nextSortOrder([...this.folders.values()]),
-      createdAt: now(),
       updatedAt: now(),
     };
     this.folders.set(folder.id, folder);
@@ -207,8 +207,8 @@ export class MockStorageAdapter implements StorageAdapter {
       ...(data.timezone !== undefined && { timezone: data.timezone }),
       ...(data.ruleId !== undefined && { ruleId: data.ruleId }),
       ...(data.originalDate !== undefined && { originalDate: data.originalDate }),
-      status: "not_started",
       createdAt: now(),
+      status: "not_started",
     };
     this.schedules.set(schedule.id, schedule);
     this._refreshDenorm(data.pageId);
@@ -264,8 +264,8 @@ export class MockStorageAdapter implements StorageAdapter {
       rruleExdates: data.rruleExdates ?? [],
       scheduledStart: data.scheduledStart,
       ...(data.scheduledEnd !== undefined && { scheduledEnd: data.scheduledEnd }),
-      timezone: data.timezone,
       createdAt: now(),
+      timezone: data.timezone,
     };
     this.rules.set(rule.id, rule);
     return Promise.resolve(rule);

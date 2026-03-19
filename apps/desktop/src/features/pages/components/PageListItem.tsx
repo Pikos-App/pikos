@@ -1,6 +1,8 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import type { Folder, PagePriority, PageSummary } from "@pikos/core";
 import { Check } from "lucide-react";
+
 import {
   ContextMenu,
   ContextMenuContent,
@@ -13,7 +15,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
-import type { Folder, PagePriority, PageSummary } from "@pikos/core";
 
 // Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p
 function formatTime(date: Date): string {
@@ -39,35 +40,35 @@ function formatDate(iso: string): { label: string; isPast: boolean; tooltip: str
 
   const tooltip = isAllDay
     ? date.toLocaleDateString("en-US", {
+        day: "numeric",
+        month: "long",
         weekday: "long",
         year: "numeric",
-        month: "long",
-        day: "numeric",
       })
     : date.toLocaleString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
+        month: "long",
+        weekday: "long",
+        year: "numeric",
       });
 
   // Timed events today always show the time (past ones in red, upcoming as muted).
   // This keeps them visually distinct from any all-day event on the same date.
   if (!isAllDay && isToday) {
-    return { label: formatTime(date), isPast, tooltip };
+    return { isPast, label: formatTime(date), tooltip };
   }
 
   const dateLabel = date.toLocaleDateString("en-US", {
-    month: "short",
     day: "numeric",
+    month: "short",
     ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
   });
 
   // Timed non-today: show date only; time is available on hover via tooltip
   const label = dateLabel;
-  return { label, isPast, tooltip };
+  return { isPast, label, tooltip };
 }
 
 function formatRelativeTime(iso: string): { label: string; isPast: boolean; tooltip: string } {
@@ -78,18 +79,18 @@ function formatRelativeTime(iso: string): { label: string; isPast: boolean; tool
         parseInt(iso.slice(5, 7)) - 1,
         parseInt(iso.slice(8, 10))
       ).toLocaleDateString("en-US", {
+        day: "numeric",
+        month: "long",
         weekday: "long",
         year: "numeric",
-        month: "long",
-        day: "numeric",
       })
     : new Date(iso).toLocaleString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
+        month: "long",
+        weekday: "long",
+        year: "numeric",
       });
 
   if (isAllDay) {
@@ -101,9 +102,9 @@ function formatRelativeTime(iso: string): { label: string; isPast: boolean; tool
     const todayMidnight = new Date();
     todayMidnight.setHours(0, 0, 0, 0);
     const diffDays = Math.round((date.getTime() - todayMidnight.getTime()) / 86400000);
-    if (diffDays === 0) return { label: "today", isPast: false, tooltip };
-    if (diffDays < 0) return { label: `${Math.abs(diffDays)}d`, isPast: true, tooltip };
-    return { label: `${diffDays}d`, isPast: false, tooltip };
+    if (diffDays === 0) return { isPast: false, label: "today", tooltip };
+    if (diffDays < 0) return { isPast: true, label: `${Math.abs(diffDays)}d`, tooltip };
+    return { isPast: false, label: `${diffDays}d`, tooltip };
   }
 
   // Timed event
@@ -115,12 +116,12 @@ function formatRelativeTime(iso: string): { label: string; isPast: boolean; tool
 
   // Within the hour → relative only (already time-informative)
   if (absMins < 60)
-    return { label: absMins === 0 ? "now" : `${absMins}m`, isPast: isPast && absMins > 0, tooltip };
+    return { isPast: isPast && absMins > 0, label: absMins === 0 ? "now" : `${absMins}m`, tooltip };
   const absHours = Math.round(abs / 3600000);
   // Within the day → relative only
-  if (absHours < 24) return { label: `${absHours}hr`, isPast, tooltip };
+  if (absHours < 24) return { isPast, label: `${absHours}hr`, tooltip };
   const days = Math.round(abs / 86400000);
-  return { label: `${days}d`, isPast, tooltip };
+  return { isPast, label: `${days}d`, tooltip };
 }
 
 interface PageListItemProps {
@@ -144,31 +145,31 @@ interface PageListItemProps {
 }
 
 export function PageListItem({
-  page,
+  dragDisabled = false,
+  folders,
   isActive,
   isHighlighted = false,
   isRenaming,
-  dragDisabled = false,
-  folders,
-  onSelect,
-  onRenameStart,
-  onRenameChange,
-  onRenameCommit,
-  onRenameCancel,
   onDelete,
   onMoveToFolder,
-  onToggleStatus,
   onPriorityChange: _onPriorityChange,
-  showRelative = false,
+  onRenameCancel,
+  onRenameChange,
+  onRenameCommit,
+  onRenameStart,
+  onSelect,
   onToggleDateFormat,
+  onToggleStatus,
+  page,
+  showRelative = false,
 }: PageListItemProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
-    id: page.id,
+  const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
     data: { type: "page" },
     disabled: isRenaming || dragDisabled,
+    id: page.id,
     transition: null,
   });
-  const { inputRef, prepareRenameFromMenu, contextMenuContentProps } = useInlineRename(isRenaming);
+  const { contextMenuContentProps, inputRef, prepareRenameFromMenu } = useInlineRename(isRenaming);
 
   useMinuteTick();
 
@@ -182,11 +183,11 @@ export function PageListItem({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          ref={setNodeRef}
           data-page-id={page.id}
+          ref={setNodeRef}
           style={{
-            transform: CSS.Transform.toString(transform),
             opacity: isDragging ? 0 : 1,
+            transform: CSS.Transform.toString(transform),
           }}
           {...attributes}
           {...listeners}
@@ -203,6 +204,7 @@ export function PageListItem({
         >
           {/* Checkbox — border color encodes priority when not done */}
           <button
+            aria-label={page.status === "done" ? "Mark not done" : "Mark done"}
             className={cn(
               "mt-0.5 flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-[2px] border transition-colors",
               page.status === "done"
@@ -213,7 +215,6 @@ export function PageListItem({
                     ? "border-orange-500 hover:border-orange-400"
                     : "border-muted-foreground/40 hover:border-foreground/60"
             )}
-            aria-label={page.status === "done" ? "Mark not done" : "Mark done"}
             onClick={(e) => {
               e.stopPropagation();
               onToggleStatus();
@@ -237,14 +238,14 @@ export function PageListItem({
                 </span>
                 {isRenaming && (
                   <input
-                    ref={inputRef}
-                    autoComplete="off"
                     autoCapitalize="off"
+                    autoComplete="off"
                     autoCorrect="off"
                     className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug font-medium text-foreground outline-none"
                     defaultValue={page.title}
-                    onChange={(e) => onRenameChange?.(e.target.value)}
                     onBlur={commit}
+                    onChange={(e) => onRenameChange?.(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -254,19 +255,18 @@ export function PageListItem({
                         onRenameCancel();
                       }
                     }}
-                    onClick={(e) => e.stopPropagation()}
+                    ref={inputRef}
                   />
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {page.scheduledStart &&
                   (() => {
-                    const { label, isPast, tooltip } = showRelative
+                    const { isPast, label, tooltip } = showRelative
                       ? formatRelativeTime(page.scheduledStart)
                       : formatDate(page.scheduledStart);
                     return (
                       <span
-                        title={tooltip}
                         className={cn(
                           "shrink-0 cursor-pointer text-[11px] leading-snug hover:opacity-80",
                           isPast ? "text-red-500" : "text-muted-foreground"
@@ -275,6 +275,7 @@ export function PageListItem({
                           e.stopPropagation();
                           onToggleDateFormat?.();
                         }}
+                        title={tooltip}
                       >
                         {label}
                       </span>
@@ -297,16 +298,16 @@ export function PageListItem({
           <ContextMenuSubTrigger>Move to Folder</ContextMenuSubTrigger>
           <ContextMenuSubContent>
             <ContextMenuItem
-              onSelect={() => onMoveToFolder(null)}
               className={cn(page.folderId === null && "font-medium")}
+              onSelect={() => onMoveToFolder(null)}
             >
               Inbox
             </ContextMenuItem>
             {folders.map((folder) => (
               <ContextMenuItem
+                className={cn(page.folderId === folder.id && "font-medium")}
                 key={folder.id}
                 onSelect={() => onMoveToFolder(folder.id)}
-                className={cn(page.folderId === folder.id && "font-medium")}
               >
                 <span
                   className="mr-2 h-2 w-2 shrink-0 rounded-full"

@@ -2,11 +2,11 @@
 // Shows automatically when cursor is on a link (view mode: URL + edit/unlink/copy).
 // Opens in edit mode via Cmd+K or toolbar button (URL input + apply/cancel).
 
-import { useState, useEffect, useRef } from "react";
-import { useEditorState } from "@tiptap/react";
-import type { Editor } from "@tiptap/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Pencil, Unlink, Copy, Check } from "lucide-react";
+import type { Editor } from "@tiptap/core";
+import { useEditorState } from "@tiptap/react";
+import { Check, Copy, ExternalLink, Pencil, Unlink } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 interface LinkPopoverProps {
   editor: Editor;
@@ -75,7 +75,7 @@ function computePopoverPos(
     left = window.innerWidth - popoverWidth - 8;
   }
   if (left < 8) left = 8;
-  return { top: rect.bottom + 6, left };
+  return { left, top: rect.bottom + 6 };
 }
 
 function ensureProtocol(url: string): string {
@@ -99,7 +99,7 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  const { isLink, linkHref, selectionFrom, selectionEmpty, editorFocused } = useEditorState({
+  const { editorFocused, isLink, linkHref, selectionEmpty, selectionFrom } = useEditorState({
     editor,
     selector: (ctx) => {
       const { state } = ctx.editor;
@@ -128,11 +128,11 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
       }
 
       return {
+        editorFocused: ctx.editor.isFocused,
         isLink: hasLinkInDoc,
         linkHref: href,
-        selectionFrom: from,
         selectionEmpty: state.selection.empty,
-        editorFocused: ctx.editor.isFocused,
+        selectionFrom: from,
       };
     },
   });
@@ -281,20 +281,19 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
 
   return (
     <div
-      ref={popoverRef}
       className="link-popover"
-      style={{ top: pos.top, left: pos.left }}
       onMouseDown={(e) => {
         // Prevent editor blur when clicking inside the popover
         e.preventDefault();
       }}
+      ref={popoverRef}
+      style={{ left: pos.left, top: pos.top }}
     >
       {showEditMode ? (
         <div className="flex items-center gap-1.5">
           <input
-            ref={inputRef}
-            type="url"
-            value={urlValue}
+            autoComplete="off"
+            className="link-popover-input"
             onChange={(e) => setUrlValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -303,9 +302,10 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
               }
             }}
             placeholder="Paste or type a URL\u2026"
-            className="link-popover-input"
-            autoComplete="off"
+            ref={inputRef}
             spellCheck={false}
+            type="url"
+            value={urlValue}
           />
           <button
             className="link-popover-btn link-popover-btn-primary"
@@ -322,7 +322,7 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
         </div>
       ) : (
         <div className="flex items-center gap-1">
-          <button className="link-popover-url" title={linkHref} onClick={handleOpen}>
+          <button className="link-popover-url" onClick={handleOpen} title={linkHref}>
             {truncateUrl(linkHref)}
           </button>
           <div className="link-popover-divider" />

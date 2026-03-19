@@ -2,11 +2,12 @@
 // Sidebar toggle is a persistent button at the top-left corner of this panel —
 // always accessible regardless of page state or which view is active.
 
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { EditorPane } from "@/features/editor";
 import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { EditorPane } from "@/features/editor";
 
 export function EditorPanel() {
   const ui = useUI();
@@ -34,9 +35,9 @@ export function EditorPanel() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
-              onClick={() => ui.setSidebarCollapsed(!ui.sidebarCollapsed)}
               aria-label={ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-muted-foreground"
+              onClick={() => ui.setSidebarCollapsed(!ui.sidebarCollapsed)}
             >
               {ui.sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
             </button>

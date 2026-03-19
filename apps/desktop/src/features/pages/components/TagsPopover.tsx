@@ -2,8 +2,9 @@
 // Used in MetadataHeader byline and QuickAddDialog.
 // Popover stays open for multi-select; Escape closes.
 
-import { useState } from "react";
 import { Check, Hash } from "lucide-react";
+import { useState } from "react";
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -17,7 +18,7 @@ interface TagsPopoverProps {
   onToggle: (name: string) => void;
 }
 
-export function TagsPopover({ allTags, selected, onToggle }: TagsPopoverProps) {
+export function TagsPopover({ allTags, onToggle, selected }: TagsPopoverProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -48,25 +49,25 @@ export function TagsPopover({ allTags, selected, onToggle }: TagsPopoverProps) {
           : `#${selected[0]} #${selected[1]} +${selected.length - 2}`;
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover onOpenChange={handleOpenChange} open={open}>
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
             <button
+              aria-label={`Tags: ${hasSelected ? selected.join(", ") : "none"}`}
               className={cn(
                 "inline-flex min-w-0 cursor-pointer items-center gap-1 rounded text-sm transition-colors hover:text-muted-foreground focus:outline-none",
                 hasSelected ? "text-muted-foreground/80" : "text-muted-foreground/40"
               )}
-              aria-label={`Tags: ${hasSelected ? selected.join(", ") : "none"}`}
             >
-              {!hasSelected && <Hash size={13} className="shrink-0" aria-hidden="true" />}
+              {!hasSelected && <Hash aria-hidden="true" className="shrink-0" size={13} />}
               <span className="max-w-[100px] truncate">{label}</span>
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
 
         {hasSelected && (
-          <TooltipContent side="bottom" className="max-w-[260px]">
+          <TooltipContent className="max-w-[260px]" side="bottom">
             {selected.map((t) => `#${t}`).join("  ")}
           </TooltipContent>
         )}
@@ -76,7 +77,7 @@ export function TagsPopover({ allTags, selected, onToggle }: TagsPopoverProps) {
         <div className="p-1.5">
           <input
             autoFocus
-            value={query}
+            className="w-full bg-transparent px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground/40"
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") handleOpenChange(false);
@@ -86,7 +87,7 @@ export function TagsPopover({ allTags, selected, onToggle }: TagsPopoverProps) {
               }
             }}
             placeholder="Search or create…"
-            className="w-full bg-transparent px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground/40"
+            value={query}
           />
         </div>
 
@@ -95,14 +96,14 @@ export function TagsPopover({ allTags, selected, onToggle }: TagsPopoverProps) {
             const isSelected = selected.includes(name);
             return (
               <button
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent"
                 key={name}
                 onClick={() => onToggle(name)}
-                className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent"
               >
                 <Check
+                  className={cn("shrink-0", isSelected ? "text-foreground" : "text-transparent")}
                   size={12}
                   strokeWidth={2.5}
-                  className={cn("shrink-0", isSelected ? "text-foreground" : "text-transparent")}
                 />
                 <span className={isSelected ? "text-foreground" : "text-muted-foreground"}>
                   #{name}
@@ -113,13 +114,13 @@ export function TagsPopover({ allTags, selected, onToggle }: TagsPopoverProps) {
 
           {canCreate && (
             <button
+              className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent"
               onClick={() => {
                 onToggle(normalizedQuery);
                 setQuery("");
               }}
-              className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent"
             >
-              <Check size={12} strokeWidth={2.5} className="shrink-0 text-transparent" />
+              <Check className="shrink-0 text-transparent" size={12} strokeWidth={2.5} />
               <span>
                 Create <span className="font-medium text-foreground">#{normalizedQuery}</span>
               </span>

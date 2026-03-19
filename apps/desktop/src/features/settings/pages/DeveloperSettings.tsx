@@ -1,10 +1,8 @@
 // DeveloperSettings — seed scripts + database reset. Dev-only tooling.
 
-import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import { useUI } from "@/shared/context/UIContext";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,41 +13,44 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 type SeedScenario = "demo" | "realistic" | "tutorial" | "stress" | "dst";
 
 const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[] = [
   {
+    description: "Polished, photogenic data for screenshots and videos.",
     id: "demo",
     label: "Demo",
-    description: "Polished, photogenic data for screenshots and videos.",
   },
   {
+    description: "Believable day-to-day life: work, personal, reading.",
     id: "realistic",
     label: "Realistic",
-    description: "Believable day-to-day life: work, personal, reading.",
   },
   {
+    description: "Default onboarding content for first launch.",
     id: "tutorial",
     label: "Tutorial",
-    description: "Default onboarding content for first launch.",
   },
   {
+    description: "Heavy load: many folders, pages, and schedules.",
     id: "stress",
     label: "Stress",
-    description: "Heavy load: many folders, pages, and schedules.",
   },
   {
+    description: "PST vs PDT edge cases around US spring-forward.",
     id: "dst",
     label: "DST",
-    description: "PST vs PDT edge cases around US spring-forward.",
   },
 ];
 
 type PendingAction = { type: "reset" } | { type: "seed"; scenario: SeedScenario };
 
 export function DeveloperSettings() {
-  const { workspace, reload } = useWorkspace();
+  const { reload, workspace } = useWorkspace();
   const { setSettingsOpen } = useUI();
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [running, setRunning] = useState(false);
@@ -96,7 +97,7 @@ export function DeveloperSettings() {
     setLog(null);
     try {
       await invoke("reset_db");
-      await invoke("run_seed", { scenario, dbPath: workspace.dbPath });
+      await invoke("run_seed", { dbPath: workspace.dbPath, scenario });
       await reload();
       setSettingsOpen(false);
     } catch (e: unknown) {
@@ -146,10 +147,10 @@ export function DeveloperSettings() {
             </p>
           </div>
           <Button
-            variant="outline"
-            size="sm"
             disabled={backingUp || running || !workspace}
             onClick={() => void handleBackup()}
+            size="sm"
+            variant="outline"
           >
             {backingUp ? "Saving…" : "Backup"}
           </Button>
@@ -166,10 +167,10 @@ export function DeveloperSettings() {
             </p>
           </div>
           <Button
-            variant="destructive"
-            size="sm"
             disabled={running || !workspace}
             onClick={() => confirm({ type: "reset" })}
+            size="sm"
+            variant="destructive"
           >
             Clear
           </Button>
@@ -179,16 +180,16 @@ export function DeveloperSettings() {
       {/* Seed scenarios */}
       <div className="divide-y divide-border rounded-lg border border-border bg-card">
         {SEED_SCENARIOS.map((s) => (
-          <div key={s.id} className="flex items-start justify-between gap-4 p-4">
+          <div className="flex items-start justify-between gap-4 p-4" key={s.id}>
             <div>
               <p className="text-sm font-medium">{s.label}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">{s.description}</p>
             </div>
             <Button
-              variant="outline"
-              size="sm"
               disabled={running || !workspace}
-              onClick={() => confirm({ type: "seed", scenario: s.id })}
+              onClick={() => confirm({ scenario: s.id, type: "seed" })}
+              size="sm"
+              variant="outline"
             >
               Seed
             </Button>
@@ -209,7 +210,7 @@ export function DeveloperSettings() {
       )}
 
       {/* Confirmation dialog */}
-      <AlertDialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
+      <AlertDialog onOpenChange={(o) => !o && setPending(null)} open={pending !== null}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{dialogTitle}</AlertDialogTitle>

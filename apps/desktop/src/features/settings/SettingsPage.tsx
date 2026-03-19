@@ -1,13 +1,15 @@
 // SettingsPage — full-screen overlay with sidebar nav + content area.
 // Triggered by the gear icon at the bottom of the main sidebar.
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+
 import { useUI } from "@/shared/context/UIContext";
-import { SettingsNav, type SettingsSection } from "./SettingsNav";
+
 import { AppearanceSettings } from "./pages/AppearanceSettings";
 import { DeveloperSettings } from "./pages/DeveloperSettings";
 import { GeneralSettings } from "./pages/GeneralSettings";
 import { ShortcutsSettings } from "./pages/ShortcutsSettings";
+import { SettingsNav, type SettingsSection } from "./SettingsNav";
 
 function readLeftPanelWidth(): number {
   try {
@@ -19,7 +21,7 @@ function readLeftPanelWidth(): number {
 }
 
 export function SettingsPage() {
-  const { settingsOpen, setSettingsOpen } = useUI();
+  const { setSettingsOpen, settingsOpen } = useUI();
   const [sidebarWidth] = useState(readLeftPanelWidth);
   const [section, setSection] = useState<SettingsSection>("general");
 
@@ -39,8 +41,8 @@ export function SettingsPage() {
     <div className="fixed inset-0 z-50 flex bg-background text-foreground">
       <SettingsNav
         active={section}
-        onNavigate={setSection}
         onClose={() => setSettingsOpen(false)}
+        onNavigate={setSection}
         width={sidebarWidth}
       />
 

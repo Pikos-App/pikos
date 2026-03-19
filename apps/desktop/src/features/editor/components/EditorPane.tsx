@@ -2,34 +2,36 @@
 // across page switches (setContent instead of destroy/recreate) for instant switching.
 // MetadataHeader (title, subtitle, status/priority/date/tags) sits above this component.
 
-import { useEffect, useRef, useState } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import TaskList from "@tiptap/extension-task-list";
-import TaskItem from "@tiptap/extension-task-item";
-import Placeholder from "@tiptap/extension-placeholder";
-import Typography from "@tiptap/extension-typography";
+import { extractText } from "@pikos/core";
 import Link from "@tiptap/extension-link";
+import Placeholder from "@tiptap/extension-placeholder";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
+import Typography from "@tiptap/extension-typography";
 import Underline from "@tiptap/extension-underline";
+import { EditorContent, useEditor } from "@tiptap/react";
+import type { JSONContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { useEffect, useRef, useState } from "react";
 import { Markdown } from "tiptap-markdown";
+
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
-import { extractText } from "@pikos/core";
+import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+
+import { TabIndent } from "../extensions/TabIndent";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
-import { MetadataHeader } from "./MetadataHeader";
-import type { JSONContent } from "@tiptap/react";
-import { SlashMenuExtension } from "./SlashMenu";
 import { LinkPopover } from "./LinkPopover";
-import { TabIndent } from "../extensions/TabIndent";
-import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { MetadataHeader } from "./MetadataHeader";
+import { SlashMenuExtension } from "./SlashMenu";
 
 // ─── Extensions ────────────────────────────────────────────────────────────────
 
 const extensions = [
   StarterKit.configure({
-    heading: { levels: [1, 2, 3] },
     codeBlock: { HTMLAttributes: { class: "editor-code-block" } },
+    heading: { levels: [1, 2, 3] },
   }),
   TaskList,
   TaskItem.configure({ nested: true }),
@@ -39,24 +41,33 @@ const extensions = [
   }),
   Typography,
   Link.configure({
-    openOnClick: false,
     autolink: true,
-    linkOnPaste: true,
     HTMLAttributes: { class: "editor-link" },
+    linkOnPaste: true,
+    openOnClick: false,
   }),
   Underline,
   Markdown.configure({
-    transformPastedText: true,
     transformCopiedText: false,
+    transformPastedText: true,
   }),
   SlashMenuExtension,
   TabIndent,
 ];
 
+// HTML attributes applied to the ProseMirror contenteditable element.
+const EDITOR_ATTRIBUTES = {
+  autocapitalize: "off",
+  autocomplete: "off",
+  autocorrect: "off",
+  class: "editor-content",
+  spellcheck: "true",
+};
+
 // ─── EditorPane ────────────────────────────────────────────────────────────────
 
 export function EditorPane() {
-  const { page, isLoading } = useEditorPage();
+  const { isLoading, page } = useEditorPage();
   const { updatePage } = useWorkspace();
 
   // Track which page the editor currently shows (to detect page switches)
@@ -69,18 +80,16 @@ export function EditorPane() {
   const [contentVersion, setContentVersion] = useState(0);
 
   const editor = useEditor({
-    extensions,
     editorProps: {
-      attributes: {
-        class: "editor-content",
-      },
+      attributes: EDITOR_ATTRIBUTES,
     },
+    extensions,
+    onBlur: () => Keyboard.popScope("editor"),
+    onFocus: () => Keyboard.pushScope("editor"),
     onUpdate: ({ editor: e }) => {
       contentJsonRef.current = JSON.stringify(e.getJSON());
       setContentVersion((v) => v + 1);
     },
-    onFocus: () => Keyboard.pushScope("editor"),
-    onBlur: () => Keyboard.popScope("editor"),
   });
 
   // ─── Prevent native <a> navigation inside editor ───────────────────────────
@@ -129,7 +138,7 @@ export function EditorPane() {
     }
 
     // setContent without emitting an update (avoids triggering autosave for loaded content)
-    editor.commands.setContent(doc ?? { type: "doc", content: [{ type: "paragraph" }] }, {
+    editor.commands.setContent(doc ?? { content: [{ type: "paragraph" }], type: "doc" }, {
       emitUpdate: false,
     });
     contentJsonRef.current = doc ? page.content : "";
@@ -144,7 +153,7 @@ export function EditorPane() {
 
   const pageId = page?.id ?? null;
 
-  const { saveError, flush } = useAutosave(
+  const { flush, saveError } = useAutosave(
     contentVersion,
     (_version: number) => {
       if (!pageId || contentJsonRef.current === "") return Promise.resolve();
@@ -173,7 +182,7 @@ export function EditorPane() {
       if (!editor) return;
       setIsAddingLink(true);
     },
-    { scope: "editor", allowInInputs: true }
+    { allowInInputs: true, scope: "editor" }
   );
 
   // ─── Empty state ─────────────────────────────────────────────────────────
@@ -206,11 +215,11 @@ export function EditorPane() {
     <div className="flex flex-1 flex-col overflow-hidden">
       {page && (
         <MetadataHeader
-          key={page.id}
-          page={page}
-          onFocusEditor={() => editor?.commands.focus()}
           contentSaveError={saveError}
+          key={page.id}
+          onFocusEditor={() => editor?.commands.focus()}
           onRetryContent={() => void flush()}
+          page={page}
         />
       )}
       {editor && (
@@ -220,7 +229,7 @@ export function EditorPane() {
           onAddingLinkChange={setIsAddingLink}
         />
       )}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={scrollContainerRef}>
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         <div
           className="mx-auto min-h-full w-full max-w-[720px] cursor-text px-8 pt-3 pb-8"

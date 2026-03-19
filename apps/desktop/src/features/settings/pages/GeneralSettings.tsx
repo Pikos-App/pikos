@@ -1,7 +1,8 @@
 // GeneralSettings — workspace info: created date, record counts, DB path.
 
-import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
+
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 interface DbStats {
@@ -34,9 +35,9 @@ export function GeneralSettings() {
 
   const createdAt = workspace?.createdAt
     ? new Date(workspace.createdAt).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "long",
         day: "numeric",
+        month: "long",
+        year: "numeric",
       })
     : "—";
 

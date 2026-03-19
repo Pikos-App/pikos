@@ -40,27 +40,27 @@ interface ShortcutGroup {
 
 const GROUPS: ShortcutGroup[] = [
   {
+    items: [
+      { combo: "Mod+N", label: "New page" },
+      { combo: "Mod+P", label: "Quick switcher" },
+      { combo: "Mod+\\", label: "Toggle sidebar" },
+      { combo: "Mod+Shift+C", label: "Toggle calendar / editor" },
+      { combo: "Mod+Shift+D", label: "Delete page" },
+      { combo: "Mod+W", label: "Close page" },
+    ],
     label: "Navigation",
-    items: [
-      { label: "New page", combo: "Mod+N" },
-      { label: "Quick switcher", combo: "Mod+P" },
-      { label: "Toggle sidebar", combo: "Mod+\\" },
-      { label: "Toggle calendar / editor", combo: "Mod+Shift+C" },
-      { label: "Delete page", combo: "Mod+Shift+D" },
-      { label: "Close page", combo: "Mod+W" },
-    ],
   },
   {
+    items: [
+      { combo: "J", label: "Move selection down" },
+      { combo: "K", label: "Move selection up" },
+      { combo: "Enter", label: "Open selected" },
+    ],
     label: "Page list",
-    items: [
-      { label: "Move selection down", combo: "J" },
-      { label: "Move selection up", combo: "K" },
-      { label: "Open selected", combo: "Enter" },
-    ],
   },
   {
+    items: [{ combo: "Mod+K", label: "Insert / edit link" }],
     label: "Editor",
-    items: [{ label: "Insert / edit link", combo: "Mod+K" }],
   },
 ];
 
@@ -114,8 +114,8 @@ export function ShortcutsSettings() {
             <div className="divide-y divide-border rounded-lg border border-border bg-card">
               {group.items.map((item) => (
                 <div
-                  key={item.label}
                   className="flex items-center justify-between gap-4 px-4 py-2.5"
+                  key={item.label}
                 >
                   <span className="text-sm">{item.label}</span>
                   <ComboDisplay combo={item.combo} />

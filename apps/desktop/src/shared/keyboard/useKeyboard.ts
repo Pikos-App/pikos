@@ -8,7 +8,8 @@
 //   Listener: useKeyboardListener()       — mount once in App.tsx
 
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { Keyboard, type Binding } from "./registry";
+
+import { type Binding, Keyboard } from "./registry";
 
 type ShortcutOpts = Omit<Binding, "id" | "combo" | "handler">;
 
@@ -80,19 +81,19 @@ export function useKeyboardShortcut(
       }
 
       Keyboard.register({
-        id: secondId,
         combo: second,
-        scope: chordScope,
-        when: stableWhen,
         handler: () => {
           clearChord();
           stableHandler();
         },
+        id: secondId,
+        scope: chordScope,
+        when: stableWhen,
       });
 
       Keyboard.register({
-        id,
         combo: first,
+        id,
         ...baseOpts,
         handler: () => {
           Keyboard.pushScope(chordScope);
@@ -108,7 +109,7 @@ export function useKeyboardShortcut(
     }
 
     // ── Single binding ─────────────────────────────────────────────────────
-    Keyboard.register({ id, combo: first, handler: stableHandler, ...baseOpts });
+    Keyboard.register({ combo: first, handler: stableHandler, id, ...baseOpts });
     return () => Keyboard.unregister(id);
   }, [first, second, scope, preventDefault, allowInInputs, repeat, stopPropagation]);
 }

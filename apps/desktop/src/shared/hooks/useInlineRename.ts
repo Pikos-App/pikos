@@ -41,5 +41,5 @@ export function useInlineRename(isRenaming: boolean) {
     },
   } as const;
 
-  return { inputRef, prepareRenameFromMenu, contextMenuContentProps };
+  return { contextMenuContentProps, inputRef, prepareRenameFromMenu };
 }

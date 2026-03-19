@@ -1,38 +1,40 @@
 // MetadataHeader — page metadata panel rendered above the editor scroll area.
 // key={page.id} in parent resets all state on page switch.
 
-import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check } from "lucide-react";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
-import { FolderChip } from "@/features/pages/components/FolderChip";
-import { TagsPopover } from "@/features/pages/components/TagsPopover";
-import { DateSchedulePopover } from "./DateSchedulePopover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
+import { AlertTriangle, Check } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { FolderChip } from "@/features/pages/components/FolderChip";
+import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
+import { TagsPopover } from "@/features/pages/components/TagsPopover";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { nowLocalISO } from "@/shared/utils/dates";
+
+import { DateSchedulePopover } from "./DateSchedulePopover";
 
 // ─── Byline ───────────────────────────────────────────────────────────────────
 // Flat inline metadata row. No pill backgrounds — reads as a document byline.
 
 function BylineSeparator() {
   return (
-    <span className="text-muted-foreground/20" aria-hidden="true">
+    <span aria-hidden="true" className="text-muted-foreground/20">
       ·
     </span>
   );
 }
 
 function Byline({
-  page,
-  folders,
   allTags,
-  onStatusChange,
+  folders,
+  onErrorClick,
   onFolderChange,
   onPriorityChange,
+  onStatusChange,
   onTagToggle,
+  page,
   saveError,
-  onErrorClick,
 }: {
   page: Page;
   folders: Folder[];
@@ -50,8 +52,8 @@ function Byline({
     <div className="flex flex-wrap items-center gap-2 pt-2 pb-4 text-sm text-muted-foreground/60">
       {/* Status toggle */}
       <button
-        className="inline-flex items-center gap-1.5 rounded transition-colors hover:text-muted-foreground focus:outline-none"
         aria-label={isDone ? "Mark not done" : "Mark done"}
+        className="inline-flex items-center gap-1.5 rounded transition-colors hover:text-muted-foreground focus:outline-none"
         onClick={() => onStatusChange(isDone ? "not_started" : "done")}
       >
         <span
@@ -64,7 +66,7 @@ function Byline({
 
       {/* Folder */}
       <BylineSeparator />
-      <FolderChip folders={folders} value={page.folderId} onChange={onFolderChange} />
+      <FolderChip folders={folders} onChange={onFolderChange} value={page.folderId} />
 
       {/* Date — GOO-34 */}
       <BylineSeparator />
@@ -72,11 +74,11 @@ function Byline({
 
       {/* Priority selector — GOO-35 */}
       <BylineSeparator />
-      <PriorityDropdown priority={page.priority} onSelect={onPriorityChange} variant="byline" />
+      <PriorityDropdown onSelect={onPriorityChange} priority={page.priority} variant="byline" />
 
       {/* Tags popover */}
       <BylineSeparator />
-      <TagsPopover allTags={allTags} selected={page.tags} onToggle={onTagToggle} />
+      <TagsPopover allTags={allTags} onToggle={onTagToggle} selected={page.tags} />
 
       {/* Save error — sticky, click to retry */}
       {saveError != null && (
@@ -85,15 +87,15 @@ function Byline({
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={onErrorClick}
                 aria-label="Save failed — click to retry"
                 className="inline-flex items-center gap-1 rounded text-amber-500/70 transition-colors hover:text-amber-500 focus:outline-none"
+                onClick={onErrorClick}
               >
                 <AlertTriangle size={12} strokeWidth={2} />
                 <span>Not saved</span>
               </button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-[260px]">
+            <TooltipContent className="max-w-[260px]" side="bottom">
               {saveError}
             </TooltipContent>
           </Tooltip>
@@ -113,12 +115,12 @@ interface MetadataHeaderProps {
 }
 
 export function MetadataHeader({
-  page,
-  onFocusEditor,
   contentSaveError,
+  onFocusEditor,
   onRetryContent,
+  page,
 }: MetadataHeaderProps) {
-  const { folders, tags, updatePage, flushPage, pageErrors, clearPageError } = useWorkspace();
+  const { clearPageError, flushPage, folders, pageErrors, tags, updatePage } = useWorkspace();
   const allTagNames = tags.map((t) => t.name);
 
   const metadataError = pageErrors.get(page.id) ?? null;
@@ -132,8 +134,8 @@ export function MetadataHeader({
 
   function handleStatusChange(status: PageStatus) {
     updatePage(page.id, {
-      status,
       completedAt: status === "done" ? nowLocalISO() : null,
+      status,
     });
   }
 
@@ -201,7 +203,7 @@ export function MetadataHeader({
     e.preventDefault();
     const el = e.currentTarget;
     const pasted = e.clipboardData.getData("text").replace(/\n/g, " ");
-    const { selectionStart: start, selectionEnd: end } = el;
+    const { selectionEnd: end, selectionStart: start } = el;
     const next = titleValue.slice(0, start ?? 0) + pasted + titleValue.slice(end ?? 0);
 
     // Measure the candidate value by temporarily writing to DOM.
@@ -268,7 +270,7 @@ export function MetadataHeader({
     e.preventDefault();
     const el = e.currentTarget;
     const pasted = e.clipboardData.getData("text").replace(/\n/g, " ");
-    const { selectionStart: start, selectionEnd: end } = el;
+    const { selectionEnd: end, selectionStart: start } = el;
     const next = subtitleValue.slice(0, start ?? 0) + pasted + subtitleValue.slice(end ?? 0);
 
     el.value = next;
@@ -312,11 +314,19 @@ export function MetadataHeader({
       <div className="mx-auto max-w-[720px] px-8">
         <div className="pt-12 pb-1">
           <textarea
-            ref={titleRef}
-            rows={1}
-            value={titleValue}
+            aria-label="Page title"
+            autoCapitalize="off"
+            autoComplete="off"
+            autoCorrect="off"
+            className={`max-h-20 w-full resize-none overflow-hidden bg-transparent text-4xl font-bold tracking-tight outline-none placeholder:text-muted-foreground/30 ${titleShake ? "animate-shake" : ""}`}
+            onBlur={() => setTitleFocused(false)}
             onChange={handleTitleChange}
-            onPaste={handleTitlePaste}
+            onFocus={(e) => {
+              setTitleFocused(true);
+              requestAnimationFrame(() =>
+                e.target.setSelectionRange(e.target.value.length, e.target.value.length)
+              );
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -327,26 +337,23 @@ export function MetadataHeader({
                 onFocusEditor();
               }
             }}
-            onFocus={(e) => {
-              setTitleFocused(true);
-              requestAnimationFrame(() =>
-                e.target.setSelectionRange(e.target.value.length, e.target.value.length)
-              );
-            }}
-            onBlur={() => setTitleFocused(false)}
-            autoComplete="off"
+            onPaste={handleTitlePaste}
             placeholder="Untitled"
-            aria-label="Page title"
-            className={`max-h-20 w-full resize-none overflow-hidden bg-transparent text-4xl font-bold tracking-tight outline-none placeholder:text-muted-foreground/30 ${titleShake ? "animate-shake" : ""}`}
+            ref={titleRef}
+            rows={1}
+            value={titleValue}
           />
         </div>
 
         <textarea
-          ref={subtitleRef}
-          rows={1}
-          value={subtitleValue}
+          aria-label="Page description"
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
+          className={`mt-1 max-h-[4.5rem] w-full resize-none overflow-hidden bg-transparent text-base text-muted-foreground outline-none placeholder:text-muted-foreground/30 ${subtitleShake ? "animate-shake" : ""}`}
+          onBlur={() => setSubtitleFocused(false)}
           onChange={handleSubtitleChange}
-          onPaste={handleSubtitlePaste}
+          onFocus={() => setSubtitleFocused(true)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -361,23 +368,23 @@ export function MetadataHeader({
               onFocusEditor();
             }
           }}
-          onFocus={() => setSubtitleFocused(true)}
-          onBlur={() => setSubtitleFocused(false)}
+          onPaste={handleSubtitlePaste}
           placeholder="Add a description…"
-          aria-label="Page description"
-          className={`mt-1 max-h-[4.5rem] w-full resize-none overflow-hidden bg-transparent text-base text-muted-foreground outline-none placeholder:text-muted-foreground/30 ${subtitleShake ? "animate-shake" : ""}`}
+          ref={subtitleRef}
+          rows={1}
+          value={subtitleValue}
         />
 
         <Byline
-          page={page}
-          folders={folders}
           allTags={allTagNames}
-          onStatusChange={handleStatusChange}
+          folders={folders}
+          onErrorClick={handleErrorClick}
           onFolderChange={handleFolderChange}
           onPriorityChange={handlePriorityChange}
+          onStatusChange={handleStatusChange}
           onTagToggle={handleTagToggle}
+          page={page}
           saveError={hasError ? (errorMessage ?? "Save failed") : null}
-          onErrorClick={handleErrorClick}
         />
       </div>
     </div>

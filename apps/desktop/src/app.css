@@ -162,6 +162,8 @@
     text-rendering: optimizeLegibility;
     /* Prevent iOS tap highlight and callout on desktop */
     -webkit-tap-highlight-color: transparent;
+    /* Prevent elastic/bounce overscroll that causes the app to shift on trackpads */
+    overscroll-behavior: none;
   }
 
   * {

@@ -1,7 +1,6 @@
 // TauriSQLiteAdapter — calls Rust Tauri commands for all storage operations.
 // Lives in apps/desktop (Tauri deps). Types imported from @pikos/core (no Tauri).
 
-import { invoke } from "@tauri-apps/api/core";
 import type {
   Folder,
   Page,
@@ -22,6 +21,7 @@ import type {
   RecurrenceRuleUpdate,
   StorageAdapter,
 } from "@pikos/core";
+import { invoke } from "@tauri-apps/api/core";
 
 /**
  * Open (or create) the SQLite workspace at `path` and run migrations.
@@ -115,7 +115,7 @@ export class TauriSQLiteAdapter implements StorageAdapter {
   }
 
   listPageSchedulesRange(start: string, end: string): Promise<PageSchedule[]> {
-    return invoke<PageSchedule[]>("list_page_schedules_range", { start, end });
+    return invoke<PageSchedule[]>("list_page_schedules_range", { end, start });
   }
 
   // ─── Recurrence rules ────────────────────────────────────────────────────────

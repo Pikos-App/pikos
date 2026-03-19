@@ -1,19 +1,20 @@
+import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
 import { useState } from "react";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import { useUI } from "@/shared/context/UIContext";
-import { useActivePage } from "@/shared/hooks/useActivePage";
+
 import {
   getCompletedTodayPages,
   getCompletedViewPages,
   getVisiblePages,
   sortPages,
 } from "@/features/pages/utils/pageFilters";
-import type { PagePriority, PageSummary, PageStatus } from "@pikos/core";
+import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useActivePage } from "@/shared/hooks/useActivePage";
 import { nowLocalISO } from "@/shared/utils/dates";
 
 export function usePageList() {
-  const { pages, folders, updatePage, deletePage } = useWorkspace();
-  const { activeViewId, setActivePage, setRightPanel, getSortMode } = useUI();
+  const { deletePage, folders, pages, updatePage } = useWorkspace();
+  const { activeViewId, getSortMode, setActivePage, setRightPanel } = useUI();
   const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PageSummary | null>(null);
@@ -70,8 +71,8 @@ export function usePageList() {
   function handleToggleStatus(pageId: string, currentStatus: PageStatus) {
     const isDone = currentStatus === "done";
     updatePage(pageId, {
-      status: isDone ? "not_started" : "done",
       completedAt: isDone ? null : nowLocalISO(),
+      status: isDone ? "not_started" : "done",
     });
   }
 
@@ -80,25 +81,25 @@ export function usePageList() {
   }
 
   return {
-    visiblePages,
+    activePage,
     completedPages,
     folders,
-    activePage,
-    renamingId,
-    setRenamingId,
-    pendingDelete,
+    handleDeleteCancel,
+    handleDeleteConfirm,
+    handleDeleteRequest,
+    handleMoveToFolder,
+    handlePriorityChange,
+    handleRenameCancel,
     handleRenameChange,
     handleRenameCommit,
-    handleRenameCancel,
-    handleDeleteRequest,
-    handleDeleteConfirm,
-    handleDeleteCancel,
-    handleMoveToFolder,
-    handleToggleStatus,
-    handlePriorityChange,
     handleSelectPage: (page: PageSummary | string | null) => {
       setActivePage(page);
       if (page !== null) setRightPanel("editor");
     },
+    handleToggleStatus,
+    pendingDelete,
+    renamingId,
+    setRenamingId,
+    visiblePages,
   };
 }

@@ -398,7 +398,6 @@
   width: 100%;
 }
 
-.slash-menu-item:hover,
 .slash-menu-item[data-selected="true"] {
   background: var(--accent);
 }

@@ -1,4 +1,5 @@
-import { type RefCallback, forwardRef } from "react";
+import { forwardRef, type RefCallback } from "react";
+
 import { cn } from "@/lib/utils";
 
 interface SidebarListItemProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "prefix"> {
@@ -30,21 +31,21 @@ interface SidebarListItemProps extends Omit<React.HTMLAttributes<HTMLDivElement>
 export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
   function SidebarListItem(
     {
-      isActive,
-      isRenaming,
-      label,
-      onSelect,
-      onRenameStart,
-      onRenameCommit,
-      onRenameCancel,
-      inputRef,
+      children,
       className,
-      isDragOver = false,
+      dragProps,
       dragRef,
       dragStyle,
-      dragProps,
+      inputRef,
+      isActive,
+      isDragOver = false,
+      isRenaming,
+      label,
+      onRenameCancel,
+      onRenameCommit,
+      onRenameStart,
+      onSelect,
       prefix,
-      children,
       ...rest
     }: SidebarListItemProps,
     ref
@@ -85,11 +86,11 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
           <div className={cn("flex min-w-0", isRenaming && "invisible")}>{children}</div>
           {isRenaming && (
             <input
-              ref={inputRef}
               autoComplete="off"
               className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug text-foreground outline-none"
               defaultValue={label}
               onBlur={commit}
+              onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -99,7 +100,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
                   onRenameCancel();
                 }
               }}
-              onClick={(e) => e.stopPropagation()}
+              ref={inputRef}
             />
           )}
         </div>

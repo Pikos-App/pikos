@@ -2,18 +2,19 @@
 // Type "/" in the editor to open a filterable list of commands.
 // Powered by @tiptap/suggestion + tippy.js + ReactRenderer.
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Extension, type Editor } from "@tiptap/core";
+import "tippy.js/dist/tippy.css";
+
+import { type Editor, Extension } from "@tiptap/core";
 import { ReactRenderer } from "@tiptap/react";
 import Suggestion from "@tiptap/suggestion";
 import type {
+  SuggestionKeyDownProps,
   SuggestionOptions,
   SuggestionProps,
-  SuggestionKeyDownProps,
 } from "@tiptap/suggestion";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import tippy from "tippy.js";
 import type { Instance as TippyInstance } from "tippy.js";
-import "tippy.js/dist/tippy.css";
 
 // ─── Command definitions ────────────────────────────────────────────────────
 
@@ -27,67 +28,67 @@ interface SlashCommand {
 
 const COMMANDS: SlashCommand[] = [
   {
-    title: "Heading 1",
-    description: "Large section heading",
     aliases: ["h1", "heading1"],
-    icon: "H1",
     command: (editor) => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+    description: "Large section heading",
+    icon: "H1",
+    title: "Heading 1",
   },
   {
-    title: "Heading 2",
-    description: "Medium section heading",
     aliases: ["h2", "heading2"],
-    icon: "H2",
     command: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+    description: "Medium section heading",
+    icon: "H2",
+    title: "Heading 2",
   },
   {
-    title: "Heading 3",
-    description: "Small section heading",
     aliases: ["h3", "heading3"],
-    icon: "H3",
     command: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+    description: "Small section heading",
+    icon: "H3",
+    title: "Heading 3",
   },
   {
-    title: "Bullet List",
-    description: "Unordered list of items",
     aliases: ["ul", "unordered", "list"],
-    icon: "•—",
     command: (editor) => editor.chain().focus().toggleBulletList().run(),
+    description: "Unordered list of items",
+    icon: "•—",
+    title: "Bullet List",
   },
   {
-    title: "Ordered List",
-    description: "Numbered list of items",
     aliases: ["ol", "numbered", "list"],
-    icon: "1.",
     command: (editor) => editor.chain().focus().toggleOrderedList().run(),
+    description: "Numbered list of items",
+    icon: "1.",
+    title: "Ordered List",
   },
   {
-    title: "Task List",
-    description: "Interactive checkboxes",
     aliases: ["todo", "check", "checkbox"],
-    icon: "☑",
     command: (editor) => editor.chain().focus().toggleTaskList().run(),
+    description: "Interactive checkboxes",
+    icon: "☑",
+    title: "Task List",
   },
   {
-    title: "Code Block",
-    description: "Monospaced code block",
     aliases: ["code", "pre", "codeblock"],
-    icon: "</>",
     command: (editor) => editor.chain().focus().toggleCodeBlock().run(),
+    description: "Monospaced code block",
+    icon: "</>",
+    title: "Code Block",
   },
   {
-    title: "Blockquote",
-    description: "Indented quote block",
     aliases: ["quote", "bq"],
-    icon: "❝",
     command: (editor) => editor.chain().focus().toggleBlockquote().run(),
+    description: "Indented quote block",
+    icon: "❝",
+    title: "Blockquote",
   },
   {
-    title: "Horizontal Rule",
-    description: "Divider between sections",
     aliases: ["hr", "divider", "separator"],
-    icon: "—",
     command: (editor) => editor.chain().focus().setHorizontalRule().run(),
+    description: "Divider between sections",
+    icon: "—",
+    title: "Horizontal Rule",
   },
 ];
 
@@ -116,16 +117,21 @@ export interface SlashMenuListRef {
 }
 
 export const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
-  ({ items, command }, ref) => {
+  ({ command, items }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const ignoreMouseUntilMove = useRef(true);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Reset selection when items list changes — derive during render to avoid setState-in-effect
+    // Reset on items change (menu open or query changed)
     const [prevItems, setPrevItems] = useState(items);
     if (items !== prevItems) {
       setPrevItems(items);
       setSelectedIndex(0);
     }
+
+    useEffect(() => {
+      ignoreMouseUntilMove.current = true;
+    }, [items]);
 
     // Scroll selected item into view
     useEffect(() => {
@@ -138,10 +144,12 @@ export const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
     useImperativeHandle(ref, () => ({
       onKeyDown: ({ event }: SuggestionKeyDownProps) => {
         if (event.key === "ArrowUp") {
+          ignoreMouseUntilMove.current = true;
           setSelectedIndex((i) => (i - 1 + items.length) % items.length);
           return true;
         }
         if (event.key === "ArrowDown") {
+          ignoreMouseUntilMove.current = true;
           setSelectedIndex((i) => (i + 1) % items.length);
           return true;
         }
@@ -161,14 +169,24 @@ export const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
     }
 
     return (
-      <div ref={containerRef} className="slash-menu">
+      <div
+        className="slash-menu"
+        onMouseMove={() => {
+          ignoreMouseUntilMove.current = false;
+        }}
+        ref={containerRef}
+      >
         {items.map((item, index) => (
           <button
-            key={item.title}
-            data-selected={index === selectedIndex}
             className="slash-menu-item"
+            data-selected={index === selectedIndex}
+            key={item.title}
             onClick={() => command(item)}
-            onMouseEnter={() => setSelectedIndex(index)}
+            onMouseEnter={() => {
+              if (!ignoreMouseUntilMove.current) {
+                setSelectedIndex(index);
+              }
+            }}
           >
             <span className="slash-menu-item-icon">{item.icon}</span>
             <span className="slash-menu-item-text">
@@ -189,9 +207,25 @@ type SlashSuggestionOptions = Omit<SuggestionOptions<SlashCommand>, "editor">;
 
 export function buildSuggestionConfig(): SlashSuggestionOptions {
   return {
-    char: "/",
+    allow: ({ editor }) => {
+      return editor.isFocused;
+    },
     allowSpaces: false,
-    startOfLine: false,
+    char: "/",
+
+    command: ({
+      editor,
+      props,
+      range,
+    }: {
+      editor: Editor;
+      range: { from: number; to: number };
+      props: { item: SlashCommand };
+    }) => {
+      // Delete the "/" + query text, then run the block command
+      editor.chain().focus().deleteRange(range).run();
+      props.item.command(editor);
+    },
 
     items: ({ query }: { query: string }) => filterCommands(query),
 
@@ -200,44 +234,11 @@ export function buildSuggestionConfig(): SlashSuggestionOptions {
       let popup: TippyInstance[] | null = null;
 
       return {
-        onStart(props: SuggestionProps<SlashCommand>) {
-          renderer = new ReactRenderer(SlashMenuList, {
-            props: {
-              items: props.items,
-              command: (item: SlashCommand) => {
-                props.command({ id: item.title, label: item.title, item });
-              },
-            },
-            editor: props.editor,
-          });
-
-          if (!props.clientRect) return;
-
-          popup = tippy("body", {
-            getReferenceClientRect: props.clientRect as () => DOMRect,
-            appendTo: () => document.body,
-            content: renderer.element,
-            showOnCreate: true,
-            interactive: true,
-            trigger: "manual",
-            placement: "bottom-start",
-            theme: "slash-menu",
-          });
-        },
-
-        onUpdate(props: SuggestionProps<SlashCommand>) {
-          renderer?.updateProps({
-            items: props.items,
-            command: (item: SlashCommand) => {
-              props.command({ id: item.title, label: item.title, item });
-            },
-          });
-
-          if (!props.clientRect) return;
-
-          popup?.[0]?.setProps({
-            getReferenceClientRect: props.clientRect as () => DOMRect,
-          });
+        onExit() {
+          popup?.[0]?.destroy();
+          popup = null;
+          renderer?.destroy();
+          renderer = null;
         },
 
         onKeyDown(props: SuggestionKeyDownProps) {
@@ -248,36 +249,55 @@ export function buildSuggestionConfig(): SlashSuggestionOptions {
           return renderer?.ref?.onKeyDown(props) ?? false;
         },
 
-        onExit() {
-          popup?.[0]?.destroy();
-          popup = null;
-          renderer?.destroy();
-          renderer = null;
+        onStart(props: SuggestionProps<SlashCommand>) {
+          renderer = new ReactRenderer(SlashMenuList, {
+            editor: props.editor,
+            props: {
+              command: (item: SlashCommand) => {
+                props.command({ id: item.title, item, label: item.title });
+              },
+              items: props.items,
+            },
+          });
+
+          if (!props.clientRect) return;
+
+          popup = tippy("body", {
+            appendTo: () => document.body,
+            content: renderer.element,
+            getReferenceClientRect: props.clientRect as () => DOMRect,
+            interactive: true,
+            placement: "bottom-start",
+            showOnCreate: true,
+            theme: "slash-menu",
+            trigger: "manual",
+          });
+        },
+
+        onUpdate(props: SuggestionProps<SlashCommand>) {
+          renderer?.updateProps({
+            command: (item: SlashCommand) => {
+              props.command({ id: item.title, item, label: item.title });
+            },
+            items: props.items,
+          });
+
+          if (!props.clientRect) return;
+
+          popup?.[0]?.setProps({
+            getReferenceClientRect: props.clientRect as () => DOMRect,
+          });
         },
       };
     },
 
-    command: ({
-      editor,
-      range,
-      props,
-    }: {
-      editor: Editor;
-      range: { from: number; to: number };
-      props: { item: SlashCommand };
-    }) => {
-      // Delete the "/" + query text, then run the block command
-      editor.chain().focus().deleteRange(range).run();
-      props.item.command(editor);
-    },
+    startOfLine: false,
   };
 }
 
 // ─── Extension ──────────────────────────────────────────────────────────────
 
 export const SlashMenuExtension = Extension.create({
-  name: "slashMenu",
-
   addOptions() {
     return {
       suggestion: buildSuggestionConfig(),
@@ -292,4 +312,6 @@ export const SlashMenuExtension = Extension.create({
       }),
     ];
   },
+
+  name: "slashMenu",
 });

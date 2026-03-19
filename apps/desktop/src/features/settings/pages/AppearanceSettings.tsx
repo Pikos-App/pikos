@@ -1,6 +1,7 @@
 // AppearanceSettings — light / dark / system theme toggle.
 
 import { useEffect, useState } from "react";
+
 import { cn } from "@/lib/utils";
 
 type ThemeMode = "dark" | "light" | "system";
@@ -22,12 +23,12 @@ function readTheme(): ThemeMode {
 }
 
 const OPTIONS: { id: ThemeMode; label: string; description: string }[] = [
-  { id: "dark", label: "Dark", description: "Always use the dark theme." },
-  { id: "light", label: "Light", description: "Always use the light theme." },
+  { description: "Always use the dark theme.", id: "dark", label: "Dark" },
+  { description: "Always use the light theme.", id: "light", label: "Light" },
   {
+    description: "Match your OS appearance setting.",
     id: "system",
     label: "System",
-    description: "Match your OS appearance setting.",
   },
 ];
 
@@ -57,12 +58,12 @@ export function AppearanceSettings() {
       <div className="divide-y divide-border rounded-lg border border-border bg-card">
         {OPTIONS.map((opt) => (
           <button
-            key={opt.id}
-            onClick={() => select(opt.id)}
             className={cn(
               "flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/50",
               mode === opt.id && "bg-accent/40"
             )}
+            key={opt.id}
+            onClick={() => select(opt.id)}
           >
             <div>
               <p className="text-sm font-medium">{opt.label}</p>

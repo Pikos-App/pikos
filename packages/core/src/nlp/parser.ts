@@ -20,11 +20,26 @@ export type ParseResult =
 
 // Day abbreviation map
 const DAY_MAP: Record<string, Weekday> = {
+  f: RRule.FR,
+  fr: RRule.FR,
+  fri: RRule.FR,
+  friday: RRule.FR,
   m: RRule.MO,
   mo: RRule.MO,
   mon: RRule.MO,
   monday: RRule.MO,
+  sa: RRule.SA,
+  sat: RRule.SA,
+  saturday: RRule.SA,
+  su: RRule.SU,
+  sun: RRule.SU,
+  sunday: RRule.SU,
   t: RRule.TU,
+  th: RRule.TH,
+  thu: RRule.TH,
+  thur: RRule.TH,
+  thurs: RRule.TH,
+  thursday: RRule.TH,
   tu: RRule.TU,
   tue: RRule.TU,
   tues: RRule.TU,
@@ -33,21 +48,6 @@ const DAY_MAP: Record<string, Weekday> = {
   we: RRule.WE,
   wed: RRule.WE,
   wednesday: RRule.WE,
-  th: RRule.TH,
-  thu: RRule.TH,
-  thur: RRule.TH,
-  thurs: RRule.TH,
-  thursday: RRule.TH,
-  f: RRule.FR,
-  fr: RRule.FR,
-  fri: RRule.FR,
-  friday: RRule.FR,
-  sa: RRule.SA,
-  sat: RRule.SA,
-  saturday: RRule.SA,
-  su: RRule.SU,
-  sun: RRule.SU,
-  sunday: RRule.SU,
 };
 
 const WEEKDAY_DAYS = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR];
@@ -75,7 +75,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   const ref = now ?? new Date();
 
   if (!raw || !raw.trim()) {
-    return { type: "single", input: { title: "", tags: [] } };
+    return { input: { tags: [], title: "" }, type: "single" };
   }
 
   let text = raw;
@@ -143,7 +143,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
   // "X times"
   text = text.replace(/\b(\d+)\s+times\b/gi, (_, n: string) => {
-    windowSpec = { kind: "count", count: parseInt(n, 10) };
+    windowSpec = { count: parseInt(n, 10), kind: "count" };
     return " ";
   });
 
@@ -154,12 +154,12 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       const count = parseInt(n, 10);
       const u = unit.toLowerCase();
       if (u === "day" || u === "days") {
-        windowSpec = { kind: "days", count };
+        windowSpec = { count, kind: "days" };
       } else if (u === "week" || u === "weeks") {
-        windowSpec = { kind: "days", count: count * 7 };
+        windowSpec = { count: count * 7, kind: "days" };
       } else {
         // months: approximate
-        windowSpec = { kind: "days", count: count * 30 };
+        windowSpec = { count: count * 30, kind: "days" };
       }
       return " ";
     }
@@ -169,7 +169,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   text = text.replace(/\bthrough\s+([a-z]+\s*\d*(?:st|nd|rd|th)?)/gi, (match, dateStr: string) => {
     const parsed = chrono.parseDate(dateStr, ref);
     if (parsed) {
-      windowSpec = { kind: "until", date: parsed };
+      windowSpec = { date: parsed, kind: "until" };
       return " ";
     }
     return match;
@@ -189,9 +189,9 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     (_, dayStr: string) => {
       const d = dayStr.toLowerCase();
       if (d === "weekday") {
-        recurrenceSpec = { kind: "infinite", freq: RRule.WEEKLY, byday: WEEKDAY_DAYS };
+        recurrenceSpec = { byday: WEEKDAY_DAYS, freq: RRule.WEEKLY, kind: "infinite" };
       } else if (DAY_MAP[d]) {
-        recurrenceSpec = { kind: "infinite", freq: RRule.WEEKLY, byday: [DAY_MAP[d]] };
+        recurrenceSpec = { byday: [DAY_MAP[d]], freq: RRule.WEEKLY, kind: "infinite" };
       }
       return " ";
     }
@@ -201,21 +201,21 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // This prevents stripping "daily" from "daily standup every monday" where "every monday" is the specifier
   if (!recurrenceSpec) {
     text = text.replace(/\bdaily\b/gi, () => {
-      recurrenceSpec = { kind: "infinite", freq: RRule.DAILY };
+      recurrenceSpec = { freq: RRule.DAILY, kind: "infinite" };
       return " ";
     });
   }
 
   if (!recurrenceSpec) {
     text = text.replace(/\bweekly\b/gi, () => {
-      recurrenceSpec = { kind: "infinite", freq: RRule.WEEKLY };
+      recurrenceSpec = { freq: RRule.WEEKLY, kind: "infinite" };
       return " ";
     });
   }
 
   if (!recurrenceSpec) {
     text = text.replace(/\bmonthly\b/gi, () => {
-      recurrenceSpec = { kind: "infinite", freq: RRule.MONTHLY };
+      recurrenceSpec = { freq: RRule.MONTHLY, kind: "infinite" };
       return " ";
     });
   }
@@ -232,7 +232,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
         if (day) days.push(day);
       }
       if (days.length > 0) {
-        recurrenceSpec = { kind: "finite-slash", days };
+        recurrenceSpec = { days, kind: "finite-slash" };
       }
       return " ";
     }
@@ -294,8 +294,8 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
   // Build base ParsedInput
   const baseInput: ParsedInput = {
-    title,
     tags,
+    title,
     ...(folderQuery !== undefined && { folderQuery }),
     ...(priority !== undefined && { priority }),
     ...(durationMinutes !== undefined && { durationMinutes }),
@@ -338,9 +338,9 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
     // Build RRule options
     const rruleOpts: ConstructorParameters<typeof RRule>[0] = {
-      freq: RRule.WEEKLY,
       byweekday: days,
       dtstart: windowStart,
+      freq: RRule.WEEKLY,
     };
 
     if (windowSpec) {
@@ -394,7 +394,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       return inp;
     });
 
-    return { type: "finite", inputs, count: inputs.length };
+    return { count: inputs.length, inputs, type: "finite" };
   }
 
   if (isInfiniteRec && !hasWindow) {
@@ -416,12 +416,12 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       .replace(/^RRULE:/, "");
 
     return {
-      type: "recurring",
       input: baseInput,
       rrule: rruleStr,
+      type: "recurring",
     };
   }
 
   // Single
-  return { type: "single", input: baseInput };
+  return { input: baseInput, type: "single" };
 }

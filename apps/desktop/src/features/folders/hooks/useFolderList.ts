@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import { useUI } from "@/shared/context/UIContext";
 import type { Folder } from "@pikos/core";
+import { useState } from "react";
+
+import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 interface PendingDelete {
   folder: Folder;
@@ -31,7 +32,7 @@ export interface FolderListState {
 }
 
 export function useFolderList(): FolderListState {
-  const { folders, pages, createFolder, updateFolder, deleteFolder } = useWorkspace();
+  const { createFolder, deleteFolder, folders, pages, updateFolder } = useWorkspace();
   const { activeViewId, setActiveViewId } = useUI();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -102,22 +103,22 @@ export function useFolderList(): FolderListState {
   }
 
   return {
-    folders: sortedFolders,
-    pageCountByFolder,
     activeViewId,
-    setActiveViewId,
-    renamingId,
-    setRenamingId,
-    pendingDelete,
-    todayCount,
-    inboxCount,
-    sortOrder,
-    setSortOrder,
-    handleCreateFolder,
-    handleRenameCommit,
-    handleDeleteRequest,
-    handleDeleteConfirm,
-    handleDeleteCancel,
+    folders: sortedFolders,
     handleColorChange,
+    handleCreateFolder,
+    handleDeleteCancel,
+    handleDeleteConfirm,
+    handleDeleteRequest,
+    handleRenameCommit,
+    inboxCount,
+    pageCountByFolder,
+    pendingDelete,
+    renamingId,
+    setActiveViewId,
+    setRenamingId,
+    setSortOrder,
+    sortOrder,
+    todayCount,
   };
 }

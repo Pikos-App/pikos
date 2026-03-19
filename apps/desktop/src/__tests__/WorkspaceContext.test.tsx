@@ -4,12 +4,13 @@
 // and skips all Tauri APIs. Spy on MockStorageAdapter prototype methods to
 // control timing and inject failures without touching real I/O.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook } from "@testing-library/react";
-import type { ReactNode } from "react";
 import type { Page } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
-import { WorkspaceProvider, useWorkspace } from "@/shared/context/WorkspaceContext";
+import { act, renderHook } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { useWorkspace, WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 
 // ─── Test mode ────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ describe("updatePage — optimistic update", () => {
     // Only one DB write, carrying the merged patch
     expect(spy).toHaveBeenCalledOnce();
     const [, patch] = spy.mock.calls[0]!;
-    expect(patch).toMatchObject({ title: "Draft 2", status: "in_progress" });
+    expect(patch).toMatchObject({ status: "in_progress", title: "Draft 2" });
   });
 
   it("rolls back React state and sets pageErrors when the DB write fails", async () => {

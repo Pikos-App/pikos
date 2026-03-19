@@ -2,6 +2,7 @@
 node_modules
 package-lock.json
 build
+apps/desktop/dist
 .svelte-kit
 package
 .turbo

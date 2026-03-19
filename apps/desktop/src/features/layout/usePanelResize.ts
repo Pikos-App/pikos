@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
+
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 interface PanelResizeOptions {
@@ -14,10 +15,10 @@ interface PanelResize {
 }
 
 export function usePanelResize({
-  storageKey,
   defaultWidth,
-  min,
   max,
+  min,
+  storageKey,
 }: PanelResizeOptions): PanelResize {
   const [width, setWidth] = useLocalStorage(storageKey, defaultWidth);
 
@@ -43,5 +44,5 @@ export function usePanelResize({
     document.addEventListener("mouseup", onUp);
   }
 
-  return { width, onResizeStart };
+  return { onResizeStart, width };
 }

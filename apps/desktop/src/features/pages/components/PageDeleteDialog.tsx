@@ -15,9 +15,9 @@ interface PageDeleteDialogProps {
   onCancel: () => void;
 }
 
-export function PageDeleteDialog({ pageTitle, onConfirm, onCancel }: PageDeleteDialogProps) {
+export function PageDeleteDialog({ onCancel, onConfirm, pageTitle }: PageDeleteDialogProps) {
   return (
-    <AlertDialog open onOpenChange={(open) => !open && onCancel()}>
+    <AlertDialog onOpenChange={(open) => !open && onCancel()} open>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete &quot;{pageTitle || "Untitled"}&quot;?</AlertDialogTitle>

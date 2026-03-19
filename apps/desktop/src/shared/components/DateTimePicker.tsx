@@ -6,7 +6,6 @@
 // Layout: two-column (calendar left · time slot list right) + optional duration footer.
 // UX: all changes apply immediately via onChange — no internal uncommitted state.
 
-import { useEffect, useRef, useState } from "react";
 import {
   addDays,
   format,
@@ -19,6 +18,8 @@ import {
   startOfDay,
 } from "date-fns";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -89,27 +90,27 @@ function formatTriggerLabel(
   const isPast = isAllDay ? date < startOfDay(new Date()) : date < new Date();
 
   if (isToday(date)) {
-    if (isAllDay) return { label: `Today${durationSuffix}`, isPast: false };
+    if (isAllDay) return { isPast: false, label: `Today${durationSuffix}` };
     return {
-      label: `Today ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
       isPast: isPast && !isDone,
+      label: `Today ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
   }
   if (isTomorrow(date)) {
-    if (isAllDay) return { label: `Tomorrow${durationSuffix}`, isPast: false };
+    if (isAllDay) return { isPast: false, label: `Tomorrow${durationSuffix}` };
     return {
-      label: `Tomorrow ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
       isPast: false,
+      label: `Tomorrow ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
   }
   const dateStr = format(date, "MMM d");
   if (!isAllDay) {
     return {
-      label: `${dateStr} ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
       isPast: isPast && !isDone,
+      label: `${dateStr} ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
   }
-  return { label: `${dateStr}${durationSuffix}`, isPast: isPast && !isDone };
+  return { isPast: isPast && !isDone, label: `${dateStr}${durationSuffix}` };
 }
 
 // ── Time slots ────────────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ interface TimeSlot {
 const TIME_SLOTS: TimeSlot[] = Array.from({ length: 96 }, (_, idx) => {
   const hour24 = Math.floor(idx / 4);
   const minute = (idx % 4) * 15;
-  return { idx, hour24, minute, label: formatTimeOfDay(hour24, minute) };
+  return { hour24, idx, label: formatTimeOfDay(hour24, minute), minute };
 });
 
 // ── Duration presets ──────────────────────────────────────────────────────────
@@ -169,12 +170,12 @@ interface MiniCalendarProps {
 }
 
 export function MiniCalendar({
-  year,
   month,
-  selectedDate,
-  onSelect,
-  onPrev,
   onNext,
+  onPrev,
+  onSelect,
+  selectedDate,
+  year,
 }: MiniCalendarProps) {
   const today = new Date();
   const firstDayOfWeek = new Date(year, month, 1).getDay();
@@ -192,16 +193,16 @@ export function MiniCalendar({
           {MONTH_NAMES[month]} {year}
         </span>
         <button
-          onClick={onPrev}
-          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label="Previous month"
+          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          onClick={onPrev}
         >
           <ChevronLeft size={14} />
         </button>
         <button
-          onClick={onNext}
-          className="ml-0.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label="Next month"
+          className="ml-0.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          onClick={onNext}
         >
           <ChevronRight size={14} />
         </button>
@@ -210,8 +211,8 @@ export function MiniCalendar({
       <div className="grid grid-cols-7">
         {DAY_ABBRS.map((day) => (
           <div
-            key={day}
             className="pb-1 text-center text-[10px] font-medium tracking-wide text-muted-foreground/60"
+            key={day}
           >
             {day}
           </div>
@@ -220,7 +221,7 @@ export function MiniCalendar({
 
       <div className="grid grid-cols-7">
         {cells.map((dayNum, cellIdx) => {
-          if (dayNum === null) return <div key={`blank-${cellIdx}`} className="h-8" />;
+          if (dayNum === null) return <div className="h-8" key={`blank-${cellIdx}`} />;
 
           const isTodayDate =
             year === today.getFullYear() &&
@@ -234,11 +235,11 @@ export function MiniCalendar({
 
           return (
             <button
-              key={dayNum}
-              onClick={() => onSelect(new Date(year, month, dayNum))}
-              className="flex h-8 w-full cursor-pointer items-center justify-center focus:outline-none"
               aria-label={`${MONTH_NAMES[month]} ${dayNum}, ${year}`}
               aria-pressed={isSelected}
+              className="flex h-8 w-full cursor-pointer items-center justify-center focus:outline-none"
+              key={dayNum}
+              onClick={() => onSelect(new Date(year, month, dayNum))}
             >
               <span
                 className={cn(
@@ -279,11 +280,11 @@ interface DateTimePickerProps {
 }
 
 export function DateTimePicker({
-  value,
-  onChange,
   endValue,
-  onEndChange,
   isDone = false,
+  onChange,
+  onEndChange,
+  value,
 }: DateTimePickerProps) {
   const [open, setOpen] = useState(false);
 
@@ -448,7 +449,7 @@ export function DateTimePicker({
       scrollTimeListToSlot(hour24, minute);
     } else {
       const label = formatTimeOfDay(hour24, minute);
-      setCustomTimeEntry({ hour24, minute, label });
+      setCustomTimeEntry({ hour24, label, minute });
       const date = selectedDate ?? startOfDay(new Date());
       onChange(toISODateTime(date, hour24, minute));
       scrollTimeListToSlot(hour24, minute);
@@ -516,9 +517,9 @@ export function DateTimePicker({
   // ── Computed ──────────────────────────────────────────────────────────────────
 
   const hasDate = value !== null;
-  const { label: triggerLabel, isPast } = value
+  const { isPast, label: triggerLabel } = value
     ? formatTriggerLabel(value, endValue, isDone)
-    : { label: "Schedule", isPast: false };
+    : { isPast: false, label: "Schedule" };
 
   // Duration in minutes derived from start/end — only meaningful for timed events.
   const durationMinutes =
@@ -540,17 +541,17 @@ export function DateTimePicker({
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover onOpenChange={handleOpenChange} open={open}>
       <PopoverTrigger asChild>
         <button
+          aria-label={hasDate ? `Scheduled: ${triggerLabel}` : "Set schedule"}
           className={cn(
             "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded text-sm whitespace-nowrap transition-colors hover:text-muted-foreground focus:outline-none",
             isPast && "text-red-500 hover:text-red-400",
             !hasDate && "text-muted-foreground/60"
           )}
-          aria-label={hasDate ? `Scheduled: ${triggerLabel}` : "Set schedule"}
         >
-          <Calendar size={13} aria-hidden="true" />
+          <Calendar aria-hidden="true" size={13} />
           <span>{triggerLabel}</span>
         </button>
       </PopoverTrigger>
@@ -574,20 +575,20 @@ export function DateTimePicker({
                   selectedDate.getMonth() === pickDate.getMonth() &&
                   selectedDate.getDate() === pickDate.getDate();
                 return (
-                  <span key={label} className="flex items-center">
+                  <span className="flex items-center" key={label}>
                     {idx > 0 && (
-                      <span className="mx-1.5 text-muted-foreground/25" aria-hidden="true">
+                      <span aria-hidden="true" className="mx-1.5 text-muted-foreground/25">
                         ·
                       </span>
                     )}
                     <button
-                      onClick={() => quickPick(offset)}
                       className={cn(
                         "cursor-pointer transition-colors",
                         isActive
                           ? "font-medium text-primary"
                           : "text-foreground/55 hover:text-foreground"
                       )}
+                      onClick={() => quickPick(offset)}
                     >
                       {label}
                     </button>
@@ -597,8 +598,8 @@ export function DateTimePicker({
             </div>
             {hasDate && (
               <button
-                onClick={handleClearAll}
                 className="cursor-pointer text-xs text-foreground/55 hover:text-foreground"
+                onClick={handleClearAll}
               >
                 Clear
               </button>
@@ -609,18 +610,7 @@ export function DateTimePicker({
           <div className="flex items-start gap-3" style={{ height: CAL_HEIGHT }}>
             <div className="min-w-0 flex-1">
               <MiniCalendar
-                year={viewYear}
                 month={viewMonth}
-                selectedDate={selectedDate}
-                onSelect={selectDate}
-                onPrev={() => {
-                  if (viewMonth === 0) {
-                    setViewMonth(11);
-                    setViewYear((year) => year - 1);
-                  } else {
-                    setViewMonth((month) => month - 1);
-                  }
-                }}
                 onNext={() => {
                   if (viewMonth === 11) {
                     setViewMonth(0);
@@ -629,6 +619,17 @@ export function DateTimePicker({
                     setViewMonth((month) => month + 1);
                   }
                 }}
+                onPrev={() => {
+                  if (viewMonth === 0) {
+                    setViewMonth(11);
+                    setViewYear((year) => year - 1);
+                  } else {
+                    setViewMonth((month) => month - 1);
+                  }
+                }}
+                onSelect={selectDate}
+                selectedDate={selectedDate}
+                year={viewYear}
               />
             </div>
 
@@ -638,24 +639,26 @@ export function DateTimePicker({
               style={{ height: CAL_HEIGHT }}
             >
               <button
-                onClick={clearTime}
+                aria-label="All day — no specific time"
                 className={cn(
                   "cursor-pointer self-start text-xs transition-colors",
                   selectedTime === null
                     ? "font-medium text-primary"
                     : "text-foreground/40 hover:text-foreground"
                 )}
-                aria-label="All day — no specific time"
+                onClick={clearTime}
               >
                 All day
               </button>
 
               <div
-                ref={timeListRef}
-                role="listbox"
                 aria-label="Select start time"
-                tabIndex={0}
-                onKeyDown={handleTimeListKeyDown}
+                className="min-h-0 flex-1 overflow-y-auto rounded-sm focus:outline-none [&::-webkit-scrollbar]:hidden"
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setFocusedSlotIdx(null);
+                  }
+                }}
                 onFocus={() => {
                   if (focusedSlotIdx === null) {
                     const selIdx = selectedTime
@@ -668,12 +671,10 @@ export function DateTimePicker({
                     setFocusedSlotIdx(selIdx !== -1 ? selIdx : 32);
                   }
                 }}
-                onBlur={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                    setFocusedSlotIdx(null);
-                  }
-                }}
-                className="min-h-0 flex-1 overflow-y-auto rounded-sm focus:outline-none [&::-webkit-scrollbar]:hidden"
+                onKeyDown={handleTimeListKeyDown}
+                ref={timeListRef}
+                role="listbox"
+                tabIndex={0}
               >
                 {displayedSlots.map((slot, displayIdx) => {
                   const isSelected =
@@ -683,13 +684,7 @@ export function DateTimePicker({
                   const isFocused = focusedSlotIdx === displayIdx;
                   return (
                     <button
-                      key={slot.isCustom ? `custom-${slot.hour24}-${slot.minute}` : slot.idx}
-                      tabIndex={-1}
-                      role="option"
                       aria-selected={isSelected}
-                      data-h={slot.hour24}
-                      data-m={slot.minute}
-                      onClick={() => handleSlotClick(slot)}
                       className={cn(
                         "flex w-full cursor-pointer rounded px-1.5 py-[3px] text-left text-xs transition-colors",
                         isSelected
@@ -698,6 +693,12 @@ export function DateTimePicker({
                             ? "bg-accent text-foreground"
                             : "text-foreground/55 hover:text-foreground"
                       )}
+                      data-h={slot.hour24}
+                      data-m={slot.minute}
+                      key={slot.isCustom ? `custom-${slot.hour24}-${slot.minute}` : slot.idx}
+                      onClick={() => handleSlotClick(slot)}
+                      role="option"
+                      tabIndex={-1}
                     >
                       {slot.label}
                     </button>
@@ -706,9 +707,8 @@ export function DateTimePicker({
               </div>
 
               <input
-                type="text"
-                placeholder="or type a time…"
-                value={customTimeStr}
+                className="w-full cursor-text border-none bg-transparent px-0.5 py-1 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/25"
+                onBlur={applyCustomTimeInput}
                 onChange={(event) => setCustomTimeStr(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
@@ -717,8 +717,9 @@ export function DateTimePicker({
                   }
                   if (event.key === "Escape") setCustomTimeStr("");
                 }}
-                onBlur={applyCustomTimeInput}
-                className="w-full cursor-text border-none bg-transparent px-0.5 py-1 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/25"
+                placeholder="or type a time…"
+                type="text"
+                value={customTimeStr}
               />
             </div>
           </div>
@@ -732,16 +733,16 @@ export function DateTimePicker({
                 const isActive = durationMinutes === minutes;
                 return (
                   <button
-                    key={minutes}
-                    onClick={() => selectDuration(isActive ? null : minutes)}
-                    aria-pressed={isActive}
                     aria-label={`Duration: ${label}`}
+                    aria-pressed={isActive}
                     className={cn(
                       "cursor-pointer rounded px-1.5 py-0.5 text-xs transition-colors",
                       isActive
                         ? "font-medium text-primary"
                         : "text-foreground/55 hover:text-foreground"
                     )}
+                    key={minutes}
+                    onClick={() => selectDuration(isActive ? null : minutes)}
                   >
                     {label}
                   </button>
@@ -752,10 +753,9 @@ export function DateTimePicker({
                 {customDurationActive ? (
                   <input
                     autoFocus
-                    type="text"
+                    className="h-6 w-full cursor-text border-none bg-transparent px-0.5 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/25"
                     inputMode="numeric"
-                    placeholder="min"
-                    value={customDurationStr}
+                    onBlur={applyCustomDuration}
                     onChange={(event) =>
                       setCustomDurationStr(event.target.value.replace(/\D/g, ""))
                     }
@@ -769,17 +769,12 @@ export function DateTimePicker({
                         setCustomDurationStr("");
                       }
                     }}
-                    onBlur={applyCustomDuration}
-                    className="h-6 w-full cursor-text border-none bg-transparent px-0.5 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/25"
+                    placeholder="min"
+                    type="text"
+                    value={customDurationStr}
                   />
                 ) : (
                   <button
-                    onClick={() => {
-                      setCustomDurationStr(
-                        durationMinutes != null && isCustomDuration ? String(durationMinutes) : ""
-                      );
-                      setCustomDurationActive(true);
-                    }}
                     aria-pressed={isCustomDuration}
                     className={cn(
                       "h-6 w-full cursor-pointer rounded px-1.5 text-xs transition-colors",
@@ -787,6 +782,12 @@ export function DateTimePicker({
                         ? "font-medium text-primary"
                         : "text-foreground/55 hover:text-foreground"
                     )}
+                    onClick={() => {
+                      setCustomDurationStr(
+                        durationMinutes != null && isCustomDuration ? String(durationMinutes) : ""
+                      );
+                      setCustomDurationActive(true);
+                    }}
                   >
                     {isCustomDuration && durationMinutes != null
                       ? formatDurationLabel(durationMinutes)
