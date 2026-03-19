@@ -11,9 +11,6 @@ Status: `[ ]` pending · Delete task when done.
 
 ### Enhancements
 
-- [ ]**GOO-114** Bubble format toolbar _(Medium)_ — **replaces removed persistent FormatToolbar**
-  Selection-triggered floating toolbar. Appears anchored above the selection when text is selected in the editor. Buttons: Bold, Italic, Underline, Strikethrough, Code, Link (triggers LinkPopover), H1/H2/H3, bullet list, ordered list. Hides on click-outside or selection collapse. Use Tiptap's `BubbleMenu` component (`@tiptap/extension-bubble-menu` — already part of `@tiptap/starter-kit` peer deps). Position: above selection, centered, with a subtle drop-shadow and border. `FormatToolbar.tsx` contains all the button logic — reuse it inside `BubbleMenu`.
-
 - [ ] **GOO-108** Tab key behavior in editor _(High)_
   Tab/Shift+Tab intercepted — no longer moves browser focus. Lists: indent/outdent ✓. Task items: indent/outdent ✓. Code blocks: insert/remove 2 spaces ✓. **Remaining:** Tab in normal paragraphs should insert/remove indentation (insertText with spaces not working in paragraph nodes — needs investigation).
 
@@ -39,20 +36,7 @@ _Without these the app feels half-finished to any organic user. Ship before publ
 
 _Core product promise: notes + tasks + calendar. Must ship before friends beta._
 
-- [ ] **GOO-21** Custom day/weekly calendar view _(High — friends beta blocker)_
-  **v1: day view only.** Custom renderer with `date-fns`, no off-the-shelf calendar library.
-  ```
-  CalendarView
-  ├── CalendarHeader (prev/next/today, [ / ] shortcuts)
-  ├── TimeGutter (hour labels: 6am–11pm)
-  ├── DayColumn
-  │   ├── HourCells (drop targets, 15min increments)
-  │   ├── PageBlocks (absolute position by time %)
-  │   └── NowIndicator (current time red line, auto-scrolls on mount)
-  ```
-  Block click → `setActivePage()`. Resize bottom edge → update `scheduledEnd`. Toggle calendar/editor: `Cmd+Shift+C`. Jump to today: `t`.
-
-- [ ] **GOO-39** Drag page → calendar to schedule _(High — friends beta blocker)_ — **requires GOO-21**
+- [ ] **GOO-39** Drag page → calendar to schedule _(High — friends beta blocker)_ — GOO-21 ✓
   `@dnd-kit/core`. Drag handle on `PageListItem` hover. Drop → `createPageSchedule({ scheduledStart, scheduledEnd })`. 15min snap.
 
 ---
