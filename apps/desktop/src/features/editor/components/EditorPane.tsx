@@ -22,6 +22,7 @@ import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { TabIndent } from "../extensions/TabIndent";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
+import { FormatToolbar } from "./FormatToolbar";
 import { LinkPopover } from "./LinkPopover";
 import { MetadataHeader } from "./MetadataHeader";
 import { SlashMenuExtension } from "./SlashMenu";
@@ -180,6 +181,7 @@ export function EditorPane() {
     "Mod+K",
     () => {
       if (!editor) return;
+      editor.view.dom.blur();
       setIsAddingLink(true);
     },
     { allowInInputs: true, scope: "editor" }
@@ -221,6 +223,9 @@ export function EditorPane() {
           onRetryContent={() => void flush()}
           page={page}
         />
+      )}
+      {editor && !isAddingLink && (
+        <FormatToolbar editor={editor} onAddLink={() => setIsAddingLink(true)} />
       )}
       {editor && (
         <LinkPopover

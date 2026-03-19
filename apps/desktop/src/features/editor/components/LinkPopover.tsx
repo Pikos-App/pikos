@@ -163,27 +163,24 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
 
   // ─── Close handlers ─────────────────────────────────────────────────────────
 
-  // Close on click outside (but not on toolbar or editor — those have their own flows)
+  function close() {
+    setEditMode(false);
+    setCopied(false);
+    onAddingLinkChange(false);
+  }
+
+  // Close on click outside (but not on the toolbar — it has its own open/close flow)
   useEffect(() => {
     if (!isVisible) return;
 
-    const close = () => {
-      setEditMode(false);
-      setCopied(false);
-      onAddingLinkChange(false);
-    };
-
     function handleMouseDown(e: MouseEvent) {
       if (popoverRef.current?.contains(e.target as Node)) return;
-      const editorDom = editor.view.dom;
-      if (editorDom.contains(e.target as Node)) return;
-      // Don't close when clicking the format toolbar (link button triggers its own flow)
       if ((e.target as HTMLElement).closest?.("[data-format-toolbar]")) return;
       close();
     }
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [isVisible, editor]);
+  }, [isVisible, editor, close]);
 
   // Close edit mode on Escape
   useEffect(() => {

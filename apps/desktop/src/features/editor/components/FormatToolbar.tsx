@@ -1,8 +1,10 @@
-// FormatToolbar — Static formatting toolbar pinned above the editor content.
-// Active state reflects the current cursor position/selection via useEditorState.
+// FormatToolbar — Selection-triggered bubble toolbar.
+// Appears anchored above the active selection via Tiptap's BubbleMenu.
+// Hides automatically when the selection collapses or focus leaves the editor.
 
 import type { Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
+import { BubbleMenu } from "@tiptap/react/menus";
 import {
   Bold,
   Code,
@@ -23,10 +25,10 @@ interface FormatToolbarProps {
 }
 
 interface ToolbarButton {
-  icon: React.ReactNode;
-  title: string;
-  isActive: boolean;
   command: () => void;
+  icon: React.ReactNode;
+  isActive: boolean;
+  title: string;
 }
 
 interface ButtonGroup {
@@ -148,6 +150,10 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
               editor.chain().focus().extendMarkRange("link").unsetLink().run();
               return;
             }
+            // Blur the editor DOM so BubbleMenuView's blurHandler fires and hides
+            // the bubble menu. ProseMirror preserves the selection in editor.state
+            // so LinkPopover can still apply the link to the correct range.
+            editor.view.dom.blur();
             onAddLink?.();
           },
           icon: <Link size={14} strokeWidth={2.5} />,
@@ -159,30 +165,31 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
   ];
 
   return (
-    <div className="flex items-center gap-1 border-b border-border px-4 py-1.5" data-format-toolbar>
-      {groups.map((group, gi) => (
-        <div className="flex items-center" key={gi}>
-          {gi > 0 && <div className="mx-1.5 h-4 w-px bg-border" />}
-          {group.buttons.map((btn, bi) => (
-            <button
-              className={[
-                "flex items-center justify-center rounded p-1.5 transition-colors",
-                btn.isActive
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              ].join(" ")}
-              key={bi}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                btn.command();
-              }}
-              title={btn.title}
-            >
-              {btn.icon}
-            </button>
-          ))}
-        </div>
-      ))}
-    </div>
+    <BubbleMenu
+      editor={editor}
+      options={{ placement: "top" }}
+      shouldShow={({ editor: ed, state }) => ed.isFocused && !state.selection.empty}
+    >
+      <div className="bubble-toolbar" data-format-toolbar>
+        {groups.map((group, gi) => (
+          <div className="flex items-center" key={gi}>
+            {gi > 0 && <div className="bubble-toolbar-divider" />}
+            {group.buttons.map((btn, bi) => (
+              <button
+                className={["bubble-toolbar-btn", btn.isActive ? "is-active" : ""].join(" ")}
+                key={bi}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  btn.command();
+                }}
+                title={btn.title}
+              >
+                {btn.icon}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    </BubbleMenu>
   );
 }

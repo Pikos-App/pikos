@@ -237,6 +237,56 @@
   outline: none;
 }
 
+/* ─── Bubble format toolbar ────────────────────────────────────────────────── */
+
+.bubble-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 6px -1px oklch(0 0 0 / 0.3),
+    0 2px 4px -1px oklch(0 0 0 / 0.2);
+  padding: 3px 4px;
+}
+
+.bubble-toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 3px;
+}
+
+.bubble-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+}
+
+.bubble-toolbar-btn:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.bubble-toolbar-btn.is-active {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
 /* ─── Link popover ─────────────────────────────────────────────────────────── */
 
 .link-popover {
