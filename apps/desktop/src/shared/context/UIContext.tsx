@@ -12,6 +12,7 @@ import type { SortMode } from "@/features/pages/utils/pageFilters";
 
 /** 'today' | 'inbox' | folderId (UUID string) */
 export type ActiveViewId = "today" | "inbox" | (string & NonNullable<unknown>);
+export type DialogId = "quick-add" | null;
 
 export interface UIContextValue {
   /** ID of the currently selected page. Derive the full Page via useActivePage(). */
@@ -34,6 +35,9 @@ export interface UIContextValue {
   /** Which sort dropdown is open ('folder-sort' | 'page-sort' | null). Shared to ensure mutual exclusion. */
   openSortMenu: string | null;
   setOpenSortMenu: (id: string | null) => void;
+  /** Which dialog is open app-wide ('quick-add' | null). */
+  openDialog: string | null;
+  setOpenDialog: (id: DialogId | null) => void;
 }
 
 const UIContext = createContext<UIContextValue | null>(null);
@@ -47,6 +51,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openSortMenu, setOpenSortMenu] = useState<string | null>(null);
+  const [openDialog, setOpenDialog] = useState<string | null>(null);
   const [sortModes, setSortModes] = useLocalStorage<Record<string, SortMode>>(
     "pikos:sortModes",
     {}
@@ -81,6 +86,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setSettingsOpen,
     openSortMenu,
     setOpenSortMenu,
+    openDialog,
+    setOpenDialog,
   };
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

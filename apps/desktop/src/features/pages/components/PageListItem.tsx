@@ -239,6 +239,8 @@ export function PageListItem({
                   <input
                     ref={inputRef}
                     autoComplete="off"
+                    autoCapitalize="off"
+                    autoCorrect="off"
                     className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug font-medium text-foreground outline-none"
                     defaultValue={page.title}
                     onChange={(e) => onRenameChange?.(e.target.value)}

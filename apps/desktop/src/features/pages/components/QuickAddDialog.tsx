@@ -5,6 +5,7 @@
 // title and all metadata from the full input.
 
 import { useEffect, useRef, useState } from "react";
+import type React from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -56,13 +57,14 @@ function BylineSeparator() {
 export function QuickAddDialog() {
   const { folders, tags, createPage, updatePage, scheduleOnce } = useWorkspace();
   const allTagNames = tags.map((t) => t.name);
-  const { activeViewId } = useUI();
+  const { activeViewId, openDialog, setOpenDialog } = useUI();
 
-  const [open, setOpen] = useState(false);
+  const isOpen = openDialog === "quick-add";
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [inputValue, setInputValue] = useState("");
   const [shake, setShake] = useState(false);
+  const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
 
   const defaultFolderId = folders.find((folder) => folder.id === activeViewId)?.id ?? null;
 
@@ -83,9 +85,10 @@ export function QuickAddDialog() {
   const [priorityManual, setPriorityManual] = useState(false);
   const [folderManual, setFolderManual] = useState(false);
 
-  // ── Open handler ─────────────────────────────────────────────────────────────
-
-  function openDialog() {
+  // ── Reset form fields when the dialog opens ───────────────────────────────────
+  useEffect(() => {
+    if (!isOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setInputValue("");
     setDateValue(null);
     setEndDateValue(null);
@@ -96,18 +99,26 @@ export function QuickAddDialog() {
     setDateManual(false);
     setPriorityManual(false);
     setFolderManual(false);
-    setOpen(true);
-  }
+    setAddedFeedback(null);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Focus input when dialog opens or feedback clears ─────────────────────────
+  // Also fires after batch submit clears addedFeedback, remounting the input.
+
+  useEffect(() => {
+    if (!isOpen || addedFeedback !== null) return;
+    inputRef.current?.focus();
+  }, [isOpen, addedFeedback]);
 
   // ── Keyboard shortcut: Mod+N from anywhere ───────────────────────────────────
 
   useKeyboardShortcut(
     "Mod+N",
     () => {
-      if (open) {
+      if (isOpen) {
         inputRef.current?.focus();
       } else {
-        openDialog();
+        setOpenDialog("quick-add");
       }
     },
     { allowInInputs: true }
@@ -115,19 +126,11 @@ export function QuickAddDialog() {
 
   function handleOpenChange(next: boolean) {
     if (next) {
-      openDialog();
+      setOpenDialog("quick-add");
     } else {
-      setOpen(false);
+      setOpenDialog(null);
     }
   }
-
-  // ── Focus input when dialog opens ─────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!open) return;
-    const id = setTimeout(() => inputRef.current?.focus(), 0);
-    return () => clearTimeout(id);
-  }, [open]);
 
   // ── Debounce preview ─────────────────────────────────────────────────────────
   // Fires 200ms after the user stops typing. Parses the full input and updates
@@ -191,19 +194,24 @@ export function QuickAddDialog() {
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
-      void handleSubmit();
+      if (event.metaKey || event.ctrlKey) {
+        void handleSubmitBatch();
+      } else {
+        void handleSubmit();
+      }
     }
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────────
 
-  async function handleSubmit() {
+  /** Shared submission logic. Returns the created page title, or null if validation failed. */
+  async function submitPage(): Promise<string | null> {
     const trimmed = inputValue.trim();
     if (!trimmed) {
       setShake(true);
       setTimeout(() => setShake(false), 300);
       inputRef.current?.focus();
-      return;
+      return null;
     }
 
     // Parse the full, unstripped input on submit.
@@ -256,32 +264,68 @@ export function QuickAddDialog() {
       await scheduleOnce(page.id, resolvedDate, resolvedEnd);
     }
 
-    setOpen(false);
+    return title;
+  }
+
+  /** Enter — commit and close. */
+  async function handleSubmit() {
+    const title = await submitPage();
+    if (title !== null) setOpenDialog(null);
+  }
+
+  /**
+   * Cmd+Enter — commit, show brief confirmation, then reset fields so the user
+   * can immediately add another page in the same folder scope.
+   */
+  async function handleSubmitBatch() {
+    const title = await submitPage();
+    if (title === null) return;
+
+    setAddedFeedback(title);
+    setInputValue("");
+    setDateValue(null);
+    setEndDateValue(null);
+    setPriorityValue(0);
+    setNlpTags([]);
+    setManualTags([]);
+    setDateManual(false);
+    setPriorityManual(false);
+    // Keep folderValue and folderManual — user stays in same folder scope.
+    setTimeout(() => {
+      setAddedFeedback(null);
+    }, 1000);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         showCloseButton={false}
         aria-label="Quick add"
         className="top-[22%] translate-y-0 gap-0 border-border/60 bg-card p-0 shadow-2xl sm:max-w-[540px]"
       >
         <div className="px-4 pt-4 pb-3">
-          <input
-            ref={inputRef}
-            value={inputValue}
-            onChange={(event) => setInputValue(event.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="What's on your mind?"
-            autoComplete="off"
-            className={cn(
-              "w-full bg-transparent text-base text-foreground outline-none",
-              "placeholder:text-muted-foreground/40",
-              shake && "animate-shake"
-            )}
-          />
+          {addedFeedback !== null ? (
+            <p className="animate-in truncate text-base text-muted-foreground fade-in-0">
+              <span className="mr-1.5 text-primary">✓</span>
+              {addedFeedback}
+            </p>
+          ) : (
+            <input
+              ref={inputRef}
+              value={inputValue}
+              onChange={(event) => setInputValue(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="What's on your mind?"
+              autoComplete="off"
+              className={cn(
+                "w-full bg-transparent text-base text-foreground outline-none",
+                "placeholder:text-muted-foreground/40",
+                shake && "animate-shake"
+              )}
+            />
+          )}
         </div>
 
         {/* Metadata chips + Add button */}

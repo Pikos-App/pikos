@@ -12,7 +12,7 @@ import type { PagePriority, PageSummary, PageStatus } from "@pikos/core";
 import { nowLocalISO } from "@/shared/utils/dates";
 
 export function usePageList() {
-  const { pages, folders, createPage, updatePage, deletePage } = useWorkspace();
+  const { pages, folders, updatePage, deletePage } = useWorkspace();
   const { activeViewId, setActivePage, setRightPanel, getSortMode } = useUI();
   const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -27,14 +27,6 @@ export function usePageList() {
     activeViewId === "today"
       ? getCompletedTodayPages(pages)
       : getCompletedViewPages(pages, activeViewId);
-
-  /** Create a page in the active folder and immediately enter rename mode. */
-  async function handleCreatePage() {
-    const folderId = activeViewId !== "today" && activeViewId !== "inbox" ? activeViewId : null;
-    const page = await createPage({ folderId });
-    setActivePage(page);
-    setRenamingId(page.id);
-  }
 
   function handleRenameChange(id: string, title: string) {
     updatePage(id, { title });
@@ -95,7 +87,6 @@ export function usePageList() {
     renamingId,
     setRenamingId,
     pendingDelete,
-    handleCreatePage,
     handleRenameChange,
     handleRenameCommit,
     handleRenameCancel,

@@ -45,7 +45,6 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
     renamingId,
     setRenamingId,
     pendingDelete,
-    handleCreatePage,
     handleRenameChange,
     handleRenameCommit,
     handleRenameCancel,
@@ -65,6 +64,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
     setSortMode,
     openSortMenu,
     setOpenSortMenu,
+    setOpenDialog,
   } = useUI();
   const sortMode = activeViewId !== "today" ? getSortMode(activeViewId) : "date";
   const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
@@ -217,7 +217,7 @@ export function PageListPanel({ width, onResizeStart }: PageListPanelProps) {
           <button
             className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
             title="New Page"
-            onClick={() => void handleCreatePage()}
+            onClick={() => setOpenDialog("quick-add")}
           >
             <Plus size={15} />
           </button>
