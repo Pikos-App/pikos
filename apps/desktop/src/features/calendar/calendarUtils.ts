@@ -3,12 +3,14 @@
 import type { PageSummary } from "@pikos/core";
 import {
   addDays,
+  addMinutes,
   endOfWeek,
   format,
   getHours,
   getMinutes,
   isSameDay,
   parseISO,
+  startOfDay,
   startOfWeek,
 } from "date-fns";
 
@@ -33,7 +35,7 @@ export const GRID_HEIGHT = VISIBLE_HOURS * HOUR_HEIGHT;
  * Fixed height for compact event chips (no scheduledEnd, or duration < 15 min).
  * Large enough for a single line of text; visually distinct from proportional blocks.
  */
-export const COMPACT_BLOCK_HEIGHT = 16;
+export const COMPACT_BLOCK_HEIGHT = 19;
 
 /**
  * Minimum duration in minutes for a block to render proportionally.
@@ -46,7 +48,7 @@ export const MIN_TIMED_MINUTES = 15;
  * so they stay visually identical. Import these instead of duplicating the string.
  */
 export const CHIP_BASE_CLASSES =
-  "overflow-hidden truncate rounded-sm border-l-2 px-1.5 py-[3px] text-sm leading-none font-medium text-foreground transition-opacity hover:opacity-75 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none" as const;
+  "h-[19px] overflow-hidden truncate rounded-sm border-l-2 px-1.5 text-sm leading-none font-medium text-foreground transition-opacity hover:opacity-75 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none" as const;
 
 /** Default chip colors when no folder color is set. */
 export const CHIP_DEFAULT_COLOR_CLASSES = "border-blue-500 bg-blue-500/20" as const;
@@ -193,7 +195,7 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
 
     const endDate = explicitEnd ?? startDate; // endDate = startDate for no-end events
     const top = timeToY(startDate);
-    const height = isCompact ? COMPACT_BLOCK_HEIGHT : Math.max(timeToY(endDate) - top, 4); // 4px min for valid-but-tiny timed blocks
+    const height = isCompact ? COMPACT_BLOCK_HEIGHT : Math.max(timeToY(endDate) - top, 4);
 
     // For overlap calculation, compact blocks claim a 15-min footprint
     const overlapEnd = isCompact
@@ -253,6 +255,38 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
   });
 
   return blocks;
+}
+
+// ─── Coordinate helpers ───────────────────────────────────────────────────────
+
+/** Minimum block height in px for resize operations — enforces 15-minute minimum. */
+export const MIN_RESIZE_HEIGHT = (15 / 60) * HOUR_HEIGHT;
+
+/** Pixel movement threshold before a mousedown is treated as a drag gesture. */
+export const DRAG_THRESHOLD = 4;
+
+/**
+ * Snaps a raw pixel Y offset to the nearest 15-minute grid line.
+ * Does not clamp — use Math.max/min around the call site as needed.
+ */
+export function snapY(y: number): number {
+  const rawMinutes = (y / HOUR_HEIGHT) * 60;
+  const snapped = Math.round(rawMinutes / 15) * 15;
+  return (snapped / 60) * HOUR_HEIGHT;
+}
+
+/**
+ * Converts a raw pixel Y offset (from the grid container top) to a Date snapped to
+ * the nearest 15-minute boundary on `day`. Clamps to [GRID_START_HOUR, GRID_END_HOUR].
+ */
+export function yToDate(y: number, day: Date): Date {
+  const rawMinutes = (y / HOUR_HEIGHT) * 60 + GRID_START_HOUR * 60;
+  const snappedMinutes = Math.round(rawMinutes / 15) * 15;
+  const clampedMinutes = Math.min(
+    Math.max(snappedMinutes, GRID_START_HOUR * 60),
+    GRID_END_HOUR * 60
+  );
+  return addMinutes(startOfDay(day), clampedMinutes);
 }
 
 // ─── Formatting ───────────────────────────────────────────────────────────────

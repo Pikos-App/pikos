@@ -34,10 +34,20 @@ _Without these the app feels half-finished to any organic user. Ship before publ
 
 ## 📅 Calendar Feature
 
-_Core product promise: notes + tasks + calendar. Must ship before friends beta._
+_GOO-21b complete: state model, editor/calendar toggle, click-to-create, popover, status checkbox, drag-to-reschedule, resize, drag-to/from all-day._
 
-- [ ] **GOO-39** Drag page → calendar to schedule _(High — friends beta blocker)_ — GOO-21 ✓
-  `@dnd-kit/core`. Drag handle on `PageListItem` hover. Drop → `createPageSchedule({ scheduledStart, scheduledEnd })`. 15min snap.
+- [ ] **GOO-39** Drag page → calendar to schedule _(High — friends beta blocker)_
+  Drag a `PageListItem` from the middle panel onto the calendar to schedule it. Page already exists — just call `scheduleOnce`. 15-min snap, same as existing calendar drag.
+
+  **Drop targets**: timed grid → `scheduleOnce(pageId, "yyyy-MM-dd'T'HH:mm:ss")` (compact chip); all-day section → `scheduleOnce(pageId, "yyyy-MM-dd")`.
+
+  **Implementation notes**:
+  - Use raw pointer events (not dnd-kit) — consistent with all existing calendar drag.
+  - The drag starts in `PageListItem` (middle panel) and the drop zones are in `WeekGrid` (right panel). Cross-panel communication: expose a `startExternalDrag(pageId, folderColor)` callback from `WeekGrid` via UIContext (store it in a ref on mount). `PageListItem` calls it when drag threshold is exceeded.
+  - `WeekGrid.handleExternalDragStart` is essentially identical to `handleAllDayChipDragStart` — registers window mousemove/mouseup, shows compact ghost in timed grid, highlights all-day column on hover. Reuse that pattern directly.
+  - Show a drag handle icon on `PageListItem` hover (lucide `GripVertical`). `cursor-grab` while hovering, `cursor-grabbing` while dragging.
+  - While dragging over the calendar, dim the source `PageListItem` (pass `draggingPageId` through UIContext so the list can read it without prop drilling).
+  - Pages that already have a schedule can still be dragged to reschedule — `scheduleOnce` replaces the existing schedule.
 
 ---
 
@@ -90,11 +100,3 @@ _Required before the marketing site goes live and the download button appears._
 
 
 _For post-launch V1, power features, and long-term roadmap — grep `BACKLOG.md` by GOO number._
-
-Testing notes
-- Manual then NLP - should persist manual, NLP can be added then removed via input - currently manual persists and can't be overridden
-- NLP then manual - should remove NLP from input? Probably
-
-Additional Thoughts
-- when to do "view more" type of query slicing? For sure completed will need that. I assume FTS will work on all records, not just records shown on the UI.
-- page list virtualization

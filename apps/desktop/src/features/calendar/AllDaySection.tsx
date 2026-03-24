@@ -1,33 +1,43 @@
 // AllDaySection — sits between the day-name row and the time grid.
 // Each column shows all-day event chips filling the column width.
 // Height is user-adjustable via a drag handle on the bottom edge.
+// Clicking an empty column area creates a new all-day page for that day.
 
 import type { PageSummary } from "@pikos/core";
 
-import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-import {
-  buildAllDayItems,
-  CHIP_BASE_CLASSES,
-  CHIP_DEFAULT_COLOR_CLASSES,
-  chipFolderStyle,
-} from "./calendarUtils";
+import { AllDayColumn } from "./AllDayColumn";
+import { buildAllDayItems } from "./calendarUtils";
 
 interface AllDaySectionProps {
   days: Date[];
+  draggingPageId: string | null;
+  editingPageId: string | null;
   height: number;
-  onPageClick: (pageId: string) => void;
+  onCancelCreate: (pageId: string) => void;
+  onChipDragStart: (info: { folderColor: string | undefined; pageId: string }) => void;
+  onCommitTitle: (pageId: string, title: string) => void;
+  onCreateAllDay: (day: Date) => Promise<void> | void;
+  onPageDoubleClick: (pageId: string) => void;
   onResizeStart: (e: React.MouseEvent) => void;
   pages: PageSummary[];
+  timedDragTarget: { dayIndex: number; folderColor: string | undefined } | null;
 }
 
 export function AllDaySection({
   days,
+  draggingPageId,
+  editingPageId,
   height,
-  onPageClick,
+  onCancelCreate,
+  onChipDragStart,
+  onCommitTitle,
+  onCreateAllDay,
+  onPageDoubleClick,
   onResizeStart,
   pages,
+  timedDragTarget,
 }: AllDaySectionProps) {
   const { folders } = useWorkspace();
   const folderColorMap = new Map(
@@ -40,40 +50,23 @@ export function AllDaySection({
         {/* Gutter spacer — aligns with TimeGutter's w-14 */}
         <div className="w-14 shrink-0" />
 
-        {/* Day columns */}
-        {days.map((day) => {
+        {days.map((day, dayIndex) => {
           const items = buildAllDayItems(pages, day);
-
           return (
-            <div
-              className={cn(
-                "flex min-w-0 flex-1 flex-col overflow-hidden border-l border-border/50 px-1 py-1 first:border-l-0",
-                (day.getDay() === 0 || day.getDay() === 6) ? "bg-white/[0.012]" : ""
-              )}
+            <AllDayColumn
+              day={day}
+              draggingPageId={draggingPageId}
+              editingPageId={editingPageId}
+              folderColorMap={folderColorMap}
+              isTimedDragTarget={timedDragTarget?.dayIndex === dayIndex}
+              items={items}
               key={day.toISOString()}
-            >
-              {/* Event chips — full column width minus px-1 margin */}
-              <div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
-                {items.map((item) => {
-                  const folderColor = item.folderId ? folderColorMap.get(item.folderId) : undefined;
-                  return (
-                    <button
-                      aria-label={item.title || "Untitled"}
-                      className={cn(
-                        "flex w-full items-center",
-                        CHIP_BASE_CLASSES,
-                        !folderColor && CHIP_DEFAULT_COLOR_CLASSES
-                      )}
-                      key={item.id}
-                      onClick={() => onPageClick(item.id)}
-                      style={folderColor ? chipFolderStyle(folderColor) : undefined}
-                    >
-                      <span className="min-w-0 truncate">{item.title || "Untitled"}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+              onCancelCreate={onCancelCreate}
+              onChipDragStart={onChipDragStart}
+              onCommitTitle={onCommitTitle}
+              onCreateAllDay={onCreateAllDay}
+              onPageDoubleClick={onPageDoubleClick}
+            />
           );
         })}
       </div>

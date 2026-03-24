@@ -24,6 +24,11 @@ export interface UIContextValue {
   setActiveViewId: (id: ActiveViewId) => void;
   rightPanel: "editor" | "calendar";
   setRightPanel: (panel: "editor" | "calendar") => void;
+  /** Page that was active before switching to calendar. Restored on Cmd+Shift+C back to editor. */
+  lastEditorPageId: string | null;
+  /** Currently viewed week reference date. Persisted so panel toggles don't reset the week. */
+  referenceDate: Date;
+  setReferenceDate: (d: Date) => void;
   /** Both left panels hidden. Persisted to localStorage. */
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (v: boolean | ((prev: boolean) => boolean)) => void;
@@ -39,6 +44,11 @@ export interface UIContextValue {
   /** Which dialog is open app-wide ('quick-add' | null). */
   openDialog: string | null;
   setOpenDialog: (id: DialogId | null) => void;
+  /**
+   * Open a page in the editor. Switches to editor panel and sets activePageId
+   * atomically — bypasses setRightPanel's restore logic so order never matters.
+   */
+  openPage: (page: PageSummary | string) => void;
 }
 
 const UIContext = createContext<UIContextValue | null>(null);
@@ -48,7 +58,18 @@ const UIContext = createContext<UIContextValue | null>(null);
 export function UIProvider({ children }: { children: ReactNode }) {
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [activeViewId, setActiveViewId] = useState<ActiveViewId>("inbox");
-  const [rightPanel, setRightPanel] = useState<"editor" | "calendar">("editor");
+  const [rightPanel, setRightPanelRaw] = useLocalStorage<"editor" | "calendar">(
+    "pikos:rightPanel",
+    "editor"
+  );
+  const [lastEditorPageId, setLastEditorPageId] = useLocalStorage<string | null>(
+    "pikos:lastEditorPageId",
+    null
+  );
+  const [referenceDateIso, setReferenceDateIso] = useLocalStorage<string>(
+    "pikos:calendarReferenceDate",
+    new Date().toISOString()
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openSortMenu, setOpenSortMenu] = useState<string | null>(null);
@@ -58,10 +79,34 @@ export function UIProvider({ children }: { children: ReactNode }) {
     {}
   );
 
+  const referenceDate = new Date(referenceDateIso);
+
+  function setReferenceDate(d: Date) {
+    setReferenceDateIso(d.toISOString());
+  }
+
   function setActivePage(page: PageSummary | string | null) {
     if (page === null) setActivePageId(null);
     else if (typeof page === "string") setActivePageId(page);
     else setActivePageId(page.id);
+  }
+
+  /** Smart panel switch — manages lastEditorPageId and activePageId transitions. */
+  function setRightPanel(panel: "editor" | "calendar") {
+    if (panel === "calendar" && rightPanel !== "calendar") {
+      setLastEditorPageId(activePageId);
+      setActivePageId(null);
+    } else if (panel === "editor" && rightPanel !== "editor") {
+      setActivePageId(lastEditorPageId);
+    }
+    setRightPanelRaw(panel);
+  }
+
+  /** Open a specific page in the editor — atomic, no ordering dependency. */
+  function openPage(page: PageSummary | string) {
+    const id = typeof page === "string" ? page : page.id;
+    setActivePageId(id);
+    setRightPanelRaw("editor");
   }
 
   function getSortMode(viewId: string): SortMode {
@@ -76,13 +121,17 @@ export function UIProvider({ children }: { children: ReactNode }) {
     activePageId,
     activeViewId,
     getSortMode,
+    lastEditorPageId,
     openDialog,
+    openPage,
     openSortMenu,
+    referenceDate,
     rightPanel,
     setActivePage,
     setActiveViewId,
     setOpenDialog,
     setOpenSortMenu,
+    setReferenceDate,
     setRightPanel,
     setSettingsOpen,
     setSidebarCollapsed,

@@ -14,7 +14,7 @@ import { nowLocalISO } from "@/shared/utils/dates";
 
 export function usePageList() {
   const { deletePage, folders, pages, updatePage } = useWorkspace();
-  const { activeViewId, getSortMode, setActivePage, setRightPanel } = useUI();
+  const { activeViewId, getSortMode, openPage, setActivePage } = useUI();
   const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PageSummary | null>(null);
@@ -93,8 +93,8 @@ export function usePageList() {
     handleRenameChange,
     handleRenameCommit,
     handleSelectPage: (page: PageSummary | string | null) => {
-      setActivePage(page);
-      if (page !== null) setRightPanel("editor");
+      if (page !== null) openPage(page);
+      else setActivePage(null);
     },
     handleToggleStatus,
     pendingDelete,

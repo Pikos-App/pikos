@@ -2,13 +2,14 @@
 // key={page.id} in parent resets all state on page switch.
 
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, CalendarDays, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FolderChip } from "@/features/pages/components/FolderChip";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { TagsPopover } from "@/features/pages/components/TagsPopover";
+import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { nowLocalISO } from "@/shared/utils/dates";
 
@@ -30,6 +31,7 @@ function Byline({
   folders,
   onErrorClick,
   onFolderChange,
+  onOpenInCalendar,
   onPriorityChange,
   onStatusChange,
   onTagToggle,
@@ -43,6 +45,7 @@ function Byline({
   onFolderChange: (folderId: string | null) => void;
   onPriorityChange: (priority: PagePriority) => void;
   onTagToggle: (name: string) => void;
+  onOpenInCalendar?: () => void;
   saveError?: string | null;
   onErrorClick?: () => void;
 }) {
@@ -57,7 +60,7 @@ function Byline({
         onClick={() => onStatusChange(isDone ? "not_started" : "done")}
       >
         <span
-          className={`flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-[2px] border transition-colors ${isDone ? "border-foreground/40 bg-foreground/10" : "border-muted-foreground/40 hover:border-foreground/60"}`}
+          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border transition-colors ${isDone ? "border-foreground/40 bg-foreground/10" : "border-muted-foreground/40 hover:border-foreground/60"}`}
         >
           {isDone && <Check size={8} strokeWidth={2.5} />}
         </span>
@@ -71,6 +74,21 @@ function Byline({
       {/* Date — GOO-34 */}
       <BylineSeparator />
       <DateSchedulePopover page={page} />
+
+      {/* Jump to calendar at scheduled date */}
+      {onOpenInCalendar && (
+        <>
+          <BylineSeparator />
+          <button
+            aria-label="View in calendar"
+            className="inline-flex items-center gap-1 rounded transition-colors hover:text-muted-foreground focus:outline-none"
+            onClick={onOpenInCalendar}
+          >
+            <CalendarDays size={13} />
+            <span>View</span>
+          </button>
+        </>
+      )}
 
       {/* Priority selector — GOO-35 */}
       <BylineSeparator />
@@ -121,6 +139,7 @@ export function MetadataHeader({
   page,
 }: MetadataHeaderProps) {
   const { clearPageError, flushPage, folders, pageErrors, tags, updatePage } = useWorkspace();
+  const { setReferenceDate, setRightPanel } = useUI();
   const allTagNames = tags.map((t) => t.name);
 
   const metadataError = pageErrors.get(page.id) ?? null;
@@ -145,6 +164,11 @@ export function MetadataHeader({
 
   function handlePriorityChange(priority: PagePriority) {
     updatePage(page.id, { priority });
+  }
+
+  function handleOpenInCalendar() {
+    setReferenceDate(new Date(page.scheduledStart!));
+    setRightPanel("calendar");
   }
 
   function handleTagToggle(name: string) {
@@ -380,6 +404,7 @@ export function MetadataHeader({
           folders={folders}
           onErrorClick={handleErrorClick}
           onFolderChange={handleFolderChange}
+          {...(page.scheduledStart ? { onOpenInCalendar: handleOpenInCalendar } : {})}
           onPriorityChange={handlePriorityChange}
           onStatusChange={handleStatusChange}
           onTagToggle={handleTagToggle}

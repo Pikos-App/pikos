@@ -135,8 +135,10 @@ pub struct RecurrenceRuleUpdate {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/// Refreshes pages.scheduled_start/end to the earliest future explicit schedule
-/// for this page (non-override rows only). Clears to NULL when none remain.
+/// Refreshes pages.scheduled_start/end to the nearest schedule for this page
+/// (non-override rows only): prefers the earliest upcoming schedule; falls back
+/// to the most recent past schedule if no future one exists.
+/// Clears to NULL when no explicit schedules remain.
 async fn refresh_schedule_denorm(pool: &sqlx::SqlitePool, page_id: &str) -> Result<(), String> {
     #[derive(sqlx::FromRow)]
     struct Denorm {
@@ -148,8 +150,9 @@ async fn refresh_schedule_denorm(pool: &sqlx::SqlitePool, page_id: &str) -> Resu
         "SELECT scheduled_start, scheduled_end
          FROM page_schedules
          WHERE page_id = ? AND rule_id IS NULL
-           AND date(scheduled_start) >= date('now')
-         ORDER BY scheduled_start ASC
+         ORDER BY
+           CASE WHEN scheduled_start >= strftime('%Y-%m-%dT%H:%M:%S', 'now') THEN 0 ELSE 1 END ASC,
+           scheduled_start ASC
          LIMIT 1",
     )
     .bind(page_id)

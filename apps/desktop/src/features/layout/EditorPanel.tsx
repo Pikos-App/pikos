@@ -1,14 +1,15 @@
-// EditorPanel — right panel. Toggles between editor and calendar via Cmd+Shift+C.
-// Sidebar toggle is a persistent button at the top-left corner of this panel —
-// always accessible regardless of page state or which view is active.
+// EditorPanel — right panel. Owns the shared header (RightPanelHeader) and
+// toggles between EditorPane and CalendarView via Cmd+Shift+C.
 
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { addWeeks, subWeeks } from "date-fns";
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CalendarHeader } from "@/features/calendar/CalendarHeader";
 import { CalendarView } from "@/features/calendar/CalendarView";
 import { EditorPane } from "@/features/editor";
 import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+
+import { RightPanelHeader } from "./RightPanelHeader";
 
 export function EditorPanel() {
   const ui = useUI();
@@ -29,25 +30,30 @@ export function EditorPanel() {
     { allowInInputs: true }
   );
 
+  function handlePrevWeek() {
+    ui.setReferenceDate(subWeeks(ui.referenceDate, 1));
+  }
+
+  function handleNextWeek() {
+    ui.setReferenceDate(addWeeks(ui.referenceDate, 1));
+  }
+
+  function handleToday() {
+    ui.setReferenceDate(new Date());
+  }
+
   return (
-    <div className="relative flex flex-1 flex-col bg-background">
-      {/* Sidebar toggle — persistent, always visible, top-left corner of editor panel */}
-      <div className="absolute top-2 left-2 z-10">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              aria-label={ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-muted-foreground"
-              onClick={() => ui.setSidebarCollapsed(!ui.sidebarCollapsed)}
-            >
-              {ui.sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} ⌘\
-          </TooltipContent>
-        </Tooltip>
-      </div>
+    <div className="flex flex-1 flex-col bg-background">
+      <RightPanelHeader>
+        {ui.rightPanel === "calendar" && (
+          <CalendarHeader
+            onNextWeek={handleNextWeek}
+            onPrevWeek={handlePrevWeek}
+            onToday={handleToday}
+            referenceDate={ui.referenceDate}
+          />
+        )}
+      </RightPanelHeader>
 
       {ui.rightPanel === "editor" ? <EditorPane /> : <CalendarView />}
     </div>

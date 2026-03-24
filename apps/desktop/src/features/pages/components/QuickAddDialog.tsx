@@ -101,7 +101,7 @@ export function QuickAddDialog() {
     setPriorityManual(false);
     setFolderManual(false);
     setAddedFeedback(null);
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   // ── Focus input when dialog opens or feedback clears ─────────────────────────
   // Also fires after batch submit clears addedFeedback, remounting the input.

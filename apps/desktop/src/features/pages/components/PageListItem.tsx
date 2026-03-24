@@ -206,7 +206,7 @@ export function PageListItem({
           <button
             aria-label={page.status === "done" ? "Mark not done" : "Mark done"}
             className={cn(
-              "mt-0.5 flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-[2px] border transition-colors",
+              "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border transition-colors",
               page.status === "done"
                 ? "border-foreground/40 bg-foreground/10"
                 : page.priority === 1

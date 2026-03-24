@@ -13,6 +13,7 @@ interface CalendarHeaderProps {
   referenceDate: Date;
 }
 
+// Inner navigation content for the calendar — rendered as children of RightPanelHeader.
 export function CalendarHeader({
   onNextWeek,
   onPrevWeek,
@@ -33,8 +34,8 @@ export function CalendarHeader({
     : `${format(monday, "MMM d")} – ${format(sunday, "MMM d, yyyy")}`;
 
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-border/50 py-2 pr-4 pl-10">
-      <h2 className="flex-1 text-sm font-medium text-foreground">{weekLabel}</h2>
+    <>
+      <h2 className="flex-1 pl-1 text-sm font-medium text-foreground">{weekLabel}</h2>
       <Button
         aria-label="Previous week"
         className="h-7 w-7"
@@ -63,6 +64,6 @@ export function CalendarHeader({
       >
         Today
       </Button>
-    </div>
+    </>
   );
 }
