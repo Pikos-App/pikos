@@ -2,14 +2,16 @@
  * Launch email blast
  *
  * Before running:
- *   1. Add RESEND_API_KEY to .env (or export it in your shell)
- *   2. Set FROM, SUBJECT, and BODY below
- *   3. Run: npm run send-launch
+ *   1. Set DATABASE_URL in .env
+ *   2. Set RESEND_API_KEY in .env
+ *   3. Edit FROM, SUBJECT, and BODY below
+ *   4. Run: pnpm send-launch
  */
 
 import { readFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import pg from "pg";
 
 // ─── Edit these before sending ────────────────────────────────────────────────
 
@@ -20,7 +22,7 @@ const BODY_HTML = `
 <p>We're launching Pikos \u2014 the local-first app that combines notes, tasks, and calendar in one place. No account required.</p>
 <p><strong>Download it here:</strong> <a href="https://pikos.app">pikos.app</a></p>
 <p>Thanks for your interest. We hope you love it.</p>
-<p>\u2014 The Pikos team</p>
+<p>\u2014 Alex</p>
 `;
 const BODY_TEXT = `
 Hi there,
@@ -31,7 +33,7 @@ Download it here: https://pikos.app
 
 Thanks for your interest. We hope you love it.
 
-\u2014 The Pikos team
+\u2014 Alex
 `.trim();
 
 // ─── End of editable section ─────────────────────────────────────────────────
@@ -48,7 +50,10 @@ if (existsSync(envPath)) {
     const eq = trimmed.indexOf("=");
     if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+    const val = trimmed
+      .slice(eq + 1)
+      .trim()
+      .replace(/^["']|["']$/g, "");
     if (!process.env[key]) process.env[key] = val;
   }
 }
@@ -59,13 +64,16 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const emailsFile = resolve(__dirname, "../../../emails.json");
-if (!existsSync(emailsFile)) {
-  console.error(`Error: emails.json not found at ${emailsFile}`);
-  process.exit(1);
-}
+// Load emails from postgres
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-const emails = JSON.parse(readFileSync(emailsFile, "utf-8"));
+const { rows } = await pool.query("SELECT email FROM waitlist ORDER BY created_at");
+await pool.end();
+
+const emails = rows.map((r) => r.email);
+
 if (!emails.length) {
   console.log("No emails to send to. Exiting.");
   process.exit(0);

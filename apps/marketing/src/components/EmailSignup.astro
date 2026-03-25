@@ -15,8 +15,9 @@ const {
 
 <form
   id="email-signup-form"
-  class="flex flex-col sm:flex-row gap-2 w-full max-w-md"
+  class="mt-6 flex flex-col gap-3 sm:flex-row"
   novalidate
+  onsubmit="event.preventDefault()"
 >
   <input
     type="email"
@@ -24,56 +25,59 @@ const {
     required
     placeholder={placeholder}
     autocomplete="email"
-    class="flex-1 rounded-lg border border-white/20 bg-white/10 px-4 py-2.5 text-sm text-white placeholder:text-white/50 outline-none focus:ring-2 focus:ring-white/40"
+    class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-base text-gray-900 placeholder:text-gray-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/30 focus:outline-none sm:max-w-xs dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-orange-500"
   />
+  {/* Honeypot — bots fill this, humans don't */}
+  <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="display:none" />
   <button
     type="submit"
-    class="rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 hover:bg-white/90 active:scale-95 transition-all whitespace-nowrap"
+    class="cursor-pointer rounded-lg bg-orange-500 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-orange-400 focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 focus:outline-none dark:focus:ring-offset-gray-950"
   >
     {buttonText}
   </button>
 </form>
 
-<p id="email-signup-msg" class="mt-2 text-sm text-white/70 hidden"></p>
+<p id="email-signup-msg" class="mt-3 hidden text-sm"></p>
 
 <script>
-  const form = document.getElementById("email-signup-form") as HTMLFormElement;
-  const msg = document.getElementById("email-signup-msg") as HTMLParagraphElement;
+  const form = document.getElementById("email-signup-form") as HTMLFormElement | null;
+  const msg = document.getElementById("email-signup-msg") as HTMLParagraphElement | null;
 
-  form.addEventListener("submit", async (e) => {
+  form?.addEventListener("submit", async (e) => {
     e.preventDefault();
 
     const email = (form.elements.namedItem("email") as HTMLInputElement).value;
+    const website = (form.elements.namedItem("website") as HTMLInputElement).value;
     const button = form.querySelector("button") as HTMLButtonElement;
 
     button.disabled = true;
-    button.textContent = "Submitting\u2026";
 
     try {
       const res = await fetch("/api/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, website }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
         form.reset();
-        form.classList.add("hidden");
         msg.textContent = data.duplicate
           ? "You're already on the list."
-          : "You're on the list! We'll be in touch.";
-        msg.classList.remove("hidden");
+          : `Got it! We'll reach out to ${email} when Pikos is ready.`;
+        msg.className = "mt-3 text-sm text-green-600";
+        button.disabled = false;
+        button.textContent = "Get early access";
       } else {
         msg.textContent = data.error ?? "Something went wrong. Try again.";
-        msg.classList.remove("hidden");
+        msg.className = "mt-3 text-sm text-red-500";
         button.disabled = false;
         button.textContent = "Get early access";
       }
     } catch {
       msg.textContent = "Network error. Try again.";
-      msg.classList.remove("hidden");
+      msg.className = "mt-3 text-sm text-red-500";
       button.disabled = false;
       button.textContent = "Get early access";
     }

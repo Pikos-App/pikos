@@ -1,35 +1,30 @@
 import type { APIRoute } from "astro";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { resolve } from "path";
+import { getPool, ensureTable } from "../../lib/db";
 
 export const prerender = false;
 
-const EMAILS_FILE = resolve("emails.json");
-
-function loadEmails(): string[] {
-  if (!existsSync(EMAILS_FILE)) return [];
-  try {
-    return JSON.parse(readFileSync(EMAILS_FILE, "utf-8"));
-  } catch {
-    return [];
-  }
-}
-
-function saveEmails(emails: string[]): void {
-  writeFileSync(EMAILS_FILE, JSON.stringify(emails, null, 2));
-}
-
 export const POST: APIRoute = async ({ request }) => {
   let email: string;
+  let honeypot: string | undefined;
 
   const contentType = request.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
     const body = await request.json();
     email = body?.email;
+    honeypot = body?.website;
   } else {
     const form = await request.formData();
     email = form.get("email") as string;
+    honeypot = form.get("website") as string;
+  }
+
+  if (honeypot) {
+    // Silently accept so bots don't know they were rejected
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -39,20 +34,17 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const emails = loadEmails();
+  await ensureTable();
 
-  if (emails.includes(email)) {
-    return new Response(JSON.stringify({ ok: true, duplicate: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  const result = await getPool().query(
+    `INSERT INTO waitlist (email) VALUES ($1) ON CONFLICT (email) DO NOTHING RETURNING id`,
+    [email],
+  );
 
-  emails.push(email);
-  saveEmails(emails);
+  const duplicate = result.rowCount === 0;
 
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 201,
+  return new Response(JSON.stringify({ ok: true, duplicate }), {
+    status: duplicate ? 200 : 201,
     headers: { "Content-Type": "application/json" },
   });
 };
