@@ -1,0 +1,81 @@
+---
+// Drop this anywhere: <EmailSignup />
+// Optional props:
+//   placeholder — input placeholder text
+//   buttonText  — submit button label
+interface Props {
+  placeholder?: string;
+  buttonText?: string;
+}
+const {
+  placeholder = "you@example.com",
+  buttonText = "Get early access",
+} = Astro.props;
+---
+
+<form
+  id="email-signup-form"
+  class="flex flex-col sm:flex-row gap-2 w-full max-w-md"
+  novalidate
+>
+  <input
+    type="email"
+    name="email"
+    required
+    placeholder={placeholder}
+    autocomplete="email"
+    class="flex-1 rounded-lg border border-white/20 bg-white/10 px-4 py-2.5 text-sm text-white placeholder:text-white/50 outline-none focus:ring-2 focus:ring-white/40"
+  />
+  <button
+    type="submit"
+    class="rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 hover:bg-white/90 active:scale-95 transition-all whitespace-nowrap"
+  >
+    {buttonText}
+  </button>
+</form>
+
+<p id="email-signup-msg" class="mt-2 text-sm text-white/70 hidden"></p>
+
+<script>
+  const form = document.getElementById("email-signup-form") as HTMLFormElement;
+  const msg = document.getElementById("email-signup-msg") as HTMLParagraphElement;
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const email = (form.elements.namedItem("email") as HTMLInputElement).value;
+    const button = form.querySelector("button") as HTMLButtonElement;
+
+    button.disabled = true;
+    button.textContent = "Submitting\u2026";
+
+    try {
+      const res = await fetch("/api/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        form.reset();
+        form.classList.add("hidden");
+        msg.textContent = data.duplicate
+          ? "You're already on the list."
+          : "You're on the list! We'll be in touch.";
+        msg.classList.remove("hidden");
+      } else {
+        msg.textContent = data.error ?? "Something went wrong. Try again.";
+        msg.classList.remove("hidden");
+        button.disabled = false;
+        button.textContent = "Get early access";
+      }
+    } catch {
+      msg.textContent = "Network error. Try again.";
+      msg.classList.remove("hidden");
+      button.disabled = false;
+      button.textContent = "Get early access";
+    }
+  });
+</script>
