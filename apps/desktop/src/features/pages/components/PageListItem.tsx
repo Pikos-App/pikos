@@ -129,7 +129,6 @@ interface PageListItemProps {
   isActive: boolean;
   isHighlighted?: boolean;
   isRenaming: boolean;
-  dragDisabled?: boolean;
   folders: Folder[];
   onSelect: () => void;
   onRenameStart: () => void;
@@ -145,7 +144,6 @@ interface PageListItemProps {
 }
 
 export function PageListItem({
-  dragDisabled = false,
   folders,
   isActive,
   isHighlighted = false,
@@ -165,7 +163,7 @@ export function PageListItem({
 }: PageListItemProps) {
   const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
     data: { type: "page" },
-    disabled: isRenaming || dragDisabled,
+    disabled: isRenaming,
     id: page.id,
     transition: null,
   });

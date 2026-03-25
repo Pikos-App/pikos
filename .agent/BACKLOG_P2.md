@@ -467,10 +467,13 @@ To Document:
   - right clicking to show context menu in editor
   - bubble menu should be one tab index with left and right arrow movement
   - highlighting text
+  - additional metadata hover section at bottom right of content (word count, character count, creation/updated dates)
 - Settings
   - disable bubble menu above text on highlight + disable slash commands (markdown editor version)
   - Configurable metadata fields on the page, scheduled date, start date, end date, location, etc
   - sync with reminders
+  - hide weekends on calendar
+  - start week on sunday
 - Questions
   - How does sharing work w/ icloud sync?
   - Can I have the code be open without showing my commit history? Why would I want this? Don't want to fully show how its made... or that I'm comparing it to other products directly?
@@ -478,9 +481,11 @@ To Document:
 - Calendar
   - when on the ticktick calendar, opening a task shows a small modal, can't search content, and when I switch to a different app (like my browser, the modal closes) (although this doesn't seem consistent, sometimes it stays open).
   - Page editor should be first class, not a small modal that is pretty inconvenient for content management.
+  - pressing escape on page block creation (cancel) jumps calendar to top of scroll
 - List View
   - Navigate items with up and down keyboard, enter to open editor
-  - Should i auto focus editor on enter key press? What about the checkbox on the UI - reachable? Too focused on keyboard navigation? Probably.
+  - Should I auto focus editor on enter key press? What about the checkbox on the UI - reachable? Too focused on keyboard navigation? Probably.
+  - Ticktick allows manual sorting when a sort order is applied (ie date), and allows a reset to default date sort order. I wonder if there's benefit in that type of functionality?
 - Reflections
   - Editor functionality (indent, outdent, link popover, link behavior) is tough for Claude - lots of rate limi consumed to progress a little bit at a time.
   - Upgrade to claude max?

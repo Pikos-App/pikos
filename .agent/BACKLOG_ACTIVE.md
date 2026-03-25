@@ -32,12 +32,6 @@ _Without these the app feels half-finished to any organic user. Ship before publ
 
 - [ ] Simple undo option when deleting something (via animated toast that comes in / goes out after ~5 seconds). Should not animate out if the mouse is on the toast.
 
-## 📅 Calendar Feature
-
-_GOO-21b complete: state model, editor/calendar toggle, click-to-create, popover, status checkbox, drag-to-reschedule, resize, drag-to/from all-day._
-
----
-
 ## 🚀 Friends Beta Gate
 
 _Must ship before sharing with anyone outside the team. External blocker: Apple Developer account ($99/yr)._

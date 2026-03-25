@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { useUI } from "@/shared/context/UIContext";
+import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 
 function isWeekend(day: Date) {
   const d = day.getDay();
@@ -88,7 +89,8 @@ export function WeekGrid({
   const weekGridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dayColumnsRef = useRef<HTMLDivElement>(null);
-  const [now, setNow] = useState(() => new Date());
+  useMinuteTick();
+  const now = new Date();
   const today = now;
 
   // ── Drag-to-reschedule ──────────────────────────────────────────────────────
@@ -161,12 +163,6 @@ export function WeekGrid({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = INITIAL_SCROLL_TOP;
     }
-  }, []);
-
-  // Update now every minute (for NowIndicator pass-through)
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(interval);
   }, []);
 
   /**

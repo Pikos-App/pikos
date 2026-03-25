@@ -92,8 +92,10 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
   const pageIds = visiblePages.map((p) => p.id);
   const insertBeforeIdRaw = useInsertionLine(pageIds);
-  // Hide the insertion line when the user is dragging toward the calendar.
-  const insertBeforeId = isDraggingOverCalendar ? undefined : insertBeforeIdRaw;
+  // Hide the insertion line when dragging toward the calendar or when the list
+  // is sorted automatically (reorder won't commit in non-manual modes).
+  const insertBeforeId =
+    isDraggingOverCalendar || sortMode !== "manual" ? undefined : insertBeforeIdRaw;
 
   // ── Keyboard navigation ────────────────────────────────────────────────────
 
@@ -150,7 +152,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   function renderPageItem(page: (typeof visiblePages)[0]) {
     return (
       <PageListItem
-        dragDisabled={sortMode !== "manual"}
         folders={folders}
         isActive={activePage?.id === page.id}
         isHighlighted={highlightedPageId === page.id}
@@ -235,8 +236,10 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {activeViewId === "today" ? "Nothing scheduled for today" : "No pages"}
           </p>
         ) : isTodayView ? (
-          // Today view: Overdue (collapsible) + Today sections
-          <>
+          // Today view: Overdue (collapsible) + Today sections.
+          // SortableContext with a no-op strategy enables drag-to-calendar and
+          // drag-to-folder without showing any list-reorder visual feedback.
+          <SortableContext items={pageIds} strategy={() => null}>
             {overdue.length > 0 && (
               <>
                 <button
@@ -280,7 +283,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
                 {!completedCollapsed && completedPages.map(renderPageItem)}
               </>
             )}
-          </>
+          </SortableContext>
         ) : (
           // Folder / Inbox views: sortable list with DnD + completed accordion
           <>
