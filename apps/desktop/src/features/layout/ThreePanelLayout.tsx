@@ -1,4 +1,4 @@
-import { closestCenter, DndContext, DragOverlay } from "@dnd-kit/core";
+import { closestCenter, type CollisionDetection, DndContext, DragOverlay } from "@dnd-kit/core";
 import { motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
@@ -13,7 +13,11 @@ import { useThreePanelDnD } from "./useThreePanelDnD";
 const PANEL_SPRING = { damping: 35, stiffness: 350, type: "spring" as const };
 
 export function ThreePanelLayout() {
-  const { sidebarCollapsed } = useUI();
+  const { isDraggingOverCalendar, sidebarCollapsed } = useUI();
+
+  // Suppress all dnd-kit collision detection while the cursor is over the
+  // calendar — prevents page items from shifting position during a calendar drop.
+  const collisionDetection: CollisionDetection = isDraggingOverCalendar ? () => [] : closestCenter;
 
   const left = usePanelResize({
     defaultWidth: 180,
@@ -38,13 +42,18 @@ export function ThreePanelLayout() {
 
   return (
     <DndContext
-      collisionDetection={closestCenter}
+      collisionDetection={collisionDetection}
       onDragCancel={handleDragCancel}
       onDragEnd={handleDragEnd}
       onDragStart={handleDragStart}
       sensors={sensors}
     >
-      <div className="flex h-screen bg-background text-foreground">
+      <div
+        className={cn(
+          "flex h-screen bg-background text-foreground",
+          (activePageData ?? activeFolderData) && "select-none"
+        )}
+      >
         <motion.div
           animate={{
             opacity: sidebarCollapsed ? 0 : 1,
@@ -77,7 +86,7 @@ export function ThreePanelLayout() {
       </div>
 
       <DragOverlay dropAnimation={null}>
-        {activePageData ? (
+        {activePageData && !isDraggingOverCalendar ? (
           <div className="cursor-grabbing rounded bg-accent px-2 py-1.5 text-sm font-medium text-accent-foreground opacity-50 shadow-lg ring-1 ring-border">
             {activePageData.title || "Untitled"}
           </div>

@@ -25,7 +25,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
             className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-muted-foreground"
             onClick={() => ui.setSidebarCollapsed(!ui.sidebarCollapsed)}
           >
-            {ui.sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            {ui.sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom">
@@ -51,7 +51,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
               )}
               onClick={() => ui.setRightPanel("editor")}
             >
-              <FileText size={14} />
+              <FileText size={16} />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Editor ⌘⇧C</TooltipContent>
@@ -69,7 +69,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
               )}
               onClick={() => ui.setRightPanel("calendar")}
             >
-              <Calendar size={14} />
+              <Calendar size={16} />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Calendar ⌘⇧C</TooltipContent>

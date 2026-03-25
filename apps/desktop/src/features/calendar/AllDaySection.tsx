@@ -11,6 +11,7 @@ import { AllDayColumn } from "./AllDayColumn";
 import { buildAllDayItems } from "./calendarUtils";
 
 interface AllDaySectionProps {
+  allDayDragHoverIndex: number | null;
   days: Date[];
   draggingPageId: string | null;
   editingPageId: string | null;
@@ -26,6 +27,7 @@ interface AllDaySectionProps {
 }
 
 export function AllDaySection({
+  allDayDragHoverIndex,
   days,
   draggingPageId,
   editingPageId,
@@ -58,6 +60,7 @@ export function AllDaySection({
               draggingPageId={draggingPageId}
               editingPageId={editingPageId}
               folderColorMap={folderColorMap}
+              isAllDayDragTarget={allDayDragHoverIndex === dayIndex}
               isTimedDragTarget={timedDragTarget?.dayIndex === dayIndex}
               items={items}
               key={day.toISOString()}

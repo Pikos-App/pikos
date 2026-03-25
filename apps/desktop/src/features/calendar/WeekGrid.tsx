@@ -3,6 +3,7 @@ import { format, isSameDay } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { useUI } from "@/shared/context/UIContext";
 
 function isWeekend(day: Date) {
   const d = day.getDay();
@@ -59,6 +60,16 @@ interface ResizeRefState {
   dayIndex: number;
 }
 
+/** Prevent text selection and lock cursor during pointer-driven drag/resize gestures. */
+function disableSelect(cursorClass: "dragging-grab" | "dragging-resize") {
+  document.body.style.userSelect = "none";
+  document.documentElement.classList.add(cursorClass);
+}
+function enableSelect() {
+  document.body.style.userSelect = "";
+  document.documentElement.classList.remove("dragging-grab", "dragging-resize");
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function WeekGrid({
@@ -73,6 +84,8 @@ export function WeekGrid({
   onReschedule,
   pages,
 }: WeekGridProps) {
+  const { registerExternalDragUpdater } = useUI();
+  const weekGridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dayColumnsRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(() => new Date());
@@ -113,12 +126,27 @@ export function WeekGrid({
   } | null>(null);
   // Separate state so the AllDaySection re-renders to dim the dragged chip.
   const [allDayDraggingPageId, setAllDayDraggingPageId] = useState<string | null>(null);
+  // Column index highlighted while an all-day chip is dragged horizontally in the all-day zone.
+  const allDayHoverColumnRef = useRef<number | null>(null);
+  const [allDayDragHoverIndex, setAllDayDragHoverIndex] = useState<number | null>(null);
 
   // ── Timed block dragged over all-day zone ───────────────────────────────────
   // Set while a timed PageBlock is being dragged above the timed grid.
   const [timedDragAllDayTarget, setTimedDragAllDayTarget] = useState<{
     dayIndex: number;
     folderColor: string | undefined;
+  } | null>(null);
+
+  // ── External drag preview (page list → calendar via dnd-kit handoff) ─────────
+  // Updated by useThreePanelDnD via callExternalDragUpdater on every mousemove.
+  const [externalPreview, setExternalPreview] = useState<{
+    dayIndex: number;
+    top: number;
+    isAllDay: boolean;
+    folderColor: string | undefined;
+    durationMs?: number | undefined;
+    title?: string | undefined;
+    isDone?: boolean | undefined;
   } | null>(null);
 
   const allDay = useHeightResize({
@@ -171,6 +199,7 @@ export function WeekGrid({
     const cursorYInGrid = clientY - scrollRect.top + scrollEl.scrollTop;
     const grabOffsetY = cursorYInGrid - block.top;
 
+    disableSelect("dragging-grab");
     dragRef.current = { block, folderColor, grabOffsetY, pageId };
     const initialGhost = { dayIndex, top: snapY(Math.max(0, block.top)) };
     dragGhostPositionRef.current = initialGhost;
@@ -231,6 +260,7 @@ export function WeekGrid({
     function onUp() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      enableSelect();
       eatNextClick();
 
       const state = dragRef.current;
@@ -275,6 +305,7 @@ export function WeekGrid({
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
 
+    disableSelect("dragging-resize");
     resizeRef.current = { block, dayIndex, pageId };
     const initialBottom = block.top + block.height;
     resizeGhostBottomRef.current = initialBottom;
@@ -288,7 +319,8 @@ export function WeekGrid({
       const scrollRect2 = scrollEl2.getBoundingClientRect();
       const cursorYInGrid = ev.clientY - scrollRect2.top + scrollEl2.scrollTop;
       const minBottom = state.block.top + MIN_RESIZE_HEIGHT;
-      const ghostBottom = snapY(Math.max(minBottom, Math.min(GRID_HEIGHT, cursorYInGrid)));
+      // No snapping during live drag — smooth resize. snapY is applied on commit via yToDate.
+      const ghostBottom = Math.max(minBottom, Math.min(GRID_HEIGHT, cursorYInGrid));
 
       resizeGhostBottomRef.current = ghostBottom;
       setResizeRenderState({ bottom: ghostBottom, pageId: state.pageId });
@@ -297,6 +329,7 @@ export function WeekGrid({
     function onUp() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      enableSelect();
       eatNextClick();
 
       const state = resizeRef.current;
@@ -327,8 +360,10 @@ export function WeekGrid({
     folderColor: string | undefined;
     pageId: string;
   }) {
+    disableSelect("dragging-grab");
     allDayDragRef.current = { folderColor, pageId };
     allDayGhostPositionRef.current = null;
+    allDayHoverColumnRef.current = null;
     setAllDayDraggingPageId(pageId);
 
     function onMove(ev: MouseEvent) {
@@ -337,21 +372,32 @@ export function WeekGrid({
       if (!scrollEl || !columnsEl) return;
 
       const scrollRect = scrollEl.getBoundingClientRect();
-      // Hide ghost while cursor is still in the all-day/header zone.
+      const columnsRect = columnsEl.getBoundingClientRect();
+      const columnWidth = columnsRect.width / 7;
+      const hoverDayIndex = Math.max(
+        0,
+        Math.min(6, Math.floor((ev.clientX - columnsRect.left) / columnWidth))
+      );
+
+      // Cursor is in the all-day/header zone — track horizontal column, hide timed ghost.
       if (ev.clientY < scrollRect.top) {
         if (allDayGhostPositionRef.current !== null) {
           allDayGhostPositionRef.current = null;
           setAllDayDragRenderState(null);
         }
+        allDayHoverColumnRef.current = hoverDayIndex;
+        setAllDayDragHoverIndex(hoverDayIndex);
         return;
       }
 
-      const columnsRect = columnsEl.getBoundingClientRect();
+      // Cursor is in the timed grid — clear all-day hover, show timed ghost.
+      allDayHoverColumnRef.current = null;
+      setAllDayDragHoverIndex(null);
+
       const cursorYInGrid = ev.clientY - scrollRect.top + scrollEl.scrollTop;
       const ghostTop = snapY(
         Math.max(0, Math.min(GRID_HEIGHT - COMPACT_BLOCK_HEIGHT, cursorYInGrid))
       );
-      const columnWidth = columnsRect.width / 7;
       const ghostDayIndex = Math.max(
         0,
         Math.min(6, Math.floor((ev.clientX - columnsRect.left) / columnWidth))
@@ -364,24 +410,34 @@ export function WeekGrid({
     function onUp(ev: MouseEvent) {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      enableSelect();
       eatNextClick();
 
       const state = allDayDragRef.current;
       const ghostPos = allDayGhostPositionRef.current;
+      const hoverColumn = allDayHoverColumnRef.current;
       allDayDragRef.current = null;
       allDayGhostPositionRef.current = null;
+      allDayHoverColumnRef.current = null;
       setAllDayDragRenderState(null);
       setAllDayDraggingPageId(null);
+      setAllDayDragHoverIndex(null);
 
-      // Ghost is null when cursor never entered the timed grid → no-op.
-      if (!state || !ghostPos) return;
+      if (!state) return;
 
       const scrollEl = scrollRef.current;
-      if (!scrollEl || ev.clientY < scrollEl.getBoundingClientRect().top) return;
+      // Dropped in the all-day zone → reschedule as all-day on the hovered column.
+      if (scrollEl && ev.clientY < scrollEl.getBoundingClientRect().top) {
+        if (hoverColumn === null) return;
+        const targetDay = days[hoverColumn];
+        if (targetDay) onReschedule(state.pageId, format(targetDay, "yyyy-MM-dd"), undefined);
+        return;
+      }
 
+      // Dropped in the timed grid.
+      if (!ghostPos) return;
       const targetDay = days[ghostPos.dayIndex];
       if (!targetDay) return;
-
       const newStart = yToDate(ghostPos.top, targetDay);
       onReschedule(state.pageId, format(newStart, "yyyy-MM-dd'T'HH:mm:ss"), undefined);
     }
@@ -390,8 +446,96 @@ export function WeekGrid({
     window.addEventListener("mouseup", onUp);
   }
 
+  // ── External drag updater: called by useThreePanelDnD on every mousemove ───
+  // Computes the drop slot from cursor coords, updates local preview state for
+  // ghost rendering, and returns { start } (ISO string) for scheduleOnce.
+  // Passing out-of-bounds coords (e.g. -1, -1) clears the preview.
+
+  function updateExternalDrag(
+    clientX: number,
+    clientY: number,
+    folderColor: string | undefined,
+    durationMs?: number,
+    title?: string,
+    isDone?: boolean
+  ): { start: string } | null {
+    const gridEl = weekGridRef.current;
+    const scrollEl = scrollRef.current;
+    const columnsEl = dayColumnsRef.current;
+    if (!gridEl || !scrollEl || !columnsEl) {
+      setExternalPreview(null);
+      return null;
+    }
+
+    const gridRect = gridEl.getBoundingClientRect();
+    const columnsRect = columnsEl.getBoundingClientRect();
+    const scrollRect = scrollEl.getBoundingClientRect();
+
+    // Must be within the calendar panel horizontally.
+    if (clientX < columnsRect.left || clientX > columnsRect.right) {
+      setExternalPreview(null);
+      return null;
+    }
+    // Must be within the calendar panel vertically (all-day row counts too).
+    if (clientY < gridRect.top || clientY > scrollRect.bottom) {
+      setExternalPreview(null);
+      return null;
+    }
+
+    const columnWidth = columnsRect.width / 7;
+    const dayIndex = Math.max(
+      0,
+      Math.min(6, Math.floor((clientX - columnsRect.left) / columnWidth))
+    );
+    const targetDay = days[dayIndex];
+    if (!targetDay) {
+      setExternalPreview(null);
+      return null;
+    }
+
+    // Cursor above the timed scroll area → all-day zone.
+    if (clientY < scrollRect.top) {
+      setExternalPreview({ dayIndex, folderColor, isAllDay: true, isDone, title, top: 0 });
+      return { start: format(targetDay, "yyyy-MM-dd") };
+    }
+
+    // Cursor in timed grid.
+    const cursorYInGrid = clientY - scrollRect.top + scrollEl.scrollTop;
+    const ghostHeight =
+      durationMs != null
+        ? Math.max((durationMs / 3_600_000) * HOUR_HEIGHT, COMPACT_BLOCK_HEIGHT)
+        : COMPACT_BLOCK_HEIGHT;
+    const top = snapY(Math.max(0, Math.min(GRID_HEIGHT - ghostHeight, cursorYInGrid)));
+    const newStart = yToDate(top, targetDay);
+    setExternalPreview({
+      dayIndex,
+      folderColor,
+      isAllDay: false,
+      isDone,
+      title,
+      top,
+      ...(durationMs != null && { durationMs }),
+    });
+    return { start: format(newStart, "yyyy-MM-dd'T'HH:mm:ss") };
+  }
+
+  // Keep registerExternalDragUpdater pointed at the latest updateExternalDrag
+  // so useThreePanelDnD always calls the current closure (fresh days, refs).
+  const latestUpdaterRef = useRef(updateExternalDrag);
+  useEffect(() => {
+    latestUpdaterRef.current = updateExternalDrag;
+  });
+  useEffect(() => {
+    registerExternalDragUpdater((clientX, clientY, folderColor, durationMs, title, isDone) =>
+      latestUpdaterRef.current(clientX, clientY, folderColor, durationMs, title, isDone)
+    );
+    return () => {
+      registerExternalDragUpdater(null);
+    };
+  }, [registerExternalDragUpdater]);
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col" ref={weekGridRef}>
       {/* Day header — "Mon 16", "Tue 17", etc. Today's date gets a pill highlight */}
       <div className="flex shrink-0 border-t border-b border-border/40">
         {/* Gutter spacer */}
@@ -429,6 +573,7 @@ export function WeekGrid({
 
       {/* All-day row — includes date numbers at top of each column */}
       <AllDaySection
+        allDayDragHoverIndex={allDayDragHoverIndex}
         days={days}
         draggingPageId={allDayDraggingPageId}
         editingPageId={editingPageId}
@@ -440,7 +585,11 @@ export function WeekGrid({
         onPageDoubleClick={onPageDoubleClick}
         onResizeStart={allDay.onResizeStart}
         pages={pages}
-        timedDragTarget={timedDragAllDayTarget}
+        timedDragTarget={
+          externalPreview?.isAllDay
+            ? { dayIndex: externalPreview.dayIndex, folderColor: externalPreview.folderColor }
+            : timedDragAllDayTarget
+        }
       />
 
       {/* Scrollable time grid */}
@@ -450,13 +599,16 @@ export function WeekGrid({
           <div className="flex flex-1" ref={dayColumnsRef}>
             {days.map((day, i) => {
               // Only pass the drag ghost to the column it targets.
-              // All-day chip drag takes precedence; only one can be active at a time.
+              // Priority: all-day chip drag > internal block drag > external list drag.
               const colDragGhost: DragGhost | null =
                 allDayDragRenderState?.dayIndex === i
                   ? {
                       folderColor: allDayDragRenderState.folderColor,
                       height: COMPACT_BLOCK_HEIGHT,
                       isCompact: true,
+                      isDone:
+                        pages.find((p) => p.id === allDayDragRenderState.pageId)?.status === "done",
+                      title: pages.find((p) => p.id === allDayDragRenderState.pageId)?.title,
                       top: allDayDragRenderState.top,
                     }
                   : dragRenderState?.dayIndex === i
@@ -464,9 +616,27 @@ export function WeekGrid({
                         folderColor: dragRenderState.folderColor,
                         height: dragRenderState.height,
                         isCompact: dragRenderState.isCompact,
+                        isDone:
+                          pages.find((p) => p.id === dragRenderState.pageId)?.status === "done",
+                        title: pages.find((p) => p.id === dragRenderState.pageId)?.title,
                         top: dragRenderState.top,
                       }
-                    : null;
+                    : externalPreview && !externalPreview.isAllDay && externalPreview.dayIndex === i
+                      ? {
+                          folderColor: externalPreview.folderColor,
+                          height:
+                            externalPreview.durationMs != null
+                              ? Math.max(
+                                  (externalPreview.durationMs / 3_600_000) * HOUR_HEIGHT,
+                                  COMPACT_BLOCK_HEIGHT
+                                )
+                              : COMPACT_BLOCK_HEIGHT,
+                          isCompact: externalPreview.durationMs == null,
+                          isDone: externalPreview.isDone,
+                          title: externalPreview.title,
+                          top: externalPreview.top,
+                        }
+                      : null;
 
               return (
                 <DayColumn

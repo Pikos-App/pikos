@@ -262,14 +262,16 @@ export function PageListItem({
               <div className="flex shrink-0 items-center gap-1.5">
                 {page.scheduledStart &&
                   (() => {
-                    const { isPast, label, tooltip } = showRelative
-                      ? formatRelativeTime(page.scheduledStart)
-                      : formatDate(page.scheduledStart);
+                    const isCompleted = page.status === "done";
+                    const { isPast, label, tooltip } =
+                      !isCompleted && showRelative
+                        ? formatRelativeTime(page.scheduledStart)
+                        : formatDate(page.scheduledStart);
                     return (
                       <span
                         className={cn(
                           "shrink-0 cursor-pointer text-sm leading-snug hover:opacity-80",
-                          isPast ? "text-red-500" : "text-muted-foreground"
+                          isPast && !isCompleted ? "text-red-500" : "text-muted-foreground"
                         )}
                         onClick={(e) => {
                           e.stopPropagation();

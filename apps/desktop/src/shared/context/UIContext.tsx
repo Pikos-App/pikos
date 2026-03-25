@@ -4,7 +4,7 @@
 // No data fetching — subscribe to WorkspaceContext for pages/folders.
 
 import type { PageSummary } from "@pikos/core";
-import { createContext, type ReactNode, useContext, useState } from "react";
+import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
 import type { SortMode } from "@/features/pages/utils/pageFilters";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
@@ -49,6 +49,35 @@ export interface UIContextValue {
    * atomically — bypasses setRightPanel's restore logic so order never matters.
    */
   openPage: (page: PageSummary | string) => void;
+  /**
+   * WeekGrid registers a function that, given cursor coordinates, computes the
+   * calendar drop slot AND updates WeekGrid's own ghost preview state.
+   * Returns { start } (ISO string for scheduleOnce) when cursor is over the calendar,
+   * null otherwise. Call with any out-of-bounds coords to clear the preview.
+   */
+  /** True while a page-list item is being dragged over the calendar panel. */
+  isDraggingOverCalendar: boolean;
+  setIsDraggingOverCalendar: (v: boolean) => void;
+  registerExternalDragUpdater: (
+    fn:
+      | ((
+          clientX: number,
+          clientY: number,
+          folderColor: string | undefined,
+          durationMs?: number,
+          title?: string,
+          isDone?: boolean
+        ) => { start: string } | null)
+      | null
+  ) => void;
+  callExternalDragUpdater: (
+    clientX: number,
+    clientY: number,
+    folderColor: string | undefined,
+    durationMs?: number,
+    title?: string,
+    isDone?: boolean
+  ) => { start: string } | null;
 }
 
 const UIContext = createContext<UIContextValue | null>(null);
@@ -78,6 +107,49 @@ export function UIProvider({ children }: { children: ReactNode }) {
     "pikos:sortModes",
     {}
   );
+
+  const [isDraggingOverCalendar, setIsDraggingOverCalendar] = useState(false);
+
+  const externalDragUpdaterRef = useRef<
+    | ((
+        clientX: number,
+        clientY: number,
+        folderColor: string | undefined,
+        durationMs?: number,
+        title?: string,
+        isDone?: boolean
+      ) => { start: string } | null)
+    | null
+  >(null);
+
+  function registerExternalDragUpdater(
+    fn:
+      | ((
+          clientX: number,
+          clientY: number,
+          folderColor: string | undefined,
+          durationMs?: number,
+          title?: string,
+          isDone?: boolean
+        ) => { start: string } | null)
+      | null
+  ) {
+    externalDragUpdaterRef.current = fn;
+  }
+
+  function callExternalDragUpdater(
+    clientX: number,
+    clientY: number,
+    folderColor: string | undefined,
+    durationMs?: number,
+    title?: string,
+    isDone?: boolean
+  ): { start: string } | null {
+    return (
+      externalDragUpdaterRef.current?.(clientX, clientY, folderColor, durationMs, title, isDone) ??
+      null
+    );
+  }
 
   const referenceDate = new Date(referenceDateIso);
 
@@ -120,15 +192,19 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const value: UIContextValue = {
     activePageId,
     activeViewId,
+    callExternalDragUpdater,
     getSortMode,
+    isDraggingOverCalendar,
     lastEditorPageId,
     openDialog,
     openPage,
     openSortMenu,
     referenceDate,
+    registerExternalDragUpdater,
     rightPanel,
     setActivePage,
     setActiveViewId,
+    setIsDraggingOverCalendar,
     setOpenDialog,
     setOpenSortMenu,
     setReferenceDate,

@@ -7,20 +7,85 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { Folder, PageSummary } from "@pikos/core";
-import { useState } from "react";
+import { format } from "date-fns";
+import { useEffect, useRef, useState } from "react";
 
 import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
+/** Returns the duration in ms for a timed page schedule, or undefined for all-day/unscheduled. */
+function getPageDurationMs(page: PageSummary): number | undefined {
+  if (!page.scheduledStart?.includes("T") || !page.scheduledEnd) return undefined;
+  const ms = new Date(page.scheduledEnd).getTime() - new Date(page.scheduledStart).getTime();
+  return ms > 0 ? ms : undefined;
+}
+
 export function useThreePanelDnD() {
-  const { folders, pages, reorderFolders, reorderPages, updatePage } = useWorkspace();
-  const { activeViewId, getSortMode } = useUI();
+  const { folders, pages, reorderFolders, reorderPages, scheduleOnce, updatePage } = useWorkspace();
+  const { activeViewId, callExternalDragUpdater, getSortMode, setIsDraggingOverCalendar } = useUI();
 
   const [activePageData, setActivePageData] = useState<PageSummary | null>(null);
   const [activeFolderData, setActiveFolderData] = useState<Folder | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  // Refs kept current each render so the mousemove closure never goes stale.
+  const activePageDataRef = useRef<PageSummary | null>(null);
+  const foldersRef = useRef(folders);
+  const callExternalDragUpdaterRef = useRef(callExternalDragUpdater);
+  useEffect(() => {
+    foldersRef.current = folders;
+  });
+  useEffect(() => {
+    callExternalDragUpdaterRef.current = callExternalDragUpdater;
+  });
+
+  // ISO start string captured from the last mousemove that was over the calendar.
+  // Read in handleDragEnd to decide whether to schedule or reorder.
+  const calendarStartRef = useRef<string | null>(null);
+  // Tracks whether cursor is currently over the calendar to avoid redundant state updates.
+  const overCalendarRef = useRef(false);
+
+  // While a page is being dragged, track cursor position and update the
+  // WeekGrid ghost preview via callExternalDragUpdater.
+  useEffect(() => {
+    if (!activePageData) {
+      calendarStartRef.current = null;
+      callExternalDragUpdaterRef.current(-1, -1, undefined); // clear ghost
+      return;
+    }
+
+    activePageDataRef.current = activePageData;
+
+    function onMove(ev: MouseEvent) {
+      const page = activePageDataRef.current;
+      if (!page) return;
+      const folder = foldersRef.current.find((f) => f.id === page.folderId);
+      const durationMs = getPageDurationMs(page);
+      const result = callExternalDragUpdaterRef.current(
+        ev.clientX,
+        ev.clientY,
+        folder?.color ?? undefined,
+        durationMs,
+        page.title,
+        page.status === "done"
+      );
+      calendarStartRef.current = result?.start ?? null;
+      const isOver = result !== null;
+      if (isOver !== overCalendarRef.current) {
+        overCalendarRef.current = isOver;
+        setIsDraggingOverCalendar(isOver);
+      }
+    }
+
+    window.addEventListener("mousemove", onMove);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      overCalendarRef.current = false;
+      setIsDraggingOverCalendar(false);
+    };
+  }, [activePageData, setIsDraggingOverCalendar]);
 
   function handleDragStart({ active }: DragStartEvent) {
     const type = active.data.current?.["type"] as string | undefined;
@@ -32,8 +97,31 @@ export function useThreePanelDnD() {
   }
 
   function handleDragEnd({ active, over }: DragEndEvent) {
+    const pageData = activePageData;
+    const calendarStart = calendarStartRef.current;
+
     setActivePageData(null);
     setActiveFolderData(null);
+    calendarStartRef.current = null;
+    // Clear the WeekGrid ghost immediately (don't wait for the effect cleanup).
+    callExternalDragUpdaterRef.current(-1, -1, undefined);
+
+    // Calendar drop takes priority over list reorder.
+    if (calendarStart && pageData) {
+      let calendarEnd: string | undefined;
+      if (calendarStart.includes("T")) {
+        const durationMs = getPageDurationMs(pageData);
+        if (durationMs != null) {
+          calendarEnd = format(
+            new Date(new Date(calendarStart).getTime() + durationMs),
+            "yyyy-MM-dd'T'HH:mm:ss"
+          );
+        }
+      }
+      void scheduleOnce(pageData.id, calendarStart, calendarEnd);
+      return;
+    }
+
     if (!over || active.id === over.id) return;
 
     const at = active.data.current?.["type"] as string | undefined;
@@ -68,6 +156,8 @@ export function useThreePanelDnD() {
   function handleDragCancel() {
     setActivePageData(null);
     setActiveFolderData(null);
+    calendarStartRef.current = null;
+    callExternalDragUpdaterRef.current(-1, -1, undefined);
   }
 
   return {

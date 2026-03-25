@@ -1,5 +1,6 @@
 import type { PageSummary } from "@pikos/core";
 import { isSameDay } from "date-fns";
+import { Check } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -10,6 +11,7 @@ import {
   chipFolderStyle,
   COMPACT_BLOCK_HEIGHT,
   DRAG_THRESHOLD,
+  formatTimeRange,
   GRID_END_HOUR,
   GRID_HEIGHT,
   GRID_START_HOUR,
@@ -39,6 +41,8 @@ export interface DragGhost {
   height: number;
   isCompact: boolean;
   folderColor: string | undefined;
+  title?: string | undefined;
+  isDone?: boolean | undefined;
 }
 
 export interface ResizeGhost {
@@ -222,7 +226,12 @@ export function DayColumn({
         {dragGhost && (
           <div
             aria-hidden
-            className="pointer-events-none absolute rounded-sm border-l-2 opacity-80"
+            className={cn(
+              "pointer-events-none absolute overflow-hidden rounded-sm border-l-2 opacity-80",
+              dragGhost.isCompact
+                ? "flex items-center gap-1 px-1.5"
+                : "flex flex-col items-start px-1.5 py-0.5"
+            )}
             style={{
               height: dragGhost.isCompact ? COMPACT_BLOCK_HEIGHT : dragGhost.height,
               left: 2,
@@ -232,7 +241,49 @@ export function DayColumn({
                 ? chipFolderStyle(dragGhost.folderColor)
                 : { backgroundColor: "rgba(59,130,246,0.25)", borderColor: "rgb(59,130,246)" }),
             }}
-          />
+          >
+            {dragGhost.isCompact ? (
+              <>
+                <span
+                  className={cn(
+                    "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                    dragGhost.isDone ? "border-foreground/40 bg-foreground/10" : "border-current/30"
+                  )}
+                >
+                  {dragGhost.isDone && <Check size={8} strokeWidth={2.5} />}
+                </span>
+                <span className="min-w-0 truncate text-sm leading-none font-medium text-foreground">
+                  {dragGhost.title || "Untitled"}
+                </span>
+              </>
+            ) : (
+              <>
+                <div className="flex w-full min-w-0 items-center gap-1">
+                  <span
+                    className={cn(
+                      "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                      dragGhost.isDone
+                        ? "border-foreground/40 bg-foreground/10"
+                        : "border-current/30"
+                    )}
+                  >
+                    {dragGhost.isDone && <Check size={8} strokeWidth={2.5} />}
+                  </span>
+                  <p className="min-w-0 truncate text-sm leading-tight font-medium text-foreground">
+                    {dragGhost.title || "Untitled"}
+                  </p>
+                </div>
+                {dragGhost.height >= 36 && (
+                  <p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground">
+                    {formatTimeRange(
+                      yToDate(dragGhost.top, day),
+                      yToDate(dragGhost.top + dragGhost.height, day)
+                    )}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
         )}
 
         {/* Page blocks */}

@@ -19,6 +19,8 @@ import {
   chipFolderStyle,
   DRAG_THRESHOLD,
   formatTimeRange,
+  HOUR_HEIGHT,
+  snapY,
 } from "./calendarUtils";
 import type { CalendarBlock } from "./calendarUtils";
 import { PageBlockPopover } from "./PageBlockPopover";
@@ -65,7 +67,7 @@ export function PageBlock({
   resizeHeight,
 }: PageBlockProps) {
   const { column, endDate, height, isCompact, page, startDate, top, totalColumns } = block;
-  const { deletePage, updatePage } = useWorkspace();
+  const { clearSchedule, deletePage, updatePage } = useWorkspace();
 
   const widthPct = 100 / totalColumns;
   const leftPct = column * widthPct;
@@ -73,7 +75,12 @@ export function PageBlock({
   const displayHeight = resizeHeight !== undefined ? Math.max(resizeHeight, 0) : height;
   // While being resized, a compact chip grows into a tall block.
   const isRenderingCompact = isCompact && resizeHeight === undefined;
-  const timeLabel = formatTimeRange(startDate, endDate);
+  // During resize, show the live end time (snapped to 15 min to match commit behaviour).
+  const liveEndDate =
+    resizeHeight !== undefined
+      ? new Date(startDate.getTime() + (snapY(Math.max(resizeHeight, 0)) / HOUR_HEIGHT) * 3_600_000)
+      : null;
+  const timeLabel = formatTimeRange(startDate, liveEndDate ?? endDate);
   const showTimeLabel = !isRenderingCompact && displayHeight >= 36;
   const isDone = page.status === "done";
 
@@ -301,7 +308,7 @@ export function PageBlock({
               <button
                 aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
                 className={cn(
-                  "absolute",
+                  "absolute select-none",
                   CHIP_BASE_CLASSES,
                   "flex items-center gap-1",
                   !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
@@ -316,15 +323,13 @@ export function PageBlock({
                 style={sharedStyle}
               >
                 {checkbox}
-                <span className={cn("min-w-0 truncate", isDone && "line-through")}>
-                  {page.title || "Untitled"}
-                </span>
+                <span className="min-w-0 truncate">{page.title || "Untitled"}</span>
               </button>
             ) : (
               <button
                 aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
                 className={cn(
-                  "absolute flex flex-col items-start overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
+                  "absolute flex flex-col items-start overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
                   !folderColor && "border-blue-500 bg-blue-500/15",
                   isDone ? "opacity-50" : "transition-opacity hover:opacity-75",
                   isDragging && "opacity-40",
@@ -338,12 +343,7 @@ export function PageBlock({
               >
                 <div className="flex w-full min-w-0 items-center gap-1">
                   {checkbox}
-                  <p
-                    className={cn(
-                      "min-w-0 truncate text-sm leading-tight font-medium text-foreground",
-                      isDone && "line-through"
-                    )}
-                  >
+                  <p className="min-w-0 truncate text-sm leading-tight font-medium text-foreground">
                     {page.title || "Untitled"}
                   </p>
                 </div>
@@ -367,6 +367,7 @@ export function PageBlock({
         </PopoverContent>
       </Popover>
       <ContextMenuContent>
+        <ContextMenuItem onSelect={() => void clearSchedule(page.id)}>Remove date</ContextMenuItem>
         <ContextMenuItem
           className="text-destructive focus:text-destructive"
           onSelect={() => void deletePage(page.id)}

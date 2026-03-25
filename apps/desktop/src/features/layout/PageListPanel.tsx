@@ -60,6 +60,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const {
     activeViewId,
     getSortMode,
+    isDraggingOverCalendar,
     openSortMenu,
     setOpenDialog,
     setOpenSortMenu,
@@ -90,7 +91,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   }
 
   const pageIds = visiblePages.map((p) => p.id);
-  const insertBeforeId = useInsertionLine(pageIds);
+  const insertBeforeIdRaw = useInsertionLine(pageIds);
+  // Hide the insertion line when the user is dragging toward the calendar.
+  const insertBeforeId = isDraggingOverCalendar ? undefined : insertBeforeIdRaw;
 
   // ── Keyboard navigation ────────────────────────────────────────────────────
 

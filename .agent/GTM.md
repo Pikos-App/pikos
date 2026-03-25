@@ -26,15 +26,17 @@ The product Pikos replaces: Obsidian (notes) + TickTick (tasks + calendar). Neit
 
 ### Who Pikos is for
 
-Pikos is for **anyone** who wants their notes, tasks, and calendar in one place without their data living on someone else's server. The app should be as approachable as TickTick and as deep as Obsidian — but most users will never need the deep end.
+Pikos is for anyone who wants their notes, tasks, and calendar in one place without their data living on someone else's server. The app should be as approachable as TickTick and as deep as Obsidian — but most users will never need the deep end.
 
-**Primary target: non-technical knowledge workers.** These are the people who pay, stay, and tell friends. They don't evaluate features — they evaluate the first 5 minutes. Technical users are useful for early feedback but are a bad primary market: vocal, high-churn, and increasingly "I'll just build my own."
+**Primary target: non-technical knowledge workers.** These are the people who pay, stay, and tell friends. They don't evaluate features — they evaluate the first 5 minutes. Technical users are useful for early feedback but are not the primary market.
 
 **High-value non-technical segments:**
-- **Freelancers and consultants** — juggling projects, clients, deadlines, call notes. Currently cobbling Notion + Todoist + Google Calendar.
-- **Graduate students** — research notes, deadlines, reading lists. Obsidian is too complex, Notion is too slow.
-- **Writers and journalists** — notes tied to deadlines, research linked to tasks. No good native tool exists.
+- **Freelancers and consultants** — juggling projects, clients, deadlines, call notes. Currently cobbling Notion + Todoist + Google Calendar. Feel the cost of context-switching directly in lost time. Highest willingness to pay.
 - **Small business owners** — need task + calendar, don't want per-seat SaaS forever.
+- **Writers and journalists** — notes tied to deadlines, research linked to tasks. No good native tool exists.
+- **Graduate students** — research notes, deadlines, reading lists. Obsidian is too complex, Notion is too slow. (Useful for early adoption and word of mouth; lower purchase intent than freelancers.)
+
+Early beta users will reveal which segment resonates most. Let them identify themselves, then lean into that framing.
 
 **Two real audiences, one brand — two front doors:**
 
@@ -52,13 +54,44 @@ The product pitch and UX defaults serve the general user. Power-user depth is pr
 - Power features (advanced filters, wikilinks, import/export) live behind discoverable surfaces, not in the critical path.
 - Performance and reliability are table stakes. The app must feel instant at all times.
 
-**Tone:** Confident but not loud. "We built the thing we couldn't find" — not "the last app you'll ever need." Non-technical users trust calm, honest framing over marketing superlatives. Technical users see through hype instantly. Be the same voice in both rooms.
+**Tone:** Confident but not loud. The product is the story — not who built it or why. Non-technical users trust calm, honest framing over marketing superlatives. Technical users see through hype instantly. Be the same voice in both rooms.
+
+**On the solo developer angle:** Pikos stands on its own as a product. The origin story is not the pitch. A brief, honest mention on the about page ("Pikos is built and maintained by one person") reinforces the lean, non-bloated positioning without leading with it. This also quietly answers "why won't it get bloated?" without having to say it directly.
 
 ---
 
 ### Competitive moat
 
-The combination is the moat: fast + private + tasks + calendar + notes in one app. Any single property is replicable. The combination at this quality level isn't.
+The combination is the moat: fast + private + tasks + calendar + notes in one app. Any single property is replicable. The combination at this quality level isn't. Large incumbents won't execute on a lean tool inside their existing codebase and company structure — their business models depend on complexity.
+
+---
+
+## Open Source Decision
+
+**Verdict: Source-available, public repository, restrictive license.**
+
+"Nothing leaves your device" is a claim, not a fact, until someone can verify it. A public repository makes that claim auditable — even non-technical users gain confidence knowing that *someone* can check. This directly reinforces the core privacy positioning.
+
+**License:** Source-available (e.g., BUSL or a custom restrictive license). Code is publicly readable. Commercial redistribution is prohibited. This is not "open source" and shouldn't be presented as such — frame it honestly as "our code is public so you can verify our privacy claims."
+
+**When to open it:** Phase 3, alongside the `/open` page launch. Not before. A half-finished repository undermines the credibility it's meant to build. Open it when it's something worth showing — ideally as a single deliberate moment with a clear narrative.
+
+**What to make public:**
+- `apps/desktop` — the whole point
+- `apps/marketing` — static Astro site, no risk
+- `packages/core` — needed to build desktop; the local-first data model being auditable reinforces the privacy claim
+- Tooling, configs, Turborepo setup — unremarkable
+
+**What to keep private:**
+- `apps/mobile` when it exists — mobile is the primary monetization lever. It converts free desktop users into paying customers. The open source credibility argument doesn't apply here the same way it does for desktop.
+
+**Repository structure:**
+Two repos. Develop in the private monorepo as normal. Maintain a separate public repo that mirrors everything except mobile, synced via CI on each release tag. The public repo starts as a fresh repo with a single initial commit — no history, clean slate. The private monorepo retains full history for your own reference.
+
+**Distribution model:**
+- Free binary at `pikos.app/download` — builds trust and word of mouth
+- App Store as primary revenue and discovery path for mainstream users
+- Technical users who clone and build locally were never going to pay via App Store anyway — no revenue is lost, goodwill is gained
 
 ---
 
@@ -129,8 +162,16 @@ Marketing site development starts now as a parallel workstream. The Phase 2.5 la
 - One page: hero headline, 2–3 sentences, app screenshot/mockup, email capture ("Get notified when Pikos launches")
 - No promises about dates or features
 - Stack: Astro in `apps/marketing/` (same monorepo), Tailwind CSS, deployed to Cloudflare Pages
-- Start collecting emails the day the page goes live — even 50 signups before launch is an audience
+- Start collecting emails the day the page goes live — even 50 signups before launch is a real audience
 - This page evolves into the full marketing site (Phase 3) rather than being thrown away
+
+**Email approach:** Two emails total, ever.
+1. Signup confirmation — immediate. Reaffirms the promise: one email when it's ready, nothing else.
+2. Launch — the email you promised. Direct download link, 3–4 sentences. Treat them like someone who already decided, not someone you're still convincing.
+
+No drip. No nurture. "No newsletters, no noise" is part of the brand — don't undermine it.
+
+Post-launch, email capture comes down. Updates and onboarding live in the app and on the marketing site's release notes page. Never in an inbox.
 
 **Milestone:** Page live at pikos.app, email capture working, at least one social post linking to it.
 
@@ -154,13 +195,13 @@ Marketing site live. Download available to anyone. No sign-up required.
 - [ ] GOO-53 Marketing site live — two pages: `/` (general) + `/open` (technical)
 - [ ] GOO-54 Privacy policy at `/privacy`
 - [ ] App stable after 2+ weeks friends beta feedback incorporated
-- [ ] Video demo recorded (1× "why I built Pikos" style, honest and unpolished)
-- [ ] Open source decision made (source-available / MIT / closed — see below)
+- [ ] Video demo recorded (see Channels below)
+- [ ] Source-available repository made public, linked from `/open`
 
 #### Dual landing pages (same app, two entry points)
 
 - **`/`** — General audience. Visual, task-focused, approachable. Headline: *"Your notes, tasks, and calendar. Private by default."* Shows the calendar + task list. No mention of SQLite, Tauri, or file paths. Download button prominent above the fold. Focus on the feeling, not the feature list.
-- **`/open`** — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief "why I built this" story. Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
+- **`/open`** — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief explanation of specific technical decisions (not origin story). Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
 
 The two pages let you run different SEO and social campaigns without the messaging feeling split.
 - General: "private notes app", "offline task manager", "notes app no account"
@@ -171,14 +212,14 @@ The two pages let you run different SEO and social campaigns without the messagi
 | Channel | Notes |
 |---|---|
 | Marketing site | General + technical pages; direct, organic, social |
-| **Reddit** | r/productivity, r/macapps, r/selfhosted, r/ObsidianMD. High-intent audience with the exact pain point. Be a genuine participant, not a promoter. |
-| **YouTube** | One "why I built Pikos" video. Non-technical users discover apps via YouTube far more than HN. Honest and unpolished beats polished ad. |
-| Hacker News | One well-timed "Show HN" post — link to `/open`. Do this after a few Reddit posts land well so you have momentum. |
-| GitHub | Source-available or open source. Builds technical credibility and is an organic discovery channel. |
+| **Reddit** | r/productivity, r/macapps, r/selfhosted, r/ObsidianMD. High-intent audience with the exact pain point. Be a genuine participant, not a promoter. Post after the app is stable and you can respond to feedback confidently. |
+| **YouTube** | One demo video. Focus on the product in motion — not why it was built. Show a real workflow: add a task, link it to a note, drag it to the calendar. Non-technical users discover apps via YouTube far more than HN. Honest and unpolished beats polished ad. Record this *after* at least one Reddit post lands well so there's already community momentum to point to. |
+| Hacker News | One well-timed "Show HN" post — link to `/open`. Lead with a specific technical decision, not a pitch. Do this after Reddit posts have landed so you have real user responses to reference. |
+| GitHub | Source-available repository. Technical credibility and organic discovery channel. Opened at Phase 3 launch alongside `/open`. |
 | Personal social | Occasional, not performative. Link to both landing pages. |
 | Email list | The Phase 2.5 list gets the launch announcement first. Even 50 people is a real audience. |
 
-**Credibility angle:** Technical blog posts about interesting decisions (Tauri + SQLite, local-first design, React 19 compiler) drive developer discovery organically and feed the `/open` page.
+**Credibility angle:** Technical blog posts about specific decisions (Tauri + SQLite, local-first design, the NL parser approach) drive developer discovery organically and feed the `/open` page. These work better than a "why I built this" narrative — they demonstrate craft and attract the kind of attention that converts to word of mouth.
 
 **Social proof:** Ask Phase 2 beta users for honest quotes. A few real testimonials on the landing page outperform any feature list for non-technical visitors.
 
@@ -232,7 +273,6 @@ iCloud sync works in direct-download Mac apps too (users just need an Apple ID).
 - iCloud sync has no ongoing infra cost to justify a subscription
 - "Buy once, own forever" builds trust with subscription-fatigued users
 - Relay sync is already a recurring line; two subscriptions for one app is confusing
-- Churn anxiety doesn't apply to one-time pricing
 
 **Competitive context:** Obsidian Sync is $96/yr. NotePlan is $69.99/yr (subscription only). At $39.99/yr for relay sync, Pikos undercuts both while being more integrated.
 
@@ -266,18 +306,6 @@ iCloud sync works in direct-download Mac apps too (users just need an Apple ID).
 | Linux | Not applicable | $0 |
 
 **macOS notarization in practice:** `tauri-apps/tauri-action` GitHub Action automates sign → notarize → upload. Set up secrets once (certificate, passwords, Apple ID, team ID) and every `git tag v*` triggers the full pipeline.
-
----
-
-## Open Source Decision
-
-**Decide before Phase 3 launch.** Options:
-
-- **Source-available** (code public, use restricted): lets developers audit privacy claims; doesn't hand SaaS competitors a free hosted version
-- **Fully open source** (MIT/Apache): easier contributions; harder monetization
-- **Closed source**: simpler; less credibility for privacy-focused audience
-
-Don't decide on a half-finished app. Revisit when Phase 2 feedback is incorporated and the codebase is something worth showing.
 
 ---
 

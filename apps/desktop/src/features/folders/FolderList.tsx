@@ -95,7 +95,7 @@ export function FolderList() {
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               title="Search"
             >
-              <Search size={15} />
+              <Search size={13} />
             </button>
             <DropdownMenu
               onOpenChange={(open) => setOpenSortMenu(open ? "folder-sort" : null)}
@@ -106,7 +106,7 @@ export function FolderList() {
                   className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
                   title="Sort folders"
                 >
-                  <ArrowUpDown size={15} />
+                  <ArrowUpDown size={13} />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40">

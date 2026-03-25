@@ -35,7 +35,7 @@ import {
 const MARKER = "⚙️ [seed-realistic] Realistic life marker";
 
 // "Today" from the script's point of view — seeds relative dates
-const TODAY = new Date("2026-03-12");
+const TODAY = new Date("2026-03-23");
 
 function daysFromToday(n: number): Date {
   const d = new Date(TODAY);
@@ -385,7 +385,7 @@ const PAGES: PageSpec[] = [
   },
   {
     folder: "Personal",
-    title: "Call mom — Sunday",
+    title: "Call mom",
     subtitle: "Weekly check-in",
     body: tiptapDoc(
       paragraph("Topics to cover:"),
@@ -481,6 +481,459 @@ const PAGES: PageSpec[] = [
     tags: ["reading", "architecture", "reference"],
   },
 
+  // ── Finance ────────────────────────────────────────────────────────────────
+  {
+    folder: "Finance",
+    title: "Review March credit card statement",
+    subtitle: "Flag any recurring charges to cancel before April billing",
+    body: tiptapDoc(
+      heading(2, "March CC review"),
+      heading(3, "Recurring charges to audit"),
+      bulletList(
+        "Adobe Creative Cloud — still needed?",
+        "Figma seats — downgrade solo plan",
+        "Namecheap renewal — 3 domains",
+        "Backblaze — keep"
+      ),
+      heading(3, "One-time items to verify"),
+      bulletList("FlexiSpot order", "JetPens gift order", "AWS bill spike in March")
+    ),
+    status: "not_started",
+    priority: 2,
+    tags: ["finance", "review"],
+    start: timedStr(daysFromToday(0), 19),
+    end: timedStr(daysFromToday(0), 19, 45),
+  },
+  {
+    folder: "Finance",
+    title: "Transfer $1,200 to HYSA",
+    subtitle: "Monthly savings transfer — hit before end of March",
+    body: tiptapDoc(
+      paragraph("Transfer $1,200 from Chase checking → Marcus HYSA."),
+      bulletList(
+        "Log in to Marcus",
+        "Schedule transfer for March 24 (settle by 27th)",
+        "Update budget sheet"
+      )
+    ),
+    status: "not_started",
+    priority: 2,
+    tags: ["finance", "savings"],
+    start: timedStr(daysFromToday(1), 12),
+    end: timedStr(daysFromToday(1), 12, 15),
+  },
+  {
+    folder: "Finance",
+    title: "File Q1 estimated tax payment",
+    subtitle: "Due April 15 — calculate from Q1 freelance income now",
+    body: tiptapDoc(
+      heading(2, "Q1 estimated taxes"),
+      heading(3, "Income sources"),
+      bulletList("Freelance consulting: $8,400", "W-2 salary: withheld automatically"),
+      heading(3, "Estimated tax owed"),
+      paragraph("~22% effective rate on freelance income = ~$1,848. Pay via IRS Direct Pay."),
+      heading(3, "Steps"),
+      taskList(
+        { text: "Tally all Q1 invoices in Wave", checked: false },
+        { text: "Calculate SE tax + income tax", checked: false },
+        { text: "Pay via IRS Direct Pay before April 15", checked: false },
+        { text: "Log payment receipt number", checked: false }
+      )
+    ),
+    status: "not_started",
+    priority: 1,
+    tags: ["finance", "taxes"],
+    start: timedStr(daysFromToday(4), 10),
+    end: timedStr(daysFromToday(4), 11, 30),
+  },
+  {
+    folder: "Finance",
+    title: "Update monthly budget spreadsheet",
+    subtitle: "Close out March actuals vs. plan",
+    body: tiptapDoc(
+      heading(2, "March budget close"),
+      bulletList(
+        "Income: $9,200 (salary + consulting)",
+        "Fixed expenses: $3,450",
+        "Variable: TBD — fill in after CC review",
+        "Savings: $1,200 target"
+      )
+    ),
+    status: "not_started",
+    priority: 3,
+    tags: ["finance", "review"],
+    start: timedStr(daysFromToday(6), 16),
+    end: timedStr(daysFromToday(6), 17),
+  },
+
+  // ── More Work tasks for the week ────────────────────────────────────────────
+  {
+    folder: "Work",
+    title: "Monday standup",
+    subtitle: "Kick off the week — share focus areas and blockers",
+    body: meetingNotes(
+      "Monday standup",
+      ["Alex", "Sarah", "Marcus", "Priya", "Jordan"],
+      [
+        "Alex: start search command palette (GOO-112)",
+        "Sarah: finalize icon set",
+        "Marcus: fix flaky CI test on Windows",
+        "Priya: synthesis from last week's user interviews",
+        "Jordan: pricing page — final copy",
+      ]
+    ),
+    status: "not_started",
+    priority: 0,
+    tags: ["standup", "meeting"],
+    start: timedStr(daysFromToday(0), 9),
+    end: timedStr(daysFromToday(0), 9, 30),
+  },
+  {
+    folder: "Work",
+    title: "Architecture sync — iCloud sync phase",
+    subtitle: "Align with Marcus before committing to iCloud Drive approach",
+    body: meetingNotes(
+      "iCloud sync architecture sync",
+      ["Alex", "Marcus"],
+      [
+        "Review spike findings from GOO-111",
+        "Confirm iCloud Drive + WAL mode approach",
+        "Identify Rust-side file-watcher requirements",
+        "Estimate scope for Phase 4a",
+      ]
+    ),
+    status: "not_started",
+    priority: 2,
+    tags: ["meeting", "sync", "dev"],
+    start: timedStr(daysFromToday(0), 15),
+    end: timedStr(daysFromToday(0), 16),
+  },
+  {
+    folder: "Work",
+    title: "Implement search command palette GOO-112",
+    subtitle: "Cmdk-powered palette: search pages, switch folders, run commands",
+    body: projectNote(
+      "Search command palette",
+      "Cmd+K opens a cmdk overlay. Types: pages (FTS), folders, commands (keyboard shortcuts). " +
+        "Keyboard-only navigable. Closes on Esc or outside click.",
+      [
+        "Install cmdk package",
+        "Build CommandPalette component with groups: Pages / Folders / Commands",
+        "Wire FTS search to pages group (debounced 150 ms)",
+        "Wire folder navigation to folders group",
+        "Add Commands group: New Page, Toggle Calendar, Toggle Sidebar",
+        "Keyboard shortcut: Cmd+K to open/close",
+        "Animate with Radix Dialog for a11y",
+      ]
+    ),
+    status: "in_progress",
+    priority: 1,
+    tags: ["dev", "feature"],
+    start: timedStr(daysFromToday(2), 10),
+    end: timedStr(daysFromToday(2), 12),
+  },
+  {
+    folder: "Work",
+    title: "Code review: GOO-108 drag handle resize",
+    subtitle: "Review Marcus's PR for resizable sidebar drag handle",
+    body: tiptapDoc(
+      heading(2, "PR review: GOO-108"),
+      heading(3, "Things to check"),
+      taskList(
+        { text: "No layout thrash on drag (rAF batching)", checked: false },
+        { text: "Min/max width constraints enforced", checked: false },
+        { text: "Persists across page reloads (localStorage)", checked: false },
+        { text: "Keyboard fallback: arrow keys ±8 px", checked: false },
+        { text: "No TypeScript `any` escapes", checked: false }
+      )
+    ),
+    status: "not_started",
+    priority: 2,
+    tags: ["dev", "review"],
+    start: timedStr(daysFromToday(1), 14),
+    end: timedStr(daysFromToday(1), 15),
+  },
+  {
+    folder: "Work",
+    title: "Sprint planning — sprint 14",
+    subtitle: "Pick items from backlog, estimate, assign owners",
+    body: meetingNotes(
+      "Sprint 14 planning",
+      ["Alex", "Sarah", "Marcus", "Priya"],
+      [
+        "Review sprint 13 velocity",
+        "Groom top 10 backlog items",
+        "Assign GOO-112, GOO-113, GOO-114",
+        "Confirm release target for v0.2.0",
+      ]
+    ),
+    status: "not_started",
+    priority: 2,
+    tags: ["planning", "meeting"],
+    start: timedStr(daysFromToday(3), 10),
+    end: timedStr(daysFromToday(3), 11, 30),
+  },
+  {
+    folder: "Work",
+    title: "Fix page list virtualization flicker on fast scroll",
+    subtitle: "Visible blank rows during rapid keyboard navigation in long lists",
+    body: tiptapDoc(
+      heading(2, "Bug: virtualized list flicker"),
+      heading(3, "Reproduction"),
+      bulletList(
+        "Open a folder with 200+ pages",
+        "Hold ↓ arrow — blank rows appear for ~100 ms between repaints",
+        "Worse on M1 (higher render rate exposes the gap)"
+      ),
+      heading(3, "Root cause hypothesis"),
+      paragraph(
+        "overscan count too low (currently 2). " +
+          "React 19 concurrent mode defers offscreen renders, exposing the gap."
+      ),
+      heading(3, "Fix"),
+      paragraph(
+        "Increase overscan to 8. Add `scrollingDelay` to suppress placeholder rows while scrolling."
+      )
+    ),
+    status: "not_started",
+    priority: 2,
+    tags: ["bug", "dev", "performance"],
+    start: timedStr(daysFromToday(4), 14),
+    end: timedStr(daysFromToday(4), 16),
+  },
+
+  // ── More Personal tasks ────────────────────────────────────────────────────
+  {
+    folder: "Personal",
+    title: "Morning run",
+    subtitle: "Easy 4k to start the week",
+    body: healthLog("4k morning run", "28 min", "Start of week shakeout. Heart rate zone 2."),
+    status: "not_started",
+    priority: 0,
+    tags: ["health", "run"],
+    start: timedStr(daysFromToday(0), 6, 30),
+    end: timedStr(daysFromToday(0), 7, 5),
+    durationMins: 35,
+  },
+  {
+    folder: "Personal",
+    title: "Gym — legs day",
+    subtitle: "Squats, deadlifts, lunges, calf raises",
+    body: healthLog(
+      "Legs session",
+      "55 min",
+      "Squat: 3x5 @ 185 lb. Romanian DL: 3x8 @ 155 lb. Finishing with walking lunges."
+    ),
+    status: "not_started",
+    priority: 0,
+    tags: ["health", "gym"],
+    start: timedStr(daysFromToday(2), 7),
+    end: timedStr(daysFromToday(2), 8),
+    durationMins: 60,
+  },
+  {
+    folder: "Personal",
+    title: "Evening walk — decompress",
+    subtitle: "No phone, no podcast — just a walk",
+    body: healthLog("Evening walk", "30 min", "No screen time. Neighbourhood loop."),
+    status: "not_started",
+    priority: 0,
+    tags: ["health", "mindfulness"],
+    start: timedStr(daysFromToday(4), 18),
+    end: timedStr(daysFromToday(4), 18, 35),
+    durationMins: 35,
+  },
+  {
+    folder: "Personal",
+    title: "Yoga — Saturday morning",
+    subtitle: "60-min flow, focus on hip flexors and thoracic mobility",
+    body: healthLog(
+      "Yoga session",
+      "60 min",
+      "Yin + flow hybrid. Hip openers, pigeon, thoracic rotation."
+    ),
+    status: "not_started",
+    priority: 0,
+    tags: ["health", "yoga"],
+    start: timedStr(daysFromToday(5), 9),
+    end: timedStr(daysFromToday(5), 10),
+    durationMins: 60,
+  },
+  {
+    folder: "Personal",
+    title: "Meal prep",
+    subtitle: "Batch cook for the week: grains, proteins, roasted veg",
+    body: tiptapDoc(
+      heading(2, "Sunday meal prep"),
+      heading(3, "Menu"),
+      bulletList(
+        "Protein: baked chicken thighs (8) + hard-boiled eggs (12)",
+        "Grains: brown rice (4 cups dry) + lentils",
+        "Veg: sheet pan broccoli + sweet potato",
+        "Sauce: tahini lemon"
+      ),
+      heading(3, "Grocery list"),
+      bulletList(
+        "Chicken thighs × 8",
+        "Broccoli × 2 heads",
+        "Sweet potato × 4",
+        "Brown rice",
+        "Lentils",
+        "Lemons"
+      )
+    ),
+    status: "not_started",
+    priority: 1,
+    tags: ["health", "food"],
+    start: timedStr(daysFromToday(6), 15),
+    end: timedStr(daysFromToday(6), 17),
+    durationMins: 120,
+  },
+
+  // ── More Projects tasks ────────────────────────────────────────────────────
+  {
+    folder: "Projects",
+    title: "Get 3 contractor quotes — kitchen reno",
+    subtitle: "Reach out to Houzz contacts by Tuesday EOD",
+    body: tiptapDoc(
+      heading(2, "Contractor outreach"),
+      heading(3, "Contacts"),
+      bulletList(
+        "Mike Ferraro — recommended by neighbour, did their bathroom",
+        "Green State Contracting — Houzz, 4.9 stars",
+        "Bay Area Kitchen Co. — specialises in countertops"
+      ),
+      heading(3, "What to include in request"),
+      taskList(
+        { text: "Photos of current kitchen", checked: true },
+        { text: "Rough measurements", checked: true },
+        { text: "Scope: countertops + cabinet repaint + backsplash", checked: false },
+        { text: "Budget ceiling: $4,500", checked: false },
+        { text: "Preferred timeline: complete by end of April", checked: false }
+      )
+    ),
+    status: "not_started",
+    priority: 1,
+    tags: ["home", "project"],
+    start: timedStr(daysFromToday(1), 17),
+    end: timedStr(daysFromToday(1), 18),
+  },
+  {
+    folder: "Projects",
+    title: "Design recipe data model",
+    subtitle: "Tables: recipes, ingredients, steps, tags — SQLite schema draft",
+    body: tiptapDoc(
+      heading(2, "Recipe manager — data model"),
+      heading(3, "Tables"),
+      bulletList(
+        "recipes(id, title, source_url, servings, prep_mins, cook_mins, notes, created_at)",
+        "ingredients(id, recipe_id, name, quantity, unit, sort_order)",
+        "steps(id, recipe_id, body, sort_order)",
+        "tags(id, name)",
+        "recipe_tags(recipe_id, tag_id)"
+      ),
+      heading(3, "Open questions"),
+      bulletList(
+        "Ingredient parser: NLP or rule-based regex?",
+        "Shopping list: merge duplicates across recipes?",
+        "Import: schema.org/Recipe JSON-LD — widest coverage"
+      )
+    ),
+    status: "not_started",
+    priority: 4,
+    tags: ["dev", "project", "idea"],
+    start: timedStr(daysFromToday(2), 19, 30),
+    end: timedStr(daysFromToday(2), 21),
+  },
+  {
+    folder: "Projects",
+    title: "Order FlexiSpot E7 frame",
+    subtitle: "Price is $379 — free shipping, arrives in 3–5 days",
+    body: tiptapDoc(
+      paragraph("FlexiSpot E7 motorized frame — white, 55-in crossbar kit."),
+      bulletList(
+        "Add to cart at flexispot.com",
+        "Coupon: check RetailMeNot first",
+        "Delivery address: home",
+        "Assembly: weekend of March 28"
+      )
+    ),
+    status: "not_started",
+    priority: 3,
+    tags: ["home", "shopping"],
+    start: timedStr(daysFromToday(3), 12),
+    end: timedStr(daysFromToday(3), 12, 20),
+  },
+
+  // ── More Reading ───────────────────────────────────────────────────────────
+  {
+    folder: "Reading",
+    title: "TLDR Tech newsletter",
+    subtitle: "Skim for anything relevant to Pikos (sync, SQLite, local-first)",
+    body: tiptapDoc(
+      heading(2, "TLDR Tech — March 23"),
+      paragraph("Quick scan: flag anything about SQLite, CRDT, local-first, or Tauri."),
+      heading(3, "Flagged"),
+      bulletList(
+        "libSQL fork of SQLite — Turso's embedded replicas could be useful for Phase 4 sync",
+        "Electron 35 ships with V8 13 — note for cross-referencing with Tauri's webview"
+      )
+    ),
+    status: "not_started",
+    priority: 4,
+    tags: ["reading", "tech"],
+    start: timedStr(daysFromToday(0), 8),
+    end: timedStr(daysFromToday(0), 8, 20),
+  },
+  {
+    folder: "Reading",
+    title: "Article: SQLite WAL mode deep dive",
+    subtitle: "Understand WAL checkpointing for safe concurrent access from iCloud Drive",
+    body: tiptapDoc(
+      heading(2, "SQLite WAL mode notes"),
+      heading(3, "Key points"),
+      bulletList(
+        "WAL allows concurrent reads + one writer without blocking",
+        "Checkpoint merges WAL back into main db — auto or manual",
+        "Safe for iCloud Drive if only one device writes at a time",
+        "Set PRAGMA wal_autocheckpoint=1000 (pages) for predictable flush"
+      ),
+      heading(3, "Relevance to Pikos"),
+      paragraph(
+        "Pikos already enables WAL via PRAGMA. " +
+          "Need to verify the Tauri Rust layer checkpoints cleanly on app exit. " +
+          "Add `PRAGMA wal_checkpoint(TRUNCATE)` to the shutdown handler."
+      )
+    ),
+    status: "not_started",
+    priority: 3,
+    tags: ["reading", "architecture", "dev"],
+    start: timedStr(daysFromToday(3), 20),
+    end: timedStr(daysFromToday(3), 21),
+  },
+  {
+    folder: "Reading",
+    title: "Read chapter 5 — Four Thousand Weeks",
+    subtitle: "'The Watermelon Problem' — why convenience undermines presence",
+    body: tiptapDoc(
+      heading(2, "Ch. 5 — The Watermelon Problem"),
+      paragraph("Reading goal: finish by Thursday evening."),
+      heading(3, "Key idea"),
+      paragraph(
+        "Convenience culture trains us to prefer the path of least resistance, " +
+          "eroding our capacity for activities that require sustained attention. " +
+          "The problem isn't busyness — it's the avoidance of meaningful difficulty."
+      ),
+      heading(3, "My reaction"),
+      paragraph(faker.lorem.paragraph())
+    ),
+    status: "not_started",
+    priority: 4,
+    tags: ["reading", "productivity"],
+    start: timedStr(daysFromToday(1), 21),
+    end: timedStr(daysFromToday(1), 22),
+  },
+
   // ── Inbox (no folder) ─────────────────────────────────────────────────────
   {
     folder: "__INBOX__",
@@ -553,6 +1006,7 @@ export function run(dbPath: string = defaultDbPath()): void {
     { key: "Projects", color: "#8b5cf6", sortOrder: 1 },
     { key: "Personal", color: "#10b981", sortOrder: 2 },
     { key: "Reading", color: "#f59e0b", sortOrder: 3 },
+    { key: "Finance", color: "#ef4444", sortOrder: 4 },
   ];
 
   for (const { key, color, sortOrder } of folderDefs) {
@@ -612,6 +1066,6 @@ export function run(dbPath: string = defaultDbPath()): void {
   db.close();
 
   console.log(`\n  Done — ${total} pages seeded.`);
-  console.log(`  Folders: Work · Projects · Personal · Reading`);
+  console.log(`  Folders: Work · Projects · Personal · Reading · Finance`);
   console.log(`  Inbox  : 3 pages`);
 }

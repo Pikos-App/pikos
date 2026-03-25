@@ -36,19 +36,6 @@ _Without these the app feels half-finished to any organic user. Ship before publ
 
 _GOO-21b complete: state model, editor/calendar toggle, click-to-create, popover, status checkbox, drag-to-reschedule, resize, drag-to/from all-day._
 
-- [ ] **GOO-39** Drag page → calendar to schedule _(High — friends beta blocker)_
-  Drag a `PageListItem` from the middle panel onto the calendar to schedule it. Page already exists — just call `scheduleOnce`. 15-min snap, same as existing calendar drag.
-
-  **Drop targets**: timed grid → `scheduleOnce(pageId, "yyyy-MM-dd'T'HH:mm:ss")` (compact chip); all-day section → `scheduleOnce(pageId, "yyyy-MM-dd")`.
-
-  **Implementation notes**:
-  - Use raw pointer events (not dnd-kit) — consistent with all existing calendar drag.
-  - The drag starts in `PageListItem` (middle panel) and the drop zones are in `WeekGrid` (right panel). Cross-panel communication: expose a `startExternalDrag(pageId, folderColor)` callback from `WeekGrid` via UIContext (store it in a ref on mount). `PageListItem` calls it when drag threshold is exceeded.
-  - `WeekGrid.handleExternalDragStart` is essentially identical to `handleAllDayChipDragStart` — registers window mousemove/mouseup, shows compact ghost in timed grid, highlights all-day column on hover. Reuse that pattern directly.
-  - Show a drag handle icon on `PageListItem` hover (lucide `GripVertical`). `cursor-grab` while hovering, `cursor-grabbing` while dragging.
-  - While dragging over the calendar, dim the source `PageListItem` (pass `draggingPageId` through UIContext so the list can read it without prop drilling).
-  - Pages that already have a schedule can still be dragged to reschedule — `scheduleOnce` replaces the existing schedule.
-
 ---
 
 ## 🚀 Friends Beta Gate

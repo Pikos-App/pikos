@@ -29,6 +29,8 @@ export interface AllDayColumnProps {
   draggingPageId: string | null;
   editingPageId: string | null;
   folderColorMap: Map<string, string>;
+  /** Highlighted when an all-day chip is being dragged over this column. */
+  isAllDayDragTarget: boolean;
   /** Highlighted when a timed block is being dragged over this column's all-day zone. */
   isTimedDragTarget: boolean;
   items: PageSummary[];
@@ -172,9 +174,7 @@ function AllDayChip({
               >
                 {isDone && <Check size={8} strokeWidth={2.5} />}
               </span>
-              <span className={cn("min-w-0 truncate", isDone && "line-through")}>
-                {item.title || "Untitled"}
-              </span>
+              <span className="min-w-0 truncate">{item.title || "Untitled"}</span>
             </button>
           </ContextMenuTrigger>
         </PopoverTrigger>
@@ -205,6 +205,7 @@ export function AllDayColumn({
   draggingPageId,
   editingPageId,
   folderColorMap,
+  isAllDayDragTarget,
   isTimedDragTarget,
   items,
   onCancelCreate,
@@ -244,7 +245,7 @@ export function AllDayColumn({
       className={cn(
         "flex min-w-0 flex-1 cursor-cell flex-col overflow-hidden border-l border-border/50 px-1 py-1 first:border-l-0",
         weekend ? "bg-white/[0.012]" : "",
-        isTimedDragTarget && "bg-accent/30"
+        (isTimedDragTarget || isAllDayDragTarget) && "bg-accent/30"
       )}
       onClick={handleColumnClick}
     >
