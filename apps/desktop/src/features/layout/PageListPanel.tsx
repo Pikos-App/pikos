@@ -19,7 +19,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PageDeleteDialog } from "@/features/pages/components/PageDeleteDialog";
 import { PageListItem } from "@/features/pages/components/PageListItem";
 import { usePageList } from "@/features/pages/hooks/usePageList";
 import type { SortMode } from "@/features/pages/utils/pageFilters";
@@ -42,8 +41,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     activePage,
     completedPages,
     folders,
-    handleDeleteCancel,
-    handleDeleteConfirm,
     handleDeleteRequest,
     handleMoveToFolder,
     handlePriorityChange,
@@ -52,7 +49,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     handleRenameCommit,
     handleSelectPage,
     handleToggleStatus,
-    pendingDelete,
     renamingId,
     setRenamingId,
     visiblePages,
@@ -112,6 +108,12 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     el?.scrollIntoView({ block: "nearest" });
   }, [highlightedPageId]);
 
+  const [prevActiveViewId, setPrevActiveViewId] = useState(activeViewId);
+  if (prevActiveViewId !== activeViewId) {
+    setPrevActiveViewId(activeViewId);
+    setHighlighted(null);
+  }
+
   function moveHighlight(direction: 1 | -1) {
     if (sidebarCollapsed) setSidebarCollapsed(false);
     setHighlighted((prev) => {
@@ -139,6 +141,16 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   useKeyboardShortcut("J", () => moveHighlight(1), { allowInInputs: false });
   useKeyboardShortcut("K", () => moveHighlight(-1), { allowInInputs: false });
   useKeyboardShortcut("Enter", openHighlighted, { allowInInputs: false });
+  useKeyboardShortcut(
+    "Mod+Shift+D",
+    () => {
+      if (activePage) {
+        if (highlightedPageId === activePage.id) setHighlighted(null);
+        handleDeleteRequest(activePage);
+      }
+    },
+    { allowInInputs: true }
+  );
 
   // ── View grouping ──────────────────────────────────────────────────────────
 
@@ -157,7 +169,10 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         isHighlighted={highlightedPageId === page.id}
         isRenaming={renamingId === page.id}
         key={page.id}
-        onDelete={() => handleDeleteRequest(page)}
+        onDelete={() => {
+          if (highlightedPageId === page.id) setHighlighted(null);
+          handleDeleteRequest(page);
+        }}
         onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
         onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
         onRenameCancel={handleRenameCancel}
@@ -321,14 +336,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         className="absolute top-0 right-0 h-full w-1 cursor-col-resize transition-colors hover:bg-primary/30"
         onMouseDown={onResizeStart}
       />
-
-      {pendingDelete && (
-        <PageDeleteDialog
-          onCancel={handleDeleteCancel}
-          onConfirm={handleDeleteConfirm}
-          pageTitle={pendingDelete.title}
-        />
-      )}
     </div>
   );
 }

@@ -1,9 +1,12 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThreePanelLayout } from "@/features/layout/ThreePanelLayout";
 import { QuickAddDialog } from "@/features/pages/components/QuickAddDialog";
+import { UNDO_TOAST_DURATION_MS } from "@/features/pages/hooks/usePageList";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { WelcomeScreen } from "@/features/workspace/WelcomeScreen";
+import { UndoToast } from "@/shared/components/UndoToast";
 import { UIProvider } from "@/shared/context/UIContext";
+import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
@@ -11,11 +14,18 @@ import { useKeyboardListener } from "@/shared/keyboard/useKeyboard";
 
 function AppShell() {
   useKeyboardListener();
+  const { handleUndoDelete, handleUndoDismiss, undoItems } = useUndoDelete();
   return (
     <>
       <ThreePanelLayout />
       <SettingsPage />
       <QuickAddDialog />
+      <UndoToast
+        duration={UNDO_TOAST_DURATION_MS}
+        items={undoItems}
+        onDismiss={handleUndoDismiss}
+        onUndo={handleUndoDelete}
+      />
     </>
   );
 }
@@ -40,9 +50,11 @@ export default function App() {
     <ErrorBoundary>
       <WorkspaceProvider>
         <UIProvider>
-          <TooltipProvider>
-            <WorkspaceGate />
-          </TooltipProvider>
+          <UndoDeleteProvider>
+            <TooltipProvider>
+              <WorkspaceGate />
+            </TooltipProvider>
+          </UndoDeleteProvider>
         </UIProvider>
       </WorkspaceProvider>
     </ErrorBoundary>

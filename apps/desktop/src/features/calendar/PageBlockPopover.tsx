@@ -4,7 +4,7 @@
 
 import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
 import { format } from "date-fns";
-import { Check, ExternalLink } from "lucide-react";
+import { CalendarX, Check, ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { FolderChip } from "@/features/pages/components/FolderChip";
@@ -12,15 +12,21 @@ import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { nowLocalISO } from "@/shared/utils/dates";
 
 interface PageBlockPopoverProps {
   page: PageSummary;
+  onDelete?: () => void;
+  onRemoveDate?: () => void;
 }
 
-export function PageBlockPopover({ page }: PageBlockPopoverProps) {
+export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopoverProps) {
   const { clearSchedule, folders, scheduleOnce, updatePage } = useWorkspace();
   const { openPage } = useUI();
+
+  useKeyboardScope("modal");
+  useKeyboardShortcut("Mod+Shift+D", () => onDelete?.(), { allowInInputs: true, scope: "modal" });
 
   // Local title state — popover mounts fresh on each open so no sync needed.
   const [titleValue, setTitleValue] = useState(page.title);
@@ -156,15 +162,38 @@ export function PageBlockPopover({ page }: PageBlockPopoverProps) {
         </div>
       </div>
 
-      {/* Open page */}
-      <div className="border-t border-border/40 pt-1">
+      {/* Open page / actions */}
+      <div className="flex items-center justify-between border-t border-border/40 pt-1">
         <button
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 transition-colors hover:text-foreground focus:outline-none"
+          className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground/60 transition-colors hover:text-foreground focus:outline-none"
           onClick={handleOpenPage}
         >
           <ExternalLink size={11} />
           Open page
         </button>
+        <div className="flex items-center gap-2">
+          {onRemoveDate && page.scheduledStart && (
+            <button
+              className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-foreground focus:outline-none"
+              onClick={() => {
+                void clearSchedule(page.id);
+                onRemoveDate();
+              }}
+              title="Remove date"
+            >
+              <CalendarX size={11} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-destructive focus:outline-none"
+              onClick={onDelete}
+              title="Delete page (⌘⇧D)"
+            >
+              <Trash2 size={11} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

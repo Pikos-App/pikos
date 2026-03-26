@@ -2,14 +2,9 @@ import type { PageStatus } from "@pikos/core";
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { nowLocalISO } from "@/shared/utils/dates";
 
@@ -67,7 +62,8 @@ export function PageBlock({
   resizeHeight,
 }: PageBlockProps) {
   const { column, endDate, height, isCompact, page, startDate, top, totalColumns } = block;
-  const { clearSchedule, deletePage, updatePage } = useWorkspace();
+  const { updatePage } = useWorkspace();
+  const { requestDeletePage } = useUndoDelete();
 
   const widthPct = 100 / totalColumns;
   const leftPct = column * widthPct;
@@ -300,81 +296,77 @@ export function PageBlock({
   }
 
   return (
-    <ContextMenu>
-      <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
-        <PopoverTrigger asChild>
-          <ContextMenuTrigger asChild>
-            {isRenderingCompact ? (
-              <button
-                aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
-                className={cn(
-                  "absolute select-none",
-                  CHIP_BASE_CLASSES,
-                  "flex items-center gap-1",
-                  !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
-                  isDone && "opacity-50",
-                  isDragging && "opacity-40",
-                  inResizeZone ? "cursor-ns-resize" : undefined
-                )}
-                onClick={handleClick}
-                onMouseDown={handleBlockMouseDown}
-                onMouseLeave={handleBlockMouseLeave}
-                onMouseMove={handleBlockMouseMove}
-                style={sharedStyle}
-              >
-                {checkbox}
-                <span className="min-w-0 truncate">{page.title || "Untitled"}</span>
-              </button>
-            ) : (
-              <button
-                aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
-                className={cn(
-                  "absolute flex flex-col items-start overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
-                  !folderColor && "border-blue-500 bg-blue-500/15",
-                  isDone ? "opacity-50" : "transition-opacity hover:opacity-75",
-                  isDragging && "opacity-40",
-                  inResizeZone ? "cursor-ns-resize" : "cursor-default"
-                )}
-                onClick={handleClick}
-                onMouseDown={handleBlockMouseDown}
-                onMouseLeave={handleBlockMouseLeave}
-                onMouseMove={handleBlockMouseMove}
-                style={sharedStyle}
-              >
-                <div className="flex w-full min-w-0 items-center gap-1">
-                  {checkbox}
-                  <p className="min-w-0 truncate text-sm leading-tight font-medium text-foreground">
-                    {page.title || "Untitled"}
-                  </p>
-                </div>
-                {showTimeLabel && (
-                  <p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground">
-                    {timeLabel}
-                  </p>
-                )}
-              </button>
+    <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
+      <PopoverTrigger asChild>
+        {isRenderingCompact ? (
+          <button
+            aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
+            className={cn(
+              "absolute select-none",
+              CHIP_BASE_CLASSES,
+              "flex items-center gap-1",
+              !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
+              isDone && "opacity-50",
+              isDragging && "opacity-40",
+              inResizeZone ? "cursor-ns-resize" : undefined
             )}
-          </ContextMenuTrigger>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="w-[280px] p-3"
-          onMouseDown={(e) => e.stopPropagation()}
-          side="right"
-          sideOffset={8}
-        >
-          <PageBlockPopover page={page} />
-        </PopoverContent>
-      </Popover>
-      <ContextMenuContent>
-        <ContextMenuItem onSelect={() => void clearSchedule(page.id)}>Remove date</ContextMenuItem>
-        <ContextMenuItem
-          className="text-destructive focus:text-destructive"
-          onSelect={() => void deletePage(page.id)}
-        >
-          Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+            onClick={handleClick}
+            onMouseDown={handleBlockMouseDown}
+            onMouseLeave={handleBlockMouseLeave}
+            onMouseMove={handleBlockMouseMove}
+            style={sharedStyle}
+          >
+            {checkbox}
+            <span className="min-w-0 truncate">{page.title || "Untitled"}</span>
+          </button>
+        ) : (
+          <button
+            aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
+            className={cn(
+              "absolute flex flex-col items-start overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
+              !folderColor && "border-blue-500 bg-blue-500/15",
+              isDone ? "opacity-50" : "transition-opacity hover:opacity-75",
+              isDragging && "opacity-40",
+              inResizeZone ? "cursor-ns-resize" : "cursor-default"
+            )}
+            onClick={handleClick}
+            onMouseDown={handleBlockMouseDown}
+            onMouseLeave={handleBlockMouseLeave}
+            onMouseMove={handleBlockMouseMove}
+            style={sharedStyle}
+          >
+            <div className="flex w-full min-w-0 items-center gap-1">
+              {checkbox}
+              <p className="min-w-0 truncate text-sm leading-tight font-medium text-foreground">
+                {page.title || "Untitled"}
+              </p>
+            </div>
+            {showTimeLabel && (
+              <p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground">
+                {timeLabel}
+              </p>
+            )}
+          </button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[280px] p-3"
+        onMouseDown={(e) => e.stopPropagation()}
+        side="right"
+        sideOffset={8}
+      >
+        <PageBlockPopover
+          onDelete={() => {
+            setPopoverOpen(false);
+            requestDeletePage(page);
+          }}
+          onRemoveDate={() => {
+            setPopoverOpen(false);
+          }}
+          page={page}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }

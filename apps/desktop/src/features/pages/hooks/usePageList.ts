@@ -8,26 +8,34 @@ import {
   sortPages,
 } from "@/features/pages/utils/pageFilters";
 import { useUI } from "@/shared/context/UIContext";
+import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
 import { nowLocalISO } from "@/shared/utils/dates";
 
+export const UNDO_TOAST_DURATION_MS = 8000;
+
 export function usePageList() {
-  const { deletePage, folders, pages, updatePage } = useWorkspace();
+  const { folders, pages, updatePage } = useWorkspace();
   const { activeViewId, getSortMode, openPage, setActivePage } = useUI();
+  const { hiddenIds, requestDeletePage } = useUndoDelete();
   const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<PageSummary | null>(null);
 
-  const filtered = getVisiblePages(pages, activeViewId);
-  // Today view has its own date-based grouping; skip extra sort.
+  const filtered = getVisiblePages(pages, activeViewId).filter((p) => !hiddenIds.has(p.id));
   const visiblePages =
     activeViewId === "today" ? filtered : sortPages(filtered, getSortMode(activeViewId));
 
-  const completedPages =
+  const completedPages = (
     activeViewId === "today"
       ? getCompletedTodayPages(pages)
-      : getCompletedViewPages(pages, activeViewId);
+      : getCompletedViewPages(pages, activeViewId)
+  ).filter((p) => !hiddenIds.has(p.id));
+
+  function handleDeleteRequest(page: PageSummary) {
+    if (activePage?.id === page.id) setActivePage(null);
+    requestDeletePage(page);
+  }
 
   function handleRenameChange(id: string, title: string) {
     updatePage(id, { title });
@@ -40,28 +48,6 @@ export function usePageList() {
 
   function handleRenameCancel() {
     setRenamingId(null);
-  }
-
-  /** Delete with confirmation if page is non-empty or has a schedule. */
-  function handleDeleteRequest(page: PageSummary) {
-    const isEmpty = page.title === "" && !page.scheduledStart;
-    if (isEmpty) {
-      if (activePage?.id === page.id) setActivePage(null);
-      void deletePage(page.id);
-    } else {
-      setPendingDelete(page);
-    }
-  }
-
-  function handleDeleteConfirm() {
-    if (!pendingDelete) return;
-    if (activePage?.id === pendingDelete.id) setActivePage(null);
-    void deletePage(pendingDelete.id);
-    setPendingDelete(null);
-  }
-
-  function handleDeleteCancel() {
-    setPendingDelete(null);
   }
 
   function handleMoveToFolder(pageId: string, folderId: string | null) {
@@ -84,8 +70,6 @@ export function usePageList() {
     activePage,
     completedPages,
     folders,
-    handleDeleteCancel,
-    handleDeleteConfirm,
     handleDeleteRequest,
     handleMoveToFolder,
     handlePriorityChange,
@@ -97,7 +81,6 @@ export function usePageList() {
       else setActivePage(null);
     },
     handleToggleStatus,
-    pendingDelete,
     renamingId,
     setRenamingId,
     visiblePages,

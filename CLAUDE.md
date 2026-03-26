@@ -49,6 +49,29 @@ Write tests for non-trivial logic: stores, hooks, utilities, and any function wi
 
 ## Stack
 
-Tauri 2 + React 19 + TypeScript (strict) + SQLite + Tiptap + shadcn/ui + Tailwind v4
-Monorepo: `apps/desktop/`, `packages/core/`, `packages/ui/`
+Tauri 2 + React 19 + React Compiler + TypeScript (strict) + SQLite + Tiptap + shadcn/ui + Tailwind v4
+Monorepo: `apps/desktop/`, `apps/marketing/`, `apps/mobile/`, `packages/core/`, `packages/ui/`
 Package manager: pnpm (never npm/yarn)
+
+## React rules
+
+- React Compiler is enabled. NEVER use useMemo, useCallback, or React.memo — the compiler handles memoization automatically.
+- NEVER call setState inside useEffect. If state is derived from props or other state, compute it during render. This is the React-recommended pattern for derived state.
+- NEVER use useEffect for synchronizing state with props. Use a key to reset component state or compute values inline during render.
+- Prefer controlled components over refs for form state.
+
+## Testing rules
+
+- Test user-visible behavior, not implementation details.
+- Use accessible selectors: getByRole, getByText, getByPlaceholder. Use getByTestId only as a last resort. Never select by CSS class or DOM structure.
+- Vitest: test inputs → outputs. Mock boundaries (storage adapters, Tauri IPC), not internal functions.
+
+## Code style
+
+- Prefer early returns over deeply nested conditionals.
+- Keep components under 200 lines. Extract hooks or subcomponents when approaching this.
+- Use TypeScript discriminated unions over boolean flags for state that has more than two modes.
+
+## Tauri
+
+- Desktop app uses MockStorageAdapter in test mode (VITE_TEST_MODE=true) and TauriSQLiteAdapter in production. Never import Tauri APIs directly in components — go through the adapter.

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { nowLocalISO } from "@/shared/utils/dates";
 
@@ -56,7 +57,8 @@ function AllDayChip({
   onDoubleClick,
   onDragStart,
 }: AllDayChipProps) {
-  const { deletePage, updatePage } = useWorkspace();
+  const { updatePage } = useWorkspace();
+  const { requestDeletePage } = useUndoDelete();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Prevents the post-drag click from opening the popover.
@@ -185,13 +187,19 @@ function AllDayChip({
           side="bottom"
           sideOffset={4}
         >
-          <PageBlockPopover page={item} />
+          <PageBlockPopover
+            onDelete={() => {
+              setPopoverOpen(false);
+              requestDeletePage(item);
+            }}
+            page={item}
+          />
         </PopoverContent>
       </Popover>
       <ContextMenuContent>
         <ContextMenuItem
           className="text-destructive focus:text-destructive"
-          onSelect={() => void deletePage(item.id)}
+          onSelect={() => requestDeletePage(item)}
         >
           Delete
         </ContextMenuItem>

@@ -6,6 +6,7 @@ import { format, isSameWeek } from "date-fns";
 import { useEffect, useState } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
+import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import { weekDays } from "./calendarUtils";
@@ -14,6 +15,8 @@ import { WeekGrid } from "./WeekGrid";
 export function CalendarView() {
   const { createPage, deletePage, pages, scheduleOnce, updatePage } = useWorkspace();
   const { activeViewId, openPage, referenceDate } = useUI();
+  const { hiddenIds } = useUndoDelete();
+  const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
   // ID of the page currently being inline-edited after calendar creation.
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
@@ -85,7 +88,7 @@ export function CalendarView() {
         onCreatePage={handleCreatePage}
         onPageDoubleClick={handlePageDoubleClick}
         onReschedule={handleReschedule}
-        pages={pages}
+        pages={visiblePages}
       />
     </div>
   );

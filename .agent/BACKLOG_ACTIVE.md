@@ -30,7 +30,7 @@ _Without these the app feels half-finished to any organic user. Ship before publ
 - [ ] **GOO-18** FTS5 content search _(High — public launch blocker)_
   FTS5 virtual table on `pages.content` + `pages.title` + `pages.tags`. Tauri command `search_pages(query)`. Updates on save. Highlighted excerpt snippets via FTS5 `snippet()`.
 
-- [ ] Simple undo option when deleting something (via animated toast that comes in / goes out after ~5 seconds). Should not animate out if the mouse is on the toast.
+- [ ] shadcn tooltip + implement consistent tooltips across the app for all icons - if icon has a keyboard shortcut show the keyboard shortcut. [title] (shortcut), account for mac/windows/linux key names (command vs control, etc). Example: View Calendar (cmd + shift + c). Use common symbols when possible (command, control, shift, etc).
 
 ## 🚀 Friends Beta Gate
 
