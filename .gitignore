@@ -23,5 +23,9 @@ src-tauri/target/
 *.swp
 *.swo
 
+# Playwright
+playwright-report/
+test-results/
+
 # OS generated files
 Thumbs.db
