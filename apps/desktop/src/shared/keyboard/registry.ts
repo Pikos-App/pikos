@@ -32,8 +32,6 @@ function parseCombo(combo: string): NormalizedCombo {
   // Accept forms like "Mod+Shift+D" or "Cmd+Shift+D" or "Ctrl+D"
   const parts = combo.split("+").map((p) => p.trim());
 
-  console.log("Parsing combo:", combo, "->", parts);
-
   let key = "";
   let mod = false,
     ctrl = false,

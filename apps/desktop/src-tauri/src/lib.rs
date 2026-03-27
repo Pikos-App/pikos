@@ -1,3 +1,4 @@
+use tauri::menu::{AboutMetadataBuilder, MenuBuilder, SubmenuBuilder};
 use tauri::WindowEvent;
 
 mod db;
@@ -8,7 +9,7 @@ use db::{
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders, update_folder,
     },
-    pages::{create_page, delete_page, get_page, list_pages, list_pages_today, reorder_pages, update_page},
+    pages::{create_page, delete_page, get_page, list_pages, list_pages_today, reorder_pages, restore_page, soft_delete_page, update_page},
     schedules::{
         create_page_schedule, create_recurrence_rule, delete_page_schedule,
         delete_recurrence_rule, get_recurrence_rule, list_page_schedules,
@@ -25,6 +26,47 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .menu(|handle| {
+            // Custom menu without Print (Cmd+P) — that shortcut is used for search palette.
+            let app_menu = SubmenuBuilder::new(handle, "Pikos")
+                .about(Some(AboutMetadataBuilder::new().build()))
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+
+            let file_menu = SubmenuBuilder::new(handle, "File")
+                .close_window()
+                .build()?;
+
+            let edit_menu = SubmenuBuilder::new(handle, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
+
+            let window_menu = SubmenuBuilder::new(handle, "Window")
+                .minimize()
+                .separator()
+                .fullscreen()
+                .build()?;
+
+            MenuBuilder::new(handle)
+                .item(&app_menu)
+                .item(&file_menu)
+                .item(&edit_menu)
+                .item(&window_menu)
+                .build()
+        })
         .on_window_event(|_window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -38,6 +80,8 @@ pub fn run() {
             create_page,
             update_page,
             delete_page,
+            soft_delete_page,
+            restore_page,
             list_pages,
             list_pages_today,
             reorder_pages,

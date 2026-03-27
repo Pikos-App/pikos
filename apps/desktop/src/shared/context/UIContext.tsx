@@ -13,7 +13,7 @@ import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 /** 'today' | 'inbox' | folderId (UUID string) */
 export type ActiveViewId = "today" | "inbox" | (string & NonNullable<unknown>);
-export type DialogId = "quick-add" | null;
+export type DialogId = "quick-add" | "search" | null;
 
 export interface UIContextValue {
   /** ID of the currently selected page. Derive the full Page via useActivePage(). */

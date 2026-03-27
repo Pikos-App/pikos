@@ -249,7 +249,7 @@ export function PageBlock({
       aria-checked={isDone}
       aria-label={isDone ? "Mark not done" : "Mark done"}
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-[2px] border transition-colors",
+        "mt-1 flex shrink-0 items-center justify-center rounded-[2px] border transition-colors",
         "h-3.5 w-3.5",
         isDone
           ? "border-foreground/40 bg-foreground/10"
@@ -335,14 +335,14 @@ export function PageBlock({
             onMouseMove={handleBlockMouseMove}
             style={sharedStyle}
           >
-            <div className="flex w-full min-w-0 items-center gap-1">
+            <div className="flex w-full min-w-0 items-start gap-1">
               {checkbox}
-              <p className="min-w-0 truncate text-sm leading-tight font-medium text-foreground">
+              <p className="line-clamp-2 min-w-0 text-left text-sm leading-tight font-medium text-foreground">
                 {page.title || "Untitled"}
               </p>
             </div>
             {showTimeLabel && (
-              <p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground">
+              <p className="mt-0.5 truncate pl-[16px] text-[10px] leading-tight text-muted-foreground">
                 {timeLabel}
               </p>
             )}

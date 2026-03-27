@@ -8,7 +8,7 @@ import type {
   PageRecurrenceRule,
   PageSchedule,
   PageSummary,
-  SearchResult,
+  SearchResponse,
 } from "./types";
 
 // ─── Page input helpers ───────────────────────────────────────────────────────
@@ -63,14 +63,18 @@ export interface StorageAdapter {
   createPage(data: NewPage): Promise<Page>;
   updatePage(id: string, updates: PageUpdate): Promise<Page>;
   deletePage(id: string): Promise<void>;
+  /** Soft-delete: sets deleted_at timestamp. Page is hidden from all queries but recoverable. */
+  softDeletePage(id: string): Promise<void>;
+  /** Restore a soft-deleted page by clearing deleted_at. */
+  restorePage(id: string): Promise<void>;
   /** List pages without content — use getPage() for full content. */
   listPages(filter?: PageFilter): Promise<PageSummary[]>;
   /** Pages with any page_schedules row <= today, status != done, sorted by sortOrder. */
   listPagesToday(): Promise<PageSummary[]>;
   /** orderedIds = complete ordered list for that folderId (null = inbox/no folder) */
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void>;
-  /** Returns excerpts (SearchResult), not full pages */
-  searchPages(query: string): Promise<SearchResult[]>;
+  /** Unified FTS5 search — title matches ranked above content matches via bm25(). */
+  searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse>;
   /** Returns tag names whose prefix matches query — for autocomplete. */
   searchTags(query: string): Promise<string[]>;
 

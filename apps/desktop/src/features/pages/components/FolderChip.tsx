@@ -47,6 +47,9 @@ export function FolderChip({ folders, onChange, value }: FolderChipProps) {
       <PopoverContent align="start" className="w-52 p-0">
         <div className="p-1.5">
           <input
+            autoCapitalize="off"
+            autoComplete="off"
+            autoCorrect="off"
             autoFocus
             className="w-full bg-transparent px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground/40"
             onChange={(event) => setSearchQuery(event.target.value)}

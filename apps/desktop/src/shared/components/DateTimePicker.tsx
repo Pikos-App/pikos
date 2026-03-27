@@ -707,6 +707,9 @@ export function DateTimePicker({
               </div>
 
               <input
+                autoCapitalize="off"
+                autoComplete="off"
+                autoCorrect="off"
                 className="w-full cursor-text border-none bg-transparent px-0.5 py-1 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/25"
                 onBlur={applyCustomTimeInput}
                 onChange={(event) => setCustomTimeStr(event.target.value)}
@@ -752,6 +755,9 @@ export function DateTimePicker({
               <div className="flex shrink-0 items-center whitespace-nowrap">
                 {customDurationActive ? (
                   <input
+                    autoCapitalize="off"
+                    autoComplete="off"
+                    autoCorrect="off"
                     autoFocus
                     className="h-6 w-full cursor-text border-none bg-transparent px-0.5 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/25"
                     inputMode="numeric"

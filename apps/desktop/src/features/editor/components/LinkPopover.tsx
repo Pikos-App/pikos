@@ -289,7 +289,9 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
       {showEditMode ? (
         <div className="flex items-center gap-1.5">
           <input
+            autoCapitalize="off"
             autoComplete="off"
+            autoCorrect="off"
             className="link-popover-input"
             onChange={(e) => setUrlValue(e.target.value)}
             onKeyDown={(e) => {

@@ -314,7 +314,9 @@ export function QuickAddDialog() {
             </p>
           ) : (
             <input
+              autoCapitalize="off"
               autoComplete="off"
+              autoCorrect="off"
               className={cn(
                 "w-full bg-transparent text-base text-foreground outline-none",
                 "placeholder:text-muted-foreground/40",

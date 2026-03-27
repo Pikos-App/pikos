@@ -27,7 +27,7 @@ export interface UndoDeleteContextValue {
 const UndoDeleteContext = createContext<UndoDeleteContextValue | null>(null);
 
 export function UndoDeleteProvider({ children }: { children: ReactNode }) {
-  const { deletePage } = useWorkspace();
+  const { restorePage, softDeletePage } = useWorkspace();
 
   const pendingDeleteIds = useRef<Set<string>>(new Set());
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
@@ -38,9 +38,12 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     pendingDeleteIds.current.add(page.id);
     setHiddenIds((prev) => new Set([...prev, page.id]));
     setUndoItems((prev) => [...prev, { id: page.id, label: page.title }]);
+    // Soft-delete immediately — page disappears from all DB queries
+    void softDeletePage(page.id);
   }
 
   function handleUndoDismiss(id: string) {
+    // Page is already soft-deleted — just clean up local state
     pendingDeleteIds.current.delete(id);
     setHiddenIds((prev) => {
       const next = new Set(prev);
@@ -48,7 +51,6 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
       return next;
     });
     setUndoItems((prev) => prev.filter((item) => item.id !== id));
-    void deletePage(id);
   }
 
   function handleUndoDelete(id: string) {
@@ -59,6 +61,8 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
       return next;
     });
     setUndoItems((prev) => prev.filter((item) => item.id !== id));
+    // Restore soft-deleted page — clears deleted_at and re-adds to pages list
+    void restorePage(id);
   }
 
   const value: UndoDeleteContextValue = {

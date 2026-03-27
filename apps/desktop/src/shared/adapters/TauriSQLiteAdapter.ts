@@ -8,7 +8,7 @@ import type {
   PageRecurrenceRule,
   PageSchedule,
   PageSummary,
-  SearchResult,
+  SearchResponse,
 } from "@pikos/core";
 import type {
   FolderUpdate,
@@ -50,6 +50,14 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<void>("delete_page", { id });
   }
 
+  softDeletePage(id: string): Promise<void> {
+    return invoke<void>("soft_delete_page", { id });
+  }
+
+  restorePage(id: string): Promise<void> {
+    return invoke<void>("restore_page", { id });
+  }
+
   listPages(filter?: PageFilter): Promise<PageSummary[]> {
     return invoke<PageSummary[]>("list_pages", { filter: filter ?? null });
   }
@@ -62,8 +70,8 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<void>("reorder_pages", { folderId, orderedIds });
   }
 
-  searchPages(query: string): Promise<SearchResult[]> {
-    return invoke<SearchResult[]>("search_pages", { query });
+  searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse> {
+    return invoke<SearchResponse>("search_pages", { includeCompleted, query });
   }
 
   searchTags(query: string): Promise<string[]> {

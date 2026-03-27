@@ -53,6 +53,7 @@ export interface Page {
   links?: string[]; // [[wikilink]] target page UUIDs; stored as JSON array
   parentId?: string | null; // sub-page nesting (GOO-12, max 3 levels)
   lastOpenedAt?: string | null; // ISO 8601; updated on open → drives recent-pages query
+  deletedAt?: string | null; // ISO 8601; NULL = not deleted, set = trashed
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
 }
@@ -114,7 +115,20 @@ export interface Tag {
 export interface SearchResult {
   id: string;
   title: string;
-  excerpt: string; // highlighted snippet with <mark> tags from FTS5 snippet()
+  excerpt: string; // plain text snippet from FTS5 — frontend handles highlighting
+  matchSource: "title" | "content" | "subtitle" | "both";
+  status: PageStatus;
+  subtitle?: string | null;
+  scheduledDate?: string | null; // ISO 8601 — denorm scheduled_start from pages
+  priority: PagePriority;
+  tags: string[];
+  contentPreview: string; // first ~80 chars of body — fallback line 2 when no metadata
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  /** Number of completed pages matching the query (always counted, even when excluded from results). */
+  completedCount: number;
 }
 
 // ─── FocusSession ─────────────────────────────────────────────────────────────

@@ -267,7 +267,7 @@ These are the flows where failure = "app is broken." Every push must pass these.
 
 #### T2-5: Search
 - Create pages with distinct titles
-- Open search (Cmd+K or search input)
+- Open search (Cmd+P or search input)
 - Type a fragment of one title
 - Assert: Matching page appears in results
 - Click result

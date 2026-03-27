@@ -3,7 +3,7 @@
 // WorkspaceContext — owns all data + mutations: pages, folders, tags.
 // GOO-15: auto-creates/reopens workspace on mount via @tauri-apps/plugin-store.
 
-import type { Folder, Page, PageSummary, Tag, Workspace } from "@pikos/core";
+import type { Folder, Page, PageSummary, SearchResponse, Tag, Workspace } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import type { FolderUpdate, PageUpdate, StorageAdapter } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -46,6 +46,10 @@ export interface WorkspaceContextValue {
   /** Immediately flush any pending debounced write for a page. */
   flushPage: (id: string) => Promise<void>;
   deletePage: (id: string) => Promise<void>;
+  /** Soft-delete: sets deleted_at. Page is hidden everywhere but recoverable via restorePage. */
+  softDeletePage: (id: string) => Promise<void>;
+  /** Restore a soft-deleted page — clears deleted_at and re-adds to pages list. */
+  restorePage: (id: string) => Promise<void>;
   createFolder: (opts: { name: string; color?: string }) => Promise<Folder>;
   updateFolder: (id: string, updates: FolderUpdate) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
@@ -55,6 +59,8 @@ export interface WorkspaceContextValue {
   scheduleOnce: (pageId: string, start: string, end?: string) => Promise<void>;
   /** Delete all one-off schedule blocks for a page. */
   clearSchedule: (pageId: string) => Promise<void>;
+  /** Unified FTS5 search — title matches ranked above content via bm25(). */
+  searchPages: (query: string, includeCompleted?: boolean) => Promise<SearchResponse>;
   /** Tag name prefix search — for autocomplete in tag chip inputs. */
   searchTags: (query: string) => Promise<string[]>;
   /** Per-page error state from failed debounced writes or scheduling mutations. */
@@ -383,6 +389,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     emit("page:deleted", id);
   }
 
+  async function softDeletePage(id: string) {
+    const timer = debounceTimers.current.get(id);
+    if (timer !== undefined) clearTimeout(timer);
+    debounceTimers.current.delete(id);
+    pendingPatches.current.delete(id);
+
+    await adapter.softDeletePage(id);
+    setPages((prev) => prev.filter((p) => p.id !== id));
+    emit("page:deleted", id);
+  }
+
+  async function restorePage(id: string) {
+    await adapter.restorePage(id);
+    // Re-fetch the page to get its current state and add back to the list
+    const page = await adapter.getPage(id);
+    if (page) {
+      const { content: _, contentText: _ct, ...summary } = page;
+      setPages((prev) => [...prev, summary]);
+    }
+  }
+
   async function reorderPages(folderId: string | null, orderedIds: string[]) {
     const snapshot = [...pages];
     setPages((prev) => {
@@ -561,6 +588,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return adapter.getPage(id);
   }
 
+  function searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse> {
+    return adapter.searchPages(query, includeCompleted);
+  }
+
   function searchTags(query: string): Promise<string[]> {
     return adapter.searchTags(query);
   }
@@ -582,9 +613,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     reload,
     reorderFolders,
     reorderPages,
+    restorePage,
     scheduleOnce,
+    searchPages,
     searchTags,
     selectWorkspace,
+    softDeletePage,
     tags,
     updateFolder,
     updatePage,

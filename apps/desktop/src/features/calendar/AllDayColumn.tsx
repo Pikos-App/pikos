@@ -2,12 +2,6 @@ import type { PageStatus, PageSummary } from "@pikos/core";
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
@@ -142,69 +136,60 @@ function AllDayChip({
   const chipStyle = folderColor ? chipFolderStyle(folderColor) : undefined;
 
   return (
-    <ContextMenu>
-      <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
-        <PopoverTrigger asChild>
-          <ContextMenuTrigger asChild>
-            <button
-              aria-label={item.title || "Untitled"}
-              className={cn(
-                "flex w-full items-center gap-1",
-                CHIP_BASE_CLASSES,
-                !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
-                isDone && "opacity-50",
-                isBeingDragged && "opacity-40"
-              )}
-              onClick={handleClick}
-              onMouseDown={handleMouseDown}
-              style={chipStyle}
-            >
-              <span
-                aria-checked={isDone}
-                aria-label={isDone ? "Mark not done" : "Mark done"}
-                className={cn(
-                  "flex shrink-0 items-center justify-center rounded-[2px] border transition-colors",
-                  "h-3.5 w-3.5",
-                  isDone
-                    ? "border-foreground/40 bg-foreground/10"
-                    : "border-current/30 hover:border-current/70"
-                )}
-                onClick={handleCheckboxClick}
-                onMouseDown={(e) => e.stopPropagation()}
-                role="checkbox"
-                tabIndex={-1}
-              >
-                {isDone && <Check size={8} strokeWidth={2.5} />}
-              </span>
-              <span className="min-w-0 truncate">{item.title || "Untitled"}</span>
-            </button>
-          </ContextMenuTrigger>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="w-[280px] p-3"
-          onMouseDown={(e) => e.stopPropagation()}
-          side="bottom"
-          sideOffset={4}
+    <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
+      <PopoverTrigger asChild>
+        <button
+          aria-label={item.title || "Untitled"}
+          className={cn(
+            "flex w-full items-center gap-1",
+            CHIP_BASE_CLASSES,
+            !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
+            isDone && "opacity-50",
+            isBeingDragged && "opacity-40"
+          )}
+          onClick={handleClick}
+          onContextMenu={(e) => e.preventDefault()}
+          onMouseDown={handleMouseDown}
+          style={chipStyle}
         >
-          <PageBlockPopover
-            onDelete={() => {
-              setPopoverOpen(false);
-              requestDeletePage(item);
-            }}
-            page={item}
-          />
-        </PopoverContent>
-      </Popover>
-      <ContextMenuContent>
-        <ContextMenuItem
-          className="text-destructive focus:text-destructive"
-          onSelect={() => requestDeletePage(item)}
-        >
-          Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+          <span
+            aria-checked={isDone}
+            aria-label={isDone ? "Mark not done" : "Mark done"}
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-[2px] border transition-colors",
+              "h-3.5 w-3.5",
+              isDone
+                ? "border-foreground/40 bg-foreground/10"
+                : "border-current/30 hover:border-current/70"
+            )}
+            onClick={handleCheckboxClick}
+            onMouseDown={(e) => e.stopPropagation()}
+            role="checkbox"
+            tabIndex={-1}
+          >
+            {isDone && <Check size={8} strokeWidth={2.5} />}
+          </span>
+          <span className="min-w-0 truncate">{item.title || "Untitled"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[280px] p-3"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        side="bottom"
+        sideOffset={4}
+      >
+        <PageBlockPopover
+          onDelete={() => {
+            setPopoverOpen(false);
+            requestDeletePage(item);
+          }}
+          onRemoveDate={() => setPopoverOpen(false)}
+          page={item}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 

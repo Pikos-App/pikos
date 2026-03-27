@@ -10,6 +10,7 @@ import { useState } from "react";
 import { FolderChip } from "@/features/pages/components/FolderChip";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
+import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -173,25 +174,24 @@ export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopo
         </button>
         <div className="flex items-center gap-2">
           {onRemoveDate && page.scheduledStart && (
-            <button
+            <TooltipIconButton
               className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-foreground focus:outline-none"
+              icon={<CalendarX size={11} />}
+              label="Remove date"
               onClick={() => {
                 void clearSchedule(page.id);
                 onRemoveDate();
               }}
-              title="Remove date"
-            >
-              <CalendarX size={11} />
-            </button>
+            />
           )}
           {onDelete && (
-            <button
+            <TooltipIconButton
               className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground/40 transition-colors hover:text-destructive focus:outline-none"
+              icon={<Trash2 size={11} />}
+              label="Delete page"
               onClick={onDelete}
-              title="Delete page (⌘⇧D)"
-            >
-              <Trash2 size={11} />
-            </button>
+              shortcut="mod+shift+d"
+            />
           )}
         </div>
       </div>

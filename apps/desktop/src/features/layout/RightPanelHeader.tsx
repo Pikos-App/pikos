@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
+import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
 
 interface RightPanelHeaderProps {
@@ -18,20 +20,13 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
   return (
     <div className="flex shrink-0 items-center gap-1 px-1 py-1">
       {/* Sidebar toggle */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            aria-label={ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-muted-foreground"
-            onClick={() => ui.setSidebarCollapsed(!ui.sidebarCollapsed)}
-          >
-            {ui.sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          {ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} ⌘\
-        </TooltipContent>
-      </Tooltip>
+      <TooltipIconButton
+        className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-muted-foreground"
+        icon={ui.sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        label={ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        onClick={() => ui.setSidebarCollapsed(!ui.sidebarCollapsed)}
+        shortcut="mod+\"
+      />
 
       {/* Center slot — view-specific content */}
       <div className="flex flex-1 items-center">{children}</div>
@@ -54,7 +49,11 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
               <FileText size={16} />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Editor ⌘⇧C</TooltipContent>
+          <TooltipContent side="bottom">
+            <span className="inline-flex items-center gap-1.5">
+              Editor <KeyboardShortcut shortcut="mod+shift+c" />
+            </span>
+          </TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -72,7 +71,11 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
               <Calendar size={16} />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Calendar ⌘⇧C</TooltipContent>
+          <TooltipContent side="bottom">
+            <span className="inline-flex items-center gap-1.5">
+              Calendar <KeyboardShortcut shortcut="mod+shift+c" />
+            </span>
+          </TooltipContent>
         </Tooltip>
       </div>
     </div>

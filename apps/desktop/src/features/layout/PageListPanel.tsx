@@ -19,12 +19,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageListItem } from "@/features/pages/components/PageListItem";
 import { usePageList } from "@/features/pages/hooks/usePageList";
 import type { SortMode } from "@/features/pages/utils/pageFilters";
 import { groupTodayPages } from "@/features/pages/utils/pageFilters";
 import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
+import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
@@ -204,14 +206,19 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
               onOpenChange={(open) => setOpenSortMenu(open ? "page-sort" : null)}
               open={openSortMenu === "page-sort"}
             >
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  title={`Sort: ${sortMode}`}
-                >
-                  <ArrowUpDown size={13} />
-                </button>
-              </DropdownMenuTrigger>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      aria-label={`Sort: ${sortMode}`}
+                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <ArrowUpDown size={13} />
+                    </button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Sort: {sortMode}</TooltipContent>
+              </Tooltip>
               <DropdownMenuContent align="end" className="w-40">
                 {(
                   [
@@ -234,13 +241,13 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <button
+          <TooltipIconButton
             className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            icon={<Plus size={15} />}
+            label="New Page"
             onClick={() => setOpenDialog("quick-add")}
-            title="New Page"
-          >
-            <Plus size={15} />
-          </button>
+            shortcut="mod+n"
+          />
         </div>
       </div>
 

@@ -10,7 +10,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { InsertionLine } from "@/shared/components/InsertionLine";
+import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 
@@ -40,7 +42,7 @@ export function FolderList() {
     sortOrder,
     todayCount,
   } = useFolderList();
-  const { openSortMenu, setOpenSortMenu } = useUI();
+  const { openSortMenu, setOpenDialog, setOpenSortMenu } = useUI();
 
   const SORT_OPTIONS: { value: FolderSortOrder; label: string; icon: React.ReactNode }[] = [
     { icon: <ArrowUpDown size={13} />, label: "Manual", value: "manual" },
@@ -91,24 +93,31 @@ export function FolderList() {
         <div className="mt-4 mb-1 flex items-center justify-between pr-1 pl-2">
           <span className="text-sm font-semibold text-foreground">Folders</span>
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-            <button
+            <TooltipIconButton
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              title="Search"
-            >
-              <Search size={13} />
-            </button>
+              icon={<Search size={13} />}
+              label="Search"
+              onClick={() => setOpenDialog("search")}
+              shortcut="mod+p"
+              side="right"
+            />
             <DropdownMenu
               onOpenChange={(open) => setOpenSortMenu(open ? "folder-sort" : null)}
               open={openSortMenu === "folder-sort"}
             >
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  title="Sort folders"
-                >
-                  <ArrowUpDown size={13} />
-                </button>
-              </DropdownMenuTrigger>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      aria-label="Sort folders"
+                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <ArrowUpDown size={13} />
+                    </button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="right">Sort folders</TooltipContent>
+              </Tooltip>
               <DropdownMenuContent align="end" className="w-40">
                 {SORT_OPTIONS.map((opt) => (
                   <DropdownMenuItem
@@ -124,13 +133,13 @@ export function FolderList() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            <button
+            <TooltipIconButton
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              icon={<Plus size={15} />}
+              label="New Folder"
               onClick={() => void handleCreateFolder()}
-              title="New Folder"
-            >
-              <Plus size={15} />
-            </button>
+              side="right"
+            />
           </div>
         </div>
 

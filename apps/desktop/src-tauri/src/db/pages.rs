@@ -481,6 +481,31 @@ pub async fn delete_page(state: State<'_, DbState>, id: String) -> Result<(), St
 }
 
 #[tauri::command]
+pub async fn soft_delete_page(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    let pool = state.get_pool().await?;
+    sqlx::query("UPDATE pages SET deleted_at = ?, updated_at = ? WHERE id = ?")
+        .bind(now_iso())
+        .bind(now_iso())
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn restore_page(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    let pool = state.get_pool().await?;
+    sqlx::query("UPDATE pages SET deleted_at = NULL, updated_at = ? WHERE id = ?")
+        .bind(now_iso())
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn list_pages(
     state: State<'_, DbState>,
     filter: Option<PageFilter>,
@@ -488,7 +513,7 @@ pub async fn list_pages(
     let pool = state.get_pool().await?;
 
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
-        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE 1=1"
+        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE deleted_at IS NULL"
     ));
 
     if let Some(ref f) = filter {
@@ -558,7 +583,8 @@ pub async fn list_pages_today(state: State<'_, DbState>) -> Result<Vec<PageSumma
     let query = format!(
         "SELECT DISTINCT {cols} FROM pages
          JOIN page_schedules ON page_schedules.page_id = pages.id
-         WHERE date(page_schedules.scheduled_start) <= date('now')
+         WHERE pages.deleted_at IS NULL
+           AND date(page_schedules.scheduled_start) <= date('now')
            AND pages.status != 'done'
          ORDER BY pages.sort_order ASC",
         cols = SUMMARY_COLUMNS

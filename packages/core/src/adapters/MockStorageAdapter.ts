@@ -19,6 +19,7 @@ import type {
   PageRecurrenceRule,
   PageSchedule,
   PageSummary,
+  SearchResponse,
   SearchResult,
 } from "../types";
 
@@ -67,6 +68,7 @@ export class MockStorageAdapter implements StorageAdapter {
   private folders = new Map<string, Folder>();
   private schedules = new Map<string, PageSchedule>();
   private rules = new Map<string, PageRecurrenceRule>();
+  private softDeleted = new Set<string>();
 
   // ─── Pages ──────────────────────────────────────────────────────────────────
 
@@ -99,8 +101,18 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
+  softDeletePage(id: string): Promise<void> {
+    this.softDeleted.add(id);
+    return Promise.resolve();
+  }
+
+  restorePage(id: string): Promise<void> {
+    this.softDeleted.delete(id);
+    return Promise.resolve();
+  }
+
   listPages(filter?: PageFilter): Promise<PageSummary[]> {
-    const all = [...this.pages.values()];
+    const all = [...this.pages.values()].filter((p) => !this.softDeleted.has(p.id));
     const filtered = filter ? all.filter((p) => matchesFilter(p, filter)) : all;
     return Promise.resolve(filtered.sort((a, b) => a.sortOrder - b.sortOrder).map(toSummary));
   }
@@ -113,7 +125,7 @@ export class MockStorageAdapter implements StorageAdapter {
         .map((s) => s.pageId)
     );
     const results = [...this.pages.values()]
-      .filter((p) => pageIds.has(p.id) && p.status !== "done")
+      .filter((p) => pageIds.has(p.id) && p.status !== "done" && !this.softDeleted.has(p.id))
       .sort((a, b) => a.sortOrder - b.sortOrder);
     return Promise.resolve(results.map(toSummary));
   }
@@ -137,20 +149,70 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve([...names].sort().slice(0, 20));
   }
 
-  searchPages(query: string): Promise<SearchResult[]> {
-    const q = query.toLowerCase();
-    const results: SearchResult[] = [];
+  searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse> {
+    const q = query.toLowerCase().trim();
+    if (!q) return Promise.resolve({ completedCount: 0, results: [] });
+    const titleResults: SearchResult[] = [];
+    const contentResults: SearchResult[] = [];
+    let completedCount = 0;
     for (const page of this.pages.values()) {
-      const text = `${page.title} ${page.subtitle ?? ""} ${page.content}`.toLowerCase();
-      if (text.includes(q)) {
+      if (this.softDeleted.has(page.id)) continue;
+      const titleMatch = page.title.toLowerCase().includes(q);
+      const text = `${page.subtitle ?? ""} ${page.content}`.toLowerCase();
+      const contentMatch = text.includes(q);
+      if (!titleMatch && !contentMatch) continue;
+      // Count completed matches regardless of filter
+      if (page.status === "done") {
+        completedCount++;
+        if (!includeCompleted) continue;
+      }
+      // Build a short content preview (first ~80 chars of body)
+      const bodyText = (page.content || "").slice(0, 80);
+      const meta = {
+        contentPreview: bodyText,
+        priority: page.priority,
+        scheduledDate: page.scheduledStart ?? null,
+        status: page.status,
+        subtitle: page.subtitle ?? null,
+        tags: page.tags,
+      } as const;
+      if (titleMatch && contentMatch) {
         const idx = text.indexOf(q);
         const start = Math.max(0, idx - 40);
         const end = Math.min(text.length, idx + q.length + 40);
-        const excerpt = text.slice(start, end).replace(q, `<mark>${q}</mark>`);
-        results.push({ excerpt, id: page.id, title: page.title });
+        const excerpt = text.slice(start, end);
+        titleResults.push({
+          excerpt,
+          id: page.id,
+          matchSource: "both",
+          title: page.title,
+          ...meta,
+        });
+      } else if (titleMatch) {
+        titleResults.push({
+          excerpt: "",
+          id: page.id,
+          matchSource: "title",
+          title: page.title,
+          ...meta,
+        });
+      } else if (contentMatch) {
+        const idx = text.indexOf(q);
+        const start = Math.max(0, idx - 40);
+        const end = Math.min(text.length, idx + q.length + 40);
+        const excerpt = text.slice(start, end);
+        contentResults.push({
+          excerpt,
+          id: page.id,
+          matchSource: "content",
+          title: page.title,
+          ...meta,
+        });
       }
     }
-    return Promise.resolve(results);
+    // Title matches first (mimics bm25 weighting)
+    const results = [...titleResults, ...contentResults].slice(0, 20);
+    return Promise.resolve({ completedCount, results });
   }
 
   // ─── Folders ────────────────────────────────────────────────────────────────

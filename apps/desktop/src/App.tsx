@@ -1,25 +1,45 @@
+import { useEffect, useRef } from "react";
+
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThreePanelLayout } from "@/features/layout/ThreePanelLayout";
 import { QuickAddDialog } from "@/features/pages/components/QuickAddDialog";
 import { UNDO_TOAST_DURATION_MS } from "@/features/pages/hooks/usePageList";
+import { SearchPalette } from "@/features/search/components/SearchPalette";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { WelcomeScreen } from "@/features/workspace/WelcomeScreen";
 import { UndoToast } from "@/shared/components/UndoToast";
-import { UIProvider } from "@/shared/context/UIContext";
+import { UIProvider, useUI } from "@/shared/context/UIContext";
 import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
 import { useKeyboardListener } from "@/shared/keyboard/useKeyboard";
 
+/** Update lastOpenedAt on the page whenever activePageId changes. */
+function useTrackPageOpened() {
+  const { activePageId } = useUI();
+  const { updatePage } = useWorkspace();
+  const prevIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (activePageId && activePageId !== prevIdRef.current) {
+      prevIdRef.current = activePageId;
+      updatePage(activePageId, { lastOpenedAt: new Date().toISOString() });
+    }
+    if (!activePageId) prevIdRef.current = null;
+  }, [activePageId, updatePage]);
+}
+
 function AppShell() {
   useKeyboardListener();
+  useTrackPageOpened();
   const { handleUndoDelete, handleUndoDismiss, undoItems } = useUndoDelete();
   return (
     <>
       <ThreePanelLayout />
       <SettingsPage />
       <QuickAddDialog />
+      <SearchPalette />
       <UndoToast
         duration={UNDO_TOAST_DURATION_MS}
         items={undoItems}
@@ -51,7 +71,7 @@ export default function App() {
       <WorkspaceProvider>
         <UIProvider>
           <UndoDeleteProvider>
-            <TooltipProvider>
+            <TooltipProvider delayDuration={400}>
               <WorkspaceGate />
             </TooltipProvider>
           </UndoDeleteProvider>

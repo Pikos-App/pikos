@@ -23,12 +23,8 @@ Status: `[ ]` pending · Delete task when done.
 
 _Without these the app feels half-finished to any organic user. Ship before public launch._
 
-- [ ] **GOO-17** Command palette _(High — public launch blocker)_
-  `Cmd+P` → fuzzy page title search. `Cmd+P` twice (chord) → content search mode. `Cmd+K` → actions (new page, switch workspace, settings). Recent pages section.
-  Title search: client-side fuzzy via `fuse.js` against `pages[]` in WorkspaceContext (immediate, no DB round-trip). Content search: FTS5 via `search_pages` Tauri command (debounced). See `features/search.md`. It seems like this could use some more thought though — maybe we want server-side search, then we can return the data that's needed to navigate to the folder/page? This should be insanely fast regardless of how many pages/folders there are. Content search should also be ripping fast and top tier — highlight matching words/partial.
 
-- [ ] **GOO-18** FTS5 content search _(High — public launch blocker)_
-  FTS5 virtual table on `pages.content` + `pages.title` + `pages.tags`. Tauri command `search_pages(query)`. Updates on save. Highlighted excerpt snippets via FTS5 `snippet()`.
+- [ ] Check huge pages in content search + check long titles
 
 - [ ] shadcn tooltip + implement consistent tooltips across the app for all icons - if icon has a keyboard shortcut show the keyboard shortcut. [title] (shortcut), account for mac/windows/linux key names (command vs control, etc). Example: View Calendar (cmd + shift + c). Use common symbols when possible (command, control, shift, etc).
 

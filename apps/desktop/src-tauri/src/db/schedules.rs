@@ -347,12 +347,14 @@ pub async fn list_page_schedules_range(
 ) -> Result<Vec<PageSchedule>, String> {
     let pool = state.get_pool().await?;
     let rows = sqlx::query_as::<_, PageScheduleRow>(
-        "SELECT * FROM page_schedules
-         WHERE (scheduled_end IS NULL AND date(scheduled_start) BETWEEN ? AND ?)
-            OR (scheduled_end IS NOT NULL
-                AND date(scheduled_start) <= ?
-                AND date(scheduled_end)   >= ?)
-         ORDER BY scheduled_start ASC",
+        "SELECT page_schedules.* FROM page_schedules
+         JOIN pages ON pages.id = page_schedules.page_id
+         WHERE pages.deleted_at IS NULL
+           AND ((page_schedules.scheduled_end IS NULL AND date(page_schedules.scheduled_start) BETWEEN ? AND ?)
+             OR (page_schedules.scheduled_end IS NOT NULL
+                 AND date(page_schedules.scheduled_start) <= ?
+                 AND date(page_schedules.scheduled_end)   >= ?))
+         ORDER BY page_schedules.scheduled_start ASC",
     )
     .bind(&start)
     .bind(&end)

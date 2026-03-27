@@ -29,6 +29,54 @@ pub(crate) fn now_iso() -> String {
     chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
 }
 
+/// Recursively extract plain text from a Tiptap JSON document.
+/// Mirrors the TypeScript `extractText()` in packages/core — keeps FTS
+/// content_text in sync for pages created before the frontend sent it.
+fn extract_text_from_tiptap(content: &str) -> String {
+    if content.is_empty() || content == "{}" {
+        return String::new();
+    }
+    let doc: serde_json::Value = match serde_json::from_str(content) {
+        Ok(v) => v,
+        Err(_) => return String::new(),
+    };
+    let mut parts: Vec<String> = Vec::new();
+    walk_tiptap_node(&doc, &mut parts);
+    parts.join("\n").trim().to_string()
+}
+
+fn walk_tiptap_node(node: &serde_json::Value, parts: &mut Vec<String>) {
+    // Text leaf node
+    if let Some(text) = node.get("text").and_then(|t| t.as_str()) {
+        parts.push(text.to_string());
+        return;
+    }
+
+    let children = match node.get("content").and_then(|c| c.as_array()) {
+        Some(arr) => arr,
+        None => return,
+    };
+
+    let node_type = node.get("type").and_then(|t| t.as_str()).unwrap_or("");
+    let is_block = matches!(
+        node_type,
+        "paragraph" | "heading" | "codeBlock" | "blockquote" | "listItem" | "taskItem"
+    );
+
+    let mut child_parts: Vec<String> = Vec::new();
+    for child in children {
+        walk_tiptap_node(child, &mut child_parts);
+    }
+
+    if is_block {
+        // Block nodes: join inline children, push as single entry
+        parts.push(child_parts.join(""));
+    } else {
+        // Container nodes (doc, bulletList, orderedList, taskList): pass through
+        parts.extend(child_parts);
+    }
+}
+
 /// Open (or create) a SQLite workspace at the given path and run migrations.
 /// Called by WorkspaceContext when the user opens or creates a workspace.
 #[tauri::command]
@@ -57,6 +105,45 @@ pub async fn connect_db(path: String, state: tauri::State<'_, DbState>) -> Resul
         .await
         .map_err(|e| e.to_string())?;
 
+    // Backfill content_text for pages where it's empty but content exists.
+    // This covers pages created before the frontend started sending content_text.
+    backfill_content_text(&pool).await?;
+
+    // Rebuild FTS5 index from the pages content table.
+    // For external-content FTS5 tables (content='pages'), the index is not
+    // automatically populated from existing rows — triggers only fire on
+    // INSERT/UPDATE/DELETE after the migration. Rebuilding on connect ensures
+    // any pre-existing pages are indexed and the index stays consistent.
+    sqlx::query("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     *state.0.lock().await = Some(pool);
+    Ok(())
+}
+
+/// Backfill content_text by re-extracting plain text from Tiptap JSON content
+/// for any pages where content_text is empty but content is not.
+async fn backfill_content_text(pool: &SqlitePool) -> Result<(), String> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT id, content FROM pages WHERE (content_text IS NULL OR content_text = '') AND content != '' AND content != '{}'",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    for (id, content) in &rows {
+        let text = extract_text_from_tiptap(content);
+        if !text.is_empty() {
+            sqlx::query("UPDATE pages SET content_text = ? WHERE id = ?")
+                .bind(&text)
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
     Ok(())
 }
