@@ -20,6 +20,16 @@ function formatCombo(combo: string): string[] {
         return ALT;
       case "Enter":
         return "↵";
+      case "Tab":
+        return "⇥";
+      case "ArrowUp":
+        return "↑";
+      case "ArrowDown":
+        return "↓";
+      case "ArrowLeft":
+        return "←";
+      case "ArrowRight":
+        return "→";
       case "\\":
         return "\\";
       default:
@@ -42,25 +52,44 @@ const GROUPS: ShortcutGroup[] = [
   {
     items: [
       { combo: "Mod+N", label: "New page" },
-      { combo: "Mod+P", label: "Quick switcher" },
+      { combo: "Mod+P", label: "Search" },
       { combo: "Mod+\\", label: "Toggle sidebar" },
       { combo: "Mod+Shift+C", label: "Toggle calendar / editor" },
       { combo: "Mod+Shift+D", label: "Delete page" },
-      { combo: "Mod+W", label: "Close page" },
     ],
     label: "Navigation",
   },
   {
     items: [
-      { combo: "J", label: "Move selection down" },
-      { combo: "K", label: "Move selection up" },
-      { combo: "Enter", label: "Open selected" },
+      { combo: "ArrowUp", label: "Select previous page" },
+      { combo: "ArrowDown", label: "Select next page" },
+      { combo: "C", label: "Toggle completion" },
     ],
     label: "Page list",
   },
   {
-    items: [{ combo: "Mod+K", label: "Insert / edit link" }],
+    items: [
+      { combo: "ArrowUp", label: "Select previous view / folder" },
+      { combo: "ArrowDown", label: "Select next view / folder" },
+    ],
+    label: "Sidebar",
+  },
+  {
+    items: [
+      { combo: "/", label: "Slash menu" },
+      { combo: "Mod+K", label: "Insert / edit link" },
+      { combo: "Tab", label: "Indent" },
+      { combo: "Shift+Tab", label: "Outdent" },
+    ],
     label: "Editor",
+  },
+  {
+    items: [
+      { combo: "ArrowLeft", label: "Previous week" },
+      { combo: "ArrowRight", label: "Next week" },
+      { combo: "T", label: "Jump to today" },
+    ],
+    label: "Calendar",
   },
 ];
 

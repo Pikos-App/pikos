@@ -14,19 +14,8 @@ Status: `[ ]` pending · Delete task when done.
 - [ ] **GOO-108** Tab key behavior in editor _(High)_
   Tab/Shift+Tab intercepted — no longer moves browser focus. Lists: indent/outdent ✓. Task items: indent/outdent ✓. Code blocks: insert/remove 2 spaces ✓. **Remaining:** Tab in normal paragraphs should insert/remove indentation (insertText with spaces not working in paragraph nodes — needs investigation).
 
+- [ ] long events don't render correctly on the calendar.
 
-- [ ] **GOO-113** Editor accessibility _(High)_
-  The editor needs WCAG 2.1 AA compliance per project standards. Currently missing: `role="textbox"` and `aria-label` on the editor container, `aria-live` region for save state announcements, visible focus indicator on the editor container, keyboard-accessible task list checkboxes, placeholder text announced to screen readers (currently CSS-only). Should be done alongside or right after GOO-106 (keyboard scope).
-  **Note (from GOO-111):** Add `tabIndex={-1}` to the root `<div>` in `PageListItem.tsx` so that after Escape blurs the editor, the active page list item is properly focusable and receives visual focus. Currently the div is not natively focusable so `el.focus()` silently no-ops.
-
-## 🔍 Search & Commands — Minimum Quality Bar
-
-_Without these the app feels half-finished to any organic user. Ship before public launch._
-
-
-- [ ] Check huge pages in content search + check long titles
-
-- [ ] shadcn tooltip + implement consistent tooltips across the app for all icons - if icon has a keyboard shortcut show the keyboard shortcut. [title] (shortcut), account for mac/windows/linux key names (command vs control, etc). Example: View Calendar (cmd + shift + c). Use common symbols when possible (command, control, shift, etc).
 
 ## 🚀 Friends Beta Gate
 
@@ -42,6 +31,10 @@ _Must ship before sharing with anyone outside the team. External blocker: Apple 
 - [ ] **GOO-50** Auto-updater _(Medium — friends beta blocker)_
   `tauri-plugin-updater`. Check on launch → non-blocking banner ("Version X.X available — restart to update") → download + install + relaunch. Update server: GitHub Releases. Wire in before any external release.
 
+- [ ] Misc dogfooding improvements.
+
+- [ ] Add more keyboard shortcuts, list them in the settings page. Task completion?
+
 ---
 
 ## 🌐 Public Launch Gate (Phase 3)
@@ -51,14 +44,6 @@ _Required before the marketing site goes live and the download button appears._
 - [ ] **GOO-53** Marketing site Phase 3 _(Medium — public launch blocker)_
   Phase 2.5 ✓ (landing page + email capture form live at pikos.app). Remaining for Phase 3:
   `/open` (open metrics), `/download` (release links), `/changelog`. See `features/marketing-site.md`.
-
-- [ ] **GOO-116** Email capture backend integration _(High — public launch blocker)_
-  The email form on the landing page is UI-only. Wire it to an email service so captured addresses are stored and can be emailed on launch.
-  - Pick provider: Resend Audiences, Loops, or ConvertKit (all have free tiers; Loops is nicest for simple launch lists)
-  - Add a serverless handler or use the provider's form endpoint directly (no server needed if using a hosted form endpoint)
-  - On submit: POST to provider API → return success/error to UI → show confirmation state ("You're on the list!")
-  - Double-opt-in not required for a launch waitlist
-  - Store API key as env var in hosting platform (not in repo)
 
 - [ ] **GOO-117** Marketing site analytics _(Medium — public launch blocker)_
   Lightweight, privacy-first page view tracking. No cookies, no fingerprinting — consistent with the product promise.

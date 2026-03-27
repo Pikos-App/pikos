@@ -46,6 +46,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
       onRenameStart,
       onSelect,
       prefix,
+      tabIndex,
       ...rest
     }: SidebarListItemProps,
     ref
@@ -67,7 +68,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
         {...rest}
         {...(dragProps as React.HTMLAttributes<HTMLDivElement>)}
         className={cn(
-          "flex cursor-pointer rounded px-2 py-2.5 text-sm select-none",
+          "flex cursor-pointer rounded px-2 py-2.5 text-sm outline-none select-none",
           isDragOver
             ? "bg-primary/10 text-foreground ring-1 ring-primary/40"
             : isActive
@@ -80,6 +81,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
           e.stopPropagation();
           onRenameStart();
         }}
+        tabIndex={tabIndex ?? 0}
       >
         {prefix}
         <div className="relative min-w-0 flex-1">

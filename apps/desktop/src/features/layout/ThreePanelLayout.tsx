@@ -3,10 +3,12 @@ import { motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
 import { useUI } from "@/shared/context/UIContext";
+import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
 import { EditorPanel } from "./EditorPanel";
 import { PageListPanel } from "./PageListPanel";
 import { Sidebar } from "./Sidebar";
+import { TitleBar } from "./TitleBar";
 import { usePanelResize } from "./usePanelResize";
 import { useThreePanelDnD } from "./useThreePanelDnD";
 
@@ -14,6 +16,7 @@ const PANEL_SPRING = { damping: 35, stiffness: 350, type: "spring" as const };
 
 export function ThreePanelLayout() {
   const { isDraggingOverCalendar, sidebarCollapsed } = useUI();
+  const isFullscreen = useIsFullscreen();
 
   // Suppress all dnd-kit collision detection while the cursor is over the
   // calendar — prevents page items from shifting position during a calendar drop.
@@ -50,39 +53,42 @@ export function ThreePanelLayout() {
     >
       <div
         className={cn(
-          "flex h-screen bg-background text-foreground",
+          "flex h-screen flex-col bg-background text-foreground",
           (activePageData ?? activeFolderData) && "select-none"
         )}
       >
-        <motion.div
-          animate={{
-            opacity: sidebarCollapsed ? 0 : 1,
-            width: sidebarCollapsed ? 0 : left.width,
-          }}
-          className={cn(
-            "h-full shrink-0 overflow-hidden",
-            sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
-          )}
-          transition={PANEL_SPRING}
-        >
-          <Sidebar onResizeStart={left.onResizeStart} width={left.width} />
-        </motion.div>
+        {!isFullscreen && <TitleBar />}
+        <div className="flex min-h-0 flex-1">
+          <motion.div
+            animate={{
+              opacity: sidebarCollapsed ? 0 : 1,
+              width: sidebarCollapsed ? 0 : left.width,
+            }}
+            className={cn(
+              "h-full shrink-0 overflow-hidden",
+              sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
+            )}
+            transition={PANEL_SPRING}
+          >
+            <Sidebar onResizeStart={left.onResizeStart} width={left.width} />
+          </motion.div>
 
-        <motion.div
-          animate={{
-            opacity: sidebarCollapsed ? 0 : 1,
-            width: sidebarCollapsed ? 0 : mid.width,
-          }}
-          className={cn(
-            "h-full shrink-0 overflow-hidden",
-            sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
-          )}
-          transition={PANEL_SPRING}
-        >
-          <PageListPanel onResizeStart={mid.onResizeStart} width={mid.width} />
-        </motion.div>
+          <motion.div
+            animate={{
+              opacity: sidebarCollapsed ? 0 : 1,
+              width: sidebarCollapsed ? 0 : mid.width,
+            }}
+            className={cn(
+              "h-full shrink-0 overflow-hidden",
+              sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
+            )}
+            transition={PANEL_SPRING}
+          >
+            <PageListPanel onResizeStart={mid.onResizeStart} width={mid.width} />
+          </motion.div>
 
-        <EditorPanel />
+          <EditorPanel />
+        </div>
       </div>
 
       <DragOverlay dropAnimation={null}>

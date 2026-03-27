@@ -15,7 +15,10 @@
         "label": "main",
         "title": "Pikos",
         "width": 1480,
-        "height": 920
+        "height": 920,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

@@ -5,6 +5,8 @@
   "packageManager": "pnpm@10.30.3",
   "scripts": {
     "dev": "turbo dev",
+    "dev:desktop": "pnpm --filter @pikos/desktop tauri dev",
+    "dev:marketing": "pnpm --filter @pkos/marketing dev",
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",

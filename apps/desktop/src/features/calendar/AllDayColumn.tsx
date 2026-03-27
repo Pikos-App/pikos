@@ -1,4 +1,5 @@
 import type { PageStatus, PageSummary } from "@pikos/core";
+import { format } from "date-fns";
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -235,8 +236,9 @@ export function AllDayColumn({
 
   return (
     <div
+      aria-label={`All-day events, ${format(day, "EEEE MMMM d")}`}
       className={cn(
-        "flex min-w-0 flex-1 cursor-cell flex-col overflow-hidden border-l border-border/50 px-1 py-1 first:border-l-0",
+        "flex min-w-0 flex-1 cursor-cell flex-col overflow-hidden border-l border-border/40 px-1 py-1 first:border-l-0",
         weekend ? "bg-white/[0.012]" : "",
         (isTimedDragTarget || isAllDayDragTarget) && "bg-accent/30"
       )}

@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { FolderChip } from "@/features/pages/components/FolderChip";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { TagsPopover } from "@/features/pages/components/TagsPopover";
+import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { nowLocalISO } from "@/shared/utils/dates";
@@ -79,14 +80,23 @@ function Byline({
       {onOpenInCalendar && (
         <>
           <BylineSeparator />
-          <button
-            aria-label="View in calendar"
-            className="inline-flex items-center gap-1 rounded transition-colors hover:text-muted-foreground focus:outline-none"
-            onClick={onOpenInCalendar}
-          >
-            <CalendarDays size={13} />
-            <span>View</span>
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                aria-label="View in calendar"
+                className="inline-flex items-center gap-1 rounded transition-colors hover:text-muted-foreground focus:outline-none"
+                onClick={onOpenInCalendar}
+              >
+                <CalendarDays size={13} />
+                <span>View</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <span className="inline-flex items-center gap-1.5">
+                View in calendar <KeyboardShortcut shortcut="mod+shift+c" />
+              </span>
+            </TooltipContent>
+          </Tooltip>
         </>
       )}
 

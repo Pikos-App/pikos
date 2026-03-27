@@ -37,7 +37,7 @@ export function FolderChip({ folders, onChange, value }: FolderChipProps) {
       <PopoverTrigger asChild>
         <button
           aria-label={`Folder: ${label}`}
-          className="inline-flex min-w-0 cursor-pointer items-center gap-1 rounded text-sm text-muted-foreground/60 transition-colors hover:text-muted-foreground focus:outline-none"
+          className="inline-flex min-w-0 items-center gap-1 rounded text-sm text-muted-foreground/60 transition-colors hover:text-muted-foreground focus:outline-none"
         >
           <FolderOpen aria-hidden="true" className="shrink-0" size={13} />
           <span className="max-w-[100px] truncate">{label}</span>
@@ -64,7 +64,7 @@ export function FolderChip({ folders, onChange, value }: FolderChipProps) {
         <div className="max-h-48 overflow-y-auto border-t border-border/40 py-1">
           <button
             className={cn(
-              "flex w-full cursor-pointer items-center px-3 py-1.5 text-sm transition-colors hover:bg-accent",
+              "flex w-full items-center px-3 py-1.5 text-sm transition-colors hover:bg-accent",
               value === null ? "font-medium text-foreground" : "text-muted-foreground"
             )}
             onClick={() => {
@@ -78,7 +78,7 @@ export function FolderChip({ folders, onChange, value }: FolderChipProps) {
           {filteredFolders.map((folder) => (
             <button
               className={cn(
-                "flex w-full cursor-pointer items-center px-3 py-1.5 text-sm transition-colors hover:bg-accent",
+                "flex w-full items-center px-3 py-1.5 text-sm transition-colors hover:bg-accent",
                 value === folder.id ? "font-medium text-foreground" : "text-muted-foreground"
               )}
               key={folder.id}

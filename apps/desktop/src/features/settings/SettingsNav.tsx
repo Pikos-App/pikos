@@ -2,7 +2,9 @@
 
 import { Code2, Keyboard, Palette, Settings, X } from "lucide-react";
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 
 export type SettingsSection = "general" | "appearance" | "shortcuts" | "developer";
 
@@ -31,13 +33,22 @@ export function SettingsNav({ active, onClose, onNavigate, width }: SettingsNavP
         <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
           Settings
         </span>
-        <button
-          aria-label="Close settings"
-          className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          onClick={onClose}
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              aria-label="Close settings"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={onClose}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <span className="inline-flex items-center gap-1.5">
+              Close <KeyboardShortcut shortcut="Escape" />
+            </span>
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Nav items */}

@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
@@ -44,6 +45,25 @@ export function FolderList() {
   } = useFolderList();
   const { openSortMenu, setOpenDialog, setOpenSortMenu } = useUI();
 
+  // ── Keyboard navigation ───────────────────────────────────────────────────
+
+  function handleNavKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    e.currentTarget.setAttribute("data-keyboard-nav", "1");
+    const navIds = ["today", "inbox", ...folders.map((f) => f.id)];
+    const dir = e.key === "ArrowDown" ? 1 : -1;
+    const currentIdx = navIds.indexOf(activeViewId);
+    const newIdx =
+      currentIdx === -1
+        ? dir === 1
+          ? 0
+          : navIds.length - 1
+        : Math.max(0, Math.min(navIds.length - 1, currentIdx + dir));
+    const nextId = navIds[newIdx];
+    if (nextId !== undefined) setActiveViewId(nextId);
+  }
+
   const SORT_OPTIONS: { value: FolderSortOrder; label: string; icon: React.ReactNode }[] = [
     { icon: <ArrowUpDown size={13} />, label: "Manual", value: "manual" },
     { icon: <Text size={13} />, label: "Alphabetical", value: "alphabetical" },
@@ -72,10 +92,18 @@ export function FolderList() {
 
   return (
     <>
-      <div className="flex flex-col gap-0.5 px-1 py-2">
+      <div
+        aria-label="Views and folders"
+        className="flex flex-col gap-0.5 px-1 py-2 focus-visible:rounded focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none"
+        onKeyDown={handleNavKeyDown}
+        onPointerMove={(e) => e.currentTarget.removeAttribute("data-keyboard-nav")}
+        role="group"
+        tabIndex={0}
+      >
         <SmartViewEntry
           badge={todayCount}
           icon={<CalendarDays size={16} />}
+          id="nav-today"
           isActive={activeViewId === "today"}
           label="Today"
           onSelect={() => setActiveViewId("today")}
@@ -84,6 +112,7 @@ export function FolderList() {
           badge={inboxCount}
           dragRef={inboxDropRef}
           icon={<Inbox size={16} />}
+          id="nav-inbox"
           isActive={activeViewId === "inbox"}
           isDragOver={isPageOverInbox}
           label="Inbox"
@@ -92,7 +121,10 @@ export function FolderList() {
 
         <div className="mt-4 mb-1 flex items-center justify-between pr-1 pl-2">
           <span className="text-sm font-semibold text-foreground">Folders</span>
-          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <IconToolbar
+            aria-label="Folder actions"
+            className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+          >
             <TooltipIconButton
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               icon={<Search size={13} />}
@@ -100,6 +132,7 @@ export function FolderList() {
               onClick={() => setOpenDialog("search")}
               shortcut="mod+p"
               side="right"
+              tabIndex={0}
             />
             <DropdownMenu
               onOpenChange={(open) => setOpenSortMenu(open ? "folder-sort" : null)}
@@ -111,6 +144,7 @@ export function FolderList() {
                     <button
                       aria-label="Sort folders"
                       className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      tabIndex={-1}
                     >
                       <ArrowUpDown size={13} />
                     </button>
@@ -139,8 +173,9 @@ export function FolderList() {
               label="New Folder"
               onClick={() => void handleCreateFolder()}
               side="right"
+              tabIndex={-1}
             />
-          </div>
+          </IconToolbar>
         </div>
 
         <SortableContext items={folderIds} strategy={verticalListSortingStrategy}>

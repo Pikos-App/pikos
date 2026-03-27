@@ -58,10 +58,14 @@ const extensions = [
 
 // HTML attributes applied to the ProseMirror contenteditable element.
 const EDITOR_ATTRIBUTES = {
+  "aria-label": "Page content",
+  "aria-multiline": "true",
+  "aria-placeholder": "Start writing, or type '/' for commands…",
   autocapitalize: "off",
   autocomplete: "off",
   autocorrect: "off",
   class: "editor-content",
+  role: "textbox",
   spellcheck: "true",
 };
 
@@ -154,7 +158,7 @@ export function EditorPane() {
 
   const pageId = page?.id ?? null;
 
-  const { flush, saveError } = useAutosave(
+  const { flush, isSaving, saveError } = useAutosave(
     contentVersion,
     (_version: number) => {
       if (!pageId || contentJsonRef.current === "") return Promise.resolve();
@@ -234,6 +238,10 @@ export function EditorPane() {
           onAddingLinkChange={setIsAddingLink}
         />
       )}
+      {/* Visually-hidden live region — announces save errors to screen readers */}
+      <div aria-atomic="true" aria-live="assertive" className="sr-only">
+        {saveError ? "Failed to save. Please try again." : isSaving ? "Saving…" : ""}
+      </div>
       <div className="flex-1 overflow-y-auto" ref={scrollContainerRef}>
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         <div

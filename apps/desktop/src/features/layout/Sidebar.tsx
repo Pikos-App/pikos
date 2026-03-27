@@ -42,7 +42,7 @@ export function Sidebar({ onResizeStart, width }: SidebarProps) {
 
       {/* Drag handle — right edge */}
       <div
-        className="absolute top-0 right-0 h-full w-1 cursor-col-resize transition-colors hover:bg-primary/30"
+        className="absolute top-0 right-0 h-full w-1 cursor-col-resize transition-colors hover:bg-border/40 active:bg-border/60"
         onMouseDown={onResizeStart}
       />
     </div>

@@ -531,7 +531,12 @@ export function WeekGrid({
   }, [registerExternalDragUpdater]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" ref={weekGridRef}>
+    <div
+      aria-label="Week calendar"
+      className="flex min-h-0 flex-1 flex-col"
+      ref={weekGridRef}
+      role="region"
+    >
       {/* Day header — "Mon 16", "Tue 17", etc. Today's date gets a pill highlight */}
       <div className="flex shrink-0 border-t border-b border-border/40">
         {/* Gutter spacer */}
@@ -540,6 +545,7 @@ export function WeekGrid({
           const isToday = isSameDay(day, today);
           return (
             <div
+              aria-label={format(day, "EEEE, MMMM d")}
               className={cn(
                 "flex min-w-0 flex-1 items-center justify-center gap-1 border-l border-border/40 py-1.5 first:border-l-0",
                 isWeekend(day) ? "bg-white/[0.012]" : ""
@@ -589,7 +595,7 @@ export function WeekGrid({
       />
 
       {/* Scrollable time grid */}
-      <div className="min-h-0 flex-1 overflow-y-auto" ref={scrollRef}>
+      <div aria-label="Time grid" className="min-h-0 flex-1 overflow-y-auto" ref={scrollRef}>
         <div className="flex">
           <TimeGutter />
           <div className="flex flex-1" ref={dayColumnsRef}>

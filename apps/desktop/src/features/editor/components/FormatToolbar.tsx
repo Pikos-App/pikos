@@ -19,6 +19,9 @@ import {
   Underline,
 } from "lucide-react";
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
+
 interface FormatToolbarProps {
   editor: Editor;
   onAddLink?: () => void;
@@ -28,6 +31,7 @@ interface ToolbarButton {
   command: () => void;
   icon: React.ReactNode;
   isActive: boolean;
+  shortcut?: string;
   title: string;
 }
 
@@ -72,18 +76,21 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
           command: () => editor.chain().focus().toggleBold().run(),
           icon: <Bold size={14} strokeWidth={2.5} />,
           isActive: isBold,
+          shortcut: "mod+b",
           title: "Bold",
         },
         {
           command: () => editor.chain().focus().toggleItalic().run(),
           icon: <Italic size={14} strokeWidth={2.5} />,
           isActive: isItalic,
+          shortcut: "mod+i",
           title: "Italic",
         },
         {
           command: () => editor.chain().focus().toggleUnderline().run(),
           icon: <Underline size={14} strokeWidth={2.5} />,
           isActive: isUnderline,
+          shortcut: "mod+u",
           title: "Underline",
         },
       ],
@@ -94,12 +101,14 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
           command: () => editor.chain().focus().toggleStrike().run(),
           icon: <Strikethrough size={14} strokeWidth={2.5} />,
           isActive: isStrike,
+          shortcut: "mod+shift+x",
           title: "Strikethrough",
         },
         {
           command: () => editor.chain().focus().toggleCode().run(),
           icon: <Code size={14} strokeWidth={2.5} />,
           isActive: isCode,
+          shortcut: "mod+e",
           title: "Inline code",
         },
       ],
@@ -158,6 +167,7 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
           },
           icon: <Link size={14} strokeWidth={2.5} />,
           isActive: isLink,
+          shortcut: "mod+k",
           title: "Link",
         },
       ],
@@ -175,17 +185,26 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
           <div className="flex items-center" key={gi}>
             {gi > 0 && <div className="bubble-toolbar-divider" />}
             {group.buttons.map((btn, bi) => (
-              <button
-                className={["bubble-toolbar-btn", btn.isActive ? "is-active" : ""].join(" ")}
-                key={bi}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  btn.command();
-                }}
-                title={btn.title}
-              >
-                {btn.icon}
-              </button>
+              <Tooltip key={bi}>
+                <TooltipTrigger asChild>
+                  <button
+                    aria-label={btn.title}
+                    className={["bubble-toolbar-btn", btn.isActive ? "is-active" : ""].join(" ")}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      btn.command();
+                    }}
+                  >
+                    {btn.icon}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <span className={`inline-flex items-center${btn.shortcut ? "gap-1.5" : ""}`}>
+                    {btn.title}
+                    {btn.shortcut && <KeyboardShortcut shortcut={btn.shortcut} />}
+                  </span>
+                </TooltipContent>
+              </Tooltip>
             ))}
           </div>
         ))}

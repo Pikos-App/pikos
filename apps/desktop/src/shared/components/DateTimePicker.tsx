@@ -194,14 +194,14 @@ export function MiniCalendar({
         </span>
         <button
           aria-label="Previous month"
-          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={onPrev}
         >
           <ChevronLeft size={14} />
         </button>
         <button
           aria-label="Next month"
-          className="ml-0.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="ml-0.5 flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={onNext}
         >
           <ChevronRight size={14} />
@@ -237,7 +237,7 @@ export function MiniCalendar({
             <button
               aria-label={`${MONTH_NAMES[month]} ${dayNum}, ${year}`}
               aria-pressed={isSelected}
-              className="flex h-8 w-full cursor-pointer items-center justify-center focus:outline-none"
+              className="flex h-8 w-full items-center justify-center focus:outline-none"
               key={dayNum}
               onClick={() => onSelect(new Date(year, month, dayNum))}
             >
@@ -546,7 +546,7 @@ export function DateTimePicker({
         <button
           aria-label={hasDate ? `Scheduled: ${triggerLabel}` : "Set schedule"}
           className={cn(
-            "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded text-sm whitespace-nowrap transition-colors hover:text-muted-foreground focus:outline-none",
+            "inline-flex shrink-0 items-center gap-1 rounded text-sm whitespace-nowrap transition-colors hover:text-muted-foreground focus:outline-none",
             isPast && "text-red-500 hover:text-red-400",
             !hasDate && "text-muted-foreground/60"
           )}
@@ -583,7 +583,7 @@ export function DateTimePicker({
                     )}
                     <button
                       className={cn(
-                        "cursor-pointer transition-colors",
+                        "transition-colors",
                         isActive
                           ? "font-medium text-primary"
                           : "text-foreground/55 hover:text-foreground"
@@ -598,7 +598,7 @@ export function DateTimePicker({
             </div>
             {hasDate && (
               <button
-                className="cursor-pointer text-xs text-foreground/55 hover:text-foreground"
+                className="text-xs text-foreground/55 hover:text-foreground"
                 onClick={handleClearAll}
               >
                 Clear
@@ -641,7 +641,7 @@ export function DateTimePicker({
               <button
                 aria-label="All day — no specific time"
                 className={cn(
-                  "cursor-pointer self-start text-xs transition-colors",
+                  "self-start text-xs transition-colors",
                   selectedTime === null
                     ? "font-medium text-primary"
                     : "text-foreground/40 hover:text-foreground"
@@ -686,7 +686,7 @@ export function DateTimePicker({
                     <button
                       aria-selected={isSelected}
                       className={cn(
-                        "flex w-full cursor-pointer rounded px-1.5 py-[3px] text-left text-xs transition-colors",
+                        "flex w-full rounded px-1.5 py-[3px] text-left text-xs transition-colors",
                         isSelected
                           ? "font-medium text-primary"
                           : isFocused
@@ -739,7 +739,7 @@ export function DateTimePicker({
                     aria-label={`Duration: ${label}`}
                     aria-pressed={isActive}
                     className={cn(
-                      "cursor-pointer rounded px-1.5 py-0.5 text-xs transition-colors",
+                      "rounded px-1.5 py-0.5 text-xs transition-colors",
                       isActive
                         ? "font-medium text-primary"
                         : "text-foreground/55 hover:text-foreground"
@@ -783,7 +783,7 @@ export function DateTimePicker({
                   <button
                     aria-pressed={isCustomDuration}
                     className={cn(
-                      "h-6 w-full cursor-pointer rounded px-1.5 text-xs transition-colors",
+                      "h-6 w-full rounded px-1.5 text-xs transition-colors",
                       isCustomDuration
                         ? "font-medium text-primary"
                         : "text-foreground/55 hover:text-foreground"

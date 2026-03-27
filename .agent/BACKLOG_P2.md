@@ -10,9 +10,6 @@ Status: `[ ]` pending · `[-]` superseded/deferred
 
 ### Page List
 
-- [ ] **GOO-16** Page completion + DnD reordering _(Medium)_
-  Completed pages → strikethrough + muted → collapse into "Completed" accordion at bottom (UI toggle button). Drag handle for manual reordering (`@dnd-kit/core` via `reorderPages`). `completedAt` timestamp on done.
-
 - [ ] **GOO-100** Multi-select pages + bulk actions _(Medium)_
   Checkbox appears on hover on each page list item (or when any item is already selected). Click checkbox or `Cmd+click` a page to enter selection mode. `Cmd+A` selects all in current view. `Esc` clears selection.
 
@@ -503,6 +500,11 @@ To Document:
   - Under "Today" could do a "Priority" list, which shows items in priority order. Maybe not valuable enough for the prime real estate. Could conditionally render it if any items have priority.
   - page location? Like a Google Calendar item.
 
+Accessibility/Keyboard Navigation Notes - focus on easily navigating around the app with keyboard. It doesn't have to be perfectly accessible for now - no need to do drag and drop. Maybe put together some accessibility components like I did at previous job.
+  - editor outline needs improvement - should be subtle, only show when using keyboard navigation
+  - focus ring styling consistency
+  - escape to exit editor focus?
+  - enter to enter editor focus (when active page is focused - after opening a page)?
 
 
 # De-prioritized For Post Launch (Move to P2 or P3)

@@ -17,6 +17,10 @@
     "fs:allow-read-dir",
     "fs:allow-read",
     "fs:allow-read-file",
+    "core:window:allow-set-decorations",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
     {
       "identifier": "fs:scope",
       "allow": [

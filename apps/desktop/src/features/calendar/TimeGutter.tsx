@@ -7,7 +7,7 @@ export function TimeGutter() {
   );
 
   return (
-    <div className="w-14 shrink-0 select-none">
+    <div aria-hidden="true" className="w-14 shrink-0 select-none">
       {hours.map((hour) => {
         const label =
           hour === 0

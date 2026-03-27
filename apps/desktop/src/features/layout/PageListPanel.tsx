@@ -25,6 +25,7 @@ import { usePageList } from "@/features/pages/hooks/usePageList";
 import type { SortMode } from "@/features/pages/utils/pageFilters";
 import { groupTodayPages } from "@/features/pages/utils/pageFilters";
 import { cn } from "@/lib/utils";
+import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
@@ -97,62 +98,43 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
   // ── Keyboard navigation ────────────────────────────────────────────────────
 
-  // Store { viewId, pageId } so the highlight auto-clears when the view changes
-  // without needing a setState-in-effect pattern.
-  const [highlighted, setHighlighted] = useState<{ viewId: string; pageId: string } | null>(null);
-  const highlightedPageId = highlighted?.viewId === activeViewId ? highlighted.pageId : null;
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Scroll highlighted item into view
+  // Scroll active page into view when it changes via keyboard navigation.
   useEffect(() => {
-    if (!highlightedPageId || !listRef.current) return;
-    const el = listRef.current.querySelector(`[data-page-id="${highlightedPageId}"]`);
+    if (!activePage?.id || !listRef.current) return;
+    const el = listRef.current.querySelector(`[data-page-id="${activePage.id}"]`);
     el?.scrollIntoView({ block: "nearest" });
-  }, [highlightedPageId]);
+  }, [activePage?.id]);
 
-  const [prevActiveViewId, setPrevActiveViewId] = useState(activeViewId);
-  if (prevActiveViewId !== activeViewId) {
-    setPrevActiveViewId(activeViewId);
-    setHighlighted(null);
-  }
-
-  function moveHighlight(direction: 1 | -1) {
+  function navigatePage(direction: 1 | -1) {
+    if (!visiblePages.length) return;
     if (sidebarCollapsed) setSidebarCollapsed(false);
-    setHighlighted((prev) => {
-      if (!visiblePages.length) return null;
-      const prevId = prev?.viewId === activeViewId ? prev.pageId : null;
-      const idx = prevId !== null ? visiblePages.findIndex((p) => p.id === prevId) : -1;
-      let newIdx: number;
-      if (idx === -1) {
-        newIdx = direction === 1 ? 0 : visiblePages.length - 1;
-      } else {
-        newIdx = Math.max(0, Math.min(visiblePages.length - 1, idx + direction));
-      }
-      const pageId = visiblePages[newIdx]?.id;
-      return pageId !== undefined ? { pageId, viewId: activeViewId } : null;
-    });
-  }
-
-  function openHighlighted() {
-    if (!highlightedPageId) return;
-    if (sidebarCollapsed) setSidebarCollapsed(false);
-    const page = visiblePages.find((p) => p.id === highlightedPageId);
+    listRef.current?.setAttribute("data-keyboard-nav", "1");
+    const currentIdx = activePage ? visiblePages.findIndex((p) => p.id === activePage.id) : -1;
+    const newIdx =
+      currentIdx === -1
+        ? direction === 1
+          ? 0
+          : visiblePages.length - 1
+        : Math.max(0, Math.min(visiblePages.length - 1, currentIdx + direction));
+    const page = visiblePages[newIdx];
     if (page) handleSelectPage(page);
   }
 
-  useKeyboardShortcut("J", () => moveHighlight(1), { allowInInputs: false });
-  useKeyboardShortcut("K", () => moveHighlight(-1), { allowInInputs: false });
-  useKeyboardShortcut("Enter", openHighlighted, { allowInInputs: false });
   useKeyboardShortcut(
     "Mod+Shift+D",
     () => {
       if (activePage) {
-        if (highlightedPageId === activePage.id) setHighlighted(null);
         handleDeleteRequest(activePage);
       }
     },
     { allowInInputs: true }
   );
+
+  useKeyboardShortcut("c", () => {
+    if (activePage) handleToggleStatus(activePage.id, activePage.status);
+  });
 
   // ── View grouping ──────────────────────────────────────────────────────────
 
@@ -168,13 +150,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       <PageListItem
         folders={folders}
         isActive={activePage?.id === page.id}
-        isHighlighted={highlightedPageId === page.id}
         isRenaming={renamingId === page.id}
         key={page.id}
-        onDelete={() => {
-          if (highlightedPageId === page.id) setHighlighted(null);
-          handleDeleteRequest(page);
-        }}
+        onDelete={() => handleDeleteRequest(page)}
         onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
         onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
         onRenameCancel={handleRenameCancel}
@@ -196,11 +174,11 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       style={{ width }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
         <span className="text-sm font-semibold text-foreground">
           {activeViewId === "today" ? "Today" : activeViewId === "inbox" ? "Inbox" : "Pages"}
         </span>
-        <div className="flex items-center gap-0.5">
+        <IconToolbar aria-label="Page actions" className="flex items-center gap-0.5">
           {activeViewId !== "today" && (
             <DropdownMenu
               onOpenChange={(open) => setOpenSortMenu(open ? "page-sort" : null)}
@@ -212,6 +190,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
                     <button
                       aria-label={`Sort: ${sortMode}`}
                       className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      tabIndex={0}
                     >
                       <ArrowUpDown size={13} />
                     </button>
@@ -247,12 +226,31 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             label="New Page"
             onClick={() => setOpenDialog("quick-add")}
             shortcut="mod+n"
+            tabIndex={activeViewId === "today" ? 0 : -1}
           />
-        </div>
+        </IconToolbar>
       </div>
 
       {/* Page list */}
-      <div className="flex flex-col overflow-y-auto" ref={listRef}>
+      <div
+        aria-label={
+          activeViewId === "today" ? "Today" : activeViewId === "inbox" ? "Inbox" : "Pages"
+        }
+        className="flex flex-col overflow-y-auto focus-visible:outline-none"
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            navigatePage(1);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            navigatePage(-1);
+          }
+        }}
+        onPointerMove={(e) => e.currentTarget.removeAttribute("data-keyboard-nav")}
+        ref={listRef}
+        role="group"
+        tabIndex={0}
+      >
         {visiblePages.length === 0 && completedPages.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground italic">
             {activeViewId === "today" ? "Nothing scheduled for today" : "No pages"}
@@ -340,7 +338,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
       {/* Drag handle — right edge */}
       <div
-        className="absolute top-0 right-0 h-full w-1 cursor-col-resize transition-colors hover:bg-primary/30"
+        className="absolute top-0 right-0 h-full w-1 cursor-col-resize transition-colors hover:bg-border/40 active:bg-border/60"
         onMouseDown={onResizeStart}
       />
     </div>

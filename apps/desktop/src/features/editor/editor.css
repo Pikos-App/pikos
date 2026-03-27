@@ -114,6 +114,11 @@
   position: relative;
 }
 
+.editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
 .editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
   background: var(--primary);
   border-color: var(--primary);

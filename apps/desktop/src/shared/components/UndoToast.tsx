@@ -111,7 +111,7 @@ function SingleToast({
         Deleted <span className="font-medium">&ldquo;{item.label || "Untitled"}&rdquo;</span>
       </span>
       <button
-        className="shrink-0 cursor-pointer text-xs font-medium text-primary hover:text-primary/80"
+        className="shrink-0 text-xs font-medium text-primary hover:text-primary/80"
         onClick={handleUndo}
       >
         Undo

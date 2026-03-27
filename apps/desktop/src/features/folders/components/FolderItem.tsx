@@ -86,6 +86,7 @@ export function FolderItem({
             opacity: isDragging ? 0 : 1,
             transform: CSS.Transform.toString(transform),
           }}
+          id={folder.id}
           inputRef={inputRef}
           isActive={isActive}
           isDragOver={isPageOver}
@@ -102,6 +103,7 @@ export function FolderItem({
               style={{ color: folder.color ?? undefined }}
             />
           }
+          tabIndex={-1}
         >
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
           {pageCount !== undefined && pageCount > 0 && (

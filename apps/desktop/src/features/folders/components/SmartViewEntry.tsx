@@ -8,12 +8,14 @@ interface SmartViewEntryProps {
   onSelect: () => void;
   dragRef?: (node: HTMLElement | null) => void;
   isDragOver?: boolean;
+  id?: string;
 }
 
 export function SmartViewEntry({
   badge,
   dragRef,
   icon,
+  id,
   isActive,
   isDragOver,
   label,
@@ -27,8 +29,10 @@ export function SmartViewEntry({
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
       )}
+      id={id}
       onClick={onSelect}
       ref={dragRef}
+      tabIndex={-1}
     >
       <span className="shrink-0">{icon}</span>
       <span className="flex-1 text-left">{label}</span>

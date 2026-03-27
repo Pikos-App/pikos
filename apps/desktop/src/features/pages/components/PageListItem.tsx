@@ -13,6 +13,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
+import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 
@@ -127,7 +128,6 @@ function formatRelativeTime(iso: string): { label: string; isPast: boolean; tool
 interface PageListItemProps {
   page: PageSummary;
   isActive: boolean;
-  isHighlighted?: boolean;
   isRenaming: boolean;
   folders: Folder[];
   onSelect: () => void;
@@ -146,7 +146,6 @@ interface PageListItemProps {
 export function PageListItem({
   folders,
   isActive,
-  isHighlighted = false,
   isRenaming,
   onDelete,
   onMoveToFolder,
@@ -168,6 +167,7 @@ export function PageListItem({
     transition: null,
   });
   const { contextMenuContentProps, inputRef, prepareRenameFromMenu } = useInlineRename(isRenaming);
+  const { openPage } = useUI();
 
   useMinuteTick();
 
@@ -181,7 +181,9 @@ export function PageListItem({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
+          data-active={isActive ? "true" : undefined}
           data-page-id={page.id}
+          data-page-list-item
           ref={setNodeRef}
           style={{
             opacity: isDragging ? 0 : 1,
@@ -190,15 +192,26 @@ export function PageListItem({
           {...attributes}
           {...listeners}
           className={cn(
-            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-3 text-sm select-none",
-            isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-            isHighlighted && !isActive && "ring-1 ring-primary/50 ring-inset"
+            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-3 text-sm outline-none select-none",
+            isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
           )}
           onClick={isRenaming ? undefined : onSelect}
           onDoubleClick={(e) => {
             e.stopPropagation();
             onRenameStart();
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !isRenaming) {
+              e.preventDefault();
+              openPage(page.id);
+              // Defer focus to let the editor mount/update
+              requestAnimationFrame(() => {
+                const editor = document.querySelector<HTMLElement>(".editor-content");
+                editor?.focus();
+              });
+            }
+          }}
+          tabIndex={isActive ? 0 : -1}
         >
           {/* Checkbox — border color encodes priority when not done */}
           <button

@@ -56,7 +56,7 @@ export function TagsPopover({ allTags, onToggle, selected }: TagsPopoverProps) {
             <button
               aria-label={`Tags: ${hasSelected ? selected.join(", ") : "none"}`}
               className={cn(
-                "inline-flex min-w-0 cursor-pointer items-center gap-1 rounded text-sm transition-colors hover:text-muted-foreground focus:outline-none",
+                "inline-flex min-w-0 items-center gap-1 rounded text-sm transition-colors hover:text-muted-foreground focus:outline-none",
                 hasSelected ? "text-muted-foreground/80" : "text-muted-foreground/40"
               )}
             >
@@ -99,7 +99,7 @@ export function TagsPopover({ allTags, onToggle, selected }: TagsPopoverProps) {
             const isSelected = selected.includes(name);
             return (
               <button
-                className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent"
                 key={name}
                 onClick={() => onToggle(name)}
               >
@@ -117,7 +117,7 @@ export function TagsPopover({ allTags, onToggle, selected }: TagsPopoverProps) {
 
           {canCreate && (
             <button
-              className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent"
               onClick={() => {
                 onToggle(normalizedQuery);
                 setQuery("");

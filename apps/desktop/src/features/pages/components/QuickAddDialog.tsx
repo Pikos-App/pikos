@@ -384,7 +384,7 @@ export function QuickAddDialog() {
           />
 
           <button
-            className="ml-auto shrink-0 cursor-pointer rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="ml-auto shrink-0 rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => void handleSubmit()}
           >
             Add

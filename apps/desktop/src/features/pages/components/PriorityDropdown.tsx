@@ -79,7 +79,7 @@ export function PriorityDropdown({
           <button
             aria-label={`Priority: ${cfg.label}`}
             className={cn(
-              "flex shrink-0 cursor-pointer items-center justify-center rounded px-[3px] text-sm leading-none font-semibold transition-opacity hover:opacity-80 focus:outline-none",
+              "flex shrink-0 items-center justify-center rounded px-[3px] text-sm leading-none font-semibold transition-opacity hover:opacity-80 focus:outline-none",
               cfg.badgeClassName
             )}
             onClick={(e) => e.stopPropagation()}
@@ -92,7 +92,7 @@ export function PriorityDropdown({
           <button
             aria-label={`Priority: ${cfg.label}`}
             className={cn(
-              "inline-flex shrink-0 cursor-pointer items-center gap-1 rounded whitespace-nowrap transition-opacity hover:opacity-80 focus:outline-none",
+              "inline-flex shrink-0 items-center gap-1 rounded whitespace-nowrap transition-opacity hover:opacity-80 focus:outline-none",
               cfg.className
             )}
           >

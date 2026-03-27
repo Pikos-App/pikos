@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
+import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
 import { AppearanceSettings } from "./pages/AppearanceSettings";
 import { DeveloperSettings } from "./pages/DeveloperSettings";
@@ -22,6 +23,7 @@ function readLeftPanelWidth(): number {
 
 export function SettingsPage() {
   const { setSettingsOpen, settingsOpen } = useUI();
+  const isFullscreen = useIsFullscreen();
   const [sidebarWidth] = useState(readLeftPanelWidth);
   const [section, setSection] = useState<SettingsSection>("general");
 
@@ -38,7 +40,10 @@ export function SettingsPage() {
   if (!settingsOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-background text-foreground">
+    <div
+      className="fixed inset-x-0 bottom-0 z-50 flex bg-background text-foreground"
+      style={{ top: isFullscreen ? 0 : 30 }}
+    >
       <SettingsNav
         active={section}
         onClose={() => setSettingsOpen(false)}
