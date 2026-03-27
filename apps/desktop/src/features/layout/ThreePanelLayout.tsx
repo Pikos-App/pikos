@@ -56,6 +56,7 @@ export function ThreePanelLayout() {
           "flex h-screen flex-col bg-background text-foreground",
           (activePageData ?? activeFolderData) && "select-none"
         )}
+        data-testid="three-panel-layout"
       >
         {!isFullscreen && <TitleBar />}
         <div className="flex min-h-0 flex-1">
