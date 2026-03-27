@@ -634,4 +634,51 @@ describe("GOO-19 NL Page Creation Parser", () => {
       expect(r.type).toBe("finite");
     });
   });
+
+  // ─── 13. Edge cases from test strategy ──────────────────────────────────────
+
+  describe("monthly keyword", () => {
+    it("monthly triggers FREQ=MONTHLY recurrence", () => {
+      const r = parseInput("rent payment monthly", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title).toBe("rent payment");
+      expect(r.rrule).toContain("FREQ=MONTHLY");
+    });
+  });
+
+  describe("for disambiguation — no recurrence pattern", () => {
+    it("'for 30min' with no recurrence → duration only, single page", () => {
+      const r = parseInput("focus session for 30min", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.durationMinutes).toBe(30);
+      expect(r.input.title).toBe("focus session");
+    });
+
+    it("'for 2h' without day pattern → duration only", () => {
+      const r = parseInput("deep work for 2h @tomorrow at 9am", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.durationMinutes).toBe(120);
+      expect(r.input.scheduledStart).toContain("2026-03-16");
+      expect(r.input.scheduledEnd).toContain("11:00");
+    });
+  });
+
+  describe("multi-tag ordering stability", () => {
+    it("multiple tags preserve input order", () => {
+      const r = parseInput("task #design #ux #frontend", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["design", "ux", "frontend"]);
+    });
+
+    it("tags interspersed with other tokens preserve order", () => {
+      const r = parseInput("#alpha meeting #beta @tomorrow #gamma", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["alpha", "beta", "gamma"]);
+    });
+  });
 });

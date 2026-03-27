@@ -440,3 +440,129 @@ describe("deletePage", () => {
     expect(hook.result.current.pages.find((p) => p.id === page.id)).toBeUndefined();
   });
 });
+
+// ─── createFolder / deleteFolder ─────────────────────────────────────────────
+
+describe("createFolder", () => {
+  it("adds a folder to the folders list", async () => {
+    const { hook } = await setup();
+
+    let folder!: Awaited<ReturnType<typeof hook.result.current.createFolder>>;
+    await act(async () => {
+      folder = await hook.result.current.createFolder({ name: "Work" });
+    });
+
+    expect(hook.result.current.folders.find((f) => f.id === folder.id)?.name).toBe("Work");
+  });
+});
+
+describe("deleteFolder", () => {
+  it("removes folder and moves its pages to inbox (folderId null)", async () => {
+    const { hook } = await setup();
+
+    let folder!: Awaited<ReturnType<typeof hook.result.current.createFolder>>;
+    await act(async () => {
+      folder = await hook.result.current.createFolder({ name: "Temp" });
+    });
+
+    let folderPage!: Page;
+    await act(async () => {
+      folderPage = await hook.result.current.createPage({
+        folderId: folder.id,
+        title: "Folder Page",
+      });
+    });
+
+    await act(async () => {
+      await hook.result.current.deleteFolder(folder.id);
+    });
+
+    // Folder removed
+    expect(hook.result.current.folders.find((f) => f.id === folder.id)).toBeUndefined();
+    // Page moved to inbox
+    const movedPage = hook.result.current.pages.find((p) => p.id === folderPage.id);
+    expect(movedPage?.folderId).toBeNull();
+  });
+});
+
+// ─── searchTags ──────────────────────────────────────────────────────────────
+
+describe("searchTags", () => {
+  it("returns tags matching the query prefix", async () => {
+    vi.useFakeTimers();
+    const { hook, page } = await setup();
+
+    // Tags are set via updatePage, not createPage
+    act(() => {
+      hook.result.current.updatePage(page.id, { tags: ["work", "workout", "personal"] });
+    });
+
+    // Flush the debounced write so tags persist to the adapter
+    await act(async () => {
+      await hook.result.current.flushPage(page.id);
+    });
+
+    let tags!: string[];
+    await act(async () => {
+      tags = await hook.result.current.searchTags("wor");
+    });
+
+    expect(tags).toContain("work");
+    expect(tags).toContain("workout");
+    expect(tags).not.toContain("personal");
+  });
+});
+
+// ─── Event emitter ───────────────────────────────────────────────────────────
+
+describe("event emitter", () => {
+  it("fires page:created when a page is created", async () => {
+    const { hook } = await setup();
+
+    const listener = vi.fn();
+    act(() => {
+      hook.result.current.on("page:created", listener);
+    });
+
+    await act(async () => {
+      await hook.result.current.createPage({ title: "Evented" });
+    });
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0]![0]).toMatchObject({ title: "Evented" });
+  });
+
+  it("fires page:deleted when a page is deleted", async () => {
+    const { hook, page } = await setup();
+
+    const listener = vi.fn();
+    act(() => {
+      hook.result.current.on("page:deleted", listener);
+    });
+
+    await act(async () => {
+      await hook.result.current.deletePage(page.id);
+    });
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0]![0]).toBe(page.id);
+  });
+
+  it("unsubscribe stops receiving events", async () => {
+    const { hook } = await setup();
+
+    const listener = vi.fn();
+    let unsub!: () => void;
+    act(() => {
+      unsub = hook.result.current.on("page:created", listener);
+    });
+
+    unsub();
+
+    await act(async () => {
+      await hook.result.current.createPage({ title: "After unsub" });
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
