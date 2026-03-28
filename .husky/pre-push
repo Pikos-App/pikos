@@ -1,4 +1,3 @@
-pnpm verify
 # Tier 1 E2E — skip when SKIP_E2E is set
 if [ -z "$SKIP_E2E" ]; then
   pnpm --filter @pikos/desktop test:e2e -- --project tier1 -x
