@@ -132,10 +132,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     { allowInInputs: true }
   );
 
-  useKeyboardShortcut("c", () => {
-    if (activePage) handleToggleStatus(activePage.id, activePage.status);
-  });
-
   // ── View grouping ──────────────────────────────────────────────────────────
 
   const isTodayView = activeViewId === "today";

@@ -253,15 +253,25 @@ describe("mutation queue", () => {
     expect(callOrder).toEqual(["updatePage:start", "listPageSchedules:start"]);
   });
 
-  // This test simulates a user rapidly making multiple changes that trigger both an updatePage and a scheduleOnce before the first DB write completes. The mutation queue should ensure both operations are applied in order without losing either change.
-  // TODO: it broke after recent error handling changes — investigate and re-enable.
-  it.skip("applies both concurrent updatePage + scheduleOnce without losing either change", async () => {
+  // Simulates a user rapidly making a title change and a schedule change.
+  // The mutation queue serialises both writes so neither is lost.
+  it("applies both concurrent updatePage + scheduleOnce without losing either change", async () => {
     const { hook, page } = await setup();
-    const start = "2026-03-15T10:00:00";
+    // Use a future date so _refreshDenorm picks it up (filters >= today)
+    const start = "2099-03-15T10:00:00";
 
-    await act(async () => {
+    // 1. updatePage queues a debounced write (title change applied optimistically)
+    act(() => {
       hook.result.current.updatePage(page.id, { title: "concurrent update" });
+    });
+
+    // 2. scheduleOnce enqueues an immediate DB write (scheduledStart applied optimistically)
+    await act(async () => {
       await hook.result.current.scheduleOnce(page.id, start);
+    });
+
+    // 3. Flush the debounced title write
+    await act(async () => {
       await hook.result.current.flushPage(page.id);
     });
 

@@ -23,6 +23,7 @@ export function SmartViewEntry({
 }: SmartViewEntryProps) {
   return (
     <button
+      aria-current={isActive ? "true" : undefined}
       className={cn(
         "flex w-full items-center gap-2.5 rounded px-2 py-2.5 text-sm select-none",
         isActive || isDragOver

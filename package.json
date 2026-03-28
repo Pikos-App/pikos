@@ -14,6 +14,7 @@
     "depcruise": "depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs",
     "prepare": "husky",
     "check": "bash scripts/check.sh",
+    "verify": "pnpm run check && pnpm run test",
     "seed": "tsx scripts/seed/index.ts"
   },
   "dependencies": {

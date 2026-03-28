@@ -19,7 +19,7 @@ Never pad responses with unnecessary caveats, hedging, or qualifications unless 
 ## Post-task checks (mandatory — run after every task before marking done)
 
 ```
-pnpm check   # auto-fixes ESLint + Prettier on changed files, then typechecks + lint + depcruise in parallel
+pnpm verify   # runs check (auto-fix + typecheck + lint + depcruise) then unit tests
 ```
 
 ## End-of-session cleanup (mandatory)

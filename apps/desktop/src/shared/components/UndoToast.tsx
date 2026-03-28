@@ -100,17 +100,20 @@ function SingleToast({
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
+      aria-label={`Deleted \u201c${item.label || "Untitled"}\u201d`}
       className="relative flex w-80 items-center gap-3 overflow-hidden rounded-lg border border-border bg-popover px-3 py-2.5 shadow-lg"
       exit={{ opacity: 0, y: 8 }}
       initial={{ opacity: 0, y: 8 }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      role="alert"
       transition={{ duration: 0.18 }}
     >
       <span className="flex-1 truncate text-sm text-foreground">
         Deleted <span className="font-medium">&ldquo;{item.label || "Untitled"}&rdquo;</span>
       </span>
       <button
+        aria-label={`Undo delete \u201c${item.label || "Untitled"}\u201d`}
         className="shrink-0 text-xs font-medium text-primary hover:text-primary/80"
         onClick={handleUndo}
       >

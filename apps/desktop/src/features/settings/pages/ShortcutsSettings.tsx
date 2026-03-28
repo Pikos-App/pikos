@@ -63,7 +63,6 @@ const GROUPS: ShortcutGroup[] = [
     items: [
       { combo: "ArrowUp", label: "Select previous page" },
       { combo: "ArrowDown", label: "Select next page" },
-      { combo: "C", label: "Toggle completion" },
     ],
     label: "Page list",
   },

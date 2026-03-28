@@ -120,6 +120,11 @@ export function EditorPane() {
     if (!editor || isLoading) return;
 
     if (page === null) {
+      // Flush pending content for the outgoing page before clearing
+      if (currentPageIdRef.current && contentJsonRef.current !== "") {
+        const content = contentJsonRef.current;
+        updatePage(currentPageIdRef.current, { content, contentText: extractText(content) });
+      }
       currentPageIdRef.current = null;
       editor.commands.clearContent();
       contentJsonRef.current = "";
@@ -128,6 +133,12 @@ export function EditorPane() {
 
     // Only set content when the page actually changes
     if (page.id === currentPageIdRef.current) return;
+
+    // Flush pending content for the outgoing page before switching
+    if (currentPageIdRef.current && contentJsonRef.current !== "") {
+      const content = contentJsonRef.current;
+      updatePage(currentPageIdRef.current, { content, contentText: extractText(content) });
+    }
 
     currentPageIdRef.current = page.id;
 

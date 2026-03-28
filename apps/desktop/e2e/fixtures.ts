@@ -5,7 +5,7 @@ export const test = base.extend<{ app: Page }>({
   app: async ({ page }, use) => {
     await page.goto("/");
     await page.getByRole("button", { name: /get started/i }).click();
-    await expect(page.locator("[data-testid=three-panel-layout]")).toBeVisible();
+    await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
     await use(page);
   },
 });

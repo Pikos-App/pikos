@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAllDayItems,
   buildDayBlocks,
+  chipFolderStyle,
   COMPACT_BLOCK_HEIGHT,
   formatTimeRange,
   GRID_HEIGHT,
@@ -13,6 +14,9 @@ import {
   isAllDayPage,
   snapY,
   timeToY,
+  weekDays,
+  weekEnd,
+  weekStart,
   yToDate,
 } from "./calendarUtils";
 
@@ -32,6 +36,66 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
     ...overrides,
   };
 }
+
+// ─── weekStart / weekDays / weekEnd ──────────────────────────────────────────
+
+describe("weekStart", () => {
+  it("returns Monday for a Wednesday", () => {
+    const wed = new Date(2026, 2, 18); // Wednesday March 18
+    const monday = weekStart(wed);
+    expect(monday.getDay()).toBe(1); // Monday
+    expect(monday.getDate()).toBe(16);
+  });
+
+  it("returns same day when given a Monday", () => {
+    const mon = new Date(2026, 2, 16); // Monday March 16
+    expect(weekStart(mon).getDate()).toBe(16);
+  });
+
+  it("returns previous Monday for a Sunday", () => {
+    const sun = new Date(2026, 2, 22); // Sunday March 22
+    const monday = weekStart(sun);
+    expect(monday.getDay()).toBe(1);
+    expect(monday.getDate()).toBe(16);
+  });
+});
+
+describe("weekDays", () => {
+  it("returns 7 days starting from Monday", () => {
+    const wed = new Date(2026, 2, 18);
+    const days = weekDays(wed);
+    expect(days).toHaveLength(7);
+    expect(days[0]!.getDay()).toBe(1); // Monday
+    expect(days[6]!.getDay()).toBe(0); // Sunday
+  });
+
+  it("all days are consecutive", () => {
+    const days = weekDays(new Date(2026, 2, 18));
+    for (let i = 1; i < days.length; i++) {
+      const diff = days[i]!.getDate() - days[i - 1]!.getDate();
+      expect(diff).toBe(1);
+    }
+  });
+});
+
+describe("weekEnd", () => {
+  it("returns Sunday for a Wednesday", () => {
+    const wed = new Date(2026, 2, 18);
+    const sunday = weekEnd(wed);
+    expect(sunday.getDay()).toBe(0); // Sunday
+    expect(sunday.getDate()).toBe(22);
+  });
+});
+
+// ─── chipFolderStyle ────────────────────────────────────────────────────────
+
+describe("chipFolderStyle", () => {
+  it("returns backgroundColor with alpha 0.25 and borderColor as-is", () => {
+    const style = chipFolderStyle("#ff0000");
+    expect(style.borderColor).toBe("#ff0000");
+    expect(style.backgroundColor).toBe("rgba(255,0,0,0.25)");
+  });
+});
 
 // ─── isAllDayPage ────────────────────────────────────────────────────────────
 
@@ -144,6 +208,68 @@ describe("buildDayBlocks", () => {
 
   it("empty input → []", () => {
     expect(buildDayBlocks([], day)).toEqual([]);
+  });
+
+  it("three overlapping events → 3 columns", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "A",
+      }),
+      makePage({
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:15:00",
+        title: "B",
+      }),
+      makePage({
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:30:00",
+        title: "C",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    expect(blocks).toHaveLength(3);
+    const columns = new Set(blocks.map((b) => b.column));
+    expect(columns.size).toBe(3);
+    blocks.forEach((b) => expect(b.totalColumns).toBe(3));
+  });
+
+  it("non-overlapping events → each gets its own column 0", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "A",
+      }),
+      makePage({
+        scheduledEnd: "2026-03-15T12:00:00",
+        scheduledStart: "2026-03-15T11:00:00",
+        title: "B",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    expect(blocks).toHaveLength(2);
+    blocks.forEach((b) => {
+      expect(b.column).toBe(0);
+      expect(b.totalColumns).toBe(1);
+    });
+  });
+
+  it("ignores pages from other days", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-16T10:00:00",
+        scheduledStart: "2026-03-16T09:00:00",
+        title: "Wrong day",
+      }),
+    ];
+    expect(buildDayBlocks(pages, day)).toHaveLength(0);
+  });
+
+  it("ignores pages with no scheduledStart", () => {
+    const pages = [makePage({ scheduledStart: null, title: "No schedule" })];
+    expect(buildDayBlocks(pages, day)).toHaveLength(0);
   });
 });
 

@@ -59,11 +59,14 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
 
     return (
       <div
+        aria-current={isActive ? "true" : undefined}
+        aria-label={label}
         ref={(node) => {
           if (typeof ref === "function") ref(node);
           else if (ref) ref.current = node;
           if (dragRef) dragRef(node as HTMLDivElement);
         }}
+        role="button"
         style={dragStyle}
         {...rest}
         {...(dragProps as React.HTMLAttributes<HTMLDivElement>)}
@@ -88,6 +91,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
           <div className={cn("flex min-w-0", isRenaming && "invisible")}>{children}</div>
           {isRenaming && (
             <input
+              aria-label={`Rename ${label}`}
               autoComplete="off"
               className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug text-foreground outline-none"
               defaultValue={label}
