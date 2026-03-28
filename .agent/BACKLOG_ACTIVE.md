@@ -14,8 +14,6 @@ Status: `[ ]` pending · Delete task when done.
 - [ ] **GOO-108** Tab key behavior in editor _(High)_
   Tab/Shift+Tab intercepted — no longer moves browser focus. Lists: indent/outdent ✓. Task items: indent/outdent ✓. Code blocks: insert/remove 2 spaces ✓. **Remaining:** Tab in normal paragraphs should insert/remove indentation (insertText with spaces not working in paragraph nodes — needs investigation).
 
-- [ ] long events don't render correctly on the calendar.
-
 
 ## 🚀 Friends Beta Gate
 
@@ -32,8 +30,6 @@ _Must ship before sharing with anyone outside the team. External blocker: Apple 
   `tauri-plugin-updater`. Check on launch → non-blocking banner ("Version X.X available — restart to update") → download + install + relaunch. Update server: GitHub Releases. Wire in before any external release.
 
 - [ ] Misc dogfooding improvements.
-
-- [ ] Add more keyboard shortcuts, list them in the settings page. Task completion?
 
 ---
 

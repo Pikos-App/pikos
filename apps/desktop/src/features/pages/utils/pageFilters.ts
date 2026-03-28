@@ -1,15 +1,7 @@
 import type { PageSummary } from "@pikos/core";
+import { localToday, parseLocalISO } from "@pikos/core";
 
 export type SortMode = "manual" | "date" | "title" | "priority";
-
-/** Local YYYY-MM-DD string (avoids UTC date mismatch in late-evening timezones). */
-function localToday(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 
 /**
  * Convert a scheduledStart ISO string to a sort key (milliseconds).
@@ -21,12 +13,9 @@ function localToday(): string {
 function toSortMs(iso: string): number {
   if (iso.length === 10) {
     if (iso === localToday()) return Date.now();
-    const y = parseInt(iso.slice(0, 4));
-    const m = parseInt(iso.slice(5, 7)) - 1;
-    const d = parseInt(iso.slice(8, 10));
-    return new Date(y, m, d, 0, 0, 0).getTime();
+    return parseLocalISO(iso).getTime();
   }
-  return new Date(iso).getTime();
+  return parseLocalISO(iso).getTime();
 }
 
 /** Sort a page list by the given mode. Returns a new array. */
@@ -79,8 +68,8 @@ export function getVisiblePages(pages: PageSummary[], activeViewId: string): Pag
 
 function sortByCompletedDesc(pages: PageSummary[]): PageSummary[] {
   return [...pages].sort((a, b) => {
-    const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-    const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+    const aTime = a.completedAt ? parseLocalISO(a.completedAt).getTime() : 0;
+    const bTime = b.completedAt ? parseLocalISO(b.completedAt).getTime() : 0;
     return bTime - aTime;
   });
 }
@@ -121,7 +110,7 @@ export function groupTodayPages(pages: PageSummary[]): {
     // All-day format is exactly 'YYYY-MM-DD' (length 10)
     if (p.scheduledStart.length === 10) return p.scheduledStart < todayStr;
     // Timed: treat as past once the scheduled moment has passed
-    return new Date(p.scheduledStart) < now;
+    return parseLocalISO(p.scheduledStart) < now;
   }
 
   function byScheduledStart(a: PageSummary, b: PageSummary): number {

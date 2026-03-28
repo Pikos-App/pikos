@@ -1,4 +1,5 @@
 import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
+import { nowLocalISO } from "@pikos/core";
 import { useState } from "react";
 
 import {
@@ -11,7 +12,6 @@ import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
-import { nowLocalISO } from "@/shared/utils/dates";
 
 export const UNDO_TOAST_DURATION_MS = 8000;
 

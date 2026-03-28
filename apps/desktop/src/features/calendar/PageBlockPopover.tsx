@@ -3,7 +3,7 @@
 // "Open page" button is the bridge to full editor.
 
 import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
-import { format } from "date-fns";
+import { formatLocalISO, nowLocalISO, parseLocalISO } from "@pikos/core";
 import { CalendarX, Check, ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -14,7 +14,6 @@ import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-import { nowLocalISO } from "@/shared/utils/dates";
 
 interface PageBlockPopoverProps {
   page: PageSummary;
@@ -77,9 +76,9 @@ export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopo
       page.scheduledEnd?.includes("T")
     ) {
       const durationMs =
-        new Date(page.scheduledEnd).getTime() - new Date(page.scheduledStart).getTime();
+        parseLocalISO(page.scheduledEnd).getTime() - parseLocalISO(page.scheduledStart).getTime();
       if (durationMs > 0) {
-        endIso = format(new Date(new Date(iso).getTime() + durationMs), "yyyy-MM-dd'T'HH:mm:ss");
+        endIso = formatLocalISO(new Date(parseLocalISO(iso).getTime() + durationMs));
       }
     }
     void scheduleOnce(page.id, iso, endIso);

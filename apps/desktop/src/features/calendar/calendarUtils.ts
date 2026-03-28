@@ -8,7 +8,6 @@ import {
   format,
   getHours,
   getMinutes,
-  isSameDay,
   parseISO,
   startOfDay,
   startOfWeek,
@@ -148,32 +147,48 @@ export interface CalendarBlock {
   column: number;
   /** Total number of columns in this overlap group */
   totalColumns: number;
+  /** True when this block is a continuation from the previous day (event started before this day). */
+  isContinuationBefore?: boolean;
+  /** True when this event extends past the end of this day's grid. */
+  isContinuationAfter?: boolean;
 }
 
 /**
  * Given all pages, returns positioned CalendarBlock[] for `day`.
  * All-day events are excluded (use buildAllDayItems instead).
  * Handles overlap by assigning equal-width column slots.
+ *
+ * Events that span across midnight are shown on each day they touch:
+ * - On the start day: renders from event start to bottom of grid (isContinuationAfter)
+ * - On middle days: renders full grid height (isContinuationBefore + isContinuationAfter)
+ * - On the end day: renders from top of grid to event end (isContinuationBefore)
  */
 export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[] {
-  // Filter: must have a timed scheduledStart on this day
-  const timed = pages.filter((page) => {
+  const dayStart = startOfDay(day);
+  const dayEnd = addDays(dayStart, 1);
+
+  // Filter: must have a timed scheduledStart that overlaps with this day
+  const overlapping = pages.filter((page) => {
     if (!page.scheduledStart) return false;
     if (isAllDayPage(page.scheduledStart)) return false;
     try {
       const start = parseISO(page.scheduledStart);
-      return isSameDay(start, day);
+      const end = page.scheduledEnd ? parseISO(page.scheduledEnd) : start;
+      // Event overlaps with day if it starts before day ends AND ends after day starts
+      return start < dayEnd && end > dayStart;
     } catch {
       return false;
     }
   });
 
-  if (timed.length === 0) return [];
+  if (overlapping.length === 0) return [];
 
   // Build raw blocks
   interface RawBlock {
     endDate: Date;
     height: number;
+    isContinuationAfter: boolean;
+    isContinuationBefore: boolean;
     isCompact: boolean;
     /** End used only for overlap layout — may differ from endDate for compact blocks */
     overlapEnd: Date;
@@ -182,41 +197,65 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
     top: number;
   }
 
-  const raws: RawBlock[] = timed.map((page) => {
-    const startDate = parseISO(page.scheduledStart!);
-
-    // Determine if compact before computing end
+  const raws: RawBlock[] = overlapping.map((page) => {
+    const realStart = parseISO(page.scheduledStart!);
     const hasExplicitEnd = !!page.scheduledEnd;
-    const explicitEnd = hasExplicitEnd ? parseISO(page.scheduledEnd!) : null;
-    const durationMinutes = explicitEnd
-      ? (explicitEnd.getTime() - startDate.getTime()) / 60_000
-      : 0;
+    const realEnd = hasExplicitEnd ? parseISO(page.scheduledEnd!) : realStart;
+
+    // Determine if the event is compact (only when fully within one day)
+    const durationMinutes = hasExplicitEnd ? (realEnd.getTime() - realStart.getTime()) / 60_000 : 0;
     const isCompact = !hasExplicitEnd || durationMinutes < MIN_TIMED_MINUTES;
 
-    const endDate = explicitEnd ?? startDate; // endDate = startDate for no-end events
-    const top = timeToY(startDate);
-    const height = isCompact ? COMPACT_BLOCK_HEIGHT : Math.max(timeToY(endDate) - top, 4);
+    // Clamp start/end to this day's grid boundaries for cross-day events
+    const isContinuationBefore = realStart < dayStart;
+    const isContinuationAfter = !isCompact && realEnd > dayEnd;
+
+    // For visual positioning, clamp to the day's grid boundaries
+    const visualStart = isContinuationBefore
+      ? new Date(dayStart.getTime() + GRID_START_HOUR * 3_600_000)
+      : realStart;
+    const visualEnd = isContinuationAfter
+      ? new Date(dayStart.getTime() + GRID_END_HOUR * 3_600_000)
+      : realEnd;
+
+    const top = timeToY(visualStart);
+    const height = isCompact ? COMPACT_BLOCK_HEIGHT : Math.max(timeToY(visualEnd) - top, 4);
 
     // For overlap calculation, compact blocks claim a 15-min footprint
     const overlapEnd = isCompact
-      ? new Date(startDate.getTime() + MIN_TIMED_MINUTES * 60_000)
-      : endDate;
+      ? new Date(visualStart.getTime() + MIN_TIMED_MINUTES * 60_000)
+      : visualEnd;
 
-    return { endDate, height, isCompact, overlapEnd, page, startDate, top };
+    return {
+      endDate: realEnd,
+      height,
+      isCompact,
+      isContinuationAfter,
+      isContinuationBefore,
+      overlapEnd,
+      page,
+      startDate: realStart,
+      top,
+    };
   });
 
-  // Sort by start time
-  raws.sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  // Sort by visual top position (continuation blocks sort to top of grid)
+  raws.sort((a, b) => a.top - b.top || a.startDate.getTime() - b.startDate.getTime());
 
   // Assign overlap columns (greedy sweep-line)
   const columnOverlapEnds: Date[] = [];
   const assignments: number[] = [];
 
   for (const raw of raws) {
+    // Use visual start for column assignment
+    const visualStart = raw.isContinuationBefore
+      ? new Date(dayStart.getTime() + GRID_START_HOUR * 3_600_000)
+      : raw.startDate;
+
     let assigned = -1;
     for (let col = 0; col < columnOverlapEnds.length; col++) {
       const colEnd = columnOverlapEnds[col];
-      if (colEnd !== undefined && colEnd <= raw.startDate) {
+      if (colEnd !== undefined && colEnd <= visualStart) {
         assigned = col;
         break;
       }
@@ -237,7 +276,13 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
     for (let j = 0; j < raws.length; j++) {
       if (i === j) continue;
       const other = raws[j]!;
-      const overlaps = raw.startDate < other.overlapEnd && raw.overlapEnd > other.startDate;
+      const visualStartI = raw.isContinuationBefore
+        ? new Date(dayStart.getTime() + GRID_START_HOUR * 3_600_000)
+        : raw.startDate;
+      const visualStartJ = other.isContinuationBefore
+        ? new Date(dayStart.getTime() + GRID_START_HOUR * 3_600_000)
+        : other.startDate;
+      const overlaps = visualStartI < other.overlapEnd && raw.overlapEnd > visualStartJ;
       if (overlaps) {
         maxColumn = Math.max(maxColumn, assignments[j]!);
       }
@@ -247,6 +292,8 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
       endDate: raw.endDate,
       height: raw.height,
       isCompact: raw.isCompact,
+      ...(raw.isContinuationAfter ? { isContinuationAfter: true as const } : {}),
+      ...(raw.isContinuationBefore ? { isContinuationBefore: true as const } : {}),
       page: raw.page,
       startDate: raw.startDate,
       top: raw.top,

@@ -2,6 +2,7 @@
 // Thin feature-component wrapper around the shared DateTimePicker.
 
 import type { Page } from "@pikos/core";
+import { formatLocalISO, parseLocalISO } from "@pikos/core";
 
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -26,13 +27,9 @@ export function DateSchedulePopover({ page }: DateSchedulePopoverProps) {
       page.scheduledEnd?.includes("T")
     ) {
       const durationMs =
-        new Date(page.scheduledEnd).getTime() - new Date(page.scheduledStart).getTime();
+        parseLocalISO(page.scheduledEnd).getTime() - parseLocalISO(page.scheduledStart).getTime();
       if (durationMs > 0) {
-        const newEnd = new Date(new Date(iso).getTime() + durationMs);
-        const pad = (n: number) => String(n).padStart(2, "0");
-        endIso =
-          `${newEnd.getFullYear()}-${pad(newEnd.getMonth() + 1)}-${pad(newEnd.getDate())}` +
-          `T${pad(newEnd.getHours())}:${pad(newEnd.getMinutes())}:00`;
+        endIso = formatLocalISO(new Date(parseLocalISO(iso).getTime() + durationMs));
       }
     }
     void scheduleOnce(page.id, iso, endIso);

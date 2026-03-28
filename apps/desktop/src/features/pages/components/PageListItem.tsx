@@ -1,6 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder, PagePriority, PageSummary } from "@pikos/core";
+import { parseLocalISO } from "@pikos/core";
 import { Check } from "lucide-react";
 
 import {
@@ -26,13 +27,8 @@ function formatTime(date: Date): string {
 }
 
 function formatDate(iso: string): { label: string; isPast: boolean; tooltip: string } {
-  // Date-only strings ('YYYY-MM-DD') must be parsed as local, not UTC.
-  // new Date('YYYY-MM-DD') treats them as UTC midnight, shifting the displayed
-  // date by one day for users west of UTC (e.g. Pacific = Mar 8 → Mar 7).
   const isAllDay = iso.length === 10;
-  const date = isAllDay
-    ? new Date(parseInt(iso.slice(0, 4)), parseInt(iso.slice(5, 7)) - 1, parseInt(iso.slice(8, 10)))
-    : new Date(iso);
+  const date = parseLocalISO(iso);
   const now = new Date();
   const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrowMidnight = new Date(todayMidnight.getTime() + 86400000);
@@ -74,18 +70,15 @@ function formatDate(iso: string): { label: string; isPast: boolean; tooltip: str
 
 function formatRelativeTime(iso: string): { label: string; isPast: boolean; tooltip: string } {
   const isAllDay = iso.length === 10;
+  const tooltipDate = parseLocalISO(iso);
   const tooltip = isAllDay
-    ? new Date(
-        parseInt(iso.slice(0, 4)),
-        parseInt(iso.slice(5, 7)) - 1,
-        parseInt(iso.slice(8, 10))
-      ).toLocaleDateString("en-US", {
+    ? tooltipDate.toLocaleDateString("en-US", {
         day: "numeric",
         month: "long",
         weekday: "long",
         year: "numeric",
       })
-    : new Date(iso).toLocaleString("en-US", {
+    : tooltipDate.toLocaleString("en-US", {
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
@@ -95,11 +88,7 @@ function formatRelativeTime(iso: string): { label: string; isPast: boolean; tool
       });
 
   if (isAllDay) {
-    const date = new Date(
-      parseInt(iso.slice(0, 4)),
-      parseInt(iso.slice(5, 7)) - 1,
-      parseInt(iso.slice(8, 10))
-    );
+    const date = parseLocalISO(iso);
     const todayMidnight = new Date();
     todayMidnight.setHours(0, 0, 0, 0);
     const diffDays = Math.round((date.getTime() - todayMidnight.getTime()) / 86400000);
@@ -109,7 +98,7 @@ function formatRelativeTime(iso: string): { label: string; isPast: boolean; tool
   }
 
   // Timed event
-  const date = new Date(iso);
+  const date = parseLocalISO(iso);
   const diffMs = date.getTime() - Date.now();
   const isPast = diffMs < 0;
   const abs = Math.abs(diffMs);

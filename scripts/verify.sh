@@ -19,7 +19,7 @@ overall=0
 changed=()
 if [ -z "$CI" ]; then
   while IFS= read -r f; do
-    [[ -n "$f" ]] && changed+=("$f")
+    [[ -n "$f" && -f "$f" ]] && changed+=("$f")
   done < <(
     { git diff --name-only HEAD 2>/dev/null
       git diff --name-only --cached 2>/dev/null

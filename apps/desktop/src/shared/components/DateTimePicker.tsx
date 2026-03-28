@@ -6,29 +6,13 @@
 // Layout: two-column (calendar left · time slot list right) + optional duration footer.
 // UX: all changes apply immediately via onChange — no internal uncommitted state.
 
-import {
-  addDays,
-  format,
-  getHours,
-  getMinutes,
-  isToday,
-  isTomorrow,
-  parse,
-  parseISO,
-  startOfDay,
-} from "date-fns";
+import { parseLocalISO } from "@pikos/core";
+import { addDays, format, getHours, getMinutes, isToday, isTomorrow, startOfDay } from "date-fns";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-
-// ── Date parsing ──────────────────────────────────────────────────────────────
-// Date-only ISO strings must be parsed as local time (not UTC) to avoid date shifting.
-
-function parseLocalISO(iso: string): Date {
-  return iso.length === 10 ? parse(iso, "yyyy-MM-dd", new Date()) : parseISO(iso);
-}
 
 // ── ISO formatters ────────────────────────────────────────────────────────────
 

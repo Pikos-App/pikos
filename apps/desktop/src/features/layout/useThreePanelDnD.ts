@@ -7,6 +7,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { Folder, PageSummary } from "@pikos/core";
+import { parseLocalISO } from "@pikos/core";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -17,7 +18,8 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 /** Returns the duration in ms for a timed page schedule, or undefined for all-day/unscheduled. */
 function getPageDurationMs(page: PageSummary): number | undefined {
   if (!page.scheduledStart?.includes("T") || !page.scheduledEnd) return undefined;
-  const ms = new Date(page.scheduledEnd).getTime() - new Date(page.scheduledStart).getTime();
+  const ms =
+    parseLocalISO(page.scheduledEnd).getTime() - parseLocalISO(page.scheduledStart).getTime();
   return ms > 0 ? ms : undefined;
 }
 

@@ -1,5 +1,8 @@
 import * as chrono from "chrono-node";
+import { addMinutes } from "date-fns";
 import { RRule, Weekday } from "rrule";
+
+import { formatDateOnly, formatLocalISO } from "../utils/dates";
 
 export type PagePriority = "urgent" | "high" | "medium" | "low";
 
@@ -51,25 +54,6 @@ const DAY_MAP: Record<string, Weekday> = {
 };
 
 const WEEKDAY_DAYS = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR];
-
-function formatDateOnly(d: Date): string {
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${mo}-${day}`;
-}
-
-function formatDateTime(d: Date): string {
-  const base = formatDateOnly(d);
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  return `${base}T${h}:${m}:${s}`;
-}
-
-function addMinutes(d: Date, minutes: number): Date {
-  return new Date(d.getTime() + minutes * 60_000);
-}
 
 export function parseInput(raw: string, now?: Date): ParseResult {
   const ref = now ?? new Date();
@@ -277,9 +261,9 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       if (todayWithTime <= ref) {
         todayWithTime.setDate(todayWithTime.getDate() + 1);
       }
-      scheduledStart = formatDateTime(todayWithTime);
+      scheduledStart = formatLocalISO(todayWithTime);
     } else if (hasDate && hasTime) {
-      scheduledStart = formatDateTime(parsed);
+      scheduledStart = formatLocalISO(parsed);
     } else if (hasDate) {
       scheduledStart = formatDateOnly(parsed);
     }
@@ -308,7 +292,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       // Compute scheduledEnd only when we have a full datetime
       const startDate = new Date(scheduledStart);
       if (!isNaN(startDate.getTime())) {
-        baseInput.scheduledEnd = formatDateTime(addMinutes(startDate, durationMinutes));
+        baseInput.scheduledEnd = formatLocalISO(addMinutes(startDate, durationMinutes));
       }
     }
   }
@@ -382,9 +366,9 @@ export function parseInput(raw: string, now?: Date): ParseResult {
         );
         const dated = new Date(d);
         dated.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
-        inp.scheduledStart = formatDateTime(dated);
+        inp.scheduledStart = formatLocalISO(dated);
         if (durationMinutes !== undefined) {
-          inp.scheduledEnd = formatDateTime(addMinutes(dated, durationMinutes));
+          inp.scheduledEnd = formatLocalISO(addMinutes(dated, durationMinutes));
         }
       } else {
         inp.scheduledStart = formatDateOnly(d);

@@ -1,4 +1,5 @@
 import type { PageStatus } from "@pikos/core";
+import { nowLocalISO } from "@pikos/core";
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -6,7 +7,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import { nowLocalISO } from "@/shared/utils/dates";
 
 import {
   CHIP_BASE_CLASSES,
@@ -61,7 +61,18 @@ export function PageBlock({
   onResizeStart,
   resizeHeight,
 }: PageBlockProps) {
-  const { column, endDate, height, isCompact, page, startDate, top, totalColumns } = block;
+  const {
+    column,
+    endDate,
+    height,
+    isCompact,
+    isContinuationAfter,
+    isContinuationBefore,
+    page,
+    startDate,
+    top,
+    totalColumns,
+  } = block;
   const { updatePage } = useWorkspace();
   const { requestDeletePage } = useUndoDelete();
 
@@ -327,7 +338,9 @@ export function PageBlock({
               !folderColor && "border-blue-500 bg-blue-500/15",
               isDone ? "opacity-50" : "transition-opacity hover:opacity-75",
               isDragging && "opacity-40",
-              inResizeZone ? "cursor-ns-resize" : "cursor-default"
+              inResizeZone ? "cursor-ns-resize" : "cursor-default",
+              isContinuationBefore && "rounded-t-none",
+              isContinuationAfter && "rounded-b-none"
             )}
             onClick={handleClick}
             onMouseDown={handleBlockMouseDown}

@@ -2,6 +2,7 @@
 // key={page.id} in parent resets all state on page switch.
 
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
+import { nowLocalISO, parseLocalISO } from "@pikos/core";
 import { AlertTriangle, CalendarDays, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -12,7 +13,6 @@ import { TagsPopover } from "@/features/pages/components/TagsPopover";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
-import { nowLocalISO } from "@/shared/utils/dates";
 
 import { DateSchedulePopover } from "./DateSchedulePopover";
 
@@ -177,7 +177,7 @@ export function MetadataHeader({
   }
 
   function handleOpenInCalendar() {
-    setReferenceDate(new Date(page.scheduledStart!));
+    setReferenceDate(parseLocalISO(page.scheduledStart!));
     setRightPanel("calendar");
   }
 

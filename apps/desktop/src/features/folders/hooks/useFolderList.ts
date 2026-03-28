@@ -1,4 +1,5 @@
 import type { Folder } from "@pikos/core";
+import { localToday } from "@pikos/core";
 import { useState } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
@@ -45,7 +46,7 @@ export function useFolderList(): FolderListState {
     ).length;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const todayCount = pages.filter(
     (p) => p.scheduledStart && p.scheduledStart.slice(0, 10) <= today && p.status !== "done"
   ).length;

@@ -271,6 +271,99 @@ describe("buildDayBlocks", () => {
     const pages = [makePage({ scheduledStart: null, title: "No schedule" })];
     expect(buildDayBlocks(pages, day)).toHaveLength(0);
   });
+
+  // ── Cross-day events ──────────────────────────────────────────────────────
+
+  it("event spanning midnight shows on both days", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-16T02:00:00",
+        scheduledStart: "2026-03-15T22:00:00",
+        title: "Late night",
+      }),
+    ];
+
+    // March 15: shows from 10 PM to grid end, with isContinuationAfter
+    const blocksDay1 = buildDayBlocks(pages, day);
+    expect(blocksDay1).toHaveLength(1);
+    const b1 = blocksDay1[0]!;
+    expect(b1.top).toBe((22 - GRID_START_HOUR) * HOUR_HEIGHT); // 10 PM
+    expect(b1.height).toBe(GRID_HEIGHT - b1.top); // extends to grid bottom
+    expect(b1.isContinuationAfter).toBe(true);
+    expect(b1.isContinuationBefore).toBeUndefined();
+
+    // March 16: shows from grid start to 2 AM, with isContinuationBefore
+    const nextDay = new Date(2026, 2, 16);
+    const blocksDay2 = buildDayBlocks(pages, nextDay);
+    expect(blocksDay2).toHaveLength(1);
+    const b2 = blocksDay2[0]!;
+    expect(b2.top).toBe(0); // grid start (6 AM clamped)
+    expect(b2.isContinuationBefore).toBe(true);
+    expect(b2.isContinuationAfter).toBeUndefined();
+  });
+
+  it("multi-day event shows on all spanned days", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-17T14:00:00",
+        scheduledStart: "2026-03-15T20:00:00",
+        title: "Conference",
+      }),
+    ];
+
+    // Day 1 (Mar 15): starts at 8 PM, continues after
+    const blocks1 = buildDayBlocks(pages, day);
+    expect(blocks1).toHaveLength(1);
+    expect(blocks1[0]!.isContinuationAfter).toBe(true);
+    expect(blocks1[0]!.isContinuationBefore).toBeUndefined();
+
+    // Day 2 (Mar 16): full-day continuation
+    const blocks2 = buildDayBlocks(pages, new Date(2026, 2, 16));
+    expect(blocks2).toHaveLength(1);
+    expect(blocks2[0]!.isContinuationBefore).toBe(true);
+    expect(blocks2[0]!.isContinuationAfter).toBe(true);
+    expect(blocks2[0]!.top).toBe(0);
+    expect(blocks2[0]!.height).toBe(GRID_HEIGHT);
+
+    // Day 3 (Mar 17): ends at 2 PM
+    const blocks3 = buildDayBlocks(pages, new Date(2026, 2, 17));
+    expect(blocks3).toHaveLength(1);
+    expect(blocks3[0]!.isContinuationBefore).toBe(true);
+    expect(blocks3[0]!.isContinuationAfter).toBeUndefined();
+  });
+
+  it("cross-day event does not appear on unrelated days", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-16T02:00:00",
+        scheduledStart: "2026-03-15T22:00:00",
+        title: "Late night",
+      }),
+    ];
+    // March 17: should not appear
+    expect(buildDayBlocks(pages, new Date(2026, 2, 17))).toHaveLength(0);
+  });
+
+  it("cross-day event overlaps correctly with same-day events", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-16T10:00:00",
+        scheduledStart: "2026-03-15T22:00:00",
+        title: "Overnight",
+      }),
+      makePage({
+        scheduledEnd: "2026-03-16T09:00:00",
+        scheduledStart: "2026-03-16T08:00:00",
+        title: "Morning",
+      }),
+    ];
+    // March 16: both events should appear and overlap
+    const nextDay = new Date(2026, 2, 16);
+    const blocks = buildDayBlocks(pages, nextDay);
+    expect(blocks).toHaveLength(2);
+    // They overlap (overnight continues from grid start, morning is at 8 AM)
+    expect(blocks.some((b) => b.totalColumns === 2)).toBe(true);
+  });
 });
 
 // ─── timeToY ─────────────────────────────────────────────────────────────────
