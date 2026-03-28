@@ -1,6 +1,9 @@
 import { test as base, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+/** Platform-appropriate modifier: Cmd on macOS, Ctrl on Linux/Windows. */
+const MOD = process.platform === "darwin" ? "Meta" : "Control";
+
 export const test = base.extend<{ app: Page }>({
   app: async ({ page }, use) => {
     await page.goto("/");
@@ -10,9 +13,14 @@ export const test = base.extend<{ app: Page }>({
   },
 });
 
+/** Press a shortcut like "Mod+n", replacing Mod with the platform modifier. */
+export function mod(combo: string): string {
+  return combo.replace("Mod", MOD);
+}
+
 /** Create a page via Quick Add and wait for dialog to close. */
 export async function quickAdd(page: Page, input: string) {
-  await page.keyboard.press("Meta+n");
+  await page.keyboard.press(mod("Mod+n"));
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByPlaceholder(/what's on your mind/i).fill(input);
   await page.keyboard.press("Enter");

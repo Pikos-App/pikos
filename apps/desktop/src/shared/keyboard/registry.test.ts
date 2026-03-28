@@ -216,19 +216,6 @@ describe("allowInInputs", () => {
     Keyboard.handle(makeKeyEvent("d", { ctrlKey: true, target: input }));
     expect(handler).toHaveBeenCalledOnce();
   });
-
-  // jsdom does not implement isContentEditable — this is tested via E2E instead
-  it.skip("blocks handler when target is contenteditable", () => {
-    const handler = vi.fn();
-    Keyboard.register({ combo: "Mod+d", handler, id: "test-ce" });
-
-    const div = document.createElement("div");
-    div.contentEditable = "true";
-    document.body.appendChild(div);
-    Keyboard.handle(makeKeyEvent("d", { ctrlKey: true, target: div }));
-    expect(handler).not.toHaveBeenCalled();
-    document.body.removeChild(div);
-  });
 });
 
 // ─── when conditional ───────────────────────────────────────────────────────

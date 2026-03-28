@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { quickAdd, test as appTest } from "./fixtures";
+import { mod, quickAdd, test as appTest } from "./fixtures";
 
 // ─── T1-1: App boots to welcome screen ──────────────────────────────────────
 
@@ -14,7 +14,7 @@ test("app boots to welcome screen @tier1", async ({ page }) => {
 // ─── T1-2: Create page via Quick Add (Cmd+N) ────────────────────────────────
 
 appTest("create page via Quick Add @tier1", async ({ app }) => {
-  await app.keyboard.press("Meta+n");
+  await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
 
@@ -58,7 +58,7 @@ appTest("open page and edit content @tier1", async ({ app }) => {
   await expect(title).toHaveValue("my test page");
   await title.click();
   await app.waitForTimeout(100); // let onFocus rAF complete
-  await app.keyboard.press("Meta+a");
+  await app.keyboard.press(mod("Mod+a"));
   await app.keyboard.type("renamed page");
   await expect(title).toHaveValue("renamed page");
 
@@ -122,7 +122,7 @@ appTest("create and navigate folders @tier1", async ({ app }) => {
     .click();
 
   // Rename mode is active with input focused — select all, type new name, commit
-  await app.keyboard.press("Meta+a");
+  await app.keyboard.press(mod("Mod+a"));
   await app.keyboard.type("Projects");
   await app.keyboard.press("Enter");
 
@@ -214,13 +214,13 @@ appTest("toggle editor and calendar view @tier1", async ({ app }) => {
   await expect(calendarBtn).toHaveAttribute("aria-pressed", "false");
 
   // Toggle to calendar
-  await app.keyboard.press("Meta+Shift+c");
+  await app.keyboard.press(mod("Mod+Shift+c"));
   await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
   await expect(calendarBtn).toHaveAttribute("aria-pressed", "true");
   await expect(editorBtn).toHaveAttribute("aria-pressed", "false");
 
   // Toggle back to editor
-  await app.keyboard.press("Meta+Shift+c");
+  await app.keyboard.press(mod("Mod+Shift+c"));
   await expect(app.getByRole("region", { name: "Week calendar" })).not.toBeVisible();
   await expect(editorBtn).toHaveAttribute("aria-pressed", "true");
 });
@@ -233,7 +233,7 @@ appTest("search pages via Cmd+P @tier1", async ({ app }) => {
   await quickAdd(app, "gamma notes");
 
   // Open search palette
-  await app.keyboard.press("Meta+p");
+  await app.keyboard.press(mod("Mod+p"));
   const dialog = app.getByRole("dialog", { name: "Search pages" });
   await expect(dialog).toBeVisible();
 
@@ -262,7 +262,7 @@ appTest("move page to folder via context menu @tier1", async ({ app }) => {
     .getByRole("toolbar", { name: "Folder actions" })
     .getByRole("button", { name: "New Folder" })
     .click();
-  await app.keyboard.press("Meta+a");
+  await app.keyboard.press(mod("Mod+a"));
   await app.keyboard.type("Work");
   await app.keyboard.press("Enter");
 
