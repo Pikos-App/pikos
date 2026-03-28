@@ -6,15 +6,19 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PNPM_VERSION: 10.30.3
 
 jobs:
-  # ── Job 1: Tests ────────────────────────────────────────────────────────────
-  # Quality checks (typecheck, lint, prettier, depcruise) run locally via
-  # the pre-push git hook. CI owns tests + build which need a clean environment.
-  test:
-    name: Tests
+  # ── Job 1: Verify ──────────────────────────────────────────────────────────
+  # Typecheck, lint, prettier, dependency-cruiser, unit tests.
+  # Same checks as the pre-commit hook — CI is the enforcement layer.
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,25 +29,20 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Unit tests (Vitest)
-        run: pnpm turbo test
+      - name: Verify (typecheck + lint + prettier + depcruise + unit tests)
+        run: pnpm verify
 
-      - name: Install Playwright browsers
-        run: pnpm --filter @pikos/desktop exec playwright install --with-deps chromium
-
-      - name: E2E tests (Playwright)
-        run: pnpm --filter @pikos/desktop exec playwright test
-
-  # ── Job 2: Build ────────────────────────────────────────────────────────────
-  build:
-    name: Build
+  # ── Job 2: E2E ─────────────────────────────────────────────────────────────
+  # Full Playwright E2E suite (all tiers). Pre-push hook only runs tier1.
+  e2e:
+    name: E2E Tests
     runs-on: ubuntu-latest
-    needs: test
+    needs: verify
     steps:
       - uses: actions/checkout@v4
 
@@ -53,7 +52,54 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/desktop/pnpm-lock.yaml', 'pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @pikos/desktop exec playwright install --with-deps webkit
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @pikos/desktop exec playwright install-deps webkit
+
+      - name: E2E tests (Playwright)
+        run: pnpm --filter @pikos/desktop exec playwright test
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/desktop/test-results/
+            apps/desktop/playwright-report/
+          retention-days: 7
+
+  # ── Job 3: Build ───────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -63,3 +109,30 @@ jobs:
 
       - name: Verify dist output exists
         run: test -d apps/desktop/dist && echo "✓ dist built"
+
+  # ── Job 4: Rust ────────────────────────────────────────────────────────────
+  # Verify the Tauri backend compiles with zero warnings.
+  rust:
+    name: Rust Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+
+      - name: Cargo check (zero warnings)
+        env:
+          RUSTFLAGS: "-D warnings"
+        run: cargo check
