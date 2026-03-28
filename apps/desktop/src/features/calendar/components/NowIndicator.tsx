@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { timeToY } from "./calendarUtils";
+import { timeToY } from "../utils/calendarUtils";
 
 export function NowIndicator() {
   const [now, setNow] = useState(() => new Date());

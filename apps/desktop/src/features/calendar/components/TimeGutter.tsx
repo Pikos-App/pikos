@@ -1,4 +1,4 @@
-import { GRID_END_HOUR, GRID_START_HOUR, HOUR_HEIGHT } from "./calendarUtils";
+import { GRID_END_HOUR, GRID_START_HOUR, HOUR_HEIGHT } from "../utils/calendarUtils";
 
 export function TimeGutter() {
   const hours = Array.from(

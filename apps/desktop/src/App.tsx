@@ -1,12 +1,11 @@
 import { useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ThreePanelLayout } from "@/features/layout/ThreePanelLayout";
-import { QuickAddDialog } from "@/features/pages/components/QuickAddDialog";
-import { UNDO_TOAST_DURATION_MS } from "@/features/pages/hooks/usePageList";
-import { SearchPalette } from "@/features/search/components/SearchPalette";
-import { SettingsPage } from "@/features/settings/SettingsPage";
-import { WelcomeScreen } from "@/features/workspace/WelcomeScreen";
+import { ThreePanelLayout } from "@/features/layout";
+import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
+import { SearchPalette } from "@/features/search";
+import { SettingsPage } from "@/features/settings";
+import { WelcomeScreen } from "@/features/workspace";
 import { UndoToast } from "@/shared/components/UndoToast";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
 import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";

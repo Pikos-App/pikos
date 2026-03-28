@@ -17,11 +17,11 @@ import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 
-import { FolderDeleteDialog } from "./components/FolderDeleteDialog";
-import { FolderItem } from "./components/FolderItem";
-import { SmartViewEntry } from "./components/SmartViewEntry";
-import { useFolderList } from "./hooks/useFolderList";
-import type { FolderSortOrder } from "./hooks/useFolderList";
+import { useFolderList } from "../hooks/useFolderList";
+import type { FolderSortOrder } from "../hooks/useFolderList";
+import { FolderDeleteDialog } from "./FolderDeleteDialog";
+import { FolderItem } from "./FolderItem";
+import { SmartViewEntry } from "./SmartViewEntry";
 
 export function FolderList() {
   const {

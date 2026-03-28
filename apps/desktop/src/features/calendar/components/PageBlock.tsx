@@ -16,8 +16,8 @@ import {
   formatTimeRange,
   HOUR_HEIGHT,
   snapY,
-} from "./calendarUtils";
-import type { CalendarBlock } from "./calendarUtils";
+} from "../utils/calendarUtils";
+import type { CalendarBlock } from "../utils/calendarUtils";
 import { PageBlockPopover } from "./PageBlockPopover";
 
 /** Delay (ms) to distinguish single click (popover) from double click (open editor). */

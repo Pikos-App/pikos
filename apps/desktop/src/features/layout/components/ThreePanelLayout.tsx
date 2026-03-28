@@ -5,12 +5,12 @@ import { cn } from "@/lib/utils";
 import { useUI } from "@/shared/context/UIContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
+import { usePanelResize } from "../hooks/usePanelResize";
+import { useThreePanelDnD } from "../hooks/useThreePanelDnD";
 import { EditorPanel } from "./EditorPanel";
 import { PageListPanel } from "./PageListPanel";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
-import { usePanelResize } from "./usePanelResize";
-import { useThreePanelDnD } from "./useThreePanelDnD";
 
 const PANEL_SPRING = { damping: 35, stiffness: 350, type: "spring" as const };
 

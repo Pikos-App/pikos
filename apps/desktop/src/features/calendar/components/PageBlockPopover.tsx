@@ -7,8 +7,7 @@ import { formatLocalISO, nowLocalISO, parseLocalISO } from "@pikos/core";
 import { CalendarX, Check, ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import { FolderChip } from "@/features/pages/components/FolderChip";
-import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
+import { FolderChip, PriorityDropdown } from "@/features/pages";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";

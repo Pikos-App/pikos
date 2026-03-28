@@ -11,8 +11,8 @@ function isWeekend(day: Date) {
   return d === 0 || d === 6;
 }
 
-import { AllDaySection } from "./AllDaySection";
-import type { CalendarBlock } from "./calendarUtils";
+import { useHeightResize } from "../hooks/useHeightResize";
+import type { CalendarBlock } from "../utils/calendarUtils";
 import {
   COMPACT_BLOCK_HEIGHT,
   GRID_HEIGHT,
@@ -21,11 +21,11 @@ import {
   MIN_RESIZE_HEIGHT,
   snapY,
   yToDate,
-} from "./calendarUtils";
+} from "../utils/calendarUtils";
+import { AllDaySection } from "./AllDaySection";
 import type { BlockDragStartInfo, BlockResizeStartInfo, DragGhost, ResizeGhost } from "./DayColumn";
 import { DayColumn } from "./DayColumn";
 import { TimeGutter } from "./TimeGutter";
-import { useHeightResize } from "./useHeightResize";
 
 interface WeekGridProps {
   days: Date[];

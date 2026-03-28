@@ -3,8 +3,7 @@
 
 import { addWeeks, subWeeks } from "date-fns";
 
-import { CalendarHeader } from "@/features/calendar/CalendarHeader";
-import { CalendarView } from "@/features/calendar/CalendarView";
+import { CalendarHeader, CalendarView } from "@/features/calendar";
 import { EditorPane } from "@/features/editor";
 import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";

@@ -6,7 +6,7 @@
 import type { PageSummary } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
-import type { SortMode } from "@/features/pages/utils/pageFilters";
+import type { SortMode } from "@/features/pages";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

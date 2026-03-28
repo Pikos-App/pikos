@@ -1,7 +1,7 @@
 import { RRule } from "rrule";
 import { describe, expect, it } from "vitest";
 
-import { parseInput } from "../parser";
+import { parseInput } from "./parser";
 
 const NOW = new Date("2026-03-15T12:00:00");
 

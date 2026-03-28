@@ -14,7 +14,7 @@ import {
   CHIP_DEFAULT_COLOR_CLASSES,
   chipFolderStyle,
   DRAG_THRESHOLD,
-} from "./calendarUtils";
+} from "../utils/calendarUtils";
 import { PageBlockPopover } from "./PageBlockPopover";
 
 /** Delay (ms) to distinguish single click (popover) from double click (open editor). */

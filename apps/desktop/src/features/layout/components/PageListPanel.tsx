@@ -20,10 +20,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PageListItem } from "@/features/pages/components/PageListItem";
-import { usePageList } from "@/features/pages/hooks/usePageList";
-import type { SortMode } from "@/features/pages/utils/pageFilters";
-import { groupTodayPages } from "@/features/pages/utils/pageFilters";
+import { groupTodayPages, PageListItem, usePageList } from "@/features/pages";
+import type { SortMode } from "@/features/pages";
 import { cn } from "@/lib/utils";
 import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";

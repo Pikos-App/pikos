@@ -7,8 +7,8 @@ import type { PageSummary } from "@pikos/core";
 
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
+import { buildAllDayItems } from "../utils/calendarUtils";
 import { AllDayColumn } from "./AllDayColumn";
-import { buildAllDayItems } from "./calendarUtils";
 
 interface AllDaySectionProps {
   allDayDragHoverIndex: number | null;

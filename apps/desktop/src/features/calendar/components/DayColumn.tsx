@@ -17,8 +17,8 @@ import {
   GRID_START_HOUR,
   HOUR_HEIGHT,
   yToDate,
-} from "./calendarUtils";
-import type { CalendarBlock } from "./calendarUtils";
+} from "../utils/calendarUtils";
+import type { CalendarBlock } from "../utils/calendarUtils";
 import { NowIndicator } from "./NowIndicator";
 import { PageBlock } from "./PageBlock";
 

@@ -7,9 +7,7 @@ import { AlertTriangle, CalendarDays, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { FolderChip } from "@/features/pages/components/FolderChip";
-import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
-import { TagsPopover } from "@/features/pages/components/TagsPopover";
+import { FolderChip, PriorityDropdown, TagsPopover } from "@/features/pages";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";

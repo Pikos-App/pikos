@@ -6,11 +6,11 @@ import { useEffect, useState } from "react";
 import { useUI } from "@/shared/context/UIContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
-import { AppearanceSettings } from "./pages/AppearanceSettings";
-import { DeveloperSettings } from "./pages/DeveloperSettings";
-import { GeneralSettings } from "./pages/GeneralSettings";
-import { ShortcutsSettings } from "./pages/ShortcutsSettings";
+import { AppearanceSettings } from "./AppearanceSettings";
+import { DeveloperSettings } from "./DeveloperSettings";
+import { GeneralSettings } from "./GeneralSettings";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
+import { ShortcutsSettings } from "./ShortcutsSettings";
 
 function readLeftPanelWidth(): number {
   try {

@@ -11,7 +11,7 @@ import { parseLocalISO } from "@pikos/core";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
-import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
+import { getVisiblePages, sortPages } from "@/features/pages";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 

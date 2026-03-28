@@ -3,7 +3,7 @@
 import { Settings } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { FolderList } from "@/features/folders/FolderList";
+import { FolderList } from "@/features/folders";
 import { useUI } from "@/shared/context/UIContext";
 
 interface SidebarProps {

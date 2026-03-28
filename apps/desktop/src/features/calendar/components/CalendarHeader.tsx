@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
-import { weekStart } from "./calendarUtils";
+import { weekStart } from "../utils/calendarUtils";
 
 interface CalendarHeaderProps {
   onNextWeek: () => void;

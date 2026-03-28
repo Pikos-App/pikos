@@ -9,7 +9,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-import { weekDays } from "./calendarUtils";
+import { weekDays } from "../utils/calendarUtils";
 import { WeekGrid } from "./WeekGrid";
 
 export function CalendarView() {
