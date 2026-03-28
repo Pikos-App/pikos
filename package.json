@@ -8,13 +8,9 @@
     "dev:desktop": "pnpm --filter @pikos/desktop tauri dev",
     "dev:marketing": "pnpm --filter @pkos/marketing dev",
     "build": "turbo build",
-    "typecheck": "turbo typecheck",
-    "lint": "turbo lint",
     "test": "turbo test",
-    "depcruise": "depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs",
     "prepare": "husky",
-    "check": "bash scripts/check.sh",
-    "verify": "pnpm run check && pnpm run test",
+    "verify": "bash scripts/verify.sh",
     "seed": "tsx scripts/seed/index.ts"
   },
   "dependencies": {

@@ -1,5 +1,4 @@
-pnpm check
-pnpm exec turbo test
+pnpm verify
 # Tier 1 E2E — requires Playwright browsers (npx playwright install webkit)
 # Skip when SKIP_E2E is set or browsers aren't installed
 if [ -z "$SKIP_E2E" ] && npx playwright test --list --project tier1 >/dev/null 2>&1; then

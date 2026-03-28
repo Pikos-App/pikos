@@ -1,2 +1,1 @@
-pnpm check
-pnpm exec turbo test
+pnpm verify
