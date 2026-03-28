@@ -83,7 +83,7 @@ if [ $test_rc -eq 0 ]; then
   desktop_tests=$(echo "$test_out" | grep -A2 '@pikos/desktop:test:.*Test Files' | head -1 | sed 's/.*\x1b\[[0-9;]*m//g; s/\x1b\[[0-9;]*m//g' | grep -oE '[0-9]+ passed' || echo "")
   # Count total passed tests from "Tests" lines
   total=$(echo "$test_out" | sed 's/\x1b\[[0-9;]*m//g' | grep -E '^\s*Tests\s' | grep -oE '[0-9]+ passed' | awk '{s+=$1} END {print s}')
-  pass "tests" "${total:-all} passed"
+  pass "tests" "${total} passed"
 else
   fail "tests"
   # Show only the failure lines
