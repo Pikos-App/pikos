@@ -51,9 +51,13 @@ appTest("open page and edit content @tier1", async ({ app }) => {
     "my test page"
   );
 
-  // Edit the title
+  // Edit the title — wait for load, then clear and retype.
+  // The title textarea moves cursor to end on focus (rAF), so we click first,
+  // wait for the rAF to settle, then select all and replace.
   const title = app.getByRole("textbox", { name: "Page title" });
+  await expect(title).toHaveValue("my test page");
   await title.click();
+  await app.waitForTimeout(100); // let onFocus rAF complete
   await app.keyboard.press("Meta+a");
   await app.keyboard.type("renamed page");
   await expect(title).toHaveValue("renamed page");
