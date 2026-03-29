@@ -229,7 +229,7 @@ export function EditorPane() {
   // ─── Editor ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden bg-surface-primary">
       {page && (
         <MetadataHeader
           contentSaveError={saveError}

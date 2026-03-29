@@ -164,12 +164,12 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
   return (
     <div
-      className="relative flex h-full shrink-0 flex-col border-r border-border bg-surface-secondary"
+      className="relative flex h-full shrink-0 flex-col border-r border-border-secondary bg-surface-secondary"
       style={{ width }}
     >
       {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
-        <span className="type-ui font-semibold text-foreground">
+        <span className="type-ui text-foreground">
           {activeViewId === "today"
             ? "Today"
             : activeViewId === "inbox"
@@ -187,10 +187,10 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
                   <DropdownMenuTrigger asChild>
                     <button
                       aria-label={`Sort: ${sortMode}`}
-                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-subtle hover:bg-surface-hover hover:text-foreground"
                       tabIndex={0}
                     >
-                      <ArrowUpDown size={13} />
+                      <ArrowUpDown size={16} />
                     </button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
@@ -219,8 +219,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             </DropdownMenu>
           )}
           <TooltipIconButton
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            icon={<Plus size={15} />}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-subtle hover:bg-surface-hover hover:text-foreground"
+            icon={<Plus size={16} />}
             label="New Page"
             onClick={() => setOpenDialog("quick-add")}
             shortcut="mod+n"

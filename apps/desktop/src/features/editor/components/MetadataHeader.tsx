@@ -51,7 +51,7 @@ function Byline({
   const isDone = page.status === "done";
 
   return (
-    <div className="type-ui-sm flex flex-wrap items-center gap-2 pt-2 pb-4 text-subtle">
+    <div className="type-ui-sm flex items-center gap-2 overflow-hidden pt-2 pb-4 text-subtle">
       {/* Status toggle */}
       <button
         aria-label={isDone ? "Mark not done" : "Mark done"}
@@ -85,7 +85,7 @@ function Byline({
                 className="inline-flex items-center gap-1 rounded transition-colors hover:text-muted-foreground focus:outline-none"
                 onClick={onOpenInCalendar}
               >
-                <CalendarDays size={13} />
+                <CalendarDays size={14} />
                 <span>View</span>
               </button>
             </TooltipTrigger>

@@ -26,6 +26,13 @@ function formatTime(date: Date): string {
   return `${h}:${m}${ampm}`;
 }
 
+function isDueSoon(iso: string): boolean {
+  const date = parseLocalISO(iso);
+  const now = new Date();
+  const threeDaysOut = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 23, 59, 59);
+  return date > now && date <= threeDaysOut;
+}
+
 function formatDate(iso: string): { label: string; isPast: boolean; tooltip: string } {
   const isAllDay = iso.length === 10;
   const date = parseLocalISO(iso);
@@ -181,8 +188,8 @@ export function PageListItem({
           {...attributes}
           {...listeners}
           className={cn(
-            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-2.5 outline-none select-none",
-            isActive ? "bg-surface-selected text-accent-foreground" : "hover:bg-accent/50"
+            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-2.5 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
+            isActive ? "bg-surface-selected text-accent-foreground" : "hover:bg-surface-hover"
           )}
           onClick={isRenaming ? undefined : onSelect}
           onDoubleClick={(e) => {
@@ -206,13 +213,13 @@ export function PageListItem({
           <button
             aria-label={page.status === "done" ? "Mark not done" : "Mark done"}
             className={cn(
-              "mt-[2px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border transition-colors",
+              "mt-[2px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border-[1.5px] transition-colors",
               page.status === "done"
                 ? "border-foreground/40 bg-foreground/10"
                 : page.priority === 1
-                  ? "border-red-500 hover:border-red-400"
+                  ? "border-status-overdue hover:border-red-400"
                   : page.priority === 2
-                    ? "border-orange-500 hover:border-orange-400"
+                    ? "border-status-due-soon hover:border-orange-400"
                     : "border-muted-foreground/40 hover:border-foreground/60"
             )}
             onClick={(e) => {
@@ -267,11 +274,16 @@ export function PageListItem({
                       !isCompleted && showRelative
                         ? formatRelativeTime(page.scheduledStart)
                         : formatDate(page.scheduledStart);
+                    const dueSoon = !isCompleted && !isPast && isDueSoon(page.scheduledStart);
                     return (
                       <span
                         className={cn(
                           "type-ui-sm shrink-0 cursor-pointer hover:opacity-80",
-                          isPast && !isCompleted ? "text-status-overdue" : "text-subtle"
+                          isPast && !isCompleted
+                            ? "text-status-overdue"
+                            : dueSoon
+                              ? "text-status-due-soon"
+                              : "text-subtle"
                         )}
                         onClick={(e) => {
                           e.stopPropagation();

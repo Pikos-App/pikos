@@ -40,7 +40,7 @@
   margin-top: 24px;
   margin-bottom: 8px;
   letter-spacing: var(--tracking-tight);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 /* ─── Paragraphs ───────────────────────────────────────────────────────────── */
@@ -58,14 +58,24 @@
 
 .editor-content ul {
   list-style-type: disc;
-  padding-left: 1.5em;
+  padding-left: 24px;
   margin-top: 0.25em;
   margin-bottom: 0.5em;
+  color: var(--text-tertiary);
+}
+
+.editor-content ul > li {
+  color: var(--text-primary);
+}
+
+.editor-content ul > li::marker {
+  color: var(--text-tertiary);
+  font-size: 8px;
 }
 
 .editor-content ol {
   list-style-type: decimal;
-  padding-left: 1.5em;
+  padding-left: 24px;
   margin-top: 0.25em;
   margin-bottom: 0.5em;
 }
@@ -104,10 +114,10 @@
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   border: 1.5px solid var(--muted-foreground);
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   display: block;
   flex-shrink: 0;

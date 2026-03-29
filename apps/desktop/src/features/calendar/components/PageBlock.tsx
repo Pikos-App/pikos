@@ -328,15 +328,17 @@ export function PageBlock({
             style={sharedStyle}
           >
             {checkbox}
-            <span className="type-body-sm min-w-0 truncate font-medium text-foreground">{page.title || "Untitled"}</span>
+            <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
+              {page.title || "Untitled"}
+            </span>
           </button>
         ) : (
           <button
             aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
             className={cn(
-              "absolute flex flex-col items-start overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
+              "absolute flex flex-col items-start overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               !folderColor && "border-blue-500 bg-blue-500/15",
-              isDone ? "opacity-50" : "transition-opacity hover:opacity-75",
+              isDone ? "opacity-50" : "transition-all hover:opacity-80 hover:shadow-sm",
               isDragging && "opacity-40",
               inResizeZone ? "cursor-ns-resize" : "cursor-default",
               isContinuationBefore && "rounded-t-none",
@@ -355,16 +357,14 @@ export function PageBlock({
               </p>
             </div>
             {showTimeLabel && (
-              <p className="type-ui-sm mt-0.5 truncate pl-[16px] text-subtle">
-                {timeLabel}
-              </p>
+              <p className="type-ui-sm mt-0.5 truncate pl-[16px] text-subtle">{timeLabel}</p>
             )}
           </button>
         )}
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[280px] p-3"
+        className="w-70 p-3"
         onMouseDown={(e) => e.stopPropagation()}
         side="right"
         sideOffset={8}

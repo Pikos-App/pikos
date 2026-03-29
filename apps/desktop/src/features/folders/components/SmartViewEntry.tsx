@@ -25,12 +25,12 @@ export function SmartViewEntry({
     <button
       aria-current={isActive ? "true" : undefined}
       className={cn(
-        "type-ui flex w-full items-center gap-2.5 rounded-r border-l-2 px-2 py-2.5 select-none",
+        "type-ui flex w-full items-center gap-2.5 rounded-r border-l-2 px-2 py-2.5 transition-[background-color,color] duration-[120ms] ease-out select-none",
         isDragOver
           ? "border-l-transparent bg-accent text-accent-foreground"
           : isActive
             ? "border-l-interactive-primary bg-surface-selected text-accent-foreground"
-            : "border-l-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            : "border-l-transparent text-muted-foreground hover:bg-surface-hover hover:text-foreground"
       )}
       id={id}
       onClick={onSelect}

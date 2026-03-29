@@ -2,7 +2,6 @@ import { useDndMonitor } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder } from "@pikos/core";
-import { Folder as FolderIcon } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -97,10 +96,9 @@ export function FolderItem({
           onRenameStart={onRenameStart}
           onSelect={onSelect}
           prefix={
-            <FolderIcon
-              className="shrink-0"
-              size={16}
-              style={{ color: folder.color ?? undefined }}
+            <span
+              className="mt-0.75 h-2 w-2 shrink-0 rounded-sm"
+              style={{ backgroundColor: folder.color ?? "var(--text-tertiary)" }}
             />
           }
           tabIndex={-1}
