@@ -239,8 +239,7 @@
 .editor-content p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
-  color: var(--muted-foreground);
-  opacity: 0.4;
+  color: var(--text-disabled);
   pointer-events: none;
   height: 0;
 }

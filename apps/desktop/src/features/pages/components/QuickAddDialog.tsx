@@ -4,7 +4,7 @@
 // but input text is never modified. On submit, the parser extracts the clean
 // title and all metadata from the full input.
 
-import { parseInput } from "@pikos/core";
+import { localToday, parseInput } from "@pikos/core";
 import type { Folder, PagePriority, PageUpdate } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -91,13 +91,13 @@ export function QuickAddDialog() {
     if (!isOpen) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setInputValue("");
-    setDateValue(null);
+    setDateValue(activeViewId === "today" ? localToday() : null);
     setEndDateValue(null);
     setPriorityValue(0);
     setFolderValue(defaultFolderId);
     setNlpTags([]);
     setManualTags([]);
-    setDateManual(false);
+    setDateManual(activeViewId === "today");
     setPriorityManual(false);
     setFolderManual(false);
     setAddedFeedback(null);

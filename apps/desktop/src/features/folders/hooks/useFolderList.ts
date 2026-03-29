@@ -39,6 +39,12 @@ export function useFolderList(): FolderListState {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [sortOrder, setSortOrder] = useState<FolderSortOrder>("manual");
 
+  // If the active view points to a folder that no longer exists, fall back to inbox.
+  const isFolderView = activeViewId !== "today" && activeViewId !== "inbox";
+  if (isFolderView && !folders.some((f) => f.id === activeViewId)) {
+    setActiveViewId("inbox");
+  }
+
   const pageCountByFolder: Record<string, number> = {};
   for (const folder of folders) {
     pageCountByFolder[folder.id] = pages.filter(

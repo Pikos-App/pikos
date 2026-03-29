@@ -15,6 +15,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "tiptap-markdown";
 
+import { EmptyState } from "@/shared/components/EmptyState";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -37,7 +38,7 @@ const extensions = [
   TaskList,
   TaskItem.configure({ nested: true }),
   Placeholder.configure({
-    placeholder: "Start writing, or type '/' for commands…",
+    placeholder: "Start writing, or press / for commands",
     showOnlyWhenEditable: true,
   }),
   Typography,
@@ -60,7 +61,7 @@ const extensions = [
 const EDITOR_ATTRIBUTES = {
   "aria-label": "Page content",
   "aria-multiline": "true",
-  "aria-placeholder": "Start writing, or type '/' for commands…",
+  "aria-placeholder": "Start writing, or press / for commands",
   autocapitalize: "off",
   autocomplete: "off",
   autocorrect: "off",
@@ -204,24 +205,15 @@ export function EditorPane() {
 
   // ─── Empty state ─────────────────────────────────────────────────────────
 
-  if (!page && !isLoading) {
+  if (!page) {
     return (
-      <div className="flex flex-1 items-center justify-center text-muted-foreground">
-        <div className="text-center">
-          <p className="type-body-sm">Select a page to start editing</p>
+      <div className="flex flex-1 items-center justify-center">
+        <EmptyState message="Select a page to start editing">
           <p className="type-ui-sm mt-1 text-subtle">
             or press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
             to create a new page
           </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="type-body-sm">Loading…</p>
+        </EmptyState>
       </div>
     );
   }

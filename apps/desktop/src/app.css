@@ -435,7 +435,7 @@ button,
 
   /* Brand-tinted text selection */
   ::selection {
-    background: color-mix(in srgb, var(--interactive-primary) 25%, transparent);
+    background: color-mix(in srgb, var(--color-brand-400) 25%, transparent);
   }
 
   /* Reduced motion preference */

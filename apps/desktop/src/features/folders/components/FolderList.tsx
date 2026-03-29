@@ -1,6 +1,15 @@
 import { useDndMonitor, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowUpDown, CalendarDays, Hash, Inbox, Plus, Search, Text } from "lucide-react";
+import {
+  ArrowUpDown,
+  CalendarDays,
+  FolderPlus,
+  Hash,
+  Inbox,
+  Plus,
+  Search,
+  Text,
+} from "lucide-react";
 import { Fragment, useState } from "react";
 import type React from "react";
 
@@ -200,7 +209,13 @@ export function FolderList() {
         </SortableContext>
 
         {folders.length === 0 && (
-          <p className="type-body-sm px-2 py-1 text-subtle italic">No folders yet</p>
+          <button
+            className="type-body-sm mx-2 mt-1 flex w-[calc(100%-16px)] items-center gap-2 rounded-md px-2 py-2 text-left text-subtle hover:bg-surface-hover hover:text-foreground"
+            onClick={() => void handleCreateFolder()}
+          >
+            <FolderPlus size={14} strokeWidth={1.5} />
+            Create a folder
+          </button>
         )}
       </div>
 

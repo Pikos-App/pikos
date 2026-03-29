@@ -6,9 +6,12 @@ import {
   CalendarDays,
   CaseSensitive,
   ChevronRight,
+  CircleCheck,
+  FilePlus,
   Flag,
   GripVertical,
   Plus,
+  Sun,
 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -23,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { groupTodayPages, PageListItem, usePageList } from "@/features/pages";
 import type { SortMode } from "@/features/pages";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/shared/components/EmptyState";
 import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
@@ -254,9 +258,13 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         tabIndex={0}
       >
         {visiblePages.length === 0 && completedPages.length === 0 ? (
-          <p className="type-body-sm px-2 py-4 text-center text-subtle italic">
-            {activeViewId === "today" ? "Nothing scheduled for today" : "No pages"}
-          </p>
+          activeViewId === "today" ? (
+            <EmptyState icon={Sun} message="Nothing scheduled for today" />
+          ) : activeViewId === "inbox" ? (
+            <EmptyState icon={CircleCheck} message="No pages in your inbox" />
+          ) : (
+            <EmptyState icon={FilePlus} message="No pages in this folder" />
+          )
         ) : isTodayView ? (
           // Today view: Overdue (collapsible) + Today sections.
           // SortableContext with a no-op strategy enables drag-to-calendar and
