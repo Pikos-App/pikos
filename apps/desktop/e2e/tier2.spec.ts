@@ -75,15 +75,14 @@ appTest("find in page prefills selected text @tier2", async ({ app }) => {
   await app.locator("[data-page-list-item]").getByText("prefill test page").click();
   const editor = app.getByRole("textbox", { name: "Page content" });
   await editor.click();
-  await app.keyboard.type("Select this word");
+  await app.keyboard.type("hello world");
 
-  // Select "word" by double-clicking it
-  const wordSpan = editor.getByText("word");
-  await wordSpan.dblclick();
+  // Select "world" via keyboard: Option+Shift+Left selects the previous word on macOS
+  await app.keyboard.press("Alt+Shift+ArrowLeft");
 
   // Open find — should prefill with selected text
   await app.keyboard.press(mod("Mod+f"));
   const findInput = app.getByPlaceholder("Find…");
-  await expect(findInput).toHaveValue("word");
+  await expect(findInput).toHaveValue("world");
   await expect(app.getByText("1 of 1")).toBeVisible();
 });

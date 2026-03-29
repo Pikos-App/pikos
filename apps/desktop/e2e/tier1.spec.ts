@@ -96,7 +96,7 @@ appTest("complete a page via status toggle @tier1", async ({ app }) => {
   const pageItem = app.locator("[data-page-list-item]").filter({ hasText: "task to complete" });
   await expect(pageItem).toBeVisible();
 
-  await pageItem.getByRole("button", { name: "Mark done" }).click();
+  await pageItem.getByRole("checkbox", { name: "Mark done" }).click();
 
   // Task leaves the active list
   await expect(pageItem).not.toBeVisible();
