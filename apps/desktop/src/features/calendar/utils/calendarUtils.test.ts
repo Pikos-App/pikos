@@ -90,10 +90,10 @@ describe("weekEnd", () => {
 // ─── chipFolderStyle ────────────────────────────────────────────────────────
 
 describe("chipFolderStyle", () => {
-  it("returns backgroundColor with alpha 0.25 and borderColor as-is", () => {
+  it("returns --event-color CSS property and borderColor", () => {
     const style = chipFolderStyle("#ff0000");
     expect(style.borderColor).toBe("#ff0000");
-    expect(style.backgroundColor).toBe("rgba(255,0,0,0.25)");
+    expect(style["--event-color"]).toBe("#ff0000");
   });
 });
 

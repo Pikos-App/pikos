@@ -512,6 +512,15 @@ button,
   }
 }
 
+/* Event block — mode-aware folder-color backgrounds for calendar chips.
+   --event-color is set inline via chipFolderStyle(). */
+[style*="--event-color"] {
+  background: color-mix(in srgb, var(--event-color) 18%, transparent);
+}
+.dark [style*="--event-color"] {
+  background: color-mix(in srgb, var(--event-color) 15%, transparent);
+}
+
 /* Theme transition — applied briefly during theme switches to avoid jarring flash */
 html.theme-transitioning,
 html.theme-transitioning * {

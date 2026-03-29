@@ -52,12 +52,16 @@ export const CHIP_BASE_CLASSES =
 /** Default chip colors when no folder color is set. */
 export const CHIP_DEFAULT_COLOR_CLASSES = "border-blue-500 bg-blue-500/20" as const;
 
-/** Inline color style for chips when a folder color is present. */
+/**
+ * Inline color style for chips when a folder color is present.
+ * Sets --event-color so CSS can apply mode-aware background opacity
+ * (12% in light mode, 15% in dark mode — see app.css event-color rules).
+ */
 export function chipFolderStyle(folderColor: string): {
-  backgroundColor: string;
+  "--event-color": string;
   borderColor: string;
 } {
-  return { backgroundColor: hexToRgba(folderColor, 0.25), borderColor: folderColor };
+  return { "--event-color": folderColor, borderColor: folderColor };
 }
 
 // ─── Week helpers ─────────────────────────────────────────────────────────────

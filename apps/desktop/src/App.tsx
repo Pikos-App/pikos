@@ -7,6 +7,7 @@ import { SearchPalette } from "@/features/search";
 import { SettingsPage } from "@/features/settings";
 import { WelcomeScreen } from "@/features/workspace";
 import { UndoToast } from "@/shared/components/UndoToast";
+import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
 import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
@@ -67,15 +68,17 @@ function WorkspaceGate() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <WorkspaceProvider>
-        <UIProvider>
-          <UndoDeleteProvider>
-            <TooltipProvider delayDuration={400}>
-              <WorkspaceGate />
-            </TooltipProvider>
-          </UndoDeleteProvider>
-        </UIProvider>
-      </WorkspaceProvider>
+      <ThemeProvider>
+        <WorkspaceProvider>
+          <UIProvider>
+            <UndoDeleteProvider>
+              <TooltipProvider delayDuration={400}>
+                <WorkspaceGate />
+              </TooltipProvider>
+            </UndoDeleteProvider>
+          </UIProvider>
+        </WorkspaceProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

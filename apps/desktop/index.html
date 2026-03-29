@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pikos</title>
+    <meta name="theme-color" content="#161613" />
     <script>
       (function () {
         var t = localStorage.getItem("pikos-theme");
@@ -13,6 +14,9 @@
             ? window.matchMedia("(prefers-color-scheme: dark)").matches
             : t !== "light";
         if (dark) document.documentElement.classList.add("dark");
+        // Sync meta theme-color with resolved theme
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", dark ? "#161613" : "#ffffff");
       })();
     </script>
   </head>
