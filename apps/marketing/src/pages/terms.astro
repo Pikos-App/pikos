@@ -1,0 +1,95 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Terms of Service - Pikos" description="Pikos terms of service. Plain language, no legalese.">
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <!-- Back to home -->
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-orange-500 dark:text-gray-500 dark:hover:text-orange-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Terms of Service</h1>
+    <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">Last updated: March 29, 2026</p>
+
+    <div class="mt-10 space-y-6 text-base leading-relaxed text-gray-600 dark:text-gray-300">
+
+      <p>
+        These terms govern your use of the Pikos application and the pikos.app website. By using either, you agree to these terms.
+      </p>
+
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Your data is yours</h2>
+
+      <p>
+        Everything you create in Pikos — notes, tasks, calendar events — belongs to you. We claim no ownership or license over your content. Your data is stored locally on your device, and you can export, copy, or delete it at any time.
+      </p>
+
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Our software is ours</h2>
+
+      <p>
+        Pikos (the application, its code, design, and branding) is the intellectual property of its creator. Your purchase grants you a personal, non-exclusive, non-transferable license to use the application on your own devices. You may not redistribute, reverse-engineer, or resell the software.
+      </p>
+
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">What you get</h2>
+
+      <p>
+        A one-time purchase gives you the current version of Pikos and all future updates for the major version you purchased. We intend to keep shipping updates, but we don't guarantee a specific cadence or feature set.
+      </p>
+
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">No warranty</h2>
+
+      <p>
+        Pikos is provided "as is" without warranty of any kind. We do our best to ship stable, reliable software, but we cannot guarantee it will be free of bugs or work perfectly in every environment. Use it at your own risk.
+      </p>
+
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Limitation of liability</h2>
+
+      <p>
+        To the maximum extent permitted by law, we are not liable for any indirect, incidental, or consequential damages arising from your use of Pikos. Our total liability is limited to the amount you paid for the software.
+      </p>
+
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Acceptable use</h2>
+
+      <p>
+        Don't use Pikos or this website for anything illegal. Don't attempt to exploit, attack, or interfere with our systems or other users. That's about it.
+      </p>
+
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Changes to these terms</h2>
+
+      <p>
+        We may update these terms. When we do, we'll update the date at the top. Continued use of Pikos after changes constitutes acceptance of the new terms.
+      </p>
+
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Contact</h2>
+
+      <p>
+        Questions? Email <a href="mailto:hello@pikos.app" class="text-orange-500 hover:underline">hello@pikos.app</a>.
+      </p>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-20 border-t border-gray-100 pt-8 dark:border-gray-800">
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400 dark:text-gray-500">
+        <a href="/" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">Home</a>
+        <a href="/about" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">About</a>
+        <a href="/privacy" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">Privacy</a>
+        <span>Pikos by <a href="https://alexking.dev" class="text-orange-500 hover:underline">Alex</a></span>
+      </div>
+    </footer>
+
+  </main>
+</Base>
+
+<style>
+  :global(body) {
+    background-color: #fafaf9;
+  }
+
+  :global(html.dark body) {
+    background-color: #030712;
+  }
+</style>
