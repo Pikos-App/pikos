@@ -8,12 +8,15 @@ type ThemeMode = "dark" | "light" | "system";
 
 function applyTheme(mode: ThemeMode) {
   const root = document.documentElement;
+  // Brief transition class to smooth the theme switch
+  root.classList.add("theme-transitioning");
   if (mode === "system") {
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     root.classList.toggle("dark", prefersDark);
   } else {
     root.classList.toggle("dark", mode === "dark");
   }
+  setTimeout(() => root.classList.remove("theme-transitioning"), 250);
 }
 
 function readTheme(): ThemeMode {

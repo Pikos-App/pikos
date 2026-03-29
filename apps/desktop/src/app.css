@@ -49,104 +49,303 @@ button,
 
 @custom-variant dark (&:is(.dark *));
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   PRIMITIVE COLOR SCALES
+   Static values — available as Tailwind utilities (e.g. bg-brand-500).
+   Do NOT use primitives directly in components — use semantic tokens instead.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ─── Brand — warm, confident teal-green ─── */
+  --color-brand-50: #e6faf4;
+  --color-brand-100: #b3f0de;
+  --color-brand-200: #80e6c8;
+  --color-brand-300: #4ddcb2;
+  --color-brand-400: #2dd4a8;
+  --color-brand-500: #1aae8a;
+  --color-brand-600: #14896c;
+  --color-brand-700: #0e644e;
+  --color-brand-800: #083f30;
+  --color-brand-900: #041f18;
+
+  /* ─── Neutral — warm gray, NOT blue-gray ─── */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f8f8f6;
+  --color-neutral-100: #f0efed;
+  --color-neutral-150: #e6e5e2;
+  --color-neutral-200: #d5d4d0;
+  --color-neutral-300: #b5b4af;
+  --color-neutral-400: #908f8a;
+  --color-neutral-500: #6e6d69;
+  --color-neutral-600: #53524f;
+  --color-neutral-700: #3a3a37;
+  --color-neutral-800: #272724;
+  --color-neutral-850: #1e1e1b;
+  --color-neutral-900: #161613;
+  --color-neutral-950: #0f0f0d;
+
+  /* ─── Accent — amber, for non-urgent attention ─── */
+  --color-accent-amber-400: #f59e42;
+  --color-accent-amber-500: #d4850f;
+  --color-accent-amber-600: #a36a0b;
+
+  /* ─── Status colors (match Tailwind defaults — intentional) ─── */
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-yellow-400: #fbbf24;
+  --color-yellow-500: #f59e0b;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-green-400: #34d399;
+  --color-green-500: #10b981;
+  --color-purple-400: #a78bfa;
+  --color-purple-500: #8b5cf6;
+  --color-pink-400: #f472b6;
+  --color-pink-500: #ec4899;
+
+  /* ─── Folder / category palette (fixed set, user-assignable) ─── */
+  --color-folder-red: #e5534b;
+  --color-folder-orange: #e09b4a;
+  --color-folder-yellow: #c4a143;
+  --color-folder-green: #57a872;
+  --color-folder-teal: #3dbda7;
+  --color-folder-blue: #539bf5;
+  --color-folder-purple: #9b8ae8;
+  --color-folder-pink: #db6c9e;
+
+  /* ─── Typography ─── */
+  --font-sans: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --font-display: -apple-system, "SF Pro Display", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, monospace;
+
+  /* ─── Spacing ─── */
+  --spacing-panel-padding: 12px;
+  --spacing-item-gap: 2px;
+  --spacing-section-gap: 16px;
+  --spacing-content-gap: 8px;
+
+  /* ─── Border Radius ─── */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SEMANTIC TOKENS — Light Theme
+   What colors *mean*, not what they *are*. Use these in components.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
 :root {
-  --radius: 0.375rem;
+  /* ─── Surfaces ─── */
+  --surface-primary: #ffffff;
+  --surface-secondary: #f8f8f6;
+  --surface-tertiary: #f0efed;
+  --surface-elevated: #ffffff;
+  --surface-inset: #f0efed;
+  --surface-hover: #f0efed;
+  --surface-active: #e6e5e2;
+  --surface-selected: color-mix(in srgb, #2dd4a8 10%, transparent);
 
-  /* Typography */
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-    sans-serif;
-  --font-mono:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* ─── Text ─── */
+  --text-primary: #161613;
+  --text-secondary: #6e6d69;
+  --text-tertiary: #908f8a;
+  --text-disabled: #b5b4af;
+  --text-inverse: #ffffff;
+  --text-brand: #14896c;
+  --text-link: #1aae8a;
 
-  /* Letter spacing */
+  /* ─── Borders ─── */
+  --border-primary: #d5d4d0;
+  --border-secondary: #e6e5e2;
+  --border-subtle: #f0efed;
+  --border-focus: #2dd4a8;
+
+  /* ─── Interactive ─── */
+  --interactive-primary: #1aae8a;
+  --interactive-primary-hover: #14896c;
+  --interactive-secondary: #f0efed;
+  --interactive-secondary-hover: #e6e5e2;
+
+  /* ─── Status ─── */
+  --status-overdue: #ef4444;
+  --status-due-soon: #d4850f;
+  --status-open: #3b82f6;
+  --status-done: #10b981;
+
+  /* ─── Shadows (theme-aware — used via var(), not Tailwind utilities) ─── */
+  --shadow-app-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-app-md: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-app-lg: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-app-popover: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--border-primary);
+
+  /* ─── Transitions (used via var()) ─── */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* ─── Letter spacing ─── */
   --tracking-tight: -0.02em;
   --tracking-normal: 0em;
   --tracking-wide: 0.03em;
 
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.52 0.141 258);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.95 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.95 0 0);
-  --muted-foreground: oklch(0.48 0 0);
-  --accent: oklch(0.95 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.88 0 0);
-  --input: oklch(0.88 0 0);
-  --ring: oklch(0.52 0.141 258);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.96 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.52 0.141 258);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.92 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.88 0 0);
-  --sidebar-ring: oklch(0.52 0.141 258);
-  /* Titlebar: #2a2a2f (slightly lighter) — alt: #151518 (darker) */
-  --titlebar: #2a2a2f;
-  --titlebar-border: oklch(0 0 0 / 10%);
+  /* ─── Type scale (CSS font shorthand — use via font: var(--text-*)) ─── */
+  --text-display: 500 24px/1.3 var(--font-display);
+  --text-heading-lg: 500 18px/1.4 var(--font-sans);
+  --text-heading-sm: 500 15px/1.4 var(--font-sans);
+  --text-body: 400 14px/1.6 var(--font-sans);
+  --text-body-sm: 400 13px/1.5 var(--font-sans);
+  --text-ui: 500 13px/1.3 var(--font-sans);
+  --text-ui-sm: 500 11px/1.3 var(--font-sans);
+  --text-mono: 400 12px/1.5 var(--font-mono);
+
+  /* ─── shadcn/ui backward-compatible aliases ─── */
+  --background: var(--surface-primary);
+  --foreground: var(--text-primary);
+  --card: var(--surface-elevated);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--interactive-primary);
+  --primary-foreground: var(--text-inverse);
+  --secondary: var(--interactive-secondary);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface-inset);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--surface-hover);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--status-overdue);
+  --border: var(--border-primary);
+  --input: var(--border-primary);
+  --ring: var(--border-focus);
+  --chart-1: #e5534b;
+  --chart-2: #1aae8a;
+  --chart-3: #539bf5;
+  --chart-4: #d4850f;
+  --chart-5: #9b8ae8;
+  --sidebar: var(--surface-tertiary);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--interactive-primary);
+  --sidebar-primary-foreground: var(--text-inverse);
+  --sidebar-accent: var(--surface-hover);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-secondary);
+  --sidebar-ring: var(--border-focus);
+  --titlebar: #f0efed;
+  --titlebar-border: rgba(0, 0, 0, 0.1);
 }
 
-/* Dark theme — VSCode/Obsidian/Linear inspired */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SEMANTIC TOKENS — Dark Theme
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
 .dark {
-  --background: oklch(0.133 0 0); /* #1a1a1a */
-  --foreground: oklch(0.878 0 0); /* #d4d4d4 */
-  --card: oklch(0.179 0 0); /* #232323 */
-  --card-foreground: oklch(0.878 0 0);
-  --popover: oklch(0.179 0 0);
-  --popover-foreground: oklch(0.878 0 0);
-  --primary: oklch(0.623 0.141 258); /* blue accent */
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.225 0 0);
-  --secondary-foreground: oklch(0.878 0 0);
-  --muted: oklch(0.225 0 0);
-  --muted-foreground: oklch(0.545 0 0);
-  --accent: oklch(0.225 0 0);
-  --accent-foreground: oklch(0.878 0 0);
-  --destructive: oklch(0.638 0.211 23);
-  --border: oklch(1 0 0 / 7%);
-  --input: oklch(1 0 0 / 10%);
-  --ring: oklch(0.623 0.141 258);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.117 0 0); /* slightly darker than bg */
-  --sidebar-foreground: oklch(0.878 0 0);
-  --sidebar-primary: oklch(0.623 0.141 258);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.179 0 0);
-  --sidebar-accent-foreground: oklch(0.878 0 0);
-  --sidebar-border: oklch(1 0 0 / 7%);
-  --sidebar-ring: oklch(0.623 0.141 258);
-  /* Titlebar: #2a2a2f (slightly lighter) — alt: #151518 (darker) */
-  --titlebar: #151518;
-  --titlebar-border: oklch(1 0 0 / 7%);
+  /* ─── Surfaces ─── */
+  --surface-primary: #161613;
+  --surface-secondary: #1e1e1b;
+  --surface-tertiary: #0f0f0d;
+  --surface-elevated: #272724;
+  --surface-inset: #0f0f0d;
+  --surface-hover: #272724;
+  --surface-active: #3a3a37;
+  --surface-selected: color-mix(in srgb, #2dd4a8 12%, transparent);
+
+  /* ─── Text ─── */
+  --text-primary: #f0efed;
+  --text-secondary: #908f8a;
+  --text-tertiary: #6e6d69;
+  --text-disabled: #53524f;
+  --text-inverse: #161613;
+  --text-brand: #2dd4a8;
+  --text-link: #2dd4a8;
+
+  /* ─── Borders ─── */
+  --border-primary: #3a3a37;
+  --border-secondary: #272724;
+  --border-subtle: #1e1e1b;
+  --border-focus: #2dd4a8;
+
+  /* ─── Interactive ─── */
+  --interactive-primary: #2dd4a8;
+  --interactive-primary-hover: #4ddcb2;
+  --interactive-secondary: #272724;
+  --interactive-secondary-hover: #3a3a37;
+
+  /* ─── Status ─── */
+  --status-overdue: #f87171;
+  --status-due-soon: #f59e42;
+  --status-open: #60a5fa;
+  --status-done: #34d399;
+
+  /* ─── Shadows ─── */
+  --shadow-app-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-app-md: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-app-lg: 0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-app-popover: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-primary);
+
+  /* ─── Chart colors ─── */
+  --chart-1: #f87171;
+  --chart-2: #2dd4a8;
+  --chart-3: #60a5fa;
+  --chart-4: #f59e42;
+  --chart-5: #a78bfa;
+
+  /* ─── Titlebar ─── */
+  --titlebar: #0f0f0d;
+  --titlebar-border: rgba(255, 255, 255, 0.07);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TAILWIND INTEGRATION
+   Maps CSS custom properties to Tailwind utilities (responsive to theme).
+   ═══════════════════════════════════════════════════════════════════════════════ */
 
 @theme inline {
-  /* Typography */
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  /* ── Semantic surface tokens ── */
+  --color-surface-primary: var(--surface-primary);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-tertiary: var(--surface-tertiary);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-surface-selected: var(--surface-selected);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* ── Semantic text tokens ── */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-disabled: var(--text-disabled);
+  --color-text-inverse: var(--text-inverse);
+  --color-text-brand: var(--text-brand);
+  --color-text-link: var(--text-link);
+
+  /* ── Semantic border tokens ── */
+  --color-border-primary: var(--border-primary);
+  --color-border-secondary: var(--border-secondary);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-focus: var(--border-focus);
+
+  /* ── Semantic interactive tokens ── */
+  --color-interactive-primary: var(--interactive-primary);
+  --color-interactive-primary-hover: var(--interactive-primary-hover);
+  --color-interactive-secondary: var(--interactive-secondary);
+  --color-interactive-secondary-hover: var(--interactive-secondary-hover);
+
+  /* ── Semantic status tokens ── */
+  --color-status-overdue: var(--status-overdue);
+  --color-status-due-soon: var(--status-due-soon);
+  --color-status-open: var(--status-open);
+  --color-status-done: var(--status-done);
+
+  /* ── Short aliases (avoid double text- prefix) ── */
+  --color-subtle: var(--text-tertiary);
+  --color-faint: var(--text-disabled);
+
+  /* ── shadcn/ui backward-compatible aliases ── */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -182,6 +381,10 @@ button,
   --color-titlebar-border: var(--titlebar-border);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   BASE STYLES
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
 @layer base {
   html {
     /* Dense app feel — 13px base like Linear */
@@ -189,9 +392,7 @@ button,
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    /* Prevent iOS tap highlight and callout on desktop */
     -webkit-tap-highlight-color: transparent;
-    /* Prevent elastic/bounce overscroll that causes the app to shift on trackpads */
     overscroll-behavior: none;
   }
 
@@ -231,4 +432,86 @@ button,
   ::-webkit-scrollbar {
     display: none; /* Chrome / Safari / Tauri */
   }
+
+  /* Brand-tinted text selection */
+  ::selection {
+    background: color-mix(in srgb, var(--interactive-primary) 25%, transparent);
+  }
+
+  /* Reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TYPE SCALE UTILITIES
+   Maps the --text-* design tokens to utility classes. Individual properties
+   (not font shorthand) so they compose with Tailwind overrides.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  /* Display & headings — used in editor, always include line-height */
+  .type-display {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: var(--tracking-tight);
+  }
+  .type-heading-lg {
+    font-size: 18px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: var(--tracking-tight);
+  }
+  .type-heading-sm {
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  /* Body — size + weight only. Use leading-relaxed (1.6) for paragraphs,
+     leading-snug (1.375) for single-line UI contexts like list items. */
+  .type-body {
+    font-size: 14px;
+    font-weight: 400;
+  }
+  .type-body-sm {
+    font-size: 13px;
+    font-weight: 400;
+  }
+
+  /* UI — size + weight only. Compact by default (no forced line-height). */
+  .type-ui {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .type-ui-sm {
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .type-mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+}
+
+/* Theme transition — applied briefly during theme switches to avoid jarring flash */
+html.theme-transitioning,
+html.theme-transitioning * {
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    border-color 200ms ease !important;
 }

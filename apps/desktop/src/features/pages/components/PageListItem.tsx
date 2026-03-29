@@ -181,7 +181,7 @@ export function PageListItem({
           {...attributes}
           {...listeners}
           className={cn(
-            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-3 text-sm outline-none select-none",
+            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-2.5 outline-none select-none",
             isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
           )}
           onClick={isRenaming ? undefined : onSelect}
@@ -206,7 +206,7 @@ export function PageListItem({
           <button
             aria-label={page.status === "done" ? "Mark not done" : "Mark done"}
             className={cn(
-              "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border transition-colors",
+              "mt-[2px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border transition-colors",
               page.status === "done"
                 ? "border-foreground/40 bg-foreground/10"
                 : page.priority === 1
@@ -229,7 +229,7 @@ export function PageListItem({
               <div className="relative min-w-0 flex-1">
                 <span
                   className={cn(
-                    "block truncate leading-snug font-medium",
+                    "type-body block truncate leading-none font-medium",
                     isRenaming && "invisible",
                     page.status === "done" && "text-muted-foreground line-through"
                   )}
@@ -241,7 +241,7 @@ export function PageListItem({
                     autoCapitalize="off"
                     autoComplete="off"
                     autoCorrect="off"
-                    className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug font-medium text-foreground outline-none"
+                    className="type-body absolute inset-0 w-full border-0 bg-transparent p-0 leading-none font-medium text-foreground outline-none"
                     defaultValue={page.title}
                     onBlur={commit}
                     onChange={(e) => onRenameChange?.(e.target.value)}
@@ -270,8 +270,8 @@ export function PageListItem({
                     return (
                       <span
                         className={cn(
-                          "shrink-0 cursor-pointer text-sm leading-snug hover:opacity-80",
-                          isPast && !isCompleted ? "text-red-500" : "text-muted-foreground"
+                          "type-ui-sm shrink-0 cursor-pointer hover:opacity-80",
+                          isPast && !isCompleted ? "text-status-overdue" : "text-subtle"
                         )}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -286,7 +286,7 @@ export function PageListItem({
               </div>
             </div>
             {page.subtitle && (
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">{page.subtitle}</p>
+              <p className="type-body-sm mt-0.5 truncate text-subtle">{page.subtitle}</p>
             )}
           </div>
         </div>

@@ -208,8 +208,8 @@ export function EditorPane() {
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground">
         <div className="text-center">
-          <p className="text-sm">Select a page to start editing</p>
-          <p className="mt-1 text-xs text-muted-foreground/60">
+          <p className="type-body-sm">Select a page to start editing</p>
+          <p className="type-ui-sm mt-1 text-subtle">
             or press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
             to create a new page
           </p>
@@ -221,7 +221,7 @@ export function EditorPane() {
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground">
-        <p className="text-xs">Loading…</p>
+        <p className="type-body-sm">Loading…</p>
       </div>
     );
   }

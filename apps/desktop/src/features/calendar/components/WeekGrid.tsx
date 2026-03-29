@@ -554,17 +554,14 @@ export function WeekGrid({
             >
               <span
                 className={cn(
-                  "text-xs tracking-wide uppercase",
-                  isToday ? "font-medium text-primary" : "text-muted-foreground/70"
+                  "type-ui-sm tracking-wide uppercase",
+                  isToday ? "text-primary" : "text-subtle"
                 )}
               >
                 {format(day, "EEE")}
               </span>
               <span
-                className={cn(
-                  "text-xs tabular-nums",
-                  isToday ? "font-medium text-primary" : "text-muted-foreground/70"
-                )}
+                className={cn("type-ui-sm tabular-nums", isToday ? "text-primary" : "text-subtle")}
               >
                 {format(day, "d")}
               </span>

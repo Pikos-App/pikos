@@ -170,7 +170,7 @@ function AllDayChip({
           >
             {isDone && <Check size={8} strokeWidth={2.5} />}
           </span>
-          <span className="min-w-0 truncate">{item.title || "Untitled"}</span>
+          <span className="type-body-sm min-w-0 truncate font-medium text-foreground">{item.title || "Untitled"}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -264,7 +264,7 @@ export function AllDayColumn({
                 <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border border-current/30" />
                 <input
                   autoFocus
-                  className="min-w-0 flex-1 border-0 bg-transparent text-sm leading-none font-medium text-foreground outline-none placeholder:text-muted-foreground/60"
+                  className="type-body-sm min-w-0 flex-1 border-0 bg-transparent leading-none font-medium text-foreground outline-none placeholder:text-muted-foreground/60"
                   onBlur={(e) => handleCommit(item.id, e.currentTarget.value)}
                   onChange={(e) => setInputValue(e.target.value)}
                   onClick={(e) => e.stopPropagation()}

@@ -120,7 +120,7 @@ export function FolderList() {
         />
 
         <div className="mt-4 mb-1 flex items-center justify-between pr-1 pl-2">
-          <span className="text-sm font-semibold text-foreground">Folders</span>
+          <span className="type-ui-sm tracking-wide text-subtle uppercase">Folders</span>
           <IconToolbar
             aria-label="Folder actions"
             className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
@@ -200,7 +200,7 @@ export function FolderList() {
         </SortableContext>
 
         {folders.length === 0 && (
-          <p className="px-2 py-1 text-xs text-muted-foreground italic">No folders yet</p>
+          <p className="type-body-sm px-2 py-1 text-subtle italic">No folders yet</p>
         )}
       </div>
 

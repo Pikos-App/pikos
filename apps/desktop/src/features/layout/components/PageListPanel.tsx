@@ -169,7 +169,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     >
       {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
-        <span className="text-sm font-semibold text-foreground">
+        <span className="type-ui font-semibold text-foreground">
           {activeViewId === "today" ? "Today" : activeViewId === "inbox" ? "Inbox" : "Pages"}
         </span>
         <IconToolbar aria-label="Page actions" className="flex items-center gap-0.5">
@@ -246,7 +246,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         tabIndex={0}
       >
         {visiblePages.length === 0 && completedPages.length === 0 ? (
-          <p className="px-2 py-4 text-center text-xs text-muted-foreground italic">
+          <p className="type-body-sm px-2 py-4 text-center text-subtle italic">
             {activeViewId === "today" ? "Nothing scheduled for today" : "No pages"}
           </p>
         ) : isTodayView ? (
@@ -257,7 +257,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {overdue.length > 0 && (
               <>
                 <button
-                  className="flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-accent/30"
+                  className="type-ui-sm flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/30"
                   onClick={toggleOverdue}
                 >
                   <ChevronRight
@@ -273,7 +273,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {today.length > 0 && (
               <>
                 {overdue.length > 0 && (
-                  <div className="border-b border-border px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                  <div className="type-ui-sm border-b border-border px-3 py-1.5 text-muted-foreground">
                     Today
                     <span className="ml-1 tabular-nums">· {today.length}</span>
                   </div>
@@ -284,7 +284,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {completedPages.length > 0 && (
               <>
                 <button
-                  className="flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-accent/30"
+                  className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/30"
                   onClick={toggleCompletedCollapsed}
                 >
                   <ChevronRight
@@ -313,7 +313,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {completedPages.length > 0 && (
               <>
                 <button
-                  className="flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-accent/30"
+                  className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/30"
                   onClick={toggleCompletedCollapsed}
                 >
                   <ChevronRight

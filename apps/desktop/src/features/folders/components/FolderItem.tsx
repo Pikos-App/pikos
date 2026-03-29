@@ -18,14 +18,14 @@ import { SidebarListItem } from "@/shared/components/SidebarListItem";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 
 const COLORS = [
-  { label: "Red", value: "#ef4444" },
-  { label: "Orange", value: "#f97316" },
-  { label: "Yellow", value: "#eab308" },
-  { label: "Green", value: "#22c55e" },
-  { label: "Blue", value: "#3b82f6" },
-  { label: "Purple", value: "#8b5cf6" },
-  { label: "Pink", value: "#ec4899" },
-  { label: "Gray", value: "#6b7280" },
+  { label: "Red", value: "#E5534B" },
+  { label: "Orange", value: "#E09B4A" },
+  { label: "Yellow", value: "#C4A143" },
+  { label: "Green", value: "#57A872" },
+  { label: "Teal", value: "#3DBDA7" },
+  { label: "Blue", value: "#539BF5" },
+  { label: "Purple", value: "#9B8AE8" },
+  { label: "Pink", value: "#DB6C9E" },
 ] as const;
 
 export interface FolderItemProps {
@@ -107,7 +107,7 @@ export function FolderItem({
         >
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
           {pageCount !== undefined && pageCount > 0 && (
-            <span className="shrink-0 text-sm text-muted-foreground/60 tabular-nums">
+            <span className="type-ui-sm shrink-0 text-subtle tabular-nums">
               {pageCount > 99 ? "99+" : pageCount}
             </span>
           )}

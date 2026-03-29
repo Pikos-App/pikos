@@ -252,7 +252,7 @@ export function DayColumn({
                 >
                   {dragGhost.isDone && <Check size={8} strokeWidth={2.5} />}
                 </span>
-                <span className="min-w-0 truncate text-sm leading-none font-medium text-foreground">
+                <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
                   {dragGhost.title || "Untitled"}
                 </span>
               </>
@@ -269,12 +269,12 @@ export function DayColumn({
                   >
                     {dragGhost.isDone && <Check size={8} strokeWidth={2.5} />}
                   </span>
-                  <p className="min-w-0 truncate text-sm leading-tight font-medium text-foreground">
+                  <p className="type-body-sm min-w-0 truncate font-medium text-foreground">
                     {dragGhost.title || "Untitled"}
                   </p>
                 </div>
                 {dragGhost.height >= 36 && (
-                  <p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground">
+                  <p className="type-ui-sm mt-0.5 truncate text-subtle">
                     {formatTimeRange(
                       yToDate(dragGhost.top, day),
                       yToDate(dragGhost.top + dragGhost.height, day)

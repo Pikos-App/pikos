@@ -71,7 +71,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
         {...rest}
         {...(dragProps as React.HTMLAttributes<HTMLDivElement>)}
         className={cn(
-          "flex cursor-pointer rounded px-2 py-2.5 text-sm outline-none select-none",
+          "type-ui flex cursor-pointer rounded px-2 py-2.5 outline-none select-none",
           isDragOver
             ? "bg-primary/10 text-foreground ring-1 ring-primary/40"
             : isActive
@@ -93,7 +93,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
             <input
               aria-label={`Rename ${label}`}
               autoComplete="off"
-              className="absolute inset-0 w-full border-0 bg-transparent p-0 text-sm leading-snug text-foreground outline-none"
+              className="type-ui absolute inset-0 w-full border-0 bg-transparent p-0 text-foreground outline-none"
               defaultValue={label}
               onBlur={commit}
               onClick={(e) => e.stopPropagation()}

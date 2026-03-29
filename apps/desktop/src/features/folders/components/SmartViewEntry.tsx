@@ -25,7 +25,7 @@ export function SmartViewEntry({
     <button
       aria-current={isActive ? "true" : undefined}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded px-2 py-2.5 text-sm select-none",
+        "type-ui flex w-full items-center gap-2.5 rounded px-2 py-2.5 select-none",
         isActive || isDragOver
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
@@ -38,7 +38,7 @@ export function SmartViewEntry({
       <span className="shrink-0">{icon}</span>
       <span className="flex-1 text-left">{label}</span>
       {badge !== undefined && badge > 0 && (
-        <span className="ml-auto text-sm text-muted-foreground/60 tabular-nums">
+        <span className="type-ui-sm ml-auto text-subtle tabular-nums">
           {badge > 99 ? "99+" : badge}
         </span>
       )}

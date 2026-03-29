@@ -29,7 +29,7 @@ export function Sidebar({ onResizeStart, width }: SidebarProps) {
           <TooltipTrigger asChild>
             <button
               aria-label="Open settings"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="type-ui flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={() => setSettingsOpen(true)}
             >
               <Settings className="h-3.5 w-3.5 shrink-0" />

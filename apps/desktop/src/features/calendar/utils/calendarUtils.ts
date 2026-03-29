@@ -47,7 +47,7 @@ export const MIN_TIMED_MINUTES = 15;
  * so they stay visually identical. Import these instead of duplicating the string.
  */
 export const CHIP_BASE_CLASSES =
-  "h-[19px] overflow-hidden truncate rounded-sm border-l-2 px-1.5 text-sm leading-none font-medium text-foreground transition-opacity hover:opacity-75 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none" as const;
+  "type-body-sm h-[19px] overflow-hidden truncate rounded-sm border-l-2 px-1.5 leading-none font-medium text-foreground transition-opacity hover:opacity-75 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none" as const;
 
 /** Default chip colors when no folder color is set. */
 export const CHIP_DEFAULT_COLOR_CLASSES = "border-blue-500 bg-blue-500/20" as const;

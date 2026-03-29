@@ -293,7 +293,7 @@ export function PageBlock({
           autoFocus
           className={cn(
             "w-full border-0 bg-transparent font-medium text-foreground outline-none placeholder:text-muted-foreground/60",
-            isRenderingCompact ? "text-sm leading-none" : "text-sm leading-tight"
+            isRenderingCompact ? "type-body-sm leading-none" : "type-body-sm leading-tight"
           )}
           onBlur={handleBlur}
           onChange={(e) => setInputValue(e.target.value)}
@@ -328,7 +328,7 @@ export function PageBlock({
             style={sharedStyle}
           >
             {checkbox}
-            <span className="min-w-0 truncate">{page.title || "Untitled"}</span>
+            <span className="type-body-sm min-w-0 truncate font-medium text-foreground">{page.title || "Untitled"}</span>
           </button>
         ) : (
           <button
@@ -350,12 +350,12 @@ export function PageBlock({
           >
             <div className="flex w-full min-w-0 items-start gap-1">
               {checkbox}
-              <p className="line-clamp-2 min-w-0 text-left text-sm leading-tight font-medium text-foreground">
+              <p className="type-body-sm line-clamp-2 min-w-0 text-left font-medium text-foreground">
                 {page.title || "Untitled"}
               </p>
             </div>
             {showTimeLabel && (
-              <p className="mt-0.5 truncate pl-[16px] text-[10px] leading-tight text-muted-foreground">
+              <p className="type-ui-sm mt-0.5 truncate pl-[16px] text-subtle">
                 {timeLabel}
               </p>
             )}

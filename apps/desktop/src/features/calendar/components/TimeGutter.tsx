@@ -24,7 +24,7 @@ export function TimeGutter() {
             key={hour}
             style={{ height: HOUR_HEIGHT }}
           >
-            <span className="-mt-2 text-[10px] text-muted-foreground/60">{label}</span>
+            <span className="type-ui-sm -mt-2 text-subtle">{label}</span>
           </div>
         );
       })}

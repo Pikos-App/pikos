@@ -51,7 +51,7 @@ function Byline({
   const isDone = page.status === "done";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 pt-2 pb-4 text-sm text-muted-foreground/60">
+    <div className="type-ui-sm flex flex-wrap items-center gap-2 pt-2 pb-4 text-subtle">
       {/* Status toggle */}
       <button
         aria-label={isDone ? "Mark not done" : "Mark done"}
@@ -350,7 +350,7 @@ export function MetadataHeader({
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className={`max-h-20 w-full resize-none overflow-hidden bg-transparent text-4xl font-bold tracking-tight outline-none placeholder:text-muted-foreground/30 ${titleShake ? "animate-shake" : ""}`}
+            className={`type-display max-h-20 w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-faint ${titleShake ? "animate-shake" : ""}`}
             onBlur={() => setTitleFocused(false)}
             onChange={handleTitleChange}
             onFocus={(e) => {
@@ -382,7 +382,7 @@ export function MetadataHeader({
           autoCapitalize="off"
           autoComplete="off"
           autoCorrect="off"
-          className={`mt-1 max-h-[4.5rem] w-full resize-none overflow-hidden bg-transparent text-base text-muted-foreground outline-none placeholder:text-muted-foreground/30 ${subtitleShake ? "animate-shake" : ""}`}
+          className={`type-body mt-1 max-h-[4.5rem] w-full resize-none overflow-hidden bg-transparent leading-relaxed text-muted-foreground outline-none placeholder:text-faint ${subtitleShake ? "animate-shake" : ""}`}
           onBlur={() => setSubtitleFocused(false)}
           onChange={handleSubtitleChange}
           onFocus={() => setSubtitleFocused(true)}
