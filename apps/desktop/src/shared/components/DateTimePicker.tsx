@@ -7,7 +7,16 @@
 // UX: all changes apply immediately via onChange — no internal uncommitted state.
 
 import { parseLocalISO } from "@pikos/core";
-import { addDays, format, getHours, getMinutes, isToday, isTomorrow, startOfDay } from "date-fns";
+import {
+  addDays,
+  addHours,
+  format,
+  getHours,
+  getMinutes,
+  isToday,
+  isTomorrow,
+  startOfDay,
+} from "date-fns";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -61,8 +70,9 @@ function formatTriggerLabel(
   iso: string,
   endIso: string | null | undefined,
   isDone: boolean
-): { label: string; isPast: boolean } {
+): { label: string; isPast: boolean; isDueSoon: boolean } {
   const date = parseLocalISO(iso);
+  const now = new Date();
   const isAllDay = iso.length === 10;
   const durationMinutes =
     !isAllDay && endIso && endIso.length > 10
@@ -71,18 +81,22 @@ function formatTriggerLabel(
   const durationSuffix =
     durationMinutes && durationMinutes > 0 ? ` · ${formatDurationLabel(durationMinutes)}` : "";
 
-  const isPast = isAllDay ? date < startOfDay(new Date()) : date < new Date();
+  const isPast = isAllDay ? date < startOfDay(now) : date < now;
+  // Due soon: not past, within next 48 hours, not done
+  const dueSoon = !isPast && !isDone && date < addHours(now, 48);
 
   if (isToday(date)) {
-    if (isAllDay) return { isPast: false, label: `Today${durationSuffix}` };
+    if (isAllDay) return { isDueSoon: dueSoon, isPast: false, label: `Today${durationSuffix}` };
     return {
+      isDueSoon: dueSoon,
       isPast: isPast && !isDone,
       label: `Today ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
   }
   if (isTomorrow(date)) {
-    if (isAllDay) return { isPast: false, label: `Tomorrow${durationSuffix}` };
+    if (isAllDay) return { isDueSoon: dueSoon, isPast: false, label: `Tomorrow${durationSuffix}` };
     return {
+      isDueSoon: dueSoon,
       isPast: false,
       label: `Tomorrow ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
@@ -90,11 +104,12 @@ function formatTriggerLabel(
   const dateStr = format(date, "MMM d");
   if (!isAllDay) {
     return {
+      isDueSoon: dueSoon,
       isPast: isPast && !isDone,
       label: `${dateStr} ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
   }
-  return { isPast: isPast && !isDone, label: `${dateStr}${durationSuffix}` };
+  return { isDueSoon: dueSoon, isPast: isPast && !isDone, label: `${dateStr}${durationSuffix}` };
 }
 
 // ── Time slots ────────────────────────────────────────────────────────────────
@@ -501,9 +516,13 @@ export function DateTimePicker({
   // ── Computed ──────────────────────────────────────────────────────────────────
 
   const hasDate = value !== null;
-  const { isPast, label: triggerLabel } = value
+  const {
+    isDueSoon,
+    isPast,
+    label: triggerLabel,
+  } = value
     ? formatTriggerLabel(value, endValue, isDone)
-    : { isPast: false, label: "Schedule" };
+    : { isDueSoon: false, isPast: false, label: "Schedule" };
 
   // Duration in minutes derived from start/end — only meaningful for timed events.
   const durationMinutes =
@@ -530,9 +549,14 @@ export function DateTimePicker({
         <button
           aria-label={hasDate ? `Scheduled: ${triggerLabel}` : "Set schedule"}
           className={cn(
-            "inline-flex shrink-0 items-center gap-1 rounded text-sm whitespace-nowrap transition-colors hover:text-muted-foreground focus:outline-none",
-            isPast && "text-red-500 hover:text-red-400",
-            !hasDate && "text-muted-foreground/60"
+            "inline-flex shrink-0 items-center gap-1 rounded text-sm whitespace-nowrap transition-colors focus:outline-none",
+            isPast
+              ? "text-status-overdue hover:text-status-overdue/80"
+              : isDueSoon
+                ? "text-status-due-soon hover:text-status-due-soon/80"
+                : hasDate
+                  ? "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground/60 hover:text-muted-foreground"
           )}
         >
           <Calendar aria-hidden="true" size={13} />

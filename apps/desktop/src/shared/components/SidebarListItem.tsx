@@ -71,12 +71,12 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
         {...rest}
         {...(dragProps as React.HTMLAttributes<HTMLDivElement>)}
         className={cn(
-          "type-ui flex cursor-pointer rounded px-2 py-2.5 outline-none select-none",
+          "type-ui flex cursor-pointer rounded-r border-l-2 px-2 py-2.5 outline-none select-none",
           isDragOver
-            ? "bg-primary/10 text-foreground ring-1 ring-primary/40"
+            ? "border-l-transparent bg-primary/10 text-foreground ring-1 ring-primary/40"
             : isActive
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              ? "border-l-interactive-primary bg-surface-selected text-accent-foreground"
+              : "border-l-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground",
           className
         )}
         onClick={isRenaming ? undefined : onSelect}

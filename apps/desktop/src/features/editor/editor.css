@@ -123,8 +123,8 @@
 }
 
 .editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--text-tertiary);
+  border-color: var(--text-tertiary);
 }
 
 /* Checkmark drawn with a pseudo-element */
@@ -142,8 +142,9 @@
 }
 
 .editor-content ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: var(--text-tertiary);
   text-decoration: line-through;
-  opacity: 0.45;
+  text-decoration-color: var(--text-disabled);
 }
 
 /* Nested task lists */

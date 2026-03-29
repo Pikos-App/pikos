@@ -141,8 +141,8 @@ button,
 :root {
   /* ─── Surfaces ─── */
   --surface-primary: #ffffff;
-  --surface-secondary: #f8f8f6;
-  --surface-tertiary: #f0efed;
+  --surface-secondary: #fbfbf9;
+  --surface-tertiary: #f6f6f4;
   --surface-elevated: #ffffff;
   --surface-inset: #f0efed;
   --surface-hover: #f0efed;
@@ -234,7 +234,7 @@ button,
   --sidebar-accent-foreground: var(--text-primary);
   --sidebar-border: var(--border-secondary);
   --sidebar-ring: var(--border-focus);
-  --titlebar: #f0efed;
+  --titlebar: #f6f6f4;
   --titlebar-border: rgba(0, 0, 0, 0.1);
 }
 
@@ -245,8 +245,8 @@ button,
 .dark {
   /* ─── Surfaces ─── */
   --surface-primary: #161613;
-  --surface-secondary: #1e1e1b;
-  --surface-tertiary: #0f0f0d;
+  --surface-secondary: #141412;
+  --surface-tertiary: #121210;
   --surface-elevated: #272724;
   --surface-inset: #0f0f0d;
   --surface-hover: #272724;
@@ -294,7 +294,7 @@ button,
   --chart-5: #a78bfa;
 
   /* ─── Titlebar ─── */
-  --titlebar: #0f0f0d;
+  --titlebar: #121210;
   --titlebar-border: rgba(255, 255, 255, 0.07);
 }
 

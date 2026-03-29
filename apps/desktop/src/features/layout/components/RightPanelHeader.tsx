@@ -18,7 +18,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
   const ui = useUI();
 
   return (
-    <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border pr-3 pl-2">
+    <div className="flex h-12 shrink-0 items-center gap-1 border-border pr-3 pl-2">
       {/* Sidebar toggle */}
       <TooltipIconButton
         className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-muted-foreground"

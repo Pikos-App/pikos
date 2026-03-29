@@ -382,7 +382,7 @@ export function MetadataHeader({
           autoCapitalize="off"
           autoComplete="off"
           autoCorrect="off"
-          className={`type-body mt-1 max-h-[4.5rem] w-full resize-none overflow-hidden bg-transparent leading-relaxed text-muted-foreground outline-none placeholder:text-faint ${subtitleShake ? "animate-shake" : ""}`}
+          className={`type-body mt-1 max-h-[4.875rem] w-full resize-none overflow-hidden bg-transparent leading-relaxed text-muted-foreground outline-none placeholder:text-faint ${subtitleShake ? "animate-shake" : ""}`}
           onBlur={() => setSubtitleFocused(false)}
           onChange={handleSubtitleChange}
           onFocus={() => setSubtitleFocused(true)}

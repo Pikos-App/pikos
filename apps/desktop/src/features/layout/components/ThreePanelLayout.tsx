@@ -25,13 +25,13 @@ export function ThreePanelLayout() {
   const left = usePanelResize({
     defaultWidth: 180,
     max: 320,
-    min: 120,
+    min: 180,
     storageKey: "pikos:leftPanelWidth",
   });
   const mid = usePanelResize({
     defaultWidth: 280,
     max: 480,
-    min: 180,
+    min: 240,
     storageKey: "pikos:midPanelWidth",
   });
   const {

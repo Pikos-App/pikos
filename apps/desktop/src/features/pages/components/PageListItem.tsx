@@ -182,7 +182,7 @@ export function PageListItem({
           {...listeners}
           className={cn(
             "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-2.5 outline-none select-none",
-            isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
+            isActive ? "bg-surface-selected text-accent-foreground" : "hover:bg-accent/50"
           )}
           onClick={isRenaming ? undefined : onSelect}
           onDoubleClick={(e) => {
@@ -231,7 +231,7 @@ export function PageListItem({
                   className={cn(
                     "type-body block truncate leading-none font-medium",
                     isRenaming && "invisible",
-                    page.status === "done" && "text-muted-foreground line-through"
+                    page.status === "done" && "text-muted-foreground"
                   )}
                 >
                   {page.title || "Untitled"}

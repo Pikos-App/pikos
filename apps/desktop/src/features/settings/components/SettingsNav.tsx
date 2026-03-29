@@ -59,7 +59,7 @@ export function SettingsNav({ active, onClose, onNavigate, width }: SettingsNavP
               "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
               active === id
                 ? "bg-accent font-medium text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             )}
             key={id}
             onClick={() => onNavigate(id)}

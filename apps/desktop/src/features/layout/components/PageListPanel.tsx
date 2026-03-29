@@ -164,13 +164,17 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
   return (
     <div
-      className="relative flex h-full shrink-0 flex-col border-r border-border bg-background"
+      className="relative flex h-full shrink-0 flex-col border-r border-border bg-surface-secondary"
       style={{ width }}
     >
       {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
         <span className="type-ui font-semibold text-foreground">
-          {activeViewId === "today" ? "Today" : activeViewId === "inbox" ? "Inbox" : "Pages"}
+          {activeViewId === "today"
+            ? "Today"
+            : activeViewId === "inbox"
+              ? "Inbox"
+              : (folders.find((f) => f.id === activeViewId)?.name ?? "Pages")}
         </span>
         <IconToolbar aria-label="Page actions" className="flex items-center gap-0.5">
           {activeViewId !== "today" && (
@@ -228,7 +232,11 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       {/* Page list */}
       <div
         aria-label={
-          activeViewId === "today" ? "Today" : activeViewId === "inbox" ? "Inbox" : "Pages"
+          activeViewId === "today"
+            ? "Today"
+            : activeViewId === "inbox"
+              ? "Inbox"
+              : (folders.find((f) => f.id === activeViewId)?.name ?? "Pages")
         }
         className="flex flex-col overflow-y-auto focus-visible:outline-none"
         onKeyDown={(e) => {
@@ -257,7 +265,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {overdue.length > 0 && (
               <>
                 <button
-                  className="type-ui-sm flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/30"
+                  className="type-ui-sm flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
                   onClick={toggleOverdue}
                 >
                   <ChevronRight
@@ -284,7 +292,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {completedPages.length > 0 && (
               <>
                 <button
-                  className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/30"
+                  className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
                   onClick={toggleCompletedCollapsed}
                 >
                   <ChevronRight
@@ -313,7 +321,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {completedPages.length > 0 && (
               <>
                 <button
-                  className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/30"
+                  className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
                   onClick={toggleCompletedCollapsed}
                 >
                   <ChevronRight
