@@ -4,11 +4,12 @@
 
 import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
 import { formatLocalISO, nowLocalISO, parseLocalISO } from "@pikos/core";
-import { CalendarX, Check, ExternalLink, Trash2 } from "lucide-react";
+import { CalendarX, ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { FolderChip, PriorityDropdown } from "@/features/pages";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
+import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -118,16 +119,15 @@ export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopo
           <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Status</span>
           <button
             aria-label={isDone ? "Mark not done" : "Mark done"}
-            className="inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
+            className="group/status inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
             onClick={handleStatusToggle}
           >
-            <span
-              className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border transition-colors ${
-                isDone ? "border-foreground/40 bg-foreground/10" : "border-muted-foreground/40"
-              }`}
-            >
-              {isDone && <Check size={8} strokeWidth={2.5} />}
-            </span>
+            <TaskCheckbox
+              as="span"
+              checked={isDone}
+              className={!isDone ? "group-hover/status:border-foreground/60" : undefined}
+              onChange={handleStatusToggle}
+            />
             <span>{isDone ? "Done" : "Open"}</span>
           </button>
         </div>

@@ -3,12 +3,13 @@
 
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
 import { nowLocalISO, parseLocalISO } from "@pikos/core";
-import { AlertTriangle, CalendarDays, Check } from "lucide-react";
+import { AlertTriangle, CalendarDays } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FolderChip, PriorityDropdown, TagsPopover } from "@/features/pages";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
+import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
@@ -55,14 +56,15 @@ function Byline({
       {/* Status toggle */}
       <button
         aria-label={isDone ? "Mark not done" : "Mark done"}
-        className="inline-flex items-center gap-1.5 rounded transition-colors hover:text-muted-foreground focus:outline-none"
+        className="group/status inline-flex items-center gap-1.5 rounded transition-colors hover:text-muted-foreground focus:outline-none"
         onClick={() => onStatusChange(isDone ? "not_started" : "done")}
       >
-        <span
-          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border transition-colors ${isDone ? "border-foreground/40 bg-foreground/10" : "border-muted-foreground/40 hover:border-foreground/60"}`}
-        >
-          {isDone && <Check size={8} strokeWidth={2.5} />}
-        </span>
+        <TaskCheckbox
+          as="span"
+          checked={isDone}
+          className={!isDone ? "group-hover/status:border-foreground/60" : undefined}
+          onChange={() => onStatusChange(isDone ? "not_started" : "done")}
+        />
         <span className="inline-block w-[2.5rem]">{isDone ? "Done" : "Open"}</span>
       </button>
 

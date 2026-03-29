@@ -17,6 +17,11 @@ html.dragging-resize * {
   cursor: ns-resize !important;
 }
 
+/* Task checkbox hover — needs plain CSS to override inline border-color from priority props */
+.task-checkbox:not([aria-checked="true"]):hover {
+  border-color: color-mix(in srgb, var(--foreground) 60%, transparent) !important;
+}
+
 @keyframes shake {
   0%,
   100% {

@@ -116,25 +116,29 @@
   cursor: pointer;
   width: 14px;
   height: 14px;
-  border: 1.5px solid var(--muted-foreground);
-  border-radius: 4px;
+  border: 1.5px solid var(--border-primary);
+  border-radius: var(--radius-sm);
   background: transparent;
   display: block;
   flex-shrink: 0;
   transition:
-    background 120ms ease,
-    border-color 120ms ease;
+    background var(--transition-fast),
+    border-color var(--transition-fast);
   position: relative;
 }
 
+.editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:hover {
+  border-color: color-mix(in srgb, var(--foreground) 60%, transparent);
+}
+
 .editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--interactive-primary);
   outline-offset: 1px;
 }
 
 .editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
-  background: var(--text-tertiary);
-  border-color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+  border-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
 }
 
 /* Checkmark drawn with a pseudo-element */
@@ -142,7 +146,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 5.5 L4.5 8 L8 3' stroke='white' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 5.5 L4.5 8 L8 3' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
     center / 10px no-repeat;
 }
 

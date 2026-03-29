@@ -1,10 +1,10 @@
 import type { PageStatus } from "@pikos/core";
 import { nowLocalISO } from "@pikos/core";
-import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
@@ -254,25 +254,9 @@ export function PageBlock({
     width: `calc(${widthPct}% - 2px)`,
   };
 
-  // Checkbox — rendered as a span to avoid invalid nested <button> HTML.
+  // Checkbox — rendered as span to avoid invalid nested <button> HTML.
   const checkbox = (
-    <span
-      aria-checked={isDone}
-      aria-label={isDone ? "Mark not done" : "Mark done"}
-      className={cn(
-        "mt-1 flex shrink-0 items-center justify-center rounded-[2px] border transition-colors",
-        "h-3.5 w-3.5",
-        isDone
-          ? "border-foreground/40 bg-foreground/10"
-          : "border-current/30 hover:border-current/70"
-      )}
-      onClick={handleCheckboxClick}
-      onMouseDown={(e) => e.stopPropagation()}
-      role="checkbox"
-      tabIndex={-1}
-    >
-      {isDone && <Check size={8} strokeWidth={2.5} />}
-    </span>
+    <TaskCheckbox as="span" checked={isDone} className="mt-1" onChange={handleCheckboxClick} />
   );
 
   if (isEditing) {

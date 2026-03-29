@@ -2,7 +2,6 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder, PagePriority, PageSummary } from "@pikos/core";
 import { parseLocalISO } from "@pikos/core";
-import { Check } from "lucide-react";
 
 import {
   ContextMenu,
@@ -14,6 +13,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
+import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
@@ -210,25 +210,20 @@ export function PageListItem({
           tabIndex={isActive ? 0 : -1}
         >
           {/* Checkbox — border color encodes priority when not done */}
-          <button
-            aria-label={page.status === "done" ? "Mark not done" : "Mark done"}
-            className={cn(
-              "mt-[2px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border-[1.5px] transition-colors",
-              page.status === "done"
-                ? "border-foreground/40 bg-foreground/10"
-                : page.priority === 1
-                  ? "border-status-overdue hover:border-red-400"
+          <TaskCheckbox
+            borderColor={
+              page.status !== "done"
+                ? page.priority === 1
+                  ? "var(--color-status-overdue)"
                   : page.priority === 2
-                    ? "border-status-due-soon hover:border-orange-400"
-                    : "border-muted-foreground/40 hover:border-foreground/60"
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleStatus();
-            }}
-          >
-            {page.status === "done" && <Check size={8} strokeWidth={2.5} />}
-          </button>
+                    ? "var(--color-status-due-soon)"
+                    : undefined
+                : undefined
+            }
+            checked={page.status === "done"}
+            className="mt-[2px]"
+            onChange={() => onToggleStatus()}
+          />
 
           {/* Content */}
           <div className="min-w-0 flex-1">
