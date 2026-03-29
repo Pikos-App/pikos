@@ -36,7 +36,7 @@ export function Sidebar({ onResizeStart, width }: SidebarProps) {
 
       {/* Drag handle — right edge */}
       <div
-        className="absolute top-0 right-0 h-full w-1 cursor-col-resize transition-colors hover:bg-border/40 active:bg-border/60"
+        className="absolute top-0 right-0 h-full w-px cursor-col-resize border-r border-border-secondary transition-[width,background-color,border-color] duration-[var(--transition-fast)] hover:w-[3px] hover:border-r-0 hover:bg-border/40 data-[dragging]:w-[3px] data-[dragging]:border-r-0 data-[dragging]:bg-border/60"
         onMouseDown={onResizeStart}
       />
     </div>

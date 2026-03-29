@@ -135,7 +135,6 @@ export function FolderList() {
             className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
           >
             <TooltipIconButton
-              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               icon={<Search size={13} />}
               label="Search"
               onClick={() => setOpenDialog("search")}
@@ -152,7 +151,7 @@ export function FolderList() {
                   <DropdownMenuTrigger asChild>
                     <button
                       aria-label="Sort folders"
-                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      className="rounded p-1 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary"
                       tabIndex={-1}
                     >
                       <ArrowUpDown size={13} />
@@ -177,7 +176,6 @@ export function FolderList() {
               </DropdownMenuContent>
             </DropdownMenu>
             <TooltipIconButton
-              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               icon={<Plus size={15} />}
               label="New Folder"
               onClick={() => void handleCreateFolder()}

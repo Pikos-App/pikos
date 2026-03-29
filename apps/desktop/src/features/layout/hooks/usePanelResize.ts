@@ -31,12 +31,15 @@ export function usePanelResize({
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = widthRef.current;
+    const handle = e.currentTarget as HTMLElement;
+    handle.dataset["dragging"] = "true";
 
     const onMove = (ev: MouseEvent) => {
       const w = Math.max(min, Math.min(max, startWidth + ev.clientX - startX));
       setWidth(w);
     };
     const onUp = () => {
+      delete handle.dataset["dragging"];
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };

@@ -191,10 +191,10 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
                   <DropdownMenuTrigger asChild>
                     <button
                       aria-label={`Sort: ${sortMode}`}
-                      className="flex h-7 w-7 items-center justify-center rounded-md text-subtle hover:bg-surface-hover hover:text-foreground"
+                      className="rounded p-1 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary"
                       tabIndex={0}
                     >
-                      <ArrowUpDown size={16} />
+                      <ArrowUpDown size={13} />
                     </button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
@@ -223,8 +223,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             </DropdownMenu>
           )}
           <TooltipIconButton
-            className="flex h-7 w-7 items-center justify-center rounded-md text-subtle hover:bg-surface-hover hover:text-foreground"
-            icon={<Plus size={16} />}
+            icon={<Plus size={15} />}
             label="New Page"
             onClick={() => setOpenDialog("quick-add")}
             shortcut="mod+n"
@@ -348,7 +347,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
       {/* Drag handle — right edge */}
       <div
-        className="absolute top-0 right-0 h-full w-1 cursor-col-resize transition-colors hover:bg-border/40 active:bg-border/60"
+        className="absolute top-0 right-0 h-full w-px cursor-col-resize border-r border-border-secondary transition-[width,background-color,border-color] duration-[var(--transition-fast)] hover:w-[3px] hover:border-r-0 hover:bg-border/40 data-[dragging]:w-[3px] data-[dragging]:border-r-0 data-[dragging]:bg-border/60"
         onMouseDown={onResizeStart}
       />
     </div>

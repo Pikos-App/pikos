@@ -287,27 +287,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--muted-foreground);
+  color: var(--text-tertiary);
   cursor: pointer;
   flex-shrink: 0;
   transition:
-    background 100ms ease,
-    color 100ms ease;
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .bubble-toolbar-btn:hover {
-  background: var(--accent);
-  color: var(--foreground);
+  background: var(--surface-hover);
+  color: var(--text-secondary);
 }
 
 .bubble-toolbar-btn.is-active {
-  background: var(--accent);
-  color: var(--foreground);
+  background: var(--surface-active);
+  color: var(--text-secondary);
 }
 
 /* ─── Link popover ─────────────────────────────────────────────────────────── */

@@ -26,7 +26,15 @@ export function TooltipIconButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button aria-label={label} className={className} type="button" {...props}>
+        <button
+          aria-label={label}
+          className={cn(
+            "flex items-center justify-center rounded p-1 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary",
+            className
+          )}
+          type="button"
+          {...props}
+        >
           {icon}
         </button>
       </TooltipTrigger>

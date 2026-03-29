@@ -77,7 +77,7 @@ export function AllDaySection({
       {/* Drag handle — bottom edge */}
       <div
         aria-label="Resize all-day section"
-        className="absolute inset-x-0 bottom-0 h-1.5 cursor-row-resize hover:bg-border/40 active:bg-border/60"
+        className="absolute inset-x-0 bottom-0 h-px cursor-row-resize border-b border-border-secondary transition-[height,background-color,border-color] duration-[var(--transition-fast)] hover:h-[3px] hover:border-b-0 hover:bg-border/40 active:h-[3px] active:border-b-0 active:bg-border/60"
         onMouseDown={onResizeStart}
         role="separator"
       />

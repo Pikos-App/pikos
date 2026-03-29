@@ -21,7 +21,7 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
     <div className="flex h-12 shrink-0 items-center gap-1 border-border pr-3 pl-2">
       {/* Sidebar toggle */}
       <TooltipIconButton
-        className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-muted-foreground"
+        className="text-text-tertiary/50"
         icon={ui.sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         label={ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         onClick={() => ui.setSidebarCollapsed(!ui.sidebarCollapsed)}
@@ -39,10 +39,10 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
               aria-label="Editor view"
               aria-pressed={ui.rightPanel === "editor"}
               className={cn(
-                "rounded p-1 transition-colors",
+                "flex h-7 w-7 items-center justify-center rounded-md transition-[background-color,color] duration-[var(--transition-fast)]",
                 ui.rightPanel === "editor"
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground/50 hover:bg-accent hover:text-muted-foreground"
+                  ? "bg-surface-active text-text-secondary"
+                  : "text-text-tertiary/50 hover:bg-surface-hover hover:text-text-secondary"
               )}
               onClick={() => ui.setRightPanel("editor")}
             >
@@ -61,10 +61,10 @@ export function RightPanelHeader({ children }: RightPanelHeaderProps) {
               aria-label="Calendar view"
               aria-pressed={ui.rightPanel === "calendar"}
               className={cn(
-                "rounded p-1 transition-colors",
+                "flex h-7 w-7 items-center justify-center rounded-md transition-[background-color,color] duration-[var(--transition-fast)]",
                 ui.rightPanel === "calendar"
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground/50 hover:bg-accent hover:text-muted-foreground"
+                  ? "bg-surface-active text-text-secondary"
+                  : "text-text-tertiary/50 hover:bg-surface-hover hover:text-text-secondary"
               )}
               onClick={() => ui.setRightPanel("calendar")}
             >
