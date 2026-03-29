@@ -81,13 +81,14 @@ Run manually or in CI nightly. Tag tests with `@tier2`.
 - Assert: Second page created, dialog closes
 - Assert: Both pages visible in page list
 
-#### T2-2: Quick Add folder assignment via chip
+#### T2-2: Quick Add metadata via ui
 - Open Quick Add while viewing Inbox
 - Click the folder chip, select a different folder from the popover
 - Assert: Chip updates to show selected folder name
+- go through the same click/assert flow for each interactive element in the metadata section (folder, schedule, priority, tag)
 - Submit the page
 - Assert: Page does NOT appear in Inbox
-- Navigate to the selected folder — page is there
+- Navigate to the selected folder — page is there and all metadata matched (must open page to check)
 - Note: NLP `~folder` syntax is tested indirectly by T1-5's `quickAdd` helper
 
 #### T2-3: Folder drag-and-drop reorder
