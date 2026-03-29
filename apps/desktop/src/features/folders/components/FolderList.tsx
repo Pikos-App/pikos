@@ -1,15 +1,6 @@
 import { useDndMonitor, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import {
-  ArrowUpDown,
-  CalendarDays,
-  FolderPlus,
-  Hash,
-  Inbox,
-  Plus,
-  Search,
-  Text,
-} from "lucide-react";
+import { ArrowUpDown, CalendarDays, FolderPlus, Hash, Inbox, Plus, Text } from "lucide-react";
 import { Fragment, useState } from "react";
 import type React from "react";
 
@@ -52,7 +43,7 @@ export function FolderList() {
     sortOrder,
     todayCount,
   } = useFolderList();
-  const { openSortMenu, setOpenDialog, setOpenSortMenu } = useUI();
+  const { openSortMenu, setOpenSortMenu } = useUI();
 
   // ── Keyboard navigation ───────────────────────────────────────────────────
 
@@ -134,14 +125,6 @@ export function FolderList() {
             aria-label="Folder actions"
             className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
           >
-            <TooltipIconButton
-              icon={<Search size={13} />}
-              label="Search"
-              onClick={() => setOpenDialog("search")}
-              shortcut="mod+p"
-              side="right"
-              tabIndex={0}
-            />
             <DropdownMenu
               onOpenChange={(open) => setOpenSortMenu(open ? "folder-sort" : null)}
               open={openSortMenu === "folder-sort"}

@@ -225,15 +225,15 @@ appTest("toggle editor and calendar view @tier1", async ({ app }) => {
   await expect(editorBtn).toHaveAttribute("aria-pressed", "true");
 });
 
-// ─── T1-9: Search pages (Cmd+P) ──────────────────────────────────────────────
+// ─── T1-9: Search pages (Cmd+K) ──────────────────────────────────────────────
 
-appTest("search pages via Cmd+P @tier1", async ({ app }) => {
+appTest("search pages via Cmd+K @tier1", async ({ app }) => {
   await quickAdd(app, "alpha project");
   await quickAdd(app, "beta report");
   await quickAdd(app, "gamma notes");
 
   // Open search palette
-  await app.keyboard.press(mod("Mod+p"));
+  await app.keyboard.press(mod("Mod+k"));
   const dialog = app.getByRole("dialog", { name: "Search pages" });
   await expect(dialog).toBeVisible();
 

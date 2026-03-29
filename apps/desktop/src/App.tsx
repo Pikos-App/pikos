@@ -13,7 +13,8 @@ import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteCo
 import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
-import { useKeyboardListener } from "@/shared/keyboard/useKeyboard";
+import { Keyboard } from "@/shared/keyboard/registry";
+import { useKeyboardListener, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 /** Update lastOpenedAt on the page whenever activePageId changes. */
 function useTrackPageOpened() {
@@ -30,9 +31,45 @@ function useTrackPageOpened() {
   }, [activePageId, updatePage]);
 }
 
+/** ⌘, opens settings, ⌘1-9 switches to folder by index. */
+function useGlobalShortcuts() {
+  const { setActiveViewId, setSettingsOpen, settingsOpen } = useUI();
+  const { folders } = useWorkspace();
+
+  useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), { allowInInputs: true });
+
+  // ⌘1-9 — switch to folder by index (1-based).
+  // Use the Keyboard registry directly to register all 9 bindings in one effect,
+  // avoiding calling useKeyboardShortcut in a loop (violates rules of hooks).
+  const foldersRef = useRef(folders);
+  const setViewRef = useRef(setActiveViewId);
+  foldersRef.current = folders;
+  setViewRef.current = setActiveViewId;
+
+  useEffect(() => {
+    const ids: string[] = [];
+    for (let i = 1; i <= 9; i++) {
+      const id = `global-folder-${i}`;
+      ids.push(id);
+      Keyboard.register({
+        allowInInputs: true,
+        combo: `Mod+${i}`,
+        handler: () => {
+          const folder = foldersRef.current[i - 1];
+          if (folder) setViewRef.current(folder.id);
+        },
+        id,
+        scope: "global",
+      });
+    }
+    return () => ids.forEach((id) => Keyboard.unregister(id));
+  }, []);
+}
+
 function AppShell() {
   useKeyboardListener();
   useTrackPageOpened();
+  useGlobalShortcuts();
   const { handleUndoDelete, handleUndoDismiss, undoItems } = useUndoDelete();
   return (
     <>

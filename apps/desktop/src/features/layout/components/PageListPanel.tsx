@@ -11,6 +11,7 @@ import {
   Flag,
   GripVertical,
   Plus,
+  Search,
   Sun,
 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -181,6 +182,13 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
               : (folders.find((f) => f.id === activeViewId)?.name ?? "Pages")}
         </span>
         <IconToolbar aria-label="Page actions" className="flex items-center gap-0.5">
+          <TooltipIconButton
+            icon={<Search size={13} />}
+            label="Search"
+            onClick={() => setOpenDialog("search")}
+            shortcut="mod+k"
+            tabIndex={0}
+          />
           {activeViewId !== "today" && (
             <DropdownMenu
               onOpenChange={(open) => setOpenSortMenu(open ? "page-sort" : null)}

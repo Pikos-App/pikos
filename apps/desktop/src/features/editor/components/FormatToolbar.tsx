@@ -167,7 +167,7 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
           },
           icon: <Link size={14} strokeWidth={2.5} />,
           isActive: isLink,
-          shortcut: "mod+k",
+          shortcut: "mod+shift+k",
           title: "Link",
         },
       ],

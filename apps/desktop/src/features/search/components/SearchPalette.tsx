@@ -118,7 +118,7 @@ export function SearchPalette() {
   // ── Keyboard shortcut ─────────────────────────────────────────────────────
 
   useKeyboardShortcut(
-    "Mod+P",
+    "Mod+K",
     () => {
       if (!isOpen) setOpenDialog("search");
     },

@@ -52,10 +52,12 @@ const GROUPS: ShortcutGroup[] = [
   {
     items: [
       { combo: "Mod+N", label: "New page" },
-      { combo: "Mod+P", label: "Search" },
+      { combo: "Mod+K", label: "Search" },
+      { combo: "Mod+,", label: "Settings" },
       { combo: "Mod+\\", label: "Toggle sidebar" },
       { combo: "Mod+Shift+C", label: "Toggle calendar / editor" },
       { combo: "Mod+Shift+D", label: "Delete page" },
+      { combo: "Mod+1–9", label: "Switch to folder by index" },
     ],
     label: "Navigation",
   },
@@ -76,7 +78,8 @@ const GROUPS: ShortcutGroup[] = [
   {
     items: [
       { combo: "/", label: "Slash menu" },
-      { combo: "Mod+K", label: "Insert / edit link" },
+      { combo: "Mod+Shift+K", label: "Insert / edit link" },
+      { combo: "Mod+F", label: "Find in page" },
       { combo: "Tab", label: "Indent" },
       { combo: "Shift+Tab", label: "Outdent" },
     ],

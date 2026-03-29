@@ -23,6 +23,7 @@ import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { TabIndent } from "../extensions/TabIndent";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
+import { FindContentPopover } from "./FindContentPopover";
 import { FormatToolbar } from "./FormatToolbar";
 import { LinkPopover } from "./LinkPopover";
 import { MetadataHeader } from "./MetadataHeader";
@@ -194,7 +195,7 @@ export function EditorPane() {
   const [isAddingLink, setIsAddingLink] = useState(false);
 
   useKeyboardShortcut(
-    "Mod+K",
+    "Mod+Shift+K",
     () => {
       if (!editor) return;
       editor.view.dom.blur();
@@ -221,7 +222,7 @@ export function EditorPane() {
   // ─── Editor ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-surface-primary">
+    <div className="relative flex flex-1 flex-col overflow-hidden bg-surface-primary">
       {page && (
         <MetadataHeader
           contentSaveError={saveError}
@@ -231,6 +232,7 @@ export function EditorPane() {
           page={page}
         />
       )}
+      {editor && <FindContentPopover editor={editor} />}
       {editor && !isAddingLink && (
         <FormatToolbar editor={editor} onAddLink={() => setIsAddingLink(true)} />
       )}

@@ -248,6 +248,18 @@
   height: 0;
 }
 
+/* ─── Find-in-page highlights ─────────────────────────────────────────────── */
+
+.find-match {
+  background: oklch(0.75 0.15 85 / 0.3);
+  border-radius: 2px;
+}
+
+.find-match-active {
+  background: oklch(0.75 0.15 85 / 0.55);
+  box-shadow: 0 0 0 1px oklch(0.75 0.15 85 / 0.7);
+}
+
 /* ─── Selection ────────────────────────────────────────────────────────────── */
 
 .editor-content ::selection {

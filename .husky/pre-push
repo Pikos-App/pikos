@@ -1,4 +1,4 @@
-# Tier 1 E2E — skip when SKIP_E2E is set
+# Tier 1 + Tier 2 E2E — skip when SKIP_E2E is set
 if [ -z "$SKIP_E2E" ]; then
-  pnpm --filter @pikos/desktop test:e2e -- --project tier1 -x
+  pnpm --filter @pikos/desktop test:e2e -- --project tier1 --project tier2 -x
 fi

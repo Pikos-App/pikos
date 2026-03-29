@@ -2,6 +2,9 @@
 // Bindings are registered in the useKeyboard hook (GOO-31).
 export const shortcuts = {
   deleteFile: "Mod+Shift+D",
+  findInPage: "Mod+F",
+  insertLink: "Mod+Shift+K",
   newFile: "Mod+N",
-  pageSwitcher: "Mod+P",
+  openSettings: "Mod+,",
+  pageSwitcher: "Mod+K",
 } as const;
