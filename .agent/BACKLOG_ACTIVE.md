@@ -19,8 +19,11 @@ Status: `[ ]` pending · Delete task when done.
 
 _Must ship before sharing with anyone outside the team. External blocker: Apple Developer account ($99/yr)._
 
-- [ ] **GOO-51** App branding _(Medium — friends beta blocker)_
-  Icon, wordmark, color palette. Needed before any public presence. Tauri uses `apps/desktop/src-tauri/icons/` — multiple sizes required (32×32 to 512×512 + `.icns` for macOS).
+styling refinement
+- tab and focus styling behavior, tab group and focus trap components?
+- compact pageblock children rendering
+
+- [ ] First-time user content / tutorial — approach TBD. Options: pre-seeded sample pages (like Obsidian), interactive walkthrough (tooltips/coachmarks), or a short guided flow post-welcome screen. Needs to teach: create a page, schedule it, use the calendar, organize with folders. Should be dismissable and not block power users.
 
 - [ ] **GOO-52** Cross-platform builds + signing + GitHub Releases pipeline _(High — friends beta blocker)_
   `release.yml` triggered on `git tag v*`. Matrix: macOS (notarized via Apple Developer Program, `tauri-apps/tauri-action`), Windows (SmartScreen warning OK for Phase 2 beta), Linux (AppImage + deb, no signing needed).
@@ -30,6 +33,11 @@ _Must ship before sharing with anyone outside the team. External blocker: Apple 
   `tauri-plugin-updater`. Check on launch → non-blocking banner ("Version X.X available — restart to update") → download + install + relaunch. Update server: GitHub Releases. Wire in before any external release.
 
 - [ ] Misc dogfooding improvements.
+
+### Performance scaling tasks
+
+- [ ] Lazy load completed records — don't fetch completed pages until the "Completed" section is expanded. Keeps initial query fast as completed count grows over months. Only fetch 20 completed at a time, with conditional load more button below completed records.
+- [ ] Virtualize page/folder lists with `react-virtual` (TanStack Virtual) — required once a folder has 100+ pages. Without it, DOM node count scales linearly and folder switch slows down.
 
 ---
 
@@ -58,3 +66,16 @@ _Required before the marketing site goes live and the download button appears._
 
 
 _For post-launch V1, power features, and long-term roadmap — grep `BACKLOG.md` by GOO number._
+
+---
+
+## Perf test upgrades (future)
+
+Current perf tests (`e2e/perf.spec.ts`, `perf.prod.spec.ts`, `scripts/check-bundle-size.sh`) only cover the JS layer — React rendering, bundle size, long tasks. They run against Vite (dev or preview), not the Tauri webview. MockStorageAdapter is in the loop, not real SQLite.
+
+**Not covered:**
+- SQLite query latency (need Rust-side benchmarks, e.g. criterion)
+- Tauri IPC overhead (invoke round-trip)
+- WebView cold start (need tauri-driver + WebdriverIO)
+- Real I/O paths
+- **Realistic data volume testing**: seed a DB with 10000+ pages, 5000+ schedules, deep folder trees, large note bodies — simulate a year of heavy usage. Measure page list load, search, calendar render, and folder switch against real SQLite with realistic indexes and FTS. Could use the existing `pnpm seed` script as a starting point, run Tauri in dev mode, and profile with Playwright or manually.

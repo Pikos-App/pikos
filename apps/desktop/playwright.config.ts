@@ -27,6 +27,11 @@ export default defineConfig({
       use: { ...devices["Desktop Safari"] },
       grep: /@tier2/,
     },
+    {
+      name: "perf",
+      use: { ...devices["Desktop Safari"] },
+      grep: /@perf/,
+    },
   ],
   webServer: {
     command: "VITE_TEST_MODE=true pnpm vite",

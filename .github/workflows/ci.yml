@@ -103,10 +103,33 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build all packages
-        run: pnpm turbo build
+        run: VITE_TEST_MODE=true pnpm turbo build
 
       - name: Verify dist output exists
         run: test -d apps/desktop/dist && echo "✓ dist built"
+
+      - name: Bundle size check
+        run: pnpm --filter @pikos/desktop check:bundle
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/desktop/pnpm-lock.yaml', 'pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @pikos/desktop exec playwright install --with-deps webkit
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @pikos/desktop exec playwright install-deps webkit
+
+      - name: Perf tests (prod build, warn only)
+        env:
+          PERF_WARN_ONLY: "true"
+        run: pnpm --filter @pikos/desktop exec playwright test --config playwright.perf.config.ts
 
   # ── Job 4: Rust ────────────────────────────────────────────────────────────
   # Verify the Tauri backend compiles with zero warnings.

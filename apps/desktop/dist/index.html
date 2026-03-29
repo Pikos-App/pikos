@@ -4,14 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pikos</title>
+    <meta name="theme-color" content="#161613" />
     <script>
       (function () {
         var t = localStorage.getItem("pikos-theme");
-        if (t !== "light") document.documentElement.classList.add("dark");
+        // "system" follows OS preference; anything else (including null) defaults to dark.
+        var dark =
+          t === "system"
+            ? window.matchMedia("(prefers-color-scheme: dark)").matches
+            : t !== "light";
+        if (dark) document.documentElement.classList.add("dark");
+        // Sync meta theme-color with resolved theme
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", dark ? "#161613" : "#ffffff");
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-BTjBqrhM.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Bjrttqpg.css">
+    <script type="module" crossorigin src="/assets/index-BXE_r3AV.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CZKR0-wL.css">
   </head>
   <body>
     <div id="root"></div>

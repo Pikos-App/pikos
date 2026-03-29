@@ -13,7 +13,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:perf": "playwright test --project=perf",
+    "test:e2e:perf:prod": "VITE_TEST_MODE=true pnpm build && playwright test --config playwright.perf.config.ts",
+    "check:bundle": "bash ../../scripts/check-bundle-size.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
