@@ -2,12 +2,11 @@ import { expect, test } from "@playwright/test";
 
 import { mod, quickAdd, test as appTest } from "./fixtures";
 
-// ─── T1-1: App boots to welcome screen ──────────────────────────────────────
+// ─── T1-1: App boots directly to workspace ──────────────────────────────────
 
-test("app boots to welcome screen @tier1", async ({ page }) => {
+test("app boots directly to workspace @tier1", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: /get started/i })).toBeVisible();
-  await page.getByRole("button", { name: /get started/i }).click();
+  // Workspace auto-creates on first launch — no welcome screen
   await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
 });
 

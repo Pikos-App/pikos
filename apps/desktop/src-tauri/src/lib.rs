@@ -5,7 +5,7 @@ mod db;
 
 use db::{
     connect_db, DbState,
-    dev::{backup_db, get_db_stats, reset_db, run_seed},
+    dev::{backup_db, get_db_stats, reset_db},
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders, update_folder,
     },
@@ -111,7 +111,6 @@ pub fn run() {
             backup_db,
             get_db_stats,
             reset_db,
-            run_seed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

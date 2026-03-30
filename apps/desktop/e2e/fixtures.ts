@@ -7,7 +7,7 @@ const MOD = process.platform === "darwin" ? "Meta" : "Control";
 export const test = base.extend<{ app: Page }>({
   app: async ({ page }, use) => {
     await page.goto("/");
-    await page.getByRole("button", { name: /get started/i }).click();
+    // Workspace auto-creates on first launch — wait for it to be ready
     await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
     await use(page);
   },

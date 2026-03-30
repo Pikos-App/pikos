@@ -16,20 +16,18 @@ Status: `[ ]` pending · Delete task when done.
 
 ## 🚀 Friends Beta Gate
 
-styling refinement
+refinement (to fix)
+- [ ] refine tutorial content
+  - [ ] when deleting folder, delete pages or move to inbox? would make tutorial cleaner. Folder delete should probably be destructive, and it has a conformation dialog. All pages are soft deleted so we can recover when we add archive.
 - [ ] tab and focus styling behavior, tab group and focus trap components?
 - [ ] compact pageblock children rendering
-
-- [ ] First-time user content / tutorial — **seeded tutorial data** (like Obsidian's sample vault), triggered on first workspace creation.
-  - Create `apps/desktop/src/shared/seeds/tutorial.ts` — port `scripts/seed/seed-tutorial.ts` to use `StorageAdapter` (follow `marketing.ts` pattern). Dynamic dates via `new Date()`. Returns `{ welcomePageId, folderId }`.
-  - In `WorkspaceContext.selectWorkspace()`: call `seedTutorial(adapter)` after `connectDb()`. Store result in a `pendingNavigationRef`. Expose `consumePendingNavigation()` on context.
-  - In `App.tsx` `AppShell`: one-shot effect consumes pending navigation → `setActiveViewId(folderId)` + `openPage(welcomePageId)`.
-  - Add `VITE_SEED=tutorial` support in the test-mode seed switch.
-  - Full plan: `.claude/plans/peppy-foraging-lerdorf.md`
-  - Make sure to update test coverage to reflect this change - I want a test to confirm this data seeds correctly. And you may need to update existing coverage to not click through the "get started" button.
-  - And the record-hero.sh and record-hero.spec.ts might need to be updated based on this change.
-
 - [ ] Misc dogfooding improvements.
+
+## Before Launch
+- [ ] export data
+- [ ] hide dev settings
+
+- [ ] update db to bettersqlite?
 
 ## Enhancements
 

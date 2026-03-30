@@ -40,6 +40,10 @@ export interface WorkspaceContextValue {
   reload: () => Promise<void>;
   /** First-launch: create default workspace + connect. Subsequent: already handled on mount. */
   selectWorkspace: () => Promise<void>;
+  /** Consume one-shot navigation target set by tutorial seed. Returns null if none pending. */
+  consumePendingNavigation: () => { pageId: string; folderId: string } | null;
+  /** Dev tool: wipe all data and re-seed with a scenario. */
+  resetAndSeed: (scenario: "tutorial" | "realistic" | "stress") => Promise<void>;
   createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage: (id: string, patch: PageUpdate) => void;
@@ -112,6 +116,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // Start true so we don't flash the welcome screen before init completes
   const [isLoading, setIsLoading] = useState(true);
 
+  // One-shot navigation target from tutorial seed — consumed once by AppShell.
+  const pendingNavigationRef = useRef<{ pageId: string; folderId: string } | null>(null);
+
+  function consumePendingNavigation(): { pageId: string; folderId: string } | null {
+    const nav = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    return nav;
+  }
+
   // Lightweight event emitter
   const listenersRef = useRef(new Map<string, Set<AnyHandler>>());
 
@@ -149,37 +162,46 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   // ─── Auto-init on mount ────────────────────────────────────────────────────
   // Attempts to reopen the most recently used workspace from the store.
-  // On first launch (empty store) → sets isLoading=false, workspace stays null → WelcomeScreen.
+  // On first launch (empty store) → auto-creates workspace + seeds tutorial.
 
   const seedRanRef = useRef(false);
 
   useEffect(() => {
     if (import.meta.env["VITE_TEST_MODE"] === "true") {
-      const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
-      if (seedScenario) {
-        // Guard against React strict mode double-invoke
-        if (seedRanRef.current) return;
-        seedRanRef.current = true;
+      // Guard against React strict mode double-invoke
+      if (seedRanRef.current) return;
+      seedRanRef.current = true;
 
-        // Auto-seed and skip welcome screen for recording scripts
-        void (async () => {
-          if (seedScenario === "marketing") {
-            const { seedMarketing } = await import("@/shared/seeds/marketing");
-            await seedMarketing(adapter);
+      void (async () => {
+        const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
+        if (seedScenario === "marketing") {
+          const { seedMarketing } = await import("@/shared/seeds/marketing");
+          await seedMarketing(adapter);
+        } else if (seedScenario === "tutorial") {
+          const { seedTutorial } = await import("@/shared/seeds/tutorial");
+          const result = await seedTutorial(adapter);
+          if (result) {
+            pendingNavigationRef.current = {
+              folderId: result.folderId,
+              pageId: result.welcomePageId,
+            };
           }
-          await loadWorkspaceDataRef.current();
-          setWorkspace({
-            createdAt: new Date().toISOString(),
-            dbPath: ":memory:",
-            id: "seed",
-            lastOpenedAt: new Date().toISOString(),
-            name: "Seed Workspace",
-          });
-        })();
-        return;
-      }
-      // Test mode without seed: show welcome screen
-      setIsLoading(false);
+        } else if (seedScenario === "realistic") {
+          const { seedRealistic } = await import("@/shared/seeds/realistic");
+          await seedRealistic(adapter);
+        } else if (seedScenario === "stress") {
+          const { seedStress } = await import("@/shared/seeds/stress");
+          await seedStress(adapter);
+        }
+        await loadWorkspaceDataRef.current();
+        setWorkspace({
+          createdAt: new Date().toISOString(),
+          dbPath: ":memory:",
+          id: seedScenario ? "seed" : "mock",
+          lastOpenedAt: new Date().toISOString(),
+          name: seedScenario ? "Seed Workspace" : "Test Workspace",
+        });
+      })();
       return;
     }
 
@@ -190,7 +212,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const workspaces = (await store.get<Workspace[]>("workspaces")) ?? [];
 
         if (workspaces.length === 0) {
-          setIsLoading(false);
+          // First launch — auto-create workspace + seed tutorial
+          await selectWorkspace();
           return;
         }
 
@@ -225,7 +248,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [adapter]);
 
   // ─── selectWorkspace ───────────────────────────────────────────────────────
-  // Called by WelcomeScreen "Get started". Creates the default workspace on first launch.
+  // Creates the default workspace on first launch. Called by initWorkspace when no workspaces exist.
 
   async function selectWorkspace(): Promise<void> {
     if (import.meta.env["VITE_TEST_MODE"] === "true") {
@@ -263,6 +286,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       };
 
       await connectDb(dbPath);
+
+      // Seed tutorial data for first-time users (idempotent — skips if already seeded)
+      const { seedTutorial } = await import("@/shared/seeds/tutorial");
+      const seedResult = await seedTutorial(adapter);
+      if (seedResult) {
+        pendingNavigationRef.current = {
+          folderId: seedResult.folderId,
+          pageId: seedResult.welcomePageId,
+        };
+      }
 
       const store = await load("workspaces.json", { autoSave: false, defaults: {} });
       const existing = (await store.get<Workspace[]>("workspaces")) ?? [];
@@ -621,9 +654,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return adapter.searchTags(query);
   }
 
+  async function resetAndSeed(scenario: "tutorial" | "realistic" | "stress"): Promise<void> {
+    if (import.meta.env["VITE_TEST_MODE"] === "true") {
+      (adapter as MockStorageAdapter).clear();
+    } else {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("reset_db");
+    }
+    if (scenario === "tutorial") {
+      const { seedTutorial } = await import("@/shared/seeds/tutorial");
+      const result = await seedTutorial(adapter);
+      if (result) {
+        pendingNavigationRef.current = {
+          folderId: result.folderId,
+          pageId: result.welcomePageId,
+        };
+      }
+    } else if (scenario === "realistic") {
+      const { seedRealistic } = await import("@/shared/seeds/realistic");
+      await seedRealistic(adapter);
+    } else if (scenario === "stress") {
+      const { seedStress } = await import("@/shared/seeds/stress");
+      await seedStress(adapter);
+    }
+    await loadWorkspaceDataRef.current();
+  }
+
   const value: WorkspaceContextValue = {
     clearPageError,
     clearSchedule,
+    consumePendingNavigation,
     createFolder,
     createPage,
     deleteFolder,
@@ -638,6 +698,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     reload,
     reorderFolders,
     reorderPages,
+    resetAndSeed,
     restorePage,
     scheduleOnce,
     searchPages,

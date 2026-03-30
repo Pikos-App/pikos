@@ -10,17 +10,11 @@
     "build": "turbo build",
     "test": "turbo test",
     "prepare": "husky",
-    "verify": "bash scripts/verify.sh",
-    "seed": "tsx scripts/seed/index.ts"
-  },
-  "dependencies": {
-    "@faker-js/faker": "^10.3.0",
-    "better-sqlite3": "^12.6.2"
+    "verify": "bash scripts/verify.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/typography": "^0.5.19",
-    "@types/better-sqlite3": "^7.6.13",
     "dependency-cruiser": "^17.3.9",
     "eslint": "^10.0.3",
     "eslint-plugin-perfectionist": "^5.7.0",
@@ -31,7 +25,6 @@
     "lint-staged": "^16.3.3",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "tsx": "^4.21.0",
     "turbo": "^2.8.21",
     "typescript-eslint": "^8.57.0"
   },
@@ -44,7 +37,6 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3",
       "esbuild"
     ]
   }

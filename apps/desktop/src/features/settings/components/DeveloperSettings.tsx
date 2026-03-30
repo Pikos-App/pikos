@@ -17,13 +17,13 @@ import { Button } from "@/components/ui/button";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-type SeedScenario = "demo" | "realistic" | "tutorial" | "stress" | "dst";
+type SeedScenario = "tutorial" | "realistic" | "stress";
 
 const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[] = [
   {
-    description: "Polished, photogenic data for screenshots and videos.",
-    id: "demo",
-    label: "Demo",
+    description: "Default onboarding content for first launch.",
+    id: "tutorial",
+    label: "Tutorial",
   },
   {
     description: "Believable day-to-day life: work, personal, reading.",
@@ -31,26 +31,16 @@ const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[]
     label: "Realistic",
   },
   {
-    description: "Default onboarding content for first launch.",
-    id: "tutorial",
-    label: "Tutorial",
-  },
-  {
     description: "Heavy load: many folders, pages, and schedules.",
     id: "stress",
     label: "Stress",
-  },
-  {
-    description: "PST vs PDT edge cases around US spring-forward.",
-    id: "dst",
-    label: "DST",
   },
 ];
 
 type PendingAction = { type: "reset" } | { type: "seed"; scenario: SeedScenario };
 
 export function DeveloperSettings() {
-  const { reload, workspace } = useWorkspace();
+  const { reload, resetAndSeed, workspace } = useWorkspace();
   const { setSettingsOpen } = useUI();
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [running, setRunning] = useState(false);
@@ -96,9 +86,7 @@ export function DeveloperSettings() {
     setRunning(true);
     setLog(null);
     try {
-      await invoke("reset_db");
-      await invoke("run_seed", { dbPath: workspace.dbPath, scenario });
-      await reload();
+      await resetAndSeed(scenario);
       setSettingsOpen(false);
     } catch (e: unknown) {
       setLog(String(e));

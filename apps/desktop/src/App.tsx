@@ -5,7 +5,6 @@ import { ThreePanelLayout } from "@/features/layout";
 import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
 import { SettingsPage } from "@/features/settings";
-import { WelcomeScreen } from "@/features/workspace";
 import { UndoToast } from "@/shared/components/UndoToast";
 import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
@@ -70,7 +69,20 @@ function AppShell() {
   useKeyboardListener();
   useTrackPageOpened();
   useGlobalShortcuts();
+  const { consumePendingNavigation } = useWorkspace();
+  const ui = useUI();
   const { handleUndoDelete, handleUndoDismiss, undoItems } = useUndoDelete();
+
+  // One-shot: navigate to tutorial welcome page after first workspace creation.
+  const didConsumeRef = useRef<boolean | null>(null);
+  if (didConsumeRef.current == null) {
+    didConsumeRef.current = true;
+    const nav = consumePendingNavigation();
+    if (nav) {
+      ui.setActiveViewId(nav.folderId);
+      ui.openPage(nav.pageId);
+    }
+  }
   return (
     <>
       <ThreePanelLayout />
@@ -90,13 +102,9 @@ function AppShell() {
 function WorkspaceGate() {
   const { isLoading, workspace } = useWorkspace();
 
-  if (isLoading) {
-    // Blank while initialising — avoids flash of welcome screen on auto-reopen
+  if (isLoading || !workspace) {
+    // Blank while initialising — workspace is auto-created on first launch
     return null;
-  }
-
-  if (!workspace) {
-    return <WelcomeScreen />;
   }
 
   return <AppShell />;

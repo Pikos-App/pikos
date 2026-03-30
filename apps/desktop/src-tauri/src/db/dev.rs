@@ -101,29 +101,3 @@ pub async fn backup_db(state: tauri::State<'_, DbState>) -> Result<String, Strin
     Ok(dest)
 }
 
-/// Run a seed scenario against the given DB path.
-/// Shells out to `pnpm seed <scenario> <db_path>` from the repo root.
-/// Only works in a development checkout — prod builds won't have the scripts directory.
-#[tauri::command]
-pub async fn run_seed(scenario: String, db_path: String) -> Result<String, String> {
-    // CARGO_MANIFEST_DIR = apps/desktop/src-tauri/ at compile time
-    let repo_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../");
-
-    let output = std::process::Command::new("pnpm")
-        .arg("seed")
-        .arg(&scenario)
-        .arg(&db_path)
-        .arg("--force")
-        .current_dir(repo_root)
-        .output()
-        .map_err(|e| format!("Failed to launch seed process: {e}"))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    if output.status.success() {
-        Ok(if stdout.is_empty() { "Done.".to_string() } else { stdout })
-    } else {
-        Err(if stderr.is_empty() { "Seed process failed with no output.".to_string() } else { stderr })
-    }
-}
