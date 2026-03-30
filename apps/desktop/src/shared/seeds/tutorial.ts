@@ -47,7 +47,6 @@ export async function seedTutorial(
 
   const welcome = await createPage({
     content: doc(
-      h2("Welcome to Pikos \ud83d\udc4b"),
       p(
         "Pikos combines notes, tasks, and a calendar into one app. " +
           "Every page is both a note and a task \u2014 no mode-switching required."
@@ -55,16 +54,17 @@ export async function seedTutorial(
       h3("Try these to get started"),
       tasks(
         { checked: false, text: "Press Cmd+N to quick-add a new page" },
-        { checked: false, text: "Open the calendar with Cmd+Shift+C" },
-        { checked: false, text: "Drag this page onto a calendar time slot to schedule it" },
-        { checked: false, text: "Click the status circle in the page list to mark a page done" },
-        { checked: false, text: "Press Cmd+P to search across all your pages" }
+        { checked: false, text: "Toggle the calendar with Cmd+Shift+C" },
+        { checked: false, text: "Drag a page onto a calendar time slot to schedule it" },
+        { checked: false, text: "Drag a page onto a folder in the sidebar to move it" },
+        { checked: false, text: "Click a checkbox to mark a page done" },
+        { checked: false, text: "Search across all pages with Cmd+P" }
       ),
       h3("When you\u2019re done exploring"),
       p(
-        "Right-click the Tutorial folder in the sidebar and delete it. " +
-          "Any pages you haven\u2019t deleted will move to your Inbox. " +
-          "Deleted a page by mistake? An undo toast appears \u2014 just click it."
+        "Right-click the Tutorial folder in the sidebar and delete it \u2014 " +
+          "all tutorial pages will be deleted along with it. " +
+          "Deleted something by mistake? An undo toast appears \u2014 just click it."
       )
     ),
     folderId: tutorial.id,
@@ -79,15 +79,14 @@ export async function seedTutorial(
 
   const workflow = await createPage({
     content: doc(
-      h2("The core workflow"),
       h3("1. Quick add (Cmd+N)"),
-      p("Press Cmd+N from anywhere. Type a title with optional tokens:"),
+      p("Press Cmd+N from anywhere. Type a title with optional metadata:"),
       bullets(
-        "review slides @tomorrow 2pm for 1h",
-        "call dentist @monday 9am !high",
+        "review slides tomorrow 2pm for 1h",
+        "call dentist monday 9am !high",
         "grocery list #personal ~Errands"
       ),
-      p("Tokens: @date, time, for duration, #tag, ~Folder, !priority."),
+      p("Metadata: date, time, for duration, #tag, ~Folder, !priority."),
       h3("2. Schedule"),
       bullets(
         "Drag a page from the list onto a calendar time slot",
@@ -96,11 +95,10 @@ export async function seedTutorial(
       ),
       h3("3. Complete"),
       bullets(
-        "Click the status circle in the page list",
-        "Click the status circle in the page editor",
+        "Click the checkbox in the page list",
+        "Click the checkbox in the page editor",
         "Hover a calendar block and click the checkmark"
-      ),
-      p("Status cycles: \u25CB Not started \u2192 \u25D1 In progress \u2192 \u2713 Done.")
+      )
     ),
     folderId: tutorial.id,
     priority: 0,
@@ -120,42 +118,44 @@ export async function seedTutorial(
 
   await createPage({
     content: doc(
-      h2("Keyboard shortcuts"),
       h3("Navigation"),
       bullets(
         "Cmd+N \u2014 Quick add a new page",
         "Cmd+P \u2014 Search all pages",
         "Cmd+Shift+C \u2014 Toggle between editor and calendar",
         "Cmd+\\ \u2014 Toggle sidebar",
-        "J / K \u2014 Move up / down in the page list",
-        "Enter \u2014 Open selected page"
+        "\u2191 / \u2193 \u2014 Move up / down in the page list"
       ),
       h3("Editor"),
+      p(
+        "The editor supports markdown shortcuts \u2014 type # for headings, " +
+          "- for bullets, [] for task lists, > for quotes, and ``` for code blocks."
+      ),
       bullets(
+        "/ \u2014 Open the slash menu to insert blocks",
         "Cmd+B / I / U \u2014 Bold / italic / underline",
-        "Tab / Shift+Tab \u2014 Indent / outdent lists",
-        "Esc \u2014 Return focus to the page list"
+        "Cmd+Shift+K \u2014 Add a link",
+        "Tab / Shift+Tab \u2014 Indent / outdent lists"
       ),
       h3("Managing pages"),
       bullets(
-        "Right-click a page to delete it",
-        "On the calendar, click a block then the trash icon to remove it",
+        "Right-click a page to move it to another folder or delete it",
+        "Drag the bottom edge of a calendar block to resize it",
         "Deleting shows an undo toast \u2014 click to recover"
       )
     ),
     folderId: tutorial.id,
     priority: 0,
     status: "not_started",
-    subtitle: "Everything you need, no mouse required",
+    subtitle: "Keyboard shortcuts and useful tips",
     tags: ["tutorial", "reference"],
-    title: "Keyboard shortcuts",
+    title: "Shortcuts & tips",
   });
 
   // ── Example: a real page with tasks ─────────────────────────────────────
 
   const example = await createPage({
     content: doc(
-      h2("Weekly planning"),
       p("Week of March 12 \u2014 priorities and action items."),
       h3("This week"),
       tasks(
@@ -193,10 +193,6 @@ function doc(...nodes: Node[]): string {
 
 function p(text: string): Node {
   return { content: [{ text, type: "text" }], type: "paragraph" };
-}
-
-function h2(text: string): Node {
-  return { attrs: { level: 2 }, content: [{ text, type: "text" }], type: "heading" };
 }
 
 function h3(text: string): Node {

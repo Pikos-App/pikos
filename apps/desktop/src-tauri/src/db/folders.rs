@@ -187,6 +187,18 @@ pub async fn update_folder(
 #[tauri::command]
 pub async fn delete_folder(state: State<'_, DbState>, id: String) -> Result<(), String> {
     let pool = state.get_pool().await?;
+    let now = now_iso();
+
+    // Soft-delete all pages in this folder before removing the folder itself.
+    // The ON DELETE SET NULL constraint would otherwise orphan them into the inbox.
+    sqlx::query("UPDATE pages SET deleted_at = ?, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL")
+        .bind(&now)
+        .bind(&now)
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     sqlx::query("DELETE FROM folders WHERE id = ?")
         .bind(&id)
         .execute(&pool)

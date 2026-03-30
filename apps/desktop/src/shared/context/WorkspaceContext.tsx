@@ -504,8 +504,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   async function deleteFolder(id: string) {
     await adapter.deleteFolder(id);
     setFolders((prev) => prev.filter((f) => f.id !== id));
-    // Pages in the deleted folder become inbox items (ON DELETE SET NULL in DB)
-    setPages((prev) => prev.map((p) => (p.folderId === id ? { ...p, folderId: null } : p)));
+    // Pages in the deleted folder are soft-deleted by the adapter
+    setPages((prev) => prev.filter((p) => p.folderId !== id));
   }
 
   async function scheduleOnce(pageId: string, start: string, end?: string): Promise<void> {

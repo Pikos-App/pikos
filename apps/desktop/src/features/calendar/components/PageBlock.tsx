@@ -303,7 +303,7 @@ export function PageBlock({
               !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
               isDone && "opacity-50",
               isDragging && "opacity-40",
-              inResizeZone ? "cursor-ns-resize" : undefined
+              inResizeZone ? "cursor-ns-resize" : "cursor-default"
             )}
             onClick={handleClick}
             onMouseDown={handleBlockMouseDown}

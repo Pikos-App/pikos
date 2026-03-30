@@ -181,12 +181,16 @@ export const SlashMenuList = forwardRef<SlashMenuListRef, SlashMenuListProps>(
             className="slash-menu-item"
             data-selected={index === selectedIndex}
             key={item.title}
-            onClick={() => command(item)}
+            onMouseDown={(e) => {
+              e.preventDefault(); // keep focus in the editor
+              command(item);
+            }}
             onMouseEnter={() => {
               if (!ignoreMouseUntilMove.current) {
                 setSelectedIndex(index);
               }
             }}
+            tabIndex={-1}
           >
             <span className="slash-menu-item-icon">{item.icon}</span>
             <span className="slash-menu-item-text">

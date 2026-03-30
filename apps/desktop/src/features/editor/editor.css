@@ -471,7 +471,7 @@
 
 .slash-menu-item {
   align-items: center;
-  background: transparent;
+  background-color: transparent;
   border: none;
   border-radius: 5px;
   color: var(--foreground);
@@ -480,11 +480,13 @@
   gap: 10px;
   padding: 6px 8px;
   text-align: left;
+  transition: background-color var(--transition-fast);
   width: 100%;
 }
 
+.slash-menu-item:hover,
 .slash-menu-item[data-selected="true"] {
-  background: var(--accent);
+  background-color: var(--accent);
 }
 
 .slash-menu-item-icon {

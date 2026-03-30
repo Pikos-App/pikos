@@ -467,7 +467,7 @@ describe("createFolder", () => {
 });
 
 describe("deleteFolder", () => {
-  it("removes folder and moves its pages to inbox (folderId null)", async () => {
+  it("removes folder and soft-deletes its pages", async () => {
     const { hook } = await setup();
 
     let folder!: Awaited<ReturnType<typeof hook.result.current.createFolder>>;
@@ -489,9 +489,8 @@ describe("deleteFolder", () => {
 
     // Folder removed
     expect(hook.result.current.folders.find((f) => f.id === folder.id)).toBeUndefined();
-    // Page moved to inbox
-    const movedPage = hook.result.current.pages.find((p) => p.id === folderPage.id);
-    expect(movedPage?.folderId).toBeNull();
+    // Page soft-deleted (no longer in active pages list)
+    expect(hook.result.current.pages.find((p) => p.id === folderPage.id)).toBeUndefined();
   });
 });
 

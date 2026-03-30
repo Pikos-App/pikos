@@ -28,13 +28,12 @@ export function FolderDeleteDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete &quot;{folderName}&quot;?</AlertDialogTitle>
           <AlertDialogDescription>
-            {pageCount} {pageCount === 1 ? "page" : "pages"} will be moved to Inbox. This cannot be
-            undone.
+            {pageCount} {pageCount === 1 ? "page" : "pages"} inside will also be deleted.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={onCancel}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>Delete &amp; Move to Inbox</AlertDialogAction>
+          <AlertDialogAction onClick={onConfirm}>Delete folder</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

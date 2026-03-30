@@ -251,6 +251,10 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   deleteFolder(id: string): Promise<void> {
+    // Soft-delete all pages in this folder (mirrors Rust backend behavior)
+    for (const page of this.pages.values()) {
+      if (page.folderId === id) this.softDeleted.add(page.id);
+    }
     this.folders.delete(id);
     return Promise.resolve();
   }
