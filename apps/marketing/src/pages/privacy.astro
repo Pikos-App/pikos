@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
 ---
 
 <Base title="Privacy Policy - Pikos" description="Pikos privacy policy. Your data stays on your device. Plain language, no legalese.">
@@ -13,60 +14,50 @@ import Base from "../layouts/Base.astro";
     </a>
 
     <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Privacy Policy</h1>
-    <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">Last updated: March 29, 2026</p>
+    <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">Effective: April 1, 2026</p>
 
     <div class="mt-10 space-y-6 text-base leading-relaxed text-gray-600 dark:text-gray-300">
 
       <p>
-        Pikos is a local-first app. This policy is short because we don't collect much. Here's exactly what happens with your data.
+        This policy is short because there isn't much to say.
       </p>
 
-      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">What stays on your device</h2>
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Your data stays on your device</h2>
 
       <p>
-        Everything you create in Pikos — notes, tasks, calendar events, folders, and settings — is stored in a local SQLite database on your machine. This data never leaves your device unless you explicitly choose to sync it.
+        Everything you create in Pikos — notes, tasks, calendar events, folders, and settings — is stored in a local database on your machine. There is no sign-up and no way for us to see what you write.
       </p>
 
       <p>
-        We cannot access, read, or recover your data. There is no server-side copy. If you delete the app, the data goes with it (unless you've backed it up yourself).
+        We cannot access, read, or recover your data. If you delete the app, the data goes with it unless you've backed it up yourself.
       </p>
 
-      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">What leaves your device (only with your action)</h2>
+      <p>
+        When iCloud sync is available, it will use Apple's infrastructure and your Apple account. Apple's privacy policy governs your data in transit and at rest on their servers.
+      </p>
 
-      <ul class="list-inside list-disc space-y-2">
-        <li>
-          <strong>iCloud sync:</strong> If you enable sync, your data is transferred via Apple's iCloud infrastructure using your Apple account. Pikos does not operate any sync servers. Apple's iCloud privacy policy governs that data in transit and at rest on their servers.
-        </li>
-        <li>
-          <strong>Email address (waitlist only):</strong> If you signed up on this website for early access, we stored your email address to send you one launch notification. We use <a href="https://resend.com" class="text-orange-500 hover:underline">Resend</a> to send that email. We don't sell, share, or use your email for anything else.
-        </li>
-      </ul>
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Crash reports</h2>
 
-      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">What we never collect</h2>
-
-      <ul class="list-inside list-disc space-y-2">
-        <li>Note content, task titles, or calendar event details</li>
-        <li>Usage analytics or telemetry from the desktop app</li>
-        <li>Cookies, fingerprints, or tracking pixels</li>
-        <li>Personal information beyond what you voluntarily provide</li>
-      </ul>
+      <p>
+        If the app crashes, it may send an anonymous error report to help us fix bugs. These reports contain technical details about the crash only — never your note content, task titles, calendar events, or any personal information.
+      </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Website analytics</h2>
 
       <p>
-        This website (pikos.app) may use privacy-first analytics to count page views. No cookies, no personal data, no cross-site tracking. You are never individually identified.
+        This website uses privacy-focused analytics to count page views and downloads. No cookies, no fingerprinting, no cross-site tracking. We see aggregate numbers — how many people visit each page and download the app. We cannot identify individual visitors.
       </p>
 
-      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Data export</h2>
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Your data is portable</h2>
 
       <p>
-        Your data is stored in a standard SQLite database file on your device. You can copy, back up, or inspect it at any time using any SQLite-compatible tool. There is no lock-in.
+        Your data is stored in a standard, open database format on your device. You can copy, back up, or move it at any time. There is no lock-in.
       </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Changes to this policy</h2>
 
       <p>
-        If this policy changes, we'll update the date at the top. For material changes (like collecting new data), we'll note it clearly here and, if possible, notify you in the app.
+        If this policy changes, we'll update the date at the top. For material changes — like collecting new data — we'll note it clearly here and in the app.
       </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Contact</h2>
@@ -77,15 +68,7 @@ import Base from "../layouts/Base.astro";
 
     </div>
 
-    <!-- Footer -->
-    <footer class="mt-20 border-t border-gray-100 pt-8 dark:border-gray-800">
-      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400 dark:text-gray-500">
-        <a href="/" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">Home</a>
-        <a href="/about" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">About</a>
-        <a href="/terms" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">Terms</a>
-        <span>Pikos by <a href="https://alexking.dev" class="text-orange-500 hover:underline">Alex</a></span>
-      </div>
-    </footer>
+    <Footer current="/privacy" />
 
   </main>
 </Base>

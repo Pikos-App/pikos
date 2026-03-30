@@ -151,9 +151,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // Attempts to reopen the most recently used workspace from the store.
   // On first launch (empty store) → sets isLoading=false, workspace stays null → WelcomeScreen.
 
+  const seedRanRef = useRef(false);
+
   useEffect(() => {
     if (import.meta.env["VITE_TEST_MODE"] === "true") {
-      // Test mode: no Tauri APIs available; skip auto-init and show welcome
+      const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
+      if (seedScenario) {
+        // Guard against React strict mode double-invoke
+        if (seedRanRef.current) return;
+        seedRanRef.current = true;
+
+        // Auto-seed and skip welcome screen for recording scripts
+        void (async () => {
+          if (seedScenario === "marketing") {
+            const { seedMarketing } = await import("@/shared/seeds/marketing");
+            await seedMarketing(adapter);
+          }
+          await loadWorkspaceDataRef.current();
+          setWorkspace({
+            createdAt: new Date().toISOString(),
+            dbPath: ":memory:",
+            id: "seed",
+            lastOpenedAt: new Date().toISOString(),
+            name: "Seed Workspace",
+          });
+        })();
+        return;
+      }
+      // Test mode without seed: show welcome screen
       setIsLoading(false);
       return;
     }

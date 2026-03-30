@@ -9,8 +9,9 @@
  *   dst        PST vs PDT edge cases (around US spring-forward)
  *   stress     Heavy load: many folders, pages, schedules
  *   realistic  Believable day-to-day life (work, personal, reading)
- *   demo       Polished data for screenshots and demo videos
- *   tutorial   Default onboarding content for first launch
+ *   demo            Polished data for screenshots and demo videos
+ *   demo-marketing  Generic, relatable data for marketing recordings
+ *   tutorial        Default onboarding content for first launch
  *
  * Options:
  *   --force    Delete the seed marker page and re-seed even if already run
@@ -26,6 +27,7 @@ import { run as dst } from "./seed-dst.ts";
 import { run as stress } from "./seed-stress.ts";
 import { run as realistic } from "./seed-realistic.ts";
 import { run as demo } from "./seed-demo.ts";
+import { run as demoMarketing } from "./seed-demo-marketing.ts";
 import { run as tutorial } from "./seed-tutorial.ts";
 import { defaultDbPath, openDb } from "./_db.ts";
 
@@ -34,6 +36,7 @@ const SCENARIOS: Record<string, (dbPath: string) => void> = {
   stress,
   realistic,
   demo,
+  "demo-marketing": demoMarketing,
   tutorial,
 };
 
@@ -42,6 +45,7 @@ const MARKERS: Record<string, string> = {
   stress: "⚙️ [seed-stress] Stress test marker",
   realistic: "⚙️ [seed-realistic] Realistic life marker",
   demo: "⚙️ [seed-demo] Demo data marker",
+  "demo-marketing": "⚙️ [seed-demo-marketing] Marketing demo data marker",
   tutorial: "Welcome to Pikos 👋",
 };
 
@@ -55,8 +59,9 @@ Pikos seed CLI
     dst         PST vs PDT DST edge cases
     stress      Heavy load (many folders, pages, schedules)
     realistic   Believable day-to-day life
-    demo        Polished data for screenshots / demo videos
-    tutorial    Default onboarding content
+    demo            Polished data for screenshots / demo videos
+    demo-marketing  Generic, relatable data for marketing recordings
+    tutorial        Default onboarding content
 
   Options:
     --force     Re-seed even if already run (deletes marker page first)

@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
 ---
 
 <Base title="Terms of Service - Pikos" description="Pikos terms of service. Plain language, no legalese.">
@@ -13,48 +14,52 @@ import Base from "../layouts/Base.astro";
     </a>
 
     <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Terms of Service</h1>
-    <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">Last updated: March 29, 2026</p>
+    <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">Effective: April 1, 2026</p>
 
     <div class="mt-10 space-y-6 text-base leading-relaxed text-gray-600 dark:text-gray-300">
 
       <p>
-        These terms govern your use of the Pikos application and the pikos.app website. By using either, you agree to these terms.
+        These terms govern your use of the Pikos application and the pikos.app website. By downloading or using either, you agree to these terms.
       </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Your data is yours</h2>
 
       <p>
-        Everything you create in Pikos — notes, tasks, calendar events — belongs to you. We claim no ownership or license over your content. Your data is stored locally on your device, and you can export, copy, or delete it at any time.
+        Everything you create in Pikos — notes, tasks, calendar events — belongs to you. We claim no ownership or license over your content. Your data is stored on your device, and you can export, copy, or delete it at any time.
       </p>
 
-      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Our software is ours</h2>
+      <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">License</h2>
 
       <p>
-        Pikos (the application, its code, design, and branding) is the intellectual property of its creator. Your purchase grants you a personal, non-exclusive, non-transferable license to use the application on your own devices. You may not redistribute, reverse-engineer, or resell the software.
+        Pikos is available as a free download and as a paid purchase on the Mac App Store. Both grant you a personal, non-exclusive, non-transferable license to use the application on your own devices.
+      </p>
+
+      <p>
+        You may not redistribute the software commercially or resell it.
       </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">What you get</h2>
 
       <p>
-        A one-time purchase gives you the current version of Pikos and all future updates for the major version you purchased. We intend to keep shipping updates, but we don't guarantee a specific cadence or feature set.
+        The free download includes the full application. A Mac App Store purchase includes the same application plus iCloud sync when available. We intend to keep shipping updates, but we don't guarantee a specific cadence or feature set.
       </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">No warranty</h2>
 
       <p>
-        Pikos is provided "as is" without warranty of any kind. We do our best to ship stable, reliable software, but we cannot guarantee it will be free of bugs or work perfectly in every environment. Use it at your own risk.
+        Pikos is provided "as is" without warranty of any kind. We do our best to ship stable, reliable software, but we cannot guarantee it will be free of bugs or work perfectly in every environment.
       </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Limitation of liability</h2>
 
       <p>
-        To the maximum extent permitted by law, we are not liable for any indirect, incidental, or consequential damages arising from your use of Pikos. Our total liability is limited to the amount you paid for the software.
+        To the maximum extent permitted by law, we are not liable for any indirect, incidental, or consequential damages arising from your use of Pikos. Our total liability is limited to the amount you paid for the software, if any.
       </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Acceptable use</h2>
 
       <p>
-        Don't use Pikos or this website for anything illegal. Don't attempt to exploit, attack, or interfere with our systems or other users. That's about it.
+        Don't use Pikos or this website for anything illegal. Don't attempt to exploit, attack, or interfere with our systems. That's about it.
       </p>
 
       <h2 class="pt-4 text-2xl font-semibold text-gray-900 dark:text-gray-50">Changes to these terms</h2>
@@ -71,15 +76,7 @@ import Base from "../layouts/Base.astro";
 
     </div>
 
-    <!-- Footer -->
-    <footer class="mt-20 border-t border-gray-100 pt-8 dark:border-gray-800">
-      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400 dark:text-gray-500">
-        <a href="/" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">Home</a>
-        <a href="/about" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">About</a>
-        <a href="/privacy" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">Privacy</a>
-        <span>Pikos by <a href="https://alexking.dev" class="text-orange-500 hover:underline">Alex</a></span>
-      </div>
-    </footer>
+    <Footer current="/terms" />
 
   </main>
 </Base>

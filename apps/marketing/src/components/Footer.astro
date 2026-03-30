@@ -1,0 +1,22 @@
+---
+interface Props {
+  /** Current page path — used to omit self-links */
+  current?: string;
+}
+const { current = "/" } = Astro.props;
+
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+];
+---
+
+<footer class:list={["mt-16 pt-8", current !== "/" && "border-t border-gray-100 dark:border-gray-800"]}>
+  <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400 dark:text-gray-500">
+    {links.filter((l) => l.href !== current).map((l) => (
+      <a href={l.href} class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">{l.label}</a>
+    ))}
+    <span>Pikos by <a href="https://alexking.dev" class="text-orange-500 hover:underline">Alex King</a></span>
+  </div>
+</footer>

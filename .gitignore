@@ -26,6 +26,7 @@ src-tauri/target/
 # Playwright
 playwright-report/
 test-results/
+recordings/
 
 # OS generated files
 Thumbs.db

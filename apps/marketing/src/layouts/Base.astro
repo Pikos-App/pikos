@@ -8,7 +8,7 @@ interface Props {
 
 const {
   title,
-  description = "Your notes, tasks, and calendar in one app. Everything stored on your device. No account required. Buy once, own forever.",
+  description = "Your notes, tasks, and calendar in one app. Everything stored on your device. No sign-up required. Free to download.",
 } = Astro.props;
 
 const ogImage = new URL("/og.png", Astro.site);
@@ -53,6 +53,9 @@ const ogImage = new URL("/og.png", Astro.site);
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="sitemap" href="/sitemap-index.xml" />
+
+    <!-- Analytics — privacy-focused, no cookies, no personal data -->
+    <script defer src="https://cloud.umami.is/script.js" data-website-id="8a780ae1-ed60-46f7-99e8-d76463e6f9d8"></script>
   </head>
   <body class="bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100">
     <slot />

@@ -70,6 +70,15 @@ export class MockStorageAdapter implements StorageAdapter {
   private rules = new Map<string, PageRecurrenceRule>();
   private softDeleted = new Set<string>();
 
+  /** Clear all data — used before re-seeding to prevent duplicates. */
+  clear(): void {
+    this.pages.clear();
+    this.folders.clear();
+    this.schedules.clear();
+    this.rules.clear();
+    this.softDeleted.clear();
+  }
+
   // ─── Pages ──────────────────────────────────────────────────────────────────
 
   getPage(id: string): Promise<Page | null> {

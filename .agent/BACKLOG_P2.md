@@ -457,6 +457,7 @@ _For long-term power features and deferred items — see `BACKLOG_P3.md`._
 To Document:
 - Marketing Site
   - help content - create new folders, pages, quick add dialog and NLP, keyboard shortcuts
+  - feedback collection board (self hosted?), account required?, prevent spam?
 
 - Editor
   - when searching in a file, show highlighted word / partial word, also show occurrence in scroll bar (like arc / vscode)

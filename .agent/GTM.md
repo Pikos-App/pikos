@@ -237,27 +237,27 @@ Primary non-technical discovery channel. Sandboxing adds work but the audience i
 
 #### Sync paths
 
-Two completely separate sync lanes — they don't need to overlap and shouldn't share a payment mechanism.
+Two separate sync lanes gated by how you got the app.
 
 ```
-PATH A — APPLE ECOSYSTEM (Mac App Store + iPhone App Store)
+PATH A — APP STORE (Mac App Store + iPhone App Store)
 ────────────────────────────────────────────────────────────
-Mac app      → purchased once from Mac App Store
-iPhone app   → purchased once from iOS App Store (when it ships)
-Sync         → iCloud, automatic, no account, no extra charge
+Mac app      → purchased once from Mac App Store ($19.99)
+iPhone app   → purchased once from iOS App Store ($9.99, when it ships)
+Sync         → iCloud, automatic, no extra charge
                (uses the user's existing iCloud storage — like Apple Notes)
-Revenue      → app purchase prices (Apple takes 30% / 15% for subscriptions)
+Revenue      → app purchase prices (Apple takes 30%)
 
 PATH B — DIRECT DOWNLOAD (website, Homebrew, GitHub)
 ────────────────────────────────────────────────────────────
 Mac/Win/Linux → downloaded free from pikos.app
-Sync          → optional: create account → your relay server
-Revenue       → subscription via Paddle or Lemon Squeezy (you keep ~95%)
+Sync          → none by default. Optional relay sync when available.
+Revenue       → relay sync subscription via Paddle or Lemon Squeezy (~95%)
 ```
 
-iCloud sync works in direct-download Mac apps too (users just need an Apple ID). This means a website user on Mac can sync to their iPhone via iCloud without ever buying the App Store version.
+**iCloud sync is exclusive to App Store purchases.** The free direct download is the full app, local only. iCloud sync is the clear, tangible reason to buy the App Store version. This avoids the bypass problem entirely — no need to rationalize free users getting sync.
 
-**The bypass question:** A user can download Pikos free from the website, use iCloud sync, and never pay anything. This is fine — zero marginal cost, and free users spread the product. The iPhone App Store app is the natural paywall for Apple ecosystem users. The paying customers for relay sync are Windows/Android users who can't bypass anything — they genuinely need your server.
+**Upgrade path:** A user downloads the free .dmg, uses the app locally, then buys the App Store version when they want sync (or when mobile ships). The App Store version picks up the existing local database — same file, same location. No data migration needed.
 
 #### Pricing
 
@@ -319,7 +319,7 @@ iCloud sync works in direct-download Mac apps too (users just need an Apple ID).
 | Relay sync | $39.99/yr or $4.99/mo | Cross-platform sync, E2EE | Paddle/Lemon Squeezy (~95% to you) |
 | Self-hosted relay | $0 | Run your own server | Goodwill |
 
-Free at launch. iCloud sync ships with Phase 4a (no extra charge, no relay infra needed). Relay sync and the paid subscription tier come with Phase 4b when Windows/Android users exist and ask for it.
+Free direct download at launch (full app, local only). iCloud sync is exclusive to App Store purchases — ships when the Mac App Store version launches. Relay sync comes later when cross-platform demand exists.
 
 ---
 

@@ -22,6 +22,11 @@ export default defineConfig({
       name: "perf",
       use: { ...devices["Desktop Safari"] },
     },
+    {
+      grep: /@recording/,
+      name: "recording",
+      use: { ...devices["Desktop Safari"] },
+    },
   ],
   reporter: [["list"], ["html", { open: "never" }]],
   retries: process.env["CI"] ? 2 : 0,

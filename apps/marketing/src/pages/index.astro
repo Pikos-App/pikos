@@ -1,6 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
-import EmailSignup from "../components/EmailSignup.astro";
+import Footer from "../components/Footer.astro";
 ---
 
 <Base title="Pikos - Notes, tasks, and calendar. Your device. Your data.">
@@ -43,11 +43,11 @@ import EmailSignup from "../components/EmailSignup.astro";
         <ul class="mt-5 space-y-2 text-sm text-gray-500 dark:text-gray-400">
           <li class="flex items-start gap-2">
             <span class="mt-0.5 text-orange-400">→</span>
-            Buy once, own forever. No subscription, no account required.
+            Free to download. No subscription, no sign-up.
           </li>
           <li class="flex items-start gap-2">
             <span class="mt-0.5 text-orange-400">→</span>
-            Syncs across your devices automatically with the iCloud you already have.
+            Your data stays on your device. We never see it.
           </li>
           <li class="flex items-start gap-2">
             <span class="mt-0.5 text-orange-400">→</span>
@@ -57,67 +57,63 @@ import EmailSignup from "../components/EmailSignup.astro";
 
         <div class="mt-8">
           <a
-            href="#waitlist"
+            href="#"
+            data-umami-event="download-mac"
             class="inline-flex items-center justify-center rounded-lg bg-orange-500 px-7 py-3.5 text-base font-medium text-white transition-colors hover:bg-orange-400 focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 focus:outline-none dark:focus:ring-offset-gray-950"
           >
-            Get early access
+            Download for Mac — Free
           </a>
-          <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">We'll email you when it's ready. No newsletters, no noise.</p>
+          <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">No sign-up, no tracking, no catch.</p>
         </div>
       </div>
 
       <!-- Right: product screenshot -->
       <div class="w-full min-w-0">
         <button
-          id="screenshot-btn"
-          aria-label="View full-size screenshot"
+          id="hero-video-btn"
+          aria-label="View full-size demo"
           class="group relative w-full rounded-xl ring-1 ring-black/8 dark:ring-white/10 pointer-events-none md:pointer-events-auto md:cursor-zoom-in md:focus:outline-none md:focus:ring-2 md:focus:ring-orange-400"
         >
-          <img
-            src="/pikos-notes-tasks-calendar-light.webp"
-            alt="Pikos app showing a weekly review page with notes, task status, and calendar scheduling"
+          <video
+            src="/pikos-hero-light.mp4"
+            autoplay loop muted playsinline
             class="w-full rounded-xl shadow-xl transition-opacity duration-200 dark:opacity-0"
-            width="1600"
-            height="1001"
-          />
-          <img
-            src="/pikos-notes-tasks-calendar-dark.webp"
-            alt=""
+          ></video>
+          <video
+            src="/pikos-hero-dark.mp4"
+            autoplay loop muted playsinline
             aria-hidden="true"
             class="absolute inset-0 w-full rounded-xl shadow-xl opacity-0 transition-opacity duration-200 dark:opacity-100"
-            width="1600"
-            height="1001"
-          />
+          ></video>
           <div class="absolute inset-0 rounded-xl bg-black/0 transition-colors duration-200 md:group-hover:bg-black/5 md:dark:group-hover:bg-white/5"></div>
         </button>
-      </div>
 
-      <!-- Lightbox -->
-      <div
-        id="lightbox"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Full-size screenshot"
-        class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm"
-      >
-        <!-- Container: 80vw × 80vh, centred -->
-        <div class="relative w-[80vw] max-w-[80vw]">
-          <button
-            id="lightbox-close"
-            aria-label="Close"
-            class="absolute -right-3 -top-3 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-gray-900 text-white shadow-lg ring-1 ring-white/20 transition-colors hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-white/60"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-          </button>
-          <img
-            id="lightbox-img"
-            src=""
-            alt="Pikos app showing a weekly review page with notes, task status, and calendar scheduling"
-            class="w-full rounded-xl shadow-2xl"
-            style="max-height: 80vh; object-fit: contain;"
-          />
+        <!-- Lightbox -->
+        <div
+          id="lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Full-size demo"
+          class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm"
+        >
+          <div class="relative w-[80vw] max-w-[80vw]">
+            <button
+              id="lightbox-close"
+              aria-label="Close"
+              class="absolute -right-3 -top-3 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-gray-900 text-white shadow-lg ring-1 ring-white/20 transition-colors hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-white/60"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+            <video
+              id="lightbox-video"
+              autoplay loop muted playsinline
+              class="w-full rounded-xl shadow-2xl"
+              style="max-height: 80vh; object-fit: contain;"
+            ></video>
+          </div>
         </div>
       </div>
+
 
     </div>
 
@@ -125,7 +121,7 @@ import EmailSignup from "../components/EmailSignup.astro";
     <section class="mt-28 max-w-4xl">
       <p class="text-2xl font-semibold text-gray-800 dark:text-gray-100">Write it once. It's a note, a task, and a calendar event.</p>
       <p class="mt-2 text-base leading-relaxed text-gray-500 dark:text-gray-400">
-        No converting, no copying, no switching apps. Instant, the moment you type it.
+        No converting, no copying, no switching apps.
       </p>
 
       <!-- Desktop diagram (md+) -->
@@ -233,7 +229,7 @@ import EmailSignup from "../components/EmailSignup.astro";
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
           </svg>
           <h3 class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Task</h3>
-          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Status, priority, due date. Recurring tasks surface automatically in Today and Inbox.</p>
+          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Add status, priority, and a due date. Recurring tasks just appear.</p>
         </div>
 
         <!-- Connector: plain line -->
@@ -253,44 +249,7 @@ import EmailSignup from "../components/EmailSignup.astro";
       </div>
     </section>
 
-    <!-- Email capture -->
-    <section id="waitlist" class="mt-24 border-t border-gray-100 pt-16 dark:border-gray-800">
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-50">Get early access.</h2>
-      <p class="mt-2 text-gray-500 dark:text-gray-400">
-        One email when Pikos launches. No newsletters, no noise.
-      </p>
-
-      <div class="mt-5 flex flex-wrap gap-3">
-        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-          Buy once, own forever
-        </span>
-        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-          iCloud sync built in
-        </span>
-        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-          No account required
-        </span>
-        <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-          Your data stays on your device
-        </span>
-      </div>
-
-      <EmailSignup />
-    </section>
-
-    <!-- Footer -->
-    <footer class="mt-16 pt-16">
-      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400 dark:text-gray-500">
-        <a href="/about" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">About</a>
-        <a href="/privacy" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">Privacy</a>
-        <a href="/terms" class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">Terms</a>
-        <span>Pikos by <a href="https://alexking.dev" class="text-orange-500 hover:underline">Alex</a></span>
-      </div>
-    </footer>
+    <Footer current="/" />
 
   </main>
 </Base>
@@ -333,29 +292,29 @@ import EmailSignup from "../components/EmailSignup.astro";
   applyTheme(html.classList.contains("dark"));
 
   // Lightbox
-  const screenshotBtn = document.getElementById("screenshot-btn")!;
+  const heroBtn = document.getElementById("hero-video-btn")!;
   const lightbox = document.getElementById("lightbox")!;
-  const lightboxImg = document.getElementById("lightbox-img") as HTMLImageElement;
+  const lightboxVideo = document.getElementById("lightbox-video") as HTMLVideoElement;
   const lightboxClose = document.getElementById("lightbox-close")!;
 
   function openLightbox() {
     if (window.innerWidth < 768) return;
     const dark = html.classList.contains("dark");
-    lightboxImg.src = dark
-      ? "/pikos-notes-tasks-calendar-dark.webp"
-      : "/pikos-notes-tasks-calendar-light.webp";
+    lightboxVideo.src = dark ? "/pikos-hero-dark.mp4" : "/pikos-hero-light.mp4";
     lightbox.classList.remove("hidden");
     lightbox.classList.add("flex");
     document.body.style.overflow = "hidden";
   }
 
   function closeLightbox() {
+    lightboxVideo.pause();
+    lightboxVideo.removeAttribute("src");
     lightbox.classList.add("hidden");
     lightbox.classList.remove("flex");
     document.body.style.overflow = "";
   }
 
-  screenshotBtn.addEventListener("click", openLightbox);
+  heroBtn.addEventListener("click", openLightbox);
   lightboxClose.addEventListener("click", closeLightbox);
   lightbox.addEventListener("click", (e) => {
     if (e.target === lightbox) closeLightbox();
@@ -363,5 +322,6 @@ import EmailSignup from "../components/EmailSignup.astro";
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeLightbox();
   });
+
 
 </script>
