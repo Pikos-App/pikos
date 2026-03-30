@@ -150,16 +150,16 @@ appTest("create and navigate folders @tier1", async ({ app }) => {
 
   // Confirmation dialog shows page count and folder name
   await expect(app.getByText(/Delete "Projects"/)).toBeVisible();
-  await app.getByRole("button", { name: /Delete & Move to Inbox/ }).click();
+  await app.getByRole("button", { name: /Delete folder/ }).click();
 
   // Folder is gone from sidebar
   await expect(app.getByRole("button", { name: "Projects" })).not.toBeVisible();
 
-  // Orphaned page moved to Inbox
+  // Child pages are soft-deleted (not moved to Inbox)
   await app.getByRole("button", { name: /Inbox/ }).click();
   await expect(
     app.locator("[data-page-list-item]").filter({ hasText: "folder page" })
-  ).toBeVisible();
+  ).not.toBeVisible();
 });
 
 // ─── T1-6: Today view shows scheduled pages ─────────────────────────────────
