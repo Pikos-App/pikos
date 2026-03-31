@@ -266,11 +266,26 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       >
         {visiblePages.length === 0 && completedPages.length === 0 ? (
           activeViewId === "today" ? (
-            <EmptyState icon={Sun} message="Nothing scheduled for today" />
+            <EmptyState icon={Sun} message="Nothing scheduled for today">
+              <p className="type-ui-sm mt-1 text-subtle">
+                Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
+                to create a page or drag one here
+              </p>
+            </EmptyState>
           ) : activeViewId === "inbox" ? (
-            <EmptyState icon={CircleCheck} message="No pages in your inbox" />
+            <EmptyState icon={CircleCheck} message="No pages in your inbox">
+              <p className="type-ui-sm mt-1 text-subtle">
+                Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
+                to create a new page
+              </p>
+            </EmptyState>
           ) : (
-            <EmptyState icon={FilePlus} message="No pages in this folder" />
+            <EmptyState icon={FilePlus} message="No pages in this folder">
+              <p className="type-ui-sm mt-1 text-subtle">
+                Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
+                to add a page
+              </p>
+            </EmptyState>
           )
         ) : isTodayView ? (
           // Today view: Overdue (collapsible) + Today sections.

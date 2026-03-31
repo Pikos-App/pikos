@@ -40,7 +40,7 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
 // ─── weekStart / weekDays / weekEnd ──────────────────────────────────────────
 
 describe("weekStart", () => {
-  it("returns Monday for a Wednesday", () => {
+  it("returns Monday for a Wednesday (default)", () => {
     const wed = new Date(2026, 2, 18); // Wednesday March 18
     const monday = weekStart(wed);
     expect(monday.getDay()).toBe(1); // Monday
@@ -58,10 +58,22 @@ describe("weekStart", () => {
     expect(monday.getDay()).toBe(1);
     expect(monday.getDate()).toBe(16);
   });
+
+  it("returns Sunday when weekStartsOn=0", () => {
+    const wed = new Date(2026, 2, 18); // Wednesday March 18
+    const sunday = weekStart(wed, 0);
+    expect(sunday.getDay()).toBe(0); // Sunday
+    expect(sunday.getDate()).toBe(15);
+  });
+
+  it("returns same day when given a Sunday with weekStartsOn=0", () => {
+    const sun = new Date(2026, 2, 15); // Sunday March 15
+    expect(weekStart(sun, 0).getDate()).toBe(15);
+  });
 });
 
 describe("weekDays", () => {
-  it("returns 7 days starting from Monday", () => {
+  it("returns 7 days starting from Monday (default)", () => {
     const wed = new Date(2026, 2, 18);
     const days = weekDays(wed);
     expect(days).toHaveLength(7);
@@ -76,14 +88,29 @@ describe("weekDays", () => {
       expect(diff).toBe(1);
     }
   });
+
+  it("returns 7 days starting from Sunday with weekStartsOn=0", () => {
+    const wed = new Date(2026, 2, 18);
+    const days = weekDays(wed, 0);
+    expect(days).toHaveLength(7);
+    expect(days[0]!.getDay()).toBe(0); // Sunday
+    expect(days[6]!.getDay()).toBe(6); // Saturday
+  });
 });
 
 describe("weekEnd", () => {
-  it("returns Sunday for a Wednesday", () => {
+  it("returns Sunday for a Wednesday (default)", () => {
     const wed = new Date(2026, 2, 18);
     const sunday = weekEnd(wed);
     expect(sunday.getDay()).toBe(0); // Sunday
     expect(sunday.getDate()).toBe(22);
+  });
+
+  it("returns Saturday for a Wednesday with weekStartsOn=0", () => {
+    const wed = new Date(2026, 2, 18);
+    const saturday = weekEnd(wed, 0);
+    expect(saturday.getDay()).toBe(6); // Saturday
+    expect(saturday.getDate()).toBe(21);
   });
 });
 

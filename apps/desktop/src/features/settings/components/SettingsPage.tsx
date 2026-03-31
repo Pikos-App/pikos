@@ -7,6 +7,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
 import { AppearanceSettings } from "./AppearanceSettings";
+import { EditorSettings } from "./EditorSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { ShortcutsSettings } from "./ShortcutsSettings";
@@ -58,6 +59,7 @@ export function SettingsPage() {
       <div className="flex-1 overflow-y-auto p-8">
         {section === "general" && <GeneralSettings />}
         {section === "appearance" && <AppearanceSettings />}
+        {section === "editor" && <EditorSettings />}
         {section === "shortcuts" && <ShortcutsSettings />}
         {section === "developer" && DeveloperSettings && (
           <Suspense>

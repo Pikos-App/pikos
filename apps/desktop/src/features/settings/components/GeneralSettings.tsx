@@ -5,6 +5,9 @@ import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Download, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { cn } from "@/lib/utils";
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
+import type { WeekStart } from "@/shared/context/AppSettingsContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 interface DbStats {
@@ -98,11 +101,13 @@ function ExportRow({
 }
 
 export function GeneralSettings() {
-  const { workspace } = useWorkspace();
+  const { folders, workspace } = useWorkspace();
+  const { defaultFolderId, setDefaultFolderId, setWeekStart, weekStart } = useAppSettings();
   const [stats, setStats] = useState<DbStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
   const [jsonExport, setJsonExport] = useState<ExportState>({ status: "idle" });
+  const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
 
   useEffect(() => {
     if (!workspace) return;
@@ -128,6 +133,16 @@ export function GeneralSettings() {
       setJsonExport({ path: dest, status: "done" });
     } catch (e: unknown) {
       setJsonExport({ message: String(e), status: "error" });
+    }
+  }
+
+  async function handleExportMarkdown() {
+    setMarkdownExport({ status: "saving" });
+    try {
+      const dest = await invoke<string>("export_markdown");
+      setMarkdownExport({ path: dest, status: "done" });
+    } catch (e: unknown) {
+      setMarkdownExport({ message: String(e), status: "error" });
     }
   }
 
@@ -162,6 +177,62 @@ export function GeneralSettings() {
         </div>
       </SettingsSection>
 
+      {/* ── Preferences ─────────────────────────────────────────────────── */}
+      <SettingsSection title="Preferences">
+        <div className="rounded-lg border border-border bg-card px-4">
+          {/* Week starts on */}
+          <div className="flex items-center justify-between border-b border-border py-3">
+            <div>
+              <p className="text-sm font-medium">Week starts on</p>
+              <p className="text-xs text-muted-foreground">
+                Controls the calendar and date picker layout.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-md border border-border bg-background p-0.5">
+              {[
+                { id: 1 as WeekStart, label: "Monday" },
+                { id: 0 as WeekStart, label: "Sunday" },
+              ].map((opt) => (
+                <button
+                  className={cn(
+                    "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                    weekStart === opt.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  key={opt.id}
+                  onClick={() => setWeekStart(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Default folder */}
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-sm font-medium">Default folder for new pages</p>
+              <p className="text-xs text-muted-foreground">
+                Used when no folder is selected in the sidebar.
+              </p>
+            </div>
+            <select
+              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
+              onChange={(e) => setDefaultFolderId(e.target.value || null)}
+              value={defaultFolderId ?? ""}
+            >
+              <option value="">Inbox</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </SettingsSection>
+
       {/* ── Data ───────────────────────────────────────────────────────── */}
       <SettingsSection
         description="Your data is stored locally and never leaves your device."
@@ -188,6 +259,13 @@ export function GeneralSettings() {
             label="Export as JSON"
             onExport={() => void handleExportJson()}
             state={jsonExport}
+          />
+          <ExportRow
+            description="Markdown files with YAML frontmatter. Obsidian-compatible."
+            disabled={!workspace}
+            label="Export as Markdown"
+            onExport={() => void handleExportMarkdown()}
+            state={markdownExport}
           />
         </div>
 

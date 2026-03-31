@@ -4,6 +4,7 @@ use serde::Serialize;
 use sqlx::{Column, Row};
 
 use crate::db::DbState;
+use crate::markdown::prosemirror_to_markdown;
 
 #[derive(Serialize)]
 pub struct DbStats {
@@ -178,5 +179,130 @@ pub async fn backup_db(state: tauri::State<'_, DbState>) -> Result<String, Strin
         .map_err(|e| e.to_string())?;
 
     Ok(dest)
+}
+
+/// Export all pages as Markdown files to ~/Downloads/pikos-markdown-<timestamp>/.
+/// Each page becomes a .md file with YAML frontmatter (title, status, priority, tags,
+/// scheduled dates). Folder structure is preserved as subdirectories.
+#[tauri::command]
+pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String, String> {
+    let pool = state.get_pool().await?;
+
+    // Fetch folders for directory mapping
+    let folders = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, name FROM folders ORDER BY sort_order"
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let folder_names: std::collections::HashMap<String, String> =
+        folders.into_iter().collect();
+
+    // Fetch all non-deleted pages
+    let pages = sqlx::query(
+        "SELECT id, folder_id, title, content, status, priority, tags, \
+         scheduled_start, scheduled_end, created_at, updated_at \
+         FROM pages WHERE deleted_at IS NULL ORDER BY sort_order"
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let home = std::env::var("HOME").map_err(|e| format!("$HOME not set: {e}"))?;
+    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
+    let base_dir = format!("{}/Downloads/pikos-markdown-{}", home, timestamp);
+
+    std::fs::create_dir_all(&base_dir).map_err(|e| e.to_string())?;
+
+    for row in &pages {
+        let title: String = row.try_get("title").unwrap_or_default();
+        let content: String = row.try_get("content").unwrap_or_default();
+        let status: String = row.try_get("status").unwrap_or_default();
+        let priority: i64 = row.try_get("priority").unwrap_or(0);
+        let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
+        let scheduled_start: Option<String> = row.try_get("scheduled_start").ok();
+        let scheduled_end: Option<String> = row.try_get("scheduled_end").ok();
+        let created_at: String = row.try_get("created_at").unwrap_or_default();
+        let updated_at: String = row.try_get("updated_at").unwrap_or_default();
+        let folder_id: Option<String> = row.try_get("folder_id").ok();
+
+        // Determine output directory
+        let out_dir = match folder_id.as_deref() {
+            Some(fid) => {
+                let folder_name = folder_names
+                    .get(fid)
+                    .map(|n| sanitize_filename(n))
+                    .unwrap_or_else(|| "Uncategorized".to_string());
+                let dir = format!("{}/{}", base_dir, folder_name);
+                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                dir
+            }
+            None => base_dir.clone(),
+        };
+
+        // Build filename from title
+        let filename = if title.is_empty() {
+            "Untitled".to_string()
+        } else {
+            sanitize_filename(&title)
+        };
+        let filepath = format!("{}/{}.md", out_dir, filename);
+
+        // Build YAML frontmatter
+        let mut frontmatter = String::from("---\n");
+        frontmatter.push_str(&format!("title: \"{}\"\n", title.replace('"', "\\\"")));
+        if status != "not_started" {
+            frontmatter.push_str(&format!("status: {}\n", status));
+        }
+        if priority != 0 {
+            frontmatter.push_str(&format!("priority: {}\n", priority));
+        }
+        // Parse tags JSON array
+        if let Ok(tag_list) = serde_json::from_str::<Vec<String>>(&tags) {
+            if !tag_list.is_empty() {
+                frontmatter.push_str("tags:\n");
+                for tag in &tag_list {
+                    frontmatter.push_str(&format!("  - \"{}\"\n", tag.replace('"', "\\\"")));
+                }
+            }
+        }
+        if let Some(ref start) = scheduled_start {
+            frontmatter.push_str(&format!("scheduled_start: \"{}\"\n", start));
+        }
+        if let Some(ref end) = scheduled_end {
+            frontmatter.push_str(&format!("scheduled_end: \"{}\"\n", end));
+        }
+        frontmatter.push_str(&format!("created: \"{}\"\n", created_at));
+        frontmatter.push_str(&format!("updated: \"{}\"\n", updated_at));
+        frontmatter.push_str("---\n\n");
+
+        // Convert ProseMirror JSON → Markdown
+        let body = if content.is_empty() || content == "{}" {
+            String::new()
+        } else {
+            match serde_json::from_str::<serde_json::Value>(&content) {
+                Ok(doc) => prosemirror_to_markdown(&doc),
+                Err(_) => String::new(),
+            }
+        };
+
+        let full = format!("{}{}", frontmatter, body);
+        std::fs::write(&filepath, full).map_err(|e| e.to_string())?;
+    }
+
+    Ok(base_dir)
+}
+
+/// Sanitize a string for use as a filename — replace problematic characters.
+fn sanitize_filename(name: &str) -> String {
+    name.chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => c,
+        })
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
