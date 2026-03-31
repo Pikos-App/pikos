@@ -26,9 +26,23 @@
       "capabilities": ["default"]
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/alex-ak/pkos/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "category": "Productivity",
+    "shortDescription": "Notes, tasks, and calendar — local-first",
+    "longDescription": "Pikos combines notes, tasks, and a calendar into one local-first app. Your data stays on your device — no account required, no cloud sync by default."
   }
 }
