@@ -5,6 +5,7 @@
 import { format, isSameWeek } from "date-fns";
 import { useEffect, useState } from "react";
 
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -16,6 +17,7 @@ export function CalendarView() {
   const { createPage, deletePage, pages, scheduleOnce, updatePage } = useWorkspace();
   const { activeViewId, openPage, referenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
+  const { defaultFolderId: settingsDefaultFolder, weekStart } = useAppSettings();
   const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
   // ID of the page currently being inline-edited after calendar creation.
@@ -26,8 +28,8 @@ export function CalendarView() {
     (document.activeElement as HTMLElement | null)?.blur();
   }, []);
 
-  const days = weekDays(referenceDate);
-  const isCurrentWeek = isSameWeek(referenceDate, new Date(), { weekStartsOn: 1 });
+  const days = weekDays(referenceDate, weekStart);
+  const isCurrentWeek = isSameWeek(referenceDate, new Date(), { weekStartsOn: weekStart });
 
   // Double-click on a PageBlock opens the page in the editor.
   function handlePageDoubleClick(pageId: string) {
@@ -36,8 +38,9 @@ export function CalendarView() {
 
   // Click or drag on an empty time slot → create page + enter inline editing.
   async function handleCreatePage(day: Date, start: Date, end?: Date) {
-    // Default folder: active folder, or null (Inbox) for Today/Inbox views.
-    const folderId = activeViewId === "today" || activeViewId === "inbox" ? null : activeViewId;
+    // Default folder: active folder, then settings default, then Inbox.
+    const folderId =
+      activeViewId === "today" || activeViewId === "inbox" ? settingsDefaultFolder : activeViewId;
 
     const page = await createPage({ folderId });
     // Use local-time format (no Z suffix) — SQLite's date() functions require this.

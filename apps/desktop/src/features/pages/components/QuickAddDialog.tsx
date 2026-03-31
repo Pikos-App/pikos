@@ -15,6 +15,7 @@ import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { TagsPopover } from "@/features/pages/components/TagsPopover";
 import { cn } from "@/lib/utils";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -59,6 +60,7 @@ export function QuickAddDialog() {
   const { createPage, folders, scheduleOnce, tags, updatePage } = useWorkspace();
   const allTagNames = tags.map((t) => t.name);
   const { activeViewId, openDialog, setOpenDialog } = useUI();
+  const { defaultFolderId: settingsDefaultFolder } = useAppSettings();
 
   const isOpen = openDialog === "quick-add";
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,7 +69,9 @@ export function QuickAddDialog() {
   const [shake, setShake] = useState(false);
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
 
-  const defaultFolderId = folders.find((folder) => folder.id === activeViewId)?.id ?? null;
+  // Active sidebar folder takes precedence, then settings default, then Inbox (null).
+  const defaultFolderId =
+    folders.find((folder) => folder.id === activeViewId)?.id ?? settingsDefaultFolder;
 
   // ── Chip state ───────────────────────────────────────────────────────────────
   // Each field has an NLP-set value and a "manually set" flag. runPreview only

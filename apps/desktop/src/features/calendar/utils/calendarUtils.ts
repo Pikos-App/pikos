@@ -66,20 +66,20 @@ export function chipFolderStyle(folderColor: string): {
 
 // ─── Week helpers ─────────────────────────────────────────────────────────────
 
-/** Returns the Monday of the week containing `date`. */
-export function weekStart(date: Date): Date {
-  return startOfWeek(date, { weekStartsOn: 1 });
+/** Returns the first day of the week containing `date`. */
+export function weekStart(date: Date, weekStartsOn: 0 | 1 = 1): Date {
+  return startOfWeek(date, { weekStartsOn });
 }
 
-/** Returns array of 7 Date objects for the week containing `date` (Mon–Sun). */
-export function weekDays(date: Date): Date[] {
-  const monday = weekStart(date);
-  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+/** Returns array of 7 Date objects for the week containing `date`. */
+export function weekDays(date: Date, weekStartsOn: 0 | 1 = 1): Date[] {
+  const first = weekStart(date, weekStartsOn);
+  return Array.from({ length: 7 }, (_, i) => addDays(first, i));
 }
 
-/** Returns the last day (Sunday) of the week containing `date`. */
-export function weekEnd(date: Date): Date {
-  return endOfWeek(date, { weekStartsOn: 1 });
+/** Returns the last day of the week containing `date`. */
+export function weekEnd(date: Date, weekStartsOn: 0 | 1 = 1): Date {
+  return endOfWeek(date, { weekStartsOn });
 }
 
 // ─── All-day detection ────────────────────────────────────────────────────────

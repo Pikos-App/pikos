@@ -6,6 +6,7 @@ import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
 import { SettingsPage } from "@/features/settings";
 import { UndoToast } from "@/shared/components/UndoToast";
+import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
 import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
 import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
@@ -140,17 +141,19 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <WorkspaceProvider>
-          <UIProvider>
-            <EditorSettingsProvider>
-              <UndoDeleteProvider>
-                <TooltipProvider delayDuration={400}>
-                  <WorkspaceGate />
-                </TooltipProvider>
-              </UndoDeleteProvider>
-            </EditorSettingsProvider>
-          </UIProvider>
-        </WorkspaceProvider>
+        <AppSettingsProvider>
+          <WorkspaceProvider>
+            <UIProvider>
+              <EditorSettingsProvider>
+                <UndoDeleteProvider>
+                  <TooltipProvider delayDuration={400}>
+                    <WorkspaceGate />
+                  </TooltipProvider>
+                </UndoDeleteProvider>
+              </EditorSettingsProvider>
+            </UIProvider>
+          </WorkspaceProvider>
+        </AppSettingsProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

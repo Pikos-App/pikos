@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
 
 // ── ISO formatters ────────────────────────────────────────────────────────────
 
@@ -154,7 +155,8 @@ const MONTH_NAMES = [
   "November",
   "December",
 ];
-const DAY_ABBRS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const DAY_ABBRS_SUNDAY = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const DAY_ABBRS_MONDAY = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
 // Fixed height: nav (24px + 8px mb) + day headers (~16px) + 6 rows × 26px = 204px.
 const CAL_HEIGHT = 48 + 6 * 26;
@@ -166,6 +168,7 @@ interface MiniCalendarProps {
   onSelect: (date: Date) => void;
   onPrev: () => void;
   onNext: () => void;
+  weekStartsOn?: 0 | 1;
 }
 
 export function MiniCalendar({
@@ -174,11 +177,15 @@ export function MiniCalendar({
   onPrev,
   onSelect,
   selectedDate,
+  weekStartsOn = 1,
   year,
 }: MiniCalendarProps) {
   const today = new Date();
-  const firstDayOfWeek = new Date(year, month, 1).getDay();
+  const rawDay = new Date(year, month, 1).getDay();
+  // Shift so the grid starts on the correct day (0=Sun or 1=Mon)
+  const firstDayOfWeek = (rawDay - weekStartsOn + 7) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const dayAbbrs = weekStartsOn === 1 ? DAY_ABBRS_MONDAY : DAY_ABBRS_SUNDAY;
 
   const cells: (number | null)[] = [];
   for (let dayOfWeek = 0; dayOfWeek < firstDayOfWeek; dayOfWeek++) cells.push(null);
@@ -208,7 +215,7 @@ export function MiniCalendar({
       </div>
 
       <div className="grid grid-cols-7">
-        {DAY_ABBRS.map((day) => (
+        {dayAbbrs.map((day) => (
           <div
             className="pb-1 text-center text-[10px] font-medium tracking-wide text-muted-foreground/60"
             key={day}
@@ -285,6 +292,7 @@ export function DateTimePicker({
   onEndChange,
   value,
 }: DateTimePickerProps) {
+  const { weekStart } = useAppSettings();
   const [open, setOpen] = useState(false);
 
   // ── Calendar navigation state ────────────────────────────────────────────────
@@ -637,6 +645,7 @@ export function DateTimePicker({
                 }}
                 onSelect={selectDate}
                 selectedDate={selectedDate}
+                weekStartsOn={weekStart}
                 year={viewYear}
               />
             </div>
