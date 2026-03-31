@@ -494,6 +494,71 @@ describe("deleteFolder", () => {
   });
 });
 
+// ─── softDeleteFolder / restoreFolder ────────────────────────────────────────
+
+describe("softDeleteFolder", () => {
+  it("hides folder and its pages from state", async () => {
+    const { hook } = await setup();
+
+    let folder!: Awaited<ReturnType<typeof hook.result.current.createFolder>>;
+    await act(async () => {
+      folder = await hook.result.current.createFolder({ name: "Soft" });
+    });
+
+    let folderPage!: Page;
+    await act(async () => {
+      folderPage = await hook.result.current.createPage({
+        folderId: folder.id,
+        title: "Soft Page",
+      });
+    });
+
+    await act(async () => {
+      await hook.result.current.softDeleteFolder(folder.id);
+    });
+
+    expect(hook.result.current.folders.find((f) => f.id === folder.id)).toBeUndefined();
+    expect(hook.result.current.pages.find((p) => p.id === folderPage.id)).toBeUndefined();
+  });
+});
+
+describe("restoreFolder", () => {
+  it("restores folder and its pages after soft-delete", async () => {
+    const { hook } = await setup();
+
+    let folder!: Awaited<ReturnType<typeof hook.result.current.createFolder>>;
+    await act(async () => {
+      folder = await hook.result.current.createFolder({ name: "Restorable" });
+    });
+
+    let folderPage!: Page;
+    await act(async () => {
+      folderPage = await hook.result.current.createPage({
+        folderId: folder.id,
+        title: "Restorable Page",
+      });
+    });
+
+    await act(async () => {
+      await hook.result.current.softDeleteFolder(folder.id);
+    });
+
+    // Both gone
+    expect(hook.result.current.folders.find((f) => f.id === folder.id)).toBeUndefined();
+    expect(hook.result.current.pages.find((p) => p.id === folderPage.id)).toBeUndefined();
+
+    await act(async () => {
+      await hook.result.current.restoreFolder(folder.id);
+    });
+
+    // Both restored
+    expect(hook.result.current.folders.find((f) => f.id === folder.id)?.name).toBe("Restorable");
+    expect(hook.result.current.pages.find((p) => p.id === folderPage.id)?.title).toBe(
+      "Restorable Page"
+    );
+  });
+});
+
 // ─── searchTags ──────────────────────────────────────────────────────────────
 
 describe("searchTags", () => {
