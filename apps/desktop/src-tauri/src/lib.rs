@@ -27,6 +27,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .menu(|handle| {
             // Custom menu without Print (Cmd+P) — that shortcut is used for search palette.
             let app_menu = SubmenuBuilder::new(handle, "Pikos")
