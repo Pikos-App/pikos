@@ -57,6 +57,10 @@ export interface WorkspaceContextValue {
   createFolder: (opts: { name: string; color?: string }) => Promise<Folder>;
   updateFolder: (id: string, updates: FolderUpdate) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
+  /** Soft-delete folder + all its pages. Recoverable via restoreFolder. */
+  softDeleteFolder: (id: string) => Promise<void>;
+  /** Restore a soft-deleted folder and all its pages. */
+  restoreFolder: (id: string) => Promise<void>;
   reorderPages: (folderId: string | null, orderedIds: string[]) => Promise<void>;
   reorderFolders: (orderedIds: string[]) => Promise<void>;
   /** Create or update the one-off schedule block for a page. */
@@ -508,6 +512,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setPages((prev) => prev.filter((p) => p.folderId !== id));
   }
 
+  async function softDeleteFolder(id: string) {
+    await adapter.softDeleteFolder(id);
+    setFolders((prev) => prev.filter((f) => f.id !== id));
+    setPages((prev) => prev.filter((p) => p.folderId !== id));
+  }
+
+  async function restoreFolder(id: string) {
+    await adapter.restoreFolder(id);
+    // Re-fetch folders and pages to get the restored state
+    const [loadedPages, loadedFolders] = await Promise.all([
+      adapter.listPages(),
+      adapter.listFolders(),
+    ]);
+    setPages(loadedPages);
+    setFolders(loadedFolders);
+  }
+
   async function scheduleOnce(pageId: string, start: string, end?: string): Promise<void> {
     const snapshot = pages.find((p) => p.id === pageId);
     // Optimistic update
@@ -700,11 +721,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     reorderFolders,
     reorderPages,
     resetAndSeed,
+    restoreFolder,
     restorePage,
     scheduleOnce,
     searchPages,
     searchTags,
     selectWorkspace,
+    softDeleteFolder,
     softDeletePage,
     tags,
     updateFolder,

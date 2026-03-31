@@ -1,11 +1,11 @@
 "use client";
 
-// UndoDeleteContext — app-wide deferred page deletion with undo.
-// Pages are hidden from the UI immediately; the real DB delete fires when the
+// UndoDeleteContext — app-wide deferred page/folder deletion with undo.
+// Items are hidden from the UI immediately; the real DB delete fires when the
 // UndoToast timer expires (onDismiss). Undo cancels the pending delete.
 // Callers are responsible for deselecting the active page before calling requestDeletePage.
 
-import type { PageSummary } from "@pikos/core";
+import type { Folder, PageSummary } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
 import type { UndoToastItem } from "@/shared/components/UndoToast";
@@ -14,61 +14,116 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 export interface UndoDeleteContextValue {
   /** Request a deferred delete — hides the page immediately, commits after the toast expires. */
   requestDeletePage: (page: Pick<PageSummary, "id" | "title">) => void;
+  /** Request a deferred folder delete — hides folder + pages immediately, commits after toast expires. */
+  requestDeleteFolder: (folder: Folder, pageCount: number) => void;
   /** Set of page IDs currently pending deletion — filter these from all views. */
-  hiddenIds: Set<string>;
+  hiddenPageIds: Set<string>;
+  /** Set of folder IDs currently pending deletion — filter these from all views. */
+  hiddenFolderIds: Set<string>;
   /** Items to render in the UndoToast. */
   undoItems: UndoToastItem[];
   /** Called by UndoToast when the visual timer expires — commits the real DB delete. */
   handleUndoDismiss: (id: string) => void;
-  /** Called by UndoToast when the user clicks Undo — restores the page. */
+  /** Called by UndoToast when the user clicks Undo — restores the item. */
   handleUndoDelete: (id: string) => void;
+
+  // Backwards-compat alias
+  /** @deprecated Use hiddenPageIds instead. */
+  hiddenIds: Set<string>;
 }
+
+const FOLDER_UNDO_PREFIX = "folder:";
 
 const UndoDeleteContext = createContext<UndoDeleteContextValue | null>(null);
 
 export function UndoDeleteProvider({ children }: { children: ReactNode }) {
-  const { restorePage, softDeletePage } = useWorkspace();
+  const { restoreFolder, restorePage, softDeleteFolder, softDeletePage } = useWorkspace();
 
   const pendingDeleteIds = useRef<Set<string>>(new Set());
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [hiddenPageIds, setHiddenPageIds] = useState<Set<string>>(new Set());
+  const [hiddenFolderIds, setHiddenFolderIds] = useState<Set<string>>(new Set());
   const [undoItems, setUndoItems] = useState<UndoToastItem[]>([]);
+
+  // Track which folder IDs are pending so we know how to undo
+  const pendingFolderIds = useRef<Set<string>>(new Set());
 
   function requestDeletePage(page: Pick<PageSummary, "id" | "title">) {
     if (pendingDeleteIds.current.has(page.id)) return;
     pendingDeleteIds.current.add(page.id);
-    setHiddenIds((prev) => new Set([...prev, page.id]));
+    setHiddenPageIds((prev) => new Set([...prev, page.id]));
     setUndoItems((prev) => [...prev, { id: page.id, label: page.title }]);
     // Soft-delete immediately — page disappears from all DB queries
     void softDeletePage(page.id);
   }
 
+  function requestDeleteFolder(folder: Folder, pageCount: number) {
+    const undoId = `${FOLDER_UNDO_PREFIX}${folder.id}`;
+    if (pendingDeleteIds.current.has(undoId)) return;
+    pendingDeleteIds.current.add(undoId);
+    pendingFolderIds.current.add(folder.id);
+    setHiddenFolderIds((prev) => new Set([...prev, folder.id]));
+    const suffix = pageCount > 0 ? ` (${pageCount} ${pageCount === 1 ? "page" : "pages"})` : "";
+    setUndoItems((prev) => [
+      ...prev,
+      { duration: 16000, id: undoId, label: `${folder.name}${suffix}` },
+    ]);
+    // Soft-delete folder + all its pages immediately
+    void softDeleteFolder(folder.id);
+  }
+
   function handleUndoDismiss(id: string) {
-    // Page is already soft-deleted — just clean up local state
     pendingDeleteIds.current.delete(id);
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
+
+    if (id.startsWith(FOLDER_UNDO_PREFIX)) {
+      const folderId = id.slice(FOLDER_UNDO_PREFIX.length);
+      pendingFolderIds.current.delete(folderId);
+      setHiddenFolderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(folderId);
+        return next;
+      });
+    } else {
+      setHiddenPageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+
     setUndoItems((prev) => prev.filter((item) => item.id !== id));
   }
 
   function handleUndoDelete(id: string) {
     pendingDeleteIds.current.delete(id);
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
+
+    if (id.startsWith(FOLDER_UNDO_PREFIX)) {
+      const folderId = id.slice(FOLDER_UNDO_PREFIX.length);
+      pendingFolderIds.current.delete(folderId);
+      setHiddenFolderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(folderId);
+        return next;
+      });
+      void restoreFolder(folderId);
+    } else {
+      setHiddenPageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      void restorePage(id);
+    }
+
     setUndoItems((prev) => prev.filter((item) => item.id !== id));
-    // Restore soft-deleted page — clears deleted_at and re-adds to pages list
-    void restorePage(id);
   }
 
   const value: UndoDeleteContextValue = {
     handleUndoDelete,
     handleUndoDismiss,
-    hiddenIds,
+    hiddenFolderIds,
+    hiddenIds: hiddenPageIds,
+    hiddenPageIds,
+    requestDeleteFolder,
     requestDeletePage,
     undoItems,
   };

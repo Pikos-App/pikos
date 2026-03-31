@@ -19,7 +19,6 @@ import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 
 import { useFolderList } from "../hooks/useFolderList";
 import type { FolderSortOrder } from "../hooks/useFolderList";
-import { FolderDeleteDialog } from "./FolderDeleteDialog";
 import { FolderItem } from "./FolderItem";
 import { SmartViewEntry } from "./SmartViewEntry";
 
@@ -29,13 +28,10 @@ export function FolderList() {
     folders,
     handleColorChange,
     handleCreateFolder,
-    handleDeleteCancel,
-    handleDeleteConfirm,
     handleDeleteRequest,
     handleRenameCommit,
     inboxCount,
     pageCountByFolder,
-    pendingDelete,
     renamingId,
     setActiveViewId,
     setRenamingId,
@@ -199,15 +195,6 @@ export function FolderList() {
           </button>
         )}
       </div>
-
-      {pendingDelete && (
-        <FolderDeleteDialog
-          folderName={pendingDelete.folder.name}
-          onCancel={handleDeleteCancel}
-          onConfirm={handleDeleteConfirm}
-          pageCount={pendingDelete.pageCount}
-        />
-      )}
     </>
   );
 }
