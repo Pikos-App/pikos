@@ -4,14 +4,54 @@ import "../styles/global.css";
 interface Props {
   title: string;
   description?: string;
+  /** JSON-LD structured data — pass a raw object, it will be serialized */
+  jsonLd?: Record<string, unknown>;
+  /** Override og:type (defaults to "website") */
+  ogType?: string;
+  /** article:published_time for blog posts */
+  publishedTime?: string;
+  /** Override the default OG image path (e.g. "/blog/my-post-og.png") */
+  ogImagePath?: string;
 }
 
 const {
   title,
   description = "Your notes, tasks, and calendar in one app. Everything stored on your device. No sign-up required. Free to download.",
+  jsonLd,
+  ogType = "website",
+  publishedTime,
+  ogImagePath = "/og.png",
 } = Astro.props;
 
-const ogImage = new URL("/og.png", Astro.site);
+const ogImage = new URL(ogImagePath, Astro.site);
+
+// Default structured data — WebSite + SoftwareApplication
+const defaultJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "name": "Pikos",
+      "url": "https://pikos.app",
+      "description": "Notes, tasks, and calendar in one local-first desktop app.",
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Pikos",
+      "applicationCategory": "ProductivityApplication",
+      "operatingSystem": "macOS",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+      },
+      "description": "Notes, tasks, and calendar in one app. Everything stored on your device. No sign-up required.",
+      "url": "https://pikos.app",
+    },
+  ],
+};
+
+const structuredData = jsonLd ?? defaultJsonLd;
 ---
 
 <!doctype html>
@@ -38,12 +78,13 @@ const ogImage = new URL("/og.png", Astro.site);
     <meta name="theme-color" content="#030712" media="(prefers-color-scheme: dark)" />
 
     <!-- Open Graph -->
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={ogType} />
     <meta property="og:site_name" content="Pikos" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={ogImage} />
     <meta property="og:url" content={Astro.url} />
+    {publishedTime && <meta property="article:published_time" content={publishedTime} />}
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
@@ -53,6 +94,10 @@ const ogImage = new URL("/og.png", Astro.site);
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="alternate" type="application/rss+xml" title="Pikos Blog" href="/rss.xml" />
+
+    <!-- Structured data for search engines and AI -->
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
 
     <!-- Analytics — privacy-focused, no cookies, no personal data -->
     <script defer src="https://cloud.umami.is/script.js" data-website-id="8a780ae1-ed60-46f7-99e8-d76463e6f9d8"></script>
