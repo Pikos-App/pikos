@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from "react";
 export interface UndoToastItem {
   id: string;
   label: string;
+  /** Per-item duration override. Falls back to the component-level `duration` prop. */
+  duration?: number;
 }
 
 interface UndoToastProps {
@@ -17,7 +19,7 @@ interface UndoToastProps {
 }
 
 function SingleToast({
-  duration = 5000,
+  duration: defaultDuration = 5000,
   item,
   onDismiss,
   onUndo,
@@ -27,6 +29,7 @@ function SingleToast({
   onUndo: (id: string) => void;
   onDismiss: (id: string) => void;
 }) {
+  const duration = item.duration ?? defaultDuration;
   const [progress, setProgress] = useState(1);
   const stateRef = useRef({
     dismissed: false,

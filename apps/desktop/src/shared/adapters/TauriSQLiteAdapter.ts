@@ -96,6 +96,14 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<void>("delete_folder", { id });
   }
 
+  softDeleteFolder(id: string): Promise<void> {
+    return invoke<void>("soft_delete_folder", { id });
+  }
+
+  restoreFolder(id: string): Promise<void> {
+    return invoke<void>("restore_folder", { id });
+  }
+
   listFolders(): Promise<Folder[]> {
     return invoke<Folder[]>("list_folders");
   }
