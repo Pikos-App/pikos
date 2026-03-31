@@ -24,9 +24,6 @@ refinement (to fix)
 - [ ] Misc dogfooding improvements.
 
 ## Before Launch
-- [ ] export data
-- [ ] hide dev settings
-
 - [ ] update db to bettersqlite?
 
 ## Enhancements

@@ -343,7 +343,7 @@ pub async fn create_page(state: State<'_, DbState>, data: NewPage) -> Result<Pag
     .bind(&data.title)
     .bind(&data.subtitle)
     .bind(&data.content)
-    .bind(&data.content_text)
+    .bind(data.content_text.as_deref().unwrap_or(""))
     .bind(&data.status)
     .bind(data.priority)
     .bind(&tags_json)

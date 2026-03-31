@@ -1,8 +1,7 @@
-// dev.rs — Developer/settings commands: stats, reset, seed.
-// run_seed is intentionally dev-only: it shells out to `pnpm seed` in the repo root,
-// which only exists in a development checkout.
+// dev.rs — Developer/settings commands: stats, reset, seed, export.
 
 use serde::Serialize;
+use sqlx::{Column, Row};
 
 use crate::db::DbState;
 
@@ -79,6 +78,86 @@ pub async fn reset_db(state: tauri::State<'_, DbState>) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+/// Export all user data as a JSON file to ~/Downloads/.
+/// Includes folders, pages (excluding soft-deleted), schedules, recurrence rules,
+/// and focus sessions. Page content is included as both ProseMirror JSON and plain text.
+#[tauri::command]
+pub async fn export_json(state: tauri::State<'_, DbState>) -> Result<String, String> {
+    let pool = state.get_pool().await?;
+
+    let folders = sqlx::query("SELECT * FROM folders ORDER BY sort_order")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let pages = sqlx::query("SELECT * FROM pages WHERE deleted_at IS NULL ORDER BY sort_order")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let schedules = sqlx::query("SELECT * FROM page_schedules ORDER BY scheduled_start")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let rules = sqlx::query("SELECT * FROM page_recurrence_rules")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let sessions = sqlx::query("SELECT * FROM focus_sessions ORDER BY started_at")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Build JSON using serde_json::Value to handle dynamic columns
+    let to_json = |rows: Vec<sqlx::sqlite::SqliteRow>| -> Vec<serde_json::Value> {
+        rows.into_iter()
+            .map(|row| {
+                let mut obj = serde_json::Map::new();
+                for col in row.columns() {
+                    let name = col.name();
+                    // Try text first, then integer, then null
+                    let val: serde_json::Value =
+                        if let Ok(v) = row.try_get::<String, _>(name) {
+                            // Parse JSON fields inline (content, tags, links, rrule_exdates)
+                            if matches!(name, "content" | "tags" | "links" | "rrule_exdates") {
+                                serde_json::from_str(&v).unwrap_or(serde_json::Value::String(v))
+                            } else {
+                                serde_json::Value::String(v)
+                            }
+                        } else if let Ok(v) = row.try_get::<i64, _>(name) {
+                            serde_json::Value::Number(v.into())
+                        } else {
+                            serde_json::Value::Null
+                        };
+                    obj.insert(name.to_string(), val);
+                }
+                serde_json::Value::Object(obj)
+            })
+            .collect()
+    };
+
+    let export = serde_json::json!({
+        "version": 1,
+        "exported_at": chrono::Utc::now().to_rfc3339(),
+        "folders": to_json(folders),
+        "pages": to_json(pages),
+        "schedules": to_json(schedules),
+        "recurrence_rules": to_json(rules),
+        "focus_sessions": to_json(sessions),
+    });
+
+    let home = std::env::var("HOME").map_err(|e| format!("$HOME not set: {e}"))?;
+    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
+    let dest = format!("{}/Downloads/pikos-export-{}.json", home, timestamp);
+
+    let json_str = serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?;
+    std::fs::write(&dest, json_str).map_err(|e| e.to_string())?;
+
+    Ok(dest)
 }
 
 /// Copy the live database to ~/Downloads/pikos-backup-<timestamp>.sqlite.

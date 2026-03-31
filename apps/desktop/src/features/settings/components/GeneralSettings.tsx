@@ -1,6 +1,8 @@
-// GeneralSettings — workspace info: created date, record counts, DB path.
+// GeneralSettings — about, data export, feedback, and workspace stats.
 
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { Download, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -21,53 +23,194 @@ function StatRow({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function SettingsSection({
+  children,
+  description,
+  title,
+}: {
+  children: React.ReactNode;
+  description?: string;
+  title: string;
+}) {
+  return (
+    <section className="mb-8">
+      <h2 className="mb-1 text-base font-semibold">{title}</h2>
+      {description && <p className="mb-4 text-sm text-muted-foreground">{description}</p>}
+      {children}
+    </section>
+  );
+}
+
+type ExportState =
+  | { status: "idle" }
+  | { status: "saving" }
+  | { status: "done"; path: string }
+  | { status: "error"; message: string };
+
+function ExportRow({
+  description,
+  disabled,
+  label,
+  onExport,
+  state,
+}: {
+  description: string;
+  disabled: boolean;
+  label: string;
+  onExport: () => void;
+  state: ExportState;
+}) {
+  const saving = state.status === "saving";
+  const done = state.status === "done";
+
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0">
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {done ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">Saved to Downloads</p>
+        ) : state.status === "error" ? (
+          <p className="mt-0.5 text-xs text-destructive">{state.message}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {done && (
+          <button
+            className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            onClick={() => void revealItemInDir(state.path)}
+          >
+            Show in Finder
+          </button>
+        )}
+        <button
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+          disabled={disabled || saving}
+          onClick={onExport}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function GeneralSettings() {
   const { workspace } = useWorkspace();
   const [stats, setStats] = useState<DbStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
+  const [jsonExport, setJsonExport] = useState<ExportState>({ status: "idle" });
 
   useEffect(() => {
     if (!workspace) return;
     invoke<DbStats>("get_db_stats")
       .then(setStats)
-      .catch((e: unknown) => setError(String(e)));
+      .catch((e: unknown) => setStatsError(String(e)));
   }, [workspace]);
 
-  const createdAt = workspace?.createdAt
-    ? new Date(workspace.createdAt).toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
-    : "—";
+  async function handleExportSqlite() {
+    setSqliteExport({ status: "saving" });
+    try {
+      const dest = await invoke<string>("backup_db");
+      setSqliteExport({ path: dest, status: "done" });
+    } catch (e: unknown) {
+      setSqliteExport({ message: String(e), status: "error" });
+    }
+  }
+
+  async function handleExportJson() {
+    setJsonExport({ status: "saving" });
+    try {
+      const dest = await invoke<string>("export_json");
+      setJsonExport({ path: dest, status: "done" });
+    } catch (e: unknown) {
+      setJsonExport({ message: String(e), status: "error" });
+    }
+  }
 
   return (
     <div className="max-w-lg">
-      <h2 className="mb-1 text-base font-semibold">Workspace</h2>
-      <p className="mb-6 text-sm text-muted-foreground">
-        {workspace?.name ?? "No workspace loaded"}
-      </p>
-
-      <div className="mb-6 rounded-lg border border-border bg-card px-4">
-        <StatRow label="Created" value={createdAt} />
-        <StatRow label="Folders" value={stats?.folders ?? "—"} />
-        <StatRow label="Pages" value={stats?.pages ?? "—"} />
-        <StatRow label="Scheduled items" value={stats?.schedules ?? "—"} />
-        <StatRow label="Focus sessions" value={stats?.focus_sessions ?? "—"} />
-      </div>
-
-      <div className="rounded-lg border border-border bg-card px-4">
-        <div className="flex items-start justify-between gap-3 py-2.5">
-          <div className="min-w-0">
-            <p className="mb-0.5 text-xs text-muted-foreground">Database path</p>
-            <p className="font-mono text-xs break-all text-foreground/80">
-              {workspace?.dbPath ?? "—"}
-            </p>
+      {/* ── About ──────────────────────────────────────────────────────── */}
+      <SettingsSection title="About">
+        <div className="rounded-lg border border-border bg-card px-4">
+          <div className="flex items-center justify-between border-b border-border py-3">
+            <div>
+              <p className="text-sm font-medium">Pikos</p>
+              <p className="text-xs text-muted-foreground">
+                Version {__APP_VERSION__}
+                {import.meta.env.DEV && " — dev"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 py-3">
+            <button
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => void openUrl("https://pikos.app")}
+            >
+              Website <ExternalLink className="h-3 w-3" />
+            </button>
           </div>
         </div>
-      </div>
+      </SettingsSection>
 
-      {error && <p className="mt-4 text-xs text-destructive">Failed to load stats: {error}</p>}
+      {/* ── Data ───────────────────────────────────────────────────────── */}
+      <SettingsSection
+        description="Your data is stored locally and never leaves your device."
+        title="Data"
+      >
+        <div className="rounded-lg border border-border bg-card px-4">
+          <StatRow label="Folders" value={stats?.folders ?? "—"} />
+          <StatRow label="Pages" value={stats?.pages ?? "—"} />
+          <StatRow label="Scheduled items" value={stats?.schedules ?? "—"} />
+          <StatRow label="Focus sessions" value={stats?.focus_sessions ?? "—"} />
+        </div>
+
+        <div className="mt-3 rounded-lg border border-border bg-card px-4">
+          <ExportRow
+            description="Full database backup. Best for restoring data."
+            disabled={!workspace}
+            label="Export as SQLite"
+            onExport={() => void handleExportSqlite()}
+            state={sqliteExport}
+          />
+          <ExportRow
+            description="Human-readable export of all pages, folders, and schedules."
+            disabled={!workspace}
+            label="Export as JSON"
+            onExport={() => void handleExportJson()}
+            state={jsonExport}
+          />
+        </div>
+
+        {statsError && (
+          <p className="mt-3 text-xs text-destructive">Failed to load stats: {statsError}</p>
+        )}
+      </SettingsSection>
+
+      {/* ── Feedback ───────────────────────────────────────────────────── */}
+      <SettingsSection
+        description="Found a bug or have a suggestion? I'd love to hear from you."
+        title="Feedback"
+      >
+        <div className="rounded-lg border border-border bg-card px-4">
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-sm font-medium">Send feedback</p>
+              <p className="text-xs text-muted-foreground">pikos@hello-ak.com</p>
+            </div>
+            <button
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+              onClick={() => void openUrl("mailto:pikos@hello-ak.com?subject=Pikos%20Feedback")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Email
+            </button>
+          </div>
+        </div>
+      </SettingsSection>
     </div>
   );
 }

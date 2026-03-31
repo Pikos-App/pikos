@@ -121,7 +121,7 @@ export async function seedTutorial(
       h3("Navigation"),
       bullets(
         "Cmd+N \u2014 Quick add a new page",
-        "Cmd+P \u2014 Search all pages",
+        "Cmd+K \u2014 Search all pages",
         "Cmd+Shift+C \u2014 Toggle between editor and calendar",
         "Cmd+\\ \u2014 Toggle sidebar",
         "\u2191 / \u2193 \u2014 Move up / down in the page list"

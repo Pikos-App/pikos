@@ -1,16 +1,19 @@
 // SettingsPage — full-screen overlay with sidebar nav + content area.
 // Triggered by the gear icon at the bottom of the main sidebar.
 
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
 import { AppearanceSettings } from "./AppearanceSettings";
-import { DeveloperSettings } from "./DeveloperSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { ShortcutsSettings } from "./ShortcutsSettings";
+
+const DeveloperSettings = import.meta.env.DEV
+  ? lazy(() => import("./DeveloperSettings").then((m) => ({ default: m.DeveloperSettings })))
+  : null;
 
 function readLeftPanelWidth(): number {
   try {
@@ -56,7 +59,11 @@ export function SettingsPage() {
         {section === "general" && <GeneralSettings />}
         {section === "appearance" && <AppearanceSettings />}
         {section === "shortcuts" && <ShortcutsSettings />}
-        {section === "developer" && <DeveloperSettings />}
+        {section === "developer" && DeveloperSettings && (
+          <Suspense>
+            <DeveloperSettings />
+          </Suspense>
+        )}
       </div>
     </div>
   );

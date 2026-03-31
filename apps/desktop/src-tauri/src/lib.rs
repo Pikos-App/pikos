@@ -5,7 +5,7 @@ mod db;
 
 use db::{
     connect_db, DbState,
-    dev::{backup_db, get_db_stats, reset_db},
+    dev::{backup_db, export_json, get_db_stats, reset_db},
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders, update_folder,
     },
@@ -109,6 +109,7 @@ pub fn run() {
             search_tags,
             // Dev / settings
             backup_db,
+            export_json,
             get_db_stats,
             reset_db,
         ])

@@ -44,25 +44,8 @@ export function DeveloperSettings() {
   const { setSettingsOpen } = useUI();
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [running, setRunning] = useState(false);
-  const [backingUp, setBackingUp] = useState(false);
   const [log, setLog] = useState<string | null>(null);
   const [logError, setLogError] = useState(false);
-
-  async function handleBackup() {
-    if (!workspace) return;
-    setBackingUp(true);
-    setLog(null);
-    try {
-      const dest = await invoke<string>("backup_db");
-      setLog(`Backup saved to:\n${dest}`);
-      setLogError(false);
-    } catch (e: unknown) {
-      setLog(String(e));
-      setLogError(true);
-    } finally {
-      setBackingUp(false);
-    }
-  }
 
   async function handleReset() {
     if (!workspace) return;
@@ -124,26 +107,6 @@ export function DeveloperSettings() {
       <p className="mb-6 text-sm text-muted-foreground">
         Seed scripts and database utilities. For development use only.
       </p>
-
-      {/* Backup */}
-      <div className="mb-4 rounded-lg border border-border bg-card p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium">Backup database</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Save a clean copy to ~/Downloads. Safe to run any time.
-            </p>
-          </div>
-          <Button
-            disabled={backingUp || running || !workspace}
-            onClick={() => void handleBackup()}
-            size="sm"
-            variant="outline"
-          >
-            {backingUp ? "Saving…" : "Backup"}
-          </Button>
-        </div>
-      </div>
 
       {/* Reset */}
       <div className="mb-4 rounded-lg border border-border bg-card p-4">

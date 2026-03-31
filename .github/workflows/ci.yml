@@ -72,7 +72,7 @@ jobs:
         run: pnpm --filter @pikos/desktop exec playwright install-deps webkit
 
       - name: E2E tests (Playwright)
-        run: pnpm --filter @pikos/desktop exec playwright test
+        run: pnpm --filter @pikos/desktop exec playwright test --project=tier1 --project=tier2
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}

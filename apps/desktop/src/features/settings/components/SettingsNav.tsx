@@ -12,7 +12,7 @@ const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }
   { icon: Settings, id: "general", label: "General" },
   { icon: Palette, id: "appearance", label: "Appearance" },
   { icon: Keyboard, id: "shortcuts", label: "Shortcuts" },
-  { icon: Code2, id: "developer", label: "Developer" },
+  ...(import.meta.env.DEV ? [{ icon: Code2, id: "developer" as const, label: "Developer" }] : []),
 ];
 
 interface SettingsNavProps {
@@ -69,11 +69,6 @@ export function SettingsNav({ active, onClose, onNavigate, width }: SettingsNavP
           </button>
         ))}
       </nav>
-
-      {/* Version stamp */}
-      <div className="px-3 pt-1 pb-3">
-        <p className="text-[10px] text-muted-foreground/50">Pikos — dev build</p>
-      </div>
     </div>
   );
 }

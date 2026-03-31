@@ -174,10 +174,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       void (async () => {
         const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
-        if (seedScenario === "marketing") {
-          const { seedMarketing } = await import("@/shared/seeds/marketing");
-          await seedMarketing(adapter);
-        } else if (seedScenario === "tutorial") {
+        if (seedScenario === "tutorial") {
           const { seedTutorial } = await import("@/shared/seeds/tutorial");
           const result = await seedTutorial(adapter);
           if (result) {
@@ -186,10 +183,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               pageId: result.welcomePageId,
             };
           }
-        } else if (seedScenario === "realistic") {
+        } else if (import.meta.env.DEV && seedScenario === "marketing") {
+          const { seedMarketing } = await import("@/shared/seeds/marketing");
+          await seedMarketing(adapter);
+        } else if (import.meta.env.DEV && seedScenario === "realistic") {
           const { seedRealistic } = await import("@/shared/seeds/realistic");
           await seedRealistic(adapter);
-        } else if (seedScenario === "stress") {
+        } else if (import.meta.env.DEV && seedScenario === "stress") {
           const { seedStress } = await import("@/shared/seeds/stress");
           await seedStress(adapter);
         }
@@ -655,6 +655,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
 
   async function resetAndSeed(scenario: "tutorial" | "realistic" | "stress"): Promise<void> {
+    if (!import.meta.env.DEV) return;
     if (import.meta.env["VITE_TEST_MODE"] === "true") {
       (adapter as MockStorageAdapter).clear();
     } else {
