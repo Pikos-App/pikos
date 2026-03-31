@@ -21,6 +21,9 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
+    "window-state:allow-restore-state",
+    "window-state:allow-save-window-state",
+    "window-state:default",
     {
       "identifier": "fs:scope",
       "allow": [
