@@ -10,7 +10,7 @@ interface Props {
   ogImage?: string;
 }
 
-const { title, description, date } = Astro.props;
+const { title, description, date, ogImage } = Astro.props;
 const formattedDate = new Date(date).toLocaleDateString("en-US", {
   year: "numeric",
   month: "long",
@@ -28,7 +28,7 @@ const jsonLd = {
 };
 ---
 
-<Base title={`${title} - Pikos`} description={description} ogType="article" publishedTime={date} jsonLd={jsonLd}>
+<Base title={`${title} - Pikos`} description={description} ogType="article" publishedTime={date} jsonLd={jsonLd} ogImagePath={ogImage}>
 
   <main class="mx-auto max-w-2xl px-8 py-20">
 

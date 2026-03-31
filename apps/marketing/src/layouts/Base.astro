@@ -10,6 +10,8 @@ interface Props {
   ogType?: string;
   /** article:published_time for blog posts */
   publishedTime?: string;
+  /** Override the default OG image path (e.g. "/blog/my-post-og.png") */
+  ogImagePath?: string;
 }
 
 const {
@@ -18,9 +20,10 @@ const {
   jsonLd,
   ogType = "website",
   publishedTime,
+  ogImagePath = "/og.png",
 } = Astro.props;
 
-const ogImage = new URL("/og.png", Astro.site);
+const ogImage = new URL(ogImagePath, Astro.site);
 
 // Default structured data — WebSite + SoftwareApplication
 const defaultJsonLd = {
@@ -91,6 +94,7 @@ const structuredData = jsonLd ?? defaultJsonLd;
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="alternate" type="application/rss+xml" title="Pikos Blog" href="/rss.xml" />
 
     <!-- Structured data for search engines and AI -->
     <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
