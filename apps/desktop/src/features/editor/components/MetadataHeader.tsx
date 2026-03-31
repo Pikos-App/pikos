@@ -10,8 +10,16 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { FolderChip, PriorityDropdown, TagsPopover } from "@/features/pages";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+
+const LINE_WIDTH_CLASS: Record<string, string> = {
+  default: "max-w-[720px]",
+  full: "max-w-none",
+  narrow: "max-w-[560px]",
+  wide: "max-w-[880px]",
+};
 
 import { DateSchedulePopover } from "./DateSchedulePopover";
 
@@ -149,6 +157,7 @@ export function MetadataHeader({
   page,
 }: MetadataHeaderProps) {
   const { clearPageError, flushPage, folders, pageErrors, tags, updatePage } = useWorkspace();
+  const { lineWidth } = useEditorSettings();
   const { setReferenceDate, setRightPanel } = useUI();
   const allTagNames = tags.map((t) => t.name);
 
@@ -345,7 +354,7 @@ export function MetadataHeader({
 
   return (
     <div className="shrink-0">
-      <div className="mx-auto max-w-[720px] px-8">
+      <div className={`mx-auto ${LINE_WIDTH_CLASS[lineWidth] ?? "max-w-[720px]"} px-8`}>
         <div className="pt-12 pb-1">
           <textarea
             aria-label="Page title"

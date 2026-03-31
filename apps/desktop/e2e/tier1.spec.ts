@@ -114,6 +114,9 @@ appTest("complete a page via status toggle @tier1", async ({ app }) => {
 // ─── T1-5: Create and navigate folders ───────────────────────────────────────
 
 appTest("create and navigate folders @tier1", async ({ app }) => {
+  const sidebar = app.getByRole("group", { name: "Views and folders" });
+  const folderBtn = sidebar.getByRole("button", { name: "Projects", exact: true });
+
   // Click "New Folder" — creates folder, navigates to it, and enters rename mode
   await app
     .getByRole("toolbar", { name: "Folder actions" })
@@ -126,10 +129,7 @@ appTest("create and navigate folders @tier1", async ({ app }) => {
   await app.keyboard.press("Enter");
 
   // Folder appears in sidebar with its new name and is the active view
-  await expect(app.getByRole("button", { name: "Projects" })).toHaveAttribute(
-    "aria-current",
-    "true"
-  );
+  await expect(folderBtn).toHaveAttribute("aria-current", "true");
 
   // Page list should show empty state (new folder has no pages)
   await expect(app.getByText("No pages")).toBeVisible();
@@ -145,11 +145,11 @@ appTest("create and navigate folders @tier1", async ({ app }) => {
   ).not.toBeVisible();
 
   // Delete the folder — right-click → Delete — no confirmation dialog, just undo toast
-  await app.getByRole("button", { name: "Projects" }).click({ button: "right" });
+  await folderBtn.click({ button: "right" });
   await app.getByRole("menuitem", { name: "Delete" }).click();
 
   // Folder is gone from sidebar, undo toast appears
-  await expect(app.getByRole("button", { name: "Projects" })).not.toBeVisible();
+  await expect(folderBtn).not.toBeVisible();
   const toast = app.getByRole("alert", { name: /Projects/ });
   await expect(toast).toBeVisible();
 
@@ -161,8 +161,8 @@ appTest("create and navigate folders @tier1", async ({ app }) => {
 
   // Undo restores folder and its pages
   await toast.getByRole("button", { name: /Undo/ }).click();
-  await expect(app.getByRole("button", { name: "Projects" })).toBeVisible();
-  await app.getByRole("button", { name: "Projects" }).click();
+  await expect(folderBtn).toBeVisible();
+  await folderBtn.click();
   await expect(app.locator("[data-page-list-item]").getByText("folder page")).toBeVisible();
 });
 

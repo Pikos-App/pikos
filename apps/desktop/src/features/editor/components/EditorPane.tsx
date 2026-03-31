@@ -61,19 +61,16 @@ const extensions = [
 ];
 
 // HTML attributes applied to the ProseMirror contenteditable element.
-function editorAttributes(spellcheck: boolean) {
-  return {
-    "aria-label": "Page content",
-    "aria-multiline": "true",
-    "aria-placeholder": "Start writing, or press / for commands",
-    autocapitalize: "off",
-    autocomplete: "off",
-    autocorrect: "off",
-    class: "editor-content",
-    role: "textbox",
-    spellcheck: spellcheck ? "true" : "false",
-  };
-}
+const EDITOR_ATTRIBUTES = {
+  "aria-label": "Page content",
+  "aria-multiline": "true",
+  "aria-placeholder": "Start writing, or press / for commands",
+  autocapitalize: "off",
+  autocomplete: "off",
+  autocorrect: "off",
+  class: "editor-content",
+  role: "textbox",
+};
 
 const LINE_WIDTH_CLASS: Record<LineWidth, string> = {
   default: "max-w-[720px]",
@@ -87,7 +84,7 @@ const LINE_WIDTH_CLASS: Record<LineWidth, string> = {
 export function EditorPane() {
   const { isLoading, page } = useEditorPage();
   const { updatePage } = useWorkspace();
-  const { lineWidth, spellCheck } = useEditorSettings();
+  const { lineWidth } = useEditorSettings();
 
   // Track which page the editor currently shows (to detect page switches)
   const currentPageIdRef = useRef<string | null>(null);
@@ -100,7 +97,7 @@ export function EditorPane() {
 
   const editor = useEditor({
     editorProps: {
-      attributes: editorAttributes(spellCheck),
+      attributes: EDITOR_ATTRIBUTES,
     },
     extensions,
     onBlur: () => Keyboard.popScope("editor"),
@@ -110,12 +107,6 @@ export function EditorPane() {
       setContentVersion((v) => v + 1);
     },
   });
-
-  // ─── Sync spellcheck attribute when setting changes ────────────────────────
-  useEffect(() => {
-    if (!editor) return;
-    editor.view.dom.setAttribute("spellcheck", spellCheck ? "true" : "false");
-  }, [editor, spellCheck]);
 
   // ─── Prevent native <a> navigation inside editor ───────────────────────────
   // Links are rendered as <a> by Tiptap but clicking should only place the cursor

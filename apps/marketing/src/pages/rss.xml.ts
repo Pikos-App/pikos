@@ -18,7 +18,7 @@ const posts = [
   {
     slug: "buy-once",
     title: "Buy Once",
-    description: "No subscription. No recurring charge. You pay once, you own it.",
+    description: "No subscription to use the app. You pay once, you own it.",
     date: "2026-04-03",
   },
   {

@@ -1,4 +1,4 @@
-// EditorSettings — spell check toggle + line width picker.
+// EditorSettings — line width picker.
 
 import { cn } from "@/lib/utils";
 import type { LineWidth } from "@/shared/context/EditorSettingsContext";
@@ -12,44 +12,12 @@ const LINE_WIDTH_OPTIONS: { id: LineWidth; label: string; description: string }[
 ];
 
 export function EditorSettings() {
-  const { lineWidth, setLineWidth, setSpellCheck, spellCheck } = useEditorSettings();
+  const { lineWidth, setLineWidth } = useEditorSettings();
 
   return (
     <div className="max-w-lg">
       <h2 className="mb-1 text-base font-semibold">Editor</h2>
       <p className="mb-6 text-sm text-muted-foreground">Configure the writing experience.</p>
-
-      {/* ── Spell check ─────────────────────────────────────────────────── */}
-      <section className="mb-8">
-        <h3 className="mb-3 text-sm font-medium">Spell check</h3>
-        <div className="rounded-lg border border-border bg-card">
-          <button
-            className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/50"
-            onClick={() => setSpellCheck(!spellCheck)}
-          >
-            <div>
-              <p className="text-sm font-medium">Enable spell check</p>
-              <p className="text-xs text-muted-foreground">
-                Underline misspelled words in the editor.
-              </p>
-            </div>
-            {/* Toggle indicator */}
-            <div
-              className={cn(
-                "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-                spellCheck ? "bg-primary" : "bg-muted-foreground/30"
-              )}
-            >
-              <div
-                className={cn(
-                  "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
-                  spellCheck ? "translate-x-4" : "translate-x-0.5"
-                )}
-              />
-            </div>
-          </button>
-        </div>
-      </section>
 
       {/* ── Line width ──────────────────────────────────────────────────── */}
       <section>

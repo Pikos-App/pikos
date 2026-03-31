@@ -19,12 +19,12 @@ pub struct DbStats {
 pub async fn get_db_stats(state: tauri::State<'_, DbState>) -> Result<DbStats, String> {
     let pool = state.get_pool().await?;
 
-    let pages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages")
+    let pages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL")
         .fetch_one(&pool)
         .await
         .map_err(|e| e.to_string())?;
 
-    let folders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders")
+    let folders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders WHERE deleted_at IS NULL")
         .fetch_one(&pool)
         .await
         .map_err(|e| e.to_string())?;

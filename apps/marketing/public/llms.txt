@@ -30,7 +30,7 @@ Pikos is a desktop productivity app for macOS that combines notes, tasks, and a 
 
 - Homepage: https://pikos.app
 - Blog: https://pikos.app/blog
-- Changelog: https://pikos.app/changelog
+- Release Notes: https://pikos.app/release-notes
 - Privacy Policy: https://pikos.app/privacy
 - Terms of Service: https://pikos.app/terms
 

@@ -174,7 +174,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     >
       {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
-        <span className="type-ui text-foreground">
+        <span className="type-ui min-w-0 truncate text-foreground">
           {activeViewId === "today"
             ? "Today"
             : activeViewId === "inbox"

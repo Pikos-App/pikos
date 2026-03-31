@@ -33,36 +33,51 @@ function useTrackPageOpened() {
   }, [activePageId, updatePage]);
 }
 
-/** Listen for native menu events emitted from Tauri (View menu items). */
+/** Handle native menu events via global callback invoked from Tauri eval(). */
 function useMenuEvents() {
-  const { rightPanel, setRightPanel, setSidebarCollapsed, sidebarCollapsed } = useUI();
-  const stateRef = useRef({ rightPanel, sidebarCollapsed });
-  stateRef.current = { rightPanel, sidebarCollapsed };
+  const ui = useUI();
+  const { setRightPanel, setSidebarCollapsed } = ui;
+  const stateRef = useRef({ rightPanel: ui.rightPanel });
 
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    void import("@tauri-apps/api/event").then(({ listen }) => {
-      void listen<string>("menu-event", (event) => {
-        if (event.payload === "toggle_sidebar") {
+    stateRef.current = { rightPanel: ui.rightPanel };
+  });
+
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>)["__onMenuEvent"] = (id: string) => {
+      switch (id) {
+        case "new_page":
+          ui.setOpenDialog("quick-add");
+          break;
+        case "close_page":
+          ui.setActivePage(null);
+          break;
+        case "settings":
+          ui.setSettingsOpen(true);
+          break;
+        case "toggle_sidebar":
           setSidebarCollapsed((prev: boolean) => !prev);
-        } else if (event.payload === "toggle_calendar") {
+          break;
+        case "toggle_calendar": {
           const current = stateRef.current.rightPanel;
           setRightPanel(current === "calendar" ? "editor" : "calendar");
+          break;
         }
-      }).then((fn) => {
-        unlisten = fn;
-      });
-    });
-    return () => unlisten?.();
+      }
+    };
+    return () => {
+      delete (window as unknown as Record<string, unknown>)["__onMenuEvent"];
+    };
   }, [setSidebarCollapsed, setRightPanel]);
 }
 
 /** ⌘, opens settings, ⌘1-9 switches to folder by index. */
 function useGlobalShortcuts() {
-  const { setActiveViewId, setSettingsOpen, settingsOpen } = useUI();
+  const { setActivePage, setActiveViewId, setSettingsOpen, settingsOpen } = useUI();
   const { folders } = useWorkspace();
 
   useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), { allowInInputs: true });
+  useKeyboardShortcut("Mod+W", () => setActivePage(null), { allowInInputs: true });
 
   // ⌘1-9 — switch to folder by index (1-based).
   // Use the Keyboard registry directly to register all 9 bindings in one effect,

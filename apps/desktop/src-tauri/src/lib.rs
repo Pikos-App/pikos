@@ -1,5 +1,5 @@
 use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{Emitter, WindowEvent};
+use tauri::{Emitter, Manager};
 
 mod db;
 mod markdown;
@@ -32,8 +32,19 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .menu(|handle| {
             // Custom menu without Print (Cmd+P) — that shortcut is used for search palette.
+            let settings = MenuItemBuilder::new("Settings…")
+                .id("settings")
+                .accelerator("CmdOrCtrl+,")
+                .build(handle)?;
             let app_menu = SubmenuBuilder::new(handle, "Pikos")
-                .about(Some(AboutMetadataBuilder::new().build()))
+                .about(Some(
+                    AboutMetadataBuilder::new()
+                        .website(Some("https://pikos.app"))
+                        .comments(Some("Notes, tasks, and calendar — local-first"))
+                        .build(),
+                ))
+                .separator()
+                .item(&settings)
                 .separator()
                 .services()
                 .separator()
@@ -44,10 +55,21 @@ pub fn run() {
                 .quit()
                 .build()?;
 
+            // ── File ──────────────────────────────────────────────────────
+            let new_page = MenuItemBuilder::new("New Page")
+                .id("new_page")
+                .accelerator("CmdOrCtrl+N")
+                .build(handle)?;
+            let close_page = MenuItemBuilder::new("Close Page")
+                .id("close_page")
+                .accelerator("CmdOrCtrl+W")
+                .build(handle)?;
             let file_menu = SubmenuBuilder::new(handle, "File")
-                .close_window()
+                .item(&new_page)
+                .item(&close_page)
                 .build()?;
 
+            // ── Edit ─────────────────────────────────────────────────────
             let edit_menu = SubmenuBuilder::new(handle, "Edit")
                 .undo()
                 .redo()
@@ -58,6 +80,7 @@ pub fn run() {
                 .select_all()
                 .build()?;
 
+            // ── View ─────────────────────────────────────────────────────
             let toggle_sidebar = MenuItemBuilder::new("Toggle Sidebar")
                 .id("toggle_sidebar")
                 .accelerator("CmdOrCtrl+\\")
@@ -69,13 +92,23 @@ pub fn run() {
 
             let view_menu = SubmenuBuilder::new(handle, "View")
                 .item(&toggle_sidebar)
+                .separator()
                 .item(&toggle_calendar)
                 .build()?;
 
+            // ── Window ───────────────────────────────────────────────────
             let window_menu = SubmenuBuilder::new(handle, "Window")
                 .minimize()
                 .separator()
                 .fullscreen()
+                .build()?;
+
+            // ── Help ─────────────────────────────────────────────────────
+            let pikos_help = MenuItemBuilder::new("Pikos Help")
+                .id("pikos_help")
+                .build(handle)?;
+            let help_menu = SubmenuBuilder::new(handle, "Help")
+                .item(&pikos_help)
                 .build()?;
 
             MenuBuilder::new(handle)
@@ -84,20 +117,24 @@ pub fn run() {
                 .item(&edit_menu)
                 .item(&view_menu)
                 .item(&window_menu)
+                .item(&help_menu)
                 .build()
         })
         .on_menu_event(|app, event| {
-            let id = event.id().0.as_str();
-            match id {
-                "toggle_sidebar" | "toggle_calendar" => {
-                    let _ = app.emit("menu-event", id);
+            let id = event.id().0.clone();
+            match id.as_str() {
+                "pikos_help" => {
+                    let _ = tauri_plugin_opener::open_url("https://pikos.app", None::<&str>);
+                }
+                "new_page" | "close_page" | "settings"
+                | "toggle_sidebar" | "toggle_calendar" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.eval(
+                            &format!("window.__onMenuEvent && window.__onMenuEvent('{}')", id)
+                        );
+                    }
                 }
                 _ => {}
-            }
-        })
-        .on_window_event(|_window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
             }
         })
         .invoke_handler(tauri::generate_handler![

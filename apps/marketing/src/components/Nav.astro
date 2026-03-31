@@ -1,0 +1,39 @@
+---
+interface Props {
+  /** Current page path — used to highlight active link */
+  current?: string;
+}
+const { current = "/" } = Astro.props;
+
+const links = [
+  { href: "/blog", label: "Blog" },
+  { href: "/release-notes", label: "Release Notes" },
+];
+---
+
+<nav class="mx-auto flex max-w-6xl items-center justify-between px-8 py-5">
+  <a href="/" class="text-base font-semibold text-gray-900 transition-colors hover:text-orange-500 dark:text-gray-50 dark:hover:text-orange-400">
+    Pikos
+  </a>
+  <div class="flex items-center gap-6">
+    {links.map((l) => (
+      <a
+        href={l.href}
+        class:list={[
+          "text-sm transition-colors",
+          current === l.href
+            ? "font-medium text-gray-900 dark:text-gray-50"
+            : "text-gray-400 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-50",
+        ]}
+      >
+        {l.label}
+      </a>
+    ))}
+    <a
+      href="#"
+      class="rounded-lg bg-orange-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+    >
+      Download
+    </a>
+  </div>
+</nav>

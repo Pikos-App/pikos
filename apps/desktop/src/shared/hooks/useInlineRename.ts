@@ -10,15 +10,21 @@ export function useInlineRename(isRenaming: boolean) {
   const suppressRef = useRef(false);
 
   useEffect(() => {
-    if (isRenaming) {
-      requestAnimationFrame(() => {
-        const el = inputRef.current;
-        if (el) {
-          el.focus();
-          el.setSelectionRange(el.value.length, el.value.length);
-        }
-      });
+    if (!isRenaming) return;
+    // Retry focus across a few frames — the input may not be mounted yet
+    // when a new folder is created and renaming starts in the same batch.
+    let attempt = 0;
+    function tryFocus() {
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      } else if (attempt < 5) {
+        attempt++;
+        requestAnimationFrame(tryFocus);
+      }
     }
+    requestAnimationFrame(tryFocus);
   }, [isRenaming]);
 
   /**

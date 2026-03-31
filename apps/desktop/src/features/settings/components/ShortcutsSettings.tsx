@@ -52,6 +52,7 @@ const GROUPS: ShortcutGroup[] = [
   {
     items: [
       { combo: "Mod+N", label: "New page" },
+      { combo: "Mod+W", label: "Close page" },
       { combo: "Mod+K", label: "Search" },
       { combo: "Mod+,", label: "Settings" },
       { combo: "Mod+\\", label: "Toggle sidebar" },

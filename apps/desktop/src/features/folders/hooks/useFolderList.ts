@@ -70,7 +70,7 @@ export function useFolderList(): FolderListState {
         });
 
   async function handleCreateFolder() {
-    const folder = await createFolder({ name: "New Folder" });
+    const folder = await createFolder({ name: "" });
     setRenamingId(folder.id);
     setActiveViewId(folder.id);
   }

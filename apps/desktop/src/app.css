@@ -124,12 +124,6 @@ button,
   --font-display: -apple-system, "SF Pro Display", system-ui, sans-serif;
   --font-mono: "SF Mono", ui-monospace, monospace;
 
-  /* ─── Spacing ─── */
-  --spacing-panel-padding: 12px;
-  --spacing-item-gap: 2px;
-  --spacing-section-gap: 16px;
-  --spacing-content-gap: 8px;
-
   /* ─── Border Radius ─── */
   --radius: 6px;
   --radius-sm: 4px;
@@ -149,7 +143,7 @@ button,
   --surface-secondary: #fbfbf9;
   --surface-tertiary: #f6f6f4;
   --surface-elevated: #ffffff;
-  --surface-inset: #f0efed;
+  --surface-inset: #eae9e6;
   --surface-hover: #f0efed;
   --surface-active: #e6e5e2;
   --surface-selected: color-mix(in srgb, #2dd4a8 10%, transparent);
@@ -252,7 +246,7 @@ button,
   --surface-primary: #161613;
   --surface-secondary: #141412;
   --surface-tertiary: #121210;
-  --surface-elevated: #272724;
+  --surface-elevated: #1c1c19;
   --surface-inset: #0f0f0d;
   --surface-hover: #272724;
   --surface-active: #3a3a37;

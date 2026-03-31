@@ -6,6 +6,7 @@ import { Download, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -169,9 +170,9 @@ export function GeneralSettings() {
             </button>
             <button
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => void openUrl("https://pikos.app/changelog")}
+              onClick={() => void openUrl("https://pikos.app/release-notes")}
             >
-              Changelog <ExternalLink className="h-3 w-3" />
+              Release Notes <ExternalLink className="h-3 w-3" />
             </button>
           </div>
         </div>
@@ -195,7 +196,7 @@ export function GeneralSettings() {
               ].map((opt) => (
                 <button
                   className={cn(
-                    "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
                     weekStart === opt.id
                       ? "bg-accent text-accent-foreground"
                       : "text-muted-foreground hover:text-foreground"
@@ -217,18 +218,49 @@ export function GeneralSettings() {
                 Used when no folder is selected in the sidebar.
               </p>
             </div>
-            <select
-              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground"
-              onChange={(e) => setDefaultFolderId(e.target.value || null)}
-              value={defaultFolderId ?? ""}
+            <SearchablePopover
+              align="end"
+              placeholder="Search folders…"
+              trigger={
+                <button className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent">
+                  {folders.find((f) => f.id === defaultFolderId)?.name ?? "Inbox"}
+                </button>
+              }
             >
-              <option value="">Inbox</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
+              {({ close }) => (
+                <>
+                  <SearchablePopoverItem
+                    className={cn(
+                      defaultFolderId === null
+                        ? "font-medium text-foreground"
+                        : "text-muted-foreground"
+                    )}
+                    onClick={() => {
+                      setDefaultFolderId(null);
+                      close();
+                    }}
+                  >
+                    Inbox
+                  </SearchablePopoverItem>
+                  {folders.map((f) => (
+                    <SearchablePopoverItem
+                      className={cn(
+                        defaultFolderId === f.id
+                          ? "font-medium text-foreground"
+                          : "text-muted-foreground"
+                      )}
+                      key={f.id}
+                      onClick={() => {
+                        setDefaultFolderId(f.id);
+                        close();
+                      }}
+                    >
+                      {f.name}
+                    </SearchablePopoverItem>
+                  ))}
+                </>
+              )}
+            </SearchablePopover>
           </div>
         </div>
       </SettingsSection>

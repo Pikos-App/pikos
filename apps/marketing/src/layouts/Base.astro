@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import Nav from "../components/Nav.astro";
 
 interface Props {
   title: string;
@@ -22,6 +23,9 @@ const {
   publishedTime,
   ogImagePath = "/og.png",
 } = Astro.props;
+
+// Derive current path for nav highlighting
+const currentPath = "/" + Astro.url.pathname.replace(/^\/|\/$/g, "").split("/")[0];
 
 const ogImage = new URL(ogImagePath, Astro.site);
 
@@ -103,6 +107,7 @@ const structuredData = jsonLd ?? defaultJsonLd;
     <script defer src="https://cloud.umami.is/script.js" data-website-id="8a780ae1-ed60-46f7-99e8-d76463e6f9d8"></script>
   </head>
   <body class="bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100">
+    <Nav current={currentPath === "/" ? "/" : currentPath} />
     <slot />
   </body>
 </html>

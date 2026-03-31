@@ -87,13 +87,13 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
         tabIndex={tabIndex ?? 0}
       >
         {prefix}
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-h-[1lh] min-w-0 flex-1">
           <div className={cn("flex min-w-0", isRenaming && "invisible")}>{children}</div>
           {isRenaming && (
             <input
               aria-label={`Rename ${label}`}
               autoComplete="off"
-              className="type-ui absolute inset-0 w-full border-0 bg-transparent p-0 text-foreground outline-none"
+              className="type-ui absolute inset-0 w-full border-0 bg-transparent p-0 text-foreground caret-foreground outline-none"
               defaultValue={label}
               onBlur={commit}
               onClick={(e) => e.stopPropagation()}
@@ -106,6 +106,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
                   onRenameCancel();
                 }
               }}
+              placeholder="Untitled"
               ref={inputRef}
             />
           )}
