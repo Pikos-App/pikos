@@ -6,6 +6,7 @@ import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
 import { SettingsPage } from "@/features/settings";
 import { UndoToast } from "@/shared/components/UndoToast";
+import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
 import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
 import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";
@@ -28,6 +29,30 @@ function useTrackPageOpened() {
     }
     if (!activePageId) prevIdRef.current = null;
   }, [activePageId, updatePage]);
+}
+
+/** Listen for native menu events emitted from Tauri (View menu items). */
+function useMenuEvents() {
+  const { rightPanel, setRightPanel, setSidebarCollapsed, sidebarCollapsed } = useUI();
+  const stateRef = useRef({ rightPanel, sidebarCollapsed });
+  stateRef.current = { rightPanel, sidebarCollapsed };
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    void import("@tauri-apps/api/event").then(({ listen }) => {
+      void listen<string>("menu-event", (event) => {
+        if (event.payload === "toggle_sidebar") {
+          setSidebarCollapsed((prev: boolean) => !prev);
+        } else if (event.payload === "toggle_calendar") {
+          const current = stateRef.current.rightPanel;
+          setRightPanel(current === "calendar" ? "editor" : "calendar");
+        }
+      }).then((fn) => {
+        unlisten = fn;
+      });
+    });
+    return () => unlisten?.();
+  }, [setSidebarCollapsed, setRightPanel]);
 }
 
 /** ⌘, opens settings, ⌘1-9 switches to folder by index. */
@@ -69,6 +94,7 @@ function AppShell() {
   useKeyboardListener();
   useTrackPageOpened();
   useGlobalShortcuts();
+  useMenuEvents();
   const { consumePendingNavigation } = useWorkspace();
   const ui = useUI();
   const { handleUndoDelete, handleUndoDismiss, undoItems } = useUndoDelete();
@@ -116,11 +142,13 @@ export default function App() {
       <ThemeProvider>
         <WorkspaceProvider>
           <UIProvider>
-            <UndoDeleteProvider>
-              <TooltipProvider delayDuration={400}>
-                <WorkspaceGate />
-              </TooltipProvider>
-            </UndoDeleteProvider>
+            <EditorSettingsProvider>
+              <UndoDeleteProvider>
+                <TooltipProvider delayDuration={400}>
+                  <WorkspaceGate />
+                </TooltipProvider>
+              </UndoDeleteProvider>
+            </EditorSettingsProvider>
           </UIProvider>
         </WorkspaceProvider>
       </ThemeProvider>

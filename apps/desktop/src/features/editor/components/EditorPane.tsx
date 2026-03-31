@@ -16,6 +16,8 @@ import { useEffect, useRef, useState } from "react";
 import { Markdown } from "tiptap-markdown";
 
 import { EmptyState } from "@/shared/components/EmptyState";
+import type { LineWidth } from "@/shared/context/EditorSettingsContext";
+import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -59,16 +61,25 @@ const extensions = [
 ];
 
 // HTML attributes applied to the ProseMirror contenteditable element.
-const EDITOR_ATTRIBUTES = {
-  "aria-label": "Page content",
-  "aria-multiline": "true",
-  "aria-placeholder": "Start writing, or press / for commands",
-  autocapitalize: "off",
-  autocomplete: "off",
-  autocorrect: "off",
-  class: "editor-content",
-  role: "textbox",
-  spellcheck: "true",
+function editorAttributes(spellcheck: boolean) {
+  return {
+    "aria-label": "Page content",
+    "aria-multiline": "true",
+    "aria-placeholder": "Start writing, or press / for commands",
+    autocapitalize: "off",
+    autocomplete: "off",
+    autocorrect: "off",
+    class: "editor-content",
+    role: "textbox",
+    spellcheck: spellcheck ? "true" : "false",
+  };
+}
+
+const LINE_WIDTH_CLASS: Record<LineWidth, string> = {
+  default: "max-w-[720px]",
+  full: "max-w-none",
+  narrow: "max-w-[560px]",
+  wide: "max-w-[880px]",
 };
 
 // ─── EditorPane ────────────────────────────────────────────────────────────────
@@ -76,6 +87,7 @@ const EDITOR_ATTRIBUTES = {
 export function EditorPane() {
   const { isLoading, page } = useEditorPage();
   const { updatePage } = useWorkspace();
+  const { lineWidth, spellCheck } = useEditorSettings();
 
   // Track which page the editor currently shows (to detect page switches)
   const currentPageIdRef = useRef<string | null>(null);
@@ -88,7 +100,7 @@ export function EditorPane() {
 
   const editor = useEditor({
     editorProps: {
-      attributes: EDITOR_ATTRIBUTES,
+      attributes: editorAttributes(spellCheck),
     },
     extensions,
     onBlur: () => Keyboard.popScope("editor"),
@@ -98,6 +110,12 @@ export function EditorPane() {
       setContentVersion((v) => v + 1);
     },
   });
+
+  // ─── Sync spellcheck attribute when setting changes ────────────────────────
+  useEffect(() => {
+    if (!editor) return;
+    editor.view.dom.setAttribute("spellcheck", spellCheck ? "true" : "false");
+  }, [editor, spellCheck]);
 
   // ─── Prevent native <a> navigation inside editor ───────────────────────────
   // Links are rendered as <a> by Tiptap but clicking should only place the cursor
@@ -250,7 +268,7 @@ export function EditorPane() {
       <div className="flex-1 overflow-y-auto" ref={scrollContainerRef}>
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         <div
-          className="mx-auto min-h-full w-full max-w-[720px] cursor-text px-8 pt-3 pb-8"
+          className={`mx-auto min-h-full w-full ${LINE_WIDTH_CLASS[lineWidth]} cursor-text px-8 pt-3 pb-8`}
           onClick={(e) => {
             if (e.target === e.currentTarget) editor?.commands.focus("end");
           }}

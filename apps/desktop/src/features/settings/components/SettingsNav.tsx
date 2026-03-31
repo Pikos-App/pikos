@@ -1,16 +1,17 @@
 // SettingsNav — left sidebar navigation for the settings overlay.
 
-import { Code2, Keyboard, Palette, Settings, X } from "lucide-react";
+import { Code2, Keyboard, Palette, PenLine, Settings, X } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 
-export type SettingsSection = "general" | "appearance" | "shortcuts" | "developer";
+export type SettingsSection = "general" | "appearance" | "editor" | "shortcuts" | "developer";
 
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { icon: Settings, id: "general", label: "General" },
   { icon: Palette, id: "appearance", label: "Appearance" },
+  { icon: PenLine, id: "editor", label: "Editor" },
   { icon: Keyboard, id: "shortcuts", label: "Shortcuts" },
   ...(import.meta.env.DEV ? [{ icon: Code2, id: "developer" as const, label: "Developer" }] : []),
 ];

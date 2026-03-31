@@ -103,6 +103,7 @@ export function GeneralSettings() {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
   const [jsonExport, setJsonExport] = useState<ExportState>({ status: "idle" });
+  const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
 
   useEffect(() => {
     if (!workspace) return;
@@ -128,6 +129,16 @@ export function GeneralSettings() {
       setJsonExport({ path: dest, status: "done" });
     } catch (e: unknown) {
       setJsonExport({ message: String(e), status: "error" });
+    }
+  }
+
+  async function handleExportMarkdown() {
+    setMarkdownExport({ status: "saving" });
+    try {
+      const dest = await invoke<string>("export_markdown");
+      setMarkdownExport({ path: dest, status: "done" });
+    } catch (e: unknown) {
+      setMarkdownExport({ message: String(e), status: "error" });
     }
   }
 
@@ -182,6 +193,13 @@ export function GeneralSettings() {
             label="Export as JSON"
             onExport={() => void handleExportJson()}
             state={jsonExport}
+          />
+          <ExportRow
+            description="Markdown files with YAML frontmatter. Obsidian-compatible."
+            disabled={!workspace}
+            label="Export as Markdown"
+            onExport={() => void handleExportMarkdown()}
+            state={markdownExport}
           />
         </div>
 

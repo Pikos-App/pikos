@@ -1,11 +1,12 @@
-use tauri::menu::{AboutMetadataBuilder, MenuBuilder, SubmenuBuilder};
-use tauri::WindowEvent;
+use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::{Emitter, WindowEvent};
 
 mod db;
+mod markdown;
 
 use db::{
     connect_db, DbState,
-    dev::{backup_db, export_json, get_db_stats, reset_db},
+    dev::{backup_db, export_json, export_markdown, get_db_stats, reset_db},
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders, update_folder,
     },
@@ -54,6 +55,20 @@ pub fn run() {
                 .select_all()
                 .build()?;
 
+            let toggle_sidebar = MenuItemBuilder::new("Toggle Sidebar")
+                .id("toggle_sidebar")
+                .accelerator("CmdOrCtrl+\\")
+                .build(handle)?;
+            let toggle_calendar = MenuItemBuilder::new("Toggle Calendar")
+                .id("toggle_calendar")
+                .accelerator("CmdOrCtrl+Shift+C")
+                .build(handle)?;
+
+            let view_menu = SubmenuBuilder::new(handle, "View")
+                .item(&toggle_sidebar)
+                .item(&toggle_calendar)
+                .build()?;
+
             let window_menu = SubmenuBuilder::new(handle, "Window")
                 .minimize()
                 .separator()
@@ -64,8 +79,18 @@ pub fn run() {
                 .item(&app_menu)
                 .item(&file_menu)
                 .item(&edit_menu)
+                .item(&view_menu)
                 .item(&window_menu)
                 .build()
+        })
+        .on_menu_event(|app, event| {
+            let id = event.id().0.as_str();
+            match id {
+                "toggle_sidebar" | "toggle_calendar" => {
+                    let _ = app.emit("menu-event", id);
+                }
+                _ => {}
+            }
         })
         .on_window_event(|_window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -110,6 +135,7 @@ pub fn run() {
             // Dev / settings
             backup_db,
             export_json,
+            export_markdown,
             get_db_stats,
             reset_db,
         ])
