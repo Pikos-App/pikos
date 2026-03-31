@@ -6,12 +6,24 @@ import Footer from "../../components/Footer.astro";
 // Each post must have a matching file at /src/pages/blog/[slug].astro
 // or use Astro content collections when the volume warrants it.
 const posts: { slug: string; title: string; description: string; date: string }[] = [
-  // {
-  //   slug: "why-local-first",
-  //   title: "Why Local-First",
-  //   description: "Your data shouldn't need an internet connection.",
-  //   date: "2026-04-15",
-  // },
+  {
+    slug: "one-app-instead-of-three",
+    title: "One App Instead of Three",
+    description: "Notes, tasks, and calendar belong together. Pikos puts them in one place.",
+    date: "2026-04-05",
+  },
+  {
+    slug: "buy-once",
+    title: "Buy Once",
+    description: "No subscription. No recurring charge. You pay once, you own it.",
+    date: "2026-04-03",
+  },
+  {
+    slug: "your-data-stays-on-your-device",
+    title: "Your Data Stays on Your Device",
+    description: "Pikos doesn't have accounts, servers, or access to your data. Here's why.",
+    date: "2026-04-01",
+  },
 ];
 ---
 
