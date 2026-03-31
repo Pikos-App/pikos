@@ -77,8 +77,8 @@ appTest("find in page prefills selected text @tier2", async ({ app }) => {
   await editor.click();
   await app.keyboard.type("hello world");
 
-  // Double-click "world" to select it (cross-platform)
-  await editor.getByText("world").dblclick();
+  // Select "world" (5 chars) via Shift+ArrowLeft from end of line
+  for (let i = 0; i < 5; i++) await app.keyboard.press("Shift+ArrowLeft");
 
   // Open find — should prefill with selected text
   await app.keyboard.press(mod("Mod+f"));
