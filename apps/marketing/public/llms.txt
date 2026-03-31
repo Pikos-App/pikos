@@ -1,0 +1,39 @@
+# Pikos
+
+> Notes, tasks, and calendar in one local-first desktop app.
+
+Pikos is a desktop productivity app for macOS that combines notes, tasks, and a calendar into a single interface. All data is stored locally in SQLite on the user's device. No account required, no sign-up, no cloud dependency.
+
+## Key Facts
+
+- Category: Productivity / Notes / Task Management / Calendar
+- Platform: macOS (Tauri 2 + React)
+- Pricing: Free download. Paid option on Mac App Store includes iCloud sync.
+- Data: Local-first. SQLite database on device. Export as SQLite or JSON.
+- Privacy: No telemetry, no tracking cookies, no personal data collection.
+- Website: https://pikos.app
+- Contact: hello@pikos.app
+
+## What Pikos Does
+
+- Rich text editor with slash commands, formatting toolbar, Markdown paste, and autosave
+- Task management with priorities (Urgent/High/Medium/Low), statuses, tags, and folders
+- Week calendar view with drag-to-schedule, timed and all-day events
+- Quick add with natural language parsing (extracts dates, priorities, tags, folders)
+- Full-text search with BM25 ranking
+- Three-panel layout: sidebar, page list, editor or calendar
+- Complete keyboard navigation
+- Light, dark, and system themes
+- Data export (SQLite backup, JSON)
+
+## Pages
+
+- Homepage: https://pikos.app
+- Blog: https://pikos.app/blog
+- Changelog: https://pikos.app/changelog
+- Privacy Policy: https://pikos.app/privacy
+- Terms of Service: https://pikos.app/terms
+
+## Competitors and Alternatives
+
+Pikos competes with NotePlan, Obsidian, TickTick, Things, Todoist, and Linear. It differentiates by combining notes, tasks, and calendar in a single local-first app with no account requirement.
