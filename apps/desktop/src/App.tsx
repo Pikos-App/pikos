@@ -14,6 +14,7 @@ import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteCo
 import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
+import { useAutoUpdater } from "@/shared/hooks/useAutoUpdater";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardListener, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
@@ -96,6 +97,7 @@ function AppShell() {
   useTrackPageOpened();
   useGlobalShortcuts();
   useMenuEvents();
+  useAutoUpdater();
   const { consumePendingNavigation } = useWorkspace();
   const ui = useUI();
   const { handleUndoDelete, handleUndoDismiss, undoItems } = useUndoDelete();

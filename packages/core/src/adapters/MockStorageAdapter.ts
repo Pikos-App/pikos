@@ -69,6 +69,7 @@ export class MockStorageAdapter implements StorageAdapter {
   private schedules = new Map<string, PageSchedule>();
   private rules = new Map<string, PageRecurrenceRule>();
   private softDeleted = new Set<string>();
+  private softDeletedFolders = new Set<string>();
 
   /** Clear all data — used before re-seeding to prevent duplicates. */
   clear(): void {
@@ -77,6 +78,7 @@ export class MockStorageAdapter implements StorageAdapter {
     this.schedules.clear();
     this.rules.clear();
     this.softDeleted.clear();
+    this.softDeletedFolders.clear();
   }
 
   // ─── Pages ──────────────────────────────────────────────────────────────────
@@ -259,8 +261,28 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
+  softDeleteFolder(id: string): Promise<void> {
+    this.softDeletedFolders.add(id);
+    for (const page of this.pages.values()) {
+      if (page.folderId === id) this.softDeleted.add(page.id);
+    }
+    return Promise.resolve();
+  }
+
+  restoreFolder(id: string): Promise<void> {
+    this.softDeletedFolders.delete(id);
+    for (const page of this.pages.values()) {
+      if (page.folderId === id) this.softDeleted.delete(page.id);
+    }
+    return Promise.resolve();
+  }
+
   listFolders(): Promise<Folder[]> {
-    return Promise.resolve([...this.folders.values()].sort((a, b) => a.sortOrder - b.sortOrder));
+    return Promise.resolve(
+      [...this.folders.values()]
+        .filter((f) => !this.softDeletedFolders.has(f.id))
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+    );
   }
 
   reorderFolders(orderedIds: string[]): Promise<void> {

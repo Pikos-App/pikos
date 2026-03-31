@@ -1,0 +1,37 @@
+---
+/**
+ * Blog post template — copy this file to create a new post.
+ *
+ * 1. Copy this file: cp _template.astro my-post-slug.astro
+ * 2. Fill in the frontmatter props below
+ * 3. Write your content in the <slot> area (plain HTML, same as other pages)
+ * 4. Add the post to the `posts` array in /src/pages/blog/index.astro
+ *
+ * Available HTML in the prose area:
+ *   <h2>, <h3>           — section headings
+ *   <p>                   — paragraphs
+ *   <ul><li>              — bullet lists
+ *   <a href="...">        — links (auto-styled orange)
+ *   <code>                — inline code
+ *   <blockquote><p>       — pull quotes
+ */
+import BlogPost from "../../layouts/BlogPost.astro";
+---
+
+<BlogPost
+  title="Post Title Here"
+  description="A one-sentence summary for SEO and the blog listing."
+  date="2026-04-15"
+>
+
+  <p>
+    Write your post content here. Use standard HTML elements.
+  </p>
+
+  <h2>Section heading</h2>
+
+  <p>
+    More content.
+  </p>
+
+</BlogPost>

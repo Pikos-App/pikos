@@ -144,22 +144,26 @@ appTest("create and navigate folders @tier1", async ({ app }) => {
     app.locator("[data-page-list-item]").filter({ hasText: "folder page" })
   ).not.toBeVisible();
 
-  // Delete the folder — right-click → Delete → confirm
+  // Delete the folder — right-click → Delete — no confirmation dialog, just undo toast
   await app.getByRole("button", { name: "Projects" }).click({ button: "right" });
   await app.getByRole("menuitem", { name: "Delete" }).click();
 
-  // Confirmation dialog shows page count and folder name
-  await expect(app.getByText(/Delete "Projects"/)).toBeVisible();
-  await app.getByRole("button", { name: /Delete folder/ }).click();
-
-  // Folder is gone from sidebar
+  // Folder is gone from sidebar, undo toast appears
   await expect(app.getByRole("button", { name: "Projects" })).not.toBeVisible();
+  const toast = app.getByRole("alert", { name: /Projects/ });
+  await expect(toast).toBeVisible();
 
   // Child pages are soft-deleted (not moved to Inbox)
   await app.getByRole("button", { name: /Inbox/ }).click();
   await expect(
     app.locator("[data-page-list-item]").filter({ hasText: "folder page" })
   ).not.toBeVisible();
+
+  // Undo restores folder and its pages
+  await toast.getByRole("button", { name: /Undo/ }).click();
+  await expect(app.getByRole("button", { name: "Projects" })).toBeVisible();
+  await app.getByRole("button", { name: "Projects" }).click();
+  await expect(app.locator("[data-page-list-item]").getByText("folder page")).toBeVisible();
 });
 
 // ─── T1-6: Today view shows scheduled pages ─────────────────────────────────

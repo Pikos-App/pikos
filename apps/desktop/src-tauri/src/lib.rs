@@ -8,7 +8,8 @@ use db::{
     connect_db, DbState,
     dev::{backup_db, export_json, export_markdown, get_db_stats, reset_db},
     folders::{
-        create_folder, delete_folder, get_folder, list_folders, reorder_folders, update_folder,
+        create_folder, delete_folder, get_folder, list_folders, reorder_folders,
+        restore_folder, soft_delete_folder, update_folder,
     },
     pages::{create_page, delete_page, get_page, list_pages, list_pages_today, reorder_pages, restore_page, soft_delete_page, update_page},
     schedules::{
@@ -27,6 +28,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .menu(|handle| {
             // Custom menu without Print (Cmd+P) — that shortcut is used for search palette.
@@ -116,6 +118,8 @@ pub fn run() {
             create_folder,
             update_folder,
             delete_folder,
+            soft_delete_folder,
+            restore_folder,
             list_folders,
             reorder_folders,
             // Schedules

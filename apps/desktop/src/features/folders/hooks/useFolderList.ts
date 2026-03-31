@@ -3,12 +3,8 @@ import { localToday } from "@pikos/core";
 import { useState } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
+import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
-
-interface PendingDelete {
-  folder: Folder;
-  pageCount: number;
-}
 
 export type FolderSortOrder = "manual" | "alphabetical" | "page-count";
 
@@ -19,7 +15,6 @@ export interface FolderListState {
   setActiveViewId: (id: string) => void;
   renamingId: string | null;
   setRenamingId: (id: string | null) => void;
-  pendingDelete: PendingDelete | null;
   todayCount: number;
   inboxCount: number;
   sortOrder: FolderSortOrder;
@@ -27,26 +22,27 @@ export interface FolderListState {
   handleCreateFolder: () => Promise<void>;
   handleRenameCommit: (id: string, name: string) => void;
   handleDeleteRequest: (folder: Folder) => void;
-  handleDeleteConfirm: () => void;
-  handleDeleteCancel: () => void;
   handleColorChange: (id: string, color: string) => void;
 }
 
 export function useFolderList(): FolderListState {
-  const { createFolder, deleteFolder, folders, pages, updateFolder } = useWorkspace();
+  const { createFolder, folders, pages, updateFolder } = useWorkspace();
+  const { hiddenFolderIds, requestDeleteFolder } = useUndoDelete();
   const { activeViewId, setActiveViewId } = useUI();
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [sortOrder, setSortOrder] = useState<FolderSortOrder>("manual");
+
+  // Filter out folders pending undo deletion
+  const visibleFolders = folders.filter((f) => !hiddenFolderIds.has(f.id));
 
   // If the active view points to a folder that no longer exists, fall back to inbox.
   const isFolderView = activeViewId !== "today" && activeViewId !== "inbox";
-  if (isFolderView && !folders.some((f) => f.id === activeViewId)) {
+  if (isFolderView && !visibleFolders.some((f) => f.id === activeViewId)) {
     setActiveViewId("inbox");
   }
 
   const pageCountByFolder: Record<string, number> = {};
-  for (const folder of folders) {
+  for (const folder of visibleFolders) {
     pageCountByFolder[folder.id] = pages.filter(
       (p) => p.folderId === folder.id && p.status !== "done"
     ).length;
@@ -64,8 +60,8 @@ export function useFolderList(): FolderListState {
   // update the sortOrder field on each Folder object (only the DB write does).
   const sortedFolders =
     sortOrder === "manual"
-      ? folders
-      : [...folders].sort((a, b) => {
+      ? visibleFolders
+      : [...visibleFolders].sort((a, b) => {
           if (sortOrder === "alphabetical") return a.name.localeCompare(b.name);
           // page-count
           const aCount = pages.filter((p) => p.folderId === a.id && p.status !== "done").length;
@@ -86,23 +82,8 @@ export function useFolderList(): FolderListState {
 
   function handleDeleteRequest(folder: Folder) {
     const pageCount = pages.filter((p) => p.folderId === folder.id).length;
-    if (pageCount === 0) {
-      void deleteFolder(folder.id);
-      if (activeViewId === folder.id) setActiveViewId("inbox");
-    } else {
-      setPendingDelete({ folder, pageCount });
-    }
-  }
-
-  function handleDeleteConfirm() {
-    if (!pendingDelete) return;
-    void deleteFolder(pendingDelete.folder.id);
-    if (activeViewId === pendingDelete.folder.id) setActiveViewId("inbox");
-    setPendingDelete(null);
-  }
-
-  function handleDeleteCancel() {
-    setPendingDelete(null);
+    if (activeViewId === folder.id) setActiveViewId("inbox");
+    requestDeleteFolder(folder, pageCount);
   }
 
   function handleColorChange(id: string, color: string) {
@@ -114,13 +95,10 @@ export function useFolderList(): FolderListState {
     folders: sortedFolders,
     handleColorChange,
     handleCreateFolder,
-    handleDeleteCancel,
-    handleDeleteConfirm,
     handleDeleteRequest,
     handleRenameCommit,
     inboxCount,
     pageCountByFolder,
-    pendingDelete,
     renamingId,
     setActiveViewId,
     setRenamingId,

@@ -208,9 +208,59 @@ pub async fn delete_folder(state: State<'_, DbState>, id: String) -> Result<(), 
 }
 
 #[tauri::command]
+pub async fn soft_delete_folder(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    let pool = state.get_pool().await?;
+    let now = now_iso();
+
+    // Soft-delete the folder itself
+    sqlx::query("UPDATE folders SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+        .bind(&now)
+        .bind(&now)
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Soft-delete all pages in this folder
+    sqlx::query("UPDATE pages SET deleted_at = ?, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL")
+        .bind(&now)
+        .bind(&now)
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn restore_folder(state: State<'_, DbState>, id: String) -> Result<(), String> {
+    let pool = state.get_pool().await?;
+    let now = now_iso();
+
+    // Restore the folder
+    sqlx::query("UPDATE folders SET deleted_at = NULL, updated_at = ? WHERE id = ?")
+        .bind(&now)
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Restore all pages that were soft-deleted in this folder
+    sqlx::query("UPDATE pages SET deleted_at = NULL, updated_at = ? WHERE folder_id = ? AND deleted_at IS NOT NULL")
+        .bind(&now)
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn list_folders(state: State<'_, DbState>) -> Result<Vec<Folder>, String> {
     let pool = state.get_pool().await?;
-    let rows = sqlx::query_as::<_, FolderRow>("SELECT * FROM folders ORDER BY sort_order ASC")
+    let rows = sqlx::query_as::<_, FolderRow>("SELECT * FROM folders WHERE deleted_at IS NULL ORDER BY sort_order ASC")
         .fetch_all(&pool)
         .await
         .map_err(|e| e.to_string())?;

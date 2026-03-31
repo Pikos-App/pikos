@@ -1,0 +1,126 @@
+---
+import Base from "./Base.astro";
+import Footer from "../components/Footer.astro";
+
+interface Props {
+  title: string;
+  description: string;
+  date: string;
+  /** Optional OG image override (defaults to site-wide og.png) */
+  ogImage?: string;
+}
+
+const { title, description, date, ogImage } = Astro.props;
+const formattedDate = new Date(date).toLocaleDateString("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": title,
+  "description": description,
+  "datePublished": date,
+  "author": { "@type": "Person", "name": "Alex King" },
+  "publisher": { "@type": "Organization", "name": "Pikos" },
+};
+---
+
+<Base title={`${title} - Pikos`} description={description} ogType="article" publishedTime={date} jsonLd={jsonLd} ogImagePath={ogImage}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <!-- Back to blog -->
+    <a href="/blog" class="inline-flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-orange-500 dark:text-gray-500 dark:hover:text-orange-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Blog
+    </a>
+
+    <article>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">{title}</h1>
+      <time class="mt-3 block text-sm text-gray-400 dark:text-gray-500" datetime={date}>{formattedDate}</time>
+
+      <div class="prose mt-10 text-base leading-relaxed text-gray-600 dark:text-gray-300">
+        <slot />
+      </div>
+    </article>
+
+    <Footer current="/blog" />
+
+  </main>
+</Base>
+
+<style>
+  :global(body) {
+    background-color: #fafaf9;
+  }
+
+  :global(html.dark body) {
+    background-color: #030712;
+  }
+
+  /* Prose styles for blog content */
+  .prose :global(h2) {
+    padding-top: 1rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--heading-color, #111827);
+  }
+  :global(html.dark) .prose :global(h2) {
+    color: #f9fafb;
+  }
+
+  .prose :global(h3) {
+    padding-top: 0.5rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--heading-color, #111827);
+  }
+  :global(html.dark) .prose :global(h3) {
+    color: #f9fafb;
+  }
+
+  .prose :global(p) {
+    margin-top: 1.5rem;
+  }
+
+  .prose :global(ul) {
+    margin-top: 1rem;
+    padding-left: 1.25rem;
+    list-style-type: disc;
+  }
+
+  .prose :global(li) {
+    margin-top: 0.375rem;
+  }
+
+  .prose :global(a) {
+    color: #f97316;
+  }
+  .prose :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  .prose :global(code) {
+    border-radius: 0.25rem;
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.375rem;
+    font-size: 0.875rem;
+  }
+  :global(html.dark) .prose :global(code) {
+    background-color: #1f2937;
+  }
+
+  .prose :global(blockquote) {
+    margin-top: 1.5rem;
+    border-left: 3px solid #e5e7eb;
+    padding-left: 1rem;
+    font-style: italic;
+    color: #9ca3af;
+  }
+  :global(html.dark) .prose :global(blockquote) {
+    border-left-color: #374151;
+  }
+</style>

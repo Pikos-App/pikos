@@ -167,6 +167,12 @@ export function GeneralSettings() {
             >
               Website <ExternalLink className="h-3 w-3" />
             </button>
+            <button
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => void openUrl("https://pikos.app/changelog")}
+            >
+              Changelog <ExternalLink className="h-3 w-3" />
+            </button>
           </div>
         </div>
       </SettingsSection>

@@ -83,6 +83,10 @@ export interface StorageAdapter {
   createFolder(data: NewFolder): Promise<Folder>;
   updateFolder(id: string, updates: FolderUpdate): Promise<Folder>;
   deleteFolder(id: string): Promise<void>;
+  /** Soft-delete: sets deleted_at on folder and all its pages. Recoverable via restoreFolder. */
+  softDeleteFolder(id: string): Promise<void>;
+  /** Restore a soft-deleted folder and all its pages by clearing deleted_at. */
+  restoreFolder(id: string): Promise<void>;
   listFolders(): Promise<Folder[]>;
   reorderFolders(orderedIds: string[]): Promise<void>;
 

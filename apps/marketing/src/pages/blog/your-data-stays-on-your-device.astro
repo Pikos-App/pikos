@@ -1,0 +1,49 @@
+---
+import BlogPost from "../../layouts/BlogPost.astro";
+---
+
+<BlogPost
+  title="Your Data Stays on Your Device"
+  description="Pikos doesn't have accounts, servers, or access to your data. Here's why."
+  date="2026-04-01"
+>
+
+  <p>
+    Most productivity apps ask you to create an account before you can write a single note. That account connects to a server. Your notes, tasks, and calendar events live on that server. The company can read them, analyze them, or lose them in a breach.
+  </p>
+
+  <p>
+    Pikos works differently. Everything you create is stored in a database file on your computer. There's no account. There's no server. We literally cannot see what you write.
+  </p>
+
+  <h2>What this actually means</h2>
+
+  <p>
+    When you type a note in Pikos, it's saved to a local SQLite database — a standard, open format that's been around for decades. That file sits on your hard drive, right next to your photos and documents. It doesn't get uploaded anywhere.
+  </p>
+
+  <p>
+    If you delete the app, the data goes with it — unless you've backed it up yourself. We can't recover it for you because we never had it.
+  </p>
+
+  <h2>No analytics on your content</h2>
+
+  <p>
+    We don't track what you write, how many tasks you complete, or what you name your folders. We count page views on this website to know if anyone's visiting. That's it. No cookies, no fingerprinting, no behavioral tracking inside the app.
+  </p>
+
+  <h2>The trade-off</h2>
+
+  <p>
+    Local-first means you're responsible for your own backups. If your laptop dies and you didn't back up, that data is gone. Pikos has built-in export — you can save your entire database or export everything as JSON at any time. We recommend doing that occasionally.
+  </p>
+
+  <p>
+    When iCloud sync becomes available, it'll use Apple's infrastructure and your Apple account. Your data moves between your devices through Apple's servers, governed by Apple's privacy policy — not ours. We still won't have access to it.
+  </p>
+
+  <p>
+    This approach isn't for everyone. If you want automatic cloud backup managed by the app developer, there are good options for that. But if you'd rather keep your notes, tasks, and plans on your own machine and out of someone else's database, that's what Pikos is for.
+  </p>
+
+</BlogPost>
