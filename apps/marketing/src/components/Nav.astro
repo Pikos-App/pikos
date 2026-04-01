@@ -7,7 +7,7 @@ const { current = "/" } = Astro.props;
 
 const links = [
   { href: "/blog", label: "Blog" },
-  { href: "/release-notes", label: "Release Notes" },
+  { href: "/open", label: "Open" },
 ];
 ---
 
@@ -30,7 +30,7 @@ const links = [
       </a>
     ))}
     <a
-      href="#"
+      href="/download"
       class="rounded-lg bg-orange-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-orange-400"
     >
       Download

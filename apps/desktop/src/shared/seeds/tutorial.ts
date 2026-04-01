@@ -168,7 +168,7 @@ export async function seedTutorial(
     ),
     folderId: tutorial.id,
     priority: 3,
-    status: "in_progress",
+    status: "not_started",
     subtitle: "This is what a real page looks like \u2014 note + tasks in one place",
     tags: ["example"],
     title: "Example: weekly planning",

@@ -4,6 +4,41 @@ import type { APIContext } from "astro";
 // Keep in sync with /src/pages/blog/index.astro
 const posts = [
   {
+    slug: "what-if-pikos-goes-away",
+    title: "What If Pikos Goes Away?",
+    description:
+      "Your data is a file on your computer. The app works without a server. Here's what that means for longevity.",
+    date: "2026-04-17",
+  },
+  {
+    slug: "why-a-native-app",
+    title: "Why a Native App",
+    description:
+      "You could use a browser tab. Here's why a dedicated app is better for the things you use every day.",
+    date: "2026-04-15",
+  },
+  {
+    slug: "nothing-to-hack",
+    title: "Nothing to Hack",
+    description:
+      "No servers, no databases, no user accounts. The best security is having almost nothing to protect.",
+    date: "2026-04-13",
+  },
+  {
+    slug: "backups-are-on-you",
+    title: "Backups Are on You",
+    description:
+      "There's no account, no server, and no way for us to recover your data. Here's how to protect it.",
+    date: "2026-04-11",
+  },
+  {
+    slug: "the-code-is-public",
+    title: "The Code Is Public",
+    description:
+      "The Pikos codebase is now source-available. What you can do with it, how it's licensed, and why it matters for trust.",
+    date: "2026-04-09",
+  },
+  {
     slug: "getting-started",
     title: "Getting Started with Pikos",
     description: "A quick look at what happens when you open Pikos for the first time.",

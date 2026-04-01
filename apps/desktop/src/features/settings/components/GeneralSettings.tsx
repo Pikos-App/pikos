@@ -5,6 +5,7 @@ import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
@@ -89,7 +90,14 @@ function ExportRow({
 
 export function GeneralSettings() {
   const { folders, workspace } = useWorkspace();
-  const { defaultFolderId, setDefaultFolderId, setWeekStart, weekStart } = useAppSettings();
+  const {
+    autoCheckUpdates,
+    defaultFolderId,
+    setAutoCheckUpdates,
+    setDefaultFolderId,
+    setWeekStart,
+    weekStart,
+  } = useAppSettings();
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
   const [jsonExport, setJsonExport] = useState<ExportState>({ status: "idle" });
   const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
@@ -185,6 +193,17 @@ export function GeneralSettings() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Auto-update */}
+          <div className="flex items-center justify-between border-b border-border py-3">
+            <div>
+              <p className="text-sm font-medium">Automatically check for updates</p>
+              <p className="text-xs text-muted-foreground">
+                Check for new versions when the app launches.
+              </p>
+            </div>
+            <Switch checked={autoCheckUpdates} onCheckedChange={setAutoCheckUpdates} />
           </div>
 
           {/* Default folder */}

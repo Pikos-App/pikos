@@ -1,0 +1,53 @@
+---
+import BlogPost from "../../layouts/BlogPost.astro";
+---
+
+<BlogPost
+  title="Backups Are on You"
+  description="There's no account, no server, and no way for us to recover your data. Here's how to protect it."
+  date="2026-04-11"
+>
+
+  <p>
+    Pikos has no accounts. There's no server storing a copy of your data. I have no way to see what you've written, and no way to recover it if something goes wrong on your end. That's the trade-off of keeping everything on your device: your data is entirely yours, including the responsibility of keeping it safe.
+  </p>
+
+  <p>
+    This isn't a limitation I'm working around — it's a deliberate choice. But it means you should know your options.
+  </p>
+
+  <h2>Built-in export</h2>
+
+  <p>
+    Pikos has export built into settings. You can save a full backup of your data or export everything as a readable file at any time. Save it to an external drive, upload it to your cloud storage, email it to yourself — wherever you keep important files. I'd recommend doing this occasionally, especially before anything risky like a big OS upgrade.
+  </p>
+
+  <h2>Time Machine</h2>
+
+  <p>
+    If you're on a Mac and use Time Machine, your Pikos data is already being backed up automatically along with the rest of your files. If your machine dies or you accidentally delete something, Time Machine has a copy. This is probably the easiest option — it just works in the background without you thinking about it.
+  </p>
+
+  <h2>iCloud sync (coming soon)</h2>
+
+  <p>
+    When the Mac App Store version ships, iCloud sync will keep your data on Apple's servers, synced across your devices through your own Apple account. That's effectively an automatic off-site backup — if your laptop breaks, your data will sync to your next machine. I still won't have access to it. Apple handles the storage.
+  </p>
+
+  <h2>Other options</h2>
+
+  <p>
+    Your Pikos data is a standard database file sitting in a regular folder on your computer. Any backup tool that covers your files will cover Pikos too — whether that's a cloud backup service, an external hard drive, or something more hands-on like file-sync software. If you already back up your computer, you're already covered.
+  </p>
+
+  <h2>The honest version</h2>
+
+  <p>
+    If your laptop dies and you didn't back up, that data is gone. I can't help. There's no "forgot password" flow, no support ticket that restores your notes from a server. That's what it means when your data stays on your device.
+  </p>
+
+  <p>
+    For most people, Time Machine or the occasional export is plenty. If you're the kind of person who already backs up your machine, you don't need to do anything extra. If you're not — this is a good reason to start.
+  </p>
+
+</BlogPost>

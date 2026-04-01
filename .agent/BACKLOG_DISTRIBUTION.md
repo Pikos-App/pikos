@@ -88,7 +88,7 @@
 
 ---
 
-## Phase 2 (friends beta pipeline)
+## Phase 2 (friends beta pipeline — private repo, direct distribution)
 
 ---
 
@@ -208,34 +208,9 @@ Naming convention: `Pikos_<version>_universal.dmg`
 
 ---
 
-### GOO-52C: Add Windows and Linux build targets to CI 🤖
+### GOO-52C: Linux build target in CI ✅ (done)
 
-**What:** Extend the release workflow to build for Windows and Linux alongside macOS.
-
-**Implementation:**
-Update `.github/workflows/release.yml` to use a matrix strategy:
-
-```yaml
-strategy:
-  matrix:
-    include:
-      - platform: macos-latest
-        target: universal-apple-darwin
-      - platform: ubuntu-22.04
-        target: x86_64-unknown-linux-gnu
-      - platform: windows-latest
-        target: x86_64-pc-windows-msvc
-```
-
-**Platform-specific notes:**
-- **Linux:** Install system deps (`libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, etc. — check Tauri 2 prerequisites docs). Produces `.deb` and `.AppImage`. No signing needed.
-- **Windows:** Produces `.msi` and `.exe`. SmartScreen will warn without a code signing cert — this is acceptable for Phase 2/3. The updater `.json` manifest needs a Windows entry alongside macOS.
-- **Updater manifest:** Tauri generates platform-specific entries in `latest.json`. Ensure all three platforms' artifacts are uploaded to the same GitHub Release so the manifest resolves correctly.
-
-**Acceptance criteria:**
-- Push a tag → three platform builds complete → all artifacts appear in the GitHub Release
-- `latest.json` contains entries for all three platforms
-- Each platform binary runs (test at least macOS + one other)
+macOS universal + Linux x86_64 are already in the release workflow matrix. No Windows binary — per GTM, unsigned `.msi` triggers SmartScreen warnings that look like malware. Technical Windows users can build from source. Revisit only if non-technical Windows demand materializes.
 
 ---
 
@@ -252,6 +227,76 @@ strategy:
 6. Verify the app icon appears correctly in the dock, Finder, and the DMG window.
 
 **If Gatekeeper warns:** Check that notarization actually succeeded in the CI logs. Common issues: the stapling step failed silently, or the DMG was modified after notarization.
+
+---
+
+---
+
+## Phase 3 (public launch — all ship together)
+
+> Phase 3 is a single coordinated moment: repo goes public, `/download` page goes live, `/open` page goes live, blog posts publish. The repo must be public before `/download` works — GitHub Releases return 404 for unauthenticated requests on private repos.
+
+---
+
+### GOO-53-DL: Build /download page + Cloudflare Pages Function 🤖
+
+**What:** Create a `/download` page on the marketing site with platform buttons, backed by a Cloudflare Pages Function that redirects to the latest GitHub Release asset.
+
+**Prerequisites:** Repo is public. At least one GitHub Release exists with `.dmg`, `.AppImage`, and `.deb` artifacts.
+
+**Implementation:**
+
+1. **Cloudflare Pages Function** (`apps/marketing/functions/download/[platform].ts`):
+   - `GET /download/mac` → 302 redirect to latest `.dmg` from GitHub Releases
+   - `GET /download/linux` → 302 redirect to latest `.AppImage` from GitHub Releases
+   - Hits GitHub API (`/repos/{owner}/{repo}/releases/latest`), finds asset by filename pattern
+   - Cache the GitHub API response (5–10 min) to avoid rate limits
+   - Returns 404 with a helpful message for unknown platforms
+
+2. **Download page** (`apps/marketing/src/pages/download.astro`):
+   - Two download buttons: "Download for Mac" (links to `/download/mac`), "Download for Linux" (links to `/download/linux`)
+   - Show current version number (can be static, updated on release — or fetched client-side from GitHub API)
+   - System requirements: macOS 11+ (Big Sur), Linux x86_64
+   - Callout: "Want iCloud sync across devices? Coming soon to the Mac App Store."
+   - Link to GitHub Releases for all versions / changelog
+
+3. **Update homepage CTA** — "Download" button on `/` should link to `/download`.
+
+**Acceptance criteria:**
+- `/download/mac` redirects to a `.dmg` URL on `github.com/.../releases/...`
+- `/download/linux` redirects to an `.AppImage` URL
+- `/download` page renders with platform buttons
+- Redirect works for unauthenticated users (repo must be public)
+- Redirect resolves in <500ms (cached GitHub API response)
+
+---
+
+### GOO-53-OPEN: Build /open page 🤖
+
+**What:** Technical-audience landing page — architecture, local-first philosophy, SQLite data ownership, source-available repo.
+
+**Content (from GTM):**
+- Local-first philosophy: your data is a SQLite file on your disk, inspect it with any SQLite client
+- Architecture: Tauri 2 + React + TypeScript, no Electron, no cloud dependency
+- Privacy claim is auditable: link to public repo
+- Speaks to the "Obsidian + TickTick" pain point with technical specifics
+- Links: GitHub repo, Homebrew install (if ready), build-from-source instructions
+- Does NOT lead with origin story or solo-dev angle
+
+**Acceptance criteria:**
+- Page exists at `/open`
+- Links to public GitHub repo
+- No broken links or placeholder content
+
+---
+
+### GOO-XX: Make repo public 🧑
+
+**What:** Flip the private monorepo to public (or set up the public mirror repo per GTM).
+
+**Decision needed:** Single repo flip vs. separate public mirror synced by CI. Mirror is more work but keeps mobile code private when it exists. If mobile doesn't exist yet, flipping the existing repo is simpler.
+
+**Must happen before `/download` page goes live** — GitHub Releases are inaccessible on private repos.
 
 ---
 
@@ -439,19 +484,20 @@ These tasks are sequenced for after public launch, when you're ready for MAS sub
 
 ---
 
-### GOO-XX: Windows code signing certificate 🧑
+### GOO-XX: Windows binary distribution 🧑
 
-**What:** Purchase an OV code signing cert to eliminate SmartScreen warnings on Windows.
+**What:** Add Windows builds to the release pipeline. Currently no Windows binary — unsigned `.msi` triggers SmartScreen warnings that look like malware to non-technical users.
 
-**When:** Only after there's evidence of meaningful Windows usage. SmartScreen warnings are acceptable for early adopters. Revisit when you see Windows downloads in your analytics or get user complaints.
+**When:** Only if non-technical Windows demand materializes post-launch. Technical Windows users can build from source via the public repo.
 
 **If you proceed:**
-- Purchase from SSL.com or equivalent (~$300–500/yr for OV cert)
-- OV certs now require a hardware token (USB key) or cloud signing — no more file-based certs
-- Add to CI: sign the `.msi`/`.exe` during the Windows build step
-- SmartScreen reputation builds over time — the first few hundred installs may still show a warning even with a valid cert
+- Add Windows target to CI release matrix
+- Purchase an OV code signing cert (~$300–500/yr from SSL.com or equivalent) — now requires hardware token or cloud signing
+- Sign the `.msi`/`.exe` during the Windows build step
+- SmartScreen reputation builds over time — first few hundred installs may still warn even with a valid cert
+- Add Windows entry to `/download` page
 
-**Decision point:** After Phase 3 launch, assess Windows download volume. If <10% of users, defer indefinitely.
+**Decision point:** After Phase 3 launch, assess whether anyone is asking for Windows builds.
 
 ---
 

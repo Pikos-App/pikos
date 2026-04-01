@@ -27,6 +27,20 @@ refinement (to fix)
 - [ ] test auto updater
 
 
+## Distribution & Public Launch
+
+- [ ] 🧑 **Enroll in Apple Developer Program** — $99/yr, gating dependency for all signing/notarization. See `BACKLOG_DISTRIBUTION.md` for full steps.
+- [ ] 🧑 **Register bundle identifier** — `app.pikos.desktop` in Apple Developer portal. Must match `tauri.conf.json`.
+- [ ] 🧑 **Generate macOS code signing certificates** — Developer ID Application cert for direct distribution.
+- [ ] 🤖 **Audit bundle identifier in tauri.conf.json** — Ensure identifier, productName, version are set correctly.
+- [ ] 🧑🤖 **GOO-52A: GitHub Actions release workflow** — Signed, notarized macOS builds on git tag push. See `BACKLOG_DISTRIBUTION.md`.
+- [ ] 🤖 **GOO-52B: Tauri auto-updater** — Generate keypair, configure updater plugin, add update check on launch.
+- [ ] 🧑 **GOO-52D: Test signed build on clean macOS** — Verify Gatekeeper experience before sending to anyone.
+- [ ] 🧑 **Create `pikos-app` GitHub org** — Transfer repo from personal account to `pikos-app/pikos`. Must happen before repo goes public (all marketing links point to `github.com/pikos-app/pikos`).
+- [ ] 🧑 **Make repo public** — Flip to public after squashing into initial release commit + adding license. Must happen before `/download` page works (GitHub Releases 404 on private repos).
+- [ ] 🤖 **GOO-53-DL: Cloudflare Pages Function for /download** — `/download/mac` and `/download/linux` redirect to latest GitHub Release assets. Requires public repo.
+- [ ] 🤖 **Custom 404 page** — Branded 404 with links to `/` and `/download`.
+
 ## Enhancements
 
 - [ ] **Local usage stats** — SQL-powered stats panel (settings or debug view) showing aggregate usage: total pages, folders, scheduled pages, focus sessions; pages by status; pages created per week; feature adoption flags (has scheduled page, has folder, etc.). No telemetry — all queries run against the local DB. During beta, users can screenshot or share voluntarily.

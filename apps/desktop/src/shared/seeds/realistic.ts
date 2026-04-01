@@ -59,7 +59,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     title: string;
     subtitle?: string;
     content: string;
-    status: "not_started" | "in_progress" | "done";
+    status: "not_started" | "done";
     priority: 0 | 1 | 2 | 3 | 4;
     tags: string[];
     start?: string;
@@ -146,7 +146,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     folderId: work.id,
     priority: 1,
     start: timed(daysFrom(0), 14),
-    status: "in_progress",
+    status: "not_started",
     subtitle: "Blocks shift 1 hour after DST; root cause in rrule expansion",
     tags: ["bug", "calendar", "dev"],
     title: "Fix calendar timezone offset on DST week",
@@ -317,7 +317,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     folderId: work.id,
     priority: 1,
     start: timed(daysFrom(2), 10),
-    status: "in_progress",
+    status: "not_started",
     subtitle: "Cmdk-powered palette: search pages, switch folders, run commands",
     tags: ["dev", "feature"],
     title: "Implement search command palette",
@@ -414,7 +414,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     ),
     folderId: projects.id,
     priority: 2,
-    status: "in_progress",
+    status: "not_started",
     subtitle: "Replace countertops, repaint cabinets, new backsplash tile",
     tags: ["home", "project"],
     title: "Home renovation \u2014 kitchen",
@@ -463,7 +463,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     ),
     folderId: projects.id,
     priority: 3,
-    status: "in_progress",
+    status: "not_started",
     subtitle: "Find a motorized frame under $600 that fits the alcove",
     tags: ["research", "home"],
     title: "Research: standing desk setup",
@@ -737,7 +737,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     ),
     folderId: reading.id,
     priority: 4,
-    status: "in_progress",
+    status: "not_started",
     subtitle: "Finite time, finite energy \u2014 stop optimising, start choosing",
     tags: ["reading", "productivity"],
     title: "Four Thousand Weeks \u2014 Oliver Burkeman",

@@ -16,6 +16,9 @@ export interface AppSettingsValue {
   /** Folder ID to use when no folder context exists. null = Inbox. */
   defaultFolderId: string | null;
   setDefaultFolderId: (v: string | null) => void;
+  /** Whether to automatically check for updates on launch. Default: true. */
+  autoCheckUpdates: boolean;
+  setAutoCheckUpdates: (v: boolean) => void;
 }
 
 const AppSettingsContext = createContext<AppSettingsValue | null>(null);
@@ -28,9 +31,15 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     "pikos:defaultFolderId",
     null
   );
+  const [autoCheckUpdates, setAutoCheckUpdates] = useLocalStorage<boolean>(
+    "pikos:autoCheckUpdates",
+    true
+  );
 
   const value: AppSettingsValue = {
+    autoCheckUpdates,
     defaultFolderId,
+    setAutoCheckUpdates,
     setDefaultFolderId,
     setWeekStart,
     weekStart,

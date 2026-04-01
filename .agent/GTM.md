@@ -107,8 +107,17 @@ Mar 2026  ──────────────── Phase 2A core editor 
           ──────────────── Friends beta started (March 30) ✓
 Apr 2026  ─────── Friends beta feedback + calendar + search/commands
 May 2026  ─────── /open page, video demo, branding polish
-Jun 2026  ──────────────── Public launch 🚀
+Jun 2026  ──────────────── Public launch 🚀 (single coordinated moment)
 ```
+
+**Phase 3 launch ships all at once:**
+- Repo goes public (source-available)
+- `/open` page live (technical audience)
+- `/download` page live (Cloudflare Pages Function → GitHub Releases)
+- Mac (.dmg) + Linux (.AppImage, .deb) signed binaries
+- Blog launch posts
+- No Windows binary — revisit if demand materializes
+- Mac App Store is Phase 4 (separate, after launch proves stability)
 
 Pace assumptions: part-time (~a few focused hours/day).
 
@@ -142,14 +151,22 @@ Marketing site live at pikos.app. Astro + Tailwind, Cloudflare Pages. Homepage w
 
 Not a Product Hunt spike. A quiet, permanent public presence. The goal is for someone Googling "obsidian alternative with tasks" or "local-first calendar notes app" to find Pikos and be able to download it immediately.
 
-**What needs to ship:** `/open` page, video demo, source-available repo public, app stable after 2+ weeks of friends beta feedback incorporated. Command palette, full-text search, undo/redo, and theme selector should be in by then — but the bar is "stable and complete enough to show strangers," not a checklist.
+**What needs to ship — all at the same time:**
+- `/download` page with Mac + Linux buttons (Cloudflare Pages Function redirects to latest GitHub Release assets)
+- `/open` page (technical audience — architecture, local-first philosophy, GitHub link)
+- Video demo on homepage
+- Source-available repo goes public (prerequisite for `/download` — GitHub Releases must be publicly accessible)
+- Blog launch posts
+- App stable after 2+ weeks of friends beta feedback incorporated
+- Command palette, full-text search, undo/redo, and theme selector should be in — but the bar is "stable and complete enough to show strangers," not a checklist
 
-#### Dual landing pages (same app, two entry points)
+#### Three landing pages (same app, three entry points)
 
 - **`/`** — General audience. Visual, approachable. Headline: *"Notes, tasks, and calendar. One app."* Shows the product in motion (demo video). No mention of SQLite, Tauri, or file paths. Download button prominent above the fold. Focus on the feeling, not the feature list.
+- **`/download`** — Platform picker. Mac (.dmg) and Linux (.AppImage, .deb) buttons. Each button is a Cloudflare Pages Function that 302-redirects to the latest GitHub Release asset. Callout: "Want iCloud sync? Coming soon to the Mac App Store." No binaries hosted — GitHub serves them, Cloudflare redirects.
 - **`/open`** — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief explanation of specific technical decisions (not origin story). Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
 
-The two pages let you run different SEO and social campaigns without the messaging feeling split.
+The three pages let you run different SEO and social campaigns without the messaging feeling split.
 - General: "private notes app", "offline task manager", "notes app no account"
 - Technical: "local-first notes app", "obsidian alternative with tasks", "sqlite notes app"
 
@@ -193,7 +210,7 @@ Revenue      → app purchase prices (Apple takes 30%)
 
 DIRECT DOWNLOAD (website, Homebrew, GitHub)
 ────────────────────────────────────────────────────────────
-Mac/Win/Linux → downloaded free from pikos.app
+Mac/Linux     → downloaded free from pikos.app/download
 Sync          → none. Local only.
 ```
 
@@ -226,12 +243,20 @@ Sync          → none. Local only.
 
 | Channel | When | Notes |
 |---|---|---|
-| GitHub Releases | Phase 2+ | Primary distribution, auto-updater source |
-| Marketing site direct download | Phase 3 | Links to GitHub Releases |
-| Homebrew cask | Phase 3 | Developer-friendly, one-line install |
-| Mac App Store | Phase 4 | Primary non-technical discovery. Sandboxing adds work. |
+| GitHub Releases | Phase 2+ | Primary distribution, auto-updater source. Private repo during beta, public at Phase 3 launch. |
+| `/download` page | Phase 3 | Cloudflare Pages Function → 302 redirect to latest GitHub Release assets. Requires public repo. |
+| Homebrew cask | Phase 3+ | Developer-friendly, one-line install. Can ship with launch or shortly after. |
+| Mac App Store | Phase 4 | Primary non-technical discovery + iCloud sync upsell. Sandboxing adds work. |
 | Linux | Phase 3 | `.AppImage` + `.deb` from Tauri build matrix. No signing required, zero extra work. |
 | Windows | — | No binary distribution. Unsigned `.msi` triggers SmartScreen warnings that look like malware to non-technical users. The `/open` audience (developers) can build from source. Revisit if non-technical Windows demand materializes. |
+
+**Download flow at launch:**
+```
+pikos.app/download  →  Cloudflare Pages Function  →  302 redirect  →  GitHub Release asset
+                        (hits GitHub API, finds latest release,
+                         matches platform to asset filename)
+```
+Clean URLs: `/download/mac` → latest `.dmg`, `/download/linux` → latest `.AppImage`. GitHub serves the binary. No binary hosting, no S3, no CDN config. Requires the repo to be public (GitHub Releases return 404 for unauthenticated requests on private repos).
 
 ---
 
@@ -263,8 +288,9 @@ Free direct download at launch (full app, local only). iCloud sync is exclusive 
 - **GOO-51** App branding — icon, wordmark, visual identity
 - **GOO-52** macOS signing + notarization + GitHub Releases pipeline
 - **GOO-53** Marketing site — ~~Astro in `apps/marketing/`~~ (largely complete: homepage, blog, release notes, privacy, terms)
-- **GOO-53-OPEN** `/open` page for technical audience (Phase 3)
+- **GOO-53-DL** `/download` page + Cloudflare Pages Function redirects (Phase 3 — ships with launch)
+- **GOO-53-OPEN** `/open` page for technical audience (Phase 3 — ships with launch)
 - **GOO-54** Privacy policy — ~~simple, plain language, one page~~ (complete, live at `/privacy`)
-- **GOO-52-MAS** Mac App Store submission (Phase 4)
+- **GOO-52-MAS** Mac App Store submission (Phase 4 — after launch proves stability)
 - Video demo — record after Reddit posts land (Phase 3 gate)
 - Import from Apple Reminders / Google Tasks / Todoist — reduces switching cost, no phase assigned yet

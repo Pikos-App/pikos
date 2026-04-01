@@ -4,33 +4,73 @@ import Footer from "../../components/Footer.astro";
 
 // Blog posts — add new entries here, newest first.
 // Each post must have a matching file at /src/pages/blog/[slug].astro
-// or use Astro content collections when the volume warrants it.
-const posts: { slug: string; title: string; description: string; date: string }[] = [
+const posts: { slug: string; title: string; description: string; date: string; tag: string }[] = [
+  {
+    slug: "what-if-pikos-goes-away",
+    title: "What If Pikos Goes Away?",
+    description: "Your data is a file on your computer. The app works without a server. Here's what that means for longevity.",
+    date: "2026-04-17",
+    tag: "Philosophy",
+  },
+  {
+    slug: "why-a-native-app",
+    title: "Why a Native App",
+    description: "You could use a browser tab. Here's why a dedicated app is better for the things you use every day.",
+    date: "2026-04-15",
+    tag: "Philosophy",
+  },
+  {
+    slug: "nothing-to-hack",
+    title: "Nothing to Hack",
+    description: "No servers, no databases, no user accounts. The best security is having almost nothing to protect.",
+    date: "2026-04-13",
+    tag: "Security",
+  },
+  {
+    slug: "backups-are-on-you",
+    title: "Backups Are on You",
+    description: "There's no account, no server, and no way for us to recover your data. Here's how to protect it.",
+    date: "2026-04-11",
+    tag: "Privacy",
+  },
+  {
+    slug: "the-code-is-public",
+    title: "The Code Is Public",
+    description: "The Pikos codebase is now source-available. What you can do with it, how it's licensed, and why it matters for trust.",
+    date: "2026-04-09",
+    tag: "Transparency",
+  },
   {
     slug: "getting-started",
     title: "Getting Started with Pikos",
     description: "A quick look at what happens when you open Pikos for the first time.",
     date: "2026-04-07",
+    tag: "Product",
   },
   {
     slug: "one-app-instead-of-three",
     title: "One App Instead of Three",
     description: "Notes, tasks, and calendar belong together. Pikos puts them in one place.",
     date: "2026-04-05",
+    tag: "Product",
   },
   {
     slug: "buy-once",
     title: "Buy Once",
     description: "No subscription to use the app. You pay once, you own it.",
     date: "2026-04-03",
+    tag: "Pricing",
   },
   {
     slug: "your-data-stays-on-your-device",
     title: "Your Data Stays on Your Device",
     description: "Pikos doesn't have accounts, servers, or access to your data. Here's why.",
     date: "2026-04-01",
+    tag: "Privacy",
   },
 ];
+
+const tags = [...new Set(posts.map((p) => p.tag))];
 ---
 
 <Base title="Blog - Pikos" description="Articles about Pikos — the app, the architecture, the philosophy.">
@@ -46,25 +86,41 @@ const posts: { slug: string; title: string; description: string; date: string }[
     <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Blog</h1>
     <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">Honest writing about building Pikos — the app, the decisions, the trade-offs.</p>
 
-    {posts.length > 0 ? (
-      <div class="mt-12 space-y-8">
-        {posts.map((post) => (
-          <article class="group">
-            <a href={`/blog/${post.slug}`} class="block rounded-lg border border-gray-100 bg-white px-6 py-5 transition-colors hover:border-orange-200 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-orange-900">
+    <!-- Tag filters -->
+    <div class="mt-6 flex flex-wrap gap-2">
+      <button
+        data-tag="all"
+        class="tag-filter cursor-pointer rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-orange-300 hover:text-orange-600 dark:border-gray-700 dark:text-gray-400 dark:hover:border-orange-800 dark:hover:text-orange-400"
+      >
+        All
+      </button>
+      {tags.map((tag) => (
+        <button
+          data-tag={tag}
+          class="tag-filter cursor-pointer rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-orange-300 hover:text-orange-600 dark:border-gray-700 dark:text-gray-400 dark:hover:border-orange-800 dark:hover:text-orange-400"
+        >
+          {tag}
+        </button>
+      ))}
+    </div>
+
+    <div class="mt-10 space-y-6" id="posts">
+      {posts.map((post) => (
+        <article class="group" data-post-tag={post.tag}>
+          <a href={`/blog/${post.slug}`} class="block rounded-lg border border-gray-100 bg-white px-6 py-5 transition-colors hover:border-orange-200 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-orange-900">
+            <div class="flex items-center gap-2">
               <time class="text-xs text-gray-400 dark:text-gray-500" datetime={post.date}>
                 {new Date(post.date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
               </time>
-              <h2 class="mt-1 text-lg font-semibold text-gray-900 transition-colors group-hover:text-orange-500 dark:text-gray-50 dark:group-hover:text-orange-400">{post.title}</h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{post.description}</p>
-            </a>
-          </article>
-        ))}
-      </div>
-    ) : (
-      <div class="mt-16 text-center">
-        <p class="text-gray-400 dark:text-gray-500">No posts yet. Check back soon.</p>
-      </div>
-    )}
+              <span class="text-gray-200 dark:text-gray-700">&middot;</span>
+              <span class="text-xs font-medium text-orange-500 dark:text-orange-400">{post.tag}</span>
+            </div>
+            <h2 class="mt-1.5 text-lg font-semibold text-gray-900 transition-colors group-hover:text-orange-500 dark:text-gray-50 dark:group-hover:text-orange-400">{post.title}</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{post.description}</p>
+          </a>
+        </article>
+      ))}
+    </div>
 
     <Footer current="/blog" />
 
@@ -79,4 +135,48 @@ const posts: { slug: string; title: string; description: string; date: string }[
   :global(html.dark body) {
     background-color: #030712;
   }
+
+  .tag-filter[data-active] {
+    border-color: #f97316;
+    color: #f97316;
+    background-color: rgba(249, 115, 22, 0.08);
+  }
+
+  :global(html.dark) .tag-filter[data-active] {
+    border-color: #c2410c;
+    color: #fb923c;
+    background-color: rgba(249, 115, 22, 0.1);
+  }
 </style>
+
+<script>
+  const buttons = document.querySelectorAll<HTMLButtonElement>(".tag-filter");
+  const articles = document.querySelectorAll<HTMLElement>("#posts article");
+
+  function setFilter(tag: string) {
+    buttons.forEach((btn) => {
+      if (btn.dataset.tag === tag) {
+        btn.setAttribute("data-active", "");
+      } else {
+        btn.removeAttribute("data-active");
+      }
+    });
+
+    articles.forEach((article) => {
+      if (tag === "all" || article.dataset.postTag === tag) {
+        article.style.display = "";
+      } else {
+        article.style.display = "none";
+      }
+    });
+  }
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setFilter(btn.dataset.tag!);
+    });
+  });
+
+  // Default: show all
+  setFilter("all");
+</script>

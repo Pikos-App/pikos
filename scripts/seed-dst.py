@@ -180,7 +180,7 @@ PAGES = [
         "Write seed script for DST testing",
         "This very task",
         "2026-03-07T11:00:00", "2026-03-07T11:45:00",
-        "in_progress", 1, ["dev", "dst"],
+        "not_started", 1, ["dev", "dst"],
     ),
 ]
 

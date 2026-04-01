@@ -77,7 +77,7 @@ describe("updatePage — optimistic update", () => {
     act(() => {
       hook.result.current.updatePage(page.id, { title: "Draft 1" });
       hook.result.current.updatePage(page.id, { title: "Draft 2" });
-      hook.result.current.updatePage(page.id, { status: "in_progress" });
+      hook.result.current.updatePage(page.id, { status: "done" });
     });
 
     await act(async () => {
@@ -87,7 +87,7 @@ describe("updatePage — optimistic update", () => {
     // Only one DB write, carrying the merged patch
     expect(spy).toHaveBeenCalledOnce();
     const [, patch] = spy.mock.calls[0]!;
-    expect(patch).toMatchObject({ status: "in_progress", title: "Draft 2" });
+    expect(patch).toMatchObject({ status: "done", title: "Draft 2" });
   });
 
   it("rolls back React state and sets pageErrors when the DB write fails", async () => {

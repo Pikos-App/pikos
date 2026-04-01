@@ -47,7 +47,7 @@ const TAGS_POOL = [
   "ops",
 ];
 
-type Status = "not_started" | "in_progress" | "done";
+type Status = "not_started" | "done";
 type Priority = 0 | 1 | 2 | 3 | 4;
 
 function randPriority(): Priority {
@@ -61,8 +61,7 @@ function randPriority(): Priority {
 
 function randStatus(): Status {
   const r = Math.random();
-  if (r < 0.6) return "not_started";
-  if (r < 0.85) return "in_progress";
+  if (r < 0.7) return "not_started";
   return "done";
 }
 

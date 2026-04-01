@@ -29,7 +29,7 @@ export interface Folder {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-export type PageStatus = "not_started" | "in_progress" | "done";
+export type PageStatus = "not_started" | "done";
 
 // 0 = none  1 = urgent  2 = high  3 = medium  4 = low
 export type PagePriority = 0 | 1 | 2 | 3 | 4;
