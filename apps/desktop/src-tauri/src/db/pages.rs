@@ -638,3 +638,88 @@ pub async fn reorder_pages(
     }
     tx.commit().await.map_err(|e| e.to_string())
 }
+
+// ─── Completed pages (lazy-loaded, paginated) ────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletedPagesFilter {
+    pub folder_id: Option<serde_json::Value>, // null = inbox, missing = all
+    pub completed_since: Option<String>,       // ISO date for "today" filter
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletedPagesResponse {
+    pub pages: Vec<PageSummary>,
+    pub total: i64,
+}
+
+#[tauri::command]
+pub async fn list_completed_pages(
+    state: State<'_, DbState>,
+    filter: CompletedPagesFilter,
+) -> Result<CompletedPagesResponse, String> {
+    let pool = state.get_pool().await?;
+
+    // Build the WHERE clause shared by both count and data queries
+    let mut where_parts: Vec<String> = vec![
+        "deleted_at IS NULL".to_string(),
+        "status = 'done'".to_string(),
+    ];
+    let mut bind_values: Vec<String> = Vec::new();
+
+    if let Some(ref folder_val) = filter.folder_id {
+        match folder_val {
+            serde_json::Value::Null => {
+                where_parts.push("folder_id IS NULL".to_string());
+            }
+            serde_json::Value::String(fid) => {
+                where_parts.push("folder_id = ?".to_string());
+                bind_values.push(fid.clone());
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(ref since) = filter.completed_since {
+        where_parts.push("date(completed_at) >= ?".to_string());
+        bind_values.push(since.clone());
+    }
+
+    let where_clause = where_parts.join(" AND ");
+
+    // Count query
+    let count_sql = format!("SELECT COUNT(*) FROM pages WHERE {where_clause}");
+    let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+    for v in &bind_values {
+        count_query = count_query.bind(v);
+    }
+    let total = count_query
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Data query
+    let data_sql = format!(
+        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE {where_clause} \
+         ORDER BY completed_at DESC LIMIT ? OFFSET ?"
+    );
+    let mut data_query = sqlx::query_as::<_, PageSummaryRow>(&data_sql);
+    for v in &bind_values {
+        data_query = data_query.bind(v);
+    }
+    data_query = data_query.bind(filter.limit).bind(filter.offset);
+
+    let rows = data_query
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(CompletedPagesResponse {
+        pages: rows.into_iter().map(PageSummary::from).collect(),
+        total,
+    })
+}

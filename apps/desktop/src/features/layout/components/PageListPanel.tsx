@@ -45,6 +45,7 @@ interface PageListPanelProps {
 export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const {
     activePage,
+    completedHasMore,
     completedPages,
     folders,
     handleDeleteRequest,
@@ -55,6 +56,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     handleRenameCommit,
     handleSelectPage,
     handleToggleStatus,
+    loadMoreCompleted,
+    onExpandCompleted,
     renamingId,
     setRenamingId,
     visiblePages,
@@ -82,7 +85,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const completedCollapsed =
     completedCollapseState.viewId !== activeViewId ? true : completedCollapseState.collapsed;
   function toggleCompletedCollapsed() {
+    const willExpand = completedCollapsed;
     setCompletedCollapseState({ collapsed: !completedCollapsed, viewId: activeViewId });
+    if (willExpand) void onExpandCompleted();
   }
 
   function toggleDateFormat() {
@@ -264,7 +269,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         role="group"
         tabIndex={0}
       >
-        {visiblePages.length === 0 && completedPages.length === 0 ? (
+        {visiblePages.length === 0 ? (
           activeViewId === "today" ? (
             <EmptyState icon={Sun} message="Nothing scheduled for today">
               <p className="type-ui-sm mt-1 text-subtle">
@@ -319,50 +324,44 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
                 {today.map(renderPageItem)}
               </>
             )}
-            {completedPages.length > 0 && (
-              <>
-                <button
-                  className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
-                  onClick={toggleCompletedCollapsed}
-                >
-                  <ChevronRight
-                    className={cn("transition-transform", !completedCollapsed && "rotate-90")}
-                    size={12}
-                  />
-                  Completed
-                  <span className="ml-1 tabular-nums">· {completedPages.length}</span>
-                </button>
-                {!completedCollapsed && completedPages.map(renderPageItem)}
-              </>
-            )}
           </SortableContext>
         ) : (
-          // Folder / Inbox views: sortable list with DnD + completed accordion
+          // Folder / Inbox views: sortable list with DnD
+          <SortableContext items={pageIds} strategy={verticalListSortingStrategy}>
+            {visiblePages.map((page) => (
+              <Fragment key={page.id}>
+                {insertBeforeId === page.id && <InsertionLine />}
+                {renderPageItem(page)}
+              </Fragment>
+            ))}
+            {insertBeforeId === null && <InsertionLine />}
+          </SortableContext>
+        )}
+
+        {/* Completed section — always visible, lazy-loaded on expand */}
+        <button
+          className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
+          onClick={toggleCompletedCollapsed}
+        >
+          <ChevronRight
+            className={cn("transition-transform", !completedCollapsed && "rotate-90")}
+            size={12}
+          />
+          Completed
+        </button>
+        {!completedCollapsed && (
           <>
-            <SortableContext items={pageIds} strategy={verticalListSortingStrategy}>
-              {visiblePages.map((page) => (
-                <Fragment key={page.id}>
-                  {insertBeforeId === page.id && <InsertionLine />}
-                  {renderPageItem(page)}
-                </Fragment>
-              ))}
-              {insertBeforeId === null && <InsertionLine />}
-            </SortableContext>
-            {completedPages.length > 0 && (
-              <>
-                <button
-                  className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
-                  onClick={toggleCompletedCollapsed}
-                >
-                  <ChevronRight
-                    className={cn("transition-transform", !completedCollapsed && "rotate-90")}
-                    size={12}
-                  />
-                  Completed
-                  <span className="ml-1 tabular-nums">· {completedPages.length}</span>
-                </button>
-                {!completedCollapsed && completedPages.map(renderPageItem)}
-              </>
+            {completedPages.map(renderPageItem)}
+            {completedHasMore && (
+              <button
+                className="w-full px-3 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
+                onClick={() => void loadMoreCompleted()}
+              >
+                Show more completed
+              </button>
+            )}
+            {completedPages.length === 0 && (
+              <div className="type-ui-sm px-3 py-3 text-muted-foreground">No completed pages</div>
             )}
           </>
         )}

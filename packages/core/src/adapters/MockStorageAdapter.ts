@@ -13,6 +13,8 @@ import type {
   StorageAdapter,
 } from "../storage";
 import type {
+  CompletedPagesFilter,
+  CompletedPagesResponse,
   Folder,
   Page,
   PageFilter,
@@ -147,6 +149,32 @@ export class MockStorageAdapter implements StorageAdapter {
       if (page) this.pages.set(id, { ...page, sortOrder: i, updatedAt: now() });
     });
     return Promise.resolve();
+  }
+
+  listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse> {
+    let all = [...this.pages.values()].filter(
+      (p) => !this.softDeleted.has(p.id) && p.status === "done"
+    );
+
+    if (filter.folderId !== undefined) {
+      all = all.filter((p) => p.folderId === filter.folderId);
+    }
+    if (filter.completedSince !== undefined) {
+      all = all.filter(
+        (p) => p.completedAt != null && p.completedAt.slice(0, 10) >= filter.completedSince!
+      );
+    }
+
+    // Sort by completedAt descending (most recent first)
+    all.sort((a, b) => {
+      const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+      const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    const total = all.length;
+    const pages = all.slice(filter.offset, filter.offset + filter.limit).map(toSummary);
+    return Promise.resolve({ pages, total });
   }
 
   searchTags(query: string): Promise<string[]> {

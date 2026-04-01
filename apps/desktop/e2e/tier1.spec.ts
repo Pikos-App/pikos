@@ -100,8 +100,8 @@ appTest("complete a page via status toggle @tier1", async ({ app }) => {
   // Task leaves the active list
   await expect(pageItem).not.toBeVisible();
 
-  // Completed section appears with count
-  const completedToggle = app.getByRole("button", { name: /Completed · 1/ });
+  // Completed section toggle is always visible
+  const completedToggle = app.getByRole("button", { name: /Completed/ });
   await expect(completedToggle).toBeVisible();
 
   // Expand completed section — page should be inside

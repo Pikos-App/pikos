@@ -2,6 +2,8 @@
 // Lives in apps/desktop (Tauri deps). Types imported from @pikos/core (no Tauri).
 
 import type {
+  CompletedPagesFilter,
+  CompletedPagesResponse,
   Folder,
   Page,
   PageFilter,
@@ -68,6 +70,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void> {
     return invoke<void>("reorder_pages", { folderId, orderedIds });
+  }
+
+  listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse> {
+    return invoke<CompletedPagesResponse>("list_completed_pages", { filter });
   }
 
   searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse> {

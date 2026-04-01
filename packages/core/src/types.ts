@@ -162,3 +162,17 @@ export interface PageFilter {
   scheduledAfter?: string; // ISO 8601
   scheduledBefore?: string; // ISO 8601
 }
+
+// ─── Completed pages (lazy-loaded) ──────────────────────────────────────────
+
+export interface CompletedPagesFilter {
+  folderId?: string | null; // null = inbox, undefined = all folders
+  completedSince?: string; // ISO 8601 date — e.g. today's date for Today view
+  limit: number;
+  offset: number;
+}
+
+export interface CompletedPagesResponse {
+  pages: PageSummary[];
+  total: number; // total matching count (ignoring limit/offset)
+}

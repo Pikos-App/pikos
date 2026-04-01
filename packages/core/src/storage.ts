@@ -2,6 +2,8 @@
 // Zero Tauri / React / DOM dependencies — safe to import in tests and packages.
 
 import type {
+  CompletedPagesFilter,
+  CompletedPagesResponse,
   Folder,
   Page,
   PageFilter,
@@ -73,6 +75,8 @@ export interface StorageAdapter {
   listPagesToday(): Promise<PageSummary[]>;
   /** orderedIds = complete ordered list for that folderId (null = inbox/no folder) */
   reorderPages(folderId: string | null, orderedIds: string[]): Promise<void>;
+  /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
+  listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse>;
   /** Unified FTS5 search — title matches ranked above content matches via bm25(). */
   searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse>;
   /** Returns tag names whose prefix matches query — for autocomplete. */

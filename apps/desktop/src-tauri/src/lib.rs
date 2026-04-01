@@ -11,7 +11,7 @@ use db::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders,
         restore_folder, soft_delete_folder, update_folder,
     },
-    pages::{create_page, delete_page, get_page, list_pages, list_pages_today, reorder_pages, restore_page, soft_delete_page, update_page},
+    pages::{create_page, delete_page, get_page, list_completed_pages, list_pages, list_pages_today, reorder_pages, restore_page, soft_delete_page, update_page},
     schedules::{
         create_page_schedule, create_recurrence_rule, delete_page_schedule,
         delete_recurrence_rule, get_recurrence_rule, list_page_schedules,
@@ -149,6 +149,7 @@ pub fn run() {
             restore_page,
             list_pages,
             list_pages_today,
+            list_completed_pages,
             reorder_pages,
             // Folders
             get_folder,

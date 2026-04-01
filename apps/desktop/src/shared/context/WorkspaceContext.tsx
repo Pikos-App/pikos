@@ -3,7 +3,16 @@
 // WorkspaceContext — owns all data + mutations: pages, folders, tags.
 // GOO-15: auto-creates/reopens workspace on mount via @tauri-apps/plugin-store.
 
-import type { Folder, Page, PageSummary, SearchResponse, Tag, Workspace } from "@pikos/core";
+import type {
+  CompletedPagesFilter,
+  CompletedPagesResponse,
+  Folder,
+  Page,
+  PageSummary,
+  SearchResponse,
+  Tag,
+  Workspace,
+} from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import type { FolderUpdate, PageUpdate, StorageAdapter } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -67,6 +76,10 @@ export interface WorkspaceContextValue {
   scheduleOnce: (pageId: string, start: string, end?: string) => Promise<void>;
   /** Delete all one-off schedule blocks for a page. */
   clearSchedule: (pageId: string) => Promise<void>;
+  /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
+  listCompletedPages: (filter: CompletedPagesFilter) => Promise<CompletedPagesResponse>;
+  /** Merge lazy-loaded pages (e.g. completed) into the pages array, deduplicating by ID. */
+  mergePages: (incoming: PageSummary[]) => void;
   /** Unified FTS5 search — title matches ranked above content via bm25(). */
   searchPages: (query: string, includeCompleted?: boolean) => Promise<SearchResponse>;
   /** Tag name prefix search — for autocomplete in tag chip inputs. */
@@ -154,7 +167,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const [loadedPages, loadedFolders] = await Promise.all([
-        adapter.listPages(),
+        adapter.listPages({ status: "not_started" }),
         adapter.listFolders(),
       ]);
       setPages(loadedPages);
@@ -472,6 +485,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function mergePages(incoming: PageSummary[]) {
+    setPages((prev) => {
+      const existing = new Set(prev.map((p) => p.id));
+      const newPages = incoming.filter((p) => !existing.has(p.id));
+      return newPages.length > 0 ? [...prev, ...newPages] : prev;
+    });
+  }
+
   async function reorderPages(folderId: string | null, orderedIds: string[]) {
     const snapshot = [...pages];
     setPages((prev) => {
@@ -522,7 +543,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     await adapter.restoreFolder(id);
     // Re-fetch folders and pages to get the restored state
     const [loadedPages, loadedFolders] = await Promise.all([
-      adapter.listPages(),
+      adapter.listPages({ status: "not_started" }),
       adapter.listFolders(),
     ]);
     setPages(loadedPages);
@@ -667,6 +688,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return adapter.getPage(id);
   }
 
+  function listCompletedPages(filter: CompletedPagesFilter): Promise<CompletedPagesResponse> {
+    return adapter.listCompletedPages(filter);
+  }
+
   function searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse> {
     return adapter.searchPages(query, includeCompleted);
   }
@@ -714,6 +739,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     folders,
     getPage,
     isLoading,
+    listCompletedPages,
+    mergePages,
     on,
     pageErrors,
     pages,

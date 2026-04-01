@@ -640,3 +640,104 @@ describe("event emitter", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+// ─── mergePages ─────────────────────────────────────────────────────────────
+
+describe("mergePages", () => {
+  it("adds new pages to the pages array", async () => {
+    const { hook, page } = await setup();
+    const initialCount = hook.result.current.pages.length;
+
+    act(() => {
+      hook.result.current.mergePages([
+        {
+          createdAt: new Date().toISOString(),
+          folderId: null,
+          id: "completed-1",
+          priority: 0,
+          sortOrder: 99,
+          status: "done",
+          tags: [],
+          title: "Completed Page",
+          updatedAt: new Date().toISOString(),
+        },
+      ]);
+    });
+
+    expect(hook.result.current.pages).toHaveLength(initialCount + 1);
+    expect(hook.result.current.pages.find((p) => p.id === "completed-1")?.title).toBe(
+      "Completed Page"
+    );
+    void page;
+  });
+
+  it("deduplicates by ID — does not add pages already in the array", async () => {
+    const { hook, page } = await setup();
+    const initialCount = hook.result.current.pages.length;
+
+    act(() => {
+      hook.result.current.mergePages([
+        {
+          createdAt: page.createdAt,
+          folderId: null,
+          id: page.id,
+          priority: 0,
+          sortOrder: 0,
+          status: "done",
+          tags: [],
+          title: "Duplicate",
+          updatedAt: page.updatedAt,
+        },
+      ]);
+    });
+
+    // Count unchanged — the duplicate was skipped
+    expect(hook.result.current.pages).toHaveLength(initialCount);
+  });
+
+  it("merged pages participate in optimistic updates", async () => {
+    vi.useFakeTimers();
+    const { hook } = await setup();
+
+    act(() => {
+      hook.result.current.mergePages([
+        {
+          completedAt: "2026-03-01T10:00:00",
+          createdAt: "2026-03-01T09:00:00",
+          folderId: null,
+          id: "merged-1",
+          priority: 0,
+          sortOrder: 99,
+          status: "done",
+          tags: [],
+          title: "Original Title",
+          updatedAt: "2026-03-01T10:00:00",
+        },
+      ]);
+    });
+
+    // Optimistic update on merged page
+    act(() => {
+      hook.result.current.updatePage("merged-1", { title: "Updated Title" });
+    });
+
+    const found = hook.result.current.pages.find((p) => p.id === "merged-1");
+    expect(found?.title).toBe("Updated Title");
+  });
+});
+
+// ─── Initial load excludes completed ────────────────────────────────────────
+
+describe("initial load", () => {
+  it("does not include completed pages in pages array on mount", async () => {
+    const spy = vi.spyOn(MockStorageAdapter.prototype, "listPages");
+    const hook = renderHook(() => useWorkspace(), { wrapper });
+
+    await act(async () => {
+      await hook.result.current.selectWorkspace();
+    });
+
+    // listPages should have been called with status filter
+    expect(spy).toHaveBeenCalledWith({ status: "not_started" });
+  });
+});

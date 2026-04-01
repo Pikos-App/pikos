@@ -2,16 +2,13 @@ import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
 import { nowLocalISO } from "@pikos/core";
 import { useState } from "react";
 
-import {
-  getCompletedTodayPages,
-  getCompletedViewPages,
-  getVisiblePages,
-  sortPages,
-} from "@/features/pages/utils/pageFilters";
+import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
+
+import { useCompletedPages } from "./useCompletedPages";
 
 export const UNDO_TOAST_DURATION_MS = 8000;
 
@@ -22,15 +19,13 @@ export function usePageList() {
   const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
+  const completed = useCompletedPages(activeViewId);
+
   const filtered = getVisiblePages(pages, activeViewId).filter((p) => !hiddenIds.has(p.id));
   const visiblePages =
     activeViewId === "today" ? filtered : sortPages(filtered, getSortMode(activeViewId));
 
-  const completedPages = (
-    activeViewId === "today"
-      ? getCompletedTodayPages(pages)
-      : getCompletedViewPages(pages, activeViewId)
-  ).filter((p) => !hiddenIds.has(p.id));
+  const completedPages = completed.completedPages.filter((p) => !hiddenIds.has(p.id));
 
   function handleDeleteRequest(page: PageSummary) {
     if (activePage?.id === page.id) setActivePage(null);
@@ -68,6 +63,7 @@ export function usePageList() {
 
   return {
     activePage,
+    completedHasMore: completed.hasMore,
     completedPages,
     folders,
     handleDeleteRequest,
@@ -81,6 +77,8 @@ export function usePageList() {
       else setActivePage(null);
     },
     handleToggleStatus,
+    loadMoreCompleted: completed.loadMore,
+    onExpandCompleted: completed.onExpand,
     renamingId,
     setRenamingId,
     visiblePages,

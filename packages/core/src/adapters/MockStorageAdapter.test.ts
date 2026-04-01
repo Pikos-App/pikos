@@ -404,6 +404,86 @@ describe("searchTags", () => {
   });
 });
 
+// ─── listCompletedPages ─────────────────────────────────────────────────────
+
+describe("listCompletedPages", () => {
+  it("returns only completed pages, sorted by completedAt descending", async () => {
+    await createTestPage({ title: "Active" });
+    const done1 = await createTestPage({ status: "done", title: "Done 1" });
+    await adapter.updatePage(done1.id, { completedAt: "2026-03-01T10:00:00" });
+    const done2 = await createTestPage({ status: "done", title: "Done 2" });
+    await adapter.updatePage(done2.id, { completedAt: "2026-03-02T10:00:00" });
+
+    const result = await adapter.listCompletedPages({ limit: 20, offset: 0 });
+    expect(result.total).toBe(2);
+    expect(result.pages.map((p) => p.title)).toEqual(["Done 2", "Done 1"]);
+  });
+
+  it("paginates with limit and offset", async () => {
+    for (let i = 0; i < 5; i++) {
+      const p = await createTestPage({ status: "done", title: `Done ${i}` });
+      await adapter.updatePage(p.id, { completedAt: `2026-03-0${i + 1}T10:00:00` });
+    }
+
+    const page1 = await adapter.listCompletedPages({ limit: 2, offset: 0 });
+    expect(page1.total).toBe(5);
+    expect(page1.pages).toHaveLength(2);
+    expect(page1.pages[0]!.title).toBe("Done 4"); // most recent first
+
+    const page2 = await adapter.listCompletedPages({ limit: 2, offset: 2 });
+    expect(page2.total).toBe(5);
+    expect(page2.pages).toHaveLength(2);
+    expect(page2.pages[0]!.title).toBe("Done 2");
+  });
+
+  it("filters by folderId", async () => {
+    const folder = await adapter.createFolder({ name: "Work", parentId: null });
+    const inFolder = await createTestPage({
+      folderId: folder.id,
+      status: "done",
+      title: "In folder",
+    });
+    await adapter.updatePage(inFolder.id, { completedAt: "2026-03-01T10:00:00" });
+    const inInbox = await createTestPage({ folderId: null, status: "done", title: "In inbox" });
+    await adapter.updatePage(inInbox.id, { completedAt: "2026-03-01T10:00:00" });
+
+    const folderResult = await adapter.listCompletedPages({
+      folderId: folder.id,
+      limit: 20,
+      offset: 0,
+    });
+    expect(folderResult.pages.map((p) => p.title)).toEqual(["In folder"]);
+
+    const inboxResult = await adapter.listCompletedPages({ folderId: null, limit: 20, offset: 0 });
+    expect(inboxResult.pages.map((p) => p.title)).toEqual(["In inbox"]);
+  });
+
+  it("filters by completedSince", async () => {
+    const old = await createTestPage({ status: "done", title: "Old" });
+    await adapter.updatePage(old.id, { completedAt: "2026-02-15T10:00:00" });
+    const recent = await createTestPage({ status: "done", title: "Recent" });
+    await adapter.updatePage(recent.id, { completedAt: "2026-03-27T10:00:00" });
+
+    const result = await adapter.listCompletedPages({
+      completedSince: "2026-03-27",
+      limit: 20,
+      offset: 0,
+    });
+    expect(result.total).toBe(1);
+    expect(result.pages[0]!.title).toBe("Recent");
+  });
+
+  it("excludes soft-deleted pages", async () => {
+    const done = await createTestPage({ status: "done", title: "Deleted done" });
+    await adapter.updatePage(done.id, { completedAt: "2026-03-01T10:00:00" });
+    await adapter.softDeletePage(done.id);
+
+    const result = await adapter.listCompletedPages({ limit: 20, offset: 0 });
+    expect(result.total).toBe(0);
+    expect(result.pages).toHaveLength(0);
+  });
+});
+
 // ─── softDelete / restore ────────────────────────────────────────────────────
 
 describe("softDelete / restore", () => {
