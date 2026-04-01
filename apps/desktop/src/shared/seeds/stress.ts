@@ -3,6 +3,7 @@
 
 import { faker } from "@faker-js/faker";
 import type { StorageAdapter } from "@pikos/core";
+import { invoke } from "@tauri-apps/api/core";
 
 const MARKER = "Stress test marker";
 
@@ -70,51 +71,55 @@ function randTags(): string[] {
   return faker.helpers.arrayElements(TAGS_POOL, n);
 }
 
-function richContent(): string {
-  const nodes: Node[] = [
-    h2(faker.lorem.sentence({ max: 8, min: 3 }).replace(/\.$/, "")),
-    p(faker.lorem.paragraph()),
-  ];
+function richContent(): { content: string; contentText: string } {
+  const texts: string[] = [];
+  const heading = faker.lorem.sentence({ max: 8, min: 3 }).replace(/\.$/, "");
+  const intro = faker.lorem.paragraph();
+  texts.push(heading, intro);
+
+  const nodes: Node[] = [h2(heading), p(intro)];
 
   if (Math.random() > 0.4) {
-    nodes.push(h3(faker.lorem.words({ max: 5, min: 2 })), p(faker.lorem.paragraph()));
+    const sub = faker.lorem.words({ max: 5, min: 2 });
+    const body = faker.lorem.paragraph();
+    texts.push(sub, body);
+    nodes.push(h3(sub), p(body));
   }
 
   if (Math.random() > 0.5) {
-    nodes.push(
-      bullets(
-        faker.lorem.sentence(),
-        faker.lorem.sentence(),
-        faker.lorem.sentence(),
-        ...(Math.random() > 0.6 ? [faker.lorem.sentence()] : [])
-      )
-    );
+    const items = [
+      faker.lorem.sentence(),
+      faker.lorem.sentence(),
+      faker.lorem.sentence(),
+      ...(Math.random() > 0.6 ? [faker.lorem.sentence()] : []),
+    ];
+    texts.push(...items);
+    nodes.push(bullets(...items));
   }
 
   if (Math.random() > 0.6) {
-    nodes.push(
-      tasks(
-        { checked: Math.random() > 0.5, text: faker.lorem.sentence() },
-        { checked: Math.random() > 0.5, text: faker.lorem.sentence() },
-        { checked: false, text: faker.lorem.sentence() }
-      )
-    );
+    const taskItems = [
+      { checked: Math.random() > 0.5, text: faker.lorem.sentence() },
+      { checked: Math.random() > 0.5, text: faker.lorem.sentence() },
+      { checked: false, text: faker.lorem.sentence() },
+    ];
+    texts.push(...taskItems.map((t) => t.text));
+    nodes.push(tasks(...taskItems));
   }
 
   if (Math.random() > 0.8) {
-    nodes.push(
-      code(
-        "typescript",
-        `// ${faker.hacker.phrase()}\nconst ${faker.hacker.noun()} = ${faker.number.int({ max: 999, min: 1 })};`
-      )
-    );
+    const snippet = `// ${faker.hacker.phrase()}\nconst ${faker.hacker.noun()} = ${faker.number.int({ max: 999, min: 1 })};`;
+    texts.push(snippet);
+    nodes.push(code("typescript", snippet));
   }
 
   if (Math.random() > 0.5) {
-    nodes.push(p(faker.lorem.paragraph()));
+    const closing = faker.lorem.paragraph();
+    texts.push(closing);
+    nodes.push(p(closing));
   }
 
-  return doc(...nodes);
+  return { content: doc(...nodes), contentText: texts.join(" ") };
 }
 
 function randScheduledStart(): string {
@@ -136,6 +141,27 @@ function randScheduledEnd(start: string, durationMins: number): string {
   return d.toISOString().replace("Z", "").slice(0, 19);
 }
 
+/** ISO timestamp N days ago at a random hour. */
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  d.setHours(faker.number.int({ max: 22, min: 7 }), faker.number.int({ max: 59, min: 0 }), 0, 0);
+  return d.toISOString().replace("Z", "").slice(0, 19);
+}
+
+/** ISO timestamp between `after` and `before`. */
+function dateBetween(after: string, before: string): string {
+  const a = new Date(after).getTime();
+  const b = new Date(before).getTime();
+  return new Date(a + Math.random() * (b - a)).toISOString().replace("Z", "").slice(0, 19);
+}
+
+interface PageRecord {
+  id: string;
+  status: Status;
+  createdAt: string;
+}
+
 export async function seedStress(
   adapter: StorageAdapter,
   opts?: { folders?: number; pages?: number; schedules?: number }
@@ -149,6 +175,8 @@ export async function seedStress(
   if (results.some((r) => r.title.includes(MARKER))) return;
 
   faker.seed(42);
+
+  const now = new Date().toISOString().replace("Z", "").slice(0, 19);
 
   // ── Folders ──────────────────────────────────────────────────────────────
 
@@ -167,6 +195,7 @@ export async function seedStress(
 
   await adapter.createPage({
     content: doc(p("Stress seed marker.")),
+    contentText: "Stress seed marker.",
     folderId: folderIds[0] ?? null,
     priority: 0,
     status: "done",
@@ -177,44 +206,63 @@ export async function seedStress(
 
   // ── Pages ───────────────────────────────────────────────────────────────
 
-  const pageIds: string[] = [];
+  const pages: PageRecord[] = [];
   const inboxCount = Math.max(1, Math.round(pageCount * 0.05));
   const folderPageCount = pageCount - inboxCount;
 
-  // Inbox pages
-  for (let i = 0; i < inboxCount; i++) {
+  async function createSeededPage(folderId: string | null): Promise<PageRecord> {
+    const status = randStatus();
+    const { content, contentText } = richContent();
+    // Spread creation dates across the last 12 weeks
+    const createdAt = daysAgo(faker.number.int({ max: 84, min: 0 }));
     const page = await adapter.createPage({
-      content: richContent(),
-      folderId: null,
+      content,
+      contentText,
+      folderId,
       priority: randPriority(),
-      status: randStatus(),
+      status,
       subtitle: faker.lorem.sentence({ max: 15, min: 5 }),
       tags: randTags(),
       title: faker.lorem.sentence({ max: 10, min: 3 }).replace(/\.$/, ""),
     });
-    pageIds.push(page.id);
+    return { createdAt, id: page.id, status };
+  }
+
+  // Inbox pages
+  for (let i = 0; i < inboxCount; i++) {
+    pages.push(await createSeededPage(null));
   }
 
   // Folder pages
   for (let i = 0; i < folderPageCount; i++) {
     const folderId = folderIds[i % folderIds.length]!;
-    const page = await adapter.createPage({
-      content: richContent(),
-      folderId,
-      priority: randPriority(),
-      status: randStatus(),
-      subtitle: faker.lorem.sentence({ max: 15, min: 5 }),
-      tags: randTags(),
-      title: faker.lorem.sentence({ max: 10, min: 3 }).replace(/\.$/, ""),
+    pages.push(await createSeededPage(folderId));
+  }
+
+  // ── Backdate timestamps ─────────────────────────────────────────────────
+  // Spread created_at across last 12 weeks, set updated_at for ~40% of pages,
+  // and completed_at for done pages.
+
+  for (const pg of pages) {
+    const wasEdited = Math.random() < 0.4;
+    const updatedAt = wasEdited ? dateBetween(pg.createdAt, now) : pg.createdAt;
+    const completedAt = pg.status === "done" ? dateBetween(pg.createdAt, updatedAt) : undefined;
+
+    await invoke("backdate_page", {
+      params: {
+        completed_at: completedAt ?? null,
+        created_at: pg.createdAt,
+        id: pg.id,
+        updated_at: updatedAt,
+      },
     });
-    pageIds.push(page.id);
   }
 
   // ── Schedules ───────────────────────────────────────────────────────────
 
   const durations = [15, 30, 45, 60, 90, 120];
   for (let i = 0; i < schedCount; i++) {
-    const pageId = pageIds[Math.floor(Math.random() * pageIds.length)]!;
+    const pageId = pages[Math.floor(Math.random() * pages.length)]!.id;
     const start = randScheduledStart();
     const dur = faker.helpers.arrayElement(durations);
     const end = randScheduledEnd(start, dur);

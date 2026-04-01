@@ -29,6 +29,7 @@ import { FindContentPopover } from "./FindContentPopover";
 import { FormatToolbar } from "./FormatToolbar";
 import { LinkPopover } from "./LinkPopover";
 import { MetadataHeader } from "./MetadataHeader";
+import { PageInfoPopover } from "./PageInfoPopover";
 import { SlashMenuExtension } from "./SlashMenu";
 
 // ─── Extensions ────────────────────────────────────────────────────────────────
@@ -231,7 +232,7 @@ export function EditorPane() {
   // ─── Editor ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden bg-surface-primary">
+    <div className="group/editor relative flex flex-1 flex-col overflow-hidden bg-surface-primary">
       {page && (
         <MetadataHeader
           contentSaveError={saveError}
@@ -256,7 +257,7 @@ export function EditorPane() {
       <div aria-atomic="true" aria-live="assertive" className="sr-only">
         {saveError ? "Failed to save. Please try again." : isSaving ? "Saving…" : ""}
       </div>
-      <div className="flex-1 overflow-y-auto" ref={scrollContainerRef}>
+      <div className="relative flex-1 overflow-y-auto" ref={scrollContainerRef}>
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         <div
           className={`mx-auto min-h-full w-full ${LINE_WIDTH_CLASS[lineWidth]} cursor-text px-8 pt-3 pb-8`}
@@ -266,6 +267,7 @@ export function EditorPane() {
         >
           <EditorContent editor={editor} />
         </div>
+        {editor && <PageInfoPopover editor={editor} page={page} />}
       </div>
     </div>
   );

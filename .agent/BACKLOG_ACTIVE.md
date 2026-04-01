@@ -19,12 +19,13 @@ Status: `[ ]` pending · Delete task when done.
 refinement (to fix)
 - [ ] refine tutorial content
   - [ ] when deleting folder, delete pages or move to inbox? would make tutorial cleaner. Folder delete should probably be destructive, and it has a conformation dialog. All pages are soft deleted so we can recover when we add archive.
+  - [ ] keyboard shortcuts for non mac? maybe not worth it
 - [ ] tab and focus styling behavior, tab group and focus trap components?
 - [ ] compact pageblock children rendering
 - [ ] Misc dogfooding improvements.
+- [ ] selecting in editor focuses to last character
+- [ ] test auto updater
 
-## Before Launch
-- [ ] update db to bettersqlite?
 
 ## Enhancements
 

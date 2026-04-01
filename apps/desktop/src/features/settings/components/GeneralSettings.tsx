@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Download, ExternalLink } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
@@ -11,21 +11,7 @@ import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-interface DbStats {
-  pages: number;
-  folders: number;
-  schedules: number;
-  focus_sessions: number;
-}
-
-function StatRow({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex items-center justify-between border-b border-border py-2.5 last:border-0">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium tabular-nums">{value}</span>
-    </div>
-  );
-}
+import { UsageStats } from "./UsageStats";
 
 function SettingsSection({
   children,
@@ -104,18 +90,9 @@ function ExportRow({
 export function GeneralSettings() {
   const { folders, workspace } = useWorkspace();
   const { defaultFolderId, setDefaultFolderId, setWeekStart, weekStart } = useAppSettings();
-  const [stats, setStats] = useState<DbStats | null>(null);
-  const [statsError, setStatsError] = useState<string | null>(null);
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
   const [jsonExport, setJsonExport] = useState<ExportState>({ status: "idle" });
   const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
-
-  useEffect(() => {
-    if (!workspace) return;
-    invoke<DbStats>("get_db_stats")
-      .then(setStats)
-      .catch((e: unknown) => setStatsError(String(e)));
-  }, [workspace]);
 
   async function handleExportSqlite() {
     setSqliteExport({ status: "saving" });
@@ -265,19 +242,17 @@ export function GeneralSettings() {
         </div>
       </SettingsSection>
 
-      {/* ── Data ───────────────────────────────────────────────────────── */}
+      {/* ── Data ──────────────────────────────────────────────────────── */}
       <SettingsSection
-        description="Your data is stored locally and never leaves your device."
-        title="Data"
+        description="Your data stored locally and never leaves your device."
+        title="Your Workspace"
       >
-        <div className="rounded-lg border border-border bg-card px-4">
-          <StatRow label="Folders" value={stats?.folders ?? "—"} />
-          <StatRow label="Pages" value={stats?.pages ?? "—"} />
-          <StatRow label="Scheduled items" value={stats?.schedules ?? "—"} />
-          <StatRow label="Focus sessions" value={stats?.focus_sessions ?? "—"} />
-        </div>
+        <UsageStats workspace={!!workspace} />
+      </SettingsSection>
 
-        <div className="mt-3 rounded-lg border border-border bg-card px-4">
+      {/* ── Export ─────────────────────────────────────────────────────── */}
+      <SettingsSection description="Download your data in different formats." title="Export">
+        <div className="rounded-lg border border-border bg-card px-4">
           <ExportRow
             description="Full database backup. Best for restoring data."
             disabled={!workspace}
@@ -300,10 +275,6 @@ export function GeneralSettings() {
             state={markdownExport}
           />
         </div>
-
-        {statsError && (
-          <p className="mt-3 text-xs text-destructive">Failed to load stats: {statsError}</p>
-        )}
       </SettingsSection>
 
       {/* ── Feedback ───────────────────────────────────────────────────── */}

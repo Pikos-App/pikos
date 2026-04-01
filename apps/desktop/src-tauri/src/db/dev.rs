@@ -1,49 +1,209 @@
-// dev.rs — Developer/settings commands: stats, reset, seed, export.
+// dev.rs — Developer/settings commands: stats, reset, export, seed helpers.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{Column, Row};
 
 use crate::db::DbState;
 use crate::markdown::prosemirror_to_markdown;
 
+// ── Rich usage stats ─────────────────────────────────────────────────────────
+
 #[derive(Serialize)]
-pub struct DbStats {
-    pub pages: i64,
-    pub folders: i64,
-    pub schedules: i64,
-    pub focus_sessions: i64,
+pub struct StatusCount {
+    pub status: String,
+    pub count: i64,
 }
 
-/// Return row counts for the main tables. Used by the Settings > General page.
+#[derive(Serialize)]
+pub struct WeekActivity {
+    /// ISO week label, e.g. "Mar 24"
+    pub week: String,
+    pub created: i64,
+    pub edited: i64,
+    pub completed: i64,
+}
+
+#[derive(Serialize)]
+pub struct UsageStats {
+    // Totals
+    pub total_pages: i64,
+    pub total_folders: i64,
+    pub total_schedules: i64,
+    pub total_focus_sessions: i64,
+    pub total_focus_minutes: i64,
+    pub total_completed: i64,
+    pub total_words: i64,
+
+    // Pages by status
+    pub pages_by_status: Vec<StatusCount>,
+
+    // Weekly activity (last 12 weeks)
+    pub weekly_activity: Vec<WeekActivity>,
+
+    // Feature adoption
+    pub has_folders: bool,
+    pub has_schedules: bool,
+    pub has_recurring: bool,
+    pub has_focus_sessions: bool,
+    pub has_subtasks: bool,
+    pub has_tags: bool,
+    pub has_priorities: bool,
+
+    // Milestones
+    pub first_page_date: Option<String>,
+}
+
+/// Rich usage stats for the Settings > Data panel. All queries are local — no telemetry.
 #[tauri::command]
-pub async fn get_db_stats(state: tauri::State<'_, DbState>) -> Result<DbStats, String> {
+pub async fn get_usage_stats(state: tauri::State<'_, DbState>) -> Result<UsageStats, String> {
     let pool = state.get_pool().await?;
+    let e = |e: sqlx::Error| e.to_string();
 
-    let pages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL")
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    // ── Totals ────────────────────────────────────────────────────────────────
+    let total_pages: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL"
+    ).fetch_one(&pool).await.map_err(e)?;
 
-    let folders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders WHERE deleted_at IS NULL")
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let total_folders: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM folders WHERE deleted_at IS NULL"
+    ).fetch_one(&pool).await.map_err(e)?;
 
-    let schedules: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_schedules")
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let total_schedules: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM page_schedules"
+    ).fetch_one(&pool).await.map_err(e)?;
 
-    let focus_sessions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM focus_sessions")
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let total_focus_sessions: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM focus_sessions"
+    ).fetch_one(&pool).await.map_err(e)?;
 
-    Ok(DbStats {
-        pages,
-        folders,
-        schedules,
-        focus_sessions,
+    let total_focus_minutes: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(duration_s), 0) / 60 FROM focus_sessions"
+    ).fetch_one(&pool).await.map_err(e)?;
+
+    let total_completed: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL AND status = 'done'"
+    ).fetch_one(&pool).await.map_err(e)?;
+
+    // Word count: sum of words in content_text across all pages
+    let total_words: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(LENGTH(content_text) - LENGTH(REPLACE(content_text, ' ', '')) + 1), 0) \
+         FROM pages WHERE deleted_at IS NULL AND content_text != ''"
+    ).fetch_one(&pool).await.map_err(e)?;
+
+    // ── Pages by status ───────────────────────────────────────────────────────
+    let status_rows = sqlx::query(
+        "SELECT status, COUNT(*) as count FROM pages WHERE deleted_at IS NULL GROUP BY status ORDER BY count DESC"
+    ).fetch_all(&pool).await.map_err(e)?;
+
+    let pages_by_status: Vec<StatusCount> = status_rows.iter().map(|row| {
+        StatusCount {
+            status: row.try_get::<String, _>("status").unwrap_or_default(),
+            count: row.try_get::<i64, _>("count").unwrap_or(0),
+        }
+    }).collect();
+
+    // ── Weekly activity (last 12 weeks) ───────────────────────────────────────
+    // Tracks pages created, pages edited (updated_at != created_at), and pages completed per week.
+    let week_rows = sqlx::query(
+        "WITH RECURSIVE weeks(n) AS ( \
+           SELECT 0 UNION ALL SELECT n+1 FROM weeks WHERE n < 11 \
+         ), \
+         week_starts AS ( \
+           SELECT date('now', '-' || (n * 7) || ' days', 'weekday 1', '-7 days') AS week_start \
+           FROM weeks \
+         ) \
+         SELECT \
+           ws.week_start, \
+           COALESCE(cr.created, 0) AS created, \
+           COALESCE(ed.edited, 0) AS edited, \
+           COALESCE(co.completed, 0) AS completed \
+         FROM week_starts ws \
+         LEFT JOIN ( \
+           SELECT date(created_at, 'weekday 1', '-7 days') AS w, COUNT(*) AS created \
+           FROM pages WHERE deleted_at IS NULL \
+           GROUP BY w \
+         ) cr ON cr.w = ws.week_start \
+         LEFT JOIN ( \
+           SELECT date(updated_at, 'weekday 1', '-7 days') AS w, COUNT(*) AS edited \
+           FROM pages WHERE deleted_at IS NULL AND updated_at != created_at \
+           GROUP BY w \
+         ) ed ON ed.w = ws.week_start \
+         LEFT JOIN ( \
+           SELECT date(completed_at, 'weekday 1', '-7 days') AS w, COUNT(*) AS completed \
+           FROM pages WHERE deleted_at IS NULL AND completed_at IS NOT NULL \
+           GROUP BY w \
+         ) co ON co.w = ws.week_start \
+         ORDER BY ws.week_start ASC"
+    ).fetch_all(&pool).await.map_err(e)?;
+
+    let weekly_activity: Vec<WeekActivity> = week_rows.iter().map(|row| {
+        let week_start: String = row.try_get("week_start").unwrap_or_default();
+        // Format "2026-03-23" → "Mar 23"
+        let label = if week_start.len() >= 10 {
+            let month = match &week_start[5..7] {
+                "01" => "Jan", "02" => "Feb", "03" => "Mar", "04" => "Apr",
+                "05" => "May", "06" => "Jun", "07" => "Jul", "08" => "Aug",
+                "09" => "Sep", "10" => "Oct", "11" => "Nov", "12" => "Dec",
+                _ => "???",
+            };
+            let day = &week_start[8..10];
+            format!("{} {}", month, day)
+        } else {
+            week_start
+        };
+        WeekActivity {
+            week: label,
+            created: row.try_get("created").unwrap_or(0),
+            edited: row.try_get("edited").unwrap_or(0),
+            completed: row.try_get("completed").unwrap_or(0),
+        }
+    }).collect();
+
+    // ── Feature adoption ──────────────────────────────────────────────────────
+    let has_folders = total_folders > 0;
+    let has_schedules = total_schedules > 0;
+
+    let has_recurring: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM page_recurrence_rules"
+    ).fetch_one(&pool).await.map_err(e)? > 0;
+
+    let has_focus_sessions = total_focus_sessions > 0;
+
+    let has_subtasks: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM pages WHERE parent_id IS NOT NULL AND deleted_at IS NULL"
+    ).fetch_one(&pool).await.map_err(e)? > 0;
+
+    let has_tags: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL AND tags != '[]' AND tags != ''"
+    ).fetch_one(&pool).await.map_err(e)? > 0;
+
+    let has_priorities: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL AND priority != 0"
+    ).fetch_one(&pool).await.map_err(e)? > 0;
+
+    // ── Milestones ────────────────────────────────────────────────────────────
+    let first_page_date: Option<String> = sqlx::query_scalar(
+        "SELECT MIN(created_at) FROM pages WHERE deleted_at IS NULL"
+    ).fetch_one(&pool).await.map_err(e)?;
+
+    Ok(UsageStats {
+        total_pages,
+        total_folders,
+        total_schedules,
+        total_focus_sessions,
+        total_focus_minutes,
+        total_completed,
+        total_words,
+        pages_by_status,
+        weekly_activity,
+        has_folders,
+        has_schedules,
+        has_recurring,
+        has_focus_sessions,
+        has_subtasks,
+        has_tags,
+        has_priorities,
+        first_page_date,
     })
 }
 
@@ -292,6 +452,56 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
     }
 
     Ok(base_dir)
+}
+
+// ── Seed helpers ─────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct BackdateParams {
+    pub id: String,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub completed_at: Option<String>,
+}
+
+/// Dev-only: overwrite timestamps on a page for realistic seed data.
+/// Not exposed in production — only called by seed scripts.
+#[tauri::command]
+pub async fn backdate_page(
+    state: tauri::State<'_, DbState>,
+    params: BackdateParams,
+) -> Result<(), String> {
+    let pool = state.get_pool().await?;
+
+    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE pages SET ");
+    let mut sep = builder.separated(", ");
+    let mut has_updates = false;
+
+    if let Some(ref v) = params.created_at {
+        sep.push("created_at = ");
+        sep.push_bind_unseparated(v.clone());
+        has_updates = true;
+    }
+    if let Some(ref v) = params.updated_at {
+        sep.push("updated_at = ");
+        sep.push_bind_unseparated(v.clone());
+        has_updates = true;
+    }
+    if let Some(ref v) = params.completed_at {
+        sep.push("completed_at = ");
+        sep.push_bind_unseparated(v.clone());
+        has_updates = true;
+    }
+
+    if !has_updates {
+        return Ok(());
+    }
+
+    builder.push(" WHERE id = ");
+    builder.push_bind(&params.id);
+
+    builder.build().execute(&pool).await.map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Sanitize a string for use as a filename — replace problematic characters.

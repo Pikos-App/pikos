@@ -87,3 +87,6 @@ Status: `[ ]` pending · `[-]` superseded/deferred/do not start
 
 ## misc backlog notes - to be sorted.
 - [-] Add settings for priority - allow users to turn on priority coloring in the page item list (either colored checkboxes or colored dot next to the date). Default off in the list. Already implemented: show in the page / allow to sort list by priority
+
+
+What does the future of pikos look like? AI first / conversational integrated with our personal devices. Could ask Pikos questions. Am I free Wednesday at 3pm? Am I free Wednesday evening? How many times have I ran over the last 3 months. Useful for reflection. Useful for managing schedule and thoughts. Maybe non llm check. Maybe light local llm. 

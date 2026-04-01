@@ -1,12 +1,12 @@
 use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{Emitter, Manager};
+use tauri::{Manager};
 
 mod db;
 mod markdown;
 
 use db::{
     connect_db, DbState,
-    dev::{backup_db, export_json, export_markdown, get_db_stats, reset_db},
+    dev::{backdate_page, backup_db, export_json, export_markdown, get_usage_stats, reset_db},
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders,
         restore_folder, soft_delete_folder, update_folder,
@@ -175,10 +175,11 @@ pub fn run() {
             // Tags
             search_tags,
             // Dev / settings
+            backdate_page,
             backup_db,
             export_json,
             export_markdown,
-            get_db_stats,
+            get_usage_stats,
             reset_db,
         ])
         .run(tauri::generate_context!())
