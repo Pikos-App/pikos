@@ -25,6 +25,10 @@ refinement (to fix)
 - [ ] Misc dogfooding improvements.
 - [ ] selecting in editor focuses to last character
 - [ ] test auto updater
+- [ ] complete shortcut (c, space/enter - which?)
+
+to test
+- multi page select
 
 
 ## Distribution & Public Launch
@@ -39,17 +43,12 @@ refinement (to fix)
 - [ ] 🧑 **Create `pikos-app` GitHub org** — Transfer repo from personal account to `pikos-app/pikos`. Must happen before repo goes public (all marketing links point to `github.com/pikos-app/pikos`).
 - [ ] 🧑 **Make repo public** — Flip to public after squashing into initial release commit + adding license. Must happen before `/download` page works (GitHub Releases 404 on private repos).
 - [ ] 🤖 **GOO-53-DL: Cloudflare Pages Function for /download** — `/download/mac` and `/download/linux` redirect to latest GitHub Release assets. Requires public repo.
-- [ ] 🤖 **Custom 404 page** — Branded 404 with links to `/` and `/download`.
-
-## Enhancements
-
-- [ ] **Local usage stats** — SQL-powered stats panel (settings or debug view) showing aggregate usage: total pages, folders, scheduled pages, focus sessions; pages by status; pages created per week; feature adoption flags (has scheduled page, has folder, etc.). No telemetry — all queries run against the local DB. During beta, users can screenshot or share voluntarily.
+- [ ] 🤖 **Custom 404 page** — Branded 404 with links to `/`.
 
 ## Performance
 
 ### Performance scaling tasks
 
-- [ ] Lazy load completed records — don't fetch completed pages until the "Completed" section is expanded. Keeps initial query fast as completed count grows over months. Only fetch 20 completed at a time, with conditional load more button below completed records.
 - [ ] Virtualize page/folder lists with `react-virtual` (TanStack Virtual) — required once a folder has 100+ pages. Without it, DOM node count scales linearly and folder switch slows down.
 
 ---

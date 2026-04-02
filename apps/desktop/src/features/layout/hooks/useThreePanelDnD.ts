@@ -12,8 +12,12 @@ import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
 import { getVisiblePages, sortPages } from "@/features/pages";
+import type { SortMode } from "@/features/pages";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+
+/** Stagger interval for multi-drop on calendar time grid (ms). */
+const MULTI_DROP_STAGGER_MS = 30 * 60 * 1000; // 30 minutes
 
 /** Returns the duration in ms for a timed page schedule, or undefined for all-day/unscheduled. */
 function getPageDurationMs(page: PageSummary): number | undefined {
@@ -25,10 +29,19 @@ function getPageDurationMs(page: PageSummary): number | undefined {
 
 export function useThreePanelDnD() {
   const { folders, pages, reorderFolders, reorderPages, scheduleOnce, updatePage } = useWorkspace();
-  const { activeViewId, callExternalDragUpdater, getSortMode, setIsDraggingOverCalendar } = useUI();
+  const {
+    activeViewId,
+    callExternalDragUpdater,
+    clearSelection,
+    getSortMode,
+    selectedPageIds,
+    setIsDraggingOverCalendar,
+  } = useUI();
 
   const [activePageData, setActivePageData] = useState<PageSummary | null>(null);
   const [activeFolderData, setActiveFolderData] = useState<Folder | null>(null);
+  /** IDs of all pages being dragged (includes the active drag item + selected). */
+  const [draggedPageIds, setDraggedPageIds] = useState<string[]>([]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -92,35 +105,74 @@ export function useThreePanelDnD() {
   function handleDragStart({ active }: DragStartEvent) {
     const type = active.data.current?.["type"] as string | undefined;
     if (type === "page") {
-      setActivePageData(pages.find((p) => p.id === active.id) ?? null);
+      const page = pages.find((p) => p.id === active.id) ?? null;
+      setActivePageData(page);
+
+      // If dragging a selected item, drag all selected pages (in list order).
+      // If dragging an unselected item, treat as single-drag and clear selection.
+      if (selectedPageIds.has(String(active.id))) {
+        const sortMode: SortMode = activeViewId === "today" ? "date" : getSortMode(activeViewId);
+        const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
+        const ids = visible.filter((p) => selectedPageIds.has(p.id)).map((p) => p.id);
+        setDraggedPageIds(ids);
+      } else {
+        clearSelection();
+        setDraggedPageIds(page ? [page.id] : []);
+      }
     } else if (type === "folder") {
       setActiveFolderData(folders.find((f) => f.id === active.id) ?? null);
+      setDraggedPageIds([]);
     }
   }
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     const pageData = activePageData;
     const calendarStart = calendarStartRef.current;
+    const idsToMove = [...draggedPageIds];
 
     setActivePageData(null);
     setActiveFolderData(null);
+    setDraggedPageIds([]);
     calendarStartRef.current = null;
     // Clear the WeekGrid ghost immediately (don't wait for the effect cleanup).
     callExternalDragUpdaterRef.current(-1, -1, undefined);
 
     // Calendar drop takes priority over list reorder.
     if (calendarStart && pageData) {
-      let calendarEnd: string | undefined;
-      if (calendarStart.includes("T")) {
-        const durationMs = getPageDurationMs(pageData);
-        if (durationMs != null) {
-          calendarEnd = format(
-            new Date(new Date(calendarStart).getTime() + durationMs),
-            "yyyy-MM-dd'T'HH:mm:ss"
-          );
+      if (idsToMove.length <= 1) {
+        // Single-page drop: preserve existing behavior (keep duration)
+        let calendarEnd: string | undefined;
+        if (calendarStart.includes("T")) {
+          const durationMs = getPageDurationMs(pageData);
+          if (durationMs != null) {
+            calendarEnd = format(
+              new Date(new Date(calendarStart).getTime() + durationMs),
+              "yyyy-MM-dd'T'HH:mm:ss"
+            );
+          }
+        }
+        void scheduleOnce(pageData.id, calendarStart, calendarEnd);
+      } else {
+        // Multi-page drop
+        const isTimedDrop = calendarStart.includes("T");
+        if (isTimedDrop) {
+          // Stagger pages 30min apart, no duration (point-in-time)
+          const baseTime = new Date(calendarStart).getTime();
+          for (let i = 0; i < idsToMove.length; i++) {
+            const start = format(
+              new Date(baseTime + i * MULTI_DROP_STAGGER_MS),
+              "yyyy-MM-dd'T'HH:mm:ss"
+            );
+            void scheduleOnce(idsToMove[i]!, start);
+          }
+        } else {
+          // All-day drop: all pages become all-day for that date
+          for (const id of idsToMove) {
+            void scheduleOnce(id, calendarStart);
+          }
         }
       }
-      void scheduleOnce(pageData.id, calendarStart, calendarEnd);
+      clearSelection();
       return;
     }
 
@@ -146,7 +198,11 @@ export function useThreePanelDnD() {
     } else if (at === "page" && ot === "folder") {
       // folderId stored in droppable data; null means Inbox.
       const folderId = (over.data.current?.["folderId"] as string | null | undefined) ?? null;
-      updatePage(String(active.id), { folderId });
+      // Move all dragged pages to the target folder
+      for (const id of idsToMove.length > 0 ? idsToMove : [String(active.id)]) {
+        updatePage(id, { folderId });
+      }
+      clearSelection();
     } else if (at === "folder" && ot === "folder") {
       const oldIdx = folders.findIndex((f) => f.id === active.id);
       const newIdx = folders.findIndex((f) => f.id === over.id);
@@ -158,6 +214,7 @@ export function useThreePanelDnD() {
   function handleDragCancel() {
     setActivePageData(null);
     setActiveFolderData(null);
+    setDraggedPageIds([]);
     calendarStartRef.current = null;
     callExternalDragUpdaterRef.current(-1, -1, undefined);
   }
@@ -165,6 +222,7 @@ export function useThreePanelDnD() {
   return {
     activeFolderData,
     activePageData,
+    draggedPageCount: draggedPageIds.length,
     handleDragCancel,
     handleDragEnd,
     handleDragStart,

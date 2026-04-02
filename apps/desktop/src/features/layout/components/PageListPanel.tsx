@@ -64,14 +64,20 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   } = usePageList();
   const {
     activeViewId,
+    clearSelection,
     getSortMode,
     isDraggingOverCalendar,
     openSortMenu,
+    selectAll,
+    selectedPageIds,
     setOpenDialog,
     setOpenSortMenu,
+    setRangeSelection,
+    setSelectionAnchorId,
     setSidebarCollapsed,
     setSortMode,
     sidebarCollapsed,
+    togglePageSelection,
   } = useUI();
   const sortMode = activeViewId !== "today" ? getSortMode(activeViewId) : "date";
   const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
@@ -133,11 +139,32 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   useKeyboardShortcut(
     "Mod+Shift+D",
     () => {
-      if (activePage) {
+      if (selectedPageIds.size > 0) {
+        // Bulk delete all selected pages
+        const selected = visiblePages.filter((p) => selectedPageIds.has(p.id));
+        for (const page of selected) {
+          handleDeleteRequest(page);
+        }
+        clearSelection();
+      } else if (activePage) {
         handleDeleteRequest(activePage);
       }
     },
     { allowInInputs: true }
+  );
+
+  // Escape: clear multi-selection
+  useKeyboardShortcut("Escape", () => clearSelection(), {
+    when: () => selectedPageIds.size > 0,
+  });
+
+  // Cmd+A: select all visible pages (not when focus is in an editor/input)
+  useKeyboardShortcut(
+    "Mod+a",
+    () => {
+      selectAll(visiblePages.map((p) => p.id));
+    },
+    { preventDefault: true }
   );
 
   // ── View grouping ──────────────────────────────────────────────────────────
@@ -149,12 +176,31 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     ? groupTodayPages(visiblePages)
     : { overdue: [], today: [] };
 
+  function handlePageClick(page: (typeof visiblePages)[0], e: React.MouseEvent) {
+    const allIds = visiblePages.map((p) => p.id);
+    if (e.shiftKey) {
+      // Shift+Click: range select
+      setRangeSelection(allIds, page.id);
+      return;
+    }
+    if (e.metaKey || e.ctrlKey) {
+      // Cmd/Ctrl+Click: toggle individual selection
+      togglePageSelection(page.id);
+      return;
+    }
+    // Plain click: clear selection, set active
+    clearSelection();
+    setSelectionAnchorId(page.id);
+    handleSelectPage(page);
+  }
+
   function renderPageItem(page: (typeof visiblePages)[0]) {
     return (
       <PageListItem
         folders={folders}
         isActive={activePage?.id === page.id}
         isRenaming={renamingId === page.id}
+        isSelected={selectedPageIds.has(page.id)}
         key={page.id}
         onDelete={() => handleDeleteRequest(page)}
         onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
@@ -163,7 +209,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         onRenameChange={(title) => handleRenameChange(page.id, title)}
         onRenameCommit={(title) => handleRenameCommit(page.id, title)}
         onRenameStart={() => setRenamingId(page.id)}
-        onSelect={() => handleSelectPage(page)}
+        onSelect={(e) => handlePageClick(page, e)}
         onToggleDateFormat={toggleDateFormat}
         onToggleStatus={() => handleToggleStatus(page.id, page.status)}
         page={page}

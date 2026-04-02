@@ -37,6 +37,7 @@ export function ThreePanelLayout() {
   const {
     activeFolderData,
     activePageData,
+    draggedPageCount,
     handleDragCancel,
     handleDragEnd,
     handleDragStart,
@@ -95,8 +96,13 @@ export function ThreePanelLayout() {
 
       <DragOverlay dropAnimation={null}>
         {activePageData && !isDraggingOverCalendar ? (
-          <div className="cursor-grabbing rounded bg-accent px-2 py-1.5 text-sm font-medium text-accent-foreground opacity-50 shadow-lg ring-1 ring-border">
+          <div className="flex cursor-grabbing items-center gap-2 rounded bg-accent px-2 py-1.5 text-sm font-medium text-accent-foreground opacity-50 shadow-lg ring-1 ring-border">
             {activePageData.title || "Untitled"}
+            {draggedPageCount > 1 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">
+                {draggedPageCount}
+              </span>
+            )}
           </div>
         ) : activeFolderData ? (
           <div className="flex cursor-grabbing items-center gap-2 rounded bg-accent px-2 py-1.5 text-sm text-accent-foreground opacity-50 shadow-lg ring-1 ring-border">

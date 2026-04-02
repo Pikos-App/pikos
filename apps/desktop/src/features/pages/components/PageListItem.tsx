@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder, PagePriority, PageSummary } from "@pikos/core";
 import { parseLocalISO } from "@pikos/core";
+import type React from "react";
 
 import {
   ContextMenu,
@@ -124,9 +125,10 @@ function formatRelativeTime(iso: string): { label: string; isPast: boolean; tool
 interface PageListItemProps {
   page: PageSummary;
   isActive: boolean;
+  isSelected: boolean;
   isRenaming: boolean;
   folders: Folder[];
-  onSelect: () => void;
+  onSelect: (e: React.MouseEvent) => void;
   onRenameStart: () => void;
   onRenameChange?: (title: string) => void;
   onRenameCommit: (title: string) => void;
@@ -143,6 +145,7 @@ export function PageListItem({
   folders,
   isActive,
   isRenaming,
+  isSelected,
   onDelete,
   onMoveToFolder,
   onPriorityChange: _onPriorityChange,
@@ -189,8 +192,13 @@ export function PageListItem({
           {...listeners}
           className={cn(
             "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-2.5 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
-            isActive ? "bg-surface-selected text-accent-foreground" : "hover:bg-surface-hover"
+            isActive
+              ? "bg-surface-selected text-accent-foreground"
+              : isSelected
+                ? "bg-surface-selected/50 text-accent-foreground"
+                : "hover:bg-surface-hover"
           )}
+          data-selected={isSelected ? "true" : undefined}
           onClick={isRenaming ? undefined : onSelect}
           onDoubleClick={(e) => {
             e.stopPropagation();

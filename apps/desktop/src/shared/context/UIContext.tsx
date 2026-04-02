@@ -9,6 +9,8 @@ import { createContext, type ReactNode, useContext, useRef, useState } from "rea
 import type { SortMode } from "@/features/pages";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
+import { computeRangeSelection } from "./selectionUtils";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** 'today' | 'inbox' | folderId (UUID string) */
@@ -55,6 +57,22 @@ export interface UIContextValue {
    * Returns { start } (ISO string for scheduleOnce) when cursor is over the calendar,
    * null otherwise. Call with any out-of-bounds coords to clear the preview.
    */
+  // ── Multi-select ──────────────────────────────────────────────────────────
+  /** Set of currently selected page IDs (independent of activePageId). */
+  selectedPageIds: ReadonlySet<string>;
+  /** Toggle a single page in/out of the selection (Cmd+Click). */
+  togglePageSelection: (pageId: string) => void;
+  /** Select a range from the last-clicked anchor to targetId using the visible list order. */
+  setRangeSelection: (visibleIds: string[], targetId: string) => void;
+  /** Select all pages from a given list of visible IDs. */
+  selectAll: (visibleIds: string[]) => void;
+  /** Clear the entire selection. */
+  clearSelection: () => void;
+  /** The last-clicked page ID used as the anchor for Shift+Click range selection. */
+  selectionAnchorId: string | null;
+  /** Update the selection anchor (set on every click / cmd+click). */
+  setSelectionAnchorId: (id: string | null) => void;
+
   /** True while a page-list item is being dragged over the calendar panel. */
   isDraggingOverCalendar: boolean;
   setIsDraggingOverCalendar: (v: boolean) => void;
@@ -86,7 +104,13 @@ const UIContext = createContext<UIContextValue | null>(null);
 
 export function UIProvider({ children }: { children: ReactNode }) {
   const [activePageId, setActivePageId] = useState<string | null>(null);
-  const [activeViewId, setActiveViewId] = useState<ActiveViewId>("inbox");
+  const [activeViewId, setActiveViewIdRaw] = useState<ActiveViewId>("inbox");
+  function setActiveViewId(id: ActiveViewId) {
+    setActiveViewIdRaw(id);
+    // Clear multi-selection when switching views
+    setSelectedPageIds(new Set());
+    setSelectionAnchorId(null);
+  }
   const [rightPanel, setRightPanelRaw] = useLocalStorage<"editor" | "calendar">(
     "pikos:rightPanel",
     "editor"
@@ -109,6 +133,39 @@ export function UIProvider({ children }: { children: ReactNode }) {
   );
 
   const [isDraggingOverCalendar, setIsDraggingOverCalendar] = useState(false);
+
+  // ── Multi-select state ──────────────────────────────────────────────────────
+  const [selectedPageIds, setSelectedPageIds] = useState<ReadonlySet<string>>(new Set());
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
+
+  function togglePageSelection(pageId: string) {
+    setSelectedPageIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(pageId)) next.delete(pageId);
+      else next.add(pageId);
+      return next;
+    });
+    setSelectionAnchorId(pageId);
+  }
+
+  function setRangeSelection(visibleIds: string[], targetId: string) {
+    const anchor = selectionAnchorId;
+    if (!anchor) {
+      setSelectedPageIds(new Set([targetId]));
+      setSelectionAnchorId(targetId);
+      return;
+    }
+    setSelectedPageIds(computeRangeSelection(visibleIds, anchor, targetId));
+  }
+
+  function selectAll(visibleIds: string[]) {
+    setSelectedPageIds(new Set(visibleIds));
+  }
+
+  function clearSelection() {
+    setSelectedPageIds(new Set());
+    setSelectionAnchorId(null);
+  }
 
   const externalDragUpdaterRef = useRef<
     | ((
@@ -193,6 +250,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     activePageId,
     activeViewId,
     callExternalDragUpdater,
+    clearSelection,
     getSortMode,
     isDraggingOverCalendar,
     lastEditorPageId,
@@ -202,18 +260,24 @@ export function UIProvider({ children }: { children: ReactNode }) {
     referenceDate,
     registerExternalDragUpdater,
     rightPanel,
+    selectAll,
+    selectedPageIds,
+    selectionAnchorId,
     setActivePage,
     setActiveViewId,
     setIsDraggingOverCalendar,
     setOpenDialog,
     setOpenSortMenu,
+    setRangeSelection,
     setReferenceDate,
     setRightPanel,
+    setSelectionAnchorId,
     setSettingsOpen,
     setSidebarCollapsed,
     setSortMode,
     settingsOpen,
     sidebarCollapsed,
+    togglePageSelection,
   };
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

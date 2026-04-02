@@ -18,6 +18,7 @@ import { Markdown } from "tiptap-markdown";
 import { EmptyState } from "@/shared/components/EmptyState";
 import type { LineWidth } from "@/shared/context/EditorSettingsContext";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
+import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -86,6 +87,7 @@ export function EditorPane() {
   const { isLoading, page } = useEditorPage();
   const { updatePage } = useWorkspace();
   const { lineWidth } = useEditorSettings();
+  const { clearSelection, selectedPageIds } = useUI();
 
   // Track which page the editor currently shows (to detect page switches)
   const currentPageIdRef = useRef<string | null>(null);
@@ -102,7 +104,10 @@ export function EditorPane() {
     },
     extensions,
     onBlur: () => Keyboard.popScope("editor"),
-    onFocus: () => Keyboard.pushScope("editor"),
+    onFocus: () => {
+      Keyboard.pushScope("editor");
+      if (selectedPageIds.size > 0) clearSelection();
+    },
     onUpdate: ({ editor: e }) => {
       contentJsonRef.current = JSON.stringify(e.getJSON());
       setContentVersion((v) => v + 1);
