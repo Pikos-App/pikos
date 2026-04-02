@@ -4,16 +4,14 @@
 // Normal text: increments/decrements a per-paragraph indent level (0–8),
 //   stored as a `data-indent` attribute and rendered as padding-left.
 
-// TODO: delete (when cursor is to the right of a tab) doesn't outdent.
-// TODO: tabbing (when the cursor is in the middle of a line) should probably insert a tab character instead of indenting the whole paragraph.
-
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Plugin, PluginKey, Selection } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
-const TAB = "  "; // 2 spaces (used in code blocks)
+const TAB = "    "; // 4 spaces for inline insertion in normal text
+const CODE_TAB = "  "; // 2 spaces for code blocks (preserves alignment)
 const INDENT_SIZE = 2; // rem units per indent level
 const MAX_INDENT = 8;
 const MIN_INDENT = 0;
@@ -56,8 +54,16 @@ export const PARAGRAPH_INDENT_ATTRIBUTE = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Returns true if the cursor is at the very start of the text content in its block. */
+export function isCursorAtLineStart(state: EditorState): boolean {
+  const { $from, empty } = state.selection;
+  // Only applies to collapsed cursors — if there's a selection, indent the block
+  if (!empty) return true;
+  return $from.parentOffset === 0;
+}
+
 /** Returns the indent level of the paragraph/heading node at the cursor. */
-function getIndentLevel(node: ProseMirrorNode): number {
+export function getIndentLevel(node: ProseMirrorNode): number {
   const raw = node.attrs?.["indent"];
   return typeof raw === "number" ? raw : 0;
 }
@@ -66,7 +72,7 @@ function getIndentLevel(node: ProseMirrorNode): number {
  * Sets the `indent` attribute on every top-level block that has a selection
  * touching it.  Works across multi-paragraph selections.
  */
-function setIndentForSelection(
+export function setIndentForSelection(
   state: EditorState,
   dispatch: EditorView["dispatch"],
   delta: 1 | -1
@@ -115,6 +121,34 @@ export const TabIndent = Extension.create({
         key: tabIndentPluginKey,
         props: {
           handleKeyDown(view: EditorView, event: KeyboardEvent) {
+            // ── Escape → collapse selection to cursor ──
+            if (event.key === "Escape") {
+              const { dispatch, state } = view;
+              if (!state.selection.empty) {
+                dispatch(
+                  state.tr.setSelection(Selection.near(state.doc.resolve(state.selection.to)))
+                );
+                return true;
+              }
+              return false;
+            }
+
+            // ── Backspace at position 0 with indent → outdent instead of join ──
+            if (event.key === "Backspace") {
+              const { dispatch, state } = view;
+              const { $from, empty } = state.selection;
+              if (
+                empty &&
+                $from.parentOffset === 0 &&
+                ($from.parent.type.name === "paragraph" || $from.parent.type.name === "heading") &&
+                state.doc.resolve($from.pos - 1).depth <= 1 &&
+                getIndentLevel($from.parent) > 0
+              ) {
+                return setIndentForSelection(state, dispatch, -1);
+              }
+              return false;
+            }
+
             if (event.key !== "Tab") return false;
             event.preventDefault();
 
@@ -143,11 +177,18 @@ export const TabIndent = Extension.create({
             }
             if (editor.isActive("codeBlock")) {
               const { from, to } = state.selection;
-              dispatch(state.tr.insertText(TAB, from, to));
+              dispatch(state.tr.insertText(CODE_TAB, from, to));
               return true;
             }
-            // Normal paragraph / heading: increase indent level
-            return setIndentForSelection(state, dispatch, 1);
+            // Normal paragraph / heading:
+            // Cursor at start of line → indent the whole block
+            // Cursor anywhere else → insert a tab at cursor position
+            if (isCursorAtLineStart(state)) {
+              return setIndentForSelection(state, dispatch, 1);
+            }
+            const { from, to } = state.selection;
+            dispatch(state.tr.insertText(TAB, from, to));
+            return true;
           },
         },
       }),
@@ -170,7 +211,7 @@ function removeCodeBlockIndent(state: EditorState, dispatch: EditorView["dispatc
     undefined,
     "\ufffc"
   );
-  const remove = Math.min(lineText.match(/^ */)?.[0].length ?? 0, TAB.length);
+  const remove = Math.min(lineText.match(/^ */)?.[0].length ?? 0, CODE_TAB.length);
   if (remove > 0) {
     dispatch(state.tr.delete(absLineStart, absLineStart + remove));
   }

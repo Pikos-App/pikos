@@ -6,6 +6,7 @@
   line-height: 1.6;
   color: var(--text-primary);
   caret-color: var(--interactive-primary);
+  cursor: text;
 }
 
 /* ─── Headings ─────────────────────────────────────────────────────────────── */
@@ -48,6 +49,13 @@
 .editor-content p {
   margin-top: 0;
   margin-bottom: 0.35em;
+  white-space: pre-wrap;
+}
+
+.editor-content h1,
+.editor-content h2,
+.editor-content h3 {
+  white-space: pre-wrap;
 }
 
 .editor-content p:last-child {
@@ -68,9 +76,20 @@
   color: var(--text-primary);
 }
 
-.editor-content ul > li::marker {
-  color: var(--text-tertiary);
-  font-size: 8px;
+.editor-content ul:not([data-type="taskList"]) > li {
+  list-style: none;
+  position: relative;
+}
+
+.editor-content ul:not([data-type="taskList"]) > li::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 0.65em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
 }
 
 .editor-content ol {
@@ -99,13 +118,17 @@
   display: flex;
   align-items: baseline;
   gap: 0.5em;
+  margin-bottom: 0;
+}
+
+.editor-content ul[data-type="taskList"] li p {
+  margin-bottom: 0;
 }
 
 .editor-content ul[data-type="taskList"] li > label {
   flex-shrink: 0;
   /* Optical alignment: nudge the checkbox down to sit on the text baseline */
   translate: 0 0.15em;
-  user-select: none;
   line-height: 1;
 }
 
@@ -263,7 +286,7 @@
 /* ─── Selection ────────────────────────────────────────────────────────────── */
 
 .editor-content ::selection {
-  background: color-mix(in srgb, var(--interactive-primary) 25%, transparent);
+  background: color-mix(in srgb, var(--interactive-primary) 15%, transparent);
 }
 
 /* ─── Focus ring for the editor container ──────────────────────────────────── */

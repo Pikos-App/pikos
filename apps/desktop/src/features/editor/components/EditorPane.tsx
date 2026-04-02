@@ -266,8 +266,13 @@ export function EditorPane() {
         {/* min-h-full fills the scroll container so clicks below the text focus the editor */}
         <div
           className={`mx-auto min-h-full w-full ${LINE_WIDTH_CLASS[lineWidth]} cursor-text px-8 pt-3 pb-8`}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) editor?.commands.focus("end");
+          onMouseDown={(e) => {
+            // Only focus editor on direct clicks on the empty padding area,
+            // not after drag-selections that end outside text bounds.
+            if (e.target === e.currentTarget && !editor?.isFocused) {
+              // Defer so the mousedown doesn't interfere with ProseMirror's own handling
+              requestAnimationFrame(() => editor?.commands.focus("end"));
+            }
           }}
         >
           <EditorContent editor={editor} />
