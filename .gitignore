@@ -28,5 +28,8 @@ playwright-report/
 test-results/
 recordings/
 
+# Claude Code
+.claude/settings.local.json
+
 # OS generated files
 Thumbs.db
