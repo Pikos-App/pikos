@@ -22,6 +22,14 @@ Never pad responses with unnecessary caveats, hedging, or qualifications unless 
 pnpm verify   # runs check (auto-fix + typecheck + lint + depcruise) then unit tests
 ```
 
+## Git
+
+- Agent handles all git commits. Commit after each completed task (post-verify).
+- Message format: `type: brief description` — types: `feature`, `update`, `chore`, `bug`, `refactor`, `test`, `docs`
+- Keep messages short — one line, no body unless truly needed.
+- Stage only relevant files. Never stage `.env`, credentials, or unrelated changes.
+- Do not push unless explicitly asked.
+
 ## End-of-session cleanup (mandatory)
 
 1. Remove completed task from `BACKLOG_ACTIVE.md`

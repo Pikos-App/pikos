@@ -1,6 +1,7 @@
 // PageListPanel — middle panel (page list for active view). Default 280px, resizable.
 
 import { SortableContext } from "@dnd-kit/sortable";
+import type { PageSummary } from "@pikos/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowUpDown,
@@ -33,6 +34,7 @@ import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
@@ -66,6 +68,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     setRenamingId,
     visiblePages,
   } = usePageList();
+  const { clearSchedule } = useWorkspace();
   const {
     activeViewId,
     clearSelection,
@@ -194,7 +197,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     () => {
       if (selectedPageIds.size > 0) {
         // Bulk delete all selected pages
-        const selected = visiblePages.filter((p) => selectedPageIds.has(p.id));
+        const allPages = [...visiblePages, ...completedPages];
+        const selected = allPages.filter((p) => selectedPageIds.has(p.id));
         for (const page of selected) {
           handleDeleteRequest(page);
         }
@@ -223,8 +227,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   function handlePageClick(page: (typeof visiblePages)[0], e: React.MouseEvent) {
     const allIds = visiblePages.map((p) => p.id);
     if (e.shiftKey) {
-      // Shift+Click: range select
-      setRangeSelection(allIds, page.id);
+      // Shift+Click: range select from active page
+      setRangeSelection(allIds, page.id, activePage?.id ?? undefined);
       return;
     }
     if (e.metaKey || e.ctrlKey) {
@@ -238,6 +242,24 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     handleSelectPage(page);
   }
 
+  function getSelectedPages(triggerId: string) {
+    if (!selectedPageIds.has(triggerId) || selectedPageIds.size <= 1) return null;
+    const allPages = [...visiblePages, ...completedPages];
+    const batch = allPages.filter((p) => selectedPageIds.has(p.id));
+    return batch.length > 1 ? batch : null;
+  }
+
+  /** Run an action on all selected pages (if page is selected), or just the given page. */
+  function batchAction(page: PageSummary, action: (p: PageSummary) => void) {
+    const batch = getSelectedPages(page.id);
+    if (batch) {
+      for (const p of batch) action(p);
+      clearSelection();
+    } else {
+      action(page);
+    }
+  }
+
   function renderPageItem(page: (typeof visiblePages)[0]) {
     return (
       <PageListItem
@@ -246,8 +268,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         isRenaming={renamingId === page.id}
         isSelected={selectedPageIds.has(page.id)}
         key={page.id}
-        onDelete={() => handleDeleteRequest(page)}
-        onMoveToFolder={(folderId) => handleMoveToFolder(page.id, folderId)}
+        onClearDate={() => batchAction(page, (p) => void clearSchedule(p.id))}
+        onDelete={() => batchAction(page, (p) => handleDeleteRequest(p))}
+        onMoveToFolder={(folderId) => batchAction(page, (p) => handleMoveToFolder(p.id, folderId))}
         onPriorityChange={(priority) => handlePriorityChange(page.id, priority)}
         onRenameCancel={handleRenameCancel}
         onRenameChange={(title) => handleRenameChange(page.id, title)}
@@ -255,7 +278,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         onRenameStart={() => setRenamingId(page.id)}
         onSelect={(e) => handlePageClick(page, e)}
         onToggleDateFormat={toggleDateFormat}
-        onToggleStatus={() => handleToggleStatus(page.id, page.status)}
+        onToggleStatus={() => batchAction(page, (p) => handleToggleStatus(p.id, p.status))}
         page={page}
         showRelative={showRelative}
       />
@@ -308,10 +331,13 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           </div>
         );
 
-      case "page":
+      case "page": {
+        // Only show insertion line for active pages (not completed).
+        const showLine =
+          !isTodayView && insertBeforeId === row.page.id && pageIds.includes(row.page.id);
         return (
           <div className="relative">
-            {!isTodayView && insertBeforeId === row.page.id && (
+            {showLine && (
               <div className="absolute top-0 right-0 left-0 z-10 -translate-y-1/2">
                 <InsertionLine />
               </div>
@@ -319,19 +345,27 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
             {renderPageItem(row.page)}
           </div>
         );
+      }
 
       case "completed-toggle":
         return (
-          <button
-            className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
-            onClick={toggleCompletedCollapsed}
-          >
-            <ChevronRight
-              className={cn("transition-transform", !completedCollapsed && "rotate-90")}
-              size={12}
-            />
-            Completed
-          </button>
+          <div className="relative">
+            {!isTodayView && insertBeforeId === null && (
+              <div className="absolute top-0 right-0 left-0 z-10 -translate-y-1/2">
+                <InsertionLine />
+              </div>
+            )}
+            <button
+              className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
+              onClick={toggleCompletedCollapsed}
+            >
+              <ChevronRight
+                className={cn("transition-transform", !completedCollapsed && "rotate-90")}
+                size={12}
+              />
+              Completed
+            </button>
+          </div>
         );
 
       case "load-more":
@@ -442,11 +476,13 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           } else if (e.key === " " && !renamingId) {
             e.preventDefault();
             if (selectedPageIds.size > 0) {
-              for (const p of visiblePages) {
-                if (selectedPageIds.has(p.id) || p.id === activePage?.id) {
+              const allPages = [...visiblePages, ...completedPages];
+              for (const p of allPages) {
+                if (selectedPageIds.has(p.id)) {
                   handleToggleStatus(p.id, p.status);
                 }
               }
+              clearSelection();
             } else if (activePage) {
               handleToggleStatus(activePage.id, activePage.status);
             }
@@ -486,7 +522,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
               );
             })}
           </div>
-          {!isTodayView && insertBeforeId === null && <InsertionLine />}
         </SortableContext>
       </div>
 

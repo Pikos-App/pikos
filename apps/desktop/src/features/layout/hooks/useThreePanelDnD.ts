@@ -16,8 +16,10 @@ import type { SortMode } from "@/features/pages";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-/** Stagger interval for multi-drop on calendar time grid (ms). */
-const MULTI_DROP_STAGGER_MS = 30 * 60 * 1000; // 30 minutes
+/** Gap between timed pages when multi-dropping on calendar (ms). */
+const MULTI_DROP_GAP_MS = 15 * 60 * 1000; // 15 minutes
+/** Gap between point-in-time pages when multi-dropping on calendar (ms). */
+const MULTI_DROP_POINT_GAP_MS = 30 * 60 * 1000; // 30 minute
 
 /** Returns the duration in ms for a timed page schedule, or undefined for all-day/unscheduled. */
 function getPageDurationMs(page: PageSummary): number | undefined {
@@ -156,14 +158,22 @@ export function useThreePanelDnD() {
         // Multi-page drop
         const isTimedDrop = calendarStart.includes("T");
         if (isTimedDrop) {
-          // Stagger pages 30min apart, no duration (point-in-time)
+          // Stagger pages 30min apart, preserving each page's existing duration.
           const baseTime = new Date(calendarStart).getTime();
-          for (let i = 0; i < idsToMove.length; i++) {
-            const start = format(
-              new Date(baseTime + i * MULTI_DROP_STAGGER_MS),
-              "yyyy-MM-dd'T'HH:mm:ss"
-            );
-            void scheduleOnce(idsToMove[i]!, start);
+          let offset = 0;
+          for (const id of idsToMove) {
+            const page = pages.find((p) => p.id === id);
+            const durationMs = page ? getPageDurationMs(page) : undefined;
+            const startTime = new Date(baseTime + offset);
+            const start = format(startTime, "yyyy-MM-dd'T'HH:mm:ss");
+            const end =
+              durationMs != null
+                ? format(new Date(startTime.getTime() + durationMs), "yyyy-MM-dd'T'HH:mm:ss")
+                : undefined;
+            void scheduleOnce(id, start, end);
+            offset +=
+              (durationMs ?? 0) +
+              (durationMs != null ? MULTI_DROP_GAP_MS : MULTI_DROP_POINT_GAP_MS);
           }
         } else {
           // All-day drop: all pages become all-day for that date
@@ -187,14 +197,33 @@ export function useThreePanelDnD() {
       const currentSortMode = getSortMode(activeViewId);
       if (currentSortMode !== "manual") return;
       const visible = sortPages(getVisiblePages(pages, activeViewId), currentSortMode);
-      const oldIdx = visible.findIndex((p) => p.id === active.id);
-      const newIdx = visible.findIndex((p) => p.id === over.id);
-      if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
       const folderId = activeViewId !== "today" && activeViewId !== "inbox" ? activeViewId : null;
-      void reorderPages(
-        folderId,
-        arrayMove(visible, oldIdx, newIdx).map((p) => p.id)
-      );
+
+      if (idsToMove.length > 1) {
+        // Multi-page reorder: remove all dragged pages, reinsert as group at drop target.
+        const dragSet = new Set(idsToMove);
+        const dragged = visible.filter((p) => dragSet.has(p.id));
+        const rest = visible.filter((p) => !dragSet.has(p.id));
+        const dropIdx = rest.findIndex((p) => p.id === over.id);
+        if (dropIdx === -1) return;
+        // Insert after drop target if dragging downward, before if upward.
+        const activeIdx = visible.findIndex((p) => p.id === active.id);
+        const overIdx = visible.findIndex((p) => p.id === over.id);
+        const insertIdx = activeIdx < overIdx ? dropIdx + 1 : dropIdx;
+        rest.splice(insertIdx, 0, ...dragged);
+        void reorderPages(
+          folderId,
+          rest.map((p) => p.id)
+        );
+      } else {
+        const oldIdx = visible.findIndex((p) => p.id === active.id);
+        const newIdx = visible.findIndex((p) => p.id === over.id);
+        if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
+        void reorderPages(
+          folderId,
+          arrayMove(visible, oldIdx, newIdx).map((p) => p.id)
+        );
+      }
     } else if (at === "page" && ot === "folder") {
       // folderId stored in droppable data; null means Inbox.
       const folderId = (over.data.current?.["folderId"] as string | null | undefined) ?? null;

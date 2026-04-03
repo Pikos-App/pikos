@@ -63,7 +63,7 @@ export interface UIContextValue {
   /** Toggle a single page in/out of the selection (Cmd+Click). */
   togglePageSelection: (pageId: string) => void;
   /** Select a range from the last-clicked anchor to targetId using the visible list order. */
-  setRangeSelection: (visibleIds: string[], targetId: string) => void;
+  setRangeSelection: (visibleIds: string[], targetId: string, anchorOverride?: string) => void;
   /** Select all pages from a given list of visible IDs. */
   selectAll: (visibleIds: string[]) => void;
   /** Clear the entire selection. */
@@ -141,6 +141,10 @@ export function UIProvider({ children }: { children: ReactNode }) {
   function togglePageSelection(pageId: string) {
     setSelectedPageIds((prev) => {
       const next = new Set(prev);
+      // First cmd+click: seed selection with the active page so it's included.
+      if (next.size === 0 && activePageId && activePageId !== pageId) {
+        next.add(activePageId);
+      }
       if (next.has(pageId)) next.delete(pageId);
       else next.add(pageId);
       return next;
@@ -148,8 +152,8 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setSelectionAnchorId(pageId);
   }
 
-  function setRangeSelection(visibleIds: string[], targetId: string) {
-    const anchor = selectionAnchorId;
+  function setRangeSelection(visibleIds: string[], targetId: string, anchorOverride?: string) {
+    const anchor = anchorOverride ?? selectionAnchorId;
     if (!anchor) {
       setSelectedPageIds(new Set([targetId]));
       setSelectionAnchorId(targetId);

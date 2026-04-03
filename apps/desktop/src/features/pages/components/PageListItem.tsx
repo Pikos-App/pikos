@@ -128,6 +128,7 @@ interface PageListItemProps {
   isSelected: boolean;
   isRenaming: boolean;
   folders: Folder[];
+  onClearDate?: () => void;
   onSelect: (e: React.MouseEvent) => void;
   onRenameStart: () => void;
   onRenameChange?: (title: string) => void;
@@ -146,6 +147,7 @@ export function PageListItem({
   isActive,
   isRenaming,
   isSelected,
+  onClearDate,
   onDelete,
   onMoveToFolder,
   onPriorityChange: _onPriorityChange,
@@ -337,6 +339,9 @@ export function PageListItem({
             ))}
           </ContextMenuSubContent>
         </ContextMenuSub>
+        {page.scheduledStart && onClearDate && (
+          <ContextMenuItem onSelect={onClearDate}>Clear Date</ContextMenuItem>
+        )}
         <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
           Delete
         </ContextMenuItem>
