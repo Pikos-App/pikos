@@ -12,7 +12,6 @@ Status: `[ ]` pending · Delete task when done.
 - [ ] tab and focus styling behavior, tab group and focus trap components?
 - [ ] compact pageblock children rendering
 - [ ] test auto updater
-- [ ] complete shortcut (c, space/enter - which?)
 - [ ] multi select drag doesn't reorder all selected, it does drop all on calendar, delete all, move all to folder.
 - [ ] Misc dogfooding improvements.
 - [ ] "This week" feature in Pikos? 
@@ -49,11 +48,8 @@ Status: `[ ]` pending · Delete task when done.
   - The .find-match uses oklch(0.75 0.15 85) which is a warm yellow. Worth checking if it's visible enough against your dark          
   background.           
   - Validate: Use Cmd+F in the editor, search for a word. Are the highlights clearly visible?                                                                                                      
-  6. Editor destroy guard missing on page switch                                                                                      
-  - File: EditorPane.tsx:136                                                                                                          
-  - The page-switch effect checks if (!editor || isLoading) but not editor.isDestroyed. If the editor is destroyed during a rapid page
-   switch, commands like clearContent/setContent could throw.                                                                         
-  - Validate: Rapidly click between 5+ pages in the sidebar as fast as possible. Check the dev console for errors. 
+  6. ~~Editor destroy guard~~ — FIXED (added isDestroyed checks to all editor command sites)
+  - Validate: Rapidly click between 5+ pages in the sidebar as fast as possible. Check the dev console for errors.
 
   - [ ] Virtualization correctness
   - Scroll the 150+ page folder fast (flick scroll) — items should never flash blank or flicker
@@ -99,13 +95,7 @@ Status: `[ ]` pending · Delete task when done.
 - [ ] 🧑 **Create `pikos-app` GitHub org** — Transfer repo from personal account to `pikos-app/pikos`. Must happen before repo goes public (all marketing links point to `github.com/pikos-app/pikos`).
 - [ ] 🧑 **Make repo public** — Flip to public after squashing into initial release commit + adding license. Must happen before `/download` page works (GitHub Releases 404 on private repos).
 - [ ] 🤖 **GOO-53-DL: Cloudflare Pages Function for /download** — `/download/mac` and `/download/linux` redirect to latest GitHub Release assets. Requires public repo.
-- [ ] 🤖 **Custom 404 page** — Branded 404 with links to `/`.
 
-## Performance
-
-### Performance scaling tasks
-
-- [ ] Virtualize page/folder lists with `react-virtual` (TanStack Virtual) — required once a folder has 100+ pages. Without it, DOM node count scales linearly and folder switch slows down.
 
 ---
 

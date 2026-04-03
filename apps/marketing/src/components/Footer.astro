@@ -2,8 +2,10 @@
 interface Props {
   /** Current page path — used to omit self-links */
   current?: string;
+  /** Override default class on footer element */
+  class?: string;
 }
-const { current = "/" } = Astro.props;
+const { current = "/", class: className = "mt-24" } = Astro.props;
 
 const links = [
   { href: "/", label: "Home" },
@@ -16,7 +18,7 @@ const links = [
 ];
 ---
 
-<footer class:list={["mt-16 pt-8", current !== "/" && "border-t border-gray-100 dark:border-gray-800"]}>
+<footer class={className}>
   <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400 dark:text-gray-500">
     {links.filter((l) => l.href !== current).map((l) => (
       <a href={l.href} class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">{l.label}</a>

@@ -2,11 +2,13 @@
 
 ## Active Task
 
-**GOO-108** — Tab key behavior in editor.
+None — awaiting next pick from BACKLOG_ACTIVE.md
 
 ## Recently Completed
 
-- Long events / cross-day calendar rendering fix (events spanning midnight now show on all days they touch, with continuation indicators).
+- Editor destroy guard (isDestroyed checks on all editor command sites in EditorPane.tsx)
+- Custom 404 page (apps/marketing/src/pages/404.astro)
+- Space key completion shortcut (toggles page status from page list)
 
 ## Phase Status
 

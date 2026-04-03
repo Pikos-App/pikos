@@ -118,7 +118,7 @@ export function EditorPane() {
   // Links are rendered as <a> by Tiptap but clicking should only place the cursor
   // (the LinkPopover handles opening links explicitly via its Open button).
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     const dom = editor.view.dom;
     function handleClick(e: Event) {
       const target = (e as MouseEvent).target as HTMLElement;
@@ -134,7 +134,7 @@ export function EditorPane() {
   // All mutations here are refs or external system calls (Tiptap) — no setState.
 
   useEffect(() => {
-    if (!editor || isLoading) return;
+    if (!editor || editor.isDestroyed || isLoading) return;
 
     if (page === null) {
       // Flush pending content for the outgoing page before clearing
@@ -143,7 +143,7 @@ export function EditorPane() {
         updatePage(currentPageIdRef.current, { content, contentText: extractText(content) });
       }
       currentPageIdRef.current = null;
-      editor.commands.clearContent();
+      if (!editor.isDestroyed) editor.commands.clearContent();
       contentJsonRef.current = "";
       return;
     }
@@ -171,9 +171,11 @@ export function EditorPane() {
     }
 
     // setContent without emitting an update (avoids triggering autosave for loaded content)
-    editor.commands.setContent(doc ?? { content: [{ type: "paragraph" }], type: "doc" }, {
-      emitUpdate: false,
-    });
+    if (!editor.isDestroyed) {
+      editor.commands.setContent(doc ?? { content: [{ type: "paragraph" }], type: "doc" }, {
+        emitUpdate: false,
+      });
+    }
     contentJsonRef.current = doc ? page.content : "";
 
     // Scroll after content is rendered — rAF defers until after Tiptap's DOM update
@@ -242,7 +244,7 @@ export function EditorPane() {
         <MetadataHeader
           contentSaveError={saveError}
           key={page.id}
-          onFocusEditor={() => editor?.commands.focus()}
+          onFocusEditor={() => !editor?.isDestroyed && editor?.commands.focus()}
           onRetryContent={() => void flush()}
           page={page}
         />
@@ -271,7 +273,7 @@ export function EditorPane() {
             // not after drag-selections that end outside text bounds.
             if (e.target === e.currentTarget && !editor?.isFocused) {
               // Defer so the mousedown doesn't interfere with ProseMirror's own handling
-              requestAnimationFrame(() => editor?.commands.focus("end"));
+              requestAnimationFrame(() => !editor?.isDestroyed && editor?.commands.focus("end"));
             }
           }}
         >

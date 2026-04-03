@@ -439,6 +439,17 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
             navigatePage(-1);
+          } else if (e.key === " " && !renamingId) {
+            e.preventDefault();
+            if (selectedPageIds.size > 0) {
+              for (const p of visiblePages) {
+                if (selectedPageIds.has(p.id) || p.id === activePage?.id) {
+                  handleToggleStatus(p.id, p.status);
+                }
+              }
+            } else if (activePage) {
+              handleToggleStatus(activePage.id, activePage.status);
+            }
           }
         }}
         onPointerMove={(e) => e.currentTarget.removeAttribute("data-keyboard-nav")}
