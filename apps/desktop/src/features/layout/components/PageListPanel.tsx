@@ -1,6 +1,7 @@
 // PageListPanel — middle panel (page list for active view). Default 280px, resizable.
 
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext } from "@dnd-kit/sortable";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowUpDown,
   CalendarDays,
@@ -14,7 +15,7 @@ import {
   Search,
   Sun,
 } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
 import {
@@ -36,6 +37,9 @@ import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+
+import { buildPageListRows } from "../utils/buildPageListRows";
+import type { VirtualRow } from "../utils/buildPageListRows";
 
 interface PageListPanelProps {
   width: number;
@@ -114,11 +118,60 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
   const listRef = useRef<HTMLDivElement>(null);
 
+  // ── View grouping ──────────────────────────────────────────────────────────
+
+  const isTodayView = activeViewId === "today";
+  // Re-renders once per minute so overdue/today grouping stays current as time passes.
+  useMinuteTick();
+  const { overdue, today } = isTodayView
+    ? groupTodayPages(visiblePages)
+    : { overdue: [], today: [] };
+
+  // ── Virtual row model ─────────────────────────────────────────────────────
+
+  const { pageToRowIndex, rows } = buildPageListRows({
+    completedCollapsed,
+    completedHasMore,
+    completedPages,
+    isTodayView,
+    overdue,
+    overdueCollapsed,
+    today,
+    visiblePages,
+  });
+
+  // ── Virtualizer ───────────────────────────────────────────────────────────
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    estimateSize: (index) => {
+      const row = rows[index];
+      if (!row) return 48;
+      switch (row.type) {
+        case "section-header":
+        case "completed-toggle":
+        case "load-more":
+          return 33;
+        case "empty-state":
+          return 200;
+        case "empty-completed":
+          return 40;
+        case "page":
+          return 48;
+      }
+    },
+    getItemKey: (index) => rows[index]?.key ?? String(index),
+    getScrollElement: () => listRef.current,
+    overscan: 15,
+  });
+
   // Scroll active page into view when it changes via keyboard navigation.
   useEffect(() => {
-    if (!activePage?.id || !listRef.current) return;
-    const el = listRef.current.querySelector(`[data-page-id="${activePage.id}"]`);
-    el?.scrollIntoView({ block: "nearest" });
+    if (!activePage?.id) return;
+    const rowIndex = pageToRowIndex.get(activePage.id);
+    if (rowIndex !== undefined) {
+      virtualizer.scrollToIndex(rowIndex, { align: "auto" });
+    }
   }, [activePage?.id]);
 
   function navigatePage(direction: 1 | -1) {
@@ -167,15 +220,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     { preventDefault: true }
   );
 
-  // ── View grouping ──────────────────────────────────────────────────────────
-
-  const isTodayView = activeViewId === "today";
-  // Re-renders once per minute so overdue/today grouping stays current as time passes.
-  useMinuteTick();
-  const { overdue, today } = isTodayView
-    ? groupTodayPages(visiblePages)
-    : { overdue: [], today: [] };
-
   function handlePageClick(page: (typeof visiblePages)[0], e: React.MouseEvent) {
     const allIds = visiblePages.map((p) => p.id);
     if (e.shiftKey) {
@@ -216,6 +260,93 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         showRelative={showRelative}
       />
     );
+  }
+
+  function renderVirtualRow(row: VirtualRow) {
+    switch (row.type) {
+      case "empty-state":
+        return activeViewId === "today" ? (
+          <EmptyState icon={Sun} message="Nothing scheduled for today">
+            <p className="type-ui-sm mt-1 text-subtle">
+              Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
+              to create a page or drag one here
+            </p>
+          </EmptyState>
+        ) : activeViewId === "inbox" ? (
+          <EmptyState icon={CircleCheck} message="No pages in your inbox">
+            <p className="type-ui-sm mt-1 text-subtle">
+              Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
+              to create a new page
+            </p>
+          </EmptyState>
+        ) : (
+          <EmptyState icon={FilePlus} message="No pages in this folder">
+            <p className="type-ui-sm mt-1 text-subtle">
+              Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
+              to add a page
+            </p>
+          </EmptyState>
+        );
+
+      case "section-header":
+        return row.collapsible ? (
+          <button
+            className="type-ui-sm flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
+            onClick={row.key === "overdue-header" ? toggleOverdue : undefined}
+          >
+            <ChevronRight
+              className={cn("transition-transform", !row.collapsed && "rotate-90")}
+              size={12}
+            />
+            {row.label}
+            <span className="ml-1 tabular-nums">· {row.count}</span>
+          </button>
+        ) : (
+          <div className="type-ui-sm border-b border-border px-3 py-1.5 text-muted-foreground">
+            {row.label}
+            <span className="ml-1 tabular-nums">· {row.count}</span>
+          </div>
+        );
+
+      case "page":
+        return (
+          <div className="relative">
+            {!isTodayView && insertBeforeId === row.page.id && (
+              <div className="absolute top-0 right-0 left-0 z-10 -translate-y-1/2">
+                <InsertionLine />
+              </div>
+            )}
+            {renderPageItem(row.page)}
+          </div>
+        );
+
+      case "completed-toggle":
+        return (
+          <button
+            className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
+            onClick={toggleCompletedCollapsed}
+          >
+            <ChevronRight
+              className={cn("transition-transform", !completedCollapsed && "rotate-90")}
+              size={12}
+            />
+            Completed
+          </button>
+        );
+
+      case "load-more":
+        return (
+          <button
+            className="w-full px-3 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
+            onClick={() => void loadMoreCompleted()}
+          >
+            Show more completed
+          </button>
+        );
+
+      case "empty-completed":
+        return <div className="type-ui-sm px-3 py-3 text-muted-foreground">No completed pages</div>;
+    }
   }
 
   return (
@@ -315,102 +446,37 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         role="group"
         tabIndex={0}
       >
-        {visiblePages.length === 0 ? (
-          activeViewId === "today" ? (
-            <EmptyState icon={Sun} message="Nothing scheduled for today">
-              <p className="type-ui-sm mt-1 text-subtle">
-                Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
-                to create a page or drag one here
-              </p>
-            </EmptyState>
-          ) : activeViewId === "inbox" ? (
-            <EmptyState icon={CircleCheck} message="No pages in your inbox">
-              <p className="type-ui-sm mt-1 text-subtle">
-                Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
-                to create a new page
-              </p>
-            </EmptyState>
-          ) : (
-            <EmptyState icon={FilePlus} message="No pages in this folder">
-              <p className="type-ui-sm mt-1 text-subtle">
-                Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
-                to add a page
-              </p>
-            </EmptyState>
-          )
-        ) : isTodayView ? (
-          // Today view: Overdue (collapsible) + Today sections.
-          // SortableContext with a no-op strategy enables drag-to-calendar and
-          // drag-to-folder without showing any list-reorder visual feedback.
-          <SortableContext items={pageIds} strategy={() => null}>
-            {overdue.length > 0 && (
-              <>
-                <button
-                  className="type-ui-sm flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
-                  onClick={toggleOverdue}
+        <SortableContext items={pageIds} strategy={() => null}>
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              position: "relative",
+              width: "100%",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const row = rows[virtualItem.index];
+              if (!row) return null;
+              return (
+                <div
+                  data-index={virtualItem.index}
+                  key={virtualItem.key}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    left: 0,
+                    position: "absolute",
+                    top: 0,
+                    transform: `translateY(${virtualItem.start}px)`,
+                    width: "100%",
+                  }}
                 >
-                  <ChevronRight
-                    className={cn("transition-transform", !overdueCollapsed && "rotate-90")}
-                    size={12}
-                  />
-                  Overdue
-                  <span className="ml-1 tabular-nums">· {overdue.length}</span>
-                </button>
-                {!overdueCollapsed && overdue.map(renderPageItem)}
-              </>
-            )}
-            {today.length > 0 && (
-              <>
-                {overdue.length > 0 && (
-                  <div className="type-ui-sm border-b border-border px-3 py-1.5 text-muted-foreground">
-                    Today
-                    <span className="ml-1 tabular-nums">· {today.length}</span>
-                  </div>
-                )}
-                {today.map(renderPageItem)}
-              </>
-            )}
-          </SortableContext>
-        ) : (
-          // Folder / Inbox views: sortable list with DnD
-          <SortableContext items={pageIds} strategy={verticalListSortingStrategy}>
-            {visiblePages.map((page) => (
-              <Fragment key={page.id}>
-                {insertBeforeId === page.id && <InsertionLine />}
-                {renderPageItem(page)}
-              </Fragment>
-            ))}
-            {insertBeforeId === null && <InsertionLine />}
-          </SortableContext>
-        )}
-
-        {/* Completed section — always visible, lazy-loaded on expand */}
-        <button
-          className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
-          onClick={toggleCompletedCollapsed}
-        >
-          <ChevronRight
-            className={cn("transition-transform", !completedCollapsed && "rotate-90")}
-            size={12}
-          />
-          Completed
-        </button>
-        {!completedCollapsed && (
-          <>
-            {completedPages.map(renderPageItem)}
-            {completedHasMore && (
-              <button
-                className="w-full px-3 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
-                onClick={() => void loadMoreCompleted()}
-              >
-                Show more completed
-              </button>
-            )}
-            {completedPages.length === 0 && (
-              <div className="type-ui-sm px-3 py-3 text-muted-foreground">No completed pages</div>
-            )}
-          </>
-        )}
+                  {renderVirtualRow(row)}
+                </div>
+              );
+            })}
+          </div>
+          {!isTodayView && insertBeforeId === null && <InsertionLine />}
+        </SortableContext>
       </div>
 
       {/* Drag handle — right edge */}

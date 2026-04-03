@@ -1,7 +1,8 @@
 import { useDndMonitor, useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext } from "@dnd-kit/sortable";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowUpDown, CalendarDays, FolderPlus, Hash, Inbox, Plus, Text } from "lucide-react";
-import { Fragment, useState } from "react";
+import { useRef, useState } from "react";
 import type React from "react";
 
 import {
@@ -22,7 +23,11 @@ import type { FolderSortOrder } from "../hooks/useFolderList";
 import { FolderItem } from "./FolderItem";
 import { SmartViewEntry } from "./SmartViewEntry";
 
-export function FolderList() {
+interface FolderListProps {
+  scrollElement: HTMLDivElement | null;
+}
+
+export function FolderList({ scrollElement }: FolderListProps) {
   const {
     activeViewId,
     folders,
@@ -84,6 +89,19 @@ export function FolderList() {
     onDragOver({ active, over }) {
       setIsPageOverInbox(over?.id === "inbox-drop" && active.data.current?.["type"] === "page");
     },
+  });
+
+  // ── Virtualizer ───────────────────────────────────────────────────────────
+
+  const virtualContainerRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: folders.length,
+    estimateSize: () => 32,
+    getItemKey: (index) => folders[index]?.id ?? String(index),
+    getScrollElement: () => scrollElement,
+    overscan: 10,
+    scrollMargin: virtualContainerRef.current?.offsetTop ?? 0,
   });
 
   return (
@@ -164,24 +182,54 @@ export function FolderList() {
           </IconToolbar>
         </div>
 
-        <SortableContext items={folderIds} strategy={verticalListSortingStrategy}>
-          {folders.map((folder) => (
-            <Fragment key={folder.id}>
-              {insertBeforeId === folder.id && <InsertionLine />}
-              <FolderItem
-                folder={folder}
-                isActive={activeViewId === folder.id}
-                isRenaming={renamingId === folder.id}
-                onColorChange={(color) => handleColorChange(folder.id, color)}
-                onDelete={() => handleDeleteRequest(folder)}
-                onRenameCancel={() => setRenamingId(null)}
-                onRenameCommit={(name) => handleRenameCommit(folder.id, name)}
-                onRenameStart={() => setRenamingId(folder.id)}
-                onSelect={() => setActiveViewId(folder.id)}
-                pageCount={pageCountByFolder[folder.id] ?? 0}
-              />
-            </Fragment>
-          ))}
+        <SortableContext items={folderIds} strategy={() => null}>
+          <div
+            ref={virtualContainerRef}
+            style={{
+              height: virtualizer.getTotalSize(),
+              position: "relative",
+              width: "100%",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const folder = folders[virtualItem.index];
+              if (!folder) return null;
+              return (
+                <div
+                  data-index={virtualItem.index}
+                  key={virtualItem.key}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    left: 0,
+                    position: "absolute",
+                    top: 0,
+                    transform: `translateY(${virtualItem.start - virtualizer.options.scrollMargin}px)`,
+                    width: "100%",
+                  }}
+                >
+                  <div className="relative">
+                    {insertBeforeId === folder.id && (
+                      <div className="absolute top-0 right-0 left-0 z-10 -translate-y-1/2">
+                        <InsertionLine />
+                      </div>
+                    )}
+                    <FolderItem
+                      folder={folder}
+                      isActive={activeViewId === folder.id}
+                      isRenaming={renamingId === folder.id}
+                      onColorChange={(color) => handleColorChange(folder.id, color)}
+                      onDelete={() => handleDeleteRequest(folder)}
+                      onRenameCancel={() => setRenamingId(null)}
+                      onRenameCommit={(name) => handleRenameCommit(folder.id, name)}
+                      onRenameStart={() => setRenamingId(folder.id)}
+                      onSelect={() => setActiveViewId(folder.id)}
+                      pageCount={pageCountByFolder[folder.id] ?? 0}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           {insertBeforeId === null && <InsertionLine />}
         </SortableContext>
 

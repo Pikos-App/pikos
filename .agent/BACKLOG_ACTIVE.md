@@ -8,20 +8,20 @@ Status: `[ ]` pending · Delete task when done.
 ---
 
 ## Refinement (to fix)
-- [ ] editor refinements - see list in claude code
 - [ ] refine tutorial content (recommended flow / new features? / keyboard shortcuts for non mac? maybe not worth it)
 - [ ] tab and focus styling behavior, tab group and focus trap components?
 - [ ] compact pageblock children rendering
-- [ ] selecting in editor focuses to last character
 - [ ] test auto updater
 - [ ] complete shortcut (c, space/enter - which?)
+- [ ] multi select drag doesn't reorder all selected, it does drop all on calendar, delete all, move all to folder.
 - [ ] Misc dogfooding improvements.
+- [ ] "This week" feature in Pikos? 
 
 ## To test
 - page multi select: should click outside page list items clear multi select?
 - test page with a TON of content
 
-Potential Editor Bugs - to confirm and fix.
+- [] Potential Editor Bugs - to confirm and fix.
   1. white-space: pre-wrap may preserve unwanted whitespace from pasted content                                                       
   - File: editor.css:53-57                                                                                                            
   - We added white-space: pre-wrap to paragraphs/headings to make Tab spaces visible, but this also preserves any whitespace in pasted
@@ -47,14 +47,43 @@ Potential Editor Bugs - to confirm and fix.
   5. Find-in-page highlight colors are hardcoded yellow — may lack contrast in dark mode
   - File: editor.css:258-267                                                                                                          
   - The .find-match uses oklch(0.75 0.15 85) which is a warm yellow. Worth checking if it's visible enough against your dark          
-  background.                                                                                                                         
-  - Validate: Use Cmd+F in the editor, search for a word. Are the highlights clearly visible?                                         
-                                                                                             
+  background.           
+  - Validate: Use Cmd+F in the editor, search for a word. Are the highlights clearly visible?                                                                                                      
   6. Editor destroy guard missing on page switch                                                                                      
   - File: EditorPane.tsx:136                                                                                                          
   - The page-switch effect checks if (!editor || isLoading) but not editor.isDestroyed. If the editor is destroyed during a rapid page
    switch, commands like clearContent/setContent could throw.                                                                         
   - Validate: Rapidly click between 5+ pages in the sidebar as fast as possible. Check the dev console for errors. 
+
+  - [ ] Virtualization correctness
+  - Scroll the 150+ page folder fast (flick scroll) — items should never flash blank or flicker
+  - Scroll to the bottom, then back to top — no missing items                                                                         
+  - Resize the page list panel wider/narrower while scrolled partway down — items shouldn't jump
+                                                                                                                                      
+  Keyboard navigation                                                                                                                 
+  - Arrow down through the entire 150+ page list — should auto-scroll smoothly, never skip items                                      
+  - Arrow to the very last page, then arrow down again (should stay on last)                                                          
+  - Arrow nav into completed section — does it stop at the boundary or keep going?
+                                                                                                                                      
+  DnD with virtualization                                                                                                             
+  - Drag a page from the middle of a long list to a folder in the sidebar — should work, no ghost items                               
+  - Drag a page to the calendar while scrolled partway down the list                                                                  
+  - Drag a page, scroll during the drag (if possible) — items entering the viewport should render correctly
+                                                                                                                                      
+  Completed section in virtual list                                                                                                   
+  - Open completed accordion, scroll down through completed pages, then close it — scroll position shouldn't jump wildly
+  - Open completed, click "Show more" a few times — new items should appear below existing ones without layout jumps                  
+                                                            
+  Edge cases                                                                                                                          
+  - Switch rapidly between folders (one with 150+ pages, one with 3) — list should resize instantly, no stale items from the previous
+  folder                                                                                                                              
+  - Create a new page while scrolled to the bottom of a long list — should it appear and scroll into view?
+  - Delete the active page while scrolled deep — list should adjust without blank gaps                                                
+                                                                                                                                      
+  Folder list specifically                                                                                                            
+  - With your 20 folders, try reordering via drag — verify the insertion line still appears in the right spot                         
+  - Rename a folder inline — the input should appear correctly positioned, not offset                                                 
+                                                            
 
 ## Import before launch?
 
