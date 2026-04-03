@@ -17,69 +17,22 @@ Status: `[ ]` pending · Delete task when done.
 - [ ] "This week" feature in Pikos? 
 
 ## To test
-- page multi select: should click outside page list items clear multi select?
-- test page with a TON of content
-
-- [] Potential Editor Bugs - to confirm and fix.
-  1. white-space: pre-wrap may preserve unwanted whitespace from pasted content                                                       
-  - File: editor.css:53-57                                                                                                            
-  - We added white-space: pre-wrap to paragraphs/headings to make Tab spaces visible, but this also preserves any whitespace in pasted
-   text (e.g., copying from a webpage with multiple spaces or tabs)                                                                   
-  - Validate: Copy text from a webpage or email that has irregular spacing, paste into the editor. Check if extra whitespace is       
-  preserved that shouldn't be.                                                                                                              
-  2. Unordered list bullet positioning may break at indent levels or with nested lists
-  - File: editor.css:78-88                                                                                                            
-  - We replaced native ::marker with a ::before pseudo-element at left: -16px. This is absolute-positioned relative to the li, which  
-  may not align correctly when lists are nested or when a paragraph inside the list has an indent level.                              
-  - Validate: Create a nested unordered list (3+ levels deep). Check if bullets are visible and properly aligned at each level.       
-  3. Clicking below content when editor is already focused no longer moves cursor to end                                              
-  - File: EditorPane.tsx:269-274                                                                                                      
-  - The onMouseDown fix now checks !editor?.isFocused, so clicking the empty area below text while already editing does nothing.      
-  Previously onClick always moved cursor to end. Some editors (like Notion) do let you click below to place cursor at end.            
-  - Validate: Type a short paragraph, then click in the empty space far below it. Does the cursor move to the end of the text? Is this
-   the behavior you want?                                                                                                             
-  4. LinkPopover input type="url" rejects scheme-less URLs during typing
-  - File: LinkPopover.tsx                                                                                                             
-  - The URL input uses type="url" which applies browser validation. Typing "example.com" shows as invalid (red outline on some
-  browsers) even though ensureProtocol() adds the scheme on submit.                                                                   
-  - Validate: Open format toolbar, click link, type "google.com" without "https://". Does the input show error styling? Does submit   
-  5. Find-in-page highlight colors are hardcoded yellow — may lack contrast in dark mode
-  - File: editor.css:258-267                                                                                                          
-  - The .find-match uses oklch(0.75 0.15 85) which is a warm yellow. Worth checking if it's visible enough against your dark          
-  background.           
-  - Validate: Use Cmd+F in the editor, search for a word. Are the highlights clearly visible?                                                                                                      
-  6. ~~Editor destroy guard~~ — FIXED (added isDestroyed checks to all editor command sites)
-  - Validate: Rapidly click between 5+ pages in the sidebar as fast as possible. Check the dev console for errors.
-
-  - [ ] Virtualization correctness
-  - Scroll the 150+ page folder fast (flick scroll) — items should never flash blank or flicker
-  - Scroll to the bottom, then back to top — no missing items                                                                         
-  - Resize the page list panel wider/narrower while scrolled partway down — items shouldn't jump
-                                                                                                                                      
-  Keyboard navigation                                                                                                                 
-  - Arrow down through the entire 150+ page list — should auto-scroll smoothly, never skip items                                      
-  - Arrow to the very last page, then arrow down again (should stay on last)                                                          
-  - Arrow nav into completed section — does it stop at the boundary or keep going?
-                                                                                                                                      
-  DnD with virtualization                                                                                                             
-  - Drag a page from the middle of a long list to a folder in the sidebar — should work, no ghost items                               
-  - Drag a page to the calendar while scrolled partway down the list                                                                  
+  DnD with virtualization
+  - Drag a page from the middle of a long list to a folder in the sidebar — should work, no ghost items
+  - Drag a page to the calendar while scrolled partway down the list
   - Drag a page, scroll during the drag (if possible) — items entering the viewport should render correctly
-                                                                                                                                      
-  Completed section in virtual list                                                                                                   
+  Completed section in virtual list
   - Open completed accordion, scroll down through completed pages, then close it — scroll position shouldn't jump wildly
-  - Open completed, click "Show more" a few times — new items should appear below existing ones without layout jumps                  
-                                                            
-  Edge cases                                                                                                                          
+  - Open completed, click "Show more" a few times — new items should appear below existing ones without layout jumps      
+                                               
+  Edge cases                 
   - Switch rapidly between folders (one with 150+ pages, one with 3) — list should resize instantly, no stale items from the previous
-  folder                                                                                                                              
   - Create a new page while scrolled to the bottom of a long list — should it appear and scroll into view?
-  - Delete the active page while scrolled deep — list should adjust without blank gaps                                                
-                                                                                                                                      
-  Folder list specifically                                                                                                            
+  - Delete the active page while scrolled deep — list should adjust without blank gaps
+
+  Folder list specifically          
   - With your 20 folders, try reordering via drag — verify the insertion line still appears in the right spot                         
-  - Rename a folder inline — the input should appear correctly positioned, not offset                                                 
-                                                            
+  - Rename a folder inline — the input should appear correctly positioned, not offset
 
 ## Import before launch?
 

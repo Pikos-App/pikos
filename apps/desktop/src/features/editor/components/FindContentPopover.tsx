@@ -128,10 +128,15 @@ export function FindContentPopover({ editor }: FindContentPopoverProps) {
     { allowInInputs: true }
   );
 
-  // Close when focus leaves the popover (covers click-outside and tab-away)
+  // Close when focus leaves the popover (covers click-outside and tab-away).
+  // relatedTarget can be null on macOS button clicks — treat that as "still
+  // inside" and let a follow-up blur (if any) handle it.
   function handleFocusOut(e: React.FocusEvent) {
-    // relatedTarget is the element receiving focus — if it's outside the popover, close
-    if (popoverRef.current && !popoverRef.current.contains(e.relatedTarget as Node)) {
+    if (
+      popoverRef.current &&
+      e.relatedTarget &&
+      !popoverRef.current.contains(e.relatedTarget as Node)
+    ) {
       handleClose();
     }
   }

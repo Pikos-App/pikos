@@ -49,6 +49,7 @@ const extensions = [
   Typography,
   Link.configure({
     autolink: true,
+    defaultProtocol: "https",
     HTMLAttributes: { class: "editor-link" },
     linkOnPaste: true,
     openOnClick: false,

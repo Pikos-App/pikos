@@ -178,17 +178,22 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   }, [activePage?.id]);
 
   function navigatePage(direction: 1 | -1) {
-    if (!visiblePages.length) return;
+    const navigable = completedCollapsed ? visiblePages : [...visiblePages, ...completedPages];
+    if (!navigable.length) return;
     if (sidebarCollapsed) setSidebarCollapsed(false);
     listRef.current?.setAttribute("data-keyboard-nav", "1");
-    const currentIdx = activePage ? visiblePages.findIndex((p) => p.id === activePage.id) : -1;
-    const newIdx =
-      currentIdx === -1
-        ? direction === 1
-          ? 0
-          : visiblePages.length - 1
-        : Math.max(0, Math.min(visiblePages.length - 1, currentIdx + direction));
-    const page = visiblePages[newIdx];
+    const currentIdx = activePage ? navigable.findIndex((p) => p.id === activePage.id) : -1;
+    if (currentIdx === -1) {
+      // Active page not in navigable list (e.g. completed section was collapsed).
+      // Up → last visible page; down → do nothing (avoid jumping to top).
+      if (direction === -1) {
+        const page = navigable[navigable.length - 1];
+        if (page) handleSelectPage(page);
+      }
+      return;
+    }
+    const newIdx = Math.max(0, Math.min(navigable.length - 1, currentIdx + direction));
+    const page = navigable[newIdx];
     if (page) handleSelectPage(page);
   }
 

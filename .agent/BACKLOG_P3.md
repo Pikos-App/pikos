@@ -90,3 +90,7 @@ Status: `[ ]` pending · `[-]` superseded/deferred/do not start
 
 
 What does the future of pikos look like? AI first / conversational integrated with our personal devices. Could ask Pikos questions. Am I free Wednesday at 3pm? Am I free Wednesday evening? How many times have I ran over the last 3 months. Useful for reflection. Useful for managing schedule and thoughts. Maybe non llm check. Maybe light local llm. 
+
+## Known Bugs
+- [ ] Editor: typing "1." as first content causes text to disappear until next keystroke (likely WebKit contenteditable auto-formatting conflicting with ProseMirror)
+- [ ] Holding arrow key in a large page list eventually stops responding. Page loading is debounced, but rapid key repeat still saturates React re-renders from virtualizer scroll + selection updates.

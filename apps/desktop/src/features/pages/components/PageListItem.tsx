@@ -200,6 +200,7 @@ export function PageListItem({
                 ? "bg-surface-selected/50 text-accent-foreground"
                 : "hover:bg-surface-hover"
           )}
+          data-page-item
           data-selected={isSelected ? "true" : undefined}
           onClick={isRenaming ? undefined : onSelect}
           onDoubleClick={(e) => {

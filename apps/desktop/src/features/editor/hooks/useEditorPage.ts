@@ -1,11 +1,16 @@
 // useEditorPage — loads full page content when activePageId changes.
 // Returns the full Page (with content) for the Tiptap editor.
+// Debounces rapid activePageId changes (e.g. holding arrow key) to avoid
+// loading every intermediate page.
 
 import type { Page } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+
+/** Delay before loading page content after activePageId changes. */
+const DEBOUNCE_MS = 80;
 
 interface EditorPageState {
   /** Full page with content, or null if no page selected / still loading. */
@@ -27,7 +32,8 @@ export function useEditorPage(): EditorPageState {
   // Track the ID we're currently loading to avoid race conditions
   const loadingIdRef = useRef<string | null>(null);
 
-  // Load full page when activePageId changes
+  // Load full page when activePageId changes, debounced to avoid loading
+  // every intermediate page during rapid keyboard navigation.
   useEffect(() => {
     if (activePageId === null) {
       loadingIdRef.current = null;
@@ -36,12 +42,18 @@ export function useEditorPage(): EditorPageState {
 
     loadingIdRef.current = activePageId;
 
-    void getPage(activePageId).then((loaded) => {
-      // Only apply if this is still the page we want
-      if (loadingIdRef.current === activePageId) {
-        setLoadedPage(loaded);
-      }
-    });
+    const timer = setTimeout(() => {
+      if (loadingIdRef.current !== activePageId) return;
+
+      void getPage(activePageId).then((loaded) => {
+        // Only apply if this is still the page we want
+        if (loadingIdRef.current === activePageId) {
+          setLoadedPage(loaded);
+        }
+      });
+    }, DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
   }, [activePageId, getPage]);
 
   // Listen for external updates to the active page (e.g. from other contexts)

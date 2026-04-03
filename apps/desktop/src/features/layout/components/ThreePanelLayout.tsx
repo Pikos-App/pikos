@@ -15,7 +15,7 @@ import { TitleBar } from "./TitleBar";
 const PANEL_SPRING = { damping: 35, stiffness: 350, type: "spring" as const };
 
 export function ThreePanelLayout() {
-  const { isDraggingOverCalendar, sidebarCollapsed } = useUI();
+  const { clearSelection, isDraggingOverCalendar, selectedPageIds, sidebarCollapsed } = useUI();
   const isFullscreen = useIsFullscreen();
 
   // Suppress all dnd-kit collision detection while the cursor is over the
@@ -58,6 +58,11 @@ export function ThreePanelLayout() {
           "flex h-screen flex-col bg-background text-foreground",
           (activePageData ?? activeFolderData) && "select-none"
         )}
+        onMouseDown={(e) => {
+          if (selectedPageIds.size > 0 && !(e.target as HTMLElement).closest("[data-page-item]")) {
+            clearSelection();
+          }
+        }}
         role="main"
       >
         {!isFullscreen && <TitleBar />}
