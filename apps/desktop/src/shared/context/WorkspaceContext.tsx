@@ -9,6 +9,7 @@ import type {
   Folder,
   Page,
   PagePriority,
+  PageRecurrenceRule,
   PageStatus,
   PageSummary,
   SearchResponse,
@@ -16,7 +17,7 @@ import type {
   Workspace,
 } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
-import type { FolderUpdate, PageUpdate, StorageAdapter } from "@pikos/core";
+import type { FolderUpdate, NewRecurrenceRule, PageUpdate, StorageAdapter } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
@@ -78,6 +79,14 @@ export interface WorkspaceContextValue {
   scheduleOnce: (pageId: string, start: string, end?: string) => Promise<void>;
   /** Delete all one-off schedule blocks for a page. */
   clearSchedule: (pageId: string) => Promise<void>;
+  /** All recurrence rules (one per recurring page). */
+  recurrenceRules: PageRecurrenceRule[];
+  /** Create a recurrence rule for a page. */
+  createRecurrence: (data: NewRecurrenceRule) => Promise<PageRecurrenceRule>;
+  /** Delete a recurrence rule by its ID. */
+  deleteRecurrence: (ruleId: string) => Promise<void>;
+  /** List all materialised schedule rows in a date range (for rrule override filtering). */
+  listSchedulesRange: (start: string, end: string) => Promise<import("@pikos/core").PageSchedule[]>;
   /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
   listCompletedPages: (filter: CompletedPagesFilter) => Promise<CompletedPagesResponse>;
   /** Merge lazy-loaded pages (e.g. completed) into the pages array, deduplicating by ID. */
@@ -163,6 +172,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [recurrenceRules, setRecurrenceRules] = useState<PageRecurrenceRule[]>([]);
   // Start true so we don't flash the welcome screen before init completes
   const [isLoading, setIsLoading] = useState(true);
 
@@ -199,12 +209,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const loadWorkspaceDataRef = useRef(async () => {
     setIsLoading(true);
     try {
-      const [loadedPages, loadedFolders] = await Promise.all([
+      const [loadedPages, loadedFolders, loadedRules] = await Promise.all([
         adapter.listPages({ status: "not_started" }),
         adapter.listFolders(),
+        adapter.listRecurrenceRules(),
       ]);
       setPages(loadedPages);
       setFolders(loadedFolders);
+      setRecurrenceRules(loadedRules);
     } finally {
       setIsLoading(false);
     }
@@ -644,6 +656,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  // ─── Recurrence rules ─────────────────────────────────────────────────────
+
+  async function createRecurrence(data: NewRecurrenceRule): Promise<PageRecurrenceRule> {
+    const rule = await adapter.createRecurrenceRule(data);
+    setRecurrenceRules((prev) => [...prev, rule]);
+    return rule;
+  }
+
+  async function deleteRecurrence(ruleId: string): Promise<void> {
+    await adapter.deleteRecurrenceRule(ruleId);
+    setRecurrenceRules((prev) => prev.filter((r) => r.id !== ruleId));
+  }
+
+  function listSchedulesRange(start: string, end: string) {
+    return adapter.listPageSchedulesRange(start, end);
+  }
+
   // ─── Flush on window close ────────────────────────────────────────────────
   // Tauri's Rust side calls prevent_close() so we get a chance here to flush
   // any debounced writes, wait for all in-flight mutations, then destroy.
@@ -821,18 +850,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     consumePendingNavigation,
     createFolder,
     createPage,
+    createRecurrence,
     deleteFolder,
     deletePage,
+    deleteRecurrence,
     flushPage,
     folders,
     getPage,
     importBatch,
     isLoading,
     listCompletedPages,
+    listSchedulesRange,
     mergePages,
     on,
     pageErrors,
     pages,
+    recurrenceRules,
     reload,
     reorderFolders,
     reorderPages,

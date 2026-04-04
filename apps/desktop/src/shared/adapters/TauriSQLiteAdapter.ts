@@ -157,4 +157,8 @@ export class TauriSQLiteAdapter implements StorageAdapter {
   getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null> {
     return invoke<PageRecurrenceRule | null>("get_recurrence_rule", { pageId });
   }
+
+  listRecurrenceRules(): Promise<PageRecurrenceRule[]> {
+    return invoke<PageRecurrenceRule[]>("list_recurrence_rules");
+  }
 }

@@ -1,5 +1,6 @@
 // CalendarView — right panel calendar mode.
 // Reads pages from WorkspaceContext (scheduledStart denorm), renders week view.
+// Expands rrule recurrence rules into virtual occurrences for the visible week.
 // Navigation (prev/next/today) is owned by EditorPanel via UIContext.referenceDate.
 
 import { format, isSameWeek } from "date-fns";
@@ -10,11 +11,20 @@ import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
+import { useRecurrenceExpansion } from "../hooks/useRecurrenceExpansion";
 import { weekDays } from "../utils/calendarUtils";
 import { WeekGrid } from "./WeekGrid";
 
 export function CalendarView() {
-  const { createPage, deletePage, pages, scheduleOnce, updatePage } = useWorkspace();
+  const {
+    createPage,
+    deletePage,
+    listSchedulesRange,
+    pages,
+    recurrenceRules,
+    scheduleOnce,
+    updatePage,
+  } = useWorkspace();
   const { activeViewId, openPage, referenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
   const { defaultFolderId: settingsDefaultFolder, weekStart } = useAppSettings();
@@ -30,6 +40,14 @@ export function CalendarView() {
 
   const days = weekDays(referenceDate, weekStart);
   const isCurrentWeek = isSameWeek(referenceDate, new Date(), { weekStartsOn: weekStart });
+
+  // Expand rrule recurrence rules into virtual calendar occurrences for this week.
+  const expandedPages = useRecurrenceExpansion({
+    days,
+    listSchedulesRange,
+    pages: visiblePages,
+    recurrenceRules,
+  });
 
   // Double-click on a PageBlock opens the page in the editor.
   function handlePageDoubleClick(pageId: string) {
@@ -91,7 +109,7 @@ export function CalendarView() {
         onCreatePage={handleCreatePage}
         onPageDoubleClick={handlePageDoubleClick}
         onReschedule={handleReschedule}
-        pages={visiblePages}
+        pages={expandedPages}
       />
     </div>
   );

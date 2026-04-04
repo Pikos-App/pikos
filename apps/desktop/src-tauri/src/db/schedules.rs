@@ -476,6 +476,22 @@ pub async fn delete_recurrence_rule(
 }
 
 #[tauri::command]
+pub async fn list_recurrence_rules(
+    state: State<'_, DbState>,
+) -> Result<Vec<PageRecurrenceRule>, String> {
+    let pool = state.get_pool().await?;
+    let rows = sqlx::query_as::<_, RecurrenceRuleRow>(
+        "SELECT r.* FROM page_recurrence_rules r
+         INNER JOIN pages p ON p.id = r.page_id
+         WHERE p.deleted_at IS NULL",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().map(PageRecurrenceRule::from).collect())
+}
+
+#[tauri::command]
 pub async fn get_recurrence_rule(
     state: State<'_, DbState>,
     page_id: String,

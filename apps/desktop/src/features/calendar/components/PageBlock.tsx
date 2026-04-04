@@ -90,6 +90,7 @@ export function PageBlock({
   const timeLabel = formatTimeRange(startDate, liveEndDate ?? endDate);
   const showTimeLabel = !isRenderingCompact && displayHeight >= 36;
   const isDone = page.status === "done";
+  const isRecurring = "isVirtual" in page && (page as { isVirtual?: boolean }).isVirtual === true;
 
   // Inline editing state — only used when isEditing=true.
   const [inputValue, setInputValue] = useState(page.title);
@@ -312,6 +313,7 @@ export function PageBlock({
             style={sharedStyle}
           >
             {checkbox}
+            {isRecurring && <RecurringIcon />}
             <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
               {page.title || "Untitled"}
             </span>
@@ -336,6 +338,7 @@ export function PageBlock({
           >
             <div className="flex w-full min-w-0 items-start gap-1">
               {checkbox}
+              {isRecurring && <RecurringIcon />}
               <p className="type-body-sm line-clamp-2 min-w-0 text-left font-medium text-foreground">
                 {page.title || "Untitled"}
               </p>
@@ -365,5 +368,23 @@ export function PageBlock({
         />
       </PopoverContent>
     </Popover>
+  );
+}
+
+function RecurringIcon() {
+  return (
+    <svg
+      aria-label="Recurring"
+      className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      viewBox="0 0 24 24"
+    >
+      <path d="M17 1l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 23l-4-4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

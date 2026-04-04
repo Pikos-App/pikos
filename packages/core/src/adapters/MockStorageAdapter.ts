@@ -420,6 +420,13 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve(rule);
   }
 
+  listRecurrenceRules(): Promise<PageRecurrenceRule[]> {
+    const deletedPageIds = new Set(
+      [...this.pages.values()].filter((p) => p.deletedAt).map((p) => p.id)
+    );
+    return Promise.resolve([...this.rules.values()].filter((r) => !deletedPageIds.has(r.pageId)));
+  }
+
   // ─── Private helpers ─────────────────────────────────────────────────────────
 
   private _refreshDenorm(pageId: string): void {

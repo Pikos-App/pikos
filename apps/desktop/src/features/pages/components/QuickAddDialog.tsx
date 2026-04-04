@@ -4,8 +4,8 @@
 // but input text is never modified. On submit, the parser extracts the clean
 // title and all metadata from the full input.
 
-import { localToday, parseInput } from "@pikos/core";
-import type { Folder, PagePriority, PageUpdate } from "@pikos/core";
+import { localToday, parseInput, rruleToLabel } from "@pikos/core";
+import type { Folder, PagePriority, PageUpdate, ParseResult } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
@@ -57,7 +57,7 @@ function BylineSeparator() {
 // ── QuickAddDialog ────────────────────────────────────────────────────────────
 
 export function QuickAddDialog() {
-  const { createPage, folders, scheduleOnce, tags, updatePage } = useWorkspace();
+  const { createPage, createRecurrence, folders, scheduleOnce, tags, updatePage } = useWorkspace();
   const allTagNames = tags.map((t) => t.name);
   const { activeViewId, openDialog, setOpenDialog } = useUI();
   const { defaultFolderId: settingsDefaultFolder } = useAppSettings();
@@ -68,6 +68,8 @@ export function QuickAddDialog() {
   const [inputValue, setInputValue] = useState("");
   const [shake, setShake] = useState(false);
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
+  // Pending recurring confirmation: holds the parse result awaiting user OK.
+  const [pendingRecurring, setPendingRecurring] = useState<ParseResult | null>(null);
 
   // Active sidebar folder takes precedence, then settings default, then Inbox (null).
   const defaultFolderId =
@@ -89,6 +91,7 @@ export function QuickAddDialog() {
   const [dateManual, setDateManual] = useState(false);
   const [priorityManual, setPriorityManual] = useState(false);
   const [folderManual, setFolderManual] = useState(false);
+  const [recurrenceLabel, setRecurrenceLabel] = useState<string | null>(null);
 
   // ── Reset form fields when the dialog opens ───────────────────────────────────
   useEffect(() => {
@@ -104,7 +107,9 @@ export function QuickAddDialog() {
     setDateManual(activeViewId === "today");
     setPriorityManual(false);
     setFolderManual(false);
+    setRecurrenceLabel(null);
     setAddedFeedback(null);
+    setPendingRecurring(null);
   }, [isOpen]);
 
   // ── Focus input when dialog opens or feedback clears ─────────────────────────
@@ -151,6 +156,7 @@ export function QuickAddDialog() {
         if (!priorityManual) setPriorityValue(0);
         if (!folderManual) setFolderValue(defaultFolderId);
         setNlpTags([]);
+        setRecurrenceLabel(null);
         return;
       }
 
@@ -162,6 +168,15 @@ export function QuickAddDialog() {
             ? result.inputs[0]
             : result.input;
       if (!parsed) return;
+
+      // Show recurrence preview label
+      if (result.type === "recurring") {
+        setRecurrenceLabel(rruleToLabel(result.rrule));
+      } else if (result.type === "finite") {
+        setRecurrenceLabel(`${result.count} occurrence${result.count === 1 ? "" : "s"}`);
+      } else {
+        setRecurrenceLabel(null);
+      }
 
       if (!dateManual) {
         setDateValue(parsed.scheduledStart ?? null);
@@ -199,11 +214,16 @@ export function QuickAddDialog() {
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
-      if (event.metaKey || event.ctrlKey) {
+      if (pendingRecurring) {
+        void confirmRecurring();
+      } else if (event.metaKey || event.ctrlKey) {
         void handleSubmitBatch();
       } else {
         void handleSubmit();
       }
+    } else if (event.key === "Escape" && pendingRecurring) {
+      event.stopPropagation();
+      setPendingRecurring(null);
     }
   }
 
@@ -221,6 +241,19 @@ export function QuickAddDialog() {
 
     // Parse the full, unstripped input on submit.
     const result = parseInput(trimmed);
+
+    // Recurring or large finite → show confirmation before creating.
+    // Per decisions.md: always confirm recurring; confirm finite when count >= 3.
+    if (result.type === "recurring" || (result.type === "finite" && result.count >= 3)) {
+      setPendingRecurring(result);
+      return null;
+    }
+
+    return executeCreate(result);
+  }
+
+  /** Actually creates the page(s) from a parse result (after any confirmation). */
+  async function executeCreate(result: ParseResult): Promise<string | null> {
     const parsed =
       result.type === "single"
         ? result.input
@@ -249,27 +282,67 @@ export function QuickAddDialog() {
         : priorityValue;
 
     // Use parsed.title (tokens already stripped by parser) as the page title.
-    const title = parsed?.title || trimmed;
-
-    const page = await createPage({ folderId: resolvedFolderId, title });
+    const title = parsed?.title || inputValue.trim();
 
     // Fresh NLP tags from re-parse + manual additions.
-    // manualTags is never overwritten by NLP, so this correctly handles removals.
     const finalTags = [...new Set([...(parsed?.tags ?? []), ...manualTags])];
 
     const patch: PageUpdate = {};
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
     if (finalTags.length > 0) patch.tags = finalTags;
+
+    if (result.type === "recurring") {
+      // Infinite recurrence: 1 template page + recurrence rule.
+      const page = await createPage({ folderId: resolvedFolderId, title });
+      if (Object.keys(patch).length > 0) updatePage(page.id, patch);
+
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      await createRecurrence({
+        pageId: page.id,
+        rrule: result.rrule,
+        scheduledStart: resolvedDate ?? localToday(),
+        ...(parsed?.scheduledEnd ? { scheduledEnd: parsed.scheduledEnd } : {}),
+        timezone: tz,
+      });
+      return title;
+    }
+
+    if (result.type === "finite") {
+      // Finite recurrence: N independent pages, each with its own schedule.
+      for (const inp of result.inputs) {
+        const pg = await createPage({ folderId: resolvedFolderId, title: inp.title || title });
+        const finPatch: PageUpdate = {};
+        if (resolvedPriority !== 0) finPatch.priority = resolvedPriority;
+        const finTags = [...new Set([...inp.tags, ...manualTags])];
+        if (finTags.length > 0) finPatch.tags = finTags;
+        if (Object.keys(finPatch).length > 0) updatePage(pg.id, finPatch);
+        if (inp.scheduledStart) {
+          await scheduleOnce(pg.id, inp.scheduledStart, inp.scheduledEnd);
+        }
+      }
+      return title;
+    }
+
+    // Single page
+    const page = await createPage({ folderId: resolvedFolderId, title });
     if (Object.keys(patch).length > 0) updatePage(page.id, patch);
 
     if (resolvedDate) {
-      // End time: parsed scheduledEnd takes precedence over chip state.
       const hasTime = resolvedDate.includes("T");
       const resolvedEnd = hasTime ? (parsed?.scheduledEnd ?? endDateValue ?? undefined) : undefined;
       await scheduleOnce(page.id, resolvedDate, resolvedEnd);
     }
 
     return title;
+  }
+
+  /** Confirm and execute a pending recurring/finite creation. */
+  async function confirmRecurring(): Promise<void> {
+    if (!pendingRecurring) return;
+    const result = pendingRecurring;
+    setPendingRecurring(null);
+    const title = await executeCreate(result);
+    if (title !== null) setOpenDialog(null);
   }
 
   /** Enter — commit and close. */
@@ -311,7 +384,30 @@ export function QuickAddDialog() {
         showCloseButton={false}
       >
         <div className="px-4 pt-4 pb-3">
-          {addedFeedback !== null ? (
+          {pendingRecurring ? (
+            <div className="space-y-2">
+              <p className="text-base text-foreground">
+                {pendingRecurring.type === "recurring"
+                  ? `Create recurring page: ${rruleToLabel(pendingRecurring.rrule)}`
+                  : `Create ${(pendingRecurring as Extract<ParseResult, { type: "finite" }>).count} pages`}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  autoFocus
+                  className="rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => void confirmRecurring()}
+                >
+                  Confirm
+                </button>
+                <button
+                  className="rounded bg-muted px-3 py-1 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => setPendingRecurring(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : addedFeedback !== null ? (
             <p className="animate-in truncate text-base text-muted-foreground fade-in-0">
               <span className="mr-1.5 text-primary">✓</span>
               {addedFeedback}
@@ -386,6 +482,27 @@ export function QuickAddDialog() {
             }}
             selected={tagsValue}
           />
+
+          {recurrenceLabel && !pendingRecurring && (
+            <>
+              <BylineSeparator />
+              <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                <svg
+                  className="h-3 w-3"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M17 1l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M3 11V9a4 4 0 0 1 4-4h14" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7 23l-4-4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M21 13v2a4 4 0 0 1-4 4H3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {recurrenceLabel}
+              </span>
+            </>
+          )}
 
           <button
             className="ml-auto shrink-0 rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"

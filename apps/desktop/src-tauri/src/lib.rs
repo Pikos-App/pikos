@@ -15,7 +15,8 @@ use db::{
     schedules::{
         create_page_schedule, create_recurrence_rule, delete_page_schedule,
         delete_recurrence_rule, get_recurrence_rule, list_page_schedules,
-        list_page_schedules_range, update_page_schedule, update_recurrence_rule,
+        list_page_schedules_range, list_recurrence_rules, update_page_schedule,
+        update_recurrence_rule,
     },
     search::search_pages,
     tags::search_tags,
@@ -172,6 +173,7 @@ pub fn run() {
             update_recurrence_rule,
             delete_recurrence_rule,
             get_recurrence_rule,
+            list_recurrence_rules,
             // Search
             search_pages,
             // Tags
