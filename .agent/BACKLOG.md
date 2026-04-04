@@ -7,13 +7,14 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 ## Refinement
 
 - [ ] Refine tutorial content (recommended flow, new features, keyboard shortcuts for non-mac)
-- [ ] Tab and focus styling behavior, tab group and focus trap components
 - [ ] Compact page block children rendering
 - [ ] Double check multi day page blocks
-- [ ] Test auto updater
 - [ ] Multi-select drag doesn't reorder all selected (drop to calendar, delete, move to folder work)
 - [ ] Misc dogfooding improvements
 - [ ] "This week" smart view?
+- [ ] Reorganize settings now that it has so much going on? Anything else to add for "fun" that would delight?
+- [ ] Expected Slow - Deep dive into style refinement - expect a lot of LLM back and forth and manual refinements.
+- [ ] Expected Slow - Tab and focus styling behavior, tab group and focus trap components
 
 ## QA
 
@@ -21,6 +22,7 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 - [ ] Completed section in virtual list (open/close accordion, "Show more" pagination)
 - [ ] Edge cases (rapid folder switch, create page while scrolled, delete active page while scrolled)
 - [ ] Folder list (reorder with drag, inline rename positioning)
+- [ ] Test auto updater
 
 ## Import Follow-ups
 
