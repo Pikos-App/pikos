@@ -6,7 +6,7 @@ mod markdown;
 
 use db::{
     connect_db, DbState,
-    dev::{backdate_page, backup_db, export_json, export_markdown, get_usage_stats, reset_db},
+    dev::{backdate_page, backup_db, backup_db_before_import, export_json, export_markdown, get_usage_stats, reset_db},
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders,
         restore_folder, soft_delete_folder, update_folder,
@@ -25,6 +25,7 @@ use db::{
 pub fn run() {
     tauri::Builder::default()
         .manage(DbState::new())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -178,6 +179,7 @@ pub fn run() {
             // Dev / settings
             backdate_page,
             backup_db,
+            backup_db_before_import,
             export_json,
             export_markdown,
             get_usage_stats,

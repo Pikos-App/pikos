@@ -341,6 +341,38 @@ pub async fn backup_db(state: tauri::State<'_, DbState>) -> Result<String, Strin
     Ok(dest)
 }
 
+/// Pre-import safety backup — copies the DB to {appDataDir}/backups/ before a batch import.
+/// Uses VACUUM INTO for a clean, single-file copy.
+#[tauri::command]
+pub async fn backup_db_before_import(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DbState>,
+) -> Result<String, String> {
+    let pool = state.get_pool().await?;
+
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {e}"))?;
+    let backup_dir = app_data.join("backups");
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| format!("Failed to create backups dir: {e}"))?;
+
+    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
+    let dest = backup_dir
+        .join(format!("pre-import-{}.sqlite", timestamp))
+        .to_string_lossy()
+        .to_string();
+
+    let sql = format!("VACUUM INTO '{}'", dest.replace('\'', "''"));
+    sqlx::query(&sql)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(dest)
+}
+
 /// Export all pages as Markdown files to ~/Downloads/pikos-markdown-<timestamp>/.
 /// Each page becomes a .md file with YAML frontmatter (title, status, priority, tags,
 /// scheduled dates). Folder structure is preserved as subdirectories.

@@ -145,6 +145,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
 
   // ── Virtualizer ───────────────────────────────────────────────────────────
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual + React Compiler known issue
   const virtualizer = useVirtualizer({
     count: rows.length,
     estimateSize: (index) => {
