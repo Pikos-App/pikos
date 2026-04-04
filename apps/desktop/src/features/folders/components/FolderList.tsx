@@ -95,6 +95,7 @@ export function FolderList({ scrollElement }: FolderListProps) {
 
   const virtualContainerRef = useRef<HTMLDivElement>(null);
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual + React Compiler known issue
   const virtualizer = useVirtualizer({
     count: folders.length,
     estimateSize: () => 32,

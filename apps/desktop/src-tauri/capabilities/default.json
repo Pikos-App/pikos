@@ -10,6 +10,7 @@
     "store:allow-set",
     "store:allow-get",
     "store:allow-save",
+    "dialog:default",
     "fs:default",
     "fs:allow-remove",
     "fs:allow-write-text-file",
@@ -28,10 +29,8 @@
     {
       "identifier": "fs:scope",
       "allow": [
-        { "path": "/Users/alex/Documents/pikos" },
-        { "path": "/Users/alex/Documents/pikos/**" },
-        { "path": "$HOME/Documents/pikos" },
-        { "path": "$HOME/Documents/pikos/**" }
+        { "path": "$HOME/**" },
+        { "path": "$APPDATA/**" }
       ]
     }
   ]

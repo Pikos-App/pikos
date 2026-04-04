@@ -8,6 +8,8 @@ import type {
   CompletedPagesResponse,
   Folder,
   Page,
+  PagePriority,
+  PageStatus,
   PageSummary,
   SearchResponse,
   Tag,
@@ -92,6 +94,37 @@ export interface WorkspaceContextValue {
     event: E,
     handler: (payload: EventPayloadMap[E]) => void
   ) => () => void;
+  /** Batch-import pages and folders from an external source. Returns IDs for undo. */
+  importBatch: (data: ImportBatchInput) => Promise<ImportBatchResult>;
+}
+
+/** Input for batch import. */
+export interface ImportBatchItem {
+  title: string;
+  content: string;
+  folderKey: string | null;
+  status: PageStatus;
+  priority: PagePriority;
+  tags: string[];
+  scheduledDate: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
+}
+
+export interface ImportBatchFolder {
+  key: string;
+  name: string;
+}
+
+export interface ImportBatchInput {
+  pages: ImportBatchItem[];
+  folders: ImportBatchFolder[];
+  batchTag: string;
+}
+
+export interface ImportBatchResult {
+  pageIds: string[];
+  folderIds: string[];
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -727,6 +760,61 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     await loadWorkspaceDataRef.current();
   }
 
+  async function importBatch(data: ImportBatchInput): Promise<ImportBatchResult> {
+    const folderIds: string[] = [];
+    const pageIds: string[] = [];
+
+    // Build a map of existing folders by name for dedup
+    const existingFoldersByName = new Map(folders.map((f) => [f.name, f]));
+
+    // Create or resolve folders
+    const folderKeyToId = new Map<string, string>();
+    for (const f of data.folders) {
+      const existing = existingFoldersByName.get(f.name);
+      if (existing) {
+        folderKeyToId.set(f.key, existing.id);
+      } else {
+        const created = await adapter.createFolder({ name: f.name, parentId: null });
+        folderKeyToId.set(f.key, created.id);
+        folderIds.push(created.id);
+      }
+    }
+
+    // Create pages
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    for (const p of data.pages) {
+      const folderId = p.folderKey ? (folderKeyToId.get(p.folderKey) ?? null) : null;
+      const tagsWithBatch = [...p.tags, data.batchTag];
+
+      const page = await adapter.createPage({
+        content: p.content,
+        contentText: "",
+        folderId,
+        priority: p.priority,
+        status: p.status,
+        tags: tagsWithBatch,
+        title: p.title,
+        ...(p.completedAt ? { completedAt: p.completedAt } : {}),
+        ...(p.createdAt ? { createdAt: p.createdAt } : {}),
+      });
+      pageIds.push(page.id);
+
+      // Create schedule if needed
+      if (p.scheduledDate) {
+        await adapter.createPageSchedule({
+          pageId: page.id,
+          scheduledStart: p.scheduledDate,
+          timezone: tz,
+        });
+      }
+    }
+
+    // Reload all data to reflect the import
+    await loadWorkspaceDataRef.current();
+
+    return { folderIds, pageIds };
+  }
+
   const value: WorkspaceContextValue = {
     clearPageError,
     clearSchedule,
@@ -738,6 +826,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     flushPage,
     folders,
     getPage,
+    importBatch,
     isLoading,
     listCompletedPages,
     mergePages,

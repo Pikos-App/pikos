@@ -6,6 +6,7 @@ import { Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
+import { ImportSection } from "@/features/import";
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
@@ -294,6 +295,11 @@ export function GeneralSettings() {
             state={markdownExport}
           />
         </div>
+      </SettingsSection>
+
+      {/* ── Import ──────────────────────────────────────────────────── */}
+      <SettingsSection description="Bring your data from other apps into Pikos." title="Import">
+        <ImportSection />
       </SettingsSection>
 
       {/* ── Feedback ───────────────────────────────────────────────────── */}

@@ -2,13 +2,12 @@
 
 ## Active Task
 
-None — awaiting next pick from BACKLOG_ACTIVE.md
+Import feature — in progress on `claude/start-import-task-Lv7S7`
 
 ## Recently Completed
 
-- Editor destroy guard (isDestroyed checks on all editor command sites in EditorPane.tsx)
-- Custom 404 page (apps/marketing/src/pages/404.astro)
-- Space key completion shortcut (toggles page status from page list)
+- Import: parsers (Markdown/Obsidian + CSV/TickTick/Todoist), preview modal, settings UI, batch import, undo, pre-import backup
+- Editor destroy guard, Custom 404 page, Space key completion shortcut
 
 ## Phase Status
 
