@@ -1,5 +1,5 @@
 import type { Folder } from "@pikos/core";
-import { localToday } from "@pikos/core";
+import { emojiAwareCompare, localToday } from "@pikos/core";
 import { useState } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
@@ -62,7 +62,7 @@ export function useFolderList(): FolderListState {
     sortOrder === "manual"
       ? visibleFolders
       : [...visibleFolders].sort((a, b) => {
-          if (sortOrder === "alphabetical") return a.name.localeCompare(b.name);
+          if (sortOrder === "alphabetical") return emojiAwareCompare(a.name, b.name);
           // page-count
           const aCount = pages.filter((p) => p.folderId === a.id && p.status !== "done").length;
           const bCount = pages.filter((p) => p.folderId === b.id && p.status !== "done").length;

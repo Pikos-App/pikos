@@ -3,10 +3,55 @@
 // File I/O uses @tauri-apps/plugin-fs for Tauri, or accepts pre-read file contents for testing.
 
 import type { PagePriority, PageStatus } from "@pikos/core";
+import { format, isValid, parse } from "date-fns";
 
 import { NLP_PRIORITY_MAP } from "@/shared/constants/priorities";
 
-import type { ImportFolder, ImportPage, ImportPlan, ImportWarning } from "./types";
+import type { ImportFolder, ImportMeta, ImportPage, ImportPlan, ImportWarning } from "./types";
+
+// ─── Date parsing ────────────────────────────────────────────────────────────
+
+/** Known date formats from Obsidian Linter and common frontmatter conventions. */
+const DATE_FORMATS = [
+  "yyyy-MM-dd'T'HH:mm:ss",
+  "yyyy-MM-dd'T'HH:mm",
+  "yyyy-MM-dd",
+  "EEEE, MMMM do yyyy, h:mm:ss a", // Obsidian Linter: "Monday, March 17th 2025, 11:03:04 am"
+  "EEEE, MMMM do yyyy, h:mm a",
+  "MMMM do yyyy, h:mm:ss a",
+  "MMMM do yyyy",
+  "MMMM d, yyyy",
+  "MMM d, yyyy",
+  "MM/dd/yyyy",
+  "dd/MM/yyyy",
+];
+
+const REF = new Date(2000, 0, 1);
+
+/**
+ * Parse a date string into ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS).
+ * Tries known formats via date-fns. Returns null if unparseable.
+ */
+function parseDate(raw: string): string | null {
+  const s = raw.replace(/^["']|["']$/g, "").trim();
+  if (!s) return null;
+
+  // ISO format — pass through directly (avoids timezone shifting)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+
+  for (const fmt of DATE_FORMATS) {
+    const d = parse(s, fmt, REF);
+    if (isValid(d)) {
+      const h = d.getHours();
+      const min = d.getMinutes();
+      const sec = d.getSeconds();
+      if (h === 0 && min === 0 && sec === 0) return format(d, "yyyy-MM-dd");
+      return format(d, "yyyy-MM-dd'T'HH:mm:ss");
+    }
+  }
+
+  return null;
+}
 
 // ─── Frontmatter parsing ──────────────────────────────────────────────────────
 
@@ -16,6 +61,7 @@ interface Frontmatter {
   priority: PagePriority;
   scheduled: string | null;
   created: string | null;
+  modified: string | null;
 }
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -25,6 +71,7 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
   const match = FRONTMATTER_RE.exec(raw);
   const fm: Frontmatter = {
     created: null,
+    modified: null,
     priority: 0,
     scheduled: null,
     status: "not_started",
@@ -108,17 +155,23 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
       case "due":
       case "scheduled":
       case "scheduled_start": {
-        const dateStr = value.replace(/^["']|["']$/g, "");
-        if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-          fm.scheduled = dateStr.slice(0, 10); // Keep only date portion for all-day
-        }
+        const parsed = parseDate(value);
+        if (parsed) fm.scheduled = parsed.slice(0, 10); // date-only for all-day
         break;
       }
-      case "created": {
-        const dateStr = value.replace(/^["']|["']$/g, "");
-        if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-          fm.created = dateStr;
-        }
+      case "created":
+      case "date created":
+      case "created_at": {
+        const parsed = parseDate(value);
+        if (parsed) fm.created = parsed;
+        break;
+      }
+      case "modified":
+      case "date modified":
+      case "updated":
+      case "updated_at": {
+        const parsed = parseDate(value);
+        if (parsed) fm.modified = parsed;
         break;
       }
     }
@@ -219,20 +272,42 @@ export function parseMarkdownVault(files: VaultFile[]): ImportPlan {
 
     pages.push({
       body,
+      completedAt: null,
       createdAt: frontmatter.created,
       folderKey,
       priority: frontmatter.priority,
       reminderMinutes: [],
-      scheduledDate: frontmatter.scheduled,
+      scheduledEnd: null,
+      scheduledStart: frontmatter.scheduled,
+      sourceId: null,
+      sourceParentId: null,
       status: frontmatter.status,
       tags: frontmatter.tags,
       title,
+      updatedAt: frontmatter.modified,
       wikilinks,
     });
   }
 
+  const meta: ImportMeta = {
+    skipped: [], // Walker-level skips are merged in useImport
+    transformations: [],
+  };
+
+  if (folderMap.size > 0) {
+    meta.transformations.push(
+      "Nested folder paths flattened (e.g. Projects/Work → Projects / Work)"
+    );
+  }
+
+  const wikilinkPages = pages.filter((p) => p.wikilinks.length > 0).length;
+  if (wikilinkPages > 0) {
+    meta.transformations.push(`Wikilinks in ${wikilinkPages} pages preserved as text`);
+  }
+
   return {
     folders: [...folderMap.values()],
+    meta,
     pages,
     source: "markdown",
     warnings,

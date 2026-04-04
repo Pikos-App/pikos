@@ -19,7 +19,12 @@ import type {
 // ─── Page input helpers ───────────────────────────────────────────────────────
 // sort_order excluded — backend assigns max+1 on create
 
-export type NewPage = Omit<Page, "id" | "createdAt" | "updatedAt" | "sortOrder">;
+export type NewPage = Omit<Page, "id" | "createdAt" | "updatedAt" | "sortOrder"> & {
+  /** Optional override for created_at (used during import to preserve original dates). */
+  createdAt?: string;
+  /** Optional override for updated_at (used during import to preserve original dates). */
+  updatedAt?: string;
+};
 export type PageUpdate = Partial<Omit<Page, "id" | "createdAt" | "updatedAt">>;
 export type NewFolder = Omit<Folder, "id" | "createdAt" | "updatedAt" | "sortOrder">;
 export type FolderUpdate = Partial<Omit<Folder, "id" | "createdAt" | "updatedAt">>;

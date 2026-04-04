@@ -1,5 +1,5 @@
 import type { PageSummary } from "@pikos/core";
-import { localToday, parseLocalISO } from "@pikos/core";
+import { emojiAwareCompare, localToday, parseLocalISO } from "@pikos/core";
 
 export type SortMode = "manual" | "date" | "title" | "priority";
 
@@ -31,7 +31,7 @@ export function sortPages(pages: PageSummary[], mode: SortMode): PageSummary[] {
     });
   }
   if (mode === "title") {
-    return [...pages].sort((a, b) => a.title.localeCompare(b.title));
+    return [...pages].sort((a, b) => emojiAwareCompare(a.title, b.title));
   }
   if (mode === "priority") {
     // Lower priority number = higher urgency (1=urgent … 4=low). 0=none sinks to bottom.

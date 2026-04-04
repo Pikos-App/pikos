@@ -7,10 +7,13 @@ import { useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
 import { ImportSection } from "@/features/import";
+import type { ImportState } from "@/features/import";
+import { formatTimeAgo } from "@/features/import/parsers/utils";
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";
+import type { LastImportResult } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import { UsageStats } from "./UsageStats";
@@ -116,7 +119,25 @@ function CopyEmailRow() {
   );
 }
 
-export function GeneralSettings() {
+interface GeneralSettingsProps {
+  importState: ImportState;
+  lastImportResult: LastImportResult | null;
+  onClearImport: () => void;
+  onUndoImport: () => Promise<void>;
+  parseMarkdownDir: (dirPath: string) => Promise<void>;
+  parseCSVFile: (content: string) => void;
+  resetImport: () => void;
+}
+
+export function GeneralSettings({
+  importState,
+  lastImportResult,
+  onClearImport,
+  onUndoImport,
+  parseCSVFile,
+  parseMarkdownDir,
+  resetImport,
+}: GeneralSettingsProps) {
   const { folders, workspace } = useWorkspace();
   const {
     autoCheckUpdates,
@@ -326,7 +347,42 @@ export function GeneralSettings() {
 
       {/* ── Import ──────────────────────────────────────────────────── */}
       <SettingsSection description="Bring your data from other apps into Pikos." title="Import">
-        <ImportSection />
+        {lastImportResult && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-green-500/20 bg-green-500/5 px-4 py-3">
+            <div>
+              <p className="text-sm text-green-700 dark:text-green-400">
+                Imported {lastImportResult.pageCount} page
+                {lastImportResult.pageCount !== 1 ? "s" : ""}
+                {lastImportResult.folderCount > 0 &&
+                  ` into ${lastImportResult.folderCount} folder${lastImportResult.folderCount !== 1 ? "s" : ""}`}
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                via {lastImportResult.source === "markdown" ? "Markdown" : "CSV"} ·{" "}
+                {formatTimeAgo(lastImportResult.importedAt)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                onClick={() => void onUndoImport()}
+              >
+                Undo import
+              </button>
+              <button
+                className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                onClick={onClearImport}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+        <ImportSection
+          parseCSVFile={parseCSVFile}
+          parseMarkdownDir={parseMarkdownDir}
+          reset={resetImport}
+          state={importState}
+        />
       </SettingsSection>
 
       {/* ── Feedback ───────────────────────────────────────────────────── */}

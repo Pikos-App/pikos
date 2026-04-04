@@ -21,3 +21,4 @@ export {
   rruleToLabel,
 } from "./utils/recurrence";
 export type { VirtualOccurrence } from "./utils/recurrence";
+export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";

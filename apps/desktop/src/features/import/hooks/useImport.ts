@@ -1,5 +1,6 @@
-// useImport — orchestrates the parse → preview → execute → undo flow for data import.
+// useImport — orchestrates the parse → mapping → preview → execute → undo flow for data import.
 
+import { extractText } from "@pikos/core";
 import { invoke } from "@tauri-apps/api/core";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import { Editor } from "@tiptap/core";
@@ -13,9 +14,16 @@ import { Markdown } from "tiptap-markdown";
 import type { ImportBatchItem } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-import { parseCSVImport } from "../parsers/csv";
+import {
+  applyMappings,
+  detectUniqueValues,
+  prepareCSVRows,
+  suggestColumnMappings,
+  suggestValueMappings,
+} from "../parsers/csv";
 import { parseMarkdownVault, type VaultFile } from "../parsers/markdown";
-import type { ImportPlan } from "../parsers/types";
+import type { CSVMappingConfig, ImportPlan } from "../parsers/types";
+import { cleanTitle } from "../parsers/utils";
 
 // ─── Markdown → Tiptap JSON conversion ───────────────────────────────────────
 
@@ -54,8 +62,15 @@ function wrapPlainText(text: string): string {
 
 // ─── File reading ─────────────────────────────────────────────────────────────
 
-async function readVaultFiles(dirPath: string): Promise<VaultFile[]> {
+interface VaultReadResult {
+  files: VaultFile[];
+  skipped: { count: number; reason: string }[];
+}
+
+async function readVaultFiles(dirPath: string): Promise<VaultReadResult> {
   const files: VaultFile[] = [];
+  let excalidrawCount = 0;
+  let otherCount = 0;
 
   async function walk(path: string, prefix: string): Promise<void> {
     const entries = await readDir(path);
@@ -64,18 +79,30 @@ async function readVaultFiles(dirPath: string): Promise<VaultFile[]> {
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
 
       if (entry.isDirectory) {
-        // Skip hidden directories (like .obsidian, .git)
         if (entry.name.startsWith(".")) continue;
         await walk(fullPath, relativePath);
+      } else if (
+        entry.name.toLowerCase().endsWith(".excalidraw.md") ||
+        entry.name.toLowerCase().endsWith(".excalidraw")
+      ) {
+        excalidrawCount++;
       } else if (entry.name.toLowerCase().endsWith(".md")) {
         const content = await readTextFile(fullPath);
         files.push({ content, path: relativePath });
+      } else if (!entry.name.startsWith(".")) {
+        otherCount++;
       }
     }
   }
 
   await walk(dirPath, "");
-  return files;
+
+  const skipped: { count: number; reason: string }[] = [];
+  if (excalidrawCount > 0) skipped.push({ count: excalidrawCount, reason: "Excalidraw drawings" });
+  if (otherCount > 0)
+    skipped.push({ count: otherCount, reason: "non-Markdown files (images, PDFs, etc.)" });
+
+  return { files, skipped };
 }
 
 // ─── State machine ────────────────────────────────────────────────────────────
@@ -83,8 +110,14 @@ async function readVaultFiles(dirPath: string): Promise<VaultFile[]> {
 export type ImportState =
   | { step: "idle" }
   | { step: "parsing" }
+  | {
+      step: "mapping";
+      rows: Record<string, string>[];
+      headers: string[];
+      initialConfig: CSVMappingConfig;
+    }
   | { step: "preview"; plan: ImportPlan }
-  | { step: "importing"; plan: ImportPlan; progress: number; total: number }
+  | { step: "importing" }
   | {
       step: "done";
       pageCount: number;
@@ -106,12 +139,13 @@ export function useImport() {
   async function parseMarkdownDir(dirPath: string) {
     setState({ step: "parsing" });
     try {
-      const files = await readVaultFiles(dirPath);
+      const { files, skipped } = await readVaultFiles(dirPath);
       if (files.length === 0) {
         setState({ message: "No .md files found in the selected folder.", step: "error" });
         return;
       }
       const plan = parseMarkdownVault(files);
+      plan.meta.skipped.push(...skipped);
       setState({ plan, step: "preview" });
     } catch (e) {
       setState({ message: String(e), step: "error" });
@@ -121,7 +155,41 @@ export function useImport() {
   function parseCSVFile(content: string) {
     setState({ step: "parsing" });
     try {
-      const plan = parseCSVImport(content);
+      const { headers, rows } = prepareCSVRows(content);
+      if (rows.length === 0) {
+        setState({ message: "CSV file is empty or has no data rows.", step: "error" });
+        return;
+      }
+      const { detectedSource, mappings } = suggestColumnMappings(headers, rows);
+
+      // Pre-generate value mappings for auto-detected status/priority columns
+      const initialValueMappings: CSVMappingConfig["valueMappings"] = [];
+      for (const cm of mappings) {
+        if (cm.pikosField === "status" || cm.pikosField === "priority") {
+          const uniqueVals = detectUniqueValues(rows, cm.csvHeader);
+          if (uniqueVals.length > 0) {
+            initialValueMappings.push(
+              suggestValueMappings(cm.pikosField, uniqueVals, detectedSource)
+            );
+          }
+        }
+      }
+
+      const initialConfig: CSVMappingConfig = {
+        columnMappings: mappings,
+        detectedSource,
+        valueMappings: initialValueMappings,
+      };
+      setState({ headers, initialConfig, rows, step: "mapping" });
+    } catch (e) {
+      setState({ message: String(e), step: "error" });
+    }
+  }
+
+  function applyCSVMapping(config: CSVMappingConfig) {
+    if (state.step !== "mapping") return;
+    try {
+      const plan = applyMappings(state.rows, config);
       if (plan.pages.length === 0 && plan.warnings.length > 0) {
         setState({ message: plan.warnings[0]!.message, step: "error" });
         return;
@@ -134,8 +202,7 @@ export function useImport() {
 
   async function executeImport(plan: ImportPlan) {
     const batchTag = `_import_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "_")}`;
-    const total = plan.pages.length;
-    setState({ plan, progress: 0, step: "importing", total });
+    setState({ step: "importing" });
 
     try {
       // Pre-import backup (non-blocking — don't fail the import if backup fails)
@@ -145,29 +212,32 @@ export function useImport() {
         // Best-effort backup — continue with import
       }
 
-      // Convert markdown content to Tiptap JSON
-      const isMarkdown = plan.source === "markdown";
-      const convert = isMarkdown ? getMarkdownConverter() : null;
+      // Convert content to Tiptap JSON — use markdown converter for all sources
+      // (handles plain CSV bodies as single paragraphs).
+      const convert = getMarkdownConverter();
 
       // Build batch items
-      const batchPages: ImportBatchItem[] = plan.pages.map((p, i) => {
-        // Update progress
-        setState((prev) => (prev.step === "importing" ? { ...prev, progress: i } : prev));
-
-        const content = isMarkdown && convert ? convert(p.body) : wrapPlainText(p.body);
-        const completedAt = p.status === "done" ? new Date().toISOString() : null;
+      const batchPages: ImportBatchItem[] = plan.pages.map((p) => {
+        const content = p.body ? convert(p.body) : wrapPlainText("");
+        const parsed = JSON.parse(content);
+        const contentText = extractText(parsed);
 
         return {
-          completedAt,
+          completedAt: p.completedAt,
           content,
+          contentText,
           createdAt: p.createdAt,
           folderKey: p.folderKey,
           priority: p.priority,
           reminderMinutes: p.reminderMinutes,
-          scheduledDate: p.scheduledDate,
+          scheduledEnd: p.scheduledEnd,
+          scheduledStart: p.scheduledStart,
+          sourceId: p.sourceId,
+          sourceParentId: p.sourceParentId,
           status: p.status,
           tags: p.tags,
-          title: p.title,
+          title: cleanTitle(p.title),
+          updatedAt: p.updatedAt,
         };
       });
 
@@ -175,6 +245,7 @@ export function useImport() {
         batchTag,
         folders: plan.folders,
         pages: batchPages,
+        source: plan.source,
       });
 
       setState({
@@ -192,16 +263,13 @@ export function useImport() {
 
   async function undoImport(pageIds: string[], folderIds: string[]) {
     // Soft-delete all imported pages, then empty folders
-    for (const id of pageIds) {
-      await softDeletePage(id);
-    }
-    for (const id of folderIds) {
-      await softDeleteFolder(id);
-    }
+    await Promise.all(pageIds.map((id) => softDeletePage(id)));
+    await Promise.all(folderIds.map((id) => softDeleteFolder(id)));
     setState({ step: "idle" });
   }
 
   return {
+    applyCSVMapping,
     executeImport,
     parseCSVFile,
     parseMarkdownDir,

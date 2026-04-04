@@ -192,6 +192,8 @@ pub struct NewPage {
     pub links: Vec<String>,
     pub parent_id: Option<String>,
     pub last_opened_at: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
 }
 
 /// All fields optional. Use `serde_json::Value` for fields that can be explicitly set to null.
@@ -328,6 +330,8 @@ pub async fn create_page(state: State<'_, DbState>, data: NewPage) -> Result<Pag
     let pool = state.get_pool().await?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = now_iso();
+    let created_at = data.created_at.as_deref().unwrap_or(&now);
+    let updated_at = data.updated_at.as_deref().unwrap_or(&now);
     let sort_order = next_sort_order(&pool, data.folder_id.as_deref()).await;
     let tags_json = serde_json::to_string(&data.tags).unwrap_or_else(|_| "[]".to_string());
     let links_json = serde_json::to_string(&data.links).unwrap_or_else(|_| "[]".to_string());
@@ -354,8 +358,8 @@ pub async fn create_page(state: State<'_, DbState>, data: NewPage) -> Result<Pag
     .bind(&links_json)
     .bind(&data.parent_id)
     .bind(&data.last_opened_at)
-    .bind(&now)
-    .bind(&now)
+    .bind(created_at)
+    .bind(updated_at)
     .execute(&pool)
     .await
     .map_err(|e| e.to_string())?;

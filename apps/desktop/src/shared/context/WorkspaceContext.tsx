@@ -118,19 +118,30 @@ export interface WorkspaceContextValue {
   importBatch: (data: ImportBatchInput) => Promise<ImportBatchResult>;
   /** Direct access to the storage adapter — used by features that need raw CRUD (e.g. reminders). */
   storage: StorageAdapter | null;
+  /** Result of the last import — persists across settings open/close for undo. */
+  lastImportResult: LastImportResult | null;
+  /** Clear the last import result (after user dismisses). */
+  clearLastImport: () => void;
+  /** Undo the last import — soft-deletes all imported pages and folders. */
+  undoLastImport: () => Promise<void>;
 }
 
 /** Input for batch import. */
 export interface ImportBatchItem {
   title: string;
   content: string;
+  contentText: string;
   folderKey: string | null;
   status: PageStatus;
   priority: PagePriority;
   tags: string[];
-  scheduledDate: string | null;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
   createdAt: string | null;
   completedAt: string | null;
+  updatedAt: string | null;
+  sourceId: string | null;
+  sourceParentId: string | null;
   /** Per-page reminder lead times in minutes (from TickTick import). */
   reminderMinutes: number[];
 }
@@ -144,6 +155,16 @@ export interface ImportBatchInput {
   pages: ImportBatchItem[];
   folders: ImportBatchFolder[];
   batchTag: string;
+  source: string;
+}
+
+export interface LastImportResult {
+  pageIds: string[];
+  folderIds: string[];
+  pageCount: number;
+  folderCount: number;
+  source: string;
+  importedAt: string;
 }
 
 export interface ImportBatchResult {
@@ -190,6 +211,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [recurrenceRules, setRecurrenceRules] = useState<PageRecurrenceRule[]>([]);
   // Start true so we don't flash the welcome screen before init completes
   const [isLoading, setIsLoading] = useState(true);
+  const [lastImportResult, setLastImportResult] = useState<LastImportResult | null>(null);
 
   // One-shot navigation target from tutorial seed — consumed once by AppShell.
   const pendingNavigationRef = useRef<{ pageId: string; folderId: string } | null>(null);
@@ -884,15 +906,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Create pages
+    // Create pages (pass 1: create all pages, track source ID → Pikos ID mapping)
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const sourceIdToPikosId = new Map<string, string>();
+    const pagesNeedingParent: { pikosId: string; sourceParentId: string }[] = [];
+
     for (const p of data.pages) {
       const folderId = p.folderKey ? (folderKeyToId.get(p.folderKey) ?? null) : null;
       const tagsWithBatch = [...p.tags, data.batchTag];
 
       const page = await adapter.createPage({
         content: p.content,
-        contentText: "",
+        contentText: p.contentText,
         folderId,
         priority: p.priority,
         status: p.status,
@@ -900,14 +925,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         title: p.title,
         ...(p.completedAt ? { completedAt: p.completedAt } : {}),
         ...(p.createdAt ? { createdAt: p.createdAt } : {}),
+        ...(p.updatedAt ? { updatedAt: p.updatedAt } : {}),
       });
       pageIds.push(page.id);
 
+      // Track source ID mapping for parent resolution
+      if (p.sourceId) {
+        sourceIdToPikosId.set(p.sourceId, page.id);
+      }
+      if (p.sourceParentId) {
+        pagesNeedingParent.push({ pikosId: page.id, sourceParentId: p.sourceParentId });
+      }
+
       // Create schedule if needed
-      if (p.scheduledDate) {
+      if (p.scheduledStart) {
         await adapter.createPageSchedule({
           pageId: page.id,
-          scheduledStart: p.scheduledDate,
+          scheduledStart: p.scheduledStart,
+          ...(p.scheduledEnd ? { scheduledEnd: p.scheduledEnd } : {}),
           timezone: tz,
         });
       }
@@ -918,13 +953,46 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Pass 2: resolve parent IDs
+    for (const { pikosId, sourceParentId } of pagesNeedingParent) {
+      const parentPikosId = sourceIdToPikosId.get(sourceParentId);
+      if (parentPikosId) {
+        await adapter.updatePage(pikosId, { parentId: parentPikosId });
+      }
+    }
+
+    // Store result for undo before reload (reload unmounts components, losing local state)
+    const result = {
+      folderCount: folderIds.length,
+      folderIds,
+      importedAt: new Date().toISOString(),
+      pageCount: data.pages.length,
+      pageIds,
+      source: data.source,
+    };
+    setLastImportResult(result);
+
     // Reload all data to reflect the import
     await loadWorkspaceDataRef.current();
 
     return { folderIds, pageIds };
   }
 
+  function clearLastImport() {
+    setLastImportResult(null);
+  }
+
+  async function undoLastImport() {
+    if (!lastImportResult) return;
+    const { folderIds: fIds, pageIds: pIds } = lastImportResult;
+    await Promise.all(pIds.map((id) => softDeletePage(id)));
+    await Promise.all(fIds.map((id) => softDeleteFolder(id)));
+    setLastImportResult(null);
+    await loadWorkspaceDataRef.current();
+  }
+
   const value: WorkspaceContextValue = {
+    clearLastImport,
     clearPageError,
     clearSchedule,
     completeRecurringPage,
@@ -940,6 +1008,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     getPage,
     importBatch,
     isLoading,
+    lastImportResult,
     listCompletedPages,
     listSchedulesRange,
     mergePages,
@@ -962,6 +1031,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     softDeletePage,
     storage: workspace ? adapter : null,
     tags,
+    undoLastImport,
     updateFolder,
     updatePage,
     workspace,
