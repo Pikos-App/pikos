@@ -1,56 +1,11 @@
-# Feature: Search & Command Palette
+# Feature: Search — Future Work
 
-## Status
-Not started. Depends on: React migration (GOO-26), FTS5 in SQLite (GOO-29).
+## Current State
+Search palette (Cmd+K) shipped with FTS5 full-text search, recent pages, highlighted results.
 
-## Command Palette (GOO-17)
-Upgrade the existing `PageSwitcher` modal into the app's primary command hub.
+## Unbuilt Features
 
-**Triggers:**
-- `Cmd+P` → page title search (fuzzy, replaces current PageSwitcher)
-- `Cmd+P` twice → switches to content search
-- `Cmd+K` → actions palette (create page, switch workspace, open settings, etc.)
-
-**Layout:**
-- Full-width input at top
-- Results: recent pages section + fuzzy matches
-- Actions section: "New Page", "Switch Workspace", keyboard shortcut hints
-- Keyboard nav: ↑↓ arrows, Enter to select, Esc to close
-
-**Two search code paths:**
-- **Title search** — `fuse.js` against `pages[]` in WorkspaceContext memory. Immediate, no DB round-trip. Typo-tolerant with relevance scoring.
-- **Content search** — FTS5 via `search_pages` Tauri command, triggered on `Cmd+P` double-tap. Returns `SearchResult[]` with highlighted excerpts.
-
-**Natural language in input:**
-- Parsed by GOO-19 NL parser (`chrono-node` + custom tokenizer) to pre-fill page metadata on creation
-- e.g., "standup @tomorrow 9am #work" → creates page with title "standup", scheduled tomorrow 9am, tagged "work"
-
-## FTS5 Content Search (GOO-18)
-SQLite FTS5 virtual table on `pages.content_text` (plain text extracted from Tiptap JSON — NOT the raw JSON in `pages.content`). Also indexes `title` and `tags`.
-
-> Note: GOO-18 was originally described with a filesystem file watcher. That approach is **superseded** — content is in SQLite now. Updates happen on page save (auto-save), not via file watch.
-
-**Tauri command:** `search_pages(query: String) -> Vec<SearchResult>`
-
-**SearchResult type** (in `packages/core/src/types.ts`):
-```ts
-export interface SearchResult {
-  id: string;
-  title: string;
-  excerpt: string; // highlighted snippet with <mark> tags
-}
-```
-
-**SQL:**
-```sql
-SELECT pages.id, pages.title,
-  snippet(pages_fts, 2, '<mark>', '</mark>', '…', 20) as excerpt
-FROM pages_fts
-JOIN pages ON pages.rowid = pages_fts.rowid
-WHERE pages_fts MATCH ?
-ORDER BY rank
-```
-Note: FTS column indices — 0=title, 1=subtitle, 2=content_text, 3=tags.
-snippet() uses index 2 (content_text) to highlight where the body match occurred.
-
-**Result display:** title + highlighted excerpt snippet. Full page loaded from WorkspaceContext on selection.
+- **Cmd+P title search**: Fuzzy search via fuse.js against in-memory pages (immediate, no DB). Separate from Cmd+K content search.
+- **Cmd+P double-tap → content search**: Switch from title to FTS5 content search on second press.
+- **Actions palette**: Cmd+K also surfaces actions (create page, switch workspace, open settings) alongside search results.
+- **NL parser integration**: Parse input like "standup @tomorrow 9am #work" to pre-fill metadata on page creation. Parser exists in `packages/core/src/nlp/parser.ts` but not wired to search palette.

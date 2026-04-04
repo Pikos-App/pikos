@@ -299,6 +299,23 @@ configured, with per-type toggles.
 
 ---
 
+## Import Interaction
+
+When the importer maps reminders from external sources:
+
+- **TickTick `Reminder` column**: ISO 8601 duration offsets relative to scheduled start.
+  - `PT0S` = "On time" (at start)
+  - `-PT5M` = 5 minutes early
+  - `-PT30M` = 30 minutes early
+  - `-PT1H` = 1 hour early
+  - `-P1D` = 1 day early
+  - Maps directly to `page_reminders.minutes_before` (parse duration, convert to minutes).
+- **Todoist**: No explicit reminder column in CSV exports. No mapping needed.
+- **Bulk import safety**: The scheduler must NOT fire notifications for pages created during an import batch (identified by the `_import_*` batch tag). Either suppress notifications for the batch tag, or only fire for schedules with `scheduled_start` in the future at the time of import.
+- The global "Enable notifications" toggle must be checked before any notification fires — this is the user's kill switch for all notification types.
+
+---
+
 ## Dependencies
 
 - **GOO-29** — SQLite schema (need to add `page_reminders` + `notification_log` tables)

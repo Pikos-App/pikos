@@ -64,6 +64,17 @@ The product pitch and UX defaults serve the general user. Power-user depth is pr
 
 The combination is the moat: fast + private + tasks + calendar + notes in one app. Any single property is replicable. The combination at this quality level isn't. Large incumbents won't execute on a lean tool inside their existing codebase and company structure — their business models depend on complexity.
 
+### Interaction speed principle
+
+Primary actions on a page should be one click from the metadata header. Secondary configuration lives behind that click — but never behind two navigation steps.
+
+TickTick requires click task → click schedule → click reminder dropdown → click cadence (3-4 steps). Pikos should beat this by keeping metadata inline and always visible. The competitive edge is speed of interaction, not feature count.
+
+- Metadata header chips (status, priority, tags, schedule, reminders) are the visual fast lane — one click to act, dropdown/popover for options
+- NLP in Quick Add is the power-user fast lane — zero clicks for the same result
+- Don't show empty affordances for irrelevant actions (e.g., bell icon only appears when a page has a schedule) — keeps UI clean for simple notes
+- Balance: everything top-level makes UI muddy. The test is "does this action apply to most pages?" If yes, it belongs in the header. If no, it belongs behind a menu.
+
 ---
 
 ## Open Source Decision

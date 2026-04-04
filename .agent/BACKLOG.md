@@ -1,22 +1,63 @@
-# Pikos — Backlog Index
+# Pikos — Active Backlog (Pre-Launch)
 
-## File map
+Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete when done.
 
-| File | Contents |
-|---|---|
-| `BACKLOG_ACTIVE.md` | Working queue: Phase 2 → Friends Beta → Public Launch. The only file agents should load whole. |
-| `BACKLOG_P2.md` | Post-launch V1: navigation, org, settings, import/export, calendar depth, notifications. |
-| `BACKLOG_P3.md` | Power features, long-term roadmap, and deferred items. |
-| `GTM.md` | Full go-to-market strategy, launch timeline, pricing, and distribution. |
+---
 
-## Quick GOO lookup
+## Refinement
 
-Grep this file's siblings by GOO number when you need a specific item's full spec:
+- [ ] Refine tutorial content (recommended flow, new features, keyboard shortcuts for non-mac)
+- [ ] Tab and focus styling behavior, tab group and focus trap components
+- [ ] Compact page block children rendering
+- [ ] Double check multi day page blocks
+- [ ] Test auto updater
+- [ ] Multi-select drag doesn't reorder all selected (drop to calendar, delete, move to folder work)
+- [ ] Misc dogfooding improvements
+- [ ] "This week" smart view?
 
-```bash
-grep -n "GOO-<number>" .agent/BACKLOG_ACTIVE.md .agent/BACKLOG_P2.md .agent/BACKLOG_P3.md
-```
+## QA
 
-## Completed items
+- [ ] DnD with virtualization (drag from long list to folder/calendar, scroll during drag)
+- [ ] Completed section in virtual list (open/close accordion, "Show more" pagination)
+- [ ] Edge cases (rapid folder switch, create page while scrolled, delete active page while scrolled)
+- [ ] Folder list (reorder with drag, inline rename positioning)
 
-Phase 2 shipped: GOO-14, 91, 37, 88, 94, 89, 79, 80, 92, 93, 10, 109, 110, 103, 104 ✓
+## Import Follow-ups
+
+- [ ] Blog post: import compatibility guide (what transfers, what doesn't, per-source workflow)
+- [ ] Apple Notes/Reminders import guide (third-party tool recommendations)
+- [ ] Character caps audit (page list, title, calendar popover, importer preview truncation)
+- [ ] Stress test importer (1000+ files, 5000+ rows, special chars, malformed frontmatter)
+- [ ] Folder name normalization option (as-is / lowercase / Title Case)
+- [ ] Collapse nested folder prefixes option
+- [ ] Undo toast in main app (currently only via Settings > General banner)
+- [ ] RRULE mapping (after recurring events land) — TickTick `Repeat` column
+- [ ] Notification/reminder mapping (after notifications land) — TickTick `Reminder` column
+
+## Distribution & Public Launch
+
+- [ ] 🧑 Enroll in Apple Developer Program ($99/yr) — gating dependency. See BACKLOG_DISTRIBUTION.md.
+- [ ] 🧑 Register bundle identifier (`app.pikos.desktop`) in Apple Developer portal
+- [ ] 🧑 Generate macOS code signing certificates (Developer ID Application)
+- [ ] 🤖 Audit bundle identifier in tauri.conf.json
+- [ ] 🧑🤖 GOO-52A: GitHub Actions release workflow (signed, notarized macOS builds on tag push)
+- [ ] 🤖 GOO-52B: Tauri auto-updater (keypair, plugin config, update check on launch)
+- [ ] 🧑 GOO-52D: Test signed build on clean macOS
+- [ ] 🧑 Create `pikos-app` GitHub org, transfer repo
+- [ ] 🧑 Make repo public (must happen before /download works)
+- [ ] 🤖 GOO-53-DL: Cloudflare Pages Function for /download (redirect to latest GitHub Release)
+
+## Recurring Events & Notifications
+
+- [ ] **GOO-60** Recurring event creation/editing UI (backend + NLP + calendar expansion done, needs UI)
+- [ ] **GOO-87** Notification system — see `features/notifications.md` for full design
+  - Rust Tokio background scheduler (immune to JS timer throttling)
+  - Pre-event reminders (configurable per-page), overdue alerts
+  - OS notifications (macOS Notification Center) + in-app banners when focused
+  - New DB tables: `page_reminders`, `notification_log`
+  - Settings panel for defaults, quiet hours, digest
+
+## Known Bugs
+
+- [ ] Editor: typing "1." as first content causes text to disappear until next keystroke (WebKit contenteditable vs ProseMirror)
+- [ ] Holding arrow key in large page list eventually stops responding (rapid key repeat saturates React re-renders)
