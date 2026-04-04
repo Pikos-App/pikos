@@ -41,7 +41,7 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 - [ ] 🧑 Enroll in Apple Developer Program ($99/yr) — gating dependency. See BACKLOG_DISTRIBUTION.md.
 - [ ] 🧑 Register bundle identifier (`app.pikos.desktop`) in Apple Developer portal
 - [ ] 🧑 Generate macOS code signing certificates (Developer ID Application)
-- [ ] 🤖 Audit bundle identifier in tauri.conf.json
+- [x] 🤖 Audit bundle identifier in tauri.conf.json — confirmed `app.pikos.desktop`
 - [ ] 🧑🤖 GOO-52A: GitHub Actions release workflow (signed, notarized macOS builds on tag push)
 - [ ] 🤖 GOO-52B: Tauri auto-updater (keypair, plugin config, update check on launch)
 - [ ] 🧑 GOO-52D: Test signed build on clean macOS
@@ -61,5 +61,5 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 
 ## Known Bugs
 
-- [ ] Editor: typing "1." as first content causes text to disappear until next keystroke (WebKit contenteditable vs ProseMirror)
-- [ ] Holding arrow key in large page list eventually stops responding (rapid key repeat saturates React re-renders)
+- [x] Editor: typing "1." as first content causes text to disappear — WebKitInputRuleFix extension forces DOM repaint after node-type change
+- [x] Holding arrow key in large page list stops responding — rAF throttle on arrow key repeats in PageListPanel

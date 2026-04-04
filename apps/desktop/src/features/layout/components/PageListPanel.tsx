@@ -120,6 +120,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   // ── Keyboard navigation ────────────────────────────────────────────────────
 
   const listRef = useRef<HTMLDivElement>(null);
+  const navRafRef = useRef<number | null>(null);
 
   // ── View grouping ──────────────────────────────────────────────────────────
 
@@ -473,12 +474,16 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         }
         className="flex flex-col overflow-y-auto focus-visible:outline-none"
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
             e.preventDefault();
-            navigatePage(1);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            navigatePage(-1);
+            // Coalesce rapid key repeats (held arrow keys) into one
+            // navigation per animation frame to prevent render saturation.
+            if (navRafRef.current != null) return;
+            const dir = e.key === "ArrowDown" ? 1 : -1;
+            navRafRef.current = requestAnimationFrame(() => {
+              navRafRef.current = null;
+              navigatePage(dir);
+            });
           } else if (e.key === " " && !renamingId) {
             e.preventDefault();
             if (selectedPageIds.size > 0) {

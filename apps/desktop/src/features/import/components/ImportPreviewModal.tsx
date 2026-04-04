@@ -214,7 +214,7 @@ function FolderGroup({
           <ChevronRight className="h-3 w-3 text-muted-foreground" />
         )}
         {icon}
-        <span className="font-medium">{folderName}</span>
+        <span className="min-w-0 truncate font-medium">{folderName}</span>
         <span className="text-xs text-muted-foreground">({pages.length})</span>
       </button>
       {expanded && (

@@ -24,6 +24,7 @@ import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 import { TabIndent } from "../extensions/TabIndent";
+import { WebKitInputRuleFix } from "../extensions/WebKitInputRuleFix";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
 import { FindContentPopover } from "./FindContentPopover";
@@ -61,6 +62,7 @@ const extensions = [
   }),
   SlashMenuExtension,
   TabIndent,
+  WebKitInputRuleFix,
 ];
 
 // HTML attributes applied to the ProseMirror contenteditable element.
