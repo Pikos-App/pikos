@@ -81,7 +81,12 @@ Status: `[ ]` pending · Delete task when done.
   - Rename a folder inline — the input should appear correctly positioned, not offset                                                 
                                                             
 
-## Import before launch?
+## Import
+
+- [ ] Import guide / setting expectations (what transfers, what doesn't, suggested workflow)
+- [ ] How to get Apple Notes and Reminders imported (third-party tool recommendations, markdown conversion path)
+- [ ] Character caps in title and description (page list item, page title, calendar popover, importer preview — audit all truncation points)
+- [ ] Stress testing QA for importer (large Obsidian vaults 1000+ files, deeply nested dirs, CSV with 5000+ rows, special characters in filenames, empty files, malformed frontmatter)
 
 ## Distribution & Public Launch
 
