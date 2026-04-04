@@ -336,7 +336,7 @@ export function PageBlock({
           >
             <div className="flex w-full min-w-0 items-start gap-1">
               {checkbox}
-              <p className="type-body-sm line-clamp-2 min-w-0 text-left font-medium text-foreground">
+              <p className="type-body-sm line-clamp-3 min-w-0 text-left font-medium text-foreground">
                 {page.title || "Untitled"}
               </p>
             </div>

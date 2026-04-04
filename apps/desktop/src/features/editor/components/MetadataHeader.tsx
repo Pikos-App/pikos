@@ -201,7 +201,6 @@ export function MetadataHeader({
 
   const [titleValue, setTitleValue] = useState(page.title ?? "");
   const [titleFocused, setTitleFocused] = useState(false);
-  const [titleShake, setTitleShake] = useState(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
 
   const [prevTitle, setPrevTitle] = useState(page.title ?? "");
@@ -210,75 +209,28 @@ export function MetadataHeader({
     if (!titleFocused) setTitleValue(page.title ?? "");
   }
 
-  // Auto-resize on valid value changes (no revert logic — handled in onChange/onPaste).
+  // Auto-resize and focus when the textarea mounts (titleFocused becomes true).
   useEffect(() => {
     const el = titleRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [titleValue]);
-
-  function getMaxHeight(el: HTMLTextAreaElement, lines: number): number {
-    return parseFloat(getComputedStyle(el).lineHeight) * lines;
-  }
-
-  function triggerShake() {
-    setTitleShake(true);
-    setTimeout(() => setTitleShake(false), 300);
-  }
+    if (titleFocused) {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  }, [titleValue, titleFocused]);
 
   function handleTitleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const el = e.currentTarget;
     const next = e.target.value;
-    el.style.height = "auto";
-    if (el.scrollHeight > getMaxHeight(el, 2)) {
-      // Revert DOM synchronously so React never sees the overflow value.
-      el.value = titleValue;
-      el.style.height = `${el.scrollHeight}px`;
-      triggerShake();
-      return;
-    }
     setTitleValue(next);
     updatePage(page.id, { title: next });
-  }
-
-  function handleTitlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    e.preventDefault();
-    const el = e.currentTarget;
-    const pasted = e.clipboardData.getData("text").replace(/\n/g, " ");
-    const { selectionEnd: end, selectionStart: start } = el;
-    const next = titleValue.slice(0, start ?? 0) + pasted + titleValue.slice(end ?? 0);
-
-    // Measure the candidate value by temporarily writing to DOM.
-    el.value = next;
-    el.style.height = "auto";
-    if (el.scrollHeight > getMaxHeight(el, 2)) {
-      // Binary-search the longest prefix of `next` that fits.
-      let lo = 0;
-      let hi = next.length;
-      while (lo < hi) {
-        const mid = Math.ceil((lo + hi) / 2);
-        el.value = next.slice(0, mid);
-        el.style.height = "auto";
-        if (el.scrollHeight <= getMaxHeight(el, 2)) lo = mid;
-        else hi = mid - 1;
-      }
-      el.value = titleValue; // restore; setTitleValue below re-renders correctly
-      setTitleValue(next.slice(0, lo));
-      updatePage(page.id, { title: next.slice(0, lo) });
-      triggerShake();
-    } else {
-      el.value = titleValue;
-      setTitleValue(next);
-      updatePage(page.id, { title: next });
-    }
   }
 
   // ── Subtitle ───────────────────────────────────────────────────────────────
 
   const [subtitleValue, setSubtitleValue] = useState(page.subtitle ?? "");
   const [subtitleFocused, setSubtitleFocused] = useState(false);
-  const [subtitleShake, setSubtitleShake] = useState(false);
   const subtitleRef = useRef<HTMLTextAreaElement>(null);
 
   const [prevSubtitle, setPrevSubtitle] = useState(page.subtitle ?? "");
@@ -287,57 +239,22 @@ export function MetadataHeader({
     if (!subtitleFocused) setSubtitleValue(page.subtitle ?? "");
   }
 
+  // Auto-resize and focus when the subtitle textarea mounts.
   useEffect(() => {
     const el = subtitleRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [subtitleValue]);
+    if (subtitleFocused) {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  }, [subtitleValue, subtitleFocused]);
 
   function handleSubtitleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const el = e.currentTarget;
     const next = e.target.value;
-    el.style.height = "auto";
-    if (el.scrollHeight > getMaxHeight(el, 3)) {
-      el.value = subtitleValue;
-      el.style.height = `${el.scrollHeight}px`;
-      setSubtitleShake(true);
-      setTimeout(() => setSubtitleShake(false), 300);
-      return;
-    }
     setSubtitleValue(next);
     updatePage(page.id, { subtitle: next });
-  }
-
-  function handleSubtitlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    e.preventDefault();
-    const el = e.currentTarget;
-    const pasted = e.clipboardData.getData("text").replace(/\n/g, " ");
-    const { selectionEnd: end, selectionStart: start } = el;
-    const next = subtitleValue.slice(0, start ?? 0) + pasted + subtitleValue.slice(end ?? 0);
-
-    el.value = next;
-    el.style.height = "auto";
-    if (el.scrollHeight > getMaxHeight(el, 3)) {
-      let lo = 0;
-      let hi = next.length;
-      while (lo < hi) {
-        const mid = Math.ceil((lo + hi) / 2);
-        el.value = next.slice(0, mid);
-        el.style.height = "auto";
-        if (el.scrollHeight <= getMaxHeight(el, 3)) lo = mid;
-        else hi = mid - 1;
-      }
-      el.value = subtitleValue;
-      setSubtitleValue(next.slice(0, lo));
-      updatePage(page.id, { subtitle: next.slice(0, lo) });
-      setSubtitleShake(true);
-      setTimeout(() => setSubtitleShake(false), 300);
-    } else {
-      el.value = subtitleValue;
-      setSubtitleValue(next);
-      updatePage(page.id, { subtitle: next });
-    }
   }
 
   // ── Flush on window blur ───────────────────────────────────────────────────
@@ -356,67 +273,101 @@ export function MetadataHeader({
     <div className="shrink-0">
       <div className={`mx-auto ${LINE_WIDTH_CLASS[lineWidth] ?? "max-w-[720px]"} px-8`}>
         <div className="pt-12 pb-1">
+          {titleFocused ? (
+            <textarea
+              aria-label="Page title"
+              autoCapitalize="off"
+              autoComplete="off"
+              autoCorrect="off"
+              className="type-display w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-faint"
+              onBlur={() => setTitleFocused(false)}
+              onChange={handleTitleChange}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  setTitleFocused(false);
+                  setSubtitleFocused(true);
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  onFocusEditor();
+                }
+              }}
+              placeholder="Untitled"
+              ref={titleRef}
+              rows={1}
+              value={titleValue}
+            />
+          ) : (
+            <div
+              aria-label="Page title"
+              className="type-display line-clamp-2 w-full cursor-text bg-transparent outline-none placeholder:text-faint"
+              onClick={() => setTitleFocused(true)}
+              onFocus={() => setTitleFocused(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setTitleFocused(true);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              {titleValue || <span className="text-faint">Untitled</span>}
+            </div>
+          )}
+        </div>
+
+        {subtitleFocused ? (
           <textarea
-            aria-label="Page title"
+            aria-label="Page description"
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className={`type-display max-h-20 w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-faint ${titleShake ? "animate-shake" : ""}`}
-            onBlur={() => setTitleFocused(false)}
-            onChange={handleTitleChange}
-            onFocus={(e) => {
-              setTitleFocused(true);
-              requestAnimationFrame(() =>
-                e.target.setSelectionRange(e.target.value.length, e.target.value.length)
-              );
-            }}
+            className="type-body mt-1 w-full resize-none overflow-hidden bg-transparent leading-relaxed text-muted-foreground outline-none placeholder:text-faint"
+            onBlur={() => setSubtitleFocused(false)}
+            onChange={handleSubtitleChange}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                subtitleRef.current?.focus();
+                onFocusEditor();
               }
               if (e.key === "Escape") {
                 e.preventDefault();
                 onFocusEditor();
               }
+              if (e.key === "Tab" && !e.shiftKey) {
+                e.preventDefault();
+                onFocusEditor();
+              }
             }}
-            onPaste={handleTitlePaste}
-            placeholder="Untitled"
-            ref={titleRef}
+            placeholder="Add a description…"
+            ref={subtitleRef}
             rows={1}
-            value={titleValue}
+            value={subtitleValue}
           />
-        </div>
-
-        <textarea
-          aria-label="Page description"
-          autoCapitalize="off"
-          autoComplete="off"
-          autoCorrect="off"
-          className={`type-body mt-1 max-h-[4.875rem] w-full resize-none overflow-hidden bg-transparent leading-relaxed text-muted-foreground outline-none placeholder:text-faint ${subtitleShake ? "animate-shake" : ""}`}
-          onBlur={() => setSubtitleFocused(false)}
-          onChange={handleSubtitleChange}
-          onFocus={() => setSubtitleFocused(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              onFocusEditor();
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              onFocusEditor();
-            }
-            if (e.key === "Tab" && !e.shiftKey) {
-              e.preventDefault();
-              onFocusEditor();
-            }
-          }}
-          onPaste={handleSubtitlePaste}
-          placeholder="Add a description…"
-          ref={subtitleRef}
-          rows={1}
-          value={subtitleValue}
-        />
+        ) : (
+          <div
+            aria-label="Page description"
+            className="type-body mt-1 w-full cursor-text leading-relaxed text-muted-foreground outline-none"
+            onClick={() => setSubtitleFocused(true)}
+            onFocus={() => setSubtitleFocused(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSubtitleFocused(true);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+          >
+            {subtitleValue ? (
+              <span className="line-clamp-3">{subtitleValue}</span>
+            ) : (
+              <span className="text-faint">Add a description…</span>
+            )}
+          </div>
+        )}
 
         <Byline
           allTags={allTagNames}

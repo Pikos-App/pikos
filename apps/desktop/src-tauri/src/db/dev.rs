@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use sqlx::{Column, Row};
+use tauri::Manager;
 
 use crate::db::DbState;
 use crate::markdown::prosemirror_to_markdown;
