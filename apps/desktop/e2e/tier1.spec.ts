@@ -50,27 +50,28 @@ appTest("open page and edit content @tier1", async ({ app }) => {
     "my test page"
   );
 
-  // Edit the title — wait for load, then clear and retype.
-  // The title textarea moves cursor to end on focus (rAF), so we click first,
-  // wait for the rAF to settle, then select all and replace.
-  const title = app.getByRole("textbox", { name: "Page title" });
-  await expect(title).toHaveValue("my test page");
-  await title.click();
+  // Edit the title — title renders as a div when unfocused, textarea when focused.
+  // Click the div to enter edit mode, then select all and retype.
+  const titleDisplay = app.getByLabel("Page title");
+  await expect(titleDisplay).toHaveText("my test page");
+  await titleDisplay.click();
   await app.waitForTimeout(100); // let onFocus rAF complete
+  const titleInput = app.getByRole("textbox", { name: "Page title" });
   await app.keyboard.press(mod("Mod+a"));
   await app.keyboard.type("renamed page");
-  await expect(title).toHaveValue("renamed page");
+  await expect(titleInput).toHaveValue("renamed page");
 
   // Title change reflects in the page list
   await expect(app.locator("[data-page-list-item][data-active='true']")).toContainText(
     "renamed page"
   );
 
-  // Add a description
-  const description = app.getByRole("textbox", { name: "Page description" });
-  await description.click();
+  // Add a description — same div/textarea pattern
+  const descDisplay = app.getByLabel("Page description");
+  await descDisplay.click();
+  const descInput = app.getByRole("textbox", { name: "Page description" });
   await app.keyboard.type("A short summary");
-  await expect(description).toHaveValue("A short summary");
+  await expect(descInput).toHaveValue("A short summary");
 
   // Edit body content
   const editor = app.getByRole("textbox", { name: "Page content" });
@@ -81,8 +82,8 @@ appTest("open page and edit content @tier1", async ({ app }) => {
   // Navigate away and back — all changes should persist (autosave)
   await app.locator("[data-page-list-item]").getByText("other page").click();
   await app.locator("[data-page-list-item]").getByText("renamed page").click();
-  await expect(title).toHaveValue("renamed page");
-  await expect(description).toHaveValue("A short summary");
+  await expect(app.getByLabel("Page title")).toHaveText("renamed page");
+  await expect(app.getByLabel("Page description")).toHaveText("A short summary");
   await expect(editor).toContainText("Hello world");
 });
 
