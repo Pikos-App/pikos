@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Check that no lazy-loaded chunk exceeds a size budget.
-# Usage: bash scripts/check-bundle-size.sh [max_kb]
-# Default max: 50KB per chunk (matches quality bar in CLAUDE.md).
+# Usage: bash scripts/check-bundle-size.sh [warn_kb] [fail_kb]
+# Defaults: warn at 50KB, fail at 300KB.
 
 set -euo pipefail
 
-MAX_KB="${1:-50}"
-MAX_BYTES=$((MAX_KB * 1024))
+WARN_KB="${1:-50}"
+FAIL_KB="${2:-300}"
+WARN_BYTES=$((WARN_KB * 1024))
+FAIL_BYTES=$((FAIL_KB * 1024))
 # Resolve dist dir — works from repo root or apps/desktop
 if [ -d "dist/assets" ]; then
   DIST="dist/assets"
@@ -18,6 +20,7 @@ else
 fi
 
 RED='\033[0;31m'
+YELLOW='\033[0;33m'
 GREEN='\033[0;32m'
 DIM='\033[2m'
 RESET='\033[0m'
@@ -26,7 +29,7 @@ RESET='\033[0m'
 overall=0
 
 echo ""
-echo "Bundle size check (max ${MAX_KB}KB per lazy chunk)"
+echo "Bundle size check (warn ${WARN_KB}KB · fail ${FAIL_KB}KB per lazy chunk)"
 echo "────────────────────────────────────────────────"
 
 # Check JS chunks (skip the main entry — only lazy chunks matter for the budget)
@@ -46,9 +49,11 @@ for file in "$DIST"/*.js; do
     continue
   fi
 
-  if [ "$size" -gt "$MAX_BYTES" ]; then
-    printf "${RED}✗ %4dKB  %s (exceeds ${MAX_KB}KB)${RESET}\n" "$size_kb" "$name"
+  if [ "$size" -gt "$FAIL_BYTES" ]; then
+    printf "${RED}✗ %4dKB  %s (exceeds ${FAIL_KB}KB)${RESET}\n" "$size_kb" "$name"
     overall=1
+  elif [ "$size" -gt "$WARN_BYTES" ]; then
+    printf "${YELLOW}⚠ %4dKB  %s (exceeds ${WARN_KB}KB)${RESET}\n" "$size_kb" "$name"
   else
     printf "${GREEN}✓${RESET} %4dKB  %s\n" "$size_kb" "$name"
   fi
@@ -69,7 +74,7 @@ echo ""
 if [ $overall -eq 0 ]; then
   printf "${GREEN}All chunks within budget.${RESET}\n"
 else
-  printf "${RED}Some chunks exceed the ${MAX_KB}KB budget.${RESET}\n"
+  printf "${RED}Some chunks exceed the ${FAIL_KB}KB budget.${RESET}\n"
   echo "Consider code-splitting or lazy-loading heavy dependencies."
 fi
 

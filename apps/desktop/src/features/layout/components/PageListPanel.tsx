@@ -476,14 +476,19 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
             e.preventDefault();
-            // Coalesce rapid key repeats (held arrow keys) into one
-            // navigation per animation frame to prevent render saturation.
-            if (navRafRef.current != null) return;
             const dir = e.key === "ArrowDown" ? 1 : -1;
-            navRafRef.current = requestAnimationFrame(() => {
-              navRafRef.current = null;
+            // Coalesce held-key repeats into one navigation per animation
+            // frame to prevent render saturation. Discrete presses (e.repeat
+            // === false) always navigate immediately.
+            if (e.repeat) {
+              if (navRafRef.current != null) return;
+              navRafRef.current = requestAnimationFrame(() => {
+                navRafRef.current = null;
+                navigatePage(dir);
+              });
+            } else {
               navigatePage(dir);
-            });
+            }
           } else if (e.key === " " && !renamingId) {
             e.preventDefault();
             if (selectedPageIds.size > 0) {
