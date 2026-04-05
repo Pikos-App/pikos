@@ -676,3 +676,82 @@ describe("recurrence exdates (skip occurrence)", () => {
     expect(occs).toHaveLength(3);
   });
 });
+
+// ─── Page reminders ─────────────────────────────────────────────────────────
+
+describe("page reminders", () => {
+  it("creates and lists reminders sorted by minutesBefore", async () => {
+    const page = await createTestPage({ title: "reminder test" });
+
+    const r30 = await adapter.createPageReminder({ minutesBefore: 30, pageId: page.id });
+    const r5 = await adapter.createPageReminder({ minutesBefore: 5, pageId: page.id });
+    const r10 = await adapter.createPageReminder({ minutesBefore: 10, pageId: page.id });
+
+    expect(r30.minutesBefore).toBe(30);
+    expect(r5.minutesBefore).toBe(5);
+    expect(r10.minutesBefore).toBe(10);
+
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(3);
+    expect(list.map((r) => r.minutesBefore)).toEqual([5, 10, 30]);
+  });
+
+  it("returns empty list for page with no reminders", async () => {
+    const page = await createTestPage({ title: "no reminders" });
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(0);
+  });
+
+  it("deletes a single reminder by ID", async () => {
+    const page = await createTestPage({ title: "delete one" });
+    const r1 = await adapter.createPageReminder({ minutesBefore: 10, pageId: page.id });
+    await adapter.createPageReminder({ minutesBefore: 30, pageId: page.id });
+
+    await adapter.deletePageReminder(r1.id);
+
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.minutesBefore).toBe(30);
+  });
+
+  it("deletePageReminders removes all reminders for a page", async () => {
+    const page = await createTestPage({ title: "delete all" });
+    await adapter.createPageReminder({ minutesBefore: 5, pageId: page.id });
+    await adapter.createPageReminder({ minutesBefore: 10, pageId: page.id });
+    await adapter.createPageReminder({ minutesBefore: 30, pageId: page.id });
+
+    await adapter.deletePageReminders(page.id);
+
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(0);
+  });
+
+  it("reminders are scoped to their page", async () => {
+    const p1 = await createTestPage({ title: "page1" });
+    const p2 = await createTestPage({ title: "page2" });
+
+    await adapter.createPageReminder({ minutesBefore: 10, pageId: p1.id });
+    await adapter.createPageReminder({ minutesBefore: 30, pageId: p2.id });
+
+    const list1 = await adapter.listPageReminders(p1.id);
+    const list2 = await adapter.listPageReminders(p2.id);
+
+    expect(list1).toHaveLength(1);
+    expect(list1[0]?.minutesBefore).toBe(10);
+    expect(list2).toHaveLength(1);
+    expect(list2[0]?.minutesBefore).toBe(30);
+  });
+
+  it("deletePageReminders for one page does not affect another", async () => {
+    const p1 = await createTestPage({ title: "page1" });
+    const p2 = await createTestPage({ title: "page2" });
+
+    await adapter.createPageReminder({ minutesBefore: 10, pageId: p1.id });
+    await adapter.createPageReminder({ minutesBefore: 15, pageId: p2.id });
+
+    await adapter.deletePageReminders(p1.id);
+
+    expect(await adapter.listPageReminders(p1.id)).toHaveLength(0);
+    expect(await adapter.listPageReminders(p2.id)).toHaveLength(1);
+  });
+});
