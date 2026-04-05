@@ -116,6 +116,12 @@ describe("defaultReminderMinutes", () => {
     act(() => result.current.setDefaultReminderMinutes(5));
     expect(JSON.parse(localStorage.getItem("pikos:defaultReminderMinutes")!)).toBe(5);
   });
+
+  it("reads persisted value on mount", () => {
+    localStorage.setItem("pikos:defaultReminderMinutes", "30");
+    const { result } = setup();
+    expect(result.current.defaultReminderMinutes).toBe(30);
+  });
 });
 
 describe("overdueAlerts", () => {
@@ -129,6 +135,12 @@ describe("overdueAlerts", () => {
     act(() => result.current.setOverdueAlerts(false));
     expect(result.current.overdueAlerts).toBe(false);
     expect(JSON.parse(localStorage.getItem("pikos:overdueAlerts")!)).toBe(false);
+  });
+
+  it("reads persisted value on mount", () => {
+    localStorage.setItem("pikos:overdueAlerts", "false");
+    const { result } = setup();
+    expect(result.current.overdueAlerts).toBe(false);
   });
 });
 
@@ -160,5 +172,15 @@ describe("quiet hours", () => {
     expect(JSON.parse(localStorage.getItem("pikos:quietHoursEnabled")!)).toBe(true);
     expect(JSON.parse(localStorage.getItem("pikos:quietHoursStart")!)).toBe("23:00");
     expect(JSON.parse(localStorage.getItem("pikos:quietHoursEnd")!)).toBe("06:00");
+  });
+
+  it("reads persisted quiet hours on mount", () => {
+    localStorage.setItem("pikos:quietHoursEnabled", JSON.stringify(true));
+    localStorage.setItem("pikos:quietHoursStart", JSON.stringify("20:00"));
+    localStorage.setItem("pikos:quietHoursEnd", JSON.stringify("07:00"));
+    const { result } = setup();
+    expect(result.current.quietHoursEnabled).toBe(true);
+    expect(result.current.quietHoursStart).toBe("20:00");
+    expect(result.current.quietHoursEnd).toBe("07:00");
   });
 });

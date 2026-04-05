@@ -34,7 +34,7 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 - [ ] Collapse nested folder prefixes option
 - [ ] Undo toast in main app (currently only via Settings > General banner)
 - [ ] RRULE mapping (after recurring events land) — TickTick `Repeat` column
-- [ ] Notification/reminder mapping (after notifications land) — TickTick `Reminder` column
+- [x] Notification/reminder mapping — tracked under "Notifications — Post-Launch"
 
 ## Distribution & Public Launch
 
@@ -52,12 +52,14 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 ## Recurring Events & Notifications
 
 - [ ] **GOO-60** Recurring event creation/editing UI (backend + NLP + calendar expansion done, needs UI)
-- [ ] **GOO-87** Notification system — see `features/notifications.md` for full design
-  - Rust Tokio background scheduler (immune to JS timer throttling)
-  - Pre-event reminders (configurable per-page), overdue alerts
-  - OS notifications (macOS Notification Center) + in-app banners when focused
-  - New DB tables: `page_reminders`, `notification_log`
-  - Settings panel for defaults, quiet hours, digest
+- [x] **GOO-87** Notification system — OS desktop notifications, per-page reminders, overdue alerts, quiet hours, settings UI
+
+### Notifications — Post-Launch
+
+- [ ] OS notification action buttons (Mark Done) via `tauri-plugin-notification` action categories — requires platform-specific testing (macOS/Windows/Linux)
+- [ ] Notification sound toggle — silent visual-only option, `.sound()` on notification builder
+- [ ] Daily digest — morning summary of today's scheduled pages (opt-in, spec in `features/notifications.md`)
+- [ ] TickTick `Reminder` column import mapping — parse ISO 8601 durations to `page_reminders.minutes_before`
 
 ## Known Bugs
 

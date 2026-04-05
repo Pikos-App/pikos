@@ -324,6 +324,7 @@ fn deliver(app: &AppHandle, title: &str, body: &str) {
         .builder()
         .title(title)
         .body(body)
+        .group("pikos-reminders")
         .show();
 }
 

@@ -1,6 +1,5 @@
 // NotificationSettings — global on/off, default lead time, overdue alerts, quiet hours.
 
-import { invoke } from "@tauri-apps/api/core";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -60,17 +59,19 @@ export function NotificationSettings() {
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
 
   useEffect(() => {
-    void invoke<boolean>("check_notification_permission")
+    void import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke<boolean>("check_notification_permission"))
       .then(setPermissionGranted)
       .catch(() => setPermissionGranted(null));
   }, []);
 
   async function handleRequestPermission() {
     try {
+      const { invoke } = await import("@tauri-apps/api/core");
       const granted = await invoke<boolean>("request_notification_permission");
       setPermissionGranted(granted);
     } catch {
-      // Platform doesn't support permission requests
+      // Platform doesn't support permission requests or Tauri unavailable
     }
   }
 

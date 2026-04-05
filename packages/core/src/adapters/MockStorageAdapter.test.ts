@@ -754,4 +754,24 @@ describe("page reminders", () => {
     expect(await adapter.listPageReminders(p1.id)).toHaveLength(0);
     expect(await adapter.listPageReminders(p2.id)).toHaveLength(1);
   });
+
+  it("created reminder has id, pageId, minutesBefore, and createdAt", async () => {
+    const page = await createTestPage({ title: "fields test" });
+    const r = await adapter.createPageReminder({ minutesBefore: 15, pageId: page.id });
+
+    expect(r.id).toBeTruthy();
+    expect(r.pageId).toBe(page.id);
+    expect(r.minutesBefore).toBe(15);
+    expect(r.createdAt).toBeTruthy();
+  });
+
+  it("supports minutesBefore = 0 (at time of event)", async () => {
+    const page = await createTestPage({ title: "at-start" });
+    const r = await adapter.createPageReminder({ minutesBefore: 0, pageId: page.id });
+
+    expect(r.minutesBefore).toBe(0);
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.minutesBefore).toBe(0);
+  });
 });
