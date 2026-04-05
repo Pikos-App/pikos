@@ -4,6 +4,8 @@
 import type {
   CompletedPagesFilter,
   CompletedPagesResponse,
+  CompleteRecurringInput,
+  CompleteRecurringResult,
   Folder,
   Page,
   PageFilter,
@@ -111,4 +113,10 @@ export interface StorageAdapter {
   updateRecurrenceRule(id: string, updates: RecurrenceRuleUpdate): Promise<PageRecurrenceRule>;
   deleteRecurrenceRule(id: string): Promise<void>;
   getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null>;
+  /** All recurrence rules (for non-deleted pages). */
+  listRecurrenceRules(): Promise<PageRecurrenceRule[]>;
+
+  // Recurring completion
+  /** Clone head as done, advance to next occurrence (or mark done if series finished). */
+  completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult>;
 }

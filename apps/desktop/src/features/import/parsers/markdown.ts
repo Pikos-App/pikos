@@ -4,6 +4,8 @@
 
 import type { PagePriority, PageStatus } from "@pikos/core";
 
+import { NLP_PRIORITY_MAP } from "@/shared/constants/priorities";
+
 import type { ImportFolder, ImportPage, ImportPlan, ImportWarning } from "./types";
 
 // ─── Frontmatter parsing ──────────────────────────────────────────────────────
@@ -98,13 +100,7 @@ export function parseFrontmatter(raw: string): { frontmatter: Frontmatter; body:
         if (num >= 1 && num <= 4) {
           fm.priority = num as PagePriority;
         } else {
-          const map: Record<string, PagePriority> = {
-            high: 2,
-            low: 4,
-            medium: 3,
-            urgent: 1,
-          };
-          const mapped = map[value.toLowerCase()];
+          const mapped = NLP_PRIORITY_MAP[value.toLowerCase()];
           if (mapped) fm.priority = mapped;
         }
         break;

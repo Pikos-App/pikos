@@ -13,7 +13,7 @@ import { useCompletedPages } from "./useCompletedPages";
 export const UNDO_TOAST_DURATION_MS = 8000;
 
 export function usePageList() {
-  const { folders, pages, updatePage } = useWorkspace();
+  const { completeRecurringPage, folders, pages, recurrenceRules, updatePage } = useWorkspace();
   const { activeViewId, getSortMode, openPage, setActivePage } = useUI();
   const { hiddenIds, requestDeletePage } = useUndoDelete();
   const activePage = useActivePage();
@@ -51,6 +51,11 @@ export function usePageList() {
 
   function handleToggleStatus(pageId: string, currentStatus: PageStatus) {
     const isDone = currentStatus === "done";
+    // Recurring pages use the clone-and-advance flow on completion
+    if (!isDone && recurrenceRules.some((r) => r.pageId === pageId)) {
+      void completeRecurringPage(pageId);
+      return;
+    }
     updatePage(pageId, {
       completedAt: isDone ? null : nowLocalISO(),
       status: isDone ? "not_started" : "done",

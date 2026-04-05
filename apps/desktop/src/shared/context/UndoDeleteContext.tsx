@@ -27,6 +27,9 @@ export interface UndoDeleteContextValue {
   /** Called by UndoToast when the user clicks Undo — restores the item. */
   handleUndoDelete: (id: string) => void;
 
+  /** Generic undoable action — shows a toast, calls undo callback if user clicks Undo. */
+  requestUndoableAction: (id: string, label: string, undoFn: () => void) => void;
+
   // Backwards-compat alias
   /** @deprecated Use hiddenPageIds instead. */
   hiddenIds: Set<string>;
@@ -43,6 +46,8 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
   const [hiddenPageIds, setHiddenPageIds] = useState<Set<string>>(new Set());
   const [hiddenFolderIds, setHiddenFolderIds] = useState<Set<string>>(new Set());
   const [undoItems, setUndoItems] = useState<UndoToastItem[]>([]);
+  // Generic undoable action callbacks, keyed by undo item ID
+  const undoCallbacks = useRef<Map<string, () => void>>(new Map());
 
   // Track which folder IDs are pending so we know how to undo
   const pendingFolderIds = useRef<Set<string>>(new Set());
@@ -73,6 +78,7 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
 
   function handleUndoDismiss(id: string) {
     pendingDeleteIds.current.delete(id);
+    undoCallbacks.current.delete(id);
 
     if (id.startsWith(FOLDER_UNDO_PREFIX)) {
       const folderId = id.slice(FOLDER_UNDO_PREFIX.length);
@@ -96,6 +102,15 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
   function handleUndoDelete(id: string) {
     pendingDeleteIds.current.delete(id);
 
+    // Check for generic undoable action first
+    const cb = undoCallbacks.current.get(id);
+    if (cb) {
+      undoCallbacks.current.delete(id);
+      cb();
+      setUndoItems((prev) => prev.filter((item) => item.id !== id));
+      return;
+    }
+
     if (id.startsWith(FOLDER_UNDO_PREFIX)) {
       const folderId = id.slice(FOLDER_UNDO_PREFIX.length);
       pendingFolderIds.current.delete(folderId);
@@ -117,6 +132,12 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     setUndoItems((prev) => prev.filter((item) => item.id !== id));
   }
 
+  function requestUndoableAction(id: string, label: string, undoFn: () => void) {
+    pendingDeleteIds.current.add(id);
+    undoCallbacks.current.set(id, undoFn);
+    setUndoItems((prev) => [...prev, { id, label }]);
+  }
+
   const value: UndoDeleteContextValue = {
     handleUndoDelete,
     handleUndoDismiss,
@@ -125,6 +146,7 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     hiddenPageIds,
     requestDeleteFolder,
     requestDeletePage,
+    requestUndoableAction,
     undoItems,
   };
 

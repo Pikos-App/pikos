@@ -15,24 +15,11 @@ import {
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { PRIORITY_COLORS, PRIORITY_LABELS } from "@/shared/constants/priorities";
 
 import type { ImportPlan } from "../parsers/types";
 
 // ─── Priority badge ───────────────────────────────────────────────────────────
-
-const PRIORITY_LABELS: Record<number, string> = {
-  1: "Urgent",
-  2: "High",
-  3: "Medium",
-  4: "Low",
-};
-
-const PRIORITY_COLORS: Record<number, string> = {
-  1: "text-red-500",
-  2: "text-orange-500",
-  3: "text-yellow-500",
-  4: "text-blue-500",
-};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 

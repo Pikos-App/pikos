@@ -2,24 +2,18 @@
 // key={page.id} in parent resets all state on page switch.
 
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
-import { nowLocalISO, parseLocalISO } from "@pikos/core";
-import { AlertTriangle, CalendarDays } from "lucide-react";
+import { nowLocalISO, parseLocalISO, rruleToLabel } from "@pikos/core";
+import { AlertTriangle, CalendarDays, Repeat2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FolderChip, PriorityDropdown, TagsPopover } from "@/features/pages";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
-
-const LINE_WIDTH_CLASS: Record<string, string> = {
-  default: "max-w-[720px]",
-  full: "max-w-none",
-  narrow: "max-w-[560px]",
-  wide: "max-w-[880px]",
-};
 
 import { DateSchedulePopover } from "./DateSchedulePopover";
 
@@ -58,6 +52,9 @@ function Byline({
   onErrorClick?: () => void;
 }) {
   const isDone = page.status === "done";
+  const { recurrenceRules } = useWorkspace();
+  const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
+  const cadenceLabel = recurrenceRule ? rruleToLabel(recurrenceRule.rrule) : null;
 
   return (
     <div className="type-ui-sm flex items-center gap-2 overflow-hidden pt-2 pb-4 text-subtle">
@@ -83,6 +80,17 @@ function Byline({
       {/* Date — GOO-34 */}
       <BylineSeparator />
       <DateSchedulePopover page={page} />
+
+      {/* Recurrence cadence label */}
+      {cadenceLabel && (
+        <>
+          <BylineSeparator />
+          <span className="inline-flex shrink-0 items-center gap-1">
+            <Repeat2 className="h-3 w-3" />
+            {cadenceLabel}
+          </span>
+        </>
+      )}
 
       {/* Jump to calendar at scheduled date */}
       {onOpenInCalendar && (
@@ -156,7 +164,16 @@ export function MetadataHeader({
   onRetryContent,
   page,
 }: MetadataHeaderProps) {
-  const { clearPageError, flushPage, folders, pageErrors, tags, updatePage } = useWorkspace();
+  const {
+    clearPageError,
+    completeRecurringPage,
+    flushPage,
+    folders,
+    pageErrors,
+    recurrenceRules,
+    tags,
+    updatePage,
+  } = useWorkspace();
   const { lineWidth } = useEditorSettings();
   const { setReferenceDate, setRightPanel } = useUI();
   const allTagNames = tags.map((t) => t.name);
@@ -171,6 +188,11 @@ export function MetadataHeader({
   }
 
   function handleStatusChange(status: PageStatus) {
+    // Recurring pages use the clone-and-advance flow on completion
+    if (status === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
+      void completeRecurringPage(page.id);
+      return;
+    }
     updatePage(page.id, {
       completedAt: status === "done" ? nowLocalISO() : null,
       status,

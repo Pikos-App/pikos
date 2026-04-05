@@ -15,6 +15,9 @@ import {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+/** Delay (ms) to distinguish single click (popover) from double click (open editor). */
+export const CLICK_DELAY = 200;
+
 /** Height in pixels for one hour in the time grid. Tune here to adjust zoom. */
 export const HOUR_HEIGHT = 64;
 
@@ -212,7 +215,7 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
 
     // Clamp start/end to this day's grid boundaries for cross-day events
     const isContinuationBefore = realStart < dayStart;
-    const isContinuationAfter = !isCompact && realEnd > dayEnd;
+    const isContinuationAfter = !isCompact && realEnd >= dayEnd;
 
     // For visual positioning, clamp to the day's grid boundaries
     const visualStart = isContinuationBefore

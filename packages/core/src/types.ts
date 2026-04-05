@@ -151,6 +151,21 @@ export interface FocusSession {
 
 export type PageSummary = Omit<Page, "content" | "contentText">;
 
+// ─── Recurring completion ────────────────────────────────────────────────────
+
+/** Input for completing a recurring page (clone-and-advance). */
+export interface CompleteRecurringInput {
+  pageId: string;
+  nextScheduledStart: string | null;
+  nextScheduledEnd: string | null;
+}
+
+/** Result of completing a recurring page. */
+export interface CompleteRecurringResult {
+  clone: PageSummary;
+  head: PageSummary;
+}
+
 // ─── Filters ─────────────────────────────────────────────────────────────────
 
 export interface PageFilter {

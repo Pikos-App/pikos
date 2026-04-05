@@ -5,8 +5,7 @@
 import { Minus, Square, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 
-const IS_MACOS = /Mac/.test(navigator.platform);
-const IS_TAURI = import.meta.env["VITE_TEST_MODE"] !== "true";
+import { IS_MACOS, IS_TAURI } from "@/shared/constants/platform";
 
 const BAR_H = "h-[30px]";
 

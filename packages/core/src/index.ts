@@ -14,3 +14,10 @@ export {
   parseLocalISO,
 } from "./utils/dates";
 export { extractText } from "./utils/extractText";
+export {
+  computeNextEnd,
+  expandRecurrenceForRange,
+  nextOccurrenceAfter,
+  rruleToLabel,
+} from "./utils/recurrence";
+export type { VirtualOccurrence } from "./utils/recurrence";

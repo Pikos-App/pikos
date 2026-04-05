@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -38,15 +39,6 @@ function highlightText(text: string, queryWords: string[]): React.ReactNode {
     return part;
   });
 }
-
-// ── Priority labels ──────────────────────────────────────────────────────────
-
-const PRIORITY_LABELS: Record<number, string> = {
-  1: "Urgent",
-  2: "High",
-  3: "Medium",
-  4: "Low",
-};
 
 // ── Format scheduled date ────────────────────────────────────────────────────
 // "2026-03-23" or "2026-03-23T10:00:00" → "Mar 23, 2026"

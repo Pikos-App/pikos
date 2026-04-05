@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { Markdown } from "tiptap-markdown";
 
 import { EmptyState } from "@/shared/components/EmptyState";
-import type { LineWidth } from "@/shared/context/EditorSettingsContext";
+import { EDITOR_ATTRIBUTES, LINE_WIDTH_CLASS } from "@/shared/constants/editor";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -64,25 +64,6 @@ const extensions = [
   TabIndent,
   WebKitInputRuleFix,
 ];
-
-// HTML attributes applied to the ProseMirror contenteditable element.
-const EDITOR_ATTRIBUTES = {
-  "aria-label": "Page content",
-  "aria-multiline": "true",
-  "aria-placeholder": "Start writing, or press / for commands",
-  autocapitalize: "off",
-  autocomplete: "off",
-  autocorrect: "off",
-  class: "editor-content",
-  role: "textbox",
-};
-
-const LINE_WIDTH_CLASS: Record<LineWidth, string> = {
-  default: "max-w-[720px]",
-  full: "max-w-none",
-  narrow: "max-w-[560px]",
-  wide: "max-w-[880px]",
-};
 
 // ─── EditorPane ────────────────────────────────────────────────────────────────
 

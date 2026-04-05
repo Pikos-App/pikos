@@ -4,6 +4,8 @@
 import type {
   CompletedPagesFilter,
   CompletedPagesResponse,
+  CompleteRecurringInput,
+  CompleteRecurringResult,
   Folder,
   Page,
   PageFilter,
@@ -156,5 +158,13 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null> {
     return invoke<PageRecurrenceRule | null>("get_recurrence_rule", { pageId });
+  }
+
+  listRecurrenceRules(): Promise<PageRecurrenceRule[]> {
+    return invoke<PageRecurrenceRule[]>("list_recurrence_rules");
+  }
+
+  completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult> {
+    return invoke<CompleteRecurringResult>("complete_recurring_page", { data });
   }
 }

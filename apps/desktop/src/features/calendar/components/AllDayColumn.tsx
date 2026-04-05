@@ -1,24 +1,23 @@
-import type { PageStatus, PageSummary } from "@pikos/core";
-import { nowLocalISO } from "@pikos/core";
+import type { PageSummary, VirtualOccurrence } from "@pikos/core";
 import { format } from "date-fns";
+import { Repeat2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
+import { useRecurringActions } from "../hooks/useRecurringActions";
 import {
   CHIP_BASE_CLASSES,
   CHIP_DEFAULT_COLOR_CLASSES,
   chipFolderStyle,
+  CLICK_DELAY,
   DRAG_THRESHOLD,
 } from "../utils/calendarUtils";
 import { PageBlockPopover } from "./PageBlockPopover";
-
-/** Delay (ms) to distinguish single click (popover) from double click (open editor). */
-const CLICK_DELAY = 200;
+import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
 export interface AllDayColumnProps {
   day: Date;
@@ -52,8 +51,12 @@ function AllDayChip({
   onDoubleClick,
   onDragStart,
 }: AllDayChipProps) {
-  const { updatePage } = useWorkspace();
   const { requestDeletePage } = useUndoDelete();
+  const {
+    isRecurring,
+    skipOccurrence: handleSkipOccurrence,
+    toggleStatus,
+  } = useRecurringActions(item);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Prevents the post-drag click from opening the popover.
@@ -125,11 +128,7 @@ function AllDayChip({
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
     }
-    const newStatus: PageStatus = item.status === "done" ? "not_started" : "done";
-    updatePage(item.id, {
-      completedAt: newStatus === "done" ? nowLocalISO() : null,
-      status: newStatus,
-    });
+    toggleStatus();
   }
 
   const isDone = item.status === "done";
@@ -153,7 +152,11 @@ function AllDayChip({
           onMouseDown={handleMouseDown}
           style={chipStyle}
         >
-          <TaskCheckbox as="span" checked={isDone} onChange={handleCheckboxClick} />
+          {isRecurring ? (
+            <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
+          ) : (
+            <TaskCheckbox as="span" checked={isDone} onChange={handleCheckboxClick} />
+          )}
           <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
             {item.title || "Untitled"}
           </span>
@@ -167,14 +170,24 @@ function AllDayChip({
         side="bottom"
         sideOffset={4}
       >
-        <PageBlockPopover
-          onDelete={() => {
-            setPopoverOpen(false);
-            requestDeletePage(item);
-          }}
-          onRemoveDate={() => setPopoverOpen(false)}
-          page={item}
-        />
+        {isRecurring ? (
+          <VirtualPageBlockPopover
+            onSkip={() => {
+              setPopoverOpen(false);
+              void handleSkipOccurrence();
+            }}
+            page={item as VirtualOccurrence}
+          />
+        ) : (
+          <PageBlockPopover
+            onDelete={() => {
+              setPopoverOpen(false);
+              requestDeletePage(item);
+            }}
+            onRemoveDate={() => setPopoverOpen(false)}
+            page={item}
+          />
+        )}
       </PopoverContent>
     </Popover>
   );

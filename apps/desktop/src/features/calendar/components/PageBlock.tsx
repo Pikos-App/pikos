@@ -1,17 +1,18 @@
-import type { PageStatus } from "@pikos/core";
-import { nowLocalISO } from "@pikos/core";
+import type { VirtualOccurrence } from "@pikos/core";
+import { Repeat2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
-import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
+import { useRecurringActions } from "../hooks/useRecurringActions";
 import {
   CHIP_BASE_CLASSES,
   CHIP_DEFAULT_COLOR_CLASSES,
   chipFolderStyle,
+  CLICK_DELAY,
   DRAG_THRESHOLD,
   formatTimeRange,
   HOUR_HEIGHT,
@@ -19,9 +20,7 @@ import {
 } from "../utils/calendarUtils";
 import type { CalendarBlock } from "../utils/calendarUtils";
 import { PageBlockPopover } from "./PageBlockPopover";
-
-/** Delay (ms) to distinguish single click (popover) from double click (open editor). */
-const CLICK_DELAY = 200;
+import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
 /** Bottom-edge zone height (px) that triggers the resize cursor. */
 const RESIZE_ZONE = 8;
@@ -73,8 +72,12 @@ export function PageBlock({
     top,
     totalColumns,
   } = block;
-  const { updatePage } = useWorkspace();
   const { requestDeletePage } = useUndoDelete();
+  const {
+    isRecurring,
+    skipOccurrence: handleSkipOccurrence,
+    toggleStatus,
+  } = useRecurringActions(page);
 
   const widthPct = 100 / totalColumns;
   const leftPct = column * widthPct;
@@ -239,11 +242,7 @@ export function PageBlock({
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
     }
-    const newStatus: PageStatus = isDone ? "not_started" : "done";
-    updatePage(page.id, {
-      completedAt: newStatus === "done" ? nowLocalISO() : null,
-      status: newStatus,
-    });
+    toggleStatus();
   }
 
   const sharedStyle = {
@@ -254,8 +253,11 @@ export function PageBlock({
     width: `calc(${widthPct}% - 2px)`,
   };
 
-  // Checkbox — rendered as span to avoid invalid nested <button> HTML.
-  const checkbox = (
+  // Virtual recurring blocks show the recurring icon instead of a checkbox.
+  // The head block (real page) keeps the normal checkbox.
+  const checkbox = isRecurring ? (
+    <Repeat2 aria-label="Recurring" className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+  ) : (
     <TaskCheckbox as="span" checked={isDone} className="mt-1" onChange={handleCheckboxClick} />
   );
 
@@ -353,16 +355,26 @@ export function PageBlock({
         side="right"
         sideOffset={8}
       >
-        <PageBlockPopover
-          onDelete={() => {
-            setPopoverOpen(false);
-            requestDeletePage(page);
-          }}
-          onRemoveDate={() => {
-            setPopoverOpen(false);
-          }}
-          page={page}
-        />
+        {isRecurring ? (
+          <VirtualPageBlockPopover
+            onSkip={() => {
+              setPopoverOpen(false);
+              void handleSkipOccurrence();
+            }}
+            page={page as VirtualOccurrence}
+          />
+        ) : (
+          <PageBlockPopover
+            onDelete={() => {
+              setPopoverOpen(false);
+              requestDeletePage(page);
+            }}
+            onRemoveDate={() => {
+              setPopoverOpen(false);
+            }}
+            page={page}
+          />
+        )}
       </PopoverContent>
     </Popover>
   );

@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 
-const IS_TAURI = import.meta.env["VITE_TEST_MODE"] !== "true";
+import { IS_TAURI } from "@/shared/constants/platform";
 
 export function useIsFullscreen(): boolean {
   const [fullscreen, setFullscreen] = useState(false);

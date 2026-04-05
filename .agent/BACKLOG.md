@@ -63,3 +63,36 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 
 - [x] Editor: typing "1." as first content causes text to disappear — WebKitInputRuleFix extension forces DOM repaint after node-type change
 - [x] Holding arrow key in large page list stops responding — rAF throttle on arrow key repeats in PageListPanel
+
+
+## Recurring Schedule QA
+Have claude evaluate current code against feature.md file. Fix any gaps, add/update test coverage.
+
+Then manual QA:
+  1. Calendar rendering
+  - Create a recurring page ("standup every monday at 9am"), navigate to a week with Monday → virtual block appears on calendar
+  - Virtual block shows recurring icon (arrows), NOT a checkbox
+  - Head page's own calendar block shows a normal checkbox
+  2. Completion flow (the big one)
+  - Click checkbox on the head's calendar block → head advances to next Monday, clone appears in completed section
+  - Click checkbox in page list → same behavior
+  - Click checkbox in page view → date chip updates to next occurrence
+  - After completing, the head stays in the page list as "not_started" with the new date
+  - Complete 2-3 times → verify head ID stays stable (same page in editor), multiple clones in completed
+  3. Virtual occurrence popover
+  - Single-click a virtual block → read-only popover appears (title, folder, date, priority, recurrence cadence)
+  - "Open page" in popover → opens the head page in editor
+  - "Skip this occurrence" (trash icon) → virtual block disappears immediately
+  - After skip, navigating away and back → skipped occurrence stays gone
+  4. Edge cases
+  - Create recurring page with no time ("run every friday") → all-day virtual blocks appear in the all-day section
+  - Overdue recurring page (head scheduledStart is in the past) → shows in Today view
+  - Completing overdue recurring page → advances to next future occurrence, not the one after the overdue date
+  - Delete the head page → all virtual occurrences disappear from calendar
+  5. NLP input variations (spot check)
+  - "standup mondays at 9am" → recurring (plural day name)
+  - "gym every tue and thu at 6pm" → recurring with two days
+  - "report every month" → recurring monthly
+  - "standup monday at 9am" (no "every") → single, NOT recurring
+
+  Items 1-3 are the critical paths. Items 4-5 are lower risk since they're well covered by unit tests but worth a quick spot check.

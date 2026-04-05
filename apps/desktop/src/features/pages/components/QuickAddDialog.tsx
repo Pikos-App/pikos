@@ -4,8 +4,9 @@
 // but input text is never modified. On submit, the parser extracts the clean
 // title and all metadata from the full input.
 
-import { localToday, parseInput } from "@pikos/core";
-import type { Folder, PagePriority, PageUpdate } from "@pikos/core";
+import { localToday, parseInput, rruleToLabel } from "@pikos/core";
+import type { Folder, PagePriority, PageUpdate, ParseResult } from "@pikos/core";
+import { Repeat2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
@@ -15,21 +16,11 @@ import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { TagsPopover } from "@/features/pages/components/TagsPopover";
 import { cn } from "@/lib/utils";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
+import { NLP_PRIORITY_MAP } from "@/shared/constants/priorities";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-
-// ── NLP priority mapping ──────────────────────────────────────────────────────
-
-type NLPPriority = "urgent" | "high" | "medium" | "low";
-
-const NLP_PRIORITY_MAP: Record<NLPPriority, PagePriority> = {
-  high: 2,
-  low: 4,
-  medium: 3,
-  urgent: 1,
-};
 
 // ── Folder fuzzy match ────────────────────────────────────────────────────────
 
@@ -57,7 +48,7 @@ function BylineSeparator() {
 // ── QuickAddDialog ────────────────────────────────────────────────────────────
 
 export function QuickAddDialog() {
-  const { createPage, folders, scheduleOnce, tags, updatePage } = useWorkspace();
+  const { createPage, createRecurrence, folders, scheduleOnce, tags, updatePage } = useWorkspace();
   const allTagNames = tags.map((t) => t.name);
   const { activeViewId, openDialog, setOpenDialog } = useUI();
   const { defaultFolderId: settingsDefaultFolder } = useAppSettings();
@@ -89,6 +80,7 @@ export function QuickAddDialog() {
   const [dateManual, setDateManual] = useState(false);
   const [priorityManual, setPriorityManual] = useState(false);
   const [folderManual, setFolderManual] = useState(false);
+  const [recurrenceLabel, setRecurrenceLabel] = useState<string | null>(null);
 
   // ── Reset form fields when the dialog opens ───────────────────────────────────
   useEffect(() => {
@@ -104,6 +96,7 @@ export function QuickAddDialog() {
     setDateManual(activeViewId === "today");
     setPriorityManual(false);
     setFolderManual(false);
+    setRecurrenceLabel(null);
     setAddedFeedback(null);
   }, [isOpen]);
 
@@ -151,6 +144,7 @@ export function QuickAddDialog() {
         if (!priorityManual) setPriorityValue(0);
         if (!folderManual) setFolderValue(defaultFolderId);
         setNlpTags([]);
+        setRecurrenceLabel(null);
         return;
       }
 
@@ -163,6 +157,15 @@ export function QuickAddDialog() {
             : result.input;
       if (!parsed) return;
 
+      // Show recurrence preview label
+      if (result.type === "recurring") {
+        setRecurrenceLabel(rruleToLabel(result.rrule));
+      } else if (result.type === "finite") {
+        setRecurrenceLabel(`${result.count} occurrence${result.count === 1 ? "" : "s"}`);
+      } else {
+        setRecurrenceLabel(null);
+      }
+
       if (!dateManual) {
         setDateValue(parsed.scheduledStart ?? null);
         const hasTime = parsed.scheduledStart?.includes("T") ?? false;
@@ -173,7 +176,7 @@ export function QuickAddDialog() {
         setPriorityValue(
           parsed.priority === undefined || parsed.priority === null
             ? 0
-            : NLP_PRIORITY_MAP[parsed.priority]
+            : (NLP_PRIORITY_MAP[parsed.priority] ?? 0)
         );
       }
 
@@ -221,6 +224,11 @@ export function QuickAddDialog() {
 
     // Parse the full, unstripped input on submit.
     const result = parseInput(trimmed);
+    return executeCreate(result);
+  }
+
+  /** Actually creates the page(s) from a parse result (after any confirmation). */
+  async function executeCreate(result: ParseResult): Promise<string | null> {
     const parsed =
       result.type === "single"
         ? result.input
@@ -245,25 +253,62 @@ export function QuickAddDialog() {
       parsed?.priority !== undefined
         ? parsed.priority === null
           ? 0
-          : NLP_PRIORITY_MAP[parsed.priority]
+          : (NLP_PRIORITY_MAP[parsed.priority] ?? 0)
         : priorityValue;
 
     // Use parsed.title (tokens already stripped by parser) as the page title.
-    const title = parsed?.title || trimmed;
-
-    const page = await createPage({ folderId: resolvedFolderId, title });
+    const title = parsed?.title || inputValue.trim();
 
     // Fresh NLP tags from re-parse + manual additions.
-    // manualTags is never overwritten by NLP, so this correctly handles removals.
     const finalTags = [...new Set([...(parsed?.tags ?? []), ...manualTags])];
 
     const patch: PageUpdate = {};
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
     if (finalTags.length > 0) patch.tags = finalTags;
+
+    if (result.type === "recurring") {
+      // Infinite recurrence: 1 template page + recurrence rule.
+      const page = await createPage({ folderId: resolvedFolderId, title });
+      if (Object.keys(patch).length > 0) updatePage(page.id, patch);
+
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const ruleStart = resolvedDate ?? localToday();
+      await createRecurrence({
+        pageId: page.id,
+        rrule: result.rrule,
+        scheduledStart: ruleStart,
+        ...(parsed?.scheduledEnd ? { scheduledEnd: parsed.scheduledEnd } : {}),
+        timezone: tz,
+      });
+      // Set head's scheduledStart denorm so it appears in Today/calendar
+      updatePage(page.id, {
+        scheduledStart: ruleStart,
+        ...(parsed?.scheduledEnd ? { scheduledEnd: parsed.scheduledEnd } : {}),
+      });
+      return title;
+    }
+
+    if (result.type === "finite") {
+      // Finite recurrence: N independent pages, each with its own schedule.
+      for (const inp of result.inputs) {
+        const pg = await createPage({ folderId: resolvedFolderId, title: inp.title || title });
+        const finPatch: PageUpdate = {};
+        if (resolvedPriority !== 0) finPatch.priority = resolvedPriority;
+        const finTags = [...new Set([...inp.tags, ...manualTags])];
+        if (finTags.length > 0) finPatch.tags = finTags;
+        if (Object.keys(finPatch).length > 0) updatePage(pg.id, finPatch);
+        if (inp.scheduledStart) {
+          await scheduleOnce(pg.id, inp.scheduledStart, inp.scheduledEnd);
+        }
+      }
+      return title;
+    }
+
+    // Single page
+    const page = await createPage({ folderId: resolvedFolderId, title });
     if (Object.keys(patch).length > 0) updatePage(page.id, patch);
 
     if (resolvedDate) {
-      // End time: parsed scheduledEnd takes precedence over chip state.
       const hasTime = resolvedDate.includes("T");
       const resolvedEnd = hasTime ? (parsed?.scheduledEnd ?? endDateValue ?? undefined) : undefined;
       await scheduleOnce(page.id, resolvedDate, resolvedEnd);
@@ -386,6 +431,16 @@ export function QuickAddDialog() {
             }}
             selected={tagsValue}
           />
+
+          {recurrenceLabel && (
+            <>
+              <BylineSeparator />
+              <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                <Repeat2 className="h-3 w-3" />
+                {recurrenceLabel}
+              </span>
+            </>
+          )}
 
           <button
             className="ml-auto shrink-0 rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"

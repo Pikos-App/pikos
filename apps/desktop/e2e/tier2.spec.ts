@@ -257,3 +257,30 @@ appTest("clicking into editor clears multi-selection @tier2", async ({ app }) =>
   await expect(page1).not.toHaveAttribute("data-selected");
   await expect(page2).not.toHaveAttribute("data-selected");
 });
+
+// ─── T2-10: Recurring page creation via QuickAdd ───────────────────────────
+
+appTest("create recurring page shows recurrence label @tier2", async ({ app }) => {
+  // Create a recurring page via QuickAdd
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  const input = app.getByPlaceholder(/what's on your mind/i);
+  await input.fill("standup every monday at 9am");
+
+  // Wait for NLP debounce — recurrence label should appear in byline
+  await expect(dialog.getByText(/every week on Monday/i)).toBeVisible({ timeout: 2000 });
+
+  // Submit
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Page should appear in the list
+  const listItem = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
+  await expect(listItem).toBeVisible();
+
+  // Open the page and verify recurrence label in the editor byline
+  await listItem.click();
+  await expect(app.getByText(/every week on Monday/i)).toBeVisible();
+});

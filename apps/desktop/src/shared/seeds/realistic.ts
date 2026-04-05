@@ -2,6 +2,7 @@
 // Tests mixed status/priority, Today view, calendar density, folder structure, tags.
 
 import type { StorageAdapter } from "@pikos/core";
+import { addDays, addMonths, format, startOfMonth } from "date-fns";
 
 const MARKER = "Realistic seed marker";
 
@@ -16,13 +17,11 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
   const now = new Date();
 
   function daysFrom(n: number): Date {
-    const d = new Date(now);
-    d.setDate(d.getDate() + n);
-    return d;
+    return addDays(now, n);
   }
 
   function dateStr(d: Date): string {
-    return d.toISOString().slice(0, 10);
+    return format(d, "yyyy-MM-dd");
   }
 
   function timed(d: Date, hour: number, minute = 0): string {
@@ -991,6 +990,173 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
     tags: ["dev", "housekeeping"],
     title: "Rename PKOS repo to pikos",
   });
+
+  // ── Recurring events ──────────────────────────────────────────────────────
+  // These use the head + recurrence rule model: one page + one rrule.
+  // Virtual occurrences are expanded by the calendar at render time.
+
+  const tz = "America/Los_Angeles";
+
+  // Daily standup — every weekday at 9:15am, 15 min
+  {
+    // Head is scheduled for the next weekday
+    const dayOfWeek = now.getDay(); // 0=Sun, 6=Sat
+    const daysUntilWeekday = dayOfWeek === 0 ? 1 : dayOfWeek === 6 ? 2 : 0;
+    const nextWeekday = daysFrom(daysUntilWeekday);
+    const startStr = timed(nextWeekday, 9, 15);
+    const endStr = timed(nextWeekday, 9, 30);
+
+    const page = await adapter.createPage({
+      content: doc(
+        h2("Daily standup"),
+        h3("Template"),
+        bullets("What I did yesterday", "What I\u2019m doing today", "Blockers")
+      ),
+      folderId: work.id,
+      priority: 0,
+      status: "not_started",
+      subtitle: "Quick sync \u2014 blockers, priorities, updates",
+      tags: ["meeting"],
+      title: "Daily standup",
+    });
+    await adapter.updatePage(page.id, { scheduledEnd: endStr, scheduledStart: startStr });
+    await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+      scheduledEnd: endStr,
+      scheduledStart: startStr,
+      timezone: tz,
+    });
+  }
+
+  // Weekly 1:1 with Sarah — every Wednesday at 2pm, 30 min
+  {
+    const dayOfWeek = now.getDay();
+    const daysUntilWed = (3 - dayOfWeek + 7) % 7 || 7;
+    const nextWed = daysFrom(daysUntilWed);
+    const startStr = timed(nextWed, 14);
+    const endStr = timed(nextWed, 14, 30);
+
+    const page = await adapter.createPage({
+      content: doc(
+        h2("1:1 with Sarah"),
+        h3("Standing agenda"),
+        bullets(
+          "Wins from this week",
+          "Blockers / support needed",
+          "Career growth check-in (monthly)"
+        )
+      ),
+      folderId: work.id,
+      priority: 2,
+      status: "not_started",
+      subtitle: "Weekly sync \u2014 wins, blockers, growth",
+      tags: ["meeting", "1:1"],
+      title: "1:1 with Sarah",
+    });
+    await adapter.updatePage(page.id, { scheduledEnd: endStr, scheduledStart: startStr });
+    await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY;BYDAY=WE",
+      scheduledEnd: endStr,
+      scheduledStart: startStr,
+      timezone: tz,
+    });
+  }
+
+  // Morning run — every Monday, Wednesday, Friday at 6:30am, 40 min
+  {
+    const dayOfWeek = now.getDay();
+    const daysUntilMon = (1 - dayOfWeek + 7) % 7 || 7;
+    const nextMon = daysFrom(daysUntilMon);
+    const startStr = timed(nextMon, 6, 30);
+    const endStr = timed(nextMon, 7, 10);
+
+    const page = await adapter.createPage({
+      content: doc(h2("Morning run"), p("Easy zone 2 pace. Focus on form and breathing.")),
+      folderId: personal.id,
+      priority: 0,
+      status: "not_started",
+      subtitle: "5k easy pace \u2014 zone 2, no earbuds",
+      tags: ["health", "run"],
+      title: "Morning run",
+    });
+    await adapter.updatePage(page.id, { scheduledEnd: endStr, scheduledStart: startStr });
+    await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+      scheduledEnd: endStr,
+      scheduledStart: startStr,
+      timezone: tz,
+    });
+  }
+
+  // Weekly review — every Friday at 4pm, 45 min
+  {
+    const dayOfWeek = now.getDay();
+    const daysUntilFri = (5 - dayOfWeek + 7) % 7 || 7;
+    const nextFri = daysFrom(daysUntilFri);
+    const startStr = timed(nextFri, 16);
+    const endStr = timed(nextFri, 16, 45);
+
+    const page = await adapter.createPage({
+      content: doc(
+        h2("Weekly review"),
+        h3("Checklist"),
+        tasks(
+          { checked: false, text: "Process inbox to zero" },
+          { checked: false, text: "Review completed items \u2014 celebrate wins" },
+          { checked: false, text: "Update project statuses" },
+          { checked: false, text: "Plan next week\u2019s priorities" },
+          { checked: false, text: "Clean up stale tasks" }
+        )
+      ),
+      folderId: personal.id,
+      priority: 2,
+      status: "not_started",
+      subtitle: "GTD-style weekly review \u2014 inbox zero, plan next week",
+      tags: ["review", "productivity"],
+      title: "Weekly review",
+    });
+    await adapter.updatePage(page.id, { scheduledEnd: endStr, scheduledStart: startStr });
+    await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY;BYDAY=FR",
+      scheduledEnd: endStr,
+      scheduledStart: startStr,
+      timezone: tz,
+    });
+  }
+
+  // Pay rent — monthly, 1st of month (all-day)
+  {
+    const nextMonth = startOfMonth(addMonths(now, 1));
+    const startStr = dateStr(nextMonth);
+
+    const page = await adapter.createPage({
+      content: doc(
+        p("Transfer $2,350 via Zelle to landlord."),
+        tasks(
+          { checked: false, text: "Confirm balance in checking" },
+          { checked: false, text: "Send Zelle payment" },
+          { checked: false, text: "Screenshot confirmation" }
+        )
+      ),
+      folderId: finance.id,
+      priority: 1,
+      status: "not_started",
+      subtitle: "$2,350 via Zelle \u2014 due 1st of each month",
+      tags: ["finance", "recurring"],
+      title: "Pay rent",
+    });
+    await adapter.updatePage(page.id, { scheduledStart: startStr });
+    await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=MONTHLY",
+      scheduledStart: startStr,
+      timezone: tz,
+    });
+  }
 }
 
 // ── Tiptap JSON helpers ──────────────────────────────────────────────────────

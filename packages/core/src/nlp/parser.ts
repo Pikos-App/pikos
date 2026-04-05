@@ -1,5 +1,5 @@
 import * as chrono from "chrono-node";
-import { addMinutes } from "date-fns";
+import { addDays, addMinutes, set } from "date-fns";
 import { RRule, Weekday } from "rrule";
 
 import { formatDateOnly, formatLocalISO } from "../utils/dates";
@@ -54,6 +54,28 @@ const DAY_MAP: Record<string, Weekday> = {
 };
 
 const WEEKDAY_DAYS = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR];
+const WEEKEND_DAYS = [RRule.SA, RRule.SU];
+
+/** Map RRule weekday (0=MO … 6=SU) to JS Date.getDay() (0=SU … 6=SA). */
+const RRULE_TO_JS_DAY: Record<number, number> = {
+  0: 1, // MO
+  1: 2, // TU
+  2: 3, // WE
+  3: 4, // TH
+  4: 5, // FR
+  5: 6, // SA
+  6: 0, // SU
+};
+
+/** Returns the next occurrence of an RRule Weekday on or after `ref`. */
+function nextWeekdayOccurrence(ref: Date, weekday: Weekday): Date {
+  const targetJsDay = RRULE_TO_JS_DAY[weekday.weekday]!;
+  const current = ref.getDay();
+  let daysAhead = targetJsDay - current;
+  if (daysAhead < 0) daysAhead += 7;
+  if (daysAhead === 0) daysAhead = 7; // same day → next week (consistent with chrono "monday" behavior)
+  return addDays(ref, daysAhead);
+}
 
 export function parseInput(raw: string, now?: Date): ParseResult {
   const ref = now ?? new Date();
@@ -167,19 +189,41 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
   let recurrenceSpec: RecurrenceSpec | undefined;
 
-  // "every <day>" or "every weekday" — highest priority, checked first
-  text = text.replace(
-    /\bevery\s+(weekday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun|mo|tu|we|th|fr|sa|su)\b/gi,
-    (_, dayStr: string) => {
-      const d = dayStr.toLowerCase();
-      if (d === "weekday") {
-        recurrenceSpec = { byday: WEEKDAY_DAYS, freq: RRule.WEEKLY, kind: "infinite" };
-      } else if (DAY_MAP[d]) {
-        recurrenceSpec = { byday: [DAY_MAP[d]], freq: RRule.WEEKLY, kind: "infinite" };
+  // "every <day>" or "every weekday/weekend/day/week/month" — highest priority, checked first
+  // Handles comma, "and", and Oxford comma separators:
+  //   "every monday and wednesday", "every mon, wed, and fri"
+  const DAY_WORD =
+    "(?:weekday|weekend|day|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun|mo|tu|we|th|fr|sa|su)";
+  const SEP = "(?:\\s*,\\s*|\\s+and\\s+|\\s*,\\s*and\\s+)"; // comma, "and", or ", and"
+  const everyDayRe = new RegExp(`\\bevery\\s+(${DAY_WORD}(?:${SEP}${DAY_WORD})*)\\b`, "gi");
+  text = text.replace(everyDayRe, (_, dayStr: string) => {
+    const parts = dayStr.toLowerCase().split(/\s*,?\s*and\s+|\s*,\s*/);
+    const allDays: Weekday[] = [];
+    let freq: number | undefined;
+    for (const part of parts) {
+      const p = part.trim();
+      if (!p) continue;
+      if (p === "day") {
+        freq = RRule.DAILY;
+      } else if (p === "week") {
+        freq = RRule.WEEKLY;
+      } else if (p === "month") {
+        freq = RRule.MONTHLY;
+      } else if (p === "weekday") {
+        allDays.push(...WEEKDAY_DAYS);
+      } else if (p === "weekend") {
+        allDays.push(...WEEKEND_DAYS);
+      } else if (DAY_MAP[p]) {
+        allDays.push(DAY_MAP[p]);
       }
-      return " ";
     }
-  );
+    if (freq !== undefined) {
+      recurrenceSpec = { freq, kind: "infinite" };
+    } else if (allDays.length > 0) {
+      recurrenceSpec = { byday: allDays, freq: RRule.WEEKLY, kind: "infinite" };
+    }
+    return " ";
+  });
 
   // "daily", "weekly", "monthly" — only consume if no recurrence already found
   // This prevents stripping "daily" from "daily standup every monday" where "every monday" is the specifier
@@ -222,6 +266,31 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     }
   );
 
+  // Plural day names imply recurrence: "mondays", "on tuesdays and thursdays"
+  // Must run before bare "weekdays" and before chrono to avoid false date parsing.
+  if (!recurrenceSpec) {
+    const PLURAL_DAY = "(?:mondays|tuesdays|wednesdays|thursdays|fridays|saturdays|sundays)";
+    const pluralDayRe = new RegExp(
+      `(?:\\bon\\s+)?(${PLURAL_DAY}(?:${SEP}${PLURAL_DAY})*)\\b`,
+      "gi"
+    );
+    text = text.replace(pluralDayRe, (_, dayStr: string) => {
+      const parts = dayStr.toLowerCase().split(/\s*,?\s*and\s+|\s*,\s*/);
+      const days: Weekday[] = [];
+      for (const part of parts) {
+        // Strip trailing "s" to get the singular form for DAY_MAP lookup
+        const singular = part.trim().replace(/s$/, "");
+        if (singular && DAY_MAP[singular]) {
+          days.push(DAY_MAP[singular]);
+        }
+      }
+      if (days.length > 0) {
+        recurrenceSpec = { byday: days, freq: RRule.WEEKLY, kind: "infinite" };
+      }
+      return " ";
+    });
+  }
+
   // bare "weekdays" (without "every")
   text = text.replace(/\bweekdays\b/gi, () => {
     if (!recurrenceSpec) {
@@ -255,13 +324,34 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       result.start.isCertain("weekday");
 
     if (hasTime && !hasDate) {
-      // Time without date: today if future, tomorrow if past
-      const todayWithTime = new Date(ref);
-      todayWithTime.setHours(parsed.getHours(), parsed.getMinutes(), 0, 0);
-      if (todayWithTime <= ref) {
-        todayWithTime.setDate(todayWithTime.getDate() + 1);
+      // When recurrence specifies a weekday, anchor to the next occurrence of that
+      // day instead of defaulting to today/tomorrow.
+      if (
+        recurrenceSpec?.kind === "infinite" &&
+        recurrenceSpec.byday &&
+        recurrenceSpec.byday.length > 0
+      ) {
+        const target = set(nextWeekdayOccurrence(ref, recurrenceSpec.byday[0]!), {
+          hours: parsed.getHours(),
+          milliseconds: 0,
+          minutes: parsed.getMinutes(),
+          seconds: 0,
+        });
+        scheduledStart = formatLocalISO(target);
+      } else {
+        // Time without date: today if future, tomorrow if past
+        const todayWithTime = set(ref, {
+          hours: parsed.getHours(),
+          milliseconds: 0,
+          minutes: parsed.getMinutes(),
+          seconds: 0,
+        });
+        if (todayWithTime <= ref) {
+          scheduledStart = formatLocalISO(addDays(todayWithTime, 1));
+        } else {
+          scheduledStart = formatLocalISO(todayWithTime);
+        }
       }
-      scheduledStart = formatLocalISO(todayWithTime);
     } else if (hasDate && hasTime) {
       scheduledStart = formatLocalISO(parsed);
     } else if (hasDate) {
@@ -271,6 +361,43 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     // Remove matched text from the string
     text =
       text.substring(0, result.index) + " " + text.substring(result.index + result.text.length);
+  }
+
+  // When "every week" is used (FREQ=WEEKLY, no BYDAY) and chrono parsed a weekday,
+  // inject BYDAY so the rrule is self-documenting ("every week on Monday" vs bare "every week").
+  if (
+    recurrenceSpec?.kind === "infinite" &&
+    recurrenceSpec.freq === (RRule.WEEKLY as number) &&
+    !recurrenceSpec.byday &&
+    chronoResults.length > 0 &&
+    chronoResults[0]!.start.isCertain("weekday")
+  ) {
+    const jsDay = chronoResults[0]!.start.get("weekday");
+    // chrono weekday: 0=Sun … 6=Sat → map to RRule Weekday
+    const JS_TO_RRULE: Record<number, Weekday> = {
+      0: RRule.SU,
+      1: RRule.MO,
+      2: RRule.TU,
+      3: RRule.WE,
+      4: RRule.TH,
+      5: RRule.FR,
+      6: RRule.SA,
+    };
+    if (jsDay !== undefined && jsDay !== null && JS_TO_RRULE[jsDay]) {
+      recurrenceSpec = { ...recurrenceSpec, byday: [JS_TO_RRULE[jsDay]] };
+    }
+  }
+
+  // When recurrence has a byday but chrono found no date at all, anchor scheduledStart
+  // to the next occurrence of the first specified weekday.
+  if (
+    !scheduledStart &&
+    recurrenceSpec?.kind === "infinite" &&
+    recurrenceSpec.byday &&
+    recurrenceSpec.byday.length > 0
+  ) {
+    const target = nextWeekdayOccurrence(ref, recurrenceSpec.byday[0]!);
+    scheduledStart = formatDateOnly(target);
   }
 
   // --- 9. Title: remaining text ---
@@ -333,9 +460,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       } else if (windowSpec.kind === "until") {
         rruleOpts.until = windowSpec.date;
       } else if (windowSpec.kind === "days") {
-        const untilDate = new Date(windowStart);
-        untilDate.setDate(untilDate.getDate() + windowSpec.count - 1);
-        rruleOpts.until = untilDate;
+        rruleOpts.until = addDays(windowStart, windowSpec.count - 1);
       }
     } else {
       // No window: default behavior
@@ -364,8 +489,12 @@ export function parseInput(raw: string, now?: Date): ParseResult {
         const startDate = new Date(
           scheduledStart.length === 10 ? scheduledStart + "T00:00:00" : scheduledStart
         );
-        const dated = new Date(d);
-        dated.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
+        const dated = set(new Date(d), {
+          hours: startDate.getHours(),
+          milliseconds: 0,
+          minutes: startDate.getMinutes(),
+          seconds: 0,
+        });
         inp.scheduledStart = formatLocalISO(dated);
         if (durationMinutes !== undefined) {
           inp.scheduledEnd = formatLocalISO(addMinutes(dated, durationMinutes));

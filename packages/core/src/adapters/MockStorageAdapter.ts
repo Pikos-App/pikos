@@ -15,6 +15,8 @@ import type {
 import type {
   CompletedPagesFilter,
   CompletedPagesResponse,
+  CompleteRecurringInput,
+  CompleteRecurringResult,
   Folder,
   Page,
   PageFilter,
@@ -418,6 +420,46 @@ export class MockStorageAdapter implements StorageAdapter {
   getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null> {
     const rule = [...this.rules.values()].find((r) => r.pageId === pageId) ?? null;
     return Promise.resolve(rule);
+  }
+
+  listRecurrenceRules(): Promise<PageRecurrenceRule[]> {
+    const deletedPageIds = new Set(
+      [...this.pages.values()].filter((p) => p.deletedAt).map((p) => p.id)
+    );
+    return Promise.resolve([...this.rules.values()].filter((r) => !deletedPageIds.has(r.pageId)));
+  }
+
+  completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult> {
+    const head = this.pages.get(data.pageId);
+    if (!head) throw new Error(`Page not found: ${data.pageId}`);
+
+    // Create completed clone
+    const cloneId = uuid();
+    const timestamp = now();
+    const clone: Page = {
+      ...head,
+      completedAt: timestamp,
+      content: head.content,
+      createdAt: timestamp,
+      id: cloneId,
+      sortOrder: nextSortOrder([...this.pages.values()]),
+      status: "done",
+      updatedAt: timestamp,
+    };
+    this.pages.set(cloneId, clone);
+
+    // Advance head or mark done
+    if (data.nextScheduledStart) {
+      head.scheduledStart = data.nextScheduledStart;
+      head.scheduledEnd = data.nextScheduledEnd;
+      head.updatedAt = timestamp;
+    } else {
+      head.status = "done";
+      head.completedAt = timestamp;
+      head.updatedAt = timestamp;
+    }
+
+    return Promise.resolve({ clone: toSummary(clone), head: toSummary(head) });
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────────

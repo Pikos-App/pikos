@@ -9,14 +9,20 @@ import type {
   Folder,
   Page,
   PagePriority,
+  PageRecurrenceRule,
   PageStatus,
   PageSummary,
   SearchResponse,
   Tag,
   Workspace,
 } from "@pikos/core";
-import { MockStorageAdapter } from "@pikos/core";
-import type { FolderUpdate, PageUpdate, StorageAdapter } from "@pikos/core";
+import {
+  computeNextEnd,
+  MockStorageAdapter,
+  nextOccurrenceAfter,
+  parseLocalISO,
+} from "@pikos/core";
+import type { FolderUpdate, NewRecurrenceRule, PageUpdate, StorageAdapter } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
@@ -78,6 +84,18 @@ export interface WorkspaceContextValue {
   scheduleOnce: (pageId: string, start: string, end?: string) => Promise<void>;
   /** Delete all one-off schedule blocks for a page. */
   clearSchedule: (pageId: string) => Promise<void>;
+  /** All recurrence rules (one per recurring page). */
+  recurrenceRules: PageRecurrenceRule[];
+  /** Create a recurrence rule for a page. */
+  createRecurrence: (data: NewRecurrenceRule) => Promise<PageRecurrenceRule>;
+  /** Delete a recurrence rule by its ID. */
+  deleteRecurrence: (ruleId: string) => Promise<void>;
+  /** List all materialised schedule rows in a date range (for rrule override filtering). */
+  listSchedulesRange: (start: string, end: string) => Promise<import("@pikos/core").PageSchedule[]>;
+  /** Complete a recurring page: clone as done, advance head to next occurrence. */
+  completeRecurringPage: (pageId: string) => Promise<void>;
+  /** Skip a single occurrence of a recurring page (add date to exdates). Returns an undo function. */
+  skipOccurrence: (ruleId: string, date: string) => Promise<() => void>;
   /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
   listCompletedPages: (filter: CompletedPagesFilter) => Promise<CompletedPagesResponse>;
   /** Merge lazy-loaded pages (e.g. completed) into the pages array, deduplicating by ID. */
@@ -163,6 +181,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [recurrenceRules, setRecurrenceRules] = useState<PageRecurrenceRule[]>([]);
   // Start true so we don't flash the welcome screen before init completes
   const [isLoading, setIsLoading] = useState(true);
 
@@ -199,12 +218,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const loadWorkspaceDataRef = useRef(async () => {
     setIsLoading(true);
     try {
-      const [loadedPages, loadedFolders] = await Promise.all([
+      const [loadedPages, loadedFolders, loadedRules] = await Promise.all([
         adapter.listPages({ status: "not_started" }),
         adapter.listFolders(),
+        adapter.listRecurrenceRules(),
       ]);
       setPages(loadedPages);
       setFolders(loadedFolders);
+      setRecurrenceRules(loadedRules);
     } finally {
       setIsLoading(false);
     }
@@ -644,6 +665,89 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  // ─── Recurrence rules ─────────────────────────────────────────────────────
+
+  async function createRecurrence(data: NewRecurrenceRule): Promise<PageRecurrenceRule> {
+    const rule = await adapter.createRecurrenceRule(data);
+    setRecurrenceRules((prev) => [...prev, rule]);
+    return rule;
+  }
+
+  async function deleteRecurrence(ruleId: string): Promise<void> {
+    await adapter.deleteRecurrenceRule(ruleId);
+    setRecurrenceRules((prev) => prev.filter((r) => r.id !== ruleId));
+  }
+
+  function listSchedulesRange(start: string, end: string) {
+    return adapter.listPageSchedulesRange(start, end);
+  }
+
+  async function completeRecurringPage(pageId: string): Promise<void> {
+    const rule = recurrenceRules.find((r) => r.pageId === pageId);
+    if (!rule) throw new Error(`No recurrence rule for page ${pageId}`);
+
+    // Advance past whichever is later: today or the current occurrence.
+    // - If head is overdue (scheduledStart in the past): use today → skips missed occurrences.
+    // - If head is future (completing early): use scheduledStart → ensures we advance past it.
+    const head = pages.find((p) => p.id === pageId);
+    const headDate = head?.scheduledStart ? parseLocalISO(head.scheduledStart) : new Date();
+    const afterDate = headDate > new Date() ? headDate : new Date();
+    const next = nextOccurrenceAfter(rule.rrule, rule.scheduledStart, afterDate);
+    const nextEnd =
+      next && rule.scheduledEnd ? computeNextEnd(rule.scheduledEnd, next.scheduledStart) : null;
+
+    // Add the completed date to exdates so the virtual expansion won't generate
+    // a duplicate for this date (the clone now occupies it as a real page).
+    const completedDate = head?.scheduledStart?.slice(0, 10);
+    const updatedExdates = completedDate
+      ? [...rule.rruleExdates, completedDate]
+      : rule.rruleExdates;
+
+    // Persist both changes to DB
+    const [result] = await Promise.all([
+      adapter.completeRecurringPage({
+        nextScheduledEnd: nextEnd,
+        nextScheduledStart: next?.scheduledStart ?? null,
+        pageId,
+      }),
+      completedDate
+        ? adapter.updateRecurrenceRule(rule.id, { rruleExdates: updatedExdates })
+        : Promise.resolve(null),
+    ]);
+
+    // Batch all state updates together so React renders them atomically.
+    // Clone renders on the calendar as a done block (independent page).
+    // Exdate prevents the virtual expansion from generating a duplicate.
+    setRecurrenceRules((prev) =>
+      prev.map((r) => (r.id === rule.id ? { ...r, rruleExdates: updatedExdates } : r))
+    );
+    setPages((prev) => {
+      const updated = prev.map((p) => (p.id === pageId ? result.head : p));
+      return [...updated, result.clone];
+    });
+  }
+
+  async function skipOccurrence(ruleId: string, date: string): Promise<() => void> {
+    const rule = recurrenceRules.find((r) => r.id === ruleId);
+    if (!rule) throw new Error(`Recurrence rule not found: ${ruleId}`);
+
+    const updatedExdates = [...rule.rruleExdates, date];
+    await adapter.updateRecurrenceRule(ruleId, { rruleExdates: updatedExdates });
+    setRecurrenceRules((prev) =>
+      prev.map((r) => (r.id === ruleId ? { ...r, rruleExdates: updatedExdates } : r))
+    );
+
+    // Return undo function
+    return () => {
+      const restored = updatedExdates.filter((d) => d !== date);
+      void adapter.updateRecurrenceRule(ruleId, { rruleExdates: restored }).then(() => {
+        setRecurrenceRules((prev) =>
+          prev.map((r) => (r.id === ruleId ? { ...r, rruleExdates: restored } : r))
+        );
+      });
+    };
+  }
+
   // ─── Flush on window close ────────────────────────────────────────────────
   // Tauri's Rust side calls prevent_close() so we get a chance here to flush
   // any debounced writes, wait for all in-flight mutations, then destroy.
@@ -818,21 +922,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const value: WorkspaceContextValue = {
     clearPageError,
     clearSchedule,
+    completeRecurringPage,
     consumePendingNavigation,
     createFolder,
     createPage,
+    createRecurrence,
     deleteFolder,
     deletePage,
+    deleteRecurrence,
     flushPage,
     folders,
     getPage,
     importBatch,
     isLoading,
     listCompletedPages,
+    listSchedulesRange,
     mergePages,
     on,
     pageErrors,
     pages,
+    recurrenceRules,
     reload,
     reorderFolders,
     reorderPages,
@@ -843,6 +952,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     searchPages,
     searchTags,
     selectWorkspace,
+    skipOccurrence,
     softDeleteFolder,
     softDeletePage,
     tags,

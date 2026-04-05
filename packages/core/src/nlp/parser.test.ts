@@ -391,6 +391,246 @@ describe("GOO-19 NL Page Creation Parser", () => {
       expect(r.rrule).toContain("FREQ=WEEKLY");
       expect(r.rrule).toContain("BYDAY=FR");
     });
+
+    it("every monday at 9am → date anchors to next Monday, not tomorrow", () => {
+      // NOW = Sunday 2026-03-15 12:00. Next Monday = 2026-03-16.
+      const r = parseInput("standup every monday at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toContain("2026-03-16");
+      expect(r.input.scheduledStart).toContain("09:00");
+      expect(r.rrule).toContain("BYDAY=MO");
+    });
+
+    it("every monday at 9am from a Wednesday → anchors to next Monday", () => {
+      // Wed 2026-03-18 12:00 → next Monday = 2026-03-23
+      const wed = new Date("2026-03-18T12:00:00");
+      const r = parseInput("standup every monday at 9am", wed);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toContain("2026-03-23");
+      expect(r.input.scheduledStart).toContain("09:00");
+    });
+
+    it("every day → recurring FREQ=DAILY", () => {
+      const r = parseInput("standup every day at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+    });
+
+    it("every weekend → BYDAY=SA,SU", () => {
+      const r = parseInput("relax every weekend", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=SA,SU");
+    });
+
+    it("every monday, wednesday, friday → BYDAY=MO,WE,FR", () => {
+      const r = parseInput("standup every monday, wednesday, friday at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO,WE,FR");
+    });
+
+    it("every week + weekday in text → FREQ=WEEKLY;BYDAY inferred from chrono", () => {
+      const r = parseInput("standup monday 9am every week", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.input.scheduledStart).toContain("2026-03-16"); // next Monday
+      expect(r.input.scheduledStart).toContain("09:00");
+    });
+
+    it("every monday (no time) → scheduledStart anchors to next Monday", () => {
+      // NOW = Sunday 2026-03-15. Next Monday = 2026-03-16.
+      const r = parseInput("run every monday", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16");
+      expect(r.rrule).toContain("BYDAY=MO");
+    });
+
+    it("every month → recurring FREQ=MONTHLY", () => {
+      const r = parseInput("report every month", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=MONTHLY");
+    });
+  });
+
+  // ─── 7b. Recurring — word order variations ────────────────────────────────
+
+  describe("recurring word order variations", () => {
+    // All of these should produce the same result: recurring WEEKLY;BYDAY=MO
+    // with scheduledStart on next Monday at 9am.
+    const EXPECTED_DATE = "2026-03-16";
+    const EXPECTED_TIME = "09:00";
+
+    const variations = [
+      "standup every monday at 9am",
+      "standup at 9am every monday",
+      "every monday standup at 9am",
+      "every monday at 9am standup",
+      "standup every mon at 9am",
+      "standup every Monday at 9am",
+      "STANDUP EVERY MONDAY AT 9AM",
+    ];
+
+    for (const input of variations) {
+      it(`"${input}" → recurring WEEKLY BYDAY=MO`, () => {
+        const r = parseInput(input, NOW);
+        expect(r.type).toBe("recurring");
+        if (r.type !== "recurring") return;
+        expect(r.rrule).toContain("FREQ=WEEKLY");
+        expect(r.rrule).toContain("BYDAY=MO");
+        expect(r.input.scheduledStart).toContain(EXPECTED_DATE);
+        expect(r.input.scheduledStart).toContain(EXPECTED_TIME);
+        expect(r.input.title.toLowerCase()).toBe("standup");
+      });
+    }
+  });
+
+  // ─── 7c. Recurring — "and" separator ─────────────────────────────────────
+
+  describe("recurring with 'and' separator", () => {
+    it("every tuesday and thursday at 6pm", () => {
+      const r = parseInput("gym every tuesday and thursday at 6pm", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=TU,TH");
+      expect(r.input.title).toBe("gym");
+    });
+
+    it("every tue and thu (abbreviated)", () => {
+      const r = parseInput("gym every tue and thu at 6pm", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=TU,TH");
+    });
+
+    it("every mon, wed, and fri (Oxford comma)", () => {
+      const r = parseInput("standup every mon, wed, and fri at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO,WE,FR");
+    });
+  });
+
+  // ─── 7d. Recurring — plural day names ────────────────────────────────────
+
+  describe("recurring via plural day names", () => {
+    it("standup mondays at 9am → recurring BYDAY=MO", () => {
+      const r = parseInput("standup mondays at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.input.scheduledStart).toContain("09:00");
+    });
+
+    it("gym tuesdays and thursdays at 6pm → BYDAY=TU,TH", () => {
+      const r = parseInput("gym tuesdays and thursdays at 6pm", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=TU,TH");
+    });
+
+    it("standup on mondays at 9am → recurring (on + plural)", () => {
+      const r = parseInput("standup on mondays at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+    });
+
+    it("plural fridays without time → all-day recurring", () => {
+      const r = parseInput("review fridays", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=FR");
+      expect(r.input.scheduledStart).toBe("2026-03-20"); // next Friday
+    });
+  });
+
+  // ─── 7e. Recurring — duration preserved ──────────────────────────────────
+
+  describe("recurring with duration", () => {
+    it("standup every monday at 9am for 30m → recurring with duration", () => {
+      const r = parseInput("standup every monday at 9am for 30m", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.durationMinutes).toBe(30);
+      expect(r.input.scheduledEnd).toContain("09:30");
+    });
+
+    it("daily standup at 9am for 15m → FREQ=DAILY with duration", () => {
+      const r = parseInput("daily standup at 9am for 15m", new Date("2026-03-16T08:00:00"));
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.input.durationMinutes).toBe(15);
+    });
+  });
+
+  // ─── 7f. Recurring — metadata preserved ──────────────────────────────────
+
+  describe("recurring with metadata", () => {
+    it("preserves tags, priority, folder on recurring page", () => {
+      const r = parseInput("standup every monday at 9am #work !high ~Engineering", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.tags).toEqual(["work"]);
+      expect(r.input.priority).toBe("high");
+      expect(r.input.folderQuery).toBe("Engineering");
+      expect(r.input.title).toBe("standup");
+    });
+  });
+
+  // ─── 7g. Recurring — title cleanliness ───────────────────────────────────
+
+  describe("recurring title cleanliness", () => {
+    it("daily standup every monday → title 'daily standup'", () => {
+      const r = parseInput("daily standup every monday at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title).toBe("daily standup");
+    });
+
+    it("team sync every friday → title 'team sync'", () => {
+      const r = parseInput("team sync every friday at 4pm", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title).toBe("team sync");
+    });
+
+    it("every monday standup → title 'standup'", () => {
+      const r = parseInput("every monday standup", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title).toBe("standup");
+    });
+  });
+
+  // ─── 7h. Bare day names should NOT recur ─────────────────────────────────
+
+  describe("bare day names stay single (not recurring)", () => {
+    it("standup monday at 9am → single, not recurring", () => {
+      const r = parseInput("standup monday at 9am", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toContain("2026-03-16");
+      expect(r.input.scheduledStart).toContain("09:00");
+    });
+
+    it("call next monday → single", () => {
+      const r = parseInput("call next monday", NOW);
+      expect(r.type).toBe("single");
+    });
+
+    it("meeting on monday → single (singular 'on monday')", () => {
+      const r = parseInput("meeting on monday at 2pm", NOW);
+      expect(r.type).toBe("single");
+    });
   });
 
   // ─── 8. RRULE validation ──────────────────────────────────────────────────
@@ -644,6 +884,25 @@ describe("GOO-19 NL Page Creation Parser", () => {
       if (r.type !== "recurring") return;
       expect(r.input.title).toBe("rent payment");
       expect(r.rrule).toContain("FREQ=MONTHLY");
+    });
+  });
+
+  describe("bare weekly keyword", () => {
+    it("weekly triggers FREQ=WEEKLY recurrence", () => {
+      const r = parseInput("sync weekly", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title).toBe("sync");
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+    });
+
+    it("weekly at 3pm — with time", () => {
+      const r = parseInput("review weekly at 3pm", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title).toBe("review");
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.input.scheduledStart).toContain("15:00");
     });
   });
 

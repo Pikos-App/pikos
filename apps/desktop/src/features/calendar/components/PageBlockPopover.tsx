@@ -22,7 +22,14 @@ interface PageBlockPopoverProps {
 }
 
 export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopoverProps) {
-  const { clearSchedule, folders, scheduleOnce, updatePage } = useWorkspace();
+  const {
+    clearSchedule,
+    completeRecurringPage,
+    folders,
+    recurrenceRules,
+    scheduleOnce,
+    updatePage,
+  } = useWorkspace();
   const { openPage } = useUI();
 
   useKeyboardScope("modal");
@@ -35,6 +42,10 @@ export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopo
 
   function handleStatusToggle() {
     const newStatus: PageStatus = isDone ? "not_started" : "done";
+    if (newStatus === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
+      void completeRecurringPage(page.id);
+      return;
+    }
     updatePage(page.id, {
       completedAt: newStatus === "done" ? nowLocalISO() : null,
       status: newStatus,

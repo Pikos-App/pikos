@@ -71,6 +71,10 @@ Package manager: pnpm (never npm/yarn)
 - Prefer early returns over deeply nested conditionals.
 - Keep components under 200 lines. Extract hooks or subcomponents when approaching this.
 - Use TypeScript discriminated unions over boolean flags for state that has more than two modes.
+- NEVER use raw Date methods (setHours, setDate, getFullYear, manual arithmetic). Always use `date-fns` — `addDays`, `set`, `format`, `endOfDay`, etc. The only exception is `new Date()` for "now".
+- Always use Lucide icons (`lucide-react`). Never hand-roll SVGs.
+- One component per file. If two components share logic, extract a hook or utility.
+- Shared constants (like priority labels) go in `src/shared/constants/`, not duplicated across files.
 
 ## Tauri
 

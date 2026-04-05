@@ -723,3 +723,121 @@ pub async fn list_completed_pages(
         total,
     })
 }
+
+// ─── Recurring page completion ───────────────────────────────────────────────
+
+/// Input for the complete_recurring_page command.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteRecurringInput {
+    /// The head page ID to complete.
+    pub page_id: String,
+    /// The next occurrence's scheduled start (ISO date or datetime).
+    /// None = series is finished, mark head as done.
+    pub next_scheduled_start: Option<String>,
+    /// The next occurrence's scheduled end (ISO datetime), if timed.
+    pub next_scheduled_end: Option<String>,
+}
+
+/// Result of completing a recurring page.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteRecurringResult {
+    /// The newly created completed clone page.
+    pub clone: PageSummary,
+    /// The updated head page (advanced to next occurrence, or done).
+    pub head: PageSummary,
+}
+
+/// Atomically completes a recurring page:
+/// 1. Clones the head as a done page (snapshot of current state)
+/// 2. Advances the head to the next occurrence, or marks it done if series is finished
+#[tauri::command]
+pub async fn complete_recurring_page(
+    state: State<'_, DbState>,
+    data: CompleteRecurringInput,
+) -> Result<CompleteRecurringResult, String> {
+    let pool = state.get_pool().await?;
+    let now = now_iso();
+
+    // 1. Fetch the head page (full content for cloning)
+    let head = fetch_page(&pool, &data.page_id).await?;
+
+    // 2. Create the completed clone
+    let clone_id = uuid::Uuid::new_v4().to_string();
+    let clone_sort_order = next_sort_order(&pool, head.folder_id.as_deref()).await;
+    let tags_json = serde_json::to_string(&head.tags).unwrap_or_else(|_| "[]".to_string());
+
+    sqlx::query(
+        "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
+         priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
+         links, parent_id, last_opened_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'done', ?, ?, ?, ?, ?, ?, '[]', NULL, NULL, ?, ?)",
+    )
+    .bind(&clone_id)
+    .bind(&head.folder_id)
+    .bind(&head.title)
+    .bind(&head.subtitle)
+    .bind(&head.content)
+    .bind(head.content_text.as_deref().unwrap_or(""))
+    .bind(head.priority)
+    .bind(&tags_json)
+    .bind(clone_sort_order)
+    .bind(&head.scheduled_start) // clone gets the occurrence date being completed
+    .bind(&head.scheduled_end)
+    .bind(&now) // completed_at
+    .bind(&now) // created_at
+    .bind(&now) // updated_at
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("Failed to create completion clone: {e}"))?;
+
+    // Sync tags for the clone
+    upsert_page_tags(&pool, &clone_id, &head.tags).await?;
+
+    // 3. Advance the head (or mark done if series finished)
+    if let Some(ref next_start) = data.next_scheduled_start {
+        // Series continues — advance to next occurrence
+        sqlx::query(
+            "UPDATE pages SET scheduled_start = ?, scheduled_end = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(next_start)
+        .bind(&data.next_scheduled_end)
+        .bind(&now)
+        .bind(&data.page_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to advance head: {e}"))?;
+    } else {
+        // Series finished — mark head as done
+        sqlx::query(
+            "UPDATE pages SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(&now)
+        .bind(&now)
+        .bind(&data.page_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to mark head done: {e}"))?;
+    }
+
+    // 4. Fetch updated results
+    let clone_row =
+        sqlx::query_as::<_, PageSummaryRow>(&format!("SELECT {SUMMARY_COLUMNS} FROM pages WHERE id = ?"))
+            .bind(&clone_id)
+            .fetch_one(&pool)
+            .await
+            .map_err(|e| format!("Failed to fetch clone: {e}"))?;
+
+    let head_row =
+        sqlx::query_as::<_, PageSummaryRow>(&format!("SELECT {SUMMARY_COLUMNS} FROM pages WHERE id = ?"))
+            .bind(&data.page_id)
+            .fetch_one(&pool)
+            .await
+            .map_err(|e| format!("Failed to fetch head: {e}"))?;
+
+    Ok(CompleteRecurringResult {
+        clone: PageSummary::from(clone_row),
+        head: PageSummary::from(head_row),
+    })
+}

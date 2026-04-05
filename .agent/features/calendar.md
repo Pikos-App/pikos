@@ -14,9 +14,10 @@ No off-the-shelf calendar library. Custom build with `date-fns` for full control
 All-day, specific time (no end), timed block (start+end), multiple occurrences, infinite recurring (rrule), multi-day span. All expressed via `page_schedules` rows except rrule which lives on `pages`.
 
 ### Exception Handling for Recurring
-- Skip: add date to `pages.rrule_exdates` JSON array
-- Override: materialize virtual block as real `page_schedules` row with `original_rrule_date`
-- Per-occurrence completion: `page_schedules.status` tracks each materialized occurrence independently
+- Skip: add date to `page_recurrence_rules.rruleExdates` array
+- Override: materialize virtual block as real `page_schedules` row with `originalDate` + `ruleId`
+- Completion: "head + clone-on-complete" model — see `features/recurring-completion.md`
+- Virtual occurrences show recurring icon (no checkbox); only the head block has a checkbox
 
 ## Current State
 Week view shipped with all-day section, hourly grid, drag-to-create, resize, inline editing.

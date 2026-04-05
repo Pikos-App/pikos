@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Page } from "../types";
+import type { Page, PageSummary } from "../types";
 import { MockStorageAdapter } from "./MockStorageAdapter";
 
 // ─── Setup ───────────────────────────────────────────────────────────────────
@@ -497,5 +497,182 @@ describe("softDelete / restore", () => {
     await adapter.restorePage(page.id);
     results = await adapter.listPages();
     expect(results.map((p) => p.title)).toContain("recoverable");
+  });
+});
+
+// ─── completeRecurringPage ───────────────────────────────────────────────────
+
+describe("completeRecurringPage", () => {
+  it("clones head as done, advances head to next occurrence", async () => {
+    const head = await createTestPage({
+      content: '{"type":"doc","content":[]}',
+      folderId: null,
+      priority: 2,
+      tags: ["work"],
+      title: "Standup",
+    });
+
+    // Manually set scheduledStart on head (simulating what QuickAddDialog does)
+    await adapter.updatePage(head.id, { scheduledStart: "2026-03-16T09:00:00" });
+
+    await adapter.createRecurrenceRule({
+      pageId: head.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledStart: "2026-03-16T09:00:00",
+      timezone: "America/New_York",
+    });
+
+    const result = await adapter.completeRecurringPage({
+      nextScheduledEnd: null,
+      nextScheduledStart: "2026-03-23T09:00:00",
+      pageId: head.id,
+    });
+
+    // Clone should be done with the completed occurrence date
+    expect(result.clone.status).toBe("done");
+    expect(result.clone.scheduledStart).toBe("2026-03-16T09:00:00");
+    expect(result.clone.title).toBe("Standup");
+    expect(result.clone.priority).toBe(2);
+    expect(result.clone.tags).toEqual(["work"]);
+    expect(result.clone.completedAt).toBeDefined();
+    expect(result.clone.id).not.toBe(head.id);
+
+    // Head should be advanced
+    expect(result.head.id).toBe(head.id);
+    expect(result.head.status).toBe("not_started");
+    expect(result.head.scheduledStart).toBe("2026-03-23T09:00:00");
+    expect(result.head.title).toBe("Standup");
+  });
+
+  it("marks head as done when no next occurrence (series finished)", async () => {
+    const head = await createTestPage({ title: "Limited series" });
+    await adapter.updatePage(head.id, { scheduledStart: "2026-03-16T09:00:00" });
+
+    const result = await adapter.completeRecurringPage({
+      nextScheduledEnd: null,
+      nextScheduledStart: null, // no next occurrence
+      pageId: head.id,
+    });
+
+    expect(result.head.status).toBe("done");
+    expect(result.head.completedAt).toBeDefined();
+  });
+
+  it("preserves content in the clone", async () => {
+    const content =
+      '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Meeting notes"}]}]}';
+    const head = await createTestPage({ content, title: "Weekly sync" });
+
+    const result = await adapter.completeRecurringPage({
+      nextScheduledEnd: null,
+      nextScheduledStart: "2026-03-23",
+      pageId: head.id,
+    });
+
+    // Clone should have the content snapshot
+    const cloneFull = await adapter.getPage(result.clone.id);
+    expect(cloneFull?.content).toBe(content);
+  });
+
+  it("head keeps stable ID across multiple completions", async () => {
+    const head = await createTestPage({ title: "Recurring" });
+    await adapter.updatePage(head.id, { scheduledStart: "2026-03-16" });
+    const originalId = head.id;
+
+    // Complete 3 times
+    await adapter.completeRecurringPage({
+      nextScheduledEnd: null,
+      nextScheduledStart: "2026-03-23",
+      pageId: originalId,
+    });
+    await adapter.completeRecurringPage({
+      nextScheduledEnd: null,
+      nextScheduledStart: "2026-03-30",
+      pageId: originalId,
+    });
+    const result3 = await adapter.completeRecurringPage({
+      nextScheduledEnd: null,
+      nextScheduledStart: "2026-04-06",
+      pageId: originalId,
+    });
+
+    // Head ID unchanged
+    expect(result3.head.id).toBe(originalId);
+    expect(result3.head.scheduledStart).toBe("2026-04-06");
+
+    // 3 clones created (all done)
+    const allPages = await adapter.listPages();
+    const donePages = allPages.filter((p) => p.status === "done" && p.title === "Recurring");
+    expect(donePages).toHaveLength(3);
+  });
+
+  it("throws when page not found", () => {
+    expect(() =>
+      adapter.completeRecurringPage({
+        nextScheduledEnd: null,
+        nextScheduledStart: "2026-03-23",
+        pageId: "nonexistent",
+      })
+    ).toThrow("Page not found");
+  });
+});
+
+// ─── skipOccurrence (exdates) ────────────────────────────────────────────────
+
+describe("recurrence exdates (skip occurrence)", () => {
+  it("adding a date to exdates excludes it from expansion", async () => {
+    const { expandRecurrenceForRange } = await import("../utils/recurrence");
+
+    const head = await createTestPage({ title: "Weekly" });
+    const rule = await adapter.createRecurrenceRule({
+      pageId: head.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledEnd: "2026-03-02T10:00:00",
+      scheduledStart: "2026-03-02T09:00:00",
+      timezone: "America/New_York",
+    });
+
+    // Expand 3 weeks: should get 3 occurrences
+    const rangeStart = new Date(2026, 2, 2);
+    const rangeEnd = new Date(2026, 2, 23);
+    const { content: _c, contentText: _ct, ...pageSummary } = head;
+    const page: PageSummary = pageSummary;
+
+    let occs = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
+    expect(occs).toHaveLength(3);
+
+    // Skip March 9
+    const updated = await adapter.updateRecurrenceRule(rule.id, {
+      rruleExdates: ["2026-03-09"],
+    });
+
+    occs = expandRecurrenceForRange(updated, page, rangeStart, rangeEnd);
+    expect(occs).toHaveLength(2);
+    expect(occs.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
+  });
+
+  it("removing a date from exdates restores it (undo)", async () => {
+    const { expandRecurrenceForRange } = await import("../utils/recurrence");
+
+    const head = await createTestPage({ title: "Weekly" });
+    const rule = await adapter.createRecurrenceRule({
+      pageId: head.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledEnd: "2026-03-02T10:00:00",
+      scheduledStart: "2026-03-02T09:00:00",
+      timezone: "America/New_York",
+    });
+
+    const { content: _c, contentText: _ct, ...pageSummary } = head;
+    const page: PageSummary = pageSummary;
+    const rangeStart = new Date(2026, 2, 2);
+    const rangeEnd = new Date(2026, 2, 23);
+
+    // Skip then undo
+    await adapter.updateRecurrenceRule(rule.id, { rruleExdates: ["2026-03-09"] });
+    const restored = await adapter.updateRecurrenceRule(rule.id, { rruleExdates: [] });
+
+    const occs = expandRecurrenceForRange(restored, page, rangeStart, rangeEnd);
+    expect(occs).toHaveLength(3);
   });
 });

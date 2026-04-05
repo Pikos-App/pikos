@@ -329,6 +329,23 @@ describe("buildDayBlocks", () => {
     expect(b2.isContinuationAfter).toBeUndefined();
   });
 
+  it("event ending exactly at midnight clamps to grid end", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-16T00:00:00", // exactly midnight
+        scheduledStart: "2026-03-15T16:30:00",
+        title: "Evening block",
+      }),
+    ];
+
+    const blocks = buildDayBlocks(pages, day);
+    expect(blocks).toHaveLength(1);
+    const b = blocks[0]!;
+    expect(b.isContinuationAfter).toBe(true);
+    expect(b.top).toBe((16.5 - GRID_START_HOUR) * HOUR_HEIGHT);
+    expect(b.height).toBe(GRID_HEIGHT - b.top); // extends to grid bottom, not 0
+  });
+
   it("multi-day event shows on all spanned days", () => {
     const pages = [
       makePage({
