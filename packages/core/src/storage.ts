@@ -10,6 +10,7 @@ import type {
   Page,
   PageFilter,
   PageRecurrenceRule,
+  PageReminder,
   PageSchedule,
   PageSummary,
   SearchResponse,
@@ -38,6 +39,13 @@ export interface PageScheduleUpdate {
   scheduledStart?: string;
   scheduledEnd?: string | null;
   status?: PageSchedule["status"];
+}
+
+// ─── Reminder input helpers ──────────────────────────────────────────────────
+
+export interface NewPageReminder {
+  pageId: string;
+  minutesBefore: number;
 }
 
 // ─── Recurrence rule input helpers ────────────────────────────────────────────
@@ -119,4 +127,14 @@ export interface StorageAdapter {
   // Recurring completion
   /** Clone head as done, advance to next occurrence (or mark done if series finished). */
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult>;
+
+  // Reminders
+  /** Create a per-page reminder (e.g. "10 min before"). */
+  createPageReminder(data: NewPageReminder): Promise<PageReminder>;
+  /** All reminders for a page, sorted by minutesBefore ascending. */
+  listPageReminders(pageId: string): Promise<PageReminder[]>;
+  /** Delete a single reminder. */
+  deletePageReminder(id: string): Promise<void>;
+  /** Delete all reminders for a page (reset to global default). */
+  deletePageReminders(pageId: string): Promise<void>;
 }

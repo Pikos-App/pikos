@@ -9,6 +9,7 @@ import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { EditorSettings } from "./EditorSettings";
 import { GeneralSettings } from "./GeneralSettings";
+import { NotificationSettings } from "./NotificationSettings";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { ShortcutsSettings } from "./ShortcutsSettings";
 
@@ -60,6 +61,7 @@ export function SettingsPage() {
         {section === "general" && <GeneralSettings />}
         {section === "appearance" && <AppearanceSettings />}
         {section === "editor" && <EditorSettings />}
+        {section === "notifications" && <NotificationSettings />}
         {section === "shortcuts" && <ShortcutsSettings />}
         {section === "developer" && DeveloperSettings && (
           <Suspense>

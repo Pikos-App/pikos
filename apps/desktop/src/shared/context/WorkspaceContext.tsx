@@ -114,6 +114,8 @@ export interface WorkspaceContextValue {
   ) => () => void;
   /** Batch-import pages and folders from an external source. Returns IDs for undo. */
   importBatch: (data: ImportBatchInput) => Promise<ImportBatchResult>;
+  /** Direct access to the storage adapter — used by features that need raw CRUD (e.g. reminders). */
+  storage: StorageAdapter | null;
 }
 
 /** Input for batch import. */
@@ -955,6 +957,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     skipOccurrence,
     softDeleteFolder,
     softDeletePage,
+    storage: workspace ? adapter : null,
     tags,
     updateFolder,
     updatePage,

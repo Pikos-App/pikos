@@ -3,6 +3,7 @@ use tauri::{Manager};
 
 mod db;
 mod markdown;
+mod notifications;
 
 use db::{
     connect_db, DbState,
@@ -20,18 +21,31 @@ use db::{
     },
     search::search_pages,
     tags::search_tags,
+    notifications::{
+        create_page_reminder, delete_page_reminder, delete_page_reminders,
+        list_page_reminders,
+    },
 };
+
+use notifications::scheduler::{update_notification_settings, NotificationSettingsState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(DbState::new())
+        .manage(NotificationSettingsState::new())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(notifications::scheduler::run(handle));
+            Ok(())
+        })
         .menu(|handle| {
             // Custom menu without Print (Cmd+P) — that shortcut is used for search palette.
             let settings = MenuItemBuilder::new("Settings…")
@@ -179,6 +193,12 @@ pub fn run() {
             search_pages,
             // Tags
             search_tags,
+            // Notifications / reminders
+            create_page_reminder,
+            list_page_reminders,
+            delete_page_reminder,
+            delete_page_reminders,
+            update_notification_settings,
             // Dev / settings
             backdate_page,
             backup_db,

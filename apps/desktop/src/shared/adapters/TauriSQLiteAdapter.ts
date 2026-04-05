@@ -10,6 +10,7 @@ import type {
   Page,
   PageFilter,
   PageRecurrenceRule,
+  PageReminder,
   PageSchedule,
   PageSummary,
   SearchResponse,
@@ -18,6 +19,7 @@ import type {
   FolderUpdate,
   NewFolder,
   NewPage,
+  NewPageReminder,
   NewPageSchedule,
   NewRecurrenceRule,
   PageScheduleUpdate,
@@ -166,5 +168,23 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult> {
     return invoke<CompleteRecurringResult>("complete_recurring_page", { data });
+  }
+
+  // ─── Reminders ──────────────────────────────────────────────────────────────
+
+  createPageReminder(data: NewPageReminder): Promise<PageReminder> {
+    return invoke<PageReminder>("create_page_reminder", { data });
+  }
+
+  listPageReminders(pageId: string): Promise<PageReminder[]> {
+    return invoke<PageReminder[]>("list_page_reminders", { pageId });
+  }
+
+  deletePageReminder(id: string): Promise<void> {
+    return invoke<void>("delete_page_reminder", { id });
+  }
+
+  deletePageReminders(pageId: string): Promise<void> {
+    return invoke<void>("delete_page_reminders", { pageId });
   }
 }

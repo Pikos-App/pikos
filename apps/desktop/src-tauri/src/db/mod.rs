@@ -3,6 +3,7 @@ use tokio::sync::Mutex;
 
 pub mod dev;
 pub mod folders;
+pub mod notifications;
 pub mod pages;
 pub mod schedules;
 pub mod search;
