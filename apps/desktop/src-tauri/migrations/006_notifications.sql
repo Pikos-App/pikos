@@ -11,7 +11,7 @@ CREATE TABLE page_reminders (
 CREATE INDEX idx_page_reminders_page ON page_reminders(page_id);
 
 -- Deduplication log — tracks every notification that fired.
--- Prevents re-firing the same reminder and supports snooze.
+-- Prevents re-firing the same reminder on subsequent scheduler ticks.
 CREATE TABLE notification_log (
   id              TEXT PRIMARY KEY,
   page_id         TEXT,

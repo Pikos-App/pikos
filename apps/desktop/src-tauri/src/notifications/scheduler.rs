@@ -8,7 +8,7 @@
 use std::time::Duration;
 
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::db::DbState;
@@ -24,8 +24,8 @@ pub struct NotificationSettings {
     pub overdue_alerts: bool,
     /// Quiet hours — suppress notifications between these times (HH:MM, 24h format).
     pub quiet_hours_enabled: bool,
-    pub quiet_hours_start: String,  // e.g. "22:00"
-    pub quiet_hours_end: String,    // e.g. "08:00"
+    pub quiet_hours_start: String, // e.g. "22:00"
+    pub quiet_hours_end: String,   // e.g. "08:00"
 }
 
 impl Default for NotificationSettings {
@@ -50,6 +50,8 @@ impl NotificationSettingsState {
     }
 }
 
+// ─── Commands ────────────────────────────────────────────────────────────────
+
 /// Tauri command: frontend calls this whenever notification settings change.
 #[tauri::command]
 pub async fn update_notification_settings(
@@ -62,9 +64,7 @@ pub async fn update_notification_settings(
 
 /// Tauri command: request OS notification permission. Returns true if granted.
 #[tauri::command]
-pub async fn request_notification_permission(
-    app: tauri::AppHandle,
-) -> Result<bool, String> {
+pub async fn request_notification_permission(app: tauri::AppHandle) -> Result<bool, String> {
     match app.notification().request_permission() {
         Ok(granted) => Ok(granted),
         Err(e) => Err(e.to_string()),
@@ -73,14 +73,14 @@ pub async fn request_notification_permission(
 
 /// Tauri command: check current notification permission status.
 #[tauri::command]
-pub async fn check_notification_permission(
-    app: tauri::AppHandle,
-) -> Result<bool, String> {
+pub async fn check_notification_permission(app: tauri::AppHandle) -> Result<bool, String> {
     match app.notification().permission_state() {
         Ok(state) => Ok(state == tauri_plugin_notification::PermissionState::Granted),
         Err(e) => Err(e.to_string()),
     }
 }
+
+// ─── Scheduler loop ──────────────────────────────────────────────────────────
 
 /// Main scheduler loop — spawned from `lib.rs` setup.
 pub async fn run(app: AppHandle) {
@@ -93,12 +93,11 @@ pub async fn run(app: AppHandle) {
     }
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(sqlx::FromRow, Clone)]
 struct DueReminder {
     schedule_id: String,
     page_id: String,
     title: String,
-    subtitle: Option<String>,
     scheduled_start: String,
     minutes_before: i64,
 }
@@ -121,17 +120,14 @@ fn is_quiet_hours(settings: &NotificationSettings) -> bool {
     let end = &settings.quiet_hours_end;
 
     if start <= end {
-        // Same-day range: e.g. 09:00 - 17:00
         &now >= start && &now < end
     } else {
-        // Overnight range: e.g. 22:00 - 08:00
         &now >= start || &now < end
     }
 }
 
 /// Query for due reminders and fire OS notifications.
 async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
-    // Read current settings
     let settings = {
         let state = app.state::<NotificationSettingsState>();
         state.0.lock().await.clone()
@@ -141,17 +137,15 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    // Respect quiet hours
     if is_quiet_hours(&settings) {
         return Ok(());
     }
 
-    // Get the DB pool — may not be connected yet (app still loading)
     let pool = {
         let db_state = app.state::<DbState>();
         match db_state.get_pool().await {
             Ok(p) => p,
-            Err(_) => return Ok(()), // DB not connected yet, skip this tick
+            Err(_) => return Ok(()),
         }
     };
 
@@ -168,7 +162,7 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
     // 2. Fire default reminders for scheduled pages without explicit reminders
     fire_default_reminders(app, &pool, &settings, &window_start, &now_ts).await?;
 
-    // 3. Overdue alerts — once per (page, calendar_date) pair
+    // 3. Overdue alerts
     if settings.overdue_alerts {
         fire_overdue_alerts(app, &pool, &now_ts, &today).await?;
     }
@@ -184,7 +178,7 @@ async fn fire_explicit_reminders(
     now_ts: &str,
 ) -> Result<(), String> {
     let due: Vec<DueReminder> = sqlx::query_as(
-        "SELECT ps.id AS schedule_id, ps.page_id, p.title, p.subtitle,
+        "SELECT ps.id AS schedule_id, ps.page_id, p.title,
                 ps.scheduled_start, pr.minutes_before
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
@@ -224,7 +218,7 @@ async fn fire_default_reminders(
     let minutes = settings.default_minutes_before;
 
     let due: Vec<DueReminder> = sqlx::query_as(
-        "SELECT ps.id AS schedule_id, ps.page_id, p.title, p.subtitle,
+        "SELECT ps.id AS schedule_id, ps.page_id, p.title,
                 ps.scheduled_start, ? AS minutes_before
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
@@ -257,16 +251,13 @@ async fn fire_default_reminders(
     Ok(())
 }
 
-/// Overdue alerts: fire once per (page_id, calendar_date) for pages past scheduled_start
-/// that are not done and not deleted. Max 1 alert per page per day.
+/// Overdue alerts: once per (page_id, calendar_date).
 async fn fire_overdue_alerts(
     app: &AppHandle,
     pool: &SqlitePool,
     now_ts: &str,
     today: &str,
 ) -> Result<(), String> {
-    // Exclude pages created in the last 5 minutes — prevents a flood of overdue
-    // alerts after importing a batch of pages with past scheduled dates.
     let recent_cutoff = (chrono::Local::now() - chrono::Duration::minutes(5))
         .format("%Y-%m-%dT%H:%M:%S")
         .to_string();
@@ -302,14 +293,6 @@ async fn fire_overdue_alerts(
             format!("Overdue · was scheduled for {time_str}")
         };
 
-        let _ = app
-            .notification()
-            .builder()
-            .title(&row.title)
-            .body(&body)
-            .show();
-
-        // Log to prevent re-firing today
         let log_id = uuid::Uuid::new_v4().to_string();
         let fired_at = chrono::Utc::now()
             .format("%Y-%m-%dT%H:%M:%S%.3fZ")
@@ -326,15 +309,22 @@ async fn fire_overdue_alerts(
         .await
         .map_err(|e| e.to_string())?;
 
-        let _ = app.emit("notification:fired", serde_json::json!({
-            "pageId": row.page_id,
-            "title": row.title,
-            "body": body,
-            "type": "overdue",
-        }));
+        deliver(app, &row.title, &body);
     }
 
     Ok(())
+}
+
+// ─── Delivery ────────────────────────────────────────────────────────────────
+
+/// Send an OS desktop notification.
+fn deliver(app: &AppHandle, title: &str, body: &str) {
+    let _ = app
+        .notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show();
 }
 
 fn format_lead_time(minutes: i64) -> String {
@@ -353,12 +343,10 @@ fn format_lead_time(minutes: i64) -> String {
 }
 
 fn format_time_from_iso(scheduled_start: &str) -> String {
-    // Try to parse "YYYY-MM-DDTHH:MM:SS" and format as "h:MMam/pm"
     if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(scheduled_start, "%Y-%m-%dT%H:%M:%S") {
         let hour = dt.time().format("%l:%M%P").to_string();
         hour.trim().to_string()
     } else {
-        // All-day event — no time to show
         String::new()
     }
 }
@@ -368,7 +356,6 @@ async fn fire_reminder(
     pool: &SqlitePool,
     row: &DueReminder,
 ) -> Result<(), String> {
-    // Build notification body
     let lead = format_lead_time(row.minutes_before);
     let time_str = format_time_from_iso(&row.scheduled_start);
     let body = if time_str.is_empty() {
@@ -376,14 +363,6 @@ async fn fire_reminder(
     } else {
         format!("Starts {lead} · {time_str}")
     };
-
-    // Fire OS notification
-    let _ = app
-        .notification()
-        .builder()
-        .title(&row.title)
-        .body(&body)
-        .show();
 
     // Log to prevent re-firing
     let log_id = uuid::Uuid::new_v4().to_string();
@@ -403,18 +382,12 @@ async fn fire_reminder(
     .await
     .map_err(|e| e.to_string())?;
 
-    // Emit event to frontend (for future in-app banner support)
-    let _ = app.emit("notification:fired", serde_json::json!({
-        "pageId": row.page_id,
-        "title": row.title,
-        "body": body,
-    }));
+    deliver(app, &row.title, &body);
 
     Ok(())
 }
 
 /// Prune notification_log entries older than 30 days.
-/// Called from connect_db to keep the table from growing unbounded.
 pub async fn prune_notification_log(pool: &SqlitePool) -> Result<(), String> {
     let cutoff = (chrono::Utc::now() - chrono::Duration::days(30))
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
