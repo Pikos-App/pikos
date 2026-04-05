@@ -28,6 +28,18 @@ export interface AppSettingsValue {
   /** Default reminder lead time for pages without per-page reminders. Default: 10. */
   defaultReminderMinutes: ReminderLeadTime;
   setDefaultReminderMinutes: (v: ReminderLeadTime) => void;
+  /** Overdue alerts — fire once per day for past-due scheduled pages. Default: true. */
+  overdueAlerts: boolean;
+  setOverdueAlerts: (v: boolean) => void;
+  /** Quiet hours — suppress notifications during a time window. Default: off. */
+  quietHoursEnabled: boolean;
+  setQuietHoursEnabled: (v: boolean) => void;
+  /** Quiet hours start time (HH:MM, 24h format). Default: "22:00". */
+  quietHoursStart: string;
+  setQuietHoursStart: (v: string) => void;
+  /** Quiet hours end time (HH:MM, 24h format). Default: "08:00". */
+  quietHoursEnd: string;
+  setQuietHoursEnd: (v: string) => void;
 }
 
 const AppSettingsContext = createContext<AppSettingsValue | null>(null);
@@ -52,9 +64,19 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     "pikos:defaultReminderMinutes",
     10
   );
+  const [overdueAlerts, setOverdueAlerts] = useLocalStorage<boolean>("pikos:overdueAlerts", true);
+  const [quietHoursEnabled, setQuietHoursEnabled] = useLocalStorage<boolean>(
+    "pikos:quietHoursEnabled",
+    false
+  );
+  const [quietHoursStart, setQuietHoursStart] = useLocalStorage<string>(
+    "pikos:quietHoursStart",
+    "22:00"
+  );
+  const [quietHoursEnd, setQuietHoursEnd] = useLocalStorage<string>("pikos:quietHoursEnd", "08:00");
 
   // Sync notification settings to the Rust scheduler whenever they change.
-  // Wrapped in try/catch — Tauri IPC is unavailable in test/non-Tauri environments.
+  // Wrapped in catch — Tauri IPC is unavailable in test/non-Tauri environments.
   useEffect(() => {
     if (import.meta.env["VITE_TEST_MODE"] === "true") return;
     void import("@tauri-apps/api/core")
@@ -63,23 +85,42 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
           settings: {
             defaultMinutesBefore: defaultReminderMinutes,
             enabled: notificationsEnabled,
+            overdueAlerts,
+            quietHoursEnabled,
+            quietHoursEnd,
+            quietHoursStart,
           },
         })
       )
       .catch(() => {
         // Tauri runtime not available (test environment)
       });
-  }, [notificationsEnabled, defaultReminderMinutes]);
+  }, [
+    notificationsEnabled,
+    defaultReminderMinutes,
+    overdueAlerts,
+    quietHoursEnabled,
+    quietHoursStart,
+    quietHoursEnd,
+  ]);
 
   const value: AppSettingsValue = {
     autoCheckUpdates,
     defaultFolderId,
     defaultReminderMinutes,
     notificationsEnabled,
+    overdueAlerts,
+    quietHoursEnabled,
+    quietHoursEnd,
+    quietHoursStart,
     setAutoCheckUpdates,
     setDefaultFolderId,
     setDefaultReminderMinutes,
     setNotificationsEnabled,
+    setOverdueAlerts,
+    setQuietHoursEnabled,
+    setQuietHoursEnd,
+    setQuietHoursStart,
     setWeekStart,
     weekStart,
   };

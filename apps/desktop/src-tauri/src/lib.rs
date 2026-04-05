@@ -27,7 +27,10 @@ use db::{
     },
 };
 
-use notifications::scheduler::{update_notification_settings, NotificationSettingsState};
+use notifications::scheduler::{
+    check_notification_permission, request_notification_permission,
+    update_notification_settings, NotificationSettingsState,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -199,6 +202,8 @@ pub fn run() {
             delete_page_reminder,
             delete_page_reminders,
             update_notification_settings,
+            request_notification_permission,
+            check_notification_permission,
             // Dev / settings
             backdate_page,
             backup_db,

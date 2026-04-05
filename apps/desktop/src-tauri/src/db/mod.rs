@@ -110,6 +110,9 @@ pub async fn connect_db(path: String, state: tauri::State<'_, DbState>) -> Resul
     // This covers pages created before the frontend started sending content_text.
     backfill_content_text(&pool).await?;
 
+    // Prune notification log entries older than 30 days to prevent unbounded growth.
+    crate::notifications::scheduler::prune_notification_log(&pool).await?;
+
     // Rebuild FTS5 index from the pages content table.
     // For external-content FTS5 tables (content='pages'), the index is not
     // automatically populated from existing rows — triggers only fire on
