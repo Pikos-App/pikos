@@ -222,6 +222,7 @@ export function parseMarkdownVault(files: VaultFile[]): ImportPlan {
       createdAt: frontmatter.created,
       folderKey,
       priority: frontmatter.priority,
+      reminderMinutes: [],
       scheduledDate: frontmatter.scheduled,
       status: frontmatter.status,
       tags: frontmatter.tags,

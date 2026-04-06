@@ -16,6 +16,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import { DateSchedulePopover } from "./DateSchedulePopover";
+import { ReminderPopover } from "./ReminderPopover";
 
 // ─── Byline ───────────────────────────────────────────────────────────────────
 // Flat inline metadata row. No pill backgrounds — reads as a document byline.
@@ -80,6 +81,14 @@ function Byline({
       {/* Date — GOO-34 */}
       <BylineSeparator />
       <DateSchedulePopover page={page} />
+
+      {/* Reminder bell — per-page reminder override */}
+      {!!page.scheduledStart && (
+        <>
+          <BylineSeparator />
+          <ReminderPopover hasSchedule={!!page.scheduledStart} pageId={page.id} />
+        </>
+      )}
 
       {/* Recurrence cadence label */}
       {cadenceLabel && (

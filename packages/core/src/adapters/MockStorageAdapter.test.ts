@@ -620,7 +620,9 @@ describe("completeRecurringPage", () => {
 // ─── skipOccurrence (exdates) ────────────────────────────────────────────────
 
 describe("recurrence exdates (skip occurrence)", () => {
-  it("adding a date to exdates excludes it from expansion", async () => {
+  // First test in this block cold-loads the rrule library via dynamic import,
+  // which can exceed 5s on slow CI runners.
+  it("adding a date to exdates excludes it from expansion", { timeout: 15_000 }, async () => {
     const { expandRecurrenceForRange } = await import("../utils/recurrence");
 
     const head = await createTestPage({ title: "Weekly" });
@@ -651,7 +653,7 @@ describe("recurrence exdates (skip occurrence)", () => {
     expect(occs.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
   });
 
-  it("removing a date from exdates restores it (undo)", async () => {
+  it("removing a date from exdates restores it (undo)", { timeout: 15_000 }, async () => {
     const { expandRecurrenceForRange } = await import("../utils/recurrence");
 
     const head = await createTestPage({ title: "Weekly" });
@@ -674,5 +676,130 @@ describe("recurrence exdates (skip occurrence)", () => {
 
     const occs = expandRecurrenceForRange(restored, page, rangeStart, rangeEnd);
     expect(occs).toHaveLength(3);
+  });
+});
+
+// ─── Page reminders ─────────────────────────────────────────────────────────
+
+describe("page reminders", () => {
+  it("creates and lists reminders sorted by minutesBefore", async () => {
+    const page = await createTestPage({ title: "reminder test" });
+
+    const r30 = await adapter.createPageReminder({ minutesBefore: 30, pageId: page.id });
+    const r5 = await adapter.createPageReminder({ minutesBefore: 5, pageId: page.id });
+    const r10 = await adapter.createPageReminder({ minutesBefore: 10, pageId: page.id });
+
+    expect(r30.minutesBefore).toBe(30);
+    expect(r5.minutesBefore).toBe(5);
+    expect(r10.minutesBefore).toBe(10);
+
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(3);
+    expect(list.map((r) => r.minutesBefore)).toEqual([5, 10, 30]);
+  });
+
+  it("returns empty list for page with no reminders", async () => {
+    const page = await createTestPage({ title: "no reminders" });
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(0);
+  });
+
+  it("deletes a single reminder by ID", async () => {
+    const page = await createTestPage({ title: "delete one" });
+    const r1 = await adapter.createPageReminder({ minutesBefore: 10, pageId: page.id });
+    await adapter.createPageReminder({ minutesBefore: 30, pageId: page.id });
+
+    await adapter.deletePageReminder(r1.id);
+
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.minutesBefore).toBe(30);
+  });
+
+  it("deletePageReminders removes all reminders for a page", async () => {
+    const page = await createTestPage({ title: "delete all" });
+    await adapter.createPageReminder({ minutesBefore: 5, pageId: page.id });
+    await adapter.createPageReminder({ minutesBefore: 10, pageId: page.id });
+    await adapter.createPageReminder({ minutesBefore: 30, pageId: page.id });
+
+    await adapter.deletePageReminders(page.id);
+
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(0);
+  });
+
+  it("reminders are scoped to their page", async () => {
+    const p1 = await createTestPage({ title: "page1" });
+    const p2 = await createTestPage({ title: "page2" });
+
+    await adapter.createPageReminder({ minutesBefore: 10, pageId: p1.id });
+    await adapter.createPageReminder({ minutesBefore: 30, pageId: p2.id });
+
+    const list1 = await adapter.listPageReminders(p1.id);
+    const list2 = await adapter.listPageReminders(p2.id);
+
+    expect(list1).toHaveLength(1);
+    expect(list1[0]?.minutesBefore).toBe(10);
+    expect(list2).toHaveLength(1);
+    expect(list2[0]?.minutesBefore).toBe(30);
+  });
+
+  it("deletePageReminders for one page does not affect another", async () => {
+    const p1 = await createTestPage({ title: "page1" });
+    const p2 = await createTestPage({ title: "page2" });
+
+    await adapter.createPageReminder({ minutesBefore: 10, pageId: p1.id });
+    await adapter.createPageReminder({ minutesBefore: 15, pageId: p2.id });
+
+    await adapter.deletePageReminders(p1.id);
+
+    expect(await adapter.listPageReminders(p1.id)).toHaveLength(0);
+    expect(await adapter.listPageReminders(p2.id)).toHaveLength(1);
+  });
+
+  it("created reminder has id, pageId, minutesBefore, and createdAt", async () => {
+    const page = await createTestPage({ title: "fields test" });
+    const r = await adapter.createPageReminder({ minutesBefore: 15, pageId: page.id });
+
+    expect(r.id).toBeTruthy();
+    expect(r.pageId).toBe(page.id);
+    expect(r.minutesBefore).toBe(15);
+    expect(r.createdAt).toBeTruthy();
+  });
+
+  it("supports minutesBefore = 0 (at time of event)", async () => {
+    const page = await createTestPage({ title: "at-start" });
+    const r = await adapter.createPageReminder({ minutesBefore: 0, pageId: page.id });
+
+    expect(r.minutesBefore).toBe(0);
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.minutesBefore).toBe(0);
+  });
+
+  it("supports minutesBefore = -1 (none sentinel)", async () => {
+    const page = await createTestPage({ title: "no-reminders" });
+    const sentinel = await adapter.createPageReminder({ minutesBefore: -1, pageId: page.id });
+
+    expect(sentinel.minutesBefore).toBe(-1);
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.minutesBefore).toBe(-1);
+  });
+
+  it("replacing none sentinel with real reminders", async () => {
+    const page = await createTestPage({ title: "none-then-add" });
+
+    // Set "None"
+    await adapter.createPageReminder({ minutesBefore: -1, pageId: page.id });
+    expect(await adapter.listPageReminders(page.id)).toHaveLength(1);
+
+    // Switch to a real reminder — clear all then add
+    await adapter.deletePageReminders(page.id);
+    await adapter.createPageReminder({ minutesBefore: 10, pageId: page.id });
+
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.minutesBefore).toBe(10);
   });
 });

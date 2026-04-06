@@ -114,6 +114,8 @@ export interface WorkspaceContextValue {
   ) => () => void;
   /** Batch-import pages and folders from an external source. Returns IDs for undo. */
   importBatch: (data: ImportBatchInput) => Promise<ImportBatchResult>;
+  /** Direct access to the storage adapter — used by features that need raw CRUD (e.g. reminders). */
+  storage: StorageAdapter | null;
 }
 
 /** Input for batch import. */
@@ -127,6 +129,8 @@ export interface ImportBatchItem {
   scheduledDate: string | null;
   createdAt: string | null;
   completedAt: string | null;
+  /** Per-page reminder lead times in minutes (from TickTick import). */
+  reminderMinutes: number[];
 }
 
 export interface ImportBatchFolder {
@@ -911,6 +915,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           timezone: tz,
         });
       }
+
+      // Create per-page reminders if any (from TickTick import)
+      for (const mins of p.reminderMinutes) {
+        await adapter.createPageReminder({ minutesBefore: mins, pageId: page.id });
+      }
     }
 
     // Reload all data to reflect the import
@@ -955,6 +964,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     skipOccurrence,
     softDeleteFolder,
     softDeletePage,
+    storage: workspace ? adapter : null,
     tags,
     updateFolder,
     updatePage,

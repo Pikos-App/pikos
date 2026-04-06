@@ -1,7 +1,7 @@
-// AppSettingsContext — app-wide preferences (week start, default folder).
-// Persisted to localStorage. Consumed by calendar, Quick Add, and Settings panels.
+// AppSettingsContext — app-wide preferences (week start, default folder, notifications).
+// Persisted to localStorage. Consumed by calendar, Quick Add, Settings panels, and scheduler.
 
-import { createContext, type ReactNode, useContext } from "react";
+import { createContext, type ReactNode, useContext, useEffect } from "react";
 
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
@@ -9,6 +9,9 @@ import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 /** 0 = Sunday, 1 = Monday — matches date-fns weekStartsOn. */
 export type WeekStart = 0 | 1;
+
+/** Reminder lead time options in minutes. 0 = "at start time". */
+export type ReminderLeadTime = 0 | 5 | 10 | 15 | 30;
 
 export interface AppSettingsValue {
   weekStart: WeekStart;
@@ -19,6 +22,24 @@ export interface AppSettingsValue {
   /** Whether to automatically check for updates on launch. Default: true. */
   autoCheckUpdates: boolean;
   setAutoCheckUpdates: (v: boolean) => void;
+  /** Global on/off switch for desktop notifications. Default: true. */
+  notificationsEnabled: boolean;
+  setNotificationsEnabled: (v: boolean) => void;
+  /** Default reminder lead time for pages without per-page reminders. Default: 10. */
+  defaultReminderMinutes: ReminderLeadTime;
+  setDefaultReminderMinutes: (v: ReminderLeadTime) => void;
+  /** Overdue alerts — fire once per day for past-due scheduled pages. Default: true. */
+  overdueAlerts: boolean;
+  setOverdueAlerts: (v: boolean) => void;
+  /** Quiet hours — suppress notifications during a time window. Default: off. */
+  quietHoursEnabled: boolean;
+  setQuietHoursEnabled: (v: boolean) => void;
+  /** Quiet hours start time (HH:MM, 24h format). Default: "22:00". */
+  quietHoursStart: string;
+  setQuietHoursStart: (v: string) => void;
+  /** Quiet hours end time (HH:MM, 24h format). Default: "08:00". */
+  quietHoursEnd: string;
+  setQuietHoursEnd: (v: string) => void;
 }
 
 const AppSettingsContext = createContext<AppSettingsValue | null>(null);
@@ -35,12 +56,71 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     "pikos:autoCheckUpdates",
     true
   );
+  const [notificationsEnabled, setNotificationsEnabled] = useLocalStorage<boolean>(
+    "pikos:notificationsEnabled",
+    true
+  );
+  const [defaultReminderMinutes, setDefaultReminderMinutes] = useLocalStorage<ReminderLeadTime>(
+    "pikos:defaultReminderMinutes",
+    10
+  );
+  const [overdueAlerts, setOverdueAlerts] = useLocalStorage<boolean>("pikos:overdueAlerts", true);
+  const [quietHoursEnabled, setQuietHoursEnabled] = useLocalStorage<boolean>(
+    "pikos:quietHoursEnabled",
+    false
+  );
+  const [quietHoursStart, setQuietHoursStart] = useLocalStorage<string>(
+    "pikos:quietHoursStart",
+    "22:00"
+  );
+  const [quietHoursEnd, setQuietHoursEnd] = useLocalStorage<string>("pikos:quietHoursEnd", "08:00");
+
+  // Sync notification settings to the Rust scheduler whenever they change.
+  // Wrapped in catch — Tauri IPC is unavailable in test/non-Tauri environments.
+  useEffect(() => {
+    if (import.meta.env["VITE_TEST_MODE"] === "true") return;
+    void import("@tauri-apps/api/core")
+      .then(({ invoke }) =>
+        invoke("update_notification_settings", {
+          settings: {
+            defaultMinutesBefore: defaultReminderMinutes,
+            enabled: notificationsEnabled,
+            overdueAlerts,
+            quietHoursEnabled,
+            quietHoursEnd,
+            quietHoursStart,
+          },
+        })
+      )
+      .catch(() => {
+        // Tauri runtime not available (test environment)
+      });
+  }, [
+    notificationsEnabled,
+    defaultReminderMinutes,
+    overdueAlerts,
+    quietHoursEnabled,
+    quietHoursStart,
+    quietHoursEnd,
+  ]);
 
   const value: AppSettingsValue = {
     autoCheckUpdates,
     defaultFolderId,
+    defaultReminderMinutes,
+    notificationsEnabled,
+    overdueAlerts,
+    quietHoursEnabled,
+    quietHoursEnd,
+    quietHoursStart,
     setAutoCheckUpdates,
     setDefaultFolderId,
+    setDefaultReminderMinutes,
+    setNotificationsEnabled,
+    setOverdueAlerts,
+    setQuietHoursEnabled,
+    setQuietHoursEnd,
+    setQuietHoursStart,
     setWeekStart,
     weekStart,
   };

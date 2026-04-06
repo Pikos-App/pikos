@@ -5,6 +5,7 @@ import type {
   FolderUpdate,
   NewFolder,
   NewPage,
+  NewPageReminder,
   NewPageSchedule,
   NewRecurrenceRule,
   PageScheduleUpdate,
@@ -21,6 +22,7 @@ import type {
   Page,
   PageFilter,
   PageRecurrenceRule,
+  PageReminder,
   PageSchedule,
   PageSummary,
   SearchResponse,
@@ -72,6 +74,7 @@ export class MockStorageAdapter implements StorageAdapter {
   private folders = new Map<string, Folder>();
   private schedules = new Map<string, PageSchedule>();
   private rules = new Map<string, PageRecurrenceRule>();
+  private reminders = new Map<string, PageReminder>();
   private softDeleted = new Set<string>();
   private softDeletedFolders = new Set<string>();
 
@@ -81,6 +84,7 @@ export class MockStorageAdapter implements StorageAdapter {
     this.folders.clear();
     this.schedules.clear();
     this.rules.clear();
+    this.reminders.clear();
     this.softDeleted.clear();
     this.softDeletedFolders.clear();
   }
@@ -460,6 +464,38 @@ export class MockStorageAdapter implements StorageAdapter {
     }
 
     return Promise.resolve({ clone: toSummary(clone), head: toSummary(head) });
+  }
+
+  // ─── Reminders ──────────────────────────────────────────────────────────────
+
+  createPageReminder(data: NewPageReminder): Promise<PageReminder> {
+    const reminder: PageReminder = {
+      createdAt: now(),
+      id: uuid(),
+      minutesBefore: data.minutesBefore,
+      pageId: data.pageId,
+    };
+    this.reminders.set(reminder.id, reminder);
+    return Promise.resolve(reminder);
+  }
+
+  listPageReminders(pageId: string): Promise<PageReminder[]> {
+    const results = [...this.reminders.values()]
+      .filter((r) => r.pageId === pageId)
+      .sort((a, b) => a.minutesBefore - b.minutesBefore);
+    return Promise.resolve(results);
+  }
+
+  deletePageReminder(id: string): Promise<void> {
+    this.reminders.delete(id);
+    return Promise.resolve();
+  }
+
+  deletePageReminders(pageId: string): Promise<void> {
+    for (const [id, r] of this.reminders) {
+      if (r.pageId === pageId) this.reminders.delete(id);
+    }
+    return Promise.resolve();
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────────

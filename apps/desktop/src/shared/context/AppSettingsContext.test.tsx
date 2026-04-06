@@ -69,3 +69,118 @@ describe("defaultFolderId", () => {
     expect(JSON.parse(localStorage.getItem("pikos:defaultFolderId")!)).toBe("folder-abc");
   });
 });
+
+// ─── Notification settings ──────────────────────────────────────────────────
+
+describe("notificationsEnabled", () => {
+  it("defaults to true", () => {
+    const { result } = setup();
+    expect(result.current.notificationsEnabled).toBe(true);
+  });
+
+  it("can be toggled off", () => {
+    const { result } = setup();
+    act(() => result.current.setNotificationsEnabled(false));
+    expect(result.current.notificationsEnabled).toBe(false);
+  });
+
+  it("persists to localStorage", () => {
+    const { result } = setup();
+    act(() => result.current.setNotificationsEnabled(false));
+    expect(JSON.parse(localStorage.getItem("pikos:notificationsEnabled")!)).toBe(false);
+  });
+
+  it("reads persisted value on mount", () => {
+    localStorage.setItem("pikos:notificationsEnabled", "false");
+    const { result } = setup();
+    expect(result.current.notificationsEnabled).toBe(false);
+  });
+});
+
+describe("defaultReminderMinutes", () => {
+  it("defaults to 10", () => {
+    const { result } = setup();
+    expect(result.current.defaultReminderMinutes).toBe(10);
+  });
+
+  it("can be changed to any valid lead time", () => {
+    const { result } = setup();
+    act(() => result.current.setDefaultReminderMinutes(30));
+    expect(result.current.defaultReminderMinutes).toBe(30);
+    act(() => result.current.setDefaultReminderMinutes(0));
+    expect(result.current.defaultReminderMinutes).toBe(0);
+  });
+
+  it("persists to localStorage", () => {
+    const { result } = setup();
+    act(() => result.current.setDefaultReminderMinutes(5));
+    expect(JSON.parse(localStorage.getItem("pikos:defaultReminderMinutes")!)).toBe(5);
+  });
+
+  it("reads persisted value on mount", () => {
+    localStorage.setItem("pikos:defaultReminderMinutes", "30");
+    const { result } = setup();
+    expect(result.current.defaultReminderMinutes).toBe(30);
+  });
+});
+
+describe("overdueAlerts", () => {
+  it("defaults to true", () => {
+    const { result } = setup();
+    expect(result.current.overdueAlerts).toBe(true);
+  });
+
+  it("can be toggled off and persists", () => {
+    const { result } = setup();
+    act(() => result.current.setOverdueAlerts(false));
+    expect(result.current.overdueAlerts).toBe(false);
+    expect(JSON.parse(localStorage.getItem("pikos:overdueAlerts")!)).toBe(false);
+  });
+
+  it("reads persisted value on mount", () => {
+    localStorage.setItem("pikos:overdueAlerts", "false");
+    const { result } = setup();
+    expect(result.current.overdueAlerts).toBe(false);
+  });
+});
+
+describe("quiet hours", () => {
+  it("defaults to disabled with 22:00-08:00 window", () => {
+    const { result } = setup();
+    expect(result.current.quietHoursEnabled).toBe(false);
+    expect(result.current.quietHoursStart).toBe("22:00");
+    expect(result.current.quietHoursEnd).toBe("08:00");
+  });
+
+  it("can enable quiet hours and change times", () => {
+    const { result } = setup();
+    act(() => result.current.setQuietHoursEnabled(true));
+    act(() => result.current.setQuietHoursStart("21:00"));
+    act(() => result.current.setQuietHoursEnd("07:00"));
+
+    expect(result.current.quietHoursEnabled).toBe(true);
+    expect(result.current.quietHoursStart).toBe("21:00");
+    expect(result.current.quietHoursEnd).toBe("07:00");
+  });
+
+  it("persists all quiet hours settings to localStorage", () => {
+    const { result } = setup();
+    act(() => result.current.setQuietHoursEnabled(true));
+    act(() => result.current.setQuietHoursStart("23:00"));
+    act(() => result.current.setQuietHoursEnd("06:00"));
+
+    expect(JSON.parse(localStorage.getItem("pikos:quietHoursEnabled")!)).toBe(true);
+    expect(JSON.parse(localStorage.getItem("pikos:quietHoursStart")!)).toBe("23:00");
+    expect(JSON.parse(localStorage.getItem("pikos:quietHoursEnd")!)).toBe("06:00");
+  });
+
+  it("reads persisted quiet hours on mount", () => {
+    localStorage.setItem("pikos:quietHoursEnabled", JSON.stringify(true));
+    localStorage.setItem("pikos:quietHoursStart", JSON.stringify("20:00"));
+    localStorage.setItem("pikos:quietHoursEnd", JSON.stringify("07:00"));
+    const { result } = setup();
+    expect(result.current.quietHoursEnabled).toBe(true);
+    expect(result.current.quietHoursStart).toBe("20:00");
+    expect(result.current.quietHoursEnd).toBe("07:00");
+  });
+});

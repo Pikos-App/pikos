@@ -93,6 +93,17 @@ export interface PageRecurrenceRule {
   createdAt: string; // ISO 8601
 }
 
+// ─── PageReminder ────────────────────────────────────────────────────────────
+// Per-page notification reminder. Stored in page_reminders table.
+// minutes_before = 0 means "at start time".
+
+export interface PageReminder {
+  id: string; // UUID
+  pageId: string;
+  minutesBefore: number; // 0 = at start, 5, 10, 15, 30, etc.
+  createdAt: string; // ISO 8601
+}
+
 // ─── FolderNode ───────────────────────────────────────────────────────────────
 // Used by buildFolderTree() in packages/core/src/page.ts.
 // In v1, children is always [] (flat list); the type supports nesting for later.

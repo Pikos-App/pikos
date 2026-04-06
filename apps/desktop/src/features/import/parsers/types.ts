@@ -20,6 +20,8 @@ export interface ImportPage {
   createdAt: string | null;
   /** Raw wikilink targets (e.g. "My Page") — resolved to IDs post-import. */
   wikilinks: string[];
+  /** Per-page reminder lead times in minutes (from TickTick Reminder column). */
+  reminderMinutes: number[];
 }
 
 /** A folder to be created (or matched to an existing one). */

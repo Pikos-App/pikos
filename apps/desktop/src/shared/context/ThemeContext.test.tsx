@@ -37,6 +37,8 @@ afterEach(() => {
   localStorage.clear();
   document.documentElement.classList.remove("dark", "theme-transitioning");
   document.querySelector('meta[name="theme-color"]')?.remove();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("ThemeContext", () => {
