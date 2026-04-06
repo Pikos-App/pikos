@@ -9,6 +9,7 @@ import { useState } from "react";
 
 import { FolderChip, PriorityDropdown } from "@/features/pages";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
+import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
@@ -149,16 +150,19 @@ export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopo
           <FolderChip folders={folders} onChange={handleFolderChange} value={page.folderId} />
         </div>
 
-        {/* Date / time */}
+        {/* Date / time + reminder bell */}
         <div className="flex items-center gap-3">
           <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Date</span>
-          <DateTimePicker
-            endValue={page.scheduledEnd ?? null}
-            isDone={isDone}
-            onChange={handleDateChange}
-            onEndChange={handleEndChange}
-            value={page.scheduledStart ?? null}
-          />
+          <div className="flex items-center gap-2">
+            <DateTimePicker
+              endValue={page.scheduledEnd ?? null}
+              isDone={isDone}
+              onChange={handleDateChange}
+              onEndChange={handleEndChange}
+              value={page.scheduledStart ?? null}
+            />
+            {page.scheduledStart && <ReminderDropdown iconSize={12} pageId={page.id} />}
+          </div>
         </div>
 
         {/* Priority */}

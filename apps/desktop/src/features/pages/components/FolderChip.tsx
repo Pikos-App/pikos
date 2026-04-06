@@ -2,7 +2,7 @@
 // Used in QuickAddDialog and future inline metadata editing.
 
 import type { Folder } from "@pikos/core";
-import { FolderOpen } from "lucide-react";
+import { Check, FolderOpen } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
@@ -41,6 +41,7 @@ export function FolderChip({ folders, onChange, value }: FolderChipProps) {
           <>
             <SearchablePopoverItem
               className={cn(
+                "justify-between",
                 value === null ? "font-medium text-foreground" : "text-muted-foreground"
               )}
               onClick={() => {
@@ -48,23 +49,33 @@ export function FolderChip({ folders, onChange, value }: FolderChipProps) {
                 close();
               }}
             >
-              Inbox
+              <span>Inbox</span>
+              {value === null && (
+                <Check className="shrink-0 text-foreground" size={12} strokeWidth={2.5} />
+              )}
             </SearchablePopoverItem>
 
-            {filteredFolders.map((folder) => (
-              <SearchablePopoverItem
-                className={cn(
-                  value === folder.id ? "font-medium text-foreground" : "text-muted-foreground"
-                )}
-                key={folder.id}
-                onClick={() => {
-                  onChange(folder.id);
-                  close();
-                }}
-              >
-                {folder.name}
-              </SearchablePopoverItem>
-            ))}
+            {filteredFolders.map((folder) => {
+              const isSelected = value === folder.id;
+              return (
+                <SearchablePopoverItem
+                  className={cn(
+                    "justify-between",
+                    isSelected ? "font-medium text-foreground" : "text-muted-foreground"
+                  )}
+                  key={folder.id}
+                  onClick={() => {
+                    onChange(folder.id);
+                    close();
+                  }}
+                >
+                  <span className="truncate">{folder.name}</span>
+                  {isSelected && (
+                    <Check className="shrink-0 text-foreground" size={12} strokeWidth={2.5} />
+                  )}
+                </SearchablePopoverItem>
+              );
+            })}
           </>
         );
       }}

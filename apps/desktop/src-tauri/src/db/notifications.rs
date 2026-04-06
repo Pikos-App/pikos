@@ -40,44 +40,6 @@ pub struct NewPageReminder {
     pub minutes_before: i64,
 }
 
-// ─── NotificationLogEntry ─────────────────────────────────────────────────────
-
-#[derive(sqlx::FromRow)]
-struct NotificationLogRow {
-    id: String,
-    page_id: Option<String>,
-    schedule_id: Option<String>,
-    #[sqlx(rename = "type")]
-    kind: String,
-    fired_at: String,
-    action: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NotificationLogEntry {
-    pub id: String,
-    pub page_id: Option<String>,
-    pub schedule_id: Option<String>,
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub fired_at: String,
-    pub action: Option<String>,
-}
-
-impl From<NotificationLogRow> for NotificationLogEntry {
-    fn from(row: NotificationLogRow) -> Self {
-        NotificationLogEntry {
-            id: row.id,
-            page_id: row.page_id,
-            schedule_id: row.schedule_id,
-            kind: row.kind,
-            fired_at: row.fired_at,
-            action: row.action,
-        }
-    }
-}
-
 // ─── PageReminder commands ───────────────────────────────────────────────────
 
 #[tauri::command]

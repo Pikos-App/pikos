@@ -3,6 +3,13 @@
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
@@ -16,19 +23,9 @@ const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
   { id: 30, label: "30 min before" },
 ];
 
-const QUIET_HOUR_OPTIONS = [
-  "06:00",
-  "07:00",
-  "08:00",
-  "09:00",
-  "10:00",
-  "18:00",
-  "19:00",
-  "20:00",
-  "21:00",
-  "22:00",
-  "23:00",
-];
+const QUIET_HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) =>
+  `${String(i).padStart(2, "0")}:00`
+);
 
 function formatTime24to12(time: string): string {
   const parts = time.split(":").map(Number);
@@ -59,11 +56,20 @@ export function NotificationSettings() {
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
 
   useEffect(() => {
-    void import("@tauri-apps/api/core")
-      .then(({ invoke }) => invoke<boolean>("check_notification_permission"))
-      .then(setPermissionGranted)
-      .catch(() => setPermissionGranted(null));
+    void checkPermission();
   }, []);
+
+  async function checkPermission() {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const granted = await invoke<boolean>("check_notification_permission");
+      setPermissionGranted(granted);
+      return granted;
+    } catch {
+      setPermissionGranted(null);
+      return null;
+    }
+  }
 
   async function handleRequestPermission() {
     try {
@@ -72,6 +78,17 @@ export function NotificationSettings() {
       setPermissionGranted(granted);
     } catch {
       // Platform doesn't support permission requests or Tauri unavailable
+    }
+  }
+
+  // Request permission when the user enables notifications
+  async function handleToggleEnabled(enabled: boolean) {
+    setNotificationsEnabled(enabled);
+    if (enabled) {
+      const alreadyGranted = await checkPermission();
+      if (!alreadyGranted) {
+        await handleRequestPermission();
+      }
     }
   }
 
@@ -116,7 +133,10 @@ export function NotificationSettings() {
                 Send desktop reminders for upcoming scheduled pages.
               </p>
             </div>
-            <Switch checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
+            <Switch
+              checked={notificationsEnabled}
+              onCheckedChange={(v) => void handleToggleEnabled(v)}
+            />
           </div>
 
           {/* Default lead time */}
@@ -182,31 +202,31 @@ export function NotificationSettings() {
 
             {quietHoursEnabled && (
               <div className="mt-3 flex items-center gap-2">
-                <select
-                  aria-label="Quiet hours start"
-                  className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-                  onChange={(e) => setQuietHoursStart(e.target.value)}
-                  value={quietHoursStart}
-                >
-                  {QUIET_HOUR_OPTIONS.map((t) => (
-                    <option key={t} value={t}>
-                      {formatTime24to12(t)}
-                    </option>
-                  ))}
-                </select>
+                <Select onValueChange={setQuietHoursStart} value={quietHoursStart}>
+                  <SelectTrigger aria-label="Quiet hours start" className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {QUIET_HOUR_OPTIONS.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {formatTime24to12(t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <span className="text-xs text-muted-foreground">to</span>
-                <select
-                  aria-label="Quiet hours end"
-                  className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-                  onChange={(e) => setQuietHoursEnd(e.target.value)}
-                  value={quietHoursEnd}
-                >
-                  {QUIET_HOUR_OPTIONS.map((t) => (
-                    <option key={t} value={t}>
-                      {formatTime24to12(t)}
-                    </option>
-                  ))}
-                </select>
+                <Select onValueChange={setQuietHoursEnd} value={quietHoursEnd}>
+                  <SelectTrigger aria-label="Quiet hours end" className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {QUIET_HOUR_OPTIONS.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {formatTime24to12(t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>

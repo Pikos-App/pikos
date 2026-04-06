@@ -6,7 +6,7 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 
 ## Refinement
 
-- [ ] Refine tutorial content (recommended flow, new features, keyboard shortcuts for non-mac)
+- [ ] Refine tutorial content (recommended flow, new features, keyboard shortcuts for non-mac, recurring schedule, notification settings)
 - [ ] Compact page block children rendering
 - [ ] Double check multi day page blocks
 - [ ] Multi-select drag doesn't reorder all selected (drop to calendar, delete, move to folder work)
@@ -33,8 +33,6 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 - [ ] Folder name normalization option (as-is / lowercase / Title Case)
 - [ ] Collapse nested folder prefixes option
 - [ ] Undo toast in main app (currently only via Settings > General banner)
-- [ ] RRULE mapping (after recurring events land) — TickTick `Repeat` column
-- [x] Notification/reminder mapping — TickTick Reminder column parsed (ISO 8601 durations → page_reminders)
 
 ## Distribution & Public Launch
 
@@ -50,21 +48,15 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 - [ ] 🤖 GOO-53-DL: Cloudflare Pages Function for /download (redirect to latest GitHub Release)
 - [ ] 🧑🤖 GOO-53-PUBLIC: Rename /open → /public across marketing site (routes, links, copy) and audit for "open source" language that should say "source-available"
 
-## Recurring Events & Notifications
-
-- [ ] **GOO-60** Recurring event creation/editing UI (backend + NLP + calendar expansion done, needs UI)
-- [x] **GOO-87** Notification system — OS desktop notifications, per-page reminders, overdue alerts, quiet hours, settings UI
-
 ### Notifications — Post-Launch
 
 - [ ] OS notification action buttons (Mark Done) via `tauri-plugin-notification` action categories — requires platform-specific testing (macOS/Windows/Linux)
 - [ ] Notification sound toggle — silent visual-only option, `.sound()` on notification builder
-- [ ] Daily digest — morning summary of today's scheduled pages (opt-in, spec in `features/notifications.md`)
 
 ## Known Bugs
 
-- [x] Editor: typing "1." as first content causes text to disappear — WebKitInputRuleFix extension forces DOM repaint after node-type change
-- [x] Holding arrow key in large page list stops responding — rAF throttle on arrow key repeats in PageListPanel
+- [ ] Editor: typing "1." as first content causes text to disappear — WebKitInputRuleFix extension forces DOM repaint after node-type change
+- [ ] Holding arrow key in large page list stops responding — rAF throttle on arrow key repeats in PageListPanel
 
 
 ## Recurring Schedule QA

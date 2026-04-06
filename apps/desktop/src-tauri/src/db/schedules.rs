@@ -253,6 +253,7 @@ pub async fn update_page_schedule(
         sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE page_schedules SET ");
     let mut sep = builder.separated(", ");
     let mut has_updates = false;
+    let start_changed = updates.scheduled_start.is_some();
 
     if let Some(v) = updates.scheduled_start {
         sep.push("scheduled_start = ");
@@ -287,6 +288,18 @@ pub async fn update_page_schedule(
         .execute(&pool)
         .await
         .map_err(|e| e.to_string())?;
+
+    // If scheduled_start changed, clear reminder notification_log entries for
+    // this schedule so the scheduler can re-fire at the new time.
+    if start_changed {
+        sqlx::query(
+            "DELETE FROM notification_log WHERE schedule_id = ? AND type = 'reminder'",
+        )
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
 
     let schedule = fetch_schedule(&pool, &id).await?;
     refresh_schedule_denorm(&pool, &schedule.page_id).await?;

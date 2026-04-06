@@ -2,11 +2,12 @@
 //!
 //! Runs as a Tokio task on the Tauri async runtime (not JS setInterval),
 //! so it stays alive even when the webview is backgrounded or throttled.
-//! Every 30 seconds it queries SQLite for due reminders and fires OS
-//! desktop notifications via `tauri-plugin-notification`.
+//! Ticks once per minute, aligned to the clock minute boundary, and queries
+//! SQLite for due reminders, firing OS desktop notifications.
 
 use std::time::Duration;
 
+use chrono::Timelike;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_notification::NotificationExt;
@@ -66,7 +67,7 @@ pub async fn update_notification_settings(
 #[tauri::command]
 pub async fn request_notification_permission(app: tauri::AppHandle) -> Result<bool, String> {
     match app.notification().request_permission() {
-        Ok(granted) => Ok(granted),
+        Ok(state) => Ok(state == tauri_plugin_notification::PermissionState::Granted),
         Err(e) => Err(e.to_string()),
     }
 }
@@ -84,11 +85,39 @@ pub async fn check_notification_permission(app: tauri::AppHandle) -> Result<bool
 
 /// Main scheduler loop — spawned from `lib.rs` setup.
 pub async fn run(app: AppHandle) {
-    let mut interval = tokio::time::interval(Duration::from_secs(30));
+    // Wait for DB to be connected before starting the scheduler loop.
+    // The frontend calls connect_db after mount, so we poll until it's ready.
     loop {
-        interval.tick().await;
-        if let Err(e) = check_and_fire(&app).await {
-            eprintln!("notification scheduler error: {e}");
+        {
+            let db_state = app.state::<crate::db::DbState>();
+            if db_state.get_pool().await.is_ok() {
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+
+    // Request notification permission on startup. On macOS this triggers
+    // the OS permission dialog if not yet determined.
+    match app.notification().request_permission() {
+        Ok(state) => eprintln!("[notifications] permission: {state:?}"),
+        Err(e) => eprintln!("[notifications] permission request failed: {e}"),
+    }
+
+    // Tick once per minute, aligned to the clock minute boundary.
+    eprintln!("[notifications] scheduler started, DB ready");
+    loop {
+        let now = chrono::Local::now();
+        let secs_until_next_minute = 60 - now.second() as u64;
+        let nanos_offset = now.nanosecond() as u64;
+        let wait = Duration::from_secs(secs_until_next_minute)
+            - Duration::from_nanos(nanos_offset.min(secs_until_next_minute * 1_000_000_000));
+        tokio::time::sleep(wait).await;
+
+        eprintln!("[notifications] tick at {}", chrono::Local::now().format("%H:%M:%S"));
+        match check_and_fire(&app).await {
+            Ok(()) => {}
+            Err(e) => eprintln!("[notifications] error: {e}"),
         }
     }
 }
@@ -130,14 +159,17 @@ fn is_quiet_hours(settings: &NotificationSettings) -> bool {
 async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
     let settings = {
         let state = app.state::<NotificationSettingsState>();
-        state.0.lock().await.clone()
+        let guard = state.0.lock().await;
+        guard.clone()
     };
 
     if !settings.enabled {
+        eprintln!("[notifications] disabled, skipping");
         return Ok(());
     }
 
     if is_quiet_hours(&settings) {
+        eprintln!("[notifications] quiet hours, skipping");
         return Ok(());
     }
 
@@ -150,11 +182,16 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
     };
 
     let now = chrono::Local::now();
-    let now_ts = now.format("%Y-%m-%dT%H:%M:%S").to_string();
-    let window_start = (now - chrono::Duration::seconds(30))
-        .format("%Y-%m-%dT%H:%M:%S")
+    // Use space separator to match SQLite's datetime() output format.
+    // datetime() returns 'YYYY-MM-DD HH:MM:SS' — BETWEEN comparisons are
+    // lexicographic, so both sides must use the same separator.
+    let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let window_start = (now - chrono::Duration::seconds(60))
+        .format("%Y-%m-%d %H:%M:%S")
         .to_string();
     let today = now.format("%Y-%m-%d").to_string();
+
+    eprintln!("[notifications] checking window [{window_start}] to [{now_ts}], default_min={}", settings.default_minutes_before);
 
     // 1. Fire reminders for pages with explicit page_reminders rows
     fire_explicit_reminders(app, &pool, &window_start, &now_ts).await?;
@@ -201,7 +238,9 @@ async fn fire_explicit_reminders(
     .await
     .map_err(|e| e.to_string())?;
 
+    eprintln!("[notifications] explicit reminders found: {}", due.len());
     for row in due {
+        eprintln!("[notifications]   firing for '{}' (schedule={}, mins_before={})", row.title, row.schedule_id, row.minutes_before);
         fire_reminder(app, pool, &row).await?;
     }
 
@@ -245,7 +284,9 @@ async fn fire_default_reminders(
     .await
     .map_err(|e| e.to_string())?;
 
+    eprintln!("[notifications] default reminders found: {}", due.len());
     for row in due {
+        eprintln!("[notifications]   firing for '{}' (schedule={}, mins_before={})", row.title, row.schedule_id, row.minutes_before);
         fire_reminder(app, pool, &row).await?;
     }
 
@@ -260,7 +301,7 @@ async fn fire_overdue_alerts(
     today: &str,
 ) -> Result<(), String> {
     let recent_cutoff = (chrono::Local::now() - chrono::Duration::minutes(5))
-        .format("%Y-%m-%dT%H:%M:%S")
+        .format("%Y-%m-%d %H:%M:%S")
         .to_string();
 
     let overdue: Vec<OverduePage> = sqlx::query_as(
@@ -270,8 +311,8 @@ async fn fire_overdue_alerts(
          WHERE p.status != 'done'
            AND p.deleted_at IS NULL
            AND ps.status != 'done'
-           AND ps.scheduled_start < ?
-           AND p.created_at < ?
+           AND datetime(ps.scheduled_start) < datetime(?)
+           AND datetime(p.created_at) < datetime(?)
            AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
              WHERE nl.page_id = ps.page_id
@@ -318,15 +359,22 @@ async fn fire_overdue_alerts(
 
 // ─── Delivery ────────────────────────────────────────────────────────────────
 
-/// Send an OS desktop notification.
+/// Send an OS desktop notification via tauri-plugin-notification.
+/// Requires a properly signed app bundle — unsigned dev builds will
+/// silently drop notifications. Use osascript fallback for dev testing.
 fn deliver(app: &AppHandle, title: &str, body: &str) {
-    let _ = app
+    match app
         .notification()
         .builder()
         .title(title)
         .body(body)
+        .sound("default")
         .group("pikos-reminders")
-        .show();
+        .show()
+    {
+        Ok(()) => eprintln!("[notifications] delivered: {title}"),
+        Err(e) => eprintln!("[notifications] delivery failed: {e}"),
+    }
 }
 
 fn format_lead_time(minutes: i64) -> String {
@@ -368,8 +416,8 @@ async fn fire_reminder(
 
     // Log to prevent re-firing
     let log_id = uuid::Uuid::new_v4().to_string();
-    let fired_at = chrono::Utc::now()
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+    let fired_at = chrono::Local::now()
+        .format("%Y-%m-%d %H:%M:%S")
         .to_string();
 
     sqlx::query(
@@ -391,10 +439,10 @@ async fn fire_reminder(
 
 /// Prune notification_log entries older than 30 days.
 pub async fn prune_notification_log(pool: &SqlitePool) -> Result<(), String> {
-    let cutoff = (chrono::Utc::now() - chrono::Duration::days(30))
-        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+    let cutoff = (chrono::Local::now() - chrono::Duration::days(30))
+        .format("%Y-%m-%d %H:%M:%S")
         .to_string();
-    sqlx::query("DELETE FROM notification_log WHERE fired_at < ?")
+    sqlx::query("DELETE FROM notification_log WHERE datetime(fired_at) < datetime(?)")
         .bind(&cutoff)
         .execute(pool)
         .await

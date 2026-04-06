@@ -2,6 +2,7 @@
 // Linear-inspired priority selector. Used in MetadataHeader byline + PageListItem badge.
 
 import type { PagePriority } from "@pikos/core";
+import { Check } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -105,16 +106,25 @@ export function PriorityDropdown({
       <DropdownMenuContent align="start" className="w-44">
         {ALL_PRIORITIES.map((p) => {
           const c = PRIORITY_CONFIG[p];
+          const isSelected = priority === p;
           return (
             <DropdownMenuItem
-              className={cn("gap-2", priority === p && "font-medium")}
+              className={cn(
+                "justify-between",
+                isSelected ? "font-medium text-foreground" : "text-muted-foreground"
+              )}
               key={p}
               onSelect={() => onSelect(p)}
             >
-              <span className={cn("w-5 shrink-0 text-center text-sm font-semibold", c.className)}>
-                {c.icon}
+              <span className="flex items-center gap-2">
+                <span className={cn("w-5 shrink-0 text-center text-sm font-semibold", c.className)}>
+                  {c.icon}
+                </span>
+                <span>{c.label}</span>
               </span>
-              <span>{c.label}</span>
+              {isSelected && (
+                <Check className="shrink-0 text-foreground" size={12} strokeWidth={2.5} />
+              )}
             </DropdownMenuItem>
           );
         })}

@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FolderChip, PriorityDropdown, TagsPopover } from "@/features/pages";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
+import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
@@ -16,7 +17,6 @@ import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import { DateSchedulePopover } from "./DateSchedulePopover";
-import { ReminderPopover } from "./ReminderPopover";
 
 // ─── Byline ───────────────────────────────────────────────────────────────────
 // Flat inline metadata row. No pill backgrounds — reads as a document byline.
@@ -86,7 +86,7 @@ function Byline({
       {!!page.scheduledStart && (
         <>
           <BylineSeparator />
-          <ReminderPopover hasSchedule={!!page.scheduledStart} pageId={page.id} />
+          <ReminderDropdown pageId={page.id} />
         </>
       )}
 
