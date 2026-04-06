@@ -1,0 +1,29 @@
+name: Close external PRs
+
+on:
+  pull_request_target:
+    types: [opened]
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    # Only close PRs from non-collaborators
+    if: github.event.pull_request.author_association != 'OWNER' && github.event.pull_request.author_association != 'MEMBER' && github.event.pull_request.author_association != 'COLLABORATOR'
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Thanks for the interest, but Pikos doesn't accept pull requests. This is a source-available project maintained by one person — PRs will be closed automatically.\n\nIf you've found a bug or have a suggestion, please [open an issue](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/new/choose) instead. Describe what's wrong and the fix — that's just as helpful.\n\nSee [CONTRIBUTING.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/.github/CONTRIBUTING.md) for details.`
+            });
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              state: 'closed'
+            });

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Feature Board
+    url: https://feedback.pikos.app
+    about: Browse and upvote feature requests
+  - name: General Feedback
+    url: mailto:hey@pikos.app?subject=Pikos%20Feedback
+    about: Send feedback directly via email
