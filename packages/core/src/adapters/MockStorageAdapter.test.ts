@@ -774,4 +774,30 @@ describe("page reminders", () => {
     expect(list).toHaveLength(1);
     expect(list[0]?.minutesBefore).toBe(0);
   });
+
+  it("supports minutesBefore = -1 (none sentinel)", async () => {
+    const page = await createTestPage({ title: "no-reminders" });
+    const sentinel = await adapter.createPageReminder({ minutesBefore: -1, pageId: page.id });
+
+    expect(sentinel.minutesBefore).toBe(-1);
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.minutesBefore).toBe(-1);
+  });
+
+  it("replacing none sentinel with real reminders", async () => {
+    const page = await createTestPage({ title: "none-then-add" });
+
+    // Set "None"
+    await adapter.createPageReminder({ minutesBefore: -1, pageId: page.id });
+    expect(await adapter.listPageReminders(page.id)).toHaveLength(1);
+
+    // Switch to a real reminder — clear all then add
+    await adapter.deletePageReminders(page.id);
+    await adapter.createPageReminder({ minutesBefore: 10, pageId: page.id });
+
+    const list = await adapter.listPageReminders(page.id);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.minutesBefore).toBe(10);
+  });
 });

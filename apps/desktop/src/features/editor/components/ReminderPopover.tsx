@@ -1,6 +1,7 @@
 // ReminderPopover — bell icon in the metadata byline.
 // Shows per-page reminder configuration. If no reminders are set, the global
-// default applies. Users can add specific lead times or reset to default.
+// default applies. Users can add specific lead times, set "None" to suppress
+// all reminders for this page, or reset to the global default.
 
 import type { PageReminder } from "@pikos/core";
 import { Bell, BellOff, X } from "lucide-react";
@@ -12,6 +13,9 @@ import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { ReminderLeadTime } from "@/shared/context/AppSettingsContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+
+/** Sentinel value: minutes_before = -1 means "no reminders for this page." */
+const NONE_SENTINEL = -1;
 
 const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
   { id: 0, label: "At time of event" },
@@ -41,20 +45,39 @@ export function ReminderPopover({ hasSchedule, pageId }: ReminderPopoverProps) {
 
   if (!hasSchedule) return null;
 
-  const hasCustomReminders = reminders.length > 0;
+  const isNone = reminders.length === 1 && reminders[0]?.minutesBefore === NONE_SENTINEL;
+  const activeReminders = reminders.filter((r) => r.minutesBefore !== NONE_SENTINEL);
+  const hasCustomReminders = activeReminders.length > 0;
 
   async function handleAdd(minutes: ReminderLeadTime) {
     if (!storage) return;
-    // Don't add duplicate
-    if (reminders.some((r) => r.minutesBefore === minutes)) return;
+    if (activeReminders.some((r) => r.minutesBefore === minutes)) return;
+    // If currently "None", clear the sentinel first
+    if (isNone) {
+      await storage.deletePageReminders(pageId);
+    }
     const created = await storage.createPageReminder({ minutesBefore: minutes, pageId });
-    setReminders((prev) => [...prev, created].sort((a, b) => a.minutesBefore - b.minutesBefore));
+    setReminders((prev) =>
+      [...prev.filter((r) => r.minutesBefore !== NONE_SENTINEL), created].sort(
+        (a, b) => a.minutesBefore - b.minutesBefore
+      )
+    );
   }
 
   async function handleRemove(id: string) {
     if (!storage) return;
     await storage.deletePageReminder(id);
     setReminders((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  async function handleSetNone() {
+    if (!storage) return;
+    await storage.deletePageReminders(pageId);
+    const sentinel = await storage.createPageReminder({
+      minutesBefore: NONE_SENTINEL,
+      pageId,
+    });
+    setReminders([sentinel]);
   }
 
   async function handleResetToDefault() {
@@ -67,6 +90,14 @@ export function ReminderPopover({ hasSchedule, pageId }: ReminderPopoverProps) {
     LEAD_TIME_OPTIONS.find((o) => o.id === defaultReminderMinutes)?.label ??
     `${defaultReminderMinutes} min before`;
 
+  const tooltipText = !notificationsEnabled
+    ? "Notifications disabled"
+    : isNone
+      ? "Reminders off for this page"
+      : hasCustomReminders
+        ? `Custom reminders (${activeReminders.length})`
+        : `Default: ${defaultLabel}`;
+
   return (
     <Popover onOpenChange={setOpen} open={open}>
       <Tooltip>
@@ -76,10 +107,12 @@ export function ReminderPopover({ hasSchedule, pageId }: ReminderPopoverProps) {
               aria-label="Page reminders"
               className={cn(
                 "inline-flex items-center gap-1 rounded transition-colors hover:text-muted-foreground focus:outline-none",
-                !notificationsEnabled && "opacity-40"
+                (!notificationsEnabled || isNone) && "opacity-40"
               )}
             >
-              {hasCustomReminders ? (
+              {isNone ? (
+                <BellOff className="h-3.5 w-3.5" />
+              ) : hasCustomReminders ? (
                 <Bell className="h-3.5 w-3.5 fill-current" />
               ) : (
                 <Bell className="h-3.5 w-3.5" />
@@ -87,13 +120,7 @@ export function ReminderPopover({ hasSchedule, pageId }: ReminderPopoverProps) {
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent side="bottom">
-          {!notificationsEnabled
-            ? "Notifications disabled"
-            : hasCustomReminders
-              ? `Custom reminders (${reminders.length})`
-              : `Default: ${defaultLabel}`}
-        </TooltipContent>
+        <TooltipContent side="bottom">{tooltipText}</TooltipContent>
       </Tooltip>
 
       <PopoverContent align="start" className="w-56 p-0" sideOffset={8}>
@@ -106,10 +133,12 @@ export function ReminderPopover({ hasSchedule, pageId }: ReminderPopoverProps) {
             </p>
           )}
 
-          {/* Current reminders (custom or default label) */}
-          {hasCustomReminders ? (
+          {/* Current state display */}
+          {isNone ? (
+            <p className="mb-2 text-xs text-muted-foreground">None — no reminders for this page</p>
+          ) : hasCustomReminders ? (
             <div className="mb-2 flex flex-wrap gap-1">
-              {reminders.map((r) => {
+              {activeReminders.map((r) => {
                 const label =
                   LEAD_TIME_OPTIONS.find((o) => o.id === r.minutesBefore)?.label ??
                   `${r.minutesBefore} min`;
@@ -137,7 +166,7 @@ export function ReminderPopover({ hasSchedule, pageId }: ReminderPopoverProps) {
           {/* Add options */}
           <div className="space-y-0.5">
             {LEAD_TIME_OPTIONS.filter(
-              (opt) => !reminders.some((r) => r.minutesBefore === opt.id)
+              (opt) => !activeReminders.some((r) => r.minutesBefore === opt.id)
             ).map((opt) => (
               <button
                 className="flex w-full items-center rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -149,13 +178,24 @@ export function ReminderPopover({ hasSchedule, pageId }: ReminderPopoverProps) {
             ))}
           </div>
 
-          {/* Reset to default */}
-          {hasCustomReminders && (
+          {/* None option */}
+          {!isNone && (
             <button
               className="mt-2 flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              onClick={() => void handleResetToDefault()}
+              onClick={() => void handleSetNone()}
             >
               <BellOff className="h-3 w-3" />
+              None
+            </button>
+          )}
+
+          {/* Reset to default */}
+          {(hasCustomReminders || isNone) && (
+            <button
+              className="mt-0.5 flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => void handleResetToDefault()}
+            >
+              <Bell className="h-3 w-3" />
               Reset to default
             </button>
           )}

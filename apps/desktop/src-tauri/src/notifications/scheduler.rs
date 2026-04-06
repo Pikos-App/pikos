@@ -186,6 +186,7 @@ async fn fire_explicit_reminders(
          WHERE p.status != 'done'
            AND p.deleted_at IS NULL
            AND ps.status != 'done'
+           AND pr.minutes_before >= 0
            AND datetime(ps.scheduled_start, '-' || pr.minutes_before || ' minutes')
                BETWEEN ? AND ?
            AND NOT EXISTS (
