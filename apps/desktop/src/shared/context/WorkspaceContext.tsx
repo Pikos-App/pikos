@@ -129,6 +129,8 @@ export interface ImportBatchItem {
   scheduledDate: string | null;
   createdAt: string | null;
   completedAt: string | null;
+  /** Per-page reminder lead times in minutes (from TickTick import). */
+  reminderMinutes: number[];
 }
 
 export interface ImportBatchFolder {
@@ -912,6 +914,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           scheduledStart: p.scheduledDate,
           timezone: tz,
         });
+      }
+
+      // Create per-page reminders if any (from TickTick import)
+      for (const mins of p.reminderMinutes) {
+        await adapter.createPageReminder({ minutesBefore: mins, pageId: page.id });
       }
     }
 

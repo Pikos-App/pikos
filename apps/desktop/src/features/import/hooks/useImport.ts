@@ -177,6 +177,7 @@ export function useImport() {
           createdAt: p.createdAt,
           folderKey: p.folderKey,
           priority: p.priority,
+          reminderMinutes: p.reminderMinutes,
           scheduledDate: p.scheduledDate,
           status: p.status,
           tags: p.tags,

@@ -100,6 +100,33 @@ function detectSource(headers: string[]): CSVSource {
   return "unknown";
 }
 
+// ─── ISO 8601 duration parsing ───────────────────────────────────────────────
+
+/**
+ * Parse an ISO 8601 duration offset to minutes.
+ * TickTick uses: PT0S (on time), -PT5M (5 min before), -PT30M, -PT1H, -P1D, etc.
+ * Returns minutes_before (>= 0), or null if unparseable.
+ */
+export function parseDurationToMinutes(duration: string): number | null {
+  const trimmed = duration.trim();
+  if (!trimmed) return null;
+
+  // Strip leading minus — TickTick uses negative durations for "before"
+  const normalized = trimmed.startsWith("-") ? trimmed.slice(1) : trimmed;
+
+  // Match ISO 8601 duration: P[nD][T[nH][nM][nS]]
+  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(normalized);
+  if (!match) return null;
+
+  const days = Number(match[1] ?? 0);
+  const hours = Number(match[2] ?? 0);
+  const minutes = Number(match[3] ?? 0);
+  // Seconds: round to nearest minute (PT0S = 0 min)
+  const seconds = Number(match[4] ?? 0);
+
+  return days * 1440 + hours * 60 + minutes + Math.round(seconds / 60);
+}
+
 // ─── TickTick parser ──────────────────────────────────────────────────────────
 
 function parseTickTick(rows: Record<string, string>[]): ImportPlan {
@@ -161,6 +188,17 @@ function parseTickTick(rows: Record<string, string>[]): ImportPlan {
       if (dateMatch) createdAt = dateMatch[0];
     }
 
+    // Reminders: TickTick uses ISO 8601 durations (e.g. "PT0S", "-PT5M", "-PT1H")
+    const rawReminder = row["Reminder"] ?? "";
+    const reminderMinutes: number[] = [];
+    if (rawReminder) {
+      // TickTick may have multiple reminders separated by commas or semicolons
+      for (const part of rawReminder.split(/[,;]/)) {
+        const mins = parseDurationToMinutes(part);
+        if (mins !== null) reminderMinutes.push(mins);
+      }
+    }
+
     // Content
     const body = row["Content"] ?? "";
 
@@ -169,6 +207,7 @@ function parseTickTick(rows: Record<string, string>[]): ImportPlan {
       createdAt,
       folderKey,
       priority,
+      reminderMinutes,
       scheduledDate,
       status,
       tags,
@@ -257,6 +296,7 @@ function parseTodoist(rows: Record<string, string>[]): ImportPlan {
       createdAt: null,
       folderKey,
       priority,
+      reminderMinutes: [],
       scheduledDate,
       status: "not_started", // Todoist CSV export typically only includes active tasks
       tags,

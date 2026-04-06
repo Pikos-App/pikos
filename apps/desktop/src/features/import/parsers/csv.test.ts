@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseCSV, parseCSVImport } from "./csv";
+import { parseCSV, parseCSVImport, parseDurationToMinutes } from "./csv";
 
 // ─── parseCSV ─────────────────────────────────────────────────────────────────
 
@@ -147,6 +147,82 @@ note,Extra context,,1,,Project,`;
     const plan = parseCSVImport(csv);
     expect(plan.pages).toHaveLength(1);
     expect(plan.pages[0]!.body).toBe("Original description\n\nExtra context");
+  });
+});
+
+// ─── parseDurationToMinutes ──────────────────────────────────────────────────
+
+describe("parseDurationToMinutes", () => {
+  it("parses PT0S (on time) to 0", () => {
+    expect(parseDurationToMinutes("PT0S")).toBe(0);
+  });
+
+  it("parses -PT5M to 5", () => {
+    expect(parseDurationToMinutes("-PT5M")).toBe(5);
+  });
+
+  it("parses -PT30M to 30", () => {
+    expect(parseDurationToMinutes("-PT30M")).toBe(30);
+  });
+
+  it("parses -PT1H to 60", () => {
+    expect(parseDurationToMinutes("-PT1H")).toBe(60);
+  });
+
+  it("parses -P1D to 1440", () => {
+    expect(parseDurationToMinutes("-P1D")).toBe(1440);
+  });
+
+  it("parses combined duration -P1DT2H30M", () => {
+    expect(parseDurationToMinutes("-P1DT2H30M")).toBe(1440 + 120 + 30);
+  });
+
+  it("returns null for empty string", () => {
+    expect(parseDurationToMinutes("")).toBeNull();
+  });
+
+  it("returns null for garbage", () => {
+    expect(parseDurationToMinutes("not a duration")).toBeNull();
+  });
+
+  it("handles positive duration (no leading minus)", () => {
+    expect(parseDurationToMinutes("PT15M")).toBe(15);
+  });
+});
+
+// ─── TickTick reminder import ────────────────────────────────────────────────
+
+describe("parseCSVImport — TickTick reminders", () => {
+  it("parses Reminder column into reminderMinutes", () => {
+    const csv = `Folder Name,Title,Status,Priority,Reminder,Due Date
+Work,Meeting,0,0,-PT10M,2025-06-15`;
+
+    const plan = parseCSVImport(csv);
+    expect(plan.pages[0]!.reminderMinutes).toEqual([10]);
+  });
+
+  it("handles multiple reminders separated by semicolons", () => {
+    const csv = `Folder Name,Title,Status,Priority,Reminder,Due Date
+Work,Meeting,0,0,"-PT5M;-PT30M",2025-06-15`;
+
+    const plan = parseCSVImport(csv);
+    expect(plan.pages[0]!.reminderMinutes).toEqual([5, 30]);
+  });
+
+  it("defaults to empty array when no Reminder column", () => {
+    const csv = `Folder Name,Title,Status,Priority
+Work,Task,0,0`;
+
+    const plan = parseCSVImport(csv);
+    expect(plan.pages[0]!.reminderMinutes).toEqual([]);
+  });
+
+  it("skips unparseable reminder values", () => {
+    const csv = `Folder Name,Title,Status,Priority,Reminder
+Work,Task,0,0,garbage`;
+
+    const plan = parseCSVImport(csv);
+    expect(plan.pages[0]!.reminderMinutes).toEqual([]);
   });
 });
 

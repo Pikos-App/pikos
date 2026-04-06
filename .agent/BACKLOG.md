@@ -34,7 +34,7 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 - [ ] Collapse nested folder prefixes option
 - [ ] Undo toast in main app (currently only via Settings > General banner)
 - [ ] RRULE mapping (after recurring events land) — TickTick `Repeat` column
-- [x] Notification/reminder mapping — tracked under "Notifications — Post-Launch"
+- [x] Notification/reminder mapping — TickTick Reminder column parsed (ISO 8601 durations → page_reminders)
 
 ## Distribution & Public Launch
 
@@ -59,7 +59,6 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 - [ ] OS notification action buttons (Mark Done) via `tauri-plugin-notification` action categories — requires platform-specific testing (macOS/Windows/Linux)
 - [ ] Notification sound toggle — silent visual-only option, `.sound()` on notification builder
 - [ ] Daily digest — morning summary of today's scheduled pages (opt-in, spec in `features/notifications.md`)
-- [ ] TickTick `Reminder` column import mapping — parse ISO 8601 durations to `page_reminders.minutes_before`
 
 ## Known Bugs
 
