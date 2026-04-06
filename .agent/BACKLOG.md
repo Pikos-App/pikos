@@ -48,6 +48,7 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 - [ ] 🧑 Create `pikos-app` GitHub org, transfer repo
 - [ ] 🧑 Make repo public (must happen before /download works)
 - [ ] 🤖 GOO-53-DL: Cloudflare Pages Function for /download (redirect to latest GitHub Release)
+- [ ] 🧑🤖 GOO-53-PUBLIC: Rename /open → /public across marketing site (routes, links, copy) and audit for "open source" language that should say "source-available"
 
 ## Recurring Events & Notifications
 

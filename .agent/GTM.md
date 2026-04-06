@@ -34,7 +34,12 @@ Pikos is for anyone who wants their notes, tasks, and calendar in one place with
 - **Freelancers and consultants** — juggling projects, clients, deadlines, call notes. Currently cobbling Notion + Todoist + Google Calendar. Feel the cost of context-switching directly in lost time. Highest willingness to pay.
 - **Small business owners** — need task + calendar, don't want per-seat SaaS forever.
 - **Writers and journalists** — notes tied to deadlines, research linked to tasks. No good native tool exists.
+- **Teachers and academics** — notes tied to deadlines with recurring semester structure. Talk to each other constantly (department channels, conferences). Higher willingness to pay than students, similar workflow needs.
+- **Lawyers and legal professionals** — case notes + deadlines + calendar is their entire workflow. Privacy-first is a genuine requirement, not a nice-to-have. Pay for tools without hesitation.
 - **Graduate students** — research notes, deadlines, reading lists. Obsidian is too complex, Notion is too slow. (Useful for early adoption and word of mouth; lower purchase intent than freelancers.)
+
+**Privacy-motivated segments** (self-selecting, don't need to be targeted directly):
+- **The "degoogling" crowd** — people actively migrating off Google services. Vocal, organized (r/degoogle, r/privacyguides), and will evangelize hard for tools that align with their values. Natural fit for the privacy positioning. Worth keeping in mind when choosing where to post.
 
 Early beta users will reveal which segment resonates most. Let them identify themselves, then lean into that framing.
 
@@ -43,7 +48,7 @@ Early beta users will reveal which segment resonates most. Let them identify the
 | Audience | Primary channel | How they find Pikos | Privacy framing |
 |---|---|---|---|
 | General users | Marketing `/`, App Store, Reddit, YouTube | "My to-dos, notes, and calendar, all in one place. Fast. No sign-up." | "Nothing goes to the cloud." |
-| Power users / developers | `/open`, Hacker News, GitHub, Homebrew | "Local SQLite, no servers, structured data, open format I can inspect." | "The data file is yours. Here's where it lives." |
+| Power users / developers | `/public`, Hacker News, GitHub, Homebrew | "Local SQLite, no servers, structured data, open format I can inspect." | "The data file is yours. Here's where it lives." |
 
 The product pitch and UX defaults serve the general user. Power-user depth is progressively disclosed — available but never required.
 
@@ -85,7 +90,7 @@ TickTick requires click task → click schedule → click reminder dropdown → 
 
 **License:** Source-available (e.g., BUSL or a custom restrictive license). Code is publicly readable. Commercial redistribution is prohibited. This is not "open source" and shouldn't be presented as such — frame it honestly as "our code is public so you can verify our privacy claims."
 
-**When to open it:** Phase 3, alongside the `/open` page launch. Not before. A half-finished repository undermines the credibility it's meant to build. Open it when it's something worth showing — ideally as a single deliberate moment with a clear narrative.
+**When to open it:** Phase 3, alongside the `/public` page launch. Not before. A half-finished repository undermines the credibility it's meant to build. Open it when it's something worth showing — ideally as a single deliberate moment with a clear narrative.
 
 **What to make public:**
 - `apps/desktop` — the whole point
@@ -117,13 +122,13 @@ Mar 2026  ──────────────── Phase 2A core editor 
           ──────────────── Marketing site live ✓
           ──────────────── Friends beta started (March 30) ✓
 Apr 2026  ─────── Friends beta feedback + calendar + search/commands
-May 2026  ─────── /open page, video demo, branding polish
+May 2026  ─────── /public page, video demo, branding polish
 Jun 2026  ──────────────── Public launch 🚀 (single coordinated moment)
 ```
 
 **Phase 3 launch ships all at once:**
 - Repo goes public (source-available)
-- `/open` page live (technical audience)
+- `/public` page live (technical audience)
 - `/download` page live (Cloudflare Pages Function → GitHub Releases)
 - Mac (.dmg) + Linux (.AppImage, .deb) signed binaries
 - Blog launch posts
@@ -164,7 +169,7 @@ Not a Product Hunt spike. A quiet, permanent public presence. The goal is for so
 
 **What needs to ship — all at the same time:**
 - `/download` page with Mac + Linux buttons (Cloudflare Pages Function redirects to latest GitHub Release assets)
-- `/open` page (technical audience — architecture, local-first philosophy, GitHub link)
+- `/public` page (technical audience — architecture, local-first philosophy, GitHub link)
 - Video demo on homepage
 - Source-available repo goes public (prerequisite for `/download` — GitHub Releases must be publicly accessible)
 - Blog launch posts
@@ -175,7 +180,7 @@ Not a Product Hunt spike. A quiet, permanent public presence. The goal is for so
 
 - **`/`** — General audience. Visual, approachable. Headline: *"Notes, tasks, and calendar. One app."* Shows the product in motion (demo video). No mention of SQLite, Tauri, or file paths. Download button prominent above the fold. Focus on the feeling, not the feature list.
 - **`/download`** — Platform picker. Mac (.dmg) and Linux (.AppImage, .deb) buttons. Each button is a Cloudflare Pages Function that 302-redirects to the latest GitHub Release asset. Callout: "Want iCloud sync? Coming soon to the Mac App Store." No binaries hosted — GitHub serves them, Cloudflare redirects.
-- **`/open`** — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief explanation of specific technical decisions (not origin story). Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
+- **`/public`** — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief explanation of specific technical decisions (not origin story). Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
 
 The three pages let you run different SEO and social campaigns without the messaging feeling split.
 - General: "private notes app", "offline task manager", "notes app no account"
@@ -183,16 +188,24 @@ The three pages let you run different SEO and social campaigns without the messa
 
 #### Launch channels
 
+**Phase 1 — Quiet launch (day one):** Tell friends, post on LinkedIn. LinkedIn will get engagement from your network but won't drive sustained discovery. One post, move on.
+
+**Phase 2 — Community seeding (weeks 1-4):** Space posts out over weeks so you can iterate on framing based on what resonates.
+
 | Channel | Notes |
 |---|---|
 | Marketing site | General + technical pages; direct, organic, social |
-| **Reddit** | r/productivity, r/macapps, r/selfhosted, r/ObsidianMD. High-intent audience with the exact pain point. Be a genuine participant, not a promoter. Post after the app is stable and you can respond to feedback confidently. |
-| **YouTube** | One demo video. Focus on the product in motion — not why it was built. Show a real workflow: add a task, link it to a note, drag it to the calendar. Non-technical users discover apps via YouTube far more than HN. Honest and unpolished beats polished ad. Record this *after* at least one Reddit post lands well so there's already community momentum to point to. |
-| Hacker News | One well-timed "Show HN" post — link to `/open`. Lead with a specific technical decision, not a pitch. Do this after Reddit posts have landed so you have real user responses to reference. |
-| GitHub | Source-available repository. Technical credibility and organic discovery channel. Opened at Phase 3 launch alongside `/open`. |
-| Personal social | Occasional, not performative. Link to both landing pages. |
+| **Reddit** | Highest ROI channel. r/productivity, r/macapps, r/selfhosted, r/ObsidianMD — high-intent audience with the exact pain point. Also r/degoogle, r/privacyguides, r/PKMS. Be a genuine participant, not a promoter. Don't post to all at once — space over weeks. |
+| **Hacker News** | One well-timed "Show HN" post — link to `/public`. Lead with a specific technical decision ("I built a local-first notes+tasks+calendar app on Tauri+SQLite — here's why"), not a product pitch. HN rewards specificity. Do this after Reddit posts have landed so you have real user responses to reference. |
+| **Tauri Discord** | The Tauri community is small and supportive. They like seeing real apps built on the framework. More "community participation" than marketing — but high-quality attention. |
+| **Mastodon / Fediverse** | The privacy-conscious crowd lives here. Natural fit for the positioning. Don't overlook it. |
+| **Indie Hackers** | The "solo dev built a product" angle plays well here. Good for long-form writeups about the journey. |
+| **GitHub** | Source-available repository. Technical credibility and organic discovery channel. Opened at Phase 3 launch alongside `/public`. |
+| **LinkedIn** | One "I built this" post at launch. Network engagement, not sustained discovery. |
 
-**Credibility angle:** Technical blog posts about specific decisions (Tauri + SQLite, local-first design, the NL parser approach) drive developer discovery organically and feed the `/open` page. These work better than a "why I built this" narrative — they demonstrate craft and attract the kind of attention that converts to word of mouth.
+**On YouTube:** Don't let it block launch. A good demo video takes 5-10x longer than expected (script, record, re-record, edit). For launch, a 60-90 second screen recording on the homepage is enough — the app in motion with text overlays, no narration needed. A "real" YouTube video can come later if Reddit/HN traction justifies the effort. YouTube is the lowest priority channel.
+
+**Credibility angle:** Technical blog posts about specific decisions (Tauri + SQLite, local-first design, the NL parser approach) drive developer discovery organically and feed the `/public` page. These work better than a "why I built this" narrative — they demonstrate craft and attract the kind of attention that converts to word of mouth.
 
 **Social proof:** Ask Phase 2 beta users for honest quotes. A few real testimonials on the landing page outperform any feature list for non-technical visitors.
 
@@ -229,7 +242,7 @@ Sync          → none. Local only.
 
 **iCloud sync is exclusive to App Store purchases.** The free direct download is the full app, local only. iCloud sync is the clear, tangible reason to buy the App Store version.
 
-**Technical users who want sync without the App Store** can point Syncthing (or any file-sync tool) at the SQLite database directory. Note: SQLite with WAL mode uses multiple files (db, db-wal, db-shm) and naive file-sync during active writes can corrupt data — this is a "you know what you're doing" option for technical users, not something to recommend broadly. Worth mentioning on `/open` with appropriate caveats as a natural fit for the "your data is yours" positioning.
+**Technical users who want sync without the App Store** can point Syncthing (or any file-sync tool) at the SQLite database directory. Note: SQLite with WAL mode uses multiple files (db, db-wal, db-shm) and naive file-sync during active writes can corrupt data — this is a "you know what you're doing" option for technical users, not something to recommend broadly. Worth mentioning on `/public` with appropriate caveats as a natural fit for the "your data is yours" positioning.
 
 **Upgrade path:** A user downloads the free .dmg, uses the app locally, then buys the App Store version when they want sync (or when mobile ships). The App Store version picks up the existing local database — same file, same location. No data migration needed.
 
@@ -259,7 +272,7 @@ Sync          → none. Local only.
 | Homebrew cask | Phase 3+ | Developer-friendly, one-line install. Can ship with launch or shortly after. |
 | Mac App Store | Phase 4 | Primary non-technical discovery + iCloud sync upsell. Sandboxing adds work. |
 | Linux | Phase 3 | `.AppImage` + `.deb` from Tauri build matrix. No signing required, zero extra work. |
-| Windows | — | No binary distribution. Unsigned `.msi` triggers SmartScreen warnings that look like malware to non-technical users. The `/open` audience (developers) can build from source. Revisit if non-technical Windows demand materializes. |
+| Windows | — | No binary distribution. Unsigned `.msi` triggers SmartScreen warnings that look like malware to non-technical users. The `/public` audience (developers) can build from source. Revisit if non-technical Windows demand materializes. |
 
 **Download flow at launch:**
 ```
@@ -268,6 +281,35 @@ pikos.app/download  →  Cloudflare Pages Function  →  302 redirect  →  GitH
                          matches platform to asset filename)
 ```
 Clean URLs: `/download/mac` → latest `.dmg`, `/download/linux` → latest `.AppImage`. GitHub serves the binary. No binary hosting, no S3, no CDN config. Requires the repo to be public (GitHub Releases return 404 for unauthenticated requests on private repos).
+
+---
+
+## Preparing for Criticism
+
+**Negative comments are a certainty, not a risk.** Any public launch — even a free, local-first app with no strings — will attract dismissive and critical responses. Preparing for this is part of the launch, not an afterthought.
+
+### Expected criticisms and prepared responses
+
+Draft these before posting anywhere. When they show up, you respond calmly instead of reactively.
+
+| Criticism | Response posture |
+|---|---|
+| **"Why not just use Obsidian + a plugin?"** | Acknowledge Obsidian is great for notes. Pikos treats tasks and calendar as equals, not afterthoughts. Different design goals, not a replacement claim. |
+| **"No mobile = useless"** | Fair criticism. Acknowledge honestly: "Mobile is coming. Desktop-first was a deliberate choice to get the core right." Don't be defensive — this is a real limitation. |
+| **"Another notes app?"** | Dismissive, not constructive. Don't engage. The people who say this aren't your users. |
+| **"It's not really open source"** | Be precise from the start. Always say "source-available" — never claim "open source." Explain the distinction once, clearly: "Our code is public so you can verify our privacy claims. Commercial redistribution is restricted." |
+| **"What happens when you abandon it?"** | Solo dev risk is real. Honest answer: "The data is local SQLite — it's yours regardless of what happens to the app. You can query it directly, export it, or build on it." |
+| **"AI built this"** | Don't deny or minimize AI usage — that invites a worse backlash when people inspect commit history or code patterns. Honest framing: "I use AI as a tool in my workflow, the same way I use an editor or a debugger. The design decisions, product vision, and quality bar are mine. The code passes strict TypeScript, automated linting, and test suites — the same bar regardless of how it was written." If pressed: the craftsmanship is in the decisions, not the keystrokes. |
+| **"No Windows support?"** | "macOS and Linux at launch. Windows is on the radar but unsigned Windows binaries trigger SmartScreen warnings that look like malware — I'd rather not ship that experience." |
+
+### Emotional preparation
+
+- **Separate yourself from the product.** "Your app is bad" is not "you are bad." This sounds obvious but it's hard in the moment after months of building.
+- **Don't respond to everything.** Dismissive one-liners don't deserve engagement. Thoughtful criticism does. The ratio will be roughly 80/20 — most comments are drive-by, a few are genuinely useful.
+- **Set a response window.** After posting on Reddit/HN, check once in the morning, once in the evening. Don't refresh every 10 minutes. Nothing good comes from watching comments arrive in real time.
+- **Remember the actual goal.** You're not trying to convince skeptics. You're trying to reach the 5% of readers who have the exact pain point you solve. Everyone else is noise.
+- **The harshest criticism comes from people who haven't tried the app.** People who actually download it will either quietly leave (that's fine — data point) or give specific, actionable feedback. Optimize for the second group.
+- **Useful reframe:** every negative comment means someone saw the post. Visibility is the hard part. A post with 50 comments and 10 critical ones performed better than a post with 2 polite replies.
 
 ---
 
@@ -300,7 +342,7 @@ Free direct download at launch (full app, local only). iCloud sync is exclusive 
 - **GOO-52** macOS signing + notarization + GitHub Releases pipeline
 - **GOO-53** Marketing site — ~~Astro in `apps/marketing/`~~ (largely complete: homepage, blog, release notes, privacy, terms)
 - **GOO-53-DL** `/download` page + Cloudflare Pages Function redirects (Phase 3 — ships with launch)
-- **GOO-53-OPEN** `/open` page for technical audience (Phase 3 — ships with launch)
+- **GOO-53-OPEN** `/public` page for technical audience (Phase 3 — ships with launch)
 - **GOO-54** Privacy policy — ~~simple, plain language, one page~~ (complete, live at `/privacy`)
 - **GOO-52-MAS** Mac App Store submission (Phase 4 — after launch proves stability)
 - Video demo — record after Reddit posts land (Phase 3 gate)

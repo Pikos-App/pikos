@@ -24,14 +24,14 @@ pnpm verify   # runs check (auto-fix + typecheck + lint + depcruise) then unit t
 
 ## End-of-session cleanup (mandatory)
 
-1. Remove completed task from `BACKLOG_ACTIVE.md`
+1. Remove completed task from `BACKLOG.md`
 2. Update `CURRENT.md` active task to the next pending item
 3. Collapse completed phase history in `CURRENT.md` to a single summary line
 4. Keep `CURRENT.md` under 20 lines
 
 ## Other rules
 
-- Use `.agent/BACKLOG_ACTIVE.md` for next-up items (next ~20 actionable tasks)
+- Use `.agent/BACKLOG.md` for next-up items (next ~20 actionable tasks)
 
 ## Quality bar
 
