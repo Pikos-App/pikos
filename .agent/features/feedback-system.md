@@ -8,112 +8,71 @@ Need a way to capture bug reports, feature requests, and general feedback from u
 
 ## Decision: Three Channels
 
-### 1. Bug Reports → Form on pikos.app/bugs
+### 1. Bugs + Feature Requests → Self-hosted Fider at feedback.pikos.app
 
-**Why a form, not email:** Bugs need structure — steps to reproduce, OS version, app version, what happened vs. what was expected. Unstructured email bug reports are painful to triage. A form with guided fields gets usable reports from non-technical users.
-
-**Implementation:**
-- New page at `apps/marketing/src/pages/bugs.astro`
-- Switch Astro to hybrid/server mode (SSR for form endpoints, static for everything else)
-- Form fields:
-  - What happened? (required, textarea)
-  - Steps to reproduce (required, textarea)
-  - What did you expect? (optional, textarea)
-  - App version (auto-filled if linked from app, otherwise text input)
-  - OS and version (text input)
-  - Email (optional — "Only if you want to hear back about this bug")
-- POST to an API route in Astro (`src/pages/api/bugs.ts`)
-- API route writes to your home server DB (direct insert or forward to a lightweight API on the home server)
-- Success page: "Got it. If you left your email, I'll follow up." Keep it personal.
-
-**In the desktop app:**
-- Add a "Report a Bug" link in the app's Help menu (or settings)
-- Opens `pikos.app/bugs` in the default browser
-- Optionally append query params: `?version=0.4.2&os=macos-14.3` so the form auto-fills those fields
-- The app itself makes zero network requests — it just opens a URL
-
-### 2. Feature Requests → Self-hosted Fider at feedback.pikos.app
-
-**Why Fider:** Open-source feature request board with upvoting, exactly what you described. Docker image + Postgres, trivial to deploy on Coolify. Users can browse existing requests, upvote, and submit new ones. You get prioritization signal without having to ask.
+Single Fider instance handles both bugs and feature requests. Use Fider's tagging/categories to separate them (e.g., "Bug" and "Feature Request" tags). At current volume (friends beta → early launch), structured bug form fields aren't worth the infra complexity. If someone submits a vague bug report, follow up via email. Build a dedicated bug form later only if volume makes unstructured reports unmanageable.
 
 **Key properties:**
-- Self-hosted on your home server via Coolify — no third-party data sharing
-- Subdomain: `feedback.pikos.app` (or `requests.pikos.app`)
+- Self-hosted on home server via Coolify — no third-party data sharing
+- Subdomain: `feedback.pikos.app`
+- Fully public board — anyone can browse, upvote, and submit
 - Anonymous posting supported (no account required to submit or upvote)
 - Optional email for notifications on status changes ("We built this!")
 - You moderate and respond as the admin
-- Public board — users can see what others want, reduces duplicate requests
-- Categories/tags for organization (notes, tasks, calendar, import/export, etc.)
+- Categories/tags: Bug, Feature Request, Notes, Tasks, Calendar, Import/Export, etc.
 
 **Fider setup:**
 - Docker image: `getfider/fider`
-- Needs: Postgres (already have on home server or spin up via Coolify), SMTP for optional notifications
-- Custom branding to match pikos.app look
+- Needs: Postgres (spin up via Coolify alongside Fider), SMTP for optional email notifications
+- Custom branding to match pikos.app look (logo, colors)
 - Cloudflare DNS: CNAME `feedback.pikos.app` → home server
 
 **In the desktop app:**
-- "Request a Feature" link in Help menu / settings
-- Opens `feedback.pikos.app` in browser
+- "Report a Bug" and "Request a Feature" links in Help menu / settings
+- Both open `feedback.pikos.app` in the default browser
+- App makes zero network requests — just opens a URL
+- Optionally link bugs to a filtered view: `feedback.pikos.app?tags=bug`
 
-### 3. General Feedback → Email
+### 2. General Feedback → Email
 
-**Why email:** General feedback ("I love this," "the calendar feels weird," "have you considered X") doesn't need structure. Email is zero-friction, personal, and fits the indie dev brand. A form for this would feel corporate.
+General feedback ("I love this," "the calendar feels weird," "have you considered X") doesn't need structure or a board. Email is zero-friction, personal, and fits the indie dev brand.
 
 **Implementation:**
-- Pikos domain email: `hey@pikos.app` (or `alex@pikos.app`)
+- Pikos domain email: `hey@pikos.app`
 - "Send Feedback" link in the app opens `mailto:hey@pikos.app?subject=Pikos%20Feedback`
-- Also listed on the marketing site footer and a `/contact` or `/feedback` page
+- Also listed on the marketing site footer and `/feedback` page
 
 ---
 
 ## What NOT to do
 
-- **No in-app forms or network requests.** The app stays offline. Links open in the browser. This is non-negotiable per the privacy pact.
+- **No in-app forms or network requests.** The app stays offline. Links open in the browser. Non-negotiable per the privacy pact.
 - **No analytics/telemetry for usage patterns.** You learn what users want by what they tell you, not by watching them.
 - **No required accounts on Fider.** Anonymous submissions must work. Optional email only for follow-up notifications.
-- **No Plausible/analytics on the Fider board.** Keep it clean.
 
 ---
 
 ## Marketing Site Changes
 
-### New pages
+### New page
 
 | Page | Purpose |
 |------|---------|
-| `/bugs` | Bug report form (SSR — needs Astro hybrid mode) |
-| `/feedback` | Simple page with three options: report a bug, request a feature, send feedback. Links to `/bugs`, `feedback.pikos.app`, and `mailto:` respectively. |
+| `/feedback` | Simple page with three paths: report a bug, request a feature, send feedback. Links to `feedback.pikos.app` (with appropriate tag filters) and `mailto:hey@pikos.app`. |
 
-### Astro SSR migration
-
-The marketing site is currently static on Cloudflare Pages. To handle form submissions:
-
-**Option A — Astro hybrid mode on Cloudflare:**
-- Set `output: 'hybrid'` in astro config
-- Use `@astrojs/cloudflare` adapter
-- API route at `src/pages/api/bugs.ts` forwards to home server API
-- Pro: keeps everything on Cloudflare, simple deployment
-- Con: adds a dependency on Cloudflare Workers runtime for the API route
-
-**Option B — Static site + separate API on home server:**
-- Keep Astro fully static
-- Bug form POSTs directly to `api.pikos.app/bugs` (home server)
-- Pro: marketing site stays dead simple
-- Con: CORS config, separate deployment, another subdomain
-
-**Recommendation: Option A.** Cloudflare's free tier includes Workers. One deployment pipeline. The form handler is a thin proxy that forwards to your home server DB. Everything else stays static (use `export const prerender = true` on all existing pages).
+Marketing site stays fully static — no SSR migration needed. The `/feedback` page is just links to Fider and a mailto. No form handling required.
 
 ### Footer update
 
 Add to the marketing site footer:
 ```
-Feedback · Bugs · Request a Feature
+Feedback · Report a Bug · Request a Feature
 ```
 
-### Nav / help links in the desktop app
+### Help links in the desktop app
 
 Add to settings or help menu:
-- Report a Bug → `pikos.app/bugs?version={version}&os={os}`
+- Report a Bug → `feedback.pikos.app` (tagged/filtered to bugs)
 - Request a Feature → `feedback.pikos.app`
 - Send Feedback → `mailto:hey@pikos.app?subject=Pikos%20Feedback`
 
@@ -125,10 +84,9 @@ Add to settings or help menu:
 
 | Service | Purpose | Stack |
 |---------|---------|-------|
-| Fider | Feature request board | Docker + Postgres |
-| Bug report API | Receives bug form submissions | Lightweight API (Node/Go/whatever you prefer) or just a Postgres insert via Fider's API |
+| Fider | Bug reports + feature request board with upvoting | Docker + Postgres |
 
-**Alternative to a separate bug API:** Fider supports different post types. You could use a single Fider instance with two boards — one for bugs, one for feature requests. This eliminates the need for a custom bug form entirely. Tradeoff: bug reports lose the structured fields (steps to reproduce, OS, version). For a solo dev with low initial volume, this might be fine — you can always split later if volume warrants it.
+That's it. One service. Postgres runs as a companion container in the same Coolify stack.
 
 ### DNS
 
@@ -137,24 +95,29 @@ pikos.app          → Cloudflare Pages (existing)
 feedback.pikos.app → Home server (Coolify / Fider)
 ```
 
+### SMTP
+
+Fider needs SMTP for optional email notifications (status change alerts, reply notifications). Options:
+- Cloudflare Email Routing (free, if you're already using it for hey@pikos.app)
+- Resend (free tier: 100 emails/day)
+- Self-hosted on home server (more work, but no external dependency)
+
 ---
 
 ## Implementation Order
 
-1. **Set up Pikos email** (`hey@pikos.app` or similar) — instant, no code
-2. **Deploy Fider on Coolify** — Docker compose, Postgres, DNS, basic branding
-3. **Add `/feedback` page to marketing site** — static page linking to all three channels
-4. **Add `/bugs` form to marketing site** — requires Astro hybrid mode + API route
-5. **Add help menu links in desktop app** — opens browser URLs, zero network requests from app
-6. **Update marketing site footer** — add feedback/bugs links
+1. **Set up Pikos email** (`hey@pikos.app`) — Cloudflare Email Routing or provider of choice
+2. **Deploy Fider on Coolify** — Docker compose with Postgres, DNS, SMTP config, branding
+3. **Seed the board** — Create a few initial posts yourself (known feature ideas, known bugs) so it's not empty when users arrive
+4. **Add `/feedback` page to marketing site** — static page linking to all three channels
+5. **Update marketing site footer** — add feedback links
+6. **Add help menu links in desktop app** — opens browser URLs, zero network requests from app
 
-Steps 1-3 can ship fast. Step 4 is the most work (Astro SSR migration + form + API). Step 5 is trivial once URLs are live.
+Steps 1-2 are the real work. Steps 3-6 are straightforward once Fider is live.
 
 ---
 
-## Open Questions
+## Future considerations
 
-- **Subdomain preference:** `feedback.pikos.app` vs `requests.pikos.app` vs `board.pikos.app`?
-- **Bug reports via Fider instead of custom form?** Simpler infra, less structured data. Fine at low volume.
-- **Email provider for hey@pikos.app?** Fastmail, Migadu, Cloudflare Email Routing + forwarding, or self-hosted?
-- **Do you want the Fider board to be fully public (anyone can browse) or submit-only?** Public is better for reducing duplicates and building community. But it also shows your hand on what you haven't built yet.
+- **Dedicated bug form:** If bug volume grows and unstructured reports become a triage bottleneck, add a structured form at `pikos.app/bugs` with guided fields (steps to reproduce, OS, version). This would require Astro hybrid mode or a separate API endpoint. Don't build this until the problem actually exists.
+- **GitHub Issues integration:** When the repo goes public at Phase 3, technical users will file bugs on GitHub anyway. Fider can coexist — it serves the non-technical audience that won't touch GitHub.
