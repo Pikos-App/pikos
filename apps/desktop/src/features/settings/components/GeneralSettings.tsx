@@ -2,7 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Download, ExternalLink } from "lucide-react";
+import { Bug, Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
@@ -308,17 +308,36 @@ export function GeneralSettings() {
         title="Feedback"
       >
         <div className="rounded-lg border border-border bg-card px-4">
-          <div className="flex items-center justify-between py-3">
+          <div className="flex items-center justify-between border-b border-border py-3">
             <div>
-              <p className="text-sm font-medium">Send feedback</p>
-              <p className="text-xs text-muted-foreground">pikos@hello-ak.com</p>
+              <p className="text-sm font-medium">Report a bug</p>
+              <p className="text-xs text-muted-foreground">
+                Opens pikos.app with your version info pre-filled
+              </p>
             </div>
             <button
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
-              onClick={() => void openUrl("mailto:pikos@hello-ak.com?subject=Pikos%20Feedback")}
+              onClick={() => {
+                const os = /Mac/.test(navigator.platform) ? "macOS" : "Linux";
+                const params = new URLSearchParams({ version: __APP_VERSION__, os });
+                void openUrl(`https://pikos.app/bugs?${params.toString()}`);
+              }}
+            >
+              <Bug className="h-3.5 w-3.5" />
+              Report
+            </button>
+          </div>
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-sm font-medium">Send feedback</p>
+              <p className="text-xs text-muted-foreground">hello@pikos.app</p>
+            </div>
+            <button
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+              onClick={() => void openUrl("https://pikos.app/feedback")}
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Email
+              Open
             </button>
           </div>
         </div>

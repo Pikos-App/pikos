@@ -1,0 +1,103 @@
+---
+import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Base title="Feedback - Pikos" description="Report bugs, request features, or send feedback about Pikos.">
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <!-- Back to home -->
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-orange-500 dark:text-gray-500 dark:hover:text-orange-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Feedback</h1>
+    <p class="mt-3 text-base leading-relaxed text-gray-600 dark:text-gray-300">
+      Pikos is built by one person. Your feedback directly shapes what gets built next.
+    </p>
+
+    <div class="mt-10 space-y-4">
+
+      <!-- Bug report -->
+      <a
+        href="/bugs"
+        class="group flex items-start gap-4 rounded-lg border border-gray-200 bg-white p-5 transition-colors hover:border-orange-300 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-orange-600"
+      >
+        <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-500 dark:bg-red-950 dark:text-red-400">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg>
+        </div>
+        <div>
+          <p class="font-medium text-gray-900 group-hover:text-orange-500 dark:text-gray-50 dark:group-hover:text-orange-400">Report a bug</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Something broken? Let me know what happened so I can fix it.</p>
+        </div>
+      </a>
+
+      <!-- Feature request -->
+      <a
+        href="https://feedback.pikos.app"
+        class="group flex items-start gap-4 rounded-lg border border-gray-200 bg-white p-5 transition-colors hover:border-orange-300 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-orange-600"
+      >
+        <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-500 dark:bg-blue-950 dark:text-blue-400">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+        </div>
+        <div>
+          <p class="font-medium text-gray-900 group-hover:text-orange-500 dark:text-gray-50 dark:group-hover:text-orange-400">Request a feature</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Browse and upvote feature requests, or submit your own.</p>
+        </div>
+      </a>
+
+      <!-- General feedback -->
+      <div
+        class="flex items-start gap-4 rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-900"
+      >
+        <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-500 dark:bg-orange-950 dark:text-orange-400">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div>
+          <p class="font-medium text-gray-900 dark:text-gray-50">General feedback</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Anything else — send an email to
+            <span class="inline-flex items-center gap-1.5">
+              <span class="font-medium text-orange-500">hello@pikos.app</span>
+              <button
+                id="copy-email"
+                type="button"
+                class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium text-gray-400 ring-1 ring-gray-200 transition-colors hover:text-orange-500 hover:ring-orange-300 dark:text-gray-500 dark:ring-gray-700 dark:hover:text-orange-400 dark:hover:ring-orange-600"
+                aria-label="Copy email address"
+              >
+                Copy
+              </button>
+            </span>
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+    <Footer current="/feedback" />
+
+  </main>
+</Base>
+
+<script>
+  document.getElementById("copy-email")?.addEventListener("click", (e) => {
+    const button = e.currentTarget as HTMLElement;
+    navigator.clipboard.writeText("hello@pikos.app").then(() => {
+      const original = button.innerHTML;
+      button.textContent = "Copied!";
+      setTimeout(() => { button.innerHTML = original; }, 1500);
+    });
+  });
+</script>
+
+<style>
+  :global(body) {
+    background-color: #fafaf9;
+  }
+
+  :global(html.dark body) {
+    background-color: #030712;
+  }
+</style>
