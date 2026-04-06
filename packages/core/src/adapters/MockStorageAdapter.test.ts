@@ -620,7 +620,9 @@ describe("completeRecurringPage", () => {
 // ─── skipOccurrence (exdates) ────────────────────────────────────────────────
 
 describe("recurrence exdates (skip occurrence)", () => {
-  it("adding a date to exdates excludes it from expansion", async () => {
+  // First test in this block cold-loads the rrule library via dynamic import,
+  // which can exceed 5s on slow CI runners.
+  it("adding a date to exdates excludes it from expansion", { timeout: 15_000 }, async () => {
     const { expandRecurrenceForRange } = await import("../utils/recurrence");
 
     const head = await createTestPage({ title: "Weekly" });
@@ -651,7 +653,7 @@ describe("recurrence exdates (skip occurrence)", () => {
     expect(occs.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
   });
 
-  it("removing a date from exdates restores it (undo)", async () => {
+  it("removing a date from exdates restores it (undo)", { timeout: 15_000 }, async () => {
     const { expandRecurrenceForRange } = await import("../utils/recurrence");
 
     const head = await createTestPage({ title: "Weekly" });
