@@ -2,7 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Bug, Download, ExternalLink } from "lucide-react";
+import { Bug, Check, Copy, Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
@@ -85,6 +85,33 @@ function ExportRow({
           Export
         </button>
       </div>
+    </div>
+  );
+}
+
+function CopyEmailRow() {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    void navigator.clipboard.writeText("hello@pikos.app").then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
+  return (
+    <div className="flex items-center justify-between py-3">
+      <div>
+        <p className="text-sm font-medium">Send feedback</p>
+        <p className="text-xs text-muted-foreground">hello@pikos.app</p>
+      </div>
+      <button
+        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+        onClick={handleCopy}
+      >
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        {copied ? "Copied" : "Copy email"}
+      </button>
     </div>
   );
 }
@@ -312,7 +339,7 @@ export function GeneralSettings() {
             <div>
               <p className="text-sm font-medium">Report a bug</p>
               <p className="text-xs text-muted-foreground">
-                Opens pikos.app with your version info pre-filled
+                Opens pikos.app with your version info pre-filled.
               </p>
             </div>
             <button
@@ -327,19 +354,7 @@ export function GeneralSettings() {
               Report
             </button>
           </div>
-          <div className="flex items-center justify-between py-3">
-            <div>
-              <p className="text-sm font-medium">Send feedback</p>
-              <p className="text-xs text-muted-foreground">hello@pikos.app</p>
-            </div>
-            <button
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
-              onClick={() => void openUrl("https://pikos.app/feedback")}
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Open
-            </button>
-          </div>
+          <CopyEmailRow />
         </div>
       </SettingsSection>
     </div>

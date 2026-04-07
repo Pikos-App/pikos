@@ -48,7 +48,7 @@ Early beta users will reveal which segment resonates most. Let them identify the
 | Audience | Primary channel | How they find Pikos | Privacy framing |
 |---|---|---|---|
 | General users | Marketing `/`, App Store, Reddit, YouTube | "My to-dos, notes, and calendar, all in one place. Fast. No sign-up." | "Nothing goes to the cloud." |
-| Power users / developers | `/public`, Hacker News, GitHub, Homebrew | "Local SQLite, no servers, structured data, open format I can inspect." | "The data file is yours. Here's where it lives." |
+| Power users / developers | `/source`, Hacker News, GitHub, Homebrew | "Local SQLite, no servers, structured data, open format I can inspect." | "The data file is yours. Here's where it lives." |
 
 The product pitch and UX defaults serve the general user. Power-user depth is progressively disclosed — available but never required.
 
@@ -90,7 +90,7 @@ TickTick requires click task → click schedule → click reminder dropdown → 
 
 **License:** Source-available (e.g., BUSL or a custom restrictive license). Code is publicly readable. Commercial redistribution is prohibited. This is not "open source" and shouldn't be presented as such — frame it honestly as "our code is public so you can verify our privacy claims."
 
-**When to open it:** Phase 3, alongside the `/public` page launch. Not before. A half-finished repository undermines the credibility it's meant to build. Open it when it's something worth showing — ideally as a single deliberate moment with a clear narrative.
+**When to open it:** Phase 3, alongside the `/source` page launch. Not before. A half-finished repository undermines the credibility it's meant to build. Open it when it's something worth showing — ideally as a single deliberate moment with a clear narrative.
 
 **What to make public:**
 - `apps/desktop` — the whole point
@@ -128,7 +128,7 @@ Jun 2026  ──────────────── Public launch 🚀 (s
 
 **Phase 3 launch ships all at once:**
 - Repo goes public (source-available)
-- `/public` page live (technical audience)
+- `/source` page live (technical audience)
 - `/download` page live (Cloudflare Pages Function → GitHub Releases)
 - Mac (.dmg) + Linux (.AppImage, .deb) signed binaries
 - Blog launch posts
@@ -169,7 +169,7 @@ Not a Product Hunt spike. A quiet, permanent public presence. The goal is for so
 
 **What needs to ship — all at the same time:**
 - `/download` page with Mac + Linux buttons (Cloudflare Pages Function redirects to latest GitHub Release assets)
-- `/public` page (technical audience — architecture, local-first philosophy, GitHub link)
+- `/source` page (technical audience — architecture, local-first philosophy, GitHub link)
 - Video demo on homepage
 - Source-available repo goes public (prerequisite for `/download` — GitHub Releases must be publicly accessible)
 - Blog launch posts
@@ -180,7 +180,7 @@ Not a Product Hunt spike. A quiet, permanent public presence. The goal is for so
 
 - **`/`** — General audience. Visual, approachable. Headline: *"Notes, tasks, and calendar. One app."* Shows the product in motion (demo video). No mention of SQLite, Tauri, or file paths. Download button prominent above the fold. Focus on the feeling, not the feature list.
 - **`/download`** — Platform picker. Mac (.dmg) and Linux (.AppImage, .deb) buttons. Each button is a Cloudflare Pages Function that 302-redirects to the latest GitHub Release asset. Callout: "Want iCloud sync? Coming soon to the Mac App Store." No binaries hosted — GitHub serves them, Cloudflare redirects.
-- **`/public`** — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief explanation of specific technical decisions (not origin story). Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
+- **`/source`** — Technical audience. Architecture, local-first philosophy, SQLite data ownership, open format. Brief explanation of specific technical decisions (not origin story). Links to GitHub, mentions Homebrew install. Speaks directly to the "I've tried Obsidian + TickTick" pain point with technical specifics.
 
 The three pages let you run different SEO and social campaigns without the messaging feeling split.
 - General: "private notes app", "offline task manager", "notes app no account"
@@ -196,16 +196,16 @@ The three pages let you run different SEO and social campaigns without the messa
 |---|---|
 | Marketing site | General + technical pages; direct, organic, social |
 | **Reddit** | Highest ROI channel. r/productivity, r/macapps, r/selfhosted, r/ObsidianMD — high-intent audience with the exact pain point. Also r/degoogle, r/privacyguides, r/PKMS. Be a genuine participant, not a promoter. Don't post to all at once — space over weeks. |
-| **Hacker News** | One well-timed "Show HN" post — link to `/public`. Lead with a specific technical decision ("I built a local-first notes+tasks+calendar app on Tauri+SQLite — here's why"), not a product pitch. HN rewards specificity. Do this after Reddit posts have landed so you have real user responses to reference. |
+| **Hacker News** | One well-timed "Show HN" post — link to `/source`. Lead with a specific technical decision ("I built a local-first notes+tasks+calendar app on Tauri+SQLite — here's why"), not a product pitch. HN rewards specificity. Do this after Reddit posts have landed so you have real user responses to reference. |
 | **Tauri Discord** | The Tauri community is small and supportive. They like seeing real apps built on the framework. More "community participation" than marketing — but high-quality attention. |
 | **Mastodon / Fediverse** | The privacy-conscious crowd lives here. Natural fit for the positioning. Don't overlook it. |
 | **Indie Hackers** | The "solo dev built a product" angle plays well here. Good for long-form writeups about the journey. |
-| **GitHub** | Source-available repository. Technical credibility and organic discovery channel. Opened at Phase 3 launch alongside `/public`. |
+| **GitHub** | Source-available repository. Technical credibility and organic discovery channel. Opened at Phase 3 launch alongside `/source`. |
 | **LinkedIn** | One "I built this" post at launch. Network engagement, not sustained discovery. |
 
 **On YouTube:** Don't let it block launch. A good demo video takes 5-10x longer than expected (script, record, re-record, edit). For launch, a 60-90 second screen recording on the homepage is enough — the app in motion with text overlays, no narration needed. A "real" YouTube video can come later if Reddit/HN traction justifies the effort. YouTube is the lowest priority channel.
 
-**Credibility angle:** Technical blog posts about specific decisions (Tauri + SQLite, local-first design, the NL parser approach) drive developer discovery organically and feed the `/public` page. These work better than a "why I built this" narrative — they demonstrate craft and attract the kind of attention that converts to word of mouth.
+**Credibility angle:** Technical blog posts about specific decisions (Tauri + SQLite, local-first design, the NL parser approach) drive developer discovery organically and feed the `/source` page. These work better than a "why I built this" narrative — they demonstrate craft and attract the kind of attention that converts to word of mouth.
 
 **Social proof:** Ask Phase 2 beta users for honest quotes. A few real testimonials on the landing page outperform any feature list for non-technical visitors.
 
@@ -242,7 +242,7 @@ Sync          → none. Local only.
 
 **iCloud sync is exclusive to App Store purchases.** The free direct download is the full app, local only. iCloud sync is the clear, tangible reason to buy the App Store version.
 
-**Technical users who want sync without the App Store** can point Syncthing (or any file-sync tool) at the SQLite database directory. Note: SQLite with WAL mode uses multiple files (db, db-wal, db-shm) and naive file-sync during active writes can corrupt data — this is a "you know what you're doing" option for technical users, not something to recommend broadly. Worth mentioning on `/public` with appropriate caveats as a natural fit for the "your data is yours" positioning.
+**Technical users who want sync without the App Store** can point Syncthing (or any file-sync tool) at the SQLite database directory. Note: SQLite with WAL mode uses multiple files (db, db-wal, db-shm) and naive file-sync during active writes can corrupt data — this is a "you know what you're doing" option for technical users, not something to recommend broadly. Worth mentioning on `/source` with appropriate caveats as a natural fit for the "your data is yours" positioning.
 
 **Upgrade path:** A user downloads the free .dmg, uses the app locally, then buys the App Store version when they want sync (or when mobile ships). The App Store version picks up the existing local database — same file, same location. No data migration needed.
 
@@ -272,7 +272,7 @@ Sync          → none. Local only.
 | Homebrew cask | Phase 3+ | Developer-friendly, one-line install. Can ship with launch or shortly after. |
 | Mac App Store | Phase 4 | Primary non-technical discovery + iCloud sync upsell. Sandboxing adds work. |
 | Linux | Phase 3 | `.AppImage` + `.deb` from Tauri build matrix. No signing required, zero extra work. |
-| Windows | — | No binary distribution. Unsigned `.msi` triggers SmartScreen warnings that look like malware to non-technical users. The `/public` audience (developers) can build from source. Revisit if non-technical Windows demand materializes. |
+| Windows | — | No binary distribution. Unsigned `.msi` triggers SmartScreen warnings that look like malware to non-technical users. The `/source` audience (developers) can build from source. Revisit if non-technical Windows demand materializes. |
 
 **Download flow at launch:**
 ```
@@ -342,7 +342,7 @@ Free direct download at launch (full app, local only). iCloud sync is exclusive 
 - **GOO-52** macOS signing + notarization + GitHub Releases pipeline
 - **GOO-53** Marketing site — ~~Astro in `apps/marketing/`~~ (largely complete: homepage, blog, release notes, privacy, terms)
 - **GOO-53-DL** `/download` page + Cloudflare Pages Function redirects (Phase 3 — ships with launch)
-- **GOO-53-OPEN** `/public` page for technical audience (Phase 3 — ships with launch)
+- **GOO-53-SRC** `/source` page for technical audience (Phase 3 — ships with launch)
 - **GOO-54** Privacy policy — ~~simple, plain language, one page~~ (complete, live at `/privacy`)
 - **GOO-52-MAS** Mac App Store submission (Phase 4 — after launch proves stability)
 - Video demo — record after Reddit posts land (Phase 3 gate)
