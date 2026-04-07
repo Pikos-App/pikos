@@ -346,7 +346,7 @@ export function GeneralSettings() {
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
               onClick={() => {
                 const os = /Mac/.test(navigator.platform) ? "macOS" : "Linux";
-                const params = new URLSearchParams({ version: __APP_VERSION__, os });
+                const params = new URLSearchParams({ os, version: __APP_VERSION__ });
                 void openUrl(`https://pikos.app/bugs?${params.toString()}`);
               }}
             >

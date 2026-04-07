@@ -23,9 +23,7 @@ const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
   { id: 30, label: "30 min before" },
 ];
 
-const QUIET_HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) =>
-  `${String(i).padStart(2, "0")}:00`
-);
+const QUIET_HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
 
 function formatTime24to12(time: string): string {
   const parts = time.split(":").map(Number);
@@ -203,7 +201,10 @@ export function NotificationSettings() {
             {quietHoursEnabled && (
               <div className="mt-3 flex items-center gap-2">
                 <Select onValueChange={setQuietHoursStart} value={quietHoursStart}>
-                  <SelectTrigger aria-label="Quiet hours start" className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium">
+                  <SelectTrigger
+                    aria-label="Quiet hours start"
+                    className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -216,7 +217,10 @@ export function NotificationSettings() {
                 </Select>
                 <span className="text-xs text-muted-foreground">to</span>
                 <Select onValueChange={setQuietHoursEnd} value={quietHoursEnd}>
-                  <SelectTrigger aria-label="Quiet hours end" className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium">
+                  <SelectTrigger
+                    aria-label="Quiet hours end"
+                    className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
