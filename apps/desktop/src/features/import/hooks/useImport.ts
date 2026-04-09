@@ -2,7 +2,13 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import { Editor } from "@tiptap/core";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
+import Underline from "@tiptap/extension-underline";
+import StarterKit from "@tiptap/starter-kit";
 import { useState } from "react";
+import { Markdown } from "tiptap-markdown";
 
 import type { ImportBatchItem } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -15,25 +21,8 @@ import type { ImportPlan } from "../parsers/types";
 
 let cachedConvert: ((md: string) => string) | null = null;
 
-async function getMarkdownConverter(): Promise<(md: string) => string> {
+function getMarkdownConverter(): (md: string) => string {
   if (cachedConvert) return cachedConvert;
-
-  // Lazy-load Tiptap to avoid pulling it into the initial bundle
-  const [
-    { Editor },
-    { default: StarterKit },
-    { default: TaskList },
-    { default: TaskItem },
-    { default: Underline },
-    { Markdown },
-  ] = await Promise.all([
-    import("@tiptap/core"),
-    import("@tiptap/starter-kit"),
-    import("@tiptap/extension-task-list"),
-    import("@tiptap/extension-task-item"),
-    import("@tiptap/extension-underline"),
-    import("tiptap-markdown"),
-  ]);
 
   const editor = new Editor({
     content: "",
@@ -158,10 +147,7 @@ export function useImport() {
 
       // Convert markdown content to Tiptap JSON
       const isMarkdown = plan.source === "markdown";
-      let convert: ((md: string) => string) | null = null;
-      if (isMarkdown) {
-        convert = await getMarkdownConverter();
-      }
+      const convert = isMarkdown ? getMarkdownConverter() : null;
 
       // Build batch items
       const batchPages: ImportBatchItem[] = plan.pages.map((p, i) => {

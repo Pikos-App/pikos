@@ -23,6 +23,8 @@ import {
   parseLocalISO,
 } from "@pikos/core";
 import type { FolderUpdate, NewRecurrenceRule, PageUpdate, StorageAdapter } from "@pikos/core";
+import { appDataDir } from "@tauri-apps/api/path";
+import { load } from "@tauri-apps/plugin-store";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
@@ -282,7 +284,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     async function initWorkspace() {
       try {
-        const { load } = await import("@tauri-apps/plugin-store");
         const store = await load("workspaces.json", { autoSave: false, defaults: {} });
         const workspaces = (await store.get<Workspace[]>("workspaces")) ?? [];
 
@@ -343,11 +344,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true);
     try {
-      const [{ appDataDir }, { load }] = await Promise.all([
-        import("@tauri-apps/api/path"),
-        import("@tauri-apps/plugin-store"),
-      ]);
-
       const dataDir = await appDataDir();
       const sep = dataDir.endsWith("/") || dataDir.endsWith("\\") ? "" : "/";
       const dbPath = `${dataDir}${sep}default.sqlite`;
