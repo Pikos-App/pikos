@@ -36,10 +36,7 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 
 ## Distribution & Public Launch
 
-- [ ] 🧑 Register bundle identifier + generate signing certs (blocked on Apple Developer approval)
-- [ ] 🧑🤖 GOO-52A: Wire up Apple signing in release workflow (blocked on certs)
-- [ ] 🤖 GOO-52B: Tauri auto-updater (keypair, plugin config, update check on launch)
-- [ ] 🧑 GOO-52D: Test signed build on clean macOS
+- [ ] 🧑 GOO-52D: Test signed build on clean macOS (v0.2.1 in progress)
 - [ ] 🧑 Create `pikos-app` GitHub org, transfer repo
 - [ ] 🧑 Make repo public (must happen before /download works)
 - [ ] 🤖 GOO-53-DL: Cloudflare Pages Function for /download (redirect to latest GitHub Release)

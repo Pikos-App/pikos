@@ -8,32 +8,17 @@
 > Phase mapping: tasks are grouped by when they should be done relative to your GTM phases.
 
 
-### Enroll in Apple Developer Program ✅ (done)
+## Completed (2026-04-08)
 
-Enrolled 2026-04-07, waiting for approval. Once approved: accept agreements in App Store Connect, grab Team ID, generate API key (.p8).
-
----
-
-### Register Bundle Identifier 🧑 (next — after approval)
-
-Register `app.pikos.desktop` in Apple Developer portal → Certificates, Identifiers & Profiles → Identifiers. 5 minutes.
-
----
-
-### Generate macOS code signing certificates 🧑 (next — after approval)
-
-1. Keychain Access → Certificate Assistant → Request a Certificate. Save CSR.
-2. Apple Developer portal → Certificates → Developer ID Application. Upload CSR.
-3. Download cert, double-click to install.
-4. Export as `.p12` from Keychain (right-click → Export). Set password.
-5. Base64-encode: `base64 -i certificate.p12 | pbcopy`
-6. Store: `.p12` file, password, base64 string (for GitHub Secrets).
-
----
-
-### Bundle identifier in tauri.conf.json ✅ (done)
-
-Confirmed `app.pikos.desktop`.
+- Apple Developer enrollment, bundle ID registration (`app.pikos.desktop`), Developer ID Application cert
+- GitHub Secrets configured: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+- Apple code signing + notarization enabled in `release.yml`
+- Tauri updater keypair generated, pubkey set in `tauri.conf.json`
+- Release script: `pnpm release <major|minor|patch>` — bumps versions, commits, tags, pushes, prints CI link
+- `/open` → `/source` rename across marketing site, GTM, backlogs
+- `/source` page complete with lightbox video
+- Feedback pages simplified (Fider deferred to post-launch)
+- First signed release: v0.2.1 (in progress)
 
 ---
 
@@ -41,86 +26,16 @@ Confirmed `app.pikos.desktop`.
 
 ---
 
-### GOO-52A: Wire up Apple signing in release workflow 🧑🤖
+### GOO-52B: Tauri auto-updater — app-side integration 🤖
 
-**What:** The release workflow (`.github/workflows/release.yml`) exists and builds unsigned. Once Apple Developer is approved, add signing + notarization.
+**What:** Keypair generated, pubkey in config, CI produces `.sig` files and `latest.json`. Still needed: implement the update check in the app.
 
-**🧑 You do:** Add GitHub repository secrets:
-- `APPLE_CERTIFICATE` — base64-encoded `.p12`
-- `APPLE_CERTIFICATE_PASSWORD`
-- `APPLE_API_KEY` — `.p8` file contents
-- `APPLE_API_KEY_ID`
-- `APPLE_API_ISSUER_ID`
-- `APPLE_SIGNING_IDENTITY` — `Developer ID Application: Your Name (TEAMID)`
+**Remaining:**
+1. Verify `@tauri-apps/plugin-updater` is installed and registered in Rust plugin builder
+2. Add update check on app launch (silent fail if offline)
+3. Test: install v0.2.1, push v0.2.2, verify update prompt appears
 
-**🤖 Claude Code does:** Uncomment the Apple signing env vars in `release.yml`.
-
-**Acceptance:** Tag push → signed, notarized `.dmg` → opens on clean Mac without Gatekeeper warning.
-
----
-
-### GOO-52B: Set up Tauri auto-updater 🤖
-
-**What:** Configure the Tauri updater plugin so the app can self-update from GitHub Releases.
-
-**Implementation:**
-
-1. **Generate updater keypair:**
-   Run `pnpm tauri signer generate -w ~/.tauri/pikos.key` (or wherever you keep keys). This produces a keypair. The private key goes to GitHub Secrets (`TAURI_SIGNING_PRIVATE_KEY`). The public key goes in the Tauri config.
-
-2. **Configure `tauri.conf.json`:**
-   Add/update the updater config:
-   ```json
-   {
-     "plugins": {
-       "updater": {
-         "active": true,
-         "dialog": true,
-         "pubkey": "<PUBLIC_KEY_FROM_STEP_1>",
-         "endpoints": [
-           "https://github.com/YOUR_ORG/YOUR_REPO/releases/latest/download/latest.json"
-         ]
-       }
-     }
-   }
-   ```
-   Note: The endpoint URL structure depends on whether the repo is public or private. For a private repo, you'll need a different approach (e.g., a proxy endpoint or Tauri's GitHub provider). Decide based on your repo visibility at launch time.
-
-3. **Update the CI workflow (from GOO-52A):**
-   The build step needs to produce the update manifest. Tauri 2's build process generates a `latest.json` file alongside the build artifacts when the updater is configured. Ensure the CI workflow uploads this file to the GitHub Release.
-
-4. **Add updater dependency:**
-   - Add `@tauri-apps/plugin-updater` to the frontend: `pnpm add @tauri-apps/plugin-updater` (in `apps/desktop`)
-   - Add the plugin to `src-tauri/Cargo.toml` and register it in the Tauri plugin builder in `src-tauri/src/lib.rs` (or `main.rs`)
-
-5. **Implement update check in the app:**
-   For now, use Tauri's built-in dialog (`"dialog": true` in config) which shows a native OS dialog when an update is available. This is good enough for friends beta. A custom UI component (in-app notification bar, settings panel check button) comes later.
-
-   At minimum, add an update check on app launch:
-   ```typescript
-   import { check } from '@tauri-apps/plugin-updater';
-
-   // Call on app startup (e.g., in your root App component's useEffect)
-   async function checkForUpdates() {
-     try {
-       const update = await check();
-       if (update?.available) {
-         // Built-in dialog handles the rest if dialog: true
-         await update.downloadAndInstall();
-       }
-     } catch (e) {
-       console.error('Update check failed:', e);
-       // Silently fail — don't block the user
-     }
-   }
-   ```
-
-**Acceptance criteria:**
-- Build v0.1.0, install it
-- Push v0.1.1 tag, CI builds and creates release with `latest.json`
-- v0.1.0 app detects the update on next launch
-- Update installs and app restarts at v0.1.1
-- If update check fails (offline, GitHub down), app continues normally
+**Note:** Endpoint URL points to GitHub Releases — requires public repo to work for end users. Works for testing if you have repo access.
 
 ---
 
