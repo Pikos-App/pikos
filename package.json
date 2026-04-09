@@ -11,7 +11,8 @@
     "test": "turbo test",
     "prepare": "husky",
     "verify": "bash scripts/verify.sh",
-    "release": "bash scripts/release.sh"
+    "release": "bash scripts/release.sh",
+    "release:retry": "bash scripts/release-retry.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
