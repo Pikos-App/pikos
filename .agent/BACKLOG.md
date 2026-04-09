@@ -36,17 +36,13 @@ Status: `[ ]` pending · 🧑 manual · 🤖 agent · 🧑🤖 mixed. Delete whe
 
 ## Distribution & Public Launch
 
-- [ ] 🧑 Enroll in Apple Developer Program ($99/yr) — gating dependency. See BACKLOG_DISTRIBUTION.md.
-- [ ] 🧑 Register bundle identifier (`app.pikos.desktop`) in Apple Developer portal
-- [ ] 🧑 Generate macOS code signing certificates (Developer ID Application)
-- [x] 🤖 Audit bundle identifier in tauri.conf.json — confirmed `app.pikos.desktop`
-- [ ] 🧑🤖 GOO-52A: GitHub Actions release workflow (signed, notarized macOS builds on tag push)
+- [ ] 🧑 Register bundle identifier + generate signing certs (blocked on Apple Developer approval)
+- [ ] 🧑🤖 GOO-52A: Wire up Apple signing in release workflow (blocked on certs)
 - [ ] 🤖 GOO-52B: Tauri auto-updater (keypair, plugin config, update check on launch)
 - [ ] 🧑 GOO-52D: Test signed build on clean macOS
 - [ ] 🧑 Create `pikos-app` GitHub org, transfer repo
 - [ ] 🧑 Make repo public (must happen before /download works)
 - [ ] 🤖 GOO-53-DL: Cloudflare Pages Function for /download (redirect to latest GitHub Release)
-- [ ] 🧑🤖 GOO-53-PUBLIC: Rename /open → /public across marketing site (routes, links, copy) and audit for "open source" language that should say "source-available"
 
 ### Notifications — Post-Launch
 

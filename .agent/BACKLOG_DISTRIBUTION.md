@@ -8,83 +8,32 @@
 > Phase mapping: tasks are grouped by when they should be done relative to your GTM phases.
 
 
-### GOO-XX: Enroll in Apple Developer Program 🧑
+### Enroll in Apple Developer Program ✅ (done)
 
-**What:** Enroll at https://developer.apple.com/programs/ ($99/yr). This is the gating dependency for all signing, notarization, and App Store work.
-
-**Steps:**
-1. Enroll as an Individual (not Organization — you're a solo dev, org enrollment requires a DUNS number and takes weeks).
-2. Use your existing Apple ID. If the account has any outstanding issues (expired payment method, pending agreements), resolve them first — enrollment will silently fail otherwise.
-3. Enrollment usually approves in 24–48 hours. Sometimes instant.
-4. Once approved, accept all agreements in App Store Connect (https://appstoreconnect.apple.com) — there are usually 2–3 initial agreements.
-
-**Outputs needed for downstream tasks:**
-- Team ID (visible in Membership details)
-- An App Store Connect API Key: go to Users & Access → Integrations → App Store Connect API → generate a key with "Developer" role. Download the `.p8` file — you only get one download.
-
-**Store securely (you'll need these for GitHub Secrets):**
-- Team ID
-- API Key ID
-- API Key Issuer ID
-- The `.p8` file contents
-
-**Timeline:** ~30 minutes of active work + 24–48hr wait for approval.
+Enrolled 2026-04-07, waiting for approval. Once approved: accept agreements in App Store Connect, grab Team ID, generate API key (.p8).
 
 ---
 
-### GOO-XX: Register Bundle Identifier 🧑
+### Register Bundle Identifier 🧑 (next — after approval)
 
-**What:** Register the app's bundle ID in the Apple Developer portal. Signing and notarization won't work without this.
-
-**Steps:**
-1. Go to Certificates, Identifiers & Profiles → Identifiers → Register a new identifier.
-2. Select "App IDs" → "App".
-3. Set the Bundle ID to match what's in your `tauri.conf.json` under `identifier` (likely something like `app.pikos.desktop` or `com.gooselabs.pikos` — check your config and decide now if you want to change it, because changing it later is painful).
-4. Enable capabilities you need: currently none beyond defaults. When you add App Sandbox for MAS, you'll come back here.
-
-**Decision needed:** Confirm the bundle identifier string. This should match across `tauri.conf.json`, the Apple portal, and eventually the App Store listing. Recommend `app.pikos.desktop` to match the domain and leave room for `app.pikos.mobile` later.
-
-**Timeline:** 5 minutes.
+Register `app.pikos.desktop` in Apple Developer portal → Certificates, Identifiers & Profiles → Identifiers. 5 minutes.
 
 ---
 
-### GOO-XX: Generate macOS code signing certificates 🧑
+### Generate macOS code signing certificates 🧑 (next — after approval)
 
-**What:** Create the certificates needed for signing. You need two types, but only the first is required now.
-
-**Certificates to create:**
-1. **Developer ID Application** — required for direct distribution (notarized .dmg from your site / GitHub Releases). Create this now.
-2. **Mac App Distribution** + **Mac Installer Distribution** — required for Mac App Store submission. Can defer to Phase 4.
-
-**Steps for Developer ID Application:**
-1. On your Mac, open Keychain Access → Certificate Assistant → Request a Certificate from a Certificate Authority. Save the CSR to disk.
-2. In the Apple Developer portal → Certificates → create new → Developer ID Application. Upload the CSR.
-3. Download the certificate, double-click to install in Keychain.
-4. Export as `.p12` from Keychain Access (right-click the certificate → Export). Set a strong password.
-5. Base64-encode the `.p12` for GitHub Secrets: `base64 -i certificate.p12 | pbcopy`
-
-**Store securely:**
-- The `.p12` file
-- The `.p12` password
-- The base64-encoded string (for GitHub Secrets)
-
-**Timeline:** 15 minutes.
+1. Keychain Access → Certificate Assistant → Request a Certificate. Save CSR.
+2. Apple Developer portal → Certificates → Developer ID Application. Upload CSR.
+3. Download cert, double-click to install.
+4. Export as `.p12` from Keychain (right-click → Export). Set password.
+5. Base64-encode: `base64 -i certificate.p12 | pbcopy`
+6. Store: `.p12` file, password, base64 string (for GitHub Secrets).
 
 ---
 
-### GOO-XX: Audit and set bundle identifier in tauri.conf.json 🤖
+### Bundle identifier in tauri.conf.json ✅ (done)
 
-**What:** Ensure the bundle identifier in `tauri.conf.json` is set to the final production value and is consistent everywhere.
-
-**Implementation:**
-1. Open `apps/desktop/src-tauri/tauri.conf.json`.
-2. Verify `identifier` field matches the registered Bundle ID (e.g., `app.pikos.desktop`).
-3. Check that `productName` is set to `Pikos`.
-4. Verify `version` follows semver and is set to something reasonable for beta (e.g., `0.1.0`).
-5. Check `bundle.macOS.signingIdentity` — should be set to `Developer ID Application: <Your Name> (<Team ID>)` or left empty if signing is handled entirely by the CI action (preferred — don't hardcode the identity, let the CI environment handle it).
-6. Ensure `bundle.macOS.minimumSystemVersion` is set (recommend `10.15` for Catalina+ or `11.0` for Big Sur+ depending on your Tauri 2 minimum).
-
-**Acceptance:** `pnpm tauri build` doesn't error on identifier-related config issues.
+Confirmed `app.pikos.desktop`.
 
 ---
 
@@ -92,54 +41,21 @@
 
 ---
 
-### GOO-52A: Set up GitHub Actions release workflow for macOS 🧑🤖
+### GOO-52A: Wire up Apple signing in release workflow 🧑🤖
 
-**What:** Create a GitHub Actions workflow that produces signed, notarized macOS builds on git tag push.
+**What:** The release workflow (`.github/workflows/release.yml`) exists and builds unsigned. Once Apple Developer is approved, add signing + notarization.
 
-**Prerequisites:** Apple Developer enrollment complete, certificates generated, bundle ID registered.
-
-**🧑 You do first:**
-Add these GitHub repository secrets:
+**🧑 You do:** Add GitHub repository secrets:
 - `APPLE_CERTIFICATE` — base64-encoded `.p12`
-- `APPLE_CERTIFICATE_PASSWORD` — the `.p12` export password
-- `APPLE_API_KEY` — contents of the `.p8` file
-- `APPLE_API_KEY_ID` — the Key ID from App Store Connect
-- `APPLE_API_ISSUER_ID` — the Issuer ID from App Store Connect
-- `APPLE_TEAM_ID` — your Team ID
-- `TAURI_SIGNING_PRIVATE_KEY` — (created in auto-updater task, but add the secret here)
-- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — password for the above
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_API_KEY` — `.p8` file contents
+- `APPLE_API_KEY_ID`
+- `APPLE_API_ISSUER_ID`
+- `APPLE_SIGNING_IDENTITY` — `Developer ID Application: Your Name (TEAMID)`
 
-**🤖 Claude Code implements:**
-Create `.github/workflows/release.yml`:
+**🤖 Claude Code does:** Uncomment the Apple signing env vars in `release.yml`.
 
-```
-Trigger: push tags matching `v*`
-Runner: macos-latest (Apple Silicon)
-
-Steps:
-1. Checkout code
-2. Setup Node.js (match .nvmrc or package.json engines)
-3. Setup Rust (stable)
-4. Setup pnpm (match packageManager field in root package.json)
-5. Install dependencies: `pnpm install`
-6. Import signing certificate from APPLE_CERTIFICATE secret
-7. Run `pnpm tauri build --target universal-apple-darwin` (universal binary)
-8. Notarize the .dmg using `apple-api-key`, `apple-api-key-id`, `apple-api-issuer` via tauri's built-in notarization (Tauri 2 handles this via `tauri.conf.json` `bundle.macOS.notarization` or env vars — check Tauri 2 docs for the current mechanism)
-9. Create GitHub Release from the tag
-10. Upload artifacts: .dmg, updater .json manifest, .tar.gz (for updater)
-
-Naming convention: `Pikos_<version>_universal.dmg`
-```
-
-**Important Tauri 2 specifics to check:**
-- Tauri 2 may use `APPLE_SIGNING_IDENTITY`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD` env vars directly — read the Tauri 2 signing docs at https://tauri.app/distribute/sign/macos/
-- Notarization in Tauri 2 might use `notarytool` under the hood — the API key approach (not app-specific password) is more reliable in CI
-- The `tauri-apps/tauri-action` GitHub Action may handle all of this — check if it supports Tauri 2 or if manual `pnpm tauri build` + separate notarization step is needed
-
-**Acceptance criteria:**
-- Push a `v0.1.0-test` tag → workflow runs → GitHub Release appears with a signed, notarized `.dmg`
-- Download the `.dmg` on a clean Mac (or different user account) → opens without Gatekeeper warning
-- Delete the test release and tag after verification
+**Acceptance:** Tag push → signed, notarized `.dmg` → opens on clean Mac without Gatekeeper warning.
 
 ---
 
@@ -208,12 +124,6 @@ Naming convention: `Pikos_<version>_universal.dmg`
 
 ---
 
-### GOO-52C: Linux build target in CI ✅ (done)
-
-macOS universal + Linux x86_64 are already in the release workflow matrix. No Windows binary — per GTM, unsigned `.msi` triggers SmartScreen warnings that look like malware. Technical Windows users can build from source. Revisit only if non-technical Windows demand materializes.
-
----
-
 ### GOO-52D: Test signed build on clean macOS install 🧑
 
 **What:** Verify the full Gatekeeper experience before sending the beta to anyone.
@@ -234,7 +144,7 @@ macOS universal + Linux x86_64 are already in the release workflow matrix. No Wi
 
 ## Phase 3 (public launch — all ship together)
 
-> Phase 3 is a single coordinated moment: repo goes public, `/download` page goes live, `/open` page goes live, blog posts publish. The repo must be public before `/download` works — GitHub Releases return 404 for unauthenticated requests on private repos.
+> Phase 3 is a single coordinated moment: repo goes public, `/download` page goes live, `/source` page goes live, blog posts publish. The repo must be public before `/download` works — GitHub Releases return 404 for unauthenticated requests on private repos.
 
 ---
 
@@ -271,25 +181,6 @@ macOS universal + Linux x86_64 are already in the release workflow matrix. No Wi
 
 ---
 
-### GOO-53-OPEN: Build /open page 🤖
-
-**What:** Technical-audience landing page — architecture, local-first philosophy, SQLite data ownership, source-available repo.
-
-**Content (from GTM):**
-- Local-first philosophy: your data is a SQLite file on your disk, inspect it with any SQLite client
-- Architecture: Tauri 2 + React + TypeScript, no Electron, no cloud dependency
-- Privacy claim is auditable: link to public repo
-- Speaks to the "Obsidian + TickTick" pain point with technical specifics
-- Links: GitHub repo, Homebrew install (if ready), build-from-source instructions
-- Does NOT lead with origin story or solo-dev angle
-
-**Acceptance criteria:**
-- Page exists at `/open`
-- Links to public GitHub repo
-- No broken links or placeholder content
-
----
-
 ### GOO-XX: Make repo public 🧑
 
 **What:** Flip the private monorepo to public (or set up the public mirror repo per GTM).
@@ -300,38 +191,6 @@ macOS universal + Linux x86_64 are already in the release workflow matrix. No Wi
 
 ---
 
-### GOO-XX: Create RELEASING.md 🤖
-
-**What:** Document the release process so it's repeatable and Claude Code can assist with future releases.
-
-**Contents:**
-```markdown
-# Releasing Pikos
-
-## Version bumping
-1. Update version in `apps/desktop/src-tauri/tauri.conf.json`
-2. Update version in `apps/desktop/package.json`
-3. (If they exist) Update version in `apps/desktop/src-tauri/Cargo.toml`
-4. Commit: `git commit -am "chore: bump version to vX.Y.Z"`
-
-## Creating a release
-1. Tag: `git tag vX.Y.Z`
-2. Push: `git push origin vX.Y.Z`
-3. CI builds, signs, notarizes, and creates GitHub Release automatically
-4. Verify the release: download .dmg on a clean machine, check Gatekeeper, check auto-updater
-
-## Hotfix process
-1. Fix on main (or cherry-pick to a release branch if needed)
-2. Bump patch version
-3. Tag and push — auto-updater delivers it to existing users
-
-## Troubleshooting
-- Notarization failed: Check CI logs for Apple's rejection reason. Usually entitlements or hardened runtime issues.
-- Updater not detecting new version: Verify `latest.json` is uploaded and the endpoint URL in tauri.conf.json matches.
-- Gatekeeper still warns: Stapling may have failed. Re-run `xcrun stapler staple Pikos.dmg` locally.
-```
-
-**Acceptance:** File exists at repo root, accurately reflects the actual workflow after GOO-52A is done. Update this file whenever the process changes.
 
 ---
 

@@ -10,7 +10,8 @@
     "build": "turbo build",
     "test": "turbo test",
     "prepare": "husky",
-    "verify": "bash scripts/verify.sh"
+    "verify": "bash scripts/verify.sh",
+    "release": "bash scripts/release.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
