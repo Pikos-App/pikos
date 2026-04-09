@@ -1,6 +1,6 @@
 [package]
 name = "pkos"
-version = "0.2.0"
+version = "0.2.1"
 description = "Pikos — notes, tasks, and calendar"
 authors = ["Goose Labs"]
 edition = "2021"

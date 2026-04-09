@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Pikos",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "identifier": "app.pikos.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
