@@ -28,7 +28,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_PUBLIC_KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBRTE4N0ZFOTFFMzgwMzkKUldRNWdPT1Ivb2ZobXNBUlFJSEFzZm5iUEoxV1lkVGxPQ1B0SUZybXhtYk1OVXBuUE50NjVYRWEK",
       "endpoints": [
         "https://github.com/alex-ak/pkos/releases/latest/download/latest.json"
       ]
