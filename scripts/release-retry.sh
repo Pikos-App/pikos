@@ -23,7 +23,7 @@ fi
 
 # Delete failed tag
 git tag -d "$TAG" 2>/dev/null || true
-git push origin --delete "$TAG" 2>/dev/null || true
+git push --no-verify origin --delete "$TAG" 2>/dev/null || true
 
 # Also delete the draft release on GitHub if gh is available
 gh release delete "$TAG" --yes 2>/dev/null || true
