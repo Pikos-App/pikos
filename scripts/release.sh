@@ -66,7 +66,7 @@ echo "Created commit and tag $TAG"
 echo ""
 
 # Push and get workflow URL
-git push && git push origin "$TAG"
+git push --atomic origin HEAD "$TAG"
 
 # Wait briefly for the run to register, then grab the URL
 sleep 3

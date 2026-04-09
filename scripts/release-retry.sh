@@ -28,9 +28,9 @@ git push origin --delete "$TAG" 2>/dev/null || true
 # Also delete the draft release on GitHub if gh is available
 gh release delete "$TAG" --yes 2>/dev/null || true
 
-# Re-tag current HEAD and push
+# Re-tag current HEAD and push (single push with tag)
 git tag "$TAG"
-git push && git push origin "$TAG"
+git push --atomic origin HEAD "$TAG"
 
 # Wait briefly for the run to register, then grab the URL
 sleep 3

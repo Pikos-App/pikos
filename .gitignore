@@ -32,5 +32,8 @@ recordings/
 # Claude Code
 .claude/settings.local.json
 
+# Agent workspace (private — not for public repo)
+.agent/
+
 # OS generated files
 Thumbs.db
