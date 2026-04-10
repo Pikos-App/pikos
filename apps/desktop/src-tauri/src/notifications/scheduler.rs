@@ -134,8 +134,6 @@ struct DueReminder {
 #[derive(sqlx::FromRow)]
 struct OverduePage {
     page_id: String,
-    title: String,
-    scheduled_start: String,
 }
 
 /// Check if the current local time falls within quiet hours.
@@ -313,7 +311,7 @@ async fn fire_overdue_alerts(
         .to_string();
 
     let overdue: Vec<OverduePage> = sqlx::query_as(
-        "SELECT DISTINCT ps.page_id, p.title, ps.scheduled_start
+        "SELECT DISTINCT ps.page_id
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
          WHERE p.status != 'done'
