@@ -293,7 +293,12 @@ async fn fire_default_reminders(
     Ok(())
 }
 
-/// Overdue alerts: once per (page_id, calendar_date).
+/// Overdue alerts: one summary notification per cycle.
+///
+/// Only items overdue within the last 24 hours are eligible — older items are
+/// noise (the user already knows they're overdue). All eligible items are
+/// summarized in a single notification regardless of count, then logged so
+/// they don't re-notify today.
 async fn fire_overdue_alerts(
     app: &AppHandle,
     pool: &SqlitePool,
@@ -301,6 +306,9 @@ async fn fire_overdue_alerts(
     today: &str,
 ) -> Result<(), String> {
     let recent_cutoff = (chrono::Local::now() - chrono::Duration::minutes(5))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let stale_cutoff = (chrono::Local::now() - chrono::Duration::hours(24))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
 
@@ -312,29 +320,30 @@ async fn fire_overdue_alerts(
            AND p.deleted_at IS NULL
            AND ps.status != 'done'
            AND datetime(ps.scheduled_start) < datetime(?)
+           AND datetime(ps.scheduled_start) >= datetime(?)
            AND datetime(p.created_at) < datetime(?)
            AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
              WHERE nl.page_id = ps.page_id
                AND nl.type = 'overdue'
                AND date(nl.fired_at) = ?
-           )",
+           )
+         ORDER BY ps.scheduled_start DESC",
     )
     .bind(now_ts)
+    .bind(&stale_cutoff)
     .bind(&recent_cutoff)
     .bind(today)
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    for row in overdue {
-        let time_str = format_time_from_iso(&row.scheduled_start);
-        let body = if time_str.is_empty() {
-            "Overdue".to_string()
-        } else {
-            format!("Overdue · was scheduled for {time_str}")
-        };
+    if overdue.is_empty() {
+        return Ok(());
+    }
 
+    // Log every page so we don't re-notify today.
+    for row in &overdue {
         let log_id = uuid::Uuid::new_v4().to_string();
         let fired_at = chrono::Utc::now()
             .format("%Y-%m-%dT%H:%M:%S%.3fZ")
@@ -350,9 +359,15 @@ async fn fire_overdue_alerts(
         .execute(pool)
         .await
         .map_err(|e| e.to_string())?;
-
-        deliver(app, &row.title, &body);
     }
+
+    let count = overdue.len();
+    let title = if count == 1 {
+        "1 item overdue".to_string()
+    } else {
+        format!("{count} items overdue")
+    };
+    deliver(app, &title, "Open Pikos to review.");
 
     Ok(())
 }
