@@ -136,7 +136,7 @@ jobs:
       - name: Generate updater manifest (latest.json)
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          REPO="alex-ak/pkos"
+          REPO="pikos-app/pikos"
           BASE="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}"
 
           # Find updater artifacts

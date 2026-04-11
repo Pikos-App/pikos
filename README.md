@@ -75,4 +75,4 @@ You can open the database with any SQLite client and query your own data directl
 
 Pikos is source-available under the [Business Source License 1.1](LICENSE). You can read, audit, and build the code for personal use. Commercial redistribution is not permitted. The license converts to Apache 2.0 after four years.
 
-See [pikos.app/open](https://pikos.app/open) for more on the licensing philosophy.
+See [pikos.app/source](https://pikos.app/source) for more on the licensing philosophy.
