@@ -118,6 +118,30 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f | head -50 || true
 
+      - name: Rename installers to stable names
+        working-directory: artifacts
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+
+          # Rename installers to version-less stable names so
+          # /releases/latest/download/<name> URLs on the marketing site
+          # keep working across releases. Updater bundles (*.tar.gz, *.sig)
+          # and latest.json are left alone — the auto-updater resolves them
+          # via the manifest, not fixed URLs.
+          for f in **/*.dmg; do
+            mv "$f" "$(dirname "$f")/Pikos-macos-universal.dmg"
+          done
+          for f in **/*.AppImage; do
+            mv "$f" "$(dirname "$f")/Pikos-linux-x86_64.AppImage"
+          done
+          for f in **/*.deb; do
+            mv "$f" "$(dirname "$f")/Pikos-linux-x86_64.deb"
+          done
+
+          echo "--- Artifacts after rename ---"
+          find . -type f | sort
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

@@ -22,9 +22,7 @@ import Footer from "../components/Footer.astro";
     <div class="mt-12 grid gap-4 sm:grid-cols-2">
 
       <!-- macOS -->
-      <a
-        href="/download/mac"
-        data-umami-event="download-mac"
+      <div
         class="group flex flex-col items-center rounded-xl border border-gray-200 bg-white px-6 py-8 text-center transition-colors hover:border-orange-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-orange-800"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400 transition-colors group-hover:text-orange-500 dark:text-gray-500" aria-hidden="true">
@@ -33,16 +31,18 @@ import Footer from "../components/Footer.astro";
         </svg>
         <span class="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-50">macOS</span>
         <span class="mt-1 text-sm text-gray-400 dark:text-gray-500">Intel &amp; Apple Silicon</span>
-        <span class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-5 py-2 text-sm font-medium text-white transition-colors group-hover:bg-orange-400">
+        <a
+          href="https://github.com/pikos-app/pikos/releases/latest/download/Pikos-macos-universal.dmg"
+          data-umami-event="download-mac"
+          class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+        >
           Download .dmg
-        </span>
+        </a>
         <span class="mt-3 text-xs text-gray-400 dark:text-gray-500">Requires macOS 11+</span>
-      </a>
+      </div>
 
       <!-- Linux -->
-      <a
-        href="/download/linux"
-        data-umami-event="download-linux"
+      <div
         class="group flex flex-col items-center rounded-xl border border-gray-200 bg-white px-6 py-8 text-center transition-colors hover:border-orange-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-orange-800"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400 transition-colors group-hover:text-orange-500 dark:text-gray-500" aria-hidden="true">
@@ -51,11 +51,21 @@ import Footer from "../components/Footer.astro";
         </svg>
         <span class="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-50">Linux</span>
         <span class="mt-1 text-sm text-gray-400 dark:text-gray-500">x86_64</span>
-        <span class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-5 py-2 text-sm font-medium text-white transition-colors group-hover:bg-orange-400">
+        <a
+          href="https://github.com/pikos-app/pikos/releases/latest/download/Pikos-linux-x86_64.AppImage"
+          data-umami-event="download-linux-appimage"
+          class="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-400"
+        >
           Download .AppImage
-        </span>
-        <span class="mt-3 text-xs text-gray-400 dark:text-gray-500">Also available as .deb</span>
-      </a>
+        </a>
+        <a
+          href="https://github.com/pikos-app/pikos/releases/latest/download/Pikos-linux-x86_64.deb"
+          data-umami-event="download-linux-deb"
+          class="mt-3 text-xs text-gray-400 transition-colors hover:text-orange-500 dark:text-gray-500 dark:hover:text-orange-400"
+        >
+          Prefer .deb? →
+        </a>
+      </div>
 
     </div>
 
