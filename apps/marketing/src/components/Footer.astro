@@ -5,14 +5,14 @@ interface Props {
   /** Override default class on footer element */
   class?: string;
 }
-const { current = "/", class: className = "mt-24" } = Astro.props;
+const { current = "/", class: className = "mt-24 mb-12" } = Astro.props;
 
 const links = [
   { href: "/", label: "Home" },
   { href: "/download", label: "Download" },
   { href: "/blog", label: "Blog" },
   { href: "/release-notes", label: "Release Notes" },
-  { href: "/source", label: "Source" },
+  { href: "https://github.com/Pikos-App/pikos", label: "Source" },
   { href: "/feedback", label: "Feedback" },
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
