@@ -1,5 +1,5 @@
-// PriorityDropdown — GOO-35.
-// Linear-inspired priority selector. Used in MetadataHeader byline + PageListItem badge.
+// PriorityDropdown.
+// Priority selector. Used in MetadataHeader byline + PageListItem badge.
 
 import type { PagePriority } from "@pikos/core";
 import { Check } from "lucide-react";

@@ -5,7 +5,7 @@ import { parseInput } from "./parser";
 
 const NOW = new Date("2026-03-15T12:00:00");
 
-describe("GOO-19 NL Page Creation Parser", () => {
+describe("NL Page Creation Parser", () => {
   // ─── 1. Single page creation ───────────────────────────────────────────────
 
   describe("single page creation", () => {
@@ -135,7 +135,7 @@ describe("GOO-19 NL Page Creation Parser", () => {
     });
   });
 
-  // ─── GOO-120: Numeric priority shortcuts ──────────────────────────────────
+  // ─── Numeric priority shortcuts ────────────────────────────────────────────
 
   describe("numeric priority shortcuts (!0-4)", () => {
     it("!1 → urgent", () => {

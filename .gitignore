@@ -30,10 +30,11 @@ test-results/
 recordings/
 
 # Claude Code
-.claude/settings.local.json
+.claude/
 
 # Agent workspace (private — not for public repo)
 .agent/
+CLAUDE.md
 
 # OS generated files
 Thumbs.db

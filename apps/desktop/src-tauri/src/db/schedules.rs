@@ -251,26 +251,26 @@ pub async fn update_page_schedule(
 
     let mut builder =
         sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE page_schedules SET ");
-    let mut sep = builder.separated(", ");
+    let mut fields = builder.separated(", ");
     let mut has_updates = false;
     let start_changed = updates.scheduled_start.is_some();
 
     if let Some(v) = updates.scheduled_start {
-        sep.push("scheduled_start = ");
-        sep.push_bind_unseparated(v);
+        fields.push("scheduled_start = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(v) = updates.status {
-        sep.push("status = ");
-        sep.push_bind_unseparated(v);
+        fields.push("status = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(val) = updates.scheduled_end {
-        sep.push("scheduled_end = ");
+        fields.push("scheduled_end = ");
         match val {
-            serde_json::Value::Null => sep.push_bind_unseparated(None::<String>),
-            serde_json::Value::String(s) => sep.push_bind_unseparated(s),
-            _ => sep.push_bind_unseparated(None::<String>),
+            serde_json::Value::Null => fields.push_bind_unseparated(None::<String>),
+            serde_json::Value::String(s) => fields.push_bind_unseparated(s),
+            _ => fields.push_bind_unseparated(None::<String>),
         };
         has_updates = true;
     }
@@ -279,7 +279,7 @@ pub async fn update_page_schedule(
         return fetch_schedule(&pool, &id).await;
     }
 
-    drop(sep);
+    drop(fields);
     builder.push(" WHERE id = ");
     builder.push_bind(&id);
 
@@ -379,8 +379,6 @@ pub async fn list_page_schedules_range(
     Ok(rows.into_iter().map(PageSchedule::from).collect())
 }
 
-// ─── Recurrence rule commands ─────────────────────────────────────────────────
-
 #[tauri::command]
 pub async fn create_recurrence_rule(
     state: State<'_, DbState>,
@@ -422,36 +420,36 @@ pub async fn update_recurrence_rule(
 
     let mut builder =
         sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE page_recurrence_rules SET ");
-    let mut sep = builder.separated(", ");
+    let mut fields = builder.separated(", ");
     let mut has_updates = false;
 
     if let Some(v) = updates.rrule {
-        sep.push("rrule = ");
-        sep.push_bind_unseparated(v);
+        fields.push("rrule = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(v) = updates.rrule_exdates {
         let json = serde_json::to_string(&v).unwrap_or_else(|_| "[]".to_string());
-        sep.push("rrule_exdates = ");
-        sep.push_bind_unseparated(json);
+        fields.push("rrule_exdates = ");
+        fields.push_bind_unseparated(json);
         has_updates = true;
     }
     if let Some(v) = updates.scheduled_start {
-        sep.push("scheduled_start = ");
-        sep.push_bind_unseparated(v);
+        fields.push("scheduled_start = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(v) = updates.timezone {
-        sep.push("timezone = ");
-        sep.push_bind_unseparated(v);
+        fields.push("timezone = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(val) = updates.scheduled_end {
-        sep.push("scheduled_end = ");
+        fields.push("scheduled_end = ");
         match val {
-            serde_json::Value::Null => sep.push_bind_unseparated(None::<String>),
-            serde_json::Value::String(s) => sep.push_bind_unseparated(s),
-            _ => sep.push_bind_unseparated(None::<String>),
+            serde_json::Value::Null => fields.push_bind_unseparated(None::<String>),
+            serde_json::Value::String(s) => fields.push_bind_unseparated(s),
+            _ => fields.push_bind_unseparated(None::<String>),
         };
         has_updates = true;
     }
@@ -460,7 +458,7 @@ pub async fn update_recurrence_rule(
         return fetch_rule(&pool, &id).await;
     }
 
-    drop(sep);
+    drop(fields);
     builder.push(" WHERE id = ");
     builder.push_bind(&id);
 

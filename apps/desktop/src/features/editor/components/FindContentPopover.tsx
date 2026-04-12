@@ -118,7 +118,8 @@ export function FindContentPopover({ editor }: FindContentPopoverProps) {
       const { from, to } = editor.state.selection;
       if (from !== to) {
         const selected = editor.state.doc.textBetween(from, to, " ");
-        if (selected.length <= 100) {
+        const MAX_AUTO_POPULATE_LENGTH = 100;
+        if (selected.length <= MAX_AUTO_POPULATE_LENGTH) {
           setQuery(selected);
           setActiveIndex(0);
         }

@@ -21,10 +21,10 @@ import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 
 // Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p
 function formatTime(date: Date): string {
-  const h = date.getHours() % 12 || 12;
-  const m = date.getMinutes().toString().padStart(2, "0");
-  const ampm = date.getHours() >= 12 ? "p" : "a";
-  return `${h}:${m}${ampm}`;
+  const hours = date.getHours() % 12 || 12;
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  const period = date.getHours() >= 12 ? "p" : "a";
+  return `${hours}:${minutes}${period}`;
 }
 
 function isDueSoon(iso: string): boolean {

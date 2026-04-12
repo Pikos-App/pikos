@@ -45,13 +45,13 @@ export interface Page {
   contentText?: string;
   status: PageStatus;
   priority: PagePriority;
-  tags: string[]; // stored as JSON array in SQLite
+  tags: string[]; // normalized in tags/page_tags tables; denorm JSON on pages row
   sortOrder: number; // manual position within folder (or inbox)
   scheduledStart?: string | null; // ISO 8601 — denorm of next upcoming page_schedules row
   scheduledEnd?: string | null; // ISO 8601 — denorm of next upcoming page_schedules row
   completedAt?: string | null; // ISO 8601
   links?: string[]; // [[wikilink]] target page UUIDs; stored as JSON array
-  parentId?: string | null; // sub-page nesting (GOO-12, max 3 levels)
+  parentId?: string | null; // sub-page nesting
   lastOpenedAt?: string | null; // ISO 8601; updated on open → drives recent-pages query
   deletedAt?: string | null; // ISO 8601; NULL = not deleted, set = trashed
   createdAt: string; // ISO 8601
@@ -105,7 +105,6 @@ export interface PageReminder {
 }
 
 // ─── FolderNode ───────────────────────────────────────────────────────────────
-// Used by buildFolderTree() in packages/core/src/page.ts.
 // In v1, children is always [] (flat list); the type supports nesting for later.
 
 export interface FolderNode extends Folder {
@@ -113,7 +112,6 @@ export interface FolderNode extends Folder {
 }
 
 // ─── Tag ──────────────────────────────────────────────────────────────────────
-// Derived at query time — not stored as a separate table.
 
 export interface Tag {
   name: string;
@@ -143,7 +141,7 @@ export interface SearchResponse {
 }
 
 // ─── FocusSession ─────────────────────────────────────────────────────────────
-// Recorded by the built-in focus timer (GOO-78).
+// Recorded by the built-in focus timer.
 // page_id is optional — timer can run without a page association.
 // Sessions < 10s are auto-discarded; never written to DB.
 

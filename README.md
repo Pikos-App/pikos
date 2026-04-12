@@ -14,7 +14,7 @@ Pikos is a local-first desktop app that combines a rich text editor, task manage
 - **Full-text search** — FTS5-powered search across all page content. Ranked results with previews.
 - **Quick capture** — Natural language input: "Call dentist tomorrow high priority #health" creates a page with title, date, priority, and tag set automatically.
 - **Keyboard-first** — Every action has a shortcut. Navigate, create, schedule, and search without reaching for the mouse.
-- **Private by default** — Everything stored locally in SQLite. No accounts, no telemetry, no network requests during normal use.
+- **Private by default** — Everything stored locally in SQLite. No accounts, no telemetry. The only network request is a version check at launch — updates are never installed without your approval.
 - **Export** — SQLite backup or JSON export at any time. Your data is portable.
 
 ## Stack
@@ -48,7 +48,7 @@ Prerequisites: [Node.js](https://nodejs.org) (v20+), [pnpm](https://pnpm.io) (v1
 git clone https://github.com/pikos-app/pikos.git
 cd pikos
 pnpm install
-pnpm tauri dev
+pnpm dev:desktop
 ```
 
 ### Commands
@@ -63,7 +63,7 @@ pnpm tauri dev
 
 ## Data
 
-All data is stored in a local SQLite database. The schema lives in [`apps/desktop/src-tauri/migrations/001_initial.sql`](apps/desktop/src-tauri/migrations/001_initial.sql). Every page is simultaneously a rich-text document, a trackable task, and a calendar event — one `pages` table with structured metadata columns alongside ProseMirror JSON content.
+All data is stored in a local SQLite database. The schema is defined across migration files in [`apps/desktop/src-tauri/migrations/`](apps/desktop/src-tauri/migrations/). Every page is simultaneously a rich-text document, a trackable task, and a calendar event — one `pages` table with structured metadata columns alongside ProseMirror JSON content.
 
 The database location follows your OS conventions:
 - **macOS**: `~/Library/Application Support/app.pikos.desktop/`
@@ -75,4 +75,4 @@ You can open the database with any SQLite client and query your own data directl
 
 Pikos is source-available under the [Business Source License 1.1](LICENSE). You can read, audit, and build the code for personal use. Commercial redistribution is not permitted. The license converts to Apache 2.0 after four years.
 
-See [pikos.app/source](https://pikos.app/source) for more on the licensing philosophy.
+See the [blog](https://pikos.app/blog) for more on the licensing philosophy.

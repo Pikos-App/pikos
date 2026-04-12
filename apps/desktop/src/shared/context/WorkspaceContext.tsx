@@ -1,7 +1,7 @@
 "use client";
 
 // WorkspaceContext — owns all data + mutations: pages, folders, tags.
-// GOO-15: auto-creates/reopens workspace on mount via @tauri-apps/plugin-store.
+// Auto-creates/reopens workspace on mount via @tauri-apps/plugin-store.
 
 import type {
   CompletedPagesFilter,
@@ -28,6 +28,12 @@ import { load } from "@tauri-apps/plugin-store";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
+
+/** Strip heavy fields (content, contentText) to produce a lightweight page summary for lists. */
+function toPageSummary(page: Page): PageSummary {
+  const { content: _, contentText: _ct, ...summary } = page;
+  return summary;
+}
 
 // ─── Event emitter ────────────────────────────────────────────────────────────
 
@@ -493,7 +499,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       try {
         const updated = await adapter.updatePage(id, accumulated);
         snapshotsRef.current.delete(id);
-        const { content: _, contentText: _ct, ...summary } = updated;
+        const summary = toPageSummary(updated);
         setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
         emit("page:updated", updated);
       } catch (err) {
@@ -522,14 +528,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       tags: [],
       title: title ?? "",
     });
-    const { content: _, contentText: _ct, ...summary } = page;
-    setPages((prev) => [...prev, summary]);
+    setPages((prev) => [...prev, toPageSummary(page)]);
     emit("page:created", page);
     return page;
   }
 
   async function deletePage(id: string) {
-    // Cancel any pending debounced write for this page (GOO-93 fix)
+    // Cancel any pending debounced write for this page
     const timer = debounceTimers.current.get(id);
     if (timer !== undefined) clearTimeout(timer);
     debounceTimers.current.delete(id);
@@ -556,8 +561,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     // Re-fetch the page to get its current state and add back to the list
     const page = await adapter.getPage(id);
     if (page) {
-      const { content: _, contentText: _ct, ...summary } = page;
-      setPages((prev) => [...prev, summary]);
+      setPages((prev) => [...prev, toPageSummary(page)]);
     }
   }
 

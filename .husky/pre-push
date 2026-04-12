@@ -1,3 +1,15 @@
+# Rust lint — too slow for pre-commit (~15s), fine for pre-push
+if command -v cargo &>/dev/null && [ -f apps/desktop/src-tauri/Cargo.toml ]; then
+  echo "Running cargo clippy..."
+  (cd apps/desktop/src-tauri && cargo clippy --quiet -- -D warnings) || exit 1
+  printf '\033[0;32m✓\033[0m Rust clippy\n'
+fi
+
+# Bundle size budget — opt-in locally (BUNDLE_CHECK=1), always on in CI
+if [ -n "$BUNDLE_CHECK" ] || [ -n "$CI" ]; then
+  bash scripts/bundle-check.sh || exit 1
+fi
+
 # Tier 1 + Tier 2 E2E + perf — skip when SKIP_E2E is set
 if [ -z "$SKIP_E2E" ]; then
   pnpm --filter @pikos/desktop test:e2e -- --project tier1 --project tier2 --project perf -x

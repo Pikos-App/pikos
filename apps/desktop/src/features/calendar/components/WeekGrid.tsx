@@ -90,8 +90,7 @@ export function WeekGrid({
   const scrollRef = useRef<HTMLDivElement>(null);
   const dayColumnsRef = useRef<HTMLDivElement>(null);
   useMinuteTick();
-  const now = new Date();
-  const today = now;
+  const today = new Date();
 
   // ── Drag-to-reschedule ──────────────────────────────────────────────────────
   const dragRef = useRef<DragRefState | null>(null);
@@ -217,16 +216,16 @@ export function WeekGrid({
       const state = dragRef.current;
       if (!state || !scrollRef.current || !dayColumnsRef.current) return;
 
-      const scrollEl2 = scrollRef.current;
-      const columnsEl2 = dayColumnsRef.current;
-      const scrollRect2 = scrollEl2.getBoundingClientRect();
-      const columnsRect = columnsEl2.getBoundingClientRect();
+      const scrollEl = scrollRef.current;
+      const columnsEl = dayColumnsRef.current;
+      const scrollRect = scrollEl.getBoundingClientRect();
+      const columnsRect = columnsEl.getBoundingClientRect();
 
       const columnWidth = columnsRect.width / 7;
       const cursorXInColumns = ev.clientX - columnsRect.left;
       const ghostDayIndex = Math.max(0, Math.min(6, Math.floor(cursorXInColumns / columnWidth)));
 
-      if (ev.clientY < scrollRect2.top) {
+      if (ev.clientY < scrollRect.top) {
         // Cursor is in the all-day zone — hide timed ghost, highlight the target column.
         dragGhostPositionRef.current = { dayIndex: ghostDayIndex, top: 0 };
         setDragRenderState(null);
@@ -237,9 +236,9 @@ export function WeekGrid({
       // Cursor is in the timed grid — restore ghost, clear all-day highlight.
       setTimedDragAllDayTarget(null);
 
-      const cursorYInGrid2 = ev.clientY - scrollRect2.top + scrollEl2.scrollTop;
+      const cursorYInGrid = ev.clientY - scrollRect.top + scrollEl.scrollTop;
       const blockH = state.block.isCompact ? COMPACT_BLOCK_HEIGHT : state.block.height;
-      const rawTop = cursorYInGrid2 - state.grabOffsetY;
+      const rawTop = cursorYInGrid - state.grabOffsetY;
       const ghostTop = snapY(Math.max(0, Math.min(GRID_HEIGHT - blockH, rawTop)));
 
       dragGhostPositionRef.current = { dayIndex: ghostDayIndex, top: ghostTop };
@@ -311,9 +310,9 @@ export function WeekGrid({
       const state = resizeRef.current;
       if (!state || !scrollRef.current) return;
 
-      const scrollEl2 = scrollRef.current;
-      const scrollRect2 = scrollEl2.getBoundingClientRect();
-      const cursorYInGrid = ev.clientY - scrollRect2.top + scrollEl2.scrollTop;
+      const scrollEl = scrollRef.current;
+      const scrollRect = scrollEl.getBoundingClientRect();
+      const cursorYInGrid = ev.clientY - scrollRect.top + scrollEl.scrollTop;
       const minBottom = state.block.top + MIN_RESIZE_HEIGHT;
       // No snapping during live drag — smooth resize. snapY is applied on commit via yToDate.
       const ghostBottom = Math.max(minBottom, Math.min(GRID_HEIGHT, cursorYInGrid));
@@ -646,7 +645,7 @@ export function WeekGrid({
                   editingPageId={editingPageId}
                   isCurrentWeek={isCurrentWeek}
                   key={day.toISOString()}
-                  now={now}
+                  now={today}
                   onBlockDragStart={handleBlockDragStart}
                   onBlockResizeStart={handleBlockResizeStart}
                   onCancelCreate={onCancelCreate}

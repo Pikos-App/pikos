@@ -69,12 +69,13 @@ function computePopoverPos(
   if (!isVisible) return null;
   const rect = getAnchorRect(editor, isLink);
   if (!rect) return null;
-  const popoverWidth = 320;
+  const POPOVER_WIDTH = 320;
+  const EDGE_PADDING = 8;
   let left = rect.left;
-  if (left + popoverWidth > window.innerWidth - 8) {
-    left = window.innerWidth - popoverWidth - 8;
+  if (left + POPOVER_WIDTH > window.innerWidth - EDGE_PADDING) {
+    left = window.innerWidth - POPOVER_WIDTH - EDGE_PADDING;
   }
-  if (left < 8) left = 8;
+  if (left < EDGE_PADDING) left = EDGE_PADDING;
   return { left, top: rect.bottom + 6 };
 }
 

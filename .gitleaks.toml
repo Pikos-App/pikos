@@ -1,0 +1,14 @@
+# Gitleaks configuration — scoped to source files only.
+# Used by scripts/source-audit.sh in pre-push hook.
+
+[extend]
+useDefault = true
+
+[allowlist]
+  paths = [
+    '''node_modules/''',
+    '''target/''',
+    '''dist/''',
+    '''\.turbo/''',
+    '''pnpm-lock\.yaml''',
+  ]

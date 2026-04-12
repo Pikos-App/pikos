@@ -78,7 +78,7 @@ function Byline({
       <BylineSeparator />
       <FolderChip folders={folders} onChange={onFolderChange} value={page.folderId} />
 
-      {/* Date — GOO-34 */}
+      {/* Date */}
       <BylineSeparator />
       <DateSchedulePopover page={page} />
 
@@ -125,7 +125,7 @@ function Byline({
         </>
       )}
 
-      {/* Priority selector — GOO-35 */}
+      {/* Priority */}
       <BylineSeparator />
       <PriorityDropdown onSelect={onPriorityChange} priority={page.priority} variant="byline" />
 

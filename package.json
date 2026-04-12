@@ -12,6 +12,7 @@
     "test": "turbo test",
     "prepare": "husky",
     "verify": "bash scripts/verify.sh",
+    "audit:source": "bash scripts/source-audit.sh",
     "release": "bash scripts/release.sh",
     "release:retry": "bash scripts/release-retry.sh"
   },

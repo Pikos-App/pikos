@@ -1,4 +1,4 @@
-// QuickAddDialog — GOO-60
+// QuickAddDialog
 // Cmd+N (macOS) / Ctrl+N opens a centered dialog for quick page creation.
 // NLP parsing previews on-type (debounced 200ms) — chips update as you type
 // but input text is never modified. On submit, the parser extracts the clean

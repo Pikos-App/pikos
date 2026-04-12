@@ -1,5 +1,5 @@
 // Shortcut combo constants — used by the keyboard registry and UI labels.
-// Bindings are registered in the useKeyboard hook (GOO-31).
+// Bindings are registered in the useKeyboard hook.
 export const shortcuts = {
   deleteFile: "Mod+Shift+D",
   findInPage: "Mod+F",

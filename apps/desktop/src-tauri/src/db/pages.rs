@@ -293,11 +293,11 @@ async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> Result<Page, String> {
 
 async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> i64 {
     let result: Result<i64, _> = match folder_id {
-        Some(fid) => {
+        Some(folder_id) => {
             sqlx::query_scalar(
                 "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM pages WHERE folder_id = ?",
             )
-            .bind(fid)
+            .bind(folder_id)
             .fetch_one(pool)
             .await
         }
@@ -378,51 +378,51 @@ pub async fn update_page(
     let pool = state.get_pool().await?;
 
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE pages SET ");
-    let mut sep = builder.separated(", ");
+    let mut fields = builder.separated(", ");
     let mut has_updates = false;
 
     // Non-nullable string fields
     if let Some(v) = updates.title {
-        sep.push("title = ");
-        sep.push_bind_unseparated(v);
+        fields.push("title = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(v) = updates.content {
-        sep.push("content = ");
-        sep.push_bind_unseparated(v);
+        fields.push("content = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(v) = updates.content_text {
-        sep.push("content_text = ");
-        sep.push_bind_unseparated(v);
+        fields.push("content_text = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(v) = updates.status {
-        sep.push("status = ");
-        sep.push_bind_unseparated(v);
+        fields.push("status = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(v) = updates.priority {
-        sep.push("priority = ");
-        sep.push_bind_unseparated(v);
+        fields.push("priority = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(v) = updates.sort_order {
-        sep.push("sort_order = ");
-        sep.push_bind_unseparated(v);
+        fields.push("sort_order = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     let updated_tags = updates.tags.as_deref().map(|t| t.to_vec());
     if let Some(ref v) = updates.tags {
         let json = serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string());
-        sep.push("tags = ");
-        sep.push_bind_unseparated(json);
+        fields.push("tags = ");
+        fields.push_bind_unseparated(json);
         has_updates = true;
     }
     if let Some(v) = updates.links {
         let json = serde_json::to_string(&v).unwrap_or_else(|_| "[]".to_string());
-        sep.push("links = ");
-        sep.push_bind_unseparated(json);
+        fields.push("links = ");
+        fields.push_bind_unseparated(json);
         has_updates = true;
     }
 
@@ -430,11 +430,11 @@ pub async fn update_page(
     macro_rules! push_nullable_str {
         ($field:expr, $col:literal) => {
             if let Some(val) = $field {
-                sep.push(concat!($col, " = "));
+                fields.push(concat!($col, " = "));
                 match val {
-                    serde_json::Value::Null => sep.push_bind_unseparated(None::<String>),
-                    serde_json::Value::String(s) => sep.push_bind_unseparated(s),
-                    _ => sep.push_bind_unseparated(None::<String>),
+                    serde_json::Value::Null => fields.push_bind_unseparated(None::<String>),
+                    serde_json::Value::String(s) => fields.push_bind_unseparated(s),
+                    _ => fields.push_bind_unseparated(None::<String>),
                 };
                 has_updates = true;
             }
@@ -453,9 +453,9 @@ pub async fn update_page(
         return fetch_page(&pool, &id).await;
     }
 
-    sep.push("updated_at = ");
-    sep.push_bind_unseparated(now_iso());
-    drop(sep);
+    fields.push("updated_at = ");
+    fields.push_bind_unseparated(now_iso());
+    drop(fields);
 
     builder.push(" WHERE id = ");
     builder.push_bind(&id);
@@ -526,9 +526,9 @@ pub async fn list_pages(
                 serde_json::Value::Null => {
                     builder.push(" AND folder_id IS NULL");
                 }
-                serde_json::Value::String(fid) => {
+                serde_json::Value::String(folder_id) => {
                     builder.push(" AND folder_id = ");
-                    builder.push_bind(fid.clone());
+                    builder.push_bind(folder_id.clone());
                 }
                 _ => {}
             }
@@ -573,7 +573,7 @@ pub async fn list_pages(
     if let Some(f) = &filter {
         if let Some(filter_tags) = &f.tags {
             if !filter_tags.is_empty() {
-                summaries.retain(|p| filter_tags.iter().all(|t| p.tags.contains(t)));
+                summaries.retain(|page| filter_tags.iter().all(|tag| page.tags.contains(tag)));
             }
         }
     }
@@ -615,14 +615,14 @@ pub async fn reorder_pages(
     let now = now_iso();
     for (i, id) in ordered_ids.iter().enumerate() {
         match &folder_id {
-            Some(fid) => {
+            Some(folder_id) => {
                 sqlx::query(
                     "UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ? AND folder_id = ?",
                 )
                 .bind(i as i64)
                 .bind(&now)
                 .bind(id)
-                .bind(fid)
+                .bind(folder_id)
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -680,9 +680,9 @@ pub async fn list_completed_pages(
             serde_json::Value::Null => {
                 where_parts.push("folder_id IS NULL".to_string());
             }
-            serde_json::Value::String(fid) => {
+            serde_json::Value::String(folder_id) => {
                 where_parts.push("folder_id = ?".to_string());
-                bind_values.push(fid.clone());
+                bind_values.push(folder_id.clone());
             }
             _ => {}
         }

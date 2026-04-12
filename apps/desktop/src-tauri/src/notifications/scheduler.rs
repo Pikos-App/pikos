@@ -85,7 +85,6 @@ pub async fn check_notification_permission(app: tauri::AppHandle) -> Result<bool
 
 /// Main scheduler loop — spawned from `lib.rs` setup.
 pub async fn run(app: AppHandle) {
-    // Wait for DB to be connected before starting the scheduler loop.
     // The frontend calls connect_db after mount, so we poll until it's ready.
     loop {
         {
@@ -99,13 +98,8 @@ pub async fn run(app: AppHandle) {
 
     // Request notification permission on startup. On macOS this triggers
     // the OS permission dialog if not yet determined.
-    match app.notification().request_permission() {
-        Ok(state) => eprintln!("[notifications] permission: {state:?}"),
-        Err(e) => eprintln!("[notifications] permission request failed: {e}"),
-    }
+    let _ = app.notification().request_permission();
 
-    // Tick once per minute, aligned to the clock minute boundary.
-    eprintln!("[notifications] scheduler started, DB ready");
     loop {
         let now = chrono::Local::now();
         let secs_until_next_minute = 60 - now.second() as u64;
@@ -114,11 +108,7 @@ pub async fn run(app: AppHandle) {
             - Duration::from_nanos(nanos_offset.min(secs_until_next_minute * 1_000_000_000));
         tokio::time::sleep(wait).await;
 
-        eprintln!("[notifications] tick at {}", chrono::Local::now().format("%H:%M:%S"));
-        match check_and_fire(&app).await {
-            Ok(()) => {}
-            Err(e) => eprintln!("[notifications] error: {e}"),
-        }
+        let _ = check_and_fire(&app).await;
     }
 }
 
@@ -161,13 +151,7 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
         guard.clone()
     };
 
-    if !settings.enabled {
-        eprintln!("[notifications] disabled, skipping");
-        return Ok(());
-    }
-
-    if is_quiet_hours(&settings) {
-        eprintln!("[notifications] quiet hours, skipping");
+    if !settings.enabled || is_quiet_hours(&settings) {
         return Ok(());
     }
 
@@ -188,8 +172,6 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
     let today = now.format("%Y-%m-%d").to_string();
-
-    eprintln!("[notifications] checking window [{window_start}] to [{now_ts}], default_min={}", settings.default_minutes_before);
 
     // 1. Fire reminders for pages with explicit page_reminders rows
     fire_explicit_reminders(app, &pool, &window_start, &now_ts).await?;
@@ -236,9 +218,7 @@ async fn fire_explicit_reminders(
     .await
     .map_err(|e| e.to_string())?;
 
-    eprintln!("[notifications] explicit reminders found: {}", due.len());
     for row in due {
-        eprintln!("[notifications]   firing for '{}' (schedule={}, mins_before={})", row.title, row.schedule_id, row.minutes_before);
         fire_reminder(app, pool, &row).await?;
     }
 
@@ -282,9 +262,7 @@ async fn fire_default_reminders(
     .await
     .map_err(|e| e.to_string())?;
 
-    eprintln!("[notifications] default reminders found: {}", due.len());
     for row in due {
-        eprintln!("[notifications]   firing for '{}' (schedule={}, mins_before={})", row.title, row.schedule_id, row.minutes_before);
         fire_reminder(app, pool, &row).await?;
     }
 
@@ -376,18 +354,14 @@ async fn fire_overdue_alerts(
 /// Requires a properly signed app bundle — unsigned dev builds will
 /// silently drop notifications. Use osascript fallback for dev testing.
 fn deliver(app: &AppHandle, title: &str, body: &str) {
-    match app
+    if let Ok(()) = app
         .notification()
         .builder()
         .title(title)
         .body(body)
         .sound("default")
         .group("pikos-reminders")
-        .show()
-    {
-        Ok(()) => eprintln!("[notifications] delivered: {title}"),
-        Err(e) => eprintln!("[notifications] delivery failed: {e}"),
-    }
+        .show() {}
 }
 
 fn format_lead_time(minutes: i64) -> String {

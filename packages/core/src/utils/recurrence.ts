@@ -71,7 +71,7 @@ export function expandRecurrenceForRange(
   // local wall-clock values. For timed events this means shifting the local
   // DTSTART into a fake UTC date; for all-day events we use midnight UTC on
   // the same calendar date.
-  const dtstartUtc = isAllDay ? toFakeUtc(baseStart) : toFakeUtc(baseStart);
+  const dtstartUtc = toFakeUtc(baseStart);
   const rrule = new RRule({
     ...RRule.parseString(rule.rrule),
     dtstart: dtstartUtc,

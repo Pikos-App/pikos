@@ -132,28 +132,28 @@ pub async fn update_folder(
     let pool = state.get_pool().await?;
 
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE folders SET ");
-    let mut sep = builder.separated(", ");
+    let mut fields = builder.separated(", ");
     let mut has_updates = false;
 
     if let Some(v) = updates.name {
-        sep.push("name = ");
-        sep.push_bind_unseparated(v);
+        fields.push("name = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
     if let Some(v) = updates.sort_order {
-        sep.push("sort_order = ");
-        sep.push_bind_unseparated(v);
+        fields.push("sort_order = ");
+        fields.push_bind_unseparated(v);
         has_updates = true;
     }
 
     macro_rules! push_nullable_str {
         ($field:expr, $col:literal) => {
             if let Some(val) = $field {
-                sep.push(concat!($col, " = "));
+                fields.push(concat!($col, " = "));
                 match val {
-                    serde_json::Value::Null => sep.push_bind_unseparated(None::<String>),
-                    serde_json::Value::String(s) => sep.push_bind_unseparated(s),
-                    _ => sep.push_bind_unseparated(None::<String>),
+                    serde_json::Value::Null => fields.push_bind_unseparated(None::<String>),
+                    serde_json::Value::String(s) => fields.push_bind_unseparated(s),
+                    _ => fields.push_bind_unseparated(None::<String>),
                 };
                 has_updates = true;
             }
@@ -168,9 +168,9 @@ pub async fn update_folder(
         return fetch_folder(&pool, &id).await;
     }
 
-    sep.push("updated_at = ");
-    sep.push_bind_unseparated(now_iso());
-    drop(sep);
+    fields.push("updated_at = ");
+    fields.push_bind_unseparated(now_iso());
+    drop(fields);
 
     builder.push(" WHERE id = ");
     builder.push_bind(&id);

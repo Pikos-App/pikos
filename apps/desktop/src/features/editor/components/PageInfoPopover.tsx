@@ -20,8 +20,10 @@ function countWords(text: string): number {
   return trimmed.split(/\s+/).length;
 }
 
+const WORDS_PER_MINUTE = 238;
+
 function readingTime(wordCount: number): string {
-  const minutes = Math.ceil(wordCount / 238);
+  const minutes = Math.ceil(wordCount / WORDS_PER_MINUTE);
   if (minutes < 1) return "< 1 min";
   return `${minutes} min`;
 }

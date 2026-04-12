@@ -85,7 +85,7 @@ fn build_excerpt(
             let start_char = if pos > half {
                 let target = pos - half;
                 // Walk forward from target to find whitespace (word boundary)
-                let target_byte = char_to_byte(&body, target);
+                let target_byte = char_to_byte(body, target);
                 body[target_byte..]
                     .find(char::is_whitespace)
                     .map(|b| body[..target_byte + b].chars().count() + 1)
@@ -95,7 +95,7 @@ fn build_excerpt(
             };
             let end_char = if pos + half < body_char_count {
                 let target = pos + half;
-                let target_byte = char_to_byte(&body, target);
+                let target_byte = char_to_byte(body, target);
                 // Walk back from target to find whitespace
                 body[..target_byte]
                     .rfind(char::is_whitespace)
@@ -105,8 +105,8 @@ fn build_excerpt(
                 body_char_count
             };
 
-            let start_byte = char_to_byte(&body, start_char);
-            let end_byte = char_to_byte(&body, end_char);
+            let start_byte = char_to_byte(body, start_char);
+            let end_byte = char_to_byte(body, end_char);
             let slice = body[start_byte..end_byte].trim();
             let prefix = if start_char > 0 { "\u{2026}" } else { "" };
             let suffix = if end_char < body_char_count {
@@ -136,7 +136,7 @@ fn build_content_preview(
     }
 
     // Take first line only, up to ~80 chars
-    let first_line = body.split('\n').next().unwrap_or(&body).trim();
+    let first_line = body.split('\n').next().unwrap_or(body).trim();
     let char_count = first_line.chars().count();
     if char_count <= 80 {
         first_line.to_string()

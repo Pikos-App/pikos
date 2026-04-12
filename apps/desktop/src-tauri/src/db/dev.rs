@@ -58,43 +58,43 @@ pub struct UsageStats {
 #[tauri::command]
 pub async fn get_usage_stats(state: tauri::State<'_, DbState>) -> Result<UsageStats, String> {
     let pool = state.get_pool().await?;
-    let e = |e: sqlx::Error| e.to_string();
+    let db_err = |e: sqlx::Error| e.to_string();
 
     // ── Totals ────────────────────────────────────────────────────────────────
     let total_pages: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL"
-    ).fetch_one(&pool).await.map_err(e)?;
+    ).fetch_one(&pool).await.map_err(db_err)?;
 
     let total_folders: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM folders WHERE deleted_at IS NULL"
-    ).fetch_one(&pool).await.map_err(e)?;
+    ).fetch_one(&pool).await.map_err(db_err)?;
 
     let total_schedules: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM page_schedules"
-    ).fetch_one(&pool).await.map_err(e)?;
+    ).fetch_one(&pool).await.map_err(db_err)?;
 
     let total_focus_sessions: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM focus_sessions"
-    ).fetch_one(&pool).await.map_err(e)?;
+    ).fetch_one(&pool).await.map_err(db_err)?;
 
     let total_focus_minutes: i64 = sqlx::query_scalar(
         "SELECT COALESCE(SUM(duration_s), 0) / 60 FROM focus_sessions"
-    ).fetch_one(&pool).await.map_err(e)?;
+    ).fetch_one(&pool).await.map_err(db_err)?;
 
     let total_completed: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL AND status = 'done'"
-    ).fetch_one(&pool).await.map_err(e)?;
+    ).fetch_one(&pool).await.map_err(db_err)?;
 
     // Word count: sum of words in content_text across all pages
     let total_words: i64 = sqlx::query_scalar(
         "SELECT COALESCE(SUM(LENGTH(content_text) - LENGTH(REPLACE(content_text, ' ', '')) + 1), 0) \
          FROM pages WHERE deleted_at IS NULL AND content_text != ''"
-    ).fetch_one(&pool).await.map_err(e)?;
+    ).fetch_one(&pool).await.map_err(db_err)?;
 
     // ── Pages by status ───────────────────────────────────────────────────────
     let status_rows = sqlx::query(
         "SELECT status, COUNT(*) as count FROM pages WHERE deleted_at IS NULL GROUP BY status ORDER BY count DESC"
-    ).fetch_all(&pool).await.map_err(e)?;
+    ).fetch_all(&pool).await.map_err(db_err)?;
 
     let pages_by_status: Vec<StatusCount> = status_rows.iter().map(|row| {
         StatusCount {
@@ -135,7 +135,7 @@ pub async fn get_usage_stats(state: tauri::State<'_, DbState>) -> Result<UsageSt
            GROUP BY w \
          ) co ON co.w = ws.week_start \
          ORDER BY ws.week_start ASC"
-    ).fetch_all(&pool).await.map_err(e)?;
+    ).fetch_all(&pool).await.map_err(db_err)?;
 
     let weekly_activity: Vec<WeekActivity> = week_rows.iter().map(|row| {
         let week_start: String = row.try_get("week_start").unwrap_or_default();
@@ -166,26 +166,26 @@ pub async fn get_usage_stats(state: tauri::State<'_, DbState>) -> Result<UsageSt
 
     let has_recurring: bool = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM page_recurrence_rules"
-    ).fetch_one(&pool).await.map_err(e)? > 0;
+    ).fetch_one(&pool).await.map_err(db_err)? > 0;
 
     let has_focus_sessions = total_focus_sessions > 0;
 
     let has_subtasks: bool = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM pages WHERE parent_id IS NOT NULL AND deleted_at IS NULL"
-    ).fetch_one(&pool).await.map_err(e)? > 0;
+    ).fetch_one(&pool).await.map_err(db_err)? > 0;
 
     let has_tags: bool = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL AND tags != '[]' AND tags != ''"
-    ).fetch_one(&pool).await.map_err(e)? > 0;
+    ).fetch_one(&pool).await.map_err(db_err)? > 0;
 
     let has_priorities: bool = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL AND priority != 0"
-    ).fetch_one(&pool).await.map_err(e)? > 0;
+    ).fetch_one(&pool).await.map_err(db_err)? > 0;
 
     // ── Milestones ────────────────────────────────────────────────────────────
     let first_page_date: Option<String> = sqlx::query_scalar(
         "SELECT MIN(created_at) FROM pages WHERE deleted_at IS NULL"
-    ).fetch_one(&pool).await.map_err(e)?;
+    ).fetch_one(&pool).await.map_err(db_err)?;
 
     Ok(UsageStats {
         total_pages,
@@ -422,9 +422,9 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
 
         // Determine output directory
         let out_dir = match folder_id.as_deref() {
-            Some(fid) => {
+            Some(folder_id) => {
                 let folder_name = folder_names
-                    .get(fid)
+                    .get(folder_id)
                     .map(|n| sanitize_filename(n))
                     .unwrap_or_else(|| "Uncategorized".to_string());
                 let dir = format!("{}/{}", base_dir, folder_name);

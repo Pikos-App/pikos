@@ -207,7 +207,7 @@ export async function seedRealistic(adapter: StorageAdapter): Promise<void> {
       p("Attendees: Alex, Sarah, Marcus, Priya, Jordan"),
       h3("Updates"),
       bullets(
-        "Alex: shipped GOO-104, working on GOO-106/107",
+        "Alex: shipped PROJ-104, working on PROJ-106/107",
         "Sarah: design tokens finalised",
         "Marcus: CI pipeline green",
         "Priya: user interviews scheduled",

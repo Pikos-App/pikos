@@ -1,5 +1,9 @@
+// The sqlx QueryBuilder pattern uses drop(fields) to release the Separated
+// borrow before pushing additional clauses — clippy flags this but it's required.
+#![allow(clippy::drop_non_drop)]
+
 use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{Manager};
+use tauri::Manager;
 
 mod db;
 mod markdown;
@@ -150,7 +154,7 @@ pub fn run() {
                 | "toggle_sidebar" | "toggle_calendar" => {
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.eval(
-                            &format!("window.__onMenuEvent && window.__onMenuEvent('{}')", id)
+                            format!("window.__onMenuEvent && window.__onMenuEvent('{}')", id)
                         );
                     }
                 }

@@ -21,8 +21,7 @@ impl DbState {
         let guard = self.0.lock().await;
         guard
             .as_ref()
-            .ok_or_else(|| "No database connected. Call connect_db first.".to_string())
-            .map(SqlitePool::clone)
+            .ok_or_else(|| "No database connected. Call connect_db first.".to_string()).cloned()
     }
 }
 
@@ -82,7 +81,7 @@ fn walk_tiptap_node(node: &serde_json::Value, parts: &mut Vec<String>) {
 /// Called by WorkspaceContext when the user opens or creates a workspace.
 #[tauri::command]
 pub async fn connect_db(path: String, state: tauri::State<'_, DbState>) -> Result<(), String> {
-    // Ensure the parent directory exists (e.g. ~/Library/Application Support/com.pikos.app/)
+    // Ensure the parent directory exists (e.g. ~/Library/Application Support/app.pikos.desktop/)
     if let Some(parent) = std::path::Path::new(&path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
