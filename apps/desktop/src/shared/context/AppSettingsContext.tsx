@@ -19,15 +19,15 @@ export interface AppSettingsValue {
   /** Folder ID to use when no folder context exists. null = Inbox. */
   defaultFolderId: string | null;
   setDefaultFolderId: (v: string | null) => void;
-  /** Whether to automatically check for updates on launch. Default: true. */
-  autoCheckUpdates: boolean;
-  setAutoCheckUpdates: (v: boolean) => void;
   /** Global on/off switch for desktop notifications. Default: true. */
   notificationsEnabled: boolean;
   setNotificationsEnabled: (v: boolean) => void;
   /** Default reminder lead time for pages without per-page reminders. Default: 10. */
   defaultReminderMinutes: ReminderLeadTime;
   setDefaultReminderMinutes: (v: ReminderLeadTime) => void;
+  /** Version string the user chose to skip (e.g. "1.2.0"). null = no skip. */
+  skippedVersion: string | null;
+  setSkippedVersion: (v: string | null) => void;
   /** Overdue alerts — fire once per day for past-due scheduled pages. Default: true. */
   overdueAlerts: boolean;
   setOverdueAlerts: (v: boolean) => void;
@@ -52,10 +52,6 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     "pikos:defaultFolderId",
     null
   );
-  const [autoCheckUpdates, setAutoCheckUpdates] = useLocalStorage<boolean>(
-    "pikos:autoCheckUpdates",
-    true
-  );
   const [notificationsEnabled, setNotificationsEnabled] = useLocalStorage<boolean>(
     "pikos:notificationsEnabled",
     true
@@ -63,6 +59,10 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [defaultReminderMinutes, setDefaultReminderMinutes] = useLocalStorage<ReminderLeadTime>(
     "pikos:defaultReminderMinutes",
     10
+  );
+  const [skippedVersion, setSkippedVersion] = useLocalStorage<string | null>(
+    "pikos:skippedVersion",
+    null
   );
   const [overdueAlerts, setOverdueAlerts] = useLocalStorage<boolean>("pikos:overdueAlerts", true);
   const [quietHoursEnabled, setQuietHoursEnabled] = useLocalStorage<boolean>(
@@ -105,7 +105,6 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   ]);
 
   const value: AppSettingsValue = {
-    autoCheckUpdates,
     defaultFolderId,
     defaultReminderMinutes,
     notificationsEnabled,
@@ -113,7 +112,6 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     quietHoursEnabled,
     quietHoursEnd,
     quietHoursStart,
-    setAutoCheckUpdates,
     setDefaultFolderId,
     setDefaultReminderMinutes,
     setNotificationsEnabled,
@@ -121,7 +119,9 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setQuietHoursEnabled,
     setQuietHoursEnd,
     setQuietHoursStart,
+    setSkippedVersion,
     setWeekStart,
+    skippedVersion,
     weekStart,
   };
 

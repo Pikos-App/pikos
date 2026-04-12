@@ -2,10 +2,9 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Bug, Check, Copy, Download, ExternalLink } from "lucide-react";
+import { Bug, Check, CheckCircle, Copy, Download, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
 
-import { Switch } from "@/components/ui/switch";
 import { ImportSection } from "@/features/import";
 import type { ImportState } from "@/features/import";
 import { formatTimeAgo } from "@/features/import/parsers/utils";
@@ -13,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";
+import { useUpdate } from "@/shared/context/UpdateContext";
 import type { LastImportResult } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
@@ -138,15 +138,9 @@ export function GeneralSettings({
   parseMarkdownDir,
   resetImport,
 }: GeneralSettingsProps) {
+  const updater = useUpdate();
   const { folders, workspace } = useWorkspace();
-  const {
-    autoCheckUpdates,
-    defaultFolderId,
-    setAutoCheckUpdates,
-    setDefaultFolderId,
-    setWeekStart,
-    weekStart,
-  } = useAppSettings();
+  const { defaultFolderId, setDefaultFolderId, setWeekStart, weekStart } = useAppSettings();
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
   const [jsonExport, setJsonExport] = useState<ExportState>({ status: "idle" });
   const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
@@ -195,6 +189,20 @@ export function GeneralSettings({
               </p>
             </div>
           </div>
+          {(updater.status.state === "checking" || updater.status.state === "up-to-date") && (
+            <div className="flex items-center gap-2 border-b border-border py-3">
+              {updater.status.state === "checking" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              ) : (
+                <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+              )}
+              <p className="text-sm text-muted-foreground">
+                {updater.status.state === "checking"
+                  ? "Checking for updates…"
+                  : "You\u2019re on the latest version"}
+              </p>
+            </div>
+          )}
           <div className="flex items-center gap-4 py-3">
             <button
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -242,17 +250,6 @@ export function GeneralSettings({
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Auto-update */}
-          <div className="flex items-center justify-between border-b border-border py-3">
-            <div>
-              <p className="text-sm font-medium">Automatically check for updates</p>
-              <p className="text-xs text-muted-foreground">
-                Check for new versions when the app launches.
-              </p>
-            </div>
-            <Switch checked={autoCheckUpdates} onCheckedChange={setAutoCheckUpdates} />
           </div>
 
           {/* Default folder */}

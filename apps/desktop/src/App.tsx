@@ -6,15 +6,16 @@ import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
 import { SettingsPage } from "@/features/settings";
 import { UndoToast } from "@/shared/components/UndoToast";
+import { UpdateDialog } from "@/shared/components/UpdateDialog";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
 import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
 import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
 import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";
+import { UpdateProvider, useUpdate } from "@/shared/context/UpdateContext";
 import { WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
-import { useAutoUpdater } from "@/shared/hooks/useAutoUpdater";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardListener, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
@@ -112,7 +113,7 @@ function AppShell() {
   useTrackPageOpened();
   useGlobalShortcuts();
   useMenuEvents();
-  useAutoUpdater();
+  const updater = useUpdate();
   const { consumePendingNavigation } = useWorkspace();
   const ui = useUI();
   const { handleUndoDelete, handleUndoDismiss, undoItems } = useUndoDelete();
@@ -139,6 +140,7 @@ function AppShell() {
         onDismiss={handleUndoDismiss}
         onUndo={handleUndoDelete}
       />
+      <UpdateDialog updater={updater} />
     </>
   );
 }
@@ -160,15 +162,17 @@ export default function App() {
       <ThemeProvider>
         <AppSettingsProvider>
           <WorkspaceProvider>
-            <UIProvider>
-              <EditorSettingsProvider>
-                <UndoDeleteProvider>
-                  <TooltipProvider delayDuration={400}>
-                    <WorkspaceGate />
-                  </TooltipProvider>
-                </UndoDeleteProvider>
-              </EditorSettingsProvider>
-            </UIProvider>
+            <UpdateProvider>
+              <UIProvider>
+                <EditorSettingsProvider>
+                  <UndoDeleteProvider>
+                    <TooltipProvider delayDuration={400}>
+                      <WorkspaceGate />
+                    </TooltipProvider>
+                  </UndoDeleteProvider>
+                </EditorSettingsProvider>
+              </UIProvider>
+            </UpdateProvider>
           </WorkspaceProvider>
         </AppSettingsProvider>
       </ThemeProvider>

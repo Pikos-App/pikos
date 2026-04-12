@@ -14,6 +14,21 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
 DESKTOP_PKG="$ROOT/apps/desktop/package.json"
 CARGO_TOML="$ROOT/apps/desktop/src-tauri/Cargo.toml"
+RELEASE_NOTES="$ROOT/RELEASE_NOTES.md"
+
+# Validate release notes — strip HTML comments and whitespace, must have content
+NOTES_CONTENT=$(sed 's/<!--.*-->//g' "$RELEASE_NOTES" | tr -d '[:space:]')
+if [ -z "$NOTES_CONTENT" ]; then
+  echo "Error: RELEASE_NOTES.md is empty or only has comments."
+  echo "Write release notes before running a release."
+  exit 1
+fi
+
+echo "Release notes:"
+echo "───────────────────────────────────"
+grep -v '^<!--' "$RELEASE_NOTES" | grep -v '^$' | head -20
+echo "───────────────────────────────────"
+echo ""
 
 # Read current version from tauri.conf.json
 CURRENT=$(grep -o '"version": "[^"]*"' "$TAURI_CONF" | head -1 | cut -d'"' -f4)
@@ -56,13 +71,22 @@ fi
 # Update Cargo.lock
 (cd "$ROOT/apps/desktop/src-tauri" && cargo generate-lockfile 2>/dev/null || true)
 
-# Commit and tag
-git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock"
+# Commit and tag (include release notes so the workflow can read them)
+git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$RELEASE_NOTES"
 git commit -m "release: v${NEW}"
 git tag "$TAG"
 
+# Reset release notes for next cycle
+cat > "$RELEASE_NOTES" << 'RESET'
+<!-- Write release notes for the next version here. -->
+<!-- The release script will fail if this file only contains comments or is empty. -->
+<!-- After release, this file is automatically reset. -->
+RESET
+git add "$RELEASE_NOTES"
+git commit -m "chore: reset release notes"
+
 echo ""
-echo "Created commit and tag $TAG"
+echo "Created tag $TAG"
 echo ""
 
 # Push and get workflow URL

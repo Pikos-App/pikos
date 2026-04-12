@@ -109,6 +109,10 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -142,11 +146,23 @@ jobs:
           echo "--- Artifacts after rename ---"
           find . -type f | sort
 
+      - name: Read release notes
+        id: notes
+        run: |
+          # Read RELEASE_NOTES.md from the tagged commit (before it was reset)
+          NOTES=$(git show ${{ github.ref_name }}:RELEASE_NOTES.md | grep -v '^<!--' || true)
+          # Store as multiline output
+          {
+            echo "body<<NOTES_EOF"
+            echo "$NOTES"
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          generate_release_notes: true
+          body: ${{ steps.notes.outputs.body }}
           files: |
             artifacts/**/*.deb
             artifacts/**/*.AppImage
@@ -158,10 +174,15 @@ jobs:
             latest.json
 
       - name: Generate updater manifest (latest.json)
+        env:
+          RELEASE_NOTES: ${{ steps.notes.outputs.body }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           REPO="pikos-app/pikos"
           BASE="https://github.com/${REPO}/releases/download/${GITHUB_REF_NAME}"
+
+          # Escape notes for JSON (newlines → \n, quotes → \")
+          NOTES_JSON=$(echo "$RELEASE_NOTES" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')
 
           # Find updater artifacts
           MAC_SIG=""
@@ -190,7 +211,7 @@ jobs:
           cat > latest.json <<MANIFEST
           {
             "version": "${VERSION}",
-            "notes": "See https://github.com/${REPO}/releases/tag/${GITHUB_REF_NAME}",
+            "notes": ${NOTES_JSON},
             "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "platforms": {
               "darwin-universal": {
