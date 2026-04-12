@@ -164,7 +164,7 @@ function AllDayChip({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[280px] p-3"
+        className="w-80 p-3"
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         side="bottom"

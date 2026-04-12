@@ -501,6 +501,9 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
               clearSelection();
             } else if (activePage) {
               handleToggleStatus(activePage.id, activePage.status);
+              // Re-focus the list container — the active page's DOM node may
+              // unmount (e.g. moved to completed) which drops focus to <body>.
+              listRef.current?.focus();
             }
           }
         }}

@@ -129,6 +129,7 @@ export function useThreePanelDnD() {
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     const pageData = activePageData;
+    const folderData = activeFolderData;
     const calendarStart = calendarStartRef.current;
     const idsToMove = [...draggedPageIds];
 
@@ -188,7 +189,9 @@ export function useThreePanelDnD() {
 
     if (!over || active.id === over.id) return;
 
-    const at = active.data.current?.["type"] as string | undefined;
+    // Derive types from state captured at drag start — active.data.current
+    // may be gone if the virtualizer unmounted the original sortable node.
+    const at = pageData ? "page" : folderData ? "folder" : undefined;
     const ot = over.data.current?.["type"] as string | undefined;
 
     if (at === "page" && ot === "page") {
@@ -210,6 +213,7 @@ export function useThreePanelDnD() {
         const activeIdx = visible.findIndex((p) => p.id === active.id);
         const overIdx = visible.findIndex((p) => p.id === over.id);
         const insertIdx = activeIdx < overIdx ? dropIdx + 1 : dropIdx;
+
         rest.splice(insertIdx, 0, ...dragged);
         void reorderPages(
           folderId,
@@ -218,6 +222,7 @@ export function useThreePanelDnD() {
       } else {
         const oldIdx = visible.findIndex((p) => p.id === active.id);
         const newIdx = visible.findIndex((p) => p.id === over.id);
+
         if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return;
         void reorderPages(
           folderId,

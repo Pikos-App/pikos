@@ -1,7 +1,6 @@
 // Sidebar — left panel (smart views + folders). Default 180px, resizable.
 
 import { Settings } from "lucide-react";
-import { useState } from "react";
 
 import { FolderList } from "@/features/folders";
 import { useUI } from "@/shared/context/UIContext";
@@ -13,15 +12,14 @@ interface SidebarProps {
 
 export function Sidebar({ onResizeStart, width }: SidebarProps) {
   const { setSettingsOpen } = useUI();
-  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
 
   return (
     <div
       className="group relative flex h-full shrink-0 flex-col overflow-hidden border-r border-border-secondary bg-surface-tertiary"
       style={{ width }}
     >
-      <div className="relative min-h-0 flex-1 overflow-y-auto" ref={setScrollEl}>
-        <FolderList scrollElement={scrollEl} />
+      <div className="min-h-0 flex-1">
+        <FolderList />
       </div>
 
       {/* Footer — settings button */}

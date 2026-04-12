@@ -602,6 +602,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
 
   async function updateFolder(id: string, updates: FolderUpdate) {
+    // Optimistic update — apply immediately so the UI never flashes the old value.
+    setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
     const updated = await adapter.updateFolder(id, updates);
     setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
   }

@@ -30,7 +30,7 @@ interface PageBlockProps {
   folderColor: string | undefined;
   /** When true, renders an inline title input for immediate editing of a newly created page. */
   isEditing?: boolean;
-  /** Called with the committed title (may be empty → caller should delete the page). */
+  /** Called with the committed title (may be empty → caller should use "Untitled"). */
   onCommit?: (title: string) => void;
   /** Called when the user presses Escape — caller should delete the page. */
   onCancel?: () => void;
@@ -350,7 +350,7 @@ export function PageBlock({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-70 p-3"
+        className="w-80 p-3"
         onMouseDown={(e) => e.stopPropagation()}
         side="right"
         sideOffset={8}

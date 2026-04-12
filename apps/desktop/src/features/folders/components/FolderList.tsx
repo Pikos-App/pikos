@@ -23,11 +23,8 @@ import type { FolderSortOrder } from "../hooks/useFolderList";
 import { FolderItem } from "./FolderItem";
 import { SmartViewEntry } from "./SmartViewEntry";
 
-interface FolderListProps {
-  scrollElement: HTMLDivElement | null;
-}
-
-export function FolderList({ scrollElement }: FolderListProps) {
+export function FolderList() {
+  const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const {
     activeViewId,
     folders,
@@ -62,7 +59,14 @@ export function FolderList({ scrollElement }: FolderListProps) {
           : navIds.length - 1
         : Math.max(0, Math.min(navIds.length - 1, currentIdx + dir));
     const nextId = navIds[newIdx];
-    if (nextId !== undefined) setActiveViewId(nextId);
+    if (nextId !== undefined) {
+      setActiveViewId(nextId);
+      // Scroll the folder into view if it's inside the virtualized list.
+      const folderIdx = folders.findIndex((f) => f.id === nextId);
+      if (folderIdx !== -1) {
+        virtualizer.scrollToIndex(folderIdx, { align: "auto" });
+      }
+    }
   }
 
   const SORT_OPTIONS: { value: FolderSortOrder; label: string; icon: React.ReactNode }[] = [
@@ -93,28 +97,26 @@ export function FolderList({ scrollElement }: FolderListProps) {
 
   // ── Virtualizer ───────────────────────────────────────────────────────────
 
-  const virtualContainerRef = useRef<HTMLDivElement>(null);
-
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual + React Compiler known issue
   const virtualizer = useVirtualizer({
     count: folders.length,
     estimateSize: () => 32,
     getItemKey: (index) => folders[index]?.id ?? String(index),
-    getScrollElement: () => scrollElement,
+    getScrollElement: () => scrollElementRef.current,
     overscan: 10,
-    scrollMargin: virtualContainerRef.current?.offsetTop ?? 0,
   });
 
   return (
-    <>
-      <div
-        aria-label="Views and folders"
-        className="flex flex-col gap-0.5 px-1 py-2 focus-visible:rounded focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none"
-        onKeyDown={handleNavKeyDown}
-        onPointerMove={(e) => e.currentTarget.removeAttribute("data-keyboard-nav")}
-        role="group"
-        tabIndex={0}
-      >
+    <div
+      aria-label="Views and folders"
+      className="flex h-full flex-col focus-visible:rounded focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:outline-none"
+      onKeyDown={handleNavKeyDown}
+      onPointerMove={(e) => e.currentTarget.removeAttribute("data-keyboard-nav")}
+      role="group"
+      tabIndex={0}
+    >
+      {/* Sticky smart views + folders header */}
+      <div className="flex shrink-0 flex-col gap-0.5 px-1 pt-2">
         <SmartViewEntry
           badge={todayCount}
           icon={<CalendarDays size={16} />}
@@ -182,10 +184,15 @@ export function FolderList({ scrollElement }: FolderListProps) {
             />
           </IconToolbar>
         </div>
+      </div>
 
+      {/* Scrollable folder list */}
+      <div
+        className="min-h-0 flex-1 overflow-y-auto px-1 pb-2"
+        ref={scrollElementRef}
+      >
         <SortableContext items={folderIds} strategy={() => null}>
           <div
-            ref={virtualContainerRef}
             style={{
               height: virtualizer.getTotalSize(),
               position: "relative",
@@ -204,7 +211,7 @@ export function FolderList({ scrollElement }: FolderListProps) {
                     left: 0,
                     position: "absolute",
                     top: 0,
-                    transform: `translateY(${virtualItem.start - virtualizer.options.scrollMargin}px)`,
+                    transform: `translateY(${virtualItem.start}px)`,
                     width: "100%",
                   }}
                 >
@@ -244,6 +251,6 @@ export function FolderList({ scrollElement }: FolderListProps) {
           </button>
         )}
       </div>
-    </>
+    </div>
   );
 }

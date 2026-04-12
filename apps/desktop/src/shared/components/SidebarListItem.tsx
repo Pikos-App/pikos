@@ -53,8 +53,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
   ) {
     function commit() {
       const trimmed = inputRef.current?.value.trim() ?? "";
-      if (trimmed) onRenameCommit(trimmed);
-      else onRenameCancel();
+      onRenameCommit(trimmed || "Untitled");
     }
 
     return (

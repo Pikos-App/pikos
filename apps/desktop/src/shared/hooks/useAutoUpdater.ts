@@ -39,27 +39,7 @@ export function useAutoUpdater(): AutoUpdater {
 
   async function doCheck() {
     if (import.meta.env["VITE_TEST_MODE"] === "true") return;
-
-    // ── DEV MOCK: simulate an available update ──
-    if (import.meta.env.DEV) {
-      setStatus({ state: "checking" });
-      await new Promise((r) => setTimeout(r, 1000));
-      const mockVersion = "1.0.0";
-      if (skippedVersion === mockVersion) {
-        setStatus({ state: "idle" });
-        return;
-      }
-      setStatus({
-        state: "available",
-        update: {
-          body: "- New update dialog with release notes\n- Skip version support\n- Automatic update checks on launch",
-          date: new Date().toISOString(),
-          version: mockVersion,
-        },
-      });
-      return;
-    }
-    // ── END DEV MOCK ──
+    if (import.meta.env.DEV) return;
 
     setStatus({ state: "checking" });
     try {
@@ -93,13 +73,6 @@ export function useAutoUpdater(): AutoUpdater {
     if (status.state !== "available") return;
 
     setStatus({ state: "downloading" });
-
-    // DEV MOCK: simulate download + restart
-    if (import.meta.env.DEV) {
-      await new Promise((r) => setTimeout(r, 2000));
-      setStatus({ state: "idle" });
-      return;
-    }
 
     try {
       const { check } = await import("@tauri-apps/plugin-updater");

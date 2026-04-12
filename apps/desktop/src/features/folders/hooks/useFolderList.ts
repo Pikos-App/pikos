@@ -76,7 +76,7 @@ export function useFolderList(): FolderListState {
   }
 
   function handleRenameCommit(id: string, name: string) {
-    void updateFolder(id, { name });
+    void updateFolder(id, { name: name || "Untitled" });
     setRenamingId(null);
   }
 

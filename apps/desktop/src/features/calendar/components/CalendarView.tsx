@@ -76,14 +76,10 @@ export function CalendarView() {
     setEditingPageId(page.id);
   }
 
-  // Inline title committed — save if non-empty, delete if empty.
+  // Inline title committed — empty titles become "Untitled".
   function handleCommitTitle(pageId: string, title: string) {
     setEditingPageId(null);
-    if (title.trim()) {
-      updatePage(pageId, { title: title.trim() });
-    } else {
-      void deletePage(pageId);
-    }
+    updatePage(pageId, { title: title.trim() || "Untitled" });
   }
 
   // Inline title cancelled — delete the page.
