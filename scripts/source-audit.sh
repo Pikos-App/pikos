@@ -118,6 +118,60 @@ else
   pass "No analytics/telemetry SDKs"
 fi
 
+# ── 7. XSS vectors (eval, innerHTML, dangerouslySetInnerHTML) ───────────────
+# In a Tauri app, XSS can escalate to full system access via IPC.
+# Exclude comments (lines starting with optional whitespace then // or * or /*).
+hits=$(ts_src_files \
+  | xargs grep -nE '(\beval\s*\(|new\s+Function\s*\(|\binnerHTML\s*=|dangerouslySetInnerHTML)' 2>/dev/null \
+  | grep -vE '^\S+:\s*(//|\*|/\*)' || true)
+
+if [ -n "$hits" ]; then
+  fail "XSS vectors (eval/innerHTML/dangerouslySetInnerHTML)" $hits
+else
+  pass "No XSS vectors"
+fi
+
+# ── 8. Unsafe Rust ─────────────────────────────────────────────────────────
+hits=$(rust_src_files \
+  | xargs grep -nE '^\s*unsafe\b' 2>/dev/null \
+  | grep -v '#\[cfg(test)\]' \
+  | grep -v '// SAFETY:' || true)
+
+if [ -n "$hits" ]; then
+  fail "Unsafe Rust blocks (add '// SAFETY:' comment if intentional)" $hits
+else
+  pass "No unsafe Rust"
+fi
+
+# ── 9. SQL injection (raw string queries in Rust) ──────────────────────────
+# All SQL must use sqlx parameterized queries (?-binds). Flag .execute(&format!(...))
+# which is the most direct injection vector. Dynamic WHERE clauses that still use
+# ?-binds are safe and handled elsewhere (e.g. search/filter builders).
+hits=$(rust_src_files \
+  | xargs grep -nE '\.execute\s*\(\s*&format!' 2>/dev/null || true)
+
+if [ -n "$hits" ]; then
+  fail "Possible SQL injection (use sqlx parameterized queries)" $hits
+else
+  pass "No raw SQL string interpolation"
+fi
+
+# ── 10. Tauri capability escalation ─────────────────────────────────────────
+# Flag high-risk permissions that should never appear without explicit review.
+cap_files=$(git ls-files -- 'apps/desktop/src-tauri/capabilities/*.json')
+if [ -n "$cap_files" ]; then
+  hits=$(echo "$cap_files" \
+    | xargs grep -nEi '(shell:execute|shell:allow-execute|shell:allow-open|fs:allow-write-all|fs:allow-rename|http:default|http:allow-fetch)' 2>/dev/null || true)
+
+  if [ -n "$hits" ]; then
+    fail "High-risk Tauri capabilities detected" $hits
+  else
+    pass "No high-risk Tauri capabilities"
+  fi
+else
+  pass "No high-risk Tauri capabilities" "(no capability files)"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 if [ $overall -eq 0 ]; then
