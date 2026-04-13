@@ -1,7 +1,6 @@
 // UsageStats — rich local usage statistics panel for Settings > Data.
 // All data comes from SQL queries against the local DB. No telemetry.
 
-import { invoke } from "@tauri-apps/api/core";
 import {
   BarChart3,
   BookOpen,
@@ -15,7 +14,6 @@ import {
   Layers,
   Timer,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -26,7 +24,7 @@ interface WeekActivity {
   completed: number;
 }
 
-interface UsageStatsData {
+export interface UsageStatsData {
   total_pages: number;
   total_folders: number;
   total_schedules: number;
@@ -172,30 +170,8 @@ function FeatureBadge({
   );
 }
 
-export function UsageStats({ workspace }: { workspace: boolean }) {
-  const [stats, setStats] = useState<UsageStatsData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!workspace) return;
-    invoke<UsageStatsData>("get_usage_stats")
-      .then(setStats)
-      .catch((e: unknown) => setError(String(e)));
-  }, [workspace]);
-
-  if (error) {
-    return <p className="text-xs text-destructive">Failed to load stats: {error}</p>;
-  }
-
-  if (!stats) {
-    return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div className="h-16 animate-pulse rounded-lg bg-muted" key={i} />
-        ))}
-      </div>
-    );
-  }
+export function UsageStats({ stats }: { stats: UsageStatsData | null }) {
+  if (!stats) return null;
 
   const memberDays = stats.first_page_date ? daysSince(stats.first_page_date) : 0;
 
@@ -227,9 +203,9 @@ export function UsageStats({ workspace }: { workspace: boolean }) {
         <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
           <Clock className="h-4 w-4 text-muted-foreground" />
           <div className="text-xs text-muted-foreground">
-            Using Pikos since{" "}
+            Oldest page:{" "}
             <span className="font-medium text-foreground">{formatDate(stats.first_page_date)}</span>
-            {memberDays > 0 && <span className="ml-1">({memberDays} days)</span>}
+            {memberDays > 0 && <span className="ml-1">({memberDays} days ago)</span>}
           </div>
         </div>
       )}

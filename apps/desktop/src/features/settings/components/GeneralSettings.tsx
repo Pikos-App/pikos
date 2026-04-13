@@ -1,22 +1,21 @@
-// GeneralSettings — about, data export, feedback, and workspace stats.
+// GeneralSettings — about, preferences (theme, editor, calendar), and feedback.
 
-import { invoke } from "@tauri-apps/api/core";
-import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Bug, Check, CheckCircle, Copy, Download, ExternalLink, Loader2 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { Bug, Check, CheckCircle, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
 
-import { ImportSection } from "@/features/import";
-import type { ImportState } from "@/features/import";
-import { formatTimeAgo } from "@/features/import/parsers/utils";
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";
+import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
+import type { LineWidth } from "@/shared/context/EditorSettingsContext";
+import type { ThemeMode } from "@/shared/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { useUpdate } from "@/shared/context/UpdateContext";
-import type { LastImportResult } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-import { UsageStats } from "./UsageStats";
+// ─── Shared layout ────────────────────────────────────────────────────────
 
 function SettingsSection({
   children,
@@ -36,61 +35,7 @@ function SettingsSection({
   );
 }
 
-type ExportState =
-  | { status: "idle" }
-  | { status: "saving" }
-  | { status: "done"; path: string }
-  | { status: "error"; message: string };
-
-function ExportRow({
-  description,
-  disabled,
-  label,
-  onExport,
-  state,
-}: {
-  description: string;
-  disabled: boolean;
-  label: string;
-  onExport: () => void;
-  state: ExportState;
-}) {
-  const saving = state.status === "saving";
-  const done = state.status === "done";
-
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0">
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{label}</p>
-        {done ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">Saved to Downloads</p>
-        ) : state.status === "error" ? (
-          <p className="mt-0.5 text-xs text-destructive">{state.message}</p>
-        ) : (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {done && (
-          <button
-            className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            onClick={() => void revealItemInDir(state.path)}
-          >
-            Show in Finder
-          </button>
-        )}
-        <button
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
-          disabled={disabled || saving}
-          onClick={onExport}
-        >
-          <Download className="h-3.5 w-3.5" />
-          Export
-        </button>
-      </div>
-    </div>
-  );
-}
+// ─── Feedback helpers ─────────────────────────────────────────────────────
 
 function CopyEmailRow() {
   const [copied, setCopied] = useState(false);
@@ -119,61 +64,29 @@ function CopyEmailRow() {
   );
 }
 
-interface GeneralSettingsProps {
-  importState: ImportState;
-  lastImportResult: LastImportResult | null;
-  onClearImport: () => void;
-  onUndoImport: () => Promise<void>;
-  parseMarkdownDir: (dirPath: string) => Promise<void>;
-  parseCSVFile: (content: string) => void;
-  resetImport: () => void;
-}
+// ─── Options ──────────────────────────────────────────────────────────────
 
-export function GeneralSettings({
-  importState,
-  lastImportResult,
-  onClearImport,
-  onUndoImport,
-  parseCSVFile,
-  parseMarkdownDir,
-  resetImport,
-}: GeneralSettingsProps) {
+const THEME_OPTIONS: { id: ThemeMode; label: string }[] = [
+  { id: "dark", label: "Dark" },
+  { id: "light", label: "Light" },
+  { id: "system", label: "System" },
+];
+
+const LINE_WIDTH_OPTIONS: { id: LineWidth; label: string }[] = [
+  { id: "narrow", label: "Narrow" },
+  { id: "default", label: "Default" },
+  { id: "wide", label: "Wide" },
+  { id: "full", label: "Full" },
+];
+
+// ─── Component ────────────────────────────────────────────────────────────
+
+export function GeneralSettings() {
   const updater = useUpdate();
-  const { folders, workspace } = useWorkspace();
+  const { folders } = useWorkspace();
   const { defaultFolderId, setDefaultFolderId, setWeekStart, weekStart } = useAppSettings();
-  const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
-  const [jsonExport, setJsonExport] = useState<ExportState>({ status: "idle" });
-  const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
-
-  async function handleExportSqlite() {
-    setSqliteExport({ status: "saving" });
-    try {
-      const dest = await invoke<string>("backup_db");
-      setSqliteExport({ path: dest, status: "done" });
-    } catch (e: unknown) {
-      setSqliteExport({ message: String(e), status: "error" });
-    }
-  }
-
-  async function handleExportJson() {
-    setJsonExport({ status: "saving" });
-    try {
-      const dest = await invoke<string>("export_json");
-      setJsonExport({ path: dest, status: "done" });
-    } catch (e: unknown) {
-      setJsonExport({ message: String(e), status: "error" });
-    }
-  }
-
-  async function handleExportMarkdown() {
-    setMarkdownExport({ status: "saving" });
-    try {
-      const dest = await invoke<string>("export_markdown");
-      setMarkdownExport({ path: dest, status: "done" });
-    } catch (e: unknown) {
-      setMarkdownExport({ message: String(e), status: "error" });
-    }
-  }
+  const { mode, setTheme } = useTheme();
+  const { lineWidth, setLineWidth } = useEditorSettings();
 
   return (
     <div className="max-w-lg">
@@ -223,6 +136,54 @@ export function GeneralSettings({
       {/* ── Preferences ─────────────────────────────────────────────────── */}
       <SettingsSection title="Preferences">
         <div className="rounded-lg border border-border bg-card px-4">
+          {/* Theme */}
+          <div className="flex items-center justify-between border-b border-border py-3">
+            <div>
+              <p className="text-sm font-medium">Theme</p>
+              <p className="text-xs text-muted-foreground">Choose how Pikos looks.</p>
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-md border border-border bg-background p-0.5">
+              {THEME_OPTIONS.map((opt) => (
+                <button
+                  className={cn(
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    mode === opt.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  key={opt.id}
+                  onClick={() => setTheme(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Line width */}
+          <div className="flex items-center justify-between border-b border-border py-3">
+            <div>
+              <p className="text-sm font-medium">Editor line width</p>
+              <p className="text-xs text-muted-foreground">How wide the text area is.</p>
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-md border border-border bg-background p-0.5">
+              {LINE_WIDTH_OPTIONS.map((opt) => (
+                <button
+                  className={cn(
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    lineWidth === opt.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  key={opt.id}
+                  onClick={() => setLineWidth(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Week starts on */}
           <div className="flex items-center justify-between border-b border-border py-3">
             <div>
@@ -305,81 +266,6 @@ export function GeneralSettings({
             </SearchablePopover>
           </div>
         </div>
-      </SettingsSection>
-
-      {/* ── Data ──────────────────────────────────────────────────────── */}
-      <SettingsSection
-        description="Your data stored locally and never leaves your device."
-        title="Your Workspace"
-      >
-        <UsageStats workspace={!!workspace} />
-      </SettingsSection>
-
-      {/* ── Export ─────────────────────────────────────────────────────── */}
-      <SettingsSection description="Download your data in different formats." title="Export">
-        <div className="rounded-lg border border-border bg-card px-4">
-          <ExportRow
-            description="Full database backup. Best for restoring data."
-            disabled={!workspace}
-            label="Export as SQLite"
-            onExport={() => void handleExportSqlite()}
-            state={sqliteExport}
-          />
-          <ExportRow
-            description="Human-readable export of all pages, folders, and schedules."
-            disabled={!workspace}
-            label="Export as JSON"
-            onExport={() => void handleExportJson()}
-            state={jsonExport}
-          />
-          <ExportRow
-            description="Markdown files with YAML frontmatter. Obsidian-compatible."
-            disabled={!workspace}
-            label="Export as Markdown"
-            onExport={() => void handleExportMarkdown()}
-            state={markdownExport}
-          />
-        </div>
-      </SettingsSection>
-
-      {/* ── Import ──────────────────────────────────────────────────── */}
-      <SettingsSection description="Bring your data from other apps into Pikos." title="Import">
-        {lastImportResult && (
-          <div className="mb-4 flex items-center justify-between rounded-lg border border-green-500/20 bg-green-500/5 px-4 py-3">
-            <div>
-              <p className="text-sm text-green-700 dark:text-green-400">
-                Imported {lastImportResult.pageCount} page
-                {lastImportResult.pageCount !== 1 ? "s" : ""}
-                {lastImportResult.folderCount > 0 &&
-                  ` into ${lastImportResult.folderCount} folder${lastImportResult.folderCount !== 1 ? "s" : ""}`}
-              </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                via {lastImportResult.source === "markdown" ? "Markdown" : "CSV"} ·{" "}
-                {formatTimeAgo(lastImportResult.importedAt)}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                onClick={() => void onUndoImport()}
-              >
-                Undo import
-              </button>
-              <button
-                className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                onClick={onClearImport}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        )}
-        <ImportSection
-          parseCSVFile={parseCSVFile}
-          parseMarkdownDir={parseMarkdownDir}
-          reset={resetImport}
-          state={importState}
-        />
       </SettingsSection>
 
       {/* ── Feedback ───────────────────────────────────────────────────── */}

@@ -1,6 +1,7 @@
 // SettingsPage — full-screen overlay with sidebar nav + content area.
 // Triggered by the gear icon at the bottom of the main sidebar.
 
+import { invoke } from "@tauri-apps/api/core";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
@@ -9,12 +10,12 @@ import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
-import { AppearanceSettings } from "./AppearanceSettings";
-import { EditorSettings } from "./EditorSettings";
+import { DataSettings } from "./DataSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { SettingsNav, type SettingsSection } from "./SettingsNav";
 import { ShortcutsSettings } from "./ShortcutsSettings";
+import type { UsageStatsData } from "./UsageStats";
 
 const DeveloperSettings = import.meta.env.DEV
   ? lazy(() => import("./DeveloperSettings").then((m) => ({ default: m.DeveloperSettings })))
@@ -31,10 +32,11 @@ function readLeftPanelWidth(): number {
 
 export function SettingsPage() {
   const { setActiveViewId, setSettingsOpen, settingsOpen } = useUI();
-  const { clearLastImport, lastImportResult, undoLastImport } = useWorkspace();
+  const { clearLastImport, lastImportResult, undoLastImport, workspace } = useWorkspace();
   const isFullscreen = useIsFullscreen();
   const [sidebarWidth] = useState(readLeftPanelWidth);
   const [section, setSection] = useState<SettingsSection>("general");
+  const [usageStats, setUsageStats] = useState<UsageStatsData | null>(null);
   const {
     applyCSVMapping,
     executeImport,
@@ -43,6 +45,14 @@ export function SettingsPage() {
     reset,
     state: importState,
   } = useImport();
+
+  // Fetch usage stats eagerly so the Data tab renders instantly.
+  useEffect(() => {
+    if (!workspace) return;
+    invoke<UsageStatsData>("get_usage_stats")
+      .then(setUsageStats)
+      .catch(() => {});
+  }, [workspace]);
 
   // Auto-close settings when import completes — the "done" state is stored in
   // WorkspaceContext (lastImportResult) which survives the component remount.
@@ -121,8 +131,10 @@ export function SettingsPage() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-8">
-          {section === "general" && (
-            <GeneralSettings
+          {section === "general" && <GeneralSettings />}
+          {section === "notifications" && <NotificationSettings />}
+          {section === "data" && (
+            <DataSettings
               importState={importState}
               lastImportResult={lastImportResult}
               onClearImport={clearLastImport}
@@ -130,11 +142,9 @@ export function SettingsPage() {
               parseCSVFile={parseCSVFile}
               parseMarkdownDir={parseMarkdownDir}
               resetImport={reset}
+              usageStats={usageStats}
             />
           )}
-          {section === "appearance" && <AppearanceSettings />}
-          {section === "editor" && <EditorSettings />}
-          {section === "notifications" && <NotificationSettings />}
           {section === "shortcuts" && <ShortcutsSettings />}
           {section === "developer" && DeveloperSettings && (
             <Suspense>
