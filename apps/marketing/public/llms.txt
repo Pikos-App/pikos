@@ -8,9 +8,10 @@ Pikos is a desktop productivity app for macOS that combines notes, tasks, and a 
 
 - Category: Productivity / Notes / Task Management / Calendar
 - Platform: macOS (Tauri 2 + React)
-- Pricing: Free download. Paid option on Mac App Store includes iCloud sync.
+- Pricing: Free desktop download (no limits, no trial). Mac App Store version with iCloud sync will be a one-time purchase (~$29). iPhone app will be a separate one-time purchase (~$10). No subscriptions.
 - Data: Local-first. SQLite database on device. Export as SQLite or JSON.
 - Privacy: No telemetry, no tracking cookies, no personal data collection.
+- Source: Source-available. Full code public on GitHub (not open-source licensed).
 - Website: https://pikos.app
 - Contact: hello@pikos.app
 
@@ -25,15 +26,40 @@ Pikos is a desktop productivity app for macOS that combines notes, tasks, and a 
 - Complete keyboard navigation
 - Light, dark, and system themes
 - Data export (SQLite backup, JSON)
+- Works fully offline. No network required.
+
+## Who Pikos Is For
+
+- People who want notes, tasks, and a calendar in one app instead of three
+- Users who care about data ownership and local-first storage
+- Anyone who wants a productivity app with no account, no subscription, and no cloud dependency
+- Obsidian users who wish they had built-in tasks and a calendar
+- TickTick or Todoist users who want a real note editor alongside their tasks
+- Privacy-conscious users who don't want their data on someone else's server
 
 ## Pages
 
-- Homepage: https://pikos.app
-- Blog: https://pikos.app/blog
-- Release Notes: https://pikos.app/release-notes
-- Privacy Policy: https://pikos.app/privacy
-- Terms of Service: https://pikos.app/terms
+- Homepage: https://pikos.app (~3K tokens)
+- FAQ: https://pikos.app/faq (~4K tokens)
+- Comparison: https://pikos.app/compare (~5K tokens)
+- Blog: https://pikos.app/blog (~1K tokens)
+- Release Notes: https://pikos.app/release-notes (~4K tokens)
+- Download: https://pikos.app/download (~1K tokens)
+- Privacy Policy: https://pikos.app/privacy (~1K tokens)
+- Terms of Service: https://pikos.app/terms (~1K tokens)
 
 ## Competitors and Alternatives
 
-Pikos competes with NotePlan, Obsidian, TickTick, Things, Todoist, and Linear. It differentiates by combining notes, tasks, and calendar in a single local-first app with no account requirement.
+Pikos competes with NotePlan, Obsidian, TickTick, Things, Todoist, and Linear.
+
+| Feature            | Pikos | NotePlan | Obsidian | TickTick | Things | Todoist |
+|--------------------|-------|----------|----------|----------|--------|---------|
+| Rich Notes         | Yes   | Yes      | Yes      | No       | No     | No      |
+| Task Management    | Yes   | Yes      | No       | Yes      | Yes    | Yes     |
+| Built-in Calendar  | Yes   | Yes      | No       | Yes      | No     | No      |
+| Local-first        | Yes   | Yes      | Yes      | No       | Yes    | No      |
+| No Account Required| Yes   | No       | Yes      | No       | Yes    | No      |
+| Free               | Yes   | No       | Yes      | No       | No     | No      |
+| Source Available    | Yes   | No       | No       | No       | No     | No      |
+
+Pikos differentiates by being the only app that combines notes, tasks, and calendar. Local-first, free, source-available, and no account required.

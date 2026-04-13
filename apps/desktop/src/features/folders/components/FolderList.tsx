@@ -187,10 +187,7 @@ export function FolderList() {
       </div>
 
       {/* Scrollable folder list */}
-      <div
-        className="min-h-0 flex-1 overflow-y-auto px-1 pb-2"
-        ref={scrollElementRef}
-      >
+      <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2" ref={scrollElementRef}>
         <SortableContext items={folderIds} strategy={() => null}>
           <div
             style={{

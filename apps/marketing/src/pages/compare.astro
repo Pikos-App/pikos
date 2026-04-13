@@ -1,0 +1,137 @@
+---
+import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
+
+const title = "Pikos vs Obsidian, NotePlan, TickTick, and Others";
+const description = "How Pikos compares to Obsidian, NotePlan, TickTick, Things, Todoist, and Linear. Honest feature comparison.";
+
+const apps = [
+  { name: "Pikos",    notes: true,  tasks: true,  calendar: true,  localFirst: true,  noAccount: true,  free: true,  sourceAvailable: true  },
+  { name: "NotePlan", notes: true,  tasks: true,  calendar: true,  localFirst: true,  noAccount: false, free: false, sourceAvailable: false },
+  { name: "Obsidian", notes: true,  tasks: false, calendar: false, localFirst: true,  noAccount: true,  free: true,  sourceAvailable: false },
+  { name: "TickTick", notes: false, tasks: true,  calendar: true,  localFirst: false, noAccount: false, free: false, sourceAvailable: false },
+  { name: "Things",   notes: false, tasks: true,  calendar: false, localFirst: true,  noAccount: true,  free: false, sourceAvailable: false },
+  { name: "Todoist",  notes: false, tasks: true,  calendar: false, localFirst: false, noAccount: false, free: false, sourceAvailable: false },
+  { name: "Linear",   notes: false, tasks: true,  calendar: false, localFirst: false, noAccount: false, free: false, sourceAvailable: false },
+];
+
+const columns = [
+  { key: "notes",           label: "Notes" },
+  { key: "tasks",           label: "Tasks" },
+  { key: "calendar",        label: "Calendar" },
+  { key: "localFirst",      label: "Local" },
+  { key: "noAccount",       label: "No Acct" },
+  { key: "free",            label: "Free" },
+  { key: "sourceAvailable", label: "Source" },
+];
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-orange-500 dark:text-gray-500 dark:hover:text-orange-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">How Pikos compares</h1>
+    <p class="mt-3 text-base leading-relaxed text-gray-500 dark:text-gray-400">
+      Most productivity apps do one thing. Notes, or tasks, or calendar. Pikos does all three in one window, stored on your device, no account required.
+    </p>
+
+    <!-- Comparison table -->
+    <div class="mt-12 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
+            <th class="w-[100px] px-3 py-2.5 text-left text-xs font-semibold text-gray-900 dark:text-gray-50">App</th>
+            {columns.map((col) => (
+              <th class="px-2 py-2.5 text-center text-xs font-semibold text-gray-900 dark:text-gray-50">{col.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {apps.map((app, i) => (
+            <tr class:list={[
+              "border-b border-gray-100 last:border-b-0 dark:border-gray-800",
+              i === 0 && "bg-orange-50/50 dark:bg-orange-950/20",
+            ]}>
+              <td class:list={[
+                "px-3 py-2.5 text-left font-medium",
+                i === 0 ? "text-orange-600 dark:text-orange-400" : "text-gray-900 dark:text-gray-50",
+              ]}>
+                {app.name}
+              </td>
+              {columns.map((col) => {
+                const val = app[col.key as keyof typeof app];
+                return (
+                  <td class="px-2 py-2.5 text-center">
+                    {val === true ? (
+                      <svg class="mx-auto h-4 w-4 text-emerald-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    ) : (
+                      <span class="text-gray-300 dark:text-gray-600">—</span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Prose comparison sections -->
+    <div class="mt-16 space-y-10 text-base leading-relaxed text-gray-600 dark:text-gray-300">
+
+      <section>
+        <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-50">Pikos vs Obsidian</h2>
+        <p class="mt-3">
+          Obsidian is great for linking notes and building a personal knowledge base. It doesn't have tasks or a calendar. You need plugins for both, and they don't talk to each other well. If your workflow is mostly writing and linking, Obsidian is the right tool. If you also need to track and schedule things without switching apps, Pikos does that natively.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-50">Pikos vs NotePlan</h2>
+        <p class="mt-3">
+          NotePlan is the closest alternative. Notes, tasks, and calendar in one app. It requires an Apple account and a subscription. Pikos is a free download with no account required, and stores data in an open SQLite format. The Mac App Store and iPhone versions will be one-time purchases when they ship. NotePlan has iOS support that Pikos doesn't have yet. If you need cross-device sync today, NotePlan is more complete. If you'd rather own your data and pay once instead of monthly, Pikos is the better fit.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-50">Pikos vs TickTick</h2>
+        <p class="mt-3">
+          TickTick is a polished cloud-based task manager with a calendar. Its note-taking is basic. Text attached to tasks, not a real editor. Pikos is local-first with a full rich text editor, so you can write real documents next to your tasks. If you want cross-platform sync and habit tracking, TickTick does that. If you want your data on your device and real notes alongside tasks, Pikos is a better choice.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-50">Pikos vs Things</h2>
+        <p class="mt-3">
+          Things is beautifully designed and local-first, but it only does tasks. No notes, no calendar. Pikos adds both. Things costs $50; the Pikos desktop app is a free download. If you want a focused, minimal task manager and nothing else, Things is hard to beat. If you want tasks integrated with notes and a calendar in one window, Pikos does more.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-50">Your data, your format</h2>
+        <p class="mt-3">
+          Pikos imports CSV and Markdown files directly, so switching from another app is straightforward. Your data is stored in a standard SQLite database. Copy the file, query it with any SQLite tool, or use the built-in JSON export. No proprietary format, no lock-in. If you ever stop using Pikos, your data is already in a format anything else can read.
+        </p>
+      </section>
+
+    </div>
+
+  </main>
+
+  <Footer current="/compare" />
+</Base>
+
+<style>
+  :global(body) {
+    background-color: #fafaf9;
+  }
+
+  :global(html.dark body) {
+    background-color: #030712;
+  }
+</style>
