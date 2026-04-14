@@ -35,7 +35,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   const { openPage } = useUI();
 
   useKeyboardScope("modal");
-  useKeyboardShortcut("Mod+Shift+D", () => onDelete?.(), { allowInInputs: true, scope: "modal" });
+  useKeyboardShortcut("Mod+Backspace", () => onDelete?.(), { scope: "modal" });
 
   // Local title state — popover mounts fresh on each open so no sync needed.
   const [titleValue, setTitleValue] = useState(page.title);
@@ -220,7 +220,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
               icon={<Trash2 size={11} />}
               label="Delete page"
               onClick={onDelete}
-              shortcut="mod+shift+d"
+              shortcut="mod+backspace"
             />
           )}
         </div>

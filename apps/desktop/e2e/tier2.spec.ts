@@ -185,9 +185,9 @@ appTest("Cmd+A selects all visible pages @tier2", async ({ app }) => {
   await expect(items).toHaveCount(3);
 });
 
-// ─── T2-8: Bulk delete with Cmd+Shift+D ────────────────────────────────────
+// ─── T2-8: Bulk delete with Cmd+Backspace ──────────────────────────────────
 
-appTest("bulk delete selected pages with Cmd+Shift+D @tier2", async ({ app }) => {
+appTest("bulk delete selected pages with Cmd+Backspace @tier2", async ({ app }) => {
   await createPages(app, ["del-bulk-1", "del-bulk-2", "del-bulk-3"]);
 
   const list = app.locator("[data-page-list-item]");
@@ -201,7 +201,7 @@ appTest("bulk delete selected pages with Cmd+Shift+D @tier2", async ({ app }) =>
   await expect(list.filter({ hasText: "del-bulk-3" })).toHaveAttribute("data-selected", "true");
 
   // Bulk delete
-  await app.keyboard.press(mod("Mod+Shift+D"));
+  await app.keyboard.press(mod("Mod+Backspace"));
 
   // All three should be gone
   await expect(list.filter({ hasText: "del-bulk-1" })).not.toBeVisible();
@@ -283,4 +283,42 @@ appTest("create recurring page shows recurrence label @tier2", async ({ app }) =
   // Open the page and verify recurrence label in the editor byline
   await listItem.click();
   await expect(app.getByText(/every week on Monday/i)).toBeVisible();
+});
+
+// ─── T2-11: Create folder inline from FolderChip in QuickAdd ────────────────
+
+appTest("create folder inline via QuickAdd FolderChip @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  await app.getByPlaceholder(/what's on your mind/i).fill("page in fresh folder");
+
+  // Open folder picker and type a brand new folder name
+  await dialog.getByRole("button", { name: "Folder: Inbox" }).click();
+  const folderSearch = app.getByPlaceholder(/search or create/i);
+  await folderSearch.fill("Fresh Folder");
+
+  // Enter creates the folder, selects it, and closes the popover
+  await app.keyboard.press("Enter");
+  await expect(dialog.getByRole("button", { name: "Folder: Fresh Folder" })).toBeVisible();
+
+  // Submit the quick add — page should be created in the new folder
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Sidebar shows the new folder; navigate to it and confirm page landed there
+  const sidebar = app.getByRole("group", { name: "Views and folders" });
+  const folderBtn = sidebar.getByRole("button", { name: "Fresh Folder", exact: true });
+  await expect(folderBtn).toBeVisible();
+  await folderBtn.click();
+  await expect(
+    app.locator("[data-page-list-item]").filter({ hasText: "page in fresh folder" })
+  ).toBeVisible();
+
+  // Page should NOT be in Inbox
+  await app.getByRole("button", { name: /Inbox/ }).click();
+  await expect(
+    app.locator("[data-page-list-item]").filter({ hasText: "page in fresh folder" })
+  ).not.toBeVisible();
 });

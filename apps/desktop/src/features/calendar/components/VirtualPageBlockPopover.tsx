@@ -21,7 +21,7 @@ export function VirtualPageBlockPopover({ onSkip, page }: VirtualPageBlockPopove
   const { openPage } = useUI();
 
   useKeyboardScope("modal");
-  useKeyboardShortcut("Mod+Shift+D", () => onSkip(), { allowInInputs: true, scope: "modal" });
+  useKeyboardShortcut("Mod+Backspace", () => onSkip(), { scope: "modal" });
 
   const rule = recurrenceRules.find((r) => r.id === page.ruleId);
   const folder = folders.find((f) => f.id === page.folderId);
@@ -81,7 +81,7 @@ export function VirtualPageBlockPopover({ onSkip, page }: VirtualPageBlockPopove
             icon={<CalendarX size={11} />}
             label="Skip this occurrence"
             onClick={onSkip}
-            shortcut="mod+shift+d"
+            shortcut="mod+backspace"
           />
         </div>
       </div>

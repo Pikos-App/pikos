@@ -57,7 +57,7 @@ const GROUPS: ShortcutGroup[] = [
       { combo: "Mod+,", label: "Settings" },
       { combo: "Mod+\\", label: "Toggle sidebar" },
       { combo: "Mod+Shift+C", label: "Toggle calendar / editor" },
-      { combo: "Mod+Shift+D", label: "Delete page" },
+      { combo: "Mod+Backspace", label: "Delete page" },
       { combo: "Mod+1–9", label: "Switch to folder by index" },
     ],
     label: "Navigation",

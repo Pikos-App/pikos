@@ -199,23 +199,19 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     if (page) handleSelectPage(page);
   }
 
-  useKeyboardShortcut(
-    "Mod+Shift+D",
-    () => {
-      if (selectedPageIds.size > 0) {
-        // Bulk delete all selected pages
-        const allPages = [...visiblePages, ...completedPages];
-        const selected = allPages.filter((p) => selectedPageIds.has(p.id));
-        for (const page of selected) {
-          handleDeleteRequest(page);
-        }
-        clearSelection();
-      } else if (activePage) {
-        handleDeleteRequest(activePage);
+  useKeyboardShortcut("Mod+Backspace", () => {
+    if (selectedPageIds.size > 0) {
+      // Bulk delete all selected pages
+      const allPages = [...visiblePages, ...completedPages];
+      const selected = allPages.filter((p) => selectedPageIds.has(p.id));
+      for (const page of selected) {
+        handleDeleteRequest(page);
       }
-    },
-    { allowInInputs: true }
-  );
+      clearSelection();
+    } else if (activePage) {
+      handleDeleteRequest(activePage);
+    }
+  });
 
   // Escape: clear multi-selection
   useKeyboardShortcut("Escape", () => clearSelection(), {
