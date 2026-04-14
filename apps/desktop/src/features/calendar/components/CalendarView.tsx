@@ -19,19 +19,20 @@ export function CalendarView() {
   const {
     createPage,
     deletePage,
+    flushPage,
+    getPage,
     listSchedulesRange,
     pages,
     recurrenceRules,
     scheduleOnce,
-    updatePage,
   } = useWorkspace();
   const { activeViewId, openPage, referenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
   const { defaultFolderId: settingsDefaultFolder, weekStart } = useAppSettings();
   const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
-  // ID of the page currently being inline-edited after calendar creation.
-  const [editingPageId, setEditingPageId] = useState<string | null>(null);
+  // ID of the page that should auto-open its metadata popover after calendar creation.
+  const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
 
   // Blur whatever had focus in the editor panel so no focus ring lingers.
   useEffect(() => {
@@ -54,7 +55,7 @@ export function CalendarView() {
     openPage(pageId);
   }
 
-  // Click or drag on an empty time slot → create page + enter inline editing.
+  // Click or drag on an empty time slot → create page + auto-open its metadata popover.
   async function handleCreatePage(day: Date, start: Date, end?: Date) {
     // Default folder: active folder, then settings default, then Inbox.
     const folderId =
@@ -64,7 +65,7 @@ export function CalendarView() {
     // Use local-time format (no Z suffix) — SQLite's date() functions require this.
     const fmt = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm:ss");
     await scheduleOnce(page.id, fmt(start), end ? fmt(end) : undefined);
-    setEditingPageId(page.id);
+    setAutoOpenPageId(page.id);
   }
 
   // Click on an empty all-day column → create all-day page for that date.
@@ -73,19 +74,7 @@ export function CalendarView() {
     const page = await createPage({ folderId });
     // Date-only string → isAllDayPage() returns true.
     await scheduleOnce(page.id, format(day, "yyyy-MM-dd"));
-    setEditingPageId(page.id);
-  }
-
-  // Inline title committed — empty titles become "Untitled".
-  function handleCommitTitle(pageId: string, title: string) {
-    setEditingPageId(null);
-    updatePage(pageId, { title: title.trim() || "Untitled" });
-  }
-
-  // Inline title cancelled — delete the page.
-  function handleCancelCreate(pageId: string) {
-    setEditingPageId(null);
-    void deletePage(pageId);
+    setAutoOpenPageId(page.id);
   }
 
   // Drag-to-reschedule or resize: update the schedule in place.
@@ -93,14 +82,32 @@ export function CalendarView() {
     void scheduleOnce(pageId, start, end);
   }
 
+  // Called after the auto-opened popover closes. If the user never gave the
+  // page a title — regardless of close path (Escape, outside click) — delete
+  // it so stray blank pages don't pile up. Only an explicit title (or Enter,
+  // which commits "Untitled" via PageBlockPopover) keeps the page. We flush
+  // any pending debounced title write, then read the persisted page straight
+  // from the adapter so we're not racing with React's effect scheduler.
+  function handleAutoOpenConsumed() {
+    const id = autoOpenPageId;
+    setAutoOpenPageId(null);
+    if (!id) return;
+    void (async () => {
+      await flushPage(id);
+      const latest = await getPage(id);
+      if (latest && !latest.title.trim()) {
+        void deletePage(id);
+      }
+    })();
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <WeekGrid
+        autoOpenPageId={autoOpenPageId}
         days={days}
-        editingPageId={editingPageId}
         isCurrentWeek={isCurrentWeek}
-        onCancelCreate={handleCancelCreate}
-        onCommitTitle={handleCommitTitle}
+        onAutoOpenConsumed={handleAutoOpenConsumed}
         onCreateAllDay={handleCreateAllDay}
         onCreatePage={handleCreatePage}
         onPageDoubleClick={handlePageDoubleClick}

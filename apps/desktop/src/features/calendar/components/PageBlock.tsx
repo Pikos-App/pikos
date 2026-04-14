@@ -28,12 +28,10 @@ const RESIZE_ZONE = 8;
 interface PageBlockProps {
   block: CalendarBlock;
   folderColor: string | undefined;
-  /** When true, renders an inline title input for immediate editing of a newly created page. */
-  isEditing?: boolean;
-  /** Called with the committed title (may be empty → caller should use "Untitled"). */
-  onCommit?: (title: string) => void;
-  /** Called when the user presses Escape — caller should delete the page. */
-  onCancel?: () => void;
+  /** When true, the block mounts with its metadata popover open (e.g. just created via calendar click/drag). */
+  autoOpenPopover?: boolean;
+  /** Called once after the auto-opened popover is closed by the user. */
+  onAutoOpenConsumed?: () => void;
   onDoubleClick: (pageId: string) => void;
   /** When true, dims the block — used while it is being dragged to a new position. */
   isDragging?: boolean;
@@ -49,12 +47,11 @@ interface PageBlockProps {
 }
 
 export function PageBlock({
+  autoOpenPopover,
   block,
   folderColor,
   isDragging,
-  isEditing,
-  onCancel,
-  onCommit,
+  onAutoOpenConsumed,
   onDoubleClick,
   onDragStart,
   onResizeStart,
@@ -94,12 +91,23 @@ export function PageBlock({
   const showTimeLabel = !isRenderingCompact && displayHeight >= 36;
   const isDone = page.status === "done";
 
-  // Inline editing state — only used when isEditing=true.
-  const [inputValue, setInputValue] = useState(page.title);
-  const committedRef = useRef(false);
-
-  // Popover open state — only used in the non-editing path.
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  // Popover open state. Opens automatically for a freshly-created block so the
+  // user lands directly on the metadata editor with no layout shift.
+  // The parent may flip autoOpenPopover to true on a later render (the block
+  // mounts between scheduleOnce's commit and setAutoOpenPageId's commit), so
+  // we latch on the rising edge via the render-time derived-state pattern.
+  const [popoverOpen, setPopoverOpen] = useState(autoOpenPopover ?? false);
+  const [autoOpenHandled, setAutoOpenHandled] = useState(autoOpenPopover ?? false);
+  if (autoOpenPopover && !autoOpenHandled) {
+    setAutoOpenHandled(true);
+    setPopoverOpen(true);
+  }
+  function handlePopoverOpenChange(open: boolean) {
+    setPopoverOpen(open);
+    if (!open && autoOpenHandled) {
+      onAutoOpenConsumed?.();
+    }
+  }
 
   // Timer ref for single vs double click discrimination.
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,32 +125,6 @@ export function PageBlock({
       if (clickTimerRef.current !== null) clearTimeout(clickTimerRef.current);
     };
   }, []);
-
-  function handleCommit(value: string) {
-    if (committedRef.current) return;
-    committedRef.current = true;
-    onCommit?.(value);
-  }
-
-  function handleCancel() {
-    if (committedRef.current) return;
-    committedRef.current = true;
-    onCancel?.();
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleCommit(e.currentTarget.value);
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      handleCancel();
-    }
-  }
-
-  function handleBlur(e: React.FocusEvent<HTMLInputElement>) {
-    handleCommit(e.currentTarget.value);
-  }
 
   /**
    * Discriminate single click (open popover) from double click (open editor).
@@ -177,7 +159,6 @@ export function PageBlock({
   function handleBlockMouseDown(e: React.MouseEvent) {
     if (e.button !== 0) return; // let right-click reach ContextMenuTrigger unmodified
     e.stopPropagation();
-    if (isEditing) return;
 
     const startX = e.clientX;
     const startY = e.clientY;
@@ -261,39 +242,8 @@ export function PageBlock({
     <TaskCheckbox as="span" checked={isDone} className="mt-1" onChange={handleCheckboxClick} />
   );
 
-  if (isEditing) {
-    return (
-      <div
-        className={cn(
-          "absolute",
-          isRenderingCompact
-            ? [CHIP_BASE_CLASSES, "flex items-center", !folderColor && CHIP_DEFAULT_COLOR_CLASSES]
-            : [
-                "flex flex-col items-start overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5",
-                !folderColor && "border-blue-500 bg-blue-500/15",
-              ]
-        )}
-        style={sharedStyle}
-      >
-        <input
-          autoFocus
-          className={cn(
-            "w-full border-0 bg-transparent font-medium text-foreground outline-none placeholder:text-muted-foreground/60",
-            isRenderingCompact ? "type-body-sm leading-none" : "type-body-sm leading-tight"
-          )}
-          onBlur={handleBlur}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onMouseDown={(e) => e.stopPropagation()}
-          placeholder="Untitled"
-          value={inputValue}
-        />
-      </div>
-    );
-  }
-
   return (
-    <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
+    <Popover onOpenChange={handlePopoverOpenChange} open={popoverOpen}>
       <PopoverTrigger asChild>
         {isRenderingCompact ? (
           <button
@@ -365,6 +315,7 @@ export function PageBlock({
           />
         ) : (
           <PageBlockPopover
+            onClose={() => setPopoverOpen(false)}
             onDelete={() => {
               setPopoverOpen(false);
               requestDeletePage(page);

@@ -20,34 +20,37 @@ import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
 export interface AllDayColumnProps {
+  autoOpenPageId: string | null;
   day: Date;
   draggingPageId: string | null;
-  editingPageId: string | null;
   folderColorMap: Map<string, string>;
   /** Highlighted when an all-day chip is being dragged over this column. */
   isAllDayDragTarget: boolean;
   /** Highlighted when a timed block is being dragged over this column's all-day zone. */
   isTimedDragTarget: boolean;
   items: PageSummary[];
-  onCancelCreate: (pageId: string) => void;
+  onAutoOpenConsumed: () => void;
   onChipDragStart: (info: { folderColor: string | undefined; pageId: string }) => void;
-  onCommitTitle: (pageId: string, title: string) => void;
   onCreateAllDay: (day: Date) => Promise<void> | void;
   onPageDoubleClick: (pageId: string) => void;
 }
 
 interface AllDayChipProps {
+  autoOpenPopover?: boolean;
   draggingPageId: string | null;
   folderColor: string | undefined;
   item: PageSummary;
+  onAutoOpenConsumed?: () => void;
   onDoubleClick: (pageId: string) => void;
   onDragStart: (info: { folderColor: string | undefined; pageId: string }) => void;
 }
 
 function AllDayChip({
+  autoOpenPopover,
   draggingPageId,
   folderColor,
   item,
+  onAutoOpenConsumed,
   onDoubleClick,
   onDragStart,
 }: AllDayChipProps) {
@@ -57,8 +60,24 @@ function AllDayChip({
     skipOccurrence: handleSkipOccurrence,
     toggleStatus,
   } = useRecurringActions(item);
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  // Popover opens automatically for a freshly-created chip. Parent may flip
+  // autoOpenPopover to true on a later render (chip mounts between
+  // scheduleOnce's commit and setAutoOpenPageId's commit), so we latch on the
+  // rising edge via the render-time derived-state pattern.
+  const [popoverOpen, setPopoverOpen] = useState(autoOpenPopover ?? false);
+  const [autoOpenHandled, setAutoOpenHandled] = useState(autoOpenPopover ?? false);
+  if (autoOpenPopover && !autoOpenHandled) {
+    setAutoOpenHandled(true);
+    setPopoverOpen(true);
+  }
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handlePopoverOpenChange(open: boolean) {
+    setPopoverOpen(open);
+    if (!open && autoOpenHandled) {
+      onAutoOpenConsumed?.();
+    }
+  }
   // Prevents the post-drag click from opening the popover.
   const isChipDraggingRef = useRef(false);
 
@@ -136,7 +155,7 @@ function AllDayChip({
   const chipStyle = folderColor ? chipFolderStyle(folderColor) : undefined;
 
   return (
-    <Popover onOpenChange={setPopoverOpen} open={popoverOpen}>
+    <Popover onOpenChange={handlePopoverOpenChange} open={popoverOpen}>
       <PopoverTrigger asChild>
         <button
           aria-label={item.title || "Untitled"}
@@ -180,6 +199,7 @@ function AllDayChip({
           />
         ) : (
           <PageBlockPopover
+            onClose={() => setPopoverOpen(false)}
             onDelete={() => {
               setPopoverOpen(false);
               requestDeletePage(item);
@@ -194,42 +214,22 @@ function AllDayChip({
 }
 
 export function AllDayColumn({
+  autoOpenPageId,
   day,
   draggingPageId,
-  editingPageId,
   folderColorMap,
   isAllDayDragTarget,
   isTimedDragTarget,
   items,
-  onCancelCreate,
+  onAutoOpenConsumed,
   onChipDragStart,
-  onCommitTitle,
   onCreateAllDay,
   onPageDoubleClick,
 }: AllDayColumnProps) {
   const weekend = day.getDay() === 0 || day.getDay() === 6;
-  const [inputValue, setInputValue] = useState("");
-  const committedRef = useRef(false);
-
-  // The page currently being inline-edited in this column (if any).
-  const editingItem = items.find((it) => it.id === editingPageId) ?? null;
-
-  function handleCommit(pageId: string, value: string) {
-    if (committedRef.current) return;
-    committedRef.current = true;
-    onCommitTitle(pageId, value);
-  }
-
-  function handleCancel(pageId: string) {
-    if (committedRef.current) return;
-    committedRef.current = true;
-    onCancelCreate(pageId);
-  }
 
   // Chips call stopPropagation so this only fires on empty-space clicks.
   function handleColumnClick() {
-    committedRef.current = false;
-    setInputValue("");
     void onCreateAllDay(day);
   }
 
@@ -247,49 +247,14 @@ export function AllDayColumn({
       <div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
         {items.map((item) => {
           const folderColor = item.folderId ? folderColorMap.get(item.folderId) : undefined;
-          const chipStyle = folderColor ? chipFolderStyle(folderColor) : undefined;
-
-          if (item.id === editingItem?.id) {
-            return (
-              <div
-                className={cn(
-                  "flex w-full items-center gap-1",
-                  CHIP_BASE_CLASSES,
-                  !folderColor && CHIP_DEFAULT_COLOR_CLASSES
-                )}
-                key={item.id}
-                style={chipStyle}
-              >
-                <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border border-current/30" />
-                <input
-                  autoFocus
-                  className="type-body-sm min-w-0 flex-1 border-0 bg-transparent leading-none font-medium text-foreground outline-none placeholder:text-muted-foreground/60"
-                  onBlur={(e) => handleCommit(item.id, e.currentTarget.value)}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleCommit(item.id, e.currentTarget.value);
-                    } else if (e.key === "Escape") {
-                      e.preventDefault();
-                      handleCancel(item.id);
-                    }
-                  }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  placeholder="Untitled"
-                  value={inputValue}
-                />
-              </div>
-            );
-          }
-
           return (
             <AllDayChip
+              autoOpenPopover={autoOpenPageId === item.id}
               draggingPageId={draggingPageId}
               folderColor={folderColor}
               item={item}
               key={item.id}
+              onAutoOpenConsumed={onAutoOpenConsumed}
               onDoubleClick={onPageDoubleClick}
               onDragStart={onChipDragStart}
             />

@@ -29,10 +29,9 @@ import { TimeGutter } from "./TimeGutter";
 
 interface WeekGridProps {
   days: Date[];
-  editingPageId: string | null;
+  autoOpenPageId: string | null;
   isCurrentWeek: boolean;
-  onCancelCreate: (pageId: string) => void;
-  onCommitTitle: (pageId: string, title: string) => void;
+  onAutoOpenConsumed: () => void;
   onCreateAllDay: (day: Date) => Promise<void> | void;
   onCreatePage: (day: Date, start: Date, end?: Date) => Promise<void> | void;
   onPageDoubleClick: (pageId: string) => void;
@@ -74,11 +73,10 @@ function enableSelect() {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function WeekGrid({
+  autoOpenPageId,
   days,
-  editingPageId,
   isCurrentWeek,
-  onCancelCreate,
-  onCommitTitle,
+  onAutoOpenConsumed,
   onCreateAllDay,
   onCreatePage,
   onPageDoubleClick,
@@ -572,13 +570,12 @@ export function WeekGrid({
       {/* All-day row — includes date numbers at top of each column */}
       <AllDaySection
         allDayDragHoverIndex={allDayDragHoverIndex}
+        autoOpenPageId={autoOpenPageId}
         days={days}
         draggingPageId={allDayDraggingPageId}
-        editingPageId={editingPageId}
         height={allDay.height}
-        onCancelCreate={onCancelCreate}
+        onAutoOpenConsumed={onAutoOpenConsumed}
         onChipDragStart={handleAllDayChipDragStart}
-        onCommitTitle={onCommitTitle}
         onCreateAllDay={onCreateAllDay}
         onPageDoubleClick={onPageDoubleClick}
         onResizeStart={allDay.onResizeStart}
@@ -638,18 +635,17 @@ export function WeekGrid({
 
               return (
                 <DayColumn
+                  autoOpenPageId={autoOpenPageId}
                   day={day}
                   dayIndex={i}
                   dragGhost={colDragGhost}
                   draggingPageId={dragRenderState?.pageId ?? null}
-                  editingPageId={editingPageId}
                   isCurrentWeek={isCurrentWeek}
                   key={day.toISOString()}
                   now={today}
+                  onAutoOpenConsumed={onAutoOpenConsumed}
                   onBlockDragStart={handleBlockDragStart}
                   onBlockResizeStart={handleBlockResizeStart}
-                  onCancelCreate={onCancelCreate}
-                  onCommitTitle={onCommitTitle}
                   onCreatePage={onCreatePage}
                   onPageDoubleClick={onPageDoubleClick}
                   pages={pages}

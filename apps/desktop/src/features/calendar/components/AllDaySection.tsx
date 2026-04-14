@@ -12,13 +12,12 @@ import { AllDayColumn } from "./AllDayColumn";
 
 interface AllDaySectionProps {
   allDayDragHoverIndex: number | null;
+  autoOpenPageId: string | null;
   days: Date[];
   draggingPageId: string | null;
-  editingPageId: string | null;
   height: number;
-  onCancelCreate: (pageId: string) => void;
+  onAutoOpenConsumed: () => void;
   onChipDragStart: (info: { folderColor: string | undefined; pageId: string }) => void;
-  onCommitTitle: (pageId: string, title: string) => void;
   onCreateAllDay: (day: Date) => Promise<void> | void;
   onPageDoubleClick: (pageId: string) => void;
   onResizeStart: (e: React.MouseEvent) => void;
@@ -28,13 +27,12 @@ interface AllDaySectionProps {
 
 export function AllDaySection({
   allDayDragHoverIndex,
+  autoOpenPageId,
   days,
   draggingPageId,
-  editingPageId,
   height,
-  onCancelCreate,
+  onAutoOpenConsumed,
   onChipDragStart,
-  onCommitTitle,
   onCreateAllDay,
   onPageDoubleClick,
   onResizeStart,
@@ -56,17 +54,16 @@ export function AllDaySection({
           const items = buildAllDayItems(pages, day);
           return (
             <AllDayColumn
+              autoOpenPageId={autoOpenPageId}
               day={day}
               draggingPageId={draggingPageId}
-              editingPageId={editingPageId}
               folderColorMap={folderColorMap}
               isAllDayDragTarget={allDayDragHoverIndex === dayIndex}
               isTimedDragTarget={timedDragTarget?.dayIndex === dayIndex}
               items={items}
               key={day.toISOString()}
-              onCancelCreate={onCancelCreate}
+              onAutoOpenConsumed={onAutoOpenConsumed}
               onChipDragStart={onChipDragStart}
-              onCommitTitle={onCommitTitle}
               onCreateAllDay={onCreateAllDay}
               onPageDoubleClick={onPageDoubleClick}
             />

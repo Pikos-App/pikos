@@ -56,13 +56,12 @@ interface DayColumnProps {
   dayIndex: number;
   dragGhost: DragGhost | null;
   draggingPageId: string | null;
-  editingPageId: string | null;
+  autoOpenPageId: string | null;
   isCurrentWeek: boolean;
   now: Date;
   onBlockDragStart: (info: BlockDragStartInfo) => void;
   onBlockResizeStart: (info: BlockResizeStartInfo) => void;
-  onCancelCreate: (pageId: string) => void;
-  onCommitTitle: (pageId: string, title: string) => void;
+  onAutoOpenConsumed: () => void;
   onCreatePage: (day: Date, start: Date, end?: Date) => Promise<void> | void;
   onPageDoubleClick: (pageId: string) => void;
   pages: PageSummary[];
@@ -73,17 +72,16 @@ interface DayColumnProps {
 const MIN_DRAG_HEIGHT = (15 / 60) * HOUR_HEIGHT;
 
 export function DayColumn({
+  autoOpenPageId,
   day,
   dayIndex,
   dragGhost,
   draggingPageId,
-  editingPageId,
   isCurrentWeek,
   now,
+  onAutoOpenConsumed,
   onBlockDragStart,
   onBlockResizeStart,
-  onCancelCreate,
-  onCommitTitle,
   onCreatePage,
   onPageDoubleClick,
   pages,
@@ -117,8 +115,10 @@ export function DayColumn({
     if (e.button !== 0) return;
     // Don't create a block if a context menu is open — the click is targeting the menu.
     if (document.querySelector('[role="menu"]')) return;
-    // Commit any in-progress inline edit. e.preventDefault() below suppresses blur,
-    // so we must flush it manually before the old input unmounts without committing.
+    // Commit any open popover's title input: e.preventDefault() below suppresses
+    // the default focus/blur behavior, so we must flush it manually before the
+    // input unmounts — otherwise the typed title is lost and the auto-created
+    // page gets deleted as "empty" by handleAutoOpenConsumed.
     (document.activeElement as HTMLElement | null)?.blur();
     e.preventDefault(); // prevent text selection during drag
 
@@ -291,7 +291,7 @@ export function DayColumn({
           const folderColor = block.page.folderId
             ? folderColorMap.get(block.page.folderId)
             : undefined;
-          const editing = editingPageId === block.page.id;
+          const autoOpen = autoOpenPageId === block.page.id;
           const isBeingDragged = draggingPageId === block.page.id;
 
           // Resize ghost: override height for the block being resized.
@@ -302,11 +302,12 @@ export function DayColumn({
 
           return (
             <PageBlock
+              autoOpenPopover={autoOpen}
               block={block}
               folderColor={folderColor}
               isDragging={isBeingDragged}
-              isEditing={editing}
               key={block.page.id}
+              onAutoOpenConsumed={onAutoOpenConsumed}
               onDoubleClick={onPageDoubleClick}
               onDragStart={(_clientX, clientY) => {
                 onBlockDragStart({
@@ -321,12 +322,6 @@ export function DayColumn({
                 onBlockResizeStart({ block, dayIndex, pageId: block.page.id });
               }}
               {...(resizeHeight !== undefined ? { resizeHeight } : {})}
-              {...(editing
-                ? {
-                    onCancel: () => onCancelCreate(block.page.id),
-                    onCommit: (title: string) => onCommitTitle(block.page.id, title),
-                  }
-                : {})}
             />
           );
         })}

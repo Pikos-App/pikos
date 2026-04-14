@@ -18,11 +18,12 @@ import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyb
 
 interface PageBlockPopoverProps {
   page: PageSummary;
+  onClose?: () => void;
   onDelete?: () => void;
   onRemoveDate?: () => void;
 }
 
-export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopoverProps) {
+export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: PageBlockPopoverProps) {
   const {
     clearSchedule,
     completeRecurringPage,
@@ -38,6 +39,17 @@ export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopo
 
   // Local title state — popover mounts fresh on each open so no sync needed.
   const [titleValue, setTitleValue] = useState(page.title);
+
+  // Sync every keystroke to the store (debounced write) so close paths that
+  // don't run our blur handler — outside click, Escape, parent unmount — still
+  // see the latest title when they check whether the page is still untitled.
+  function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const next = e.target.value;
+    setTitleValue(next);
+    if (next !== page.title) {
+      updatePage(page.id, { title: next });
+    }
+  }
 
   const isDone = page.status === "done";
 
@@ -63,7 +75,12 @@ export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopo
   function handleTitleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       e.preventDefault();
-      e.currentTarget.blur();
+      const value = e.currentTarget.value.trim();
+      const nextTitle = value || "Untitled";
+      if (nextTitle !== page.title) {
+        updatePage(page.id, { title: nextTitle });
+      }
+      onClose?.();
     }
   }
 
@@ -114,7 +131,7 @@ export function PageBlockPopover({ onDelete, onRemoveDate, page }: PageBlockPopo
         autoFocus
         className="w-full border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
         onBlur={handleTitleBlur}
-        onChange={(e) => setTitleValue(e.target.value)}
+        onChange={handleTitleChange}
         onFocus={(e) => {
           const el = e.currentTarget;
           requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
