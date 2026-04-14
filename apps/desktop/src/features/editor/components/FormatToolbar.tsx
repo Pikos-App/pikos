@@ -178,7 +178,9 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
     <BubbleMenu
       editor={editor}
       options={{ placement: "top" }}
-      shouldShow={({ editor: ed, state }) => ed.isFocused && !state.selection.empty}
+      shouldShow={({ editor: ed, state }) =>
+        ed.isFocused && !state.selection.empty && !ed.isActive("image") && !ed.isActive("table")
+      }
     >
       <div className="bubble-toolbar" data-format-toolbar>
         {groups.map((group, gi) => (

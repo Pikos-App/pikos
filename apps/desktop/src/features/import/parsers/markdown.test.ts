@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { extractWikilinks, parseFrontmatter, parseMarkdownVault, type VaultFile } from "./markdown";
+import {
+  extractImageRefs,
+  extractWikilinks,
+  parseFrontmatter,
+  parseMarkdownVault,
+  transformCallouts,
+  type VaultFile,
+} from "./markdown";
 
 // ─── parseFrontmatter ─────────────────────────────────────────────────────────
 
@@ -305,10 +312,13 @@ Task body`,
     ];
 
     const plan = parseMarkdownVault(files);
+    // Images are now handled (extracted as imageRefs), only mermaid triggers a warning
     expect(plan.warnings).toHaveLength(1);
     expect(plan.warnings[0]!.type).toBe("unsupported_content");
-    expect(plan.warnings[0]!.message).toContain("embedded image");
     expect(plan.warnings[0]!.message).toContain("mermaid diagram");
+    // Image ref should be extracted instead of warned
+    expect(plan.pages[0]!.imageRefs).toHaveLength(1);
+    expect(plan.pages[0]!.imageRefs[0]!.sourcePath).toBe("image.png");
   });
 
   it("warns about empty files", () => {
@@ -337,12 +347,14 @@ Task body`,
     expect(plan.warnings.some((w) => w.message.includes("dataview query"))).toBe(true);
   });
 
-  it("warns about callouts", () => {
+  it("transforms callouts instead of warning", () => {
     const files: VaultFile[] = [
       { content: "> [!warning] Be careful\n> Details here", path: "note.md" },
     ];
     const plan = parseMarkdownVault(files);
-    expect(plan.warnings.some((w) => w.message.includes("callout"))).toBe(true);
+    // Callouts are now transformed, not warned about
+    expect(plan.warnings.some((w) => w.message.includes("callout"))).toBe(false);
+    expect(plan.pages[0]!.body).toContain("**Warning:** Be careful");
   });
 
   it("adds folder flattening note to meta transformations", () => {
@@ -545,10 +557,9 @@ And an embedded image: ![[screenshot.png]]`,
     );
     expect(mermaidWarning).toBeTruthy();
 
-    const imageWarning = plan.warnings.find(
-      (w) => w.source === "Areas/Research/Diagrams.md" && w.message.includes("embedded image")
-    );
-    expect(imageWarning).toBeTruthy();
+    // Embedded images are now handled via imageRefs, not warned about
+    const diagrams = plan.pages.find((p) => p.title === "Diagrams");
+    expect(diagrams!.imageRefs.length).toBeGreaterThan(0);
   });
 
   it("warns about empty content files", () => {
@@ -570,5 +581,191 @@ And an embedded image: ![[screenshot.png]]`,
     const report = plan.pages.find((p) => p.title === "Quarterly Report");
     expect(report!.body).toContain("# Quarterly Report");
     expect(report!.body).not.toContain("status: done");
+  });
+});
+
+// ─── extractImageRefs ─────────────────────────────────────────────────────────
+
+describe("extractImageRefs", () => {
+  it("extracts Obsidian wiki-embed images", () => {
+    const refs = extractImageRefs("Some text\n![[screenshot.png]]\nMore text");
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      altText: "screenshot",
+      fullMatch: "![[screenshot.png]]",
+      sourcePath: "screenshot.png",
+      syntax: "wiki",
+    });
+  });
+
+  it("extracts wiki-embed with nested path", () => {
+    const refs = extractImageRefs("![[attachments/photos/vacation.jpg]]");
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      sourcePath: "attachments/photos/vacation.jpg",
+      syntax: "wiki",
+    });
+  });
+
+  it("extracts standard markdown images", () => {
+    const refs = extractImageRefs("![alt text](images/diagram.png)");
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      altText: "alt text",
+      fullMatch: "![alt text](images/diagram.png)",
+      sourcePath: "images/diagram.png",
+      syntax: "standard",
+    });
+  });
+
+  it("ignores http/https URLs in standard markdown", () => {
+    const refs = extractImageRefs("![logo](https://example.com/logo.png)");
+    expect(refs).toHaveLength(0);
+  });
+
+  it("extracts multiple image refs from one body", () => {
+    const body = `# Notes
+![[photo1.png]]
+Some text
+![diagram](assets/diagram.svg)
+![[photo2.jpeg]]`;
+    const refs = extractImageRefs(body);
+    expect(refs).toHaveLength(3);
+    expect(refs[0]!.sourcePath).toBe("photo1.png");
+    expect(refs[1]!.sourcePath).toBe("assets/diagram.svg");
+    expect(refs[2]!.sourcePath).toBe("photo2.jpeg");
+  });
+
+  it("handles empty alt text in standard markdown", () => {
+    const refs = extractImageRefs("![](path/to/image.webp)");
+    expect(refs).toHaveLength(1);
+    expect(refs[0]!.altText).toBe("");
+    expect(refs[0]!.sourcePath).toBe("path/to/image.webp");
+  });
+
+  it("returns empty array when no images present", () => {
+    const refs = extractImageRefs("Just plain text\n## With heading");
+    expect(refs).toHaveLength(0);
+  });
+
+  it("is case-insensitive on extensions", () => {
+    const refs = extractImageRefs("![[Photo.PNG]]\n![](diagram.SVG)");
+    expect(refs).toHaveLength(2);
+  });
+
+  it("marks extensionless wiki-embeds as speculative", () => {
+    const refs = extractImageRefs("![[Screenshot 2026-04-13 at 7.41.23 PM]]");
+    expect(refs).toHaveLength(1);
+    expect(refs[0]!.speculative).toBe(true);
+    expect(refs[0]!.sourcePath).toBe("Screenshot 2026-04-13 at 7.41.23 PM");
+  });
+
+  it("does not mark wiki-embeds with extensions as speculative", () => {
+    const refs = extractImageRefs("![[photo.png]]");
+    expect(refs).toHaveLength(1);
+    expect(refs[0]!.speculative).toBeUndefined();
+  });
+
+  it("does not double-match embeds with extensions", () => {
+    const refs = extractImageRefs("![[photo.png]]\n![[My Note]]");
+    expect(refs).toHaveLength(2);
+    expect(refs[0]!.sourcePath).toBe("photo.png");
+    expect(refs[0]!.speculative).toBeUndefined();
+    expect(refs[1]!.sourcePath).toBe("My Note");
+    expect(refs[1]!.speculative).toBe(true);
+  });
+
+  it("handles wiki-embed with display text", () => {
+    const refs = extractImageRefs("![[photo.png|My Photo]]");
+    expect(refs).toHaveLength(1);
+    expect(refs[0]!.sourcePath).toBe("photo.png");
+  });
+});
+
+// ─── parseMarkdownVault with images ──────────────────────────────────────────
+
+describe("parseMarkdownVault image handling", () => {
+  it("populates imageRefs on pages with embedded images", () => {
+    const files: VaultFile[] = [
+      {
+        content: "# My Note\n\n![[screenshot.png]]\n\n![diagram](assets/flow.svg)",
+        path: "notes/my-note.md",
+      },
+    ];
+    const plan = parseMarkdownVault(files);
+    expect(plan.pages).toHaveLength(1);
+    expect(plan.pages[0]!.imageRefs).toHaveLength(2);
+    expect(plan.pages[0]!.imageRefs[0]!.syntax).toBe("wiki");
+    expect(plan.pages[0]!.imageRefs[1]!.syntax).toBe("standard");
+  });
+
+  it("does not warn about embedded images (now handled)", () => {
+    const files: VaultFile[] = [{ content: "![[photo.png]]", path: "note.md" }];
+    const plan = parseMarkdownVault(files);
+    const imageWarnings = plan.warnings.filter((w) => w.message.includes("embedded image"));
+    expect(imageWarnings).toHaveLength(0);
+  });
+
+  it("still warns about other unsupported content", () => {
+    const files: VaultFile[] = [{ content: "```mermaid\ngraph TD\nA-->B\n```", path: "note.md" }];
+    const plan = parseMarkdownVault(files);
+    expect(plan.warnings.some((w) => w.message.includes("mermaid"))).toBe(true);
+  });
+
+  it("sets empty imageRefs on pages without images", () => {
+    const files: VaultFile[] = [{ content: "# Plain note\nNo images here.", path: "plain.md" }];
+    const plan = parseMarkdownVault(files);
+    expect(plan.pages[0]!.imageRefs).toEqual([]);
+  });
+
+  it("transforms callouts into styled blockquotes on import", () => {
+    const files: VaultFile[] = [
+      { content: "> [!note] Important info\n> More details here.", path: "callout.md" },
+    ];
+    const plan = parseMarkdownVault(files);
+    expect(plan.pages[0]!.body).toContain("**Note:** Important info");
+    expect(plan.pages[0]!.body).toContain("> More details here.");
+  });
+
+  it("does not warn about callouts (now handled)", () => {
+    const files: VaultFile[] = [
+      { content: "> [!warning] Watch out!\n> This is dangerous.", path: "warn.md" },
+    ];
+    const plan = parseMarkdownVault(files);
+    const calloutWarnings = plan.warnings.filter((w) => w.message.includes("callout"));
+    expect(calloutWarnings).toHaveLength(0);
+  });
+});
+
+// ─── transformCallouts ──────────────────────────────────────────────────────
+
+describe("transformCallouts", () => {
+  it("transforms callout with title", () => {
+    const input = "> [!note] My Title\n> Body text";
+    const result = transformCallouts(input);
+    expect(result).toBe("> **Note:** My Title\n> Body text");
+  });
+
+  it("transforms callout without title", () => {
+    const result = transformCallouts("> [!warning]");
+    expect(result).toBe("> **Warning:**");
+  });
+
+  it("handles multiple callouts", () => {
+    const input = "> [!note] First\n\n> [!tip] Second";
+    const result = transformCallouts(input);
+    expect(result).toContain("**Note:** First");
+    expect(result).toContain("**Tip:** Second");
+  });
+
+  it("preserves non-callout blockquotes", () => {
+    const input = "> Just a regular quote";
+    const result = transformCallouts(input);
+    expect(result).toBe("> Just a regular quote");
+  });
+
+  it("capitalizes type label", () => {
+    const result = transformCallouts("> [!INFO] Details");
+    expect(result).toBe("> **Info:** Details");
   });
 });

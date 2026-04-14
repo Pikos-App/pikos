@@ -3,6 +3,24 @@
 
 import type { PagePriority, PageStatus } from "@pikos/core";
 
+/** An image reference found in a markdown body. */
+export interface ImageRef {
+  /** The full regex match (e.g. "![[photo.png]]" or "![alt](path/to/img.png)"). */
+  fullMatch: string;
+  /** Path as written in the source file (relative to vault root). */
+  sourcePath: string;
+  /** "wiki" for ![[...]] or "standard" for ![alt](...). */
+  syntax: "wiki" | "standard";
+  /** Alt text (filename for wiki, explicit alt for standard). */
+  altText: string;
+  /**
+   * Whether this is definitely an image (has image extension) or a speculative
+   * match (extensionless wiki-embed that might be an image or a note transclusion).
+   * Speculative refs are tried during resolution but left as-is if they fail.
+   */
+  speculative?: boolean;
+}
+
 /** A single page to be imported. */
 export interface ImportPage {
   /** Original filename or CSV title — used as page title. */
@@ -32,6 +50,8 @@ export interface ImportPage {
   sourceId: string | null;
   /** Original parent ID from the source system. Resolved to Pikos parent_id post-import. */
   sourceParentId: string | null;
+  /** Image references found in the body (markdown imports only). */
+  imageRefs: ImageRef[];
 }
 
 /** A folder to be created (or matched to an existing one). */
@@ -70,6 +90,8 @@ export interface ImportPlan {
   folders: ImportFolder[];
   warnings: ImportWarning[];
   meta: ImportMeta;
+  /** Vault root directory path (markdown imports only). Used to resolve image paths. */
+  vaultRoot?: string;
 }
 
 // ─── CSV Column Mapping ──────────────────────────────────────────────────────

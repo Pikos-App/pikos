@@ -302,6 +302,18 @@ pub async fn export_json(state: tauri::State<'_, DbState>) -> Result<String, Str
             .collect()
     };
 
+    // Collect all asset paths referenced in page content
+    let mut asset_paths: Vec<String> = Vec::new();
+    for row in &pages {
+        if let Ok(content) = row.try_get::<String, _>("content") {
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&content) {
+                collect_asset_paths(&doc, &mut asset_paths);
+            }
+        }
+    }
+    asset_paths.sort();
+    asset_paths.dedup();
+
     let export = serde_json::json!({
         "version": 1,
         "exported_at": chrono::Utc::now().to_rfc3339(),
@@ -310,6 +322,7 @@ pub async fn export_json(state: tauri::State<'_, DbState>) -> Result<String, Str
         "schedules": to_json(schedules),
         "recurrence_rules": to_json(rules),
         "focus_sessions": to_json(sessions),
+        "assets": asset_paths,
     });
 
     let home = std::env::var("HOME").map_err(|e| format!("$HOME not set: {e}"))?;
@@ -374,9 +387,31 @@ pub async fn backup_db_before_import(
     Ok(dest)
 }
 
+/// Collect absolute asset paths from image nodes in ProseMirror JSON.
+fn collect_asset_paths(node: &serde_json::Value, paths: &mut Vec<String>) {
+    let node_type = node.get("type").and_then(|t| t.as_str()).unwrap_or("");
+    if node_type == "image" {
+        if let Some(path) = node
+            .get("attrs")
+            .and_then(|a| a.get("data-asset-path"))
+            .and_then(|p| p.as_str())
+        {
+            if !path.is_empty() {
+                paths.push(path.to_string());
+            }
+        }
+    }
+    if let Some(content) = node.get("content").and_then(|c| c.as_array()) {
+        for child in content {
+            collect_asset_paths(child, paths);
+        }
+    }
+}
+
 /// Export all pages as Markdown files to ~/Downloads/pikos-markdown-<timestamp>/.
 /// Each page becomes a .md file with YAML frontmatter (title, status, priority, tags,
 /// scheduled dates). Folder structure is preserved as subdirectories.
+/// Images are copied into an assets/ subdirectory with references rewritten.
 #[tauri::command]
 pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String, String> {
     let pool = state.get_pool().await?;
@@ -408,6 +443,10 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
 
     std::fs::create_dir_all(&base_dir).map_err(|e| e.to_string())?;
 
+    // Track copied assets to avoid duplicates (absolute source → relative export path)
+    let mut copied_assets: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut assets_dir_created = false;
+
     for row in &pages {
         let title: String = row.try_get("title").unwrap_or_default();
         let content: String = row.try_get("content").unwrap_or_default();
@@ -419,6 +458,45 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
         let created_at: String = row.try_get("created_at").unwrap_or_default();
         let updated_at: String = row.try_get("updated_at").unwrap_or_default();
         let folder_id: Option<String> = row.try_get("folder_id").ok();
+
+        // Collect and copy image assets from the page content
+        if !content.is_empty() && content != "{}" {
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&content) {
+                let mut asset_paths = Vec::new();
+                collect_asset_paths(&doc, &mut asset_paths);
+
+                for abs_path in &asset_paths {
+                    if copied_assets.contains_key(abs_path) {
+                        continue;
+                    }
+                    let source = std::path::Path::new(abs_path);
+                    if !source.exists() {
+                        continue;
+                    }
+
+                    // Create assets dir on first use
+                    if !assets_dir_created {
+                        let dir = format!("{}/assets", base_dir);
+                        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                        assets_dir_created = true;
+                    }
+
+                    // Preserve the filename from the assets dir
+                    let filename = source
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("asset.bin");
+                    let dest = format!("{}/assets/{}", base_dir, filename);
+                    let relative = format!("assets/{}", filename);
+
+                    if let Err(e) = std::fs::copy(source, &dest) {
+                        eprintln!("Warning: failed to copy asset {}: {}", abs_path, e);
+                        continue;
+                    }
+                    copied_assets.insert(abs_path.to_string(), relative);
+                }
+            }
+        }
 
         // Determine output directory
         let out_dir = match folder_id.as_deref() {
@@ -471,7 +549,7 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
         frontmatter.push_str("---\n\n");
 
         // Convert ProseMirror JSON → Markdown
-        let body = if content.is_empty() || content == "{}" {
+        let mut body = if content.is_empty() || content == "{}" {
             String::new()
         } else {
             match serde_json::from_str::<serde_json::Value>(&content) {
@@ -480,11 +558,126 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
             }
         };
 
+        // Rewrite absolute asset paths to relative export paths in the markdown body.
+        // The relative path depends on whether the page is in a subfolder:
+        // - Root pages: assets/uuid.png
+        // - Subfolder pages: ../assets/uuid.png
+        let in_subfolder = folder_id.is_some();
+        for (abs_path, rel_path) in &copied_assets {
+            let export_ref = if in_subfolder {
+                format!("../{}", rel_path)
+            } else {
+                rel_path.clone()
+            };
+            body = body.replace(abs_path, &export_ref);
+        }
+
         let full = format!("{}{}", frontmatter, body);
         std::fs::write(&filepath, full).map_err(|e| e.to_string())?;
     }
 
     Ok(base_dir)
+}
+
+/// Export all pages as a CSV file to ~/Downloads/.
+/// Columns match what the CSV importer expects so the output can be re-imported.
+/// Rich text content is exported as plain text (content_text).
+#[tauri::command]
+pub async fn export_csv(state: tauri::State<'_, DbState>) -> Result<String, String> {
+    let pool = state.get_pool().await?;
+
+    // Fetch folders for name lookup
+    let folders = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, name FROM folders ORDER BY sort_order"
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let folder_names: std::collections::HashMap<String, String> =
+        folders.into_iter().collect();
+
+    // Fetch all non-deleted pages
+    let pages = sqlx::query(
+        "SELECT id, folder_id, title, content_text, status, priority, tags, \
+         scheduled_start, scheduled_end, created_at, updated_at, completed_at \
+         FROM pages WHERE deleted_at IS NULL ORDER BY sort_order"
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let home = std::env::var("HOME").map_err(|e| format!("$HOME not set: {e}"))?;
+    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
+    let dest = format!("{}/Downloads/pikos-export-{}.csv", home, timestamp);
+
+    let mut out = String::new();
+
+    // Header row — column names match the CSV importer's HEADER_HEURISTICS
+    out.push_str("Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Created At,Updated At,Completed At\n");
+
+    for row in &pages {
+        let title: String = row.try_get("title").unwrap_or_default();
+        let content_text: String = row.try_get("content_text").unwrap_or_default();
+        let status: String = row.try_get("status").unwrap_or_default();
+        let priority: i64 = row.try_get("priority").unwrap_or(0);
+        let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
+        let scheduled_start: Option<String> = row.try_get("scheduled_start").ok();
+        let scheduled_end: Option<String> = row.try_get("scheduled_end").ok();
+        let created_at: String = row.try_get("created_at").unwrap_or_default();
+        let updated_at: String = row.try_get("updated_at").unwrap_or_default();
+        let completed_at: Option<String> = row.try_get("completed_at").ok();
+        let folder_id: Option<String> = row.try_get("folder_id").ok();
+
+        let folder_name = folder_id
+            .as_deref()
+            .and_then(|fid| folder_names.get(fid))
+            .cloned()
+            .unwrap_or_default();
+
+        // Parse tags JSON array to comma-separated string
+        let tag_str = if let Ok(tag_list) = serde_json::from_str::<Vec<String>>(&tags) {
+            tag_list.join(", ")
+        } else {
+            String::new()
+        };
+
+        // CSV-escape a field: quote if it contains comma, newline, or quote
+        fn csv_field(s: &str) -> String {
+            if s.contains(',') || s.contains('\n') || s.contains('"') {
+                format!("\"{}\"", s.replace('"', "\"\""))
+            } else {
+                s.to_string()
+            }
+        }
+
+        out.push_str(&csv_field(&title));
+        out.push(',');
+        out.push_str(&csv_field(&content_text));
+        out.push(',');
+        out.push_str(&csv_field(&folder_name));
+        out.push(',');
+        out.push_str(&csv_field(&status));
+        out.push(',');
+        out.push_str(&priority.to_string());
+        out.push(',');
+        out.push_str(&csv_field(&tag_str));
+        out.push(',');
+        out.push_str(&csv_field(scheduled_start.as_deref().unwrap_or("")));
+        out.push(',');
+        out.push_str(&csv_field(scheduled_end.as_deref().unwrap_or("")));
+        out.push(',');
+        out.push_str(&csv_field(&created_at));
+        out.push(',');
+        out.push_str(&csv_field(&updated_at));
+        out.push(',');
+        out.push_str(&csv_field(completed_at.as_deref().unwrap_or("")));
+        out.push('\n');
+    }
+
+    std::fs::write(&dest, out).map_err(|e| e.to_string())?;
+
+    Ok(dest)
 }
 
 // ── Seed helpers ─────────────────────────────────────────────────────────────

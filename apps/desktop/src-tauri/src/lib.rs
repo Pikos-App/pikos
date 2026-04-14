@@ -11,7 +11,8 @@ mod notifications;
 
 use db::{
     connect_db, DbState,
-    dev::{backdate_page, backup_db, backup_db_before_import, export_json, export_markdown, get_usage_stats, reset_db},
+    assets::{init_assets_dir, save_asset, save_asset_bytes},
+    dev::{backdate_page, backup_db, backup_db_before_import, export_csv, export_json, export_markdown, get_usage_stats, reset_db},
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders,
         restore_folder, soft_delete_folder, update_folder,
@@ -209,9 +210,14 @@ pub fn run() {
             update_notification_settings,
             request_notification_permission,
             check_notification_permission,
+            // Assets
+            init_assets_dir,
+            save_asset,
+            save_asset_bytes,
             // Dev / settings
             backdate_page,
             backup_db,
+            export_csv,
             backup_db_before_import,
             export_json,
             export_markdown,

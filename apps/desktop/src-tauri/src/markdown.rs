@@ -101,6 +101,92 @@ fn render_block(out: &mut String, node: &Value, depth: usize) {
                 }
             }
         }
+        "table" => {
+            if let Some(rows) = node.get("content").and_then(|c| c.as_array()) {
+                // Collect all rows as vectors of cell text
+                let mut table_rows: Vec<Vec<String>> = Vec::new();
+                let mut is_first_row_header = false;
+
+                for (ri, row) in rows.iter().enumerate() {
+                    if let Some(cells) = row.get("content").and_then(|c| c.as_array()) {
+                        let mut cell_texts: Vec<String> = Vec::new();
+                        if ri == 0 {
+                            // Check if first row uses tableHeader cells
+                            is_first_row_header = cells.iter().any(|c| {
+                                c.get("type").and_then(|t| t.as_str()) == Some("tableHeader")
+                            });
+                        }
+                        for cell in cells {
+                            let mut cell_out = String::new();
+                            if let Some(content) = cell.get("content").and_then(|c| c.as_array()) {
+                                for (pi, para) in content.iter().enumerate() {
+                                    if pi > 0 {
+                                        cell_out.push_str("<br>");
+                                    }
+                                    render_inline_content(&mut cell_out, para);
+                                }
+                            }
+                            cell_texts.push(cell_out);
+                        }
+                        table_rows.push(cell_texts);
+                    }
+                }
+
+                if table_rows.is_empty() {
+                    return;
+                }
+
+                let num_cols = table_rows.iter().map(|r| r.len()).max().unwrap_or(0);
+
+                // Render header row
+                if let Some(header) = table_rows.first() {
+                    out.push('|');
+                    for col in 0..num_cols {
+                        out.push(' ');
+                        out.push_str(header.get(col).map(|s| s.as_str()).unwrap_or(""));
+                        out.push_str(" |");
+                    }
+                    out.push('\n');
+
+                    // Separator row
+                    out.push('|');
+                    for _ in 0..num_cols {
+                        out.push_str(" --- |");
+                    }
+                    out.push('\n');
+                }
+
+                // Data rows (skip first if it was the header)
+                let start = if is_first_row_header { 1 } else { 0 };
+                for row in table_rows.iter().skip(start) {
+                    out.push('|');
+                    for col in 0..num_cols {
+                        out.push(' ');
+                        out.push_str(row.get(col).map(|s| s.as_str()).unwrap_or(""));
+                        out.push_str(" |");
+                    }
+                    out.push('\n');
+                }
+            }
+        }
+        "image" => {
+            let attrs = node.get("attrs");
+            let src = attrs
+                .and_then(|a| a.get("src"))
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            let alt = attrs
+                .and_then(|a| a.get("alt"))
+                .and_then(|a| a.as_str())
+                .unwrap_or("");
+            // Prefer the stored asset path for export (relative path),
+            // fall back to src
+            let export_src = attrs
+                .and_then(|a| a.get("data-asset-path"))
+                .and_then(|p| p.as_str())
+                .unwrap_or(src);
+            out.push_str(&format!("![{}]({})\n", alt, export_src));
+        }
         "horizontalRule" => {
             out.push_str("---\n");
         }
@@ -401,6 +487,67 @@ mod tests {
         assert_eq!(
             prosemirror_to_markdown(&doc),
             "```rust\nfn main() {}\n```\n"
+        );
+    }
+
+    #[test]
+    fn table() {
+        let doc = json!({
+            "type": "doc",
+            "content": [{
+                "type": "table",
+                "content": [
+                    { "type": "tableRow", "content": [
+                        { "type": "tableHeader", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Name" }] }] },
+                        { "type": "tableHeader", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Value" }] }] }
+                    ]},
+                    { "type": "tableRow", "content": [
+                        { "type": "tableCell", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "A" }] }] },
+                        { "type": "tableCell", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "1" }] }] }
+                    ]}
+                ]
+            }]
+        });
+        assert_eq!(
+            prosemirror_to_markdown(&doc),
+            "| Name | Value |\n| --- | --- |\n| A | 1 |\n"
+        );
+    }
+
+    #[test]
+    fn image_node() {
+        let doc = json!({
+            "type": "doc",
+            "content": [{
+                "type": "image",
+                "attrs": {
+                    "src": "http://asset.localhost/path/to/image.png",
+                    "alt": "screenshot",
+                    "data-asset-path": "/tmp/test-assets/abc123.png"
+                }
+            }]
+        });
+        assert_eq!(
+            prosemirror_to_markdown(&doc),
+            "![screenshot](/tmp/test-assets/abc123.png)\n"
+        );
+    }
+
+    #[test]
+    fn image_without_asset_path() {
+        let doc = json!({
+            "type": "doc",
+            "content": [{
+                "type": "image",
+                "attrs": {
+                    "src": "https://example.com/photo.jpg",
+                    "alt": "remote"
+                }
+            }]
+        });
+        assert_eq!(
+            prosemirror_to_markdown(&doc),
+            "![remote](https://example.com/photo.jpg)\n"
         );
     }
 

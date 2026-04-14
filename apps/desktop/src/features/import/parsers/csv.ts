@@ -239,6 +239,7 @@ const HEADER_HEURISTICS: Record<string, PikosFieldKey> = {
   category: "folder",
   completed: "status",
   completed_at: "completedAt",
+  "completed at": "completedAt",
   "completed date": "completedAt",
   "completed time": "completedAt",
   // Body
@@ -253,7 +254,9 @@ const HEADER_HEURISTICS: Record<string, PikosFieldKey> = {
   due: "scheduledStart",
   // Dates
   "due date": "scheduledStart",
+  "end date": "scheduledEnd",
   // Folder
+  folder: "folder",
   "folder name": "folder",
   importance: "priority",
   labels: "tags",
@@ -281,6 +284,10 @@ const HEADER_HEURISTICS: Record<string, PikosFieldKey> = {
   "task name": "title",
   // Title
   title: "title",
+  updated: "updatedAt",
+  updated_at: "updatedAt",
+  "updated at": "updatedAt",
+  "updated date": "updatedAt",
 };
 
 /** Detect source from headers. */
@@ -415,18 +422,23 @@ export function suggestValueMappings(
         const map: Record<string, string> = { "1": "1", "2": "2", "3": "3", "4": "0" };
         target = map[v] ?? "0";
       } else {
-        // Generic: try to parse as number
-        const lower = v.toLowerCase();
-        const labelMap: Record<string, string> = {
-          critical: "1",
-          high: "2",
-          low: "4",
-          medium: "3",
-          none: "0",
-          normal: "0",
-          urgent: "1",
-        };
-        if (labelMap[lower]) target = labelMap[lower]!;
+        // Generic: try numeric first (0-4), then text labels
+        const num = Number(v);
+        if (!isNaN(num) && num >= 0 && num <= 4) {
+          target = String(Math.round(num));
+        } else {
+          const lower = v.toLowerCase();
+          const labelMap: Record<string, string> = {
+            critical: "1",
+            high: "2",
+            low: "4",
+            medium: "3",
+            none: "0",
+            normal: "0",
+            urgent: "1",
+          };
+          if (labelMap[lower]) target = labelMap[lower]!;
+        }
       }
 
       return { sourceValue: v, targetValue: target };
@@ -644,6 +656,7 @@ export function applyMappings(
       completedAt: effectiveCompletedAt,
       createdAt,
       folderKey,
+      imageRefs: [],
       priority,
       reminderMinutes,
       scheduledEnd,

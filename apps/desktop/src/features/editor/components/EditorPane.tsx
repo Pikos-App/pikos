@@ -23,6 +23,8 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
+import { PikosImage } from "../extensions/PikosImage";
+import { PikosTable } from "../extensions/PikosTable";
 import { TabIndent } from "../extensions/TabIndent";
 import { WebKitInputRuleFix } from "../extensions/WebKitInputRuleFix";
 import { useAutosave } from "../hooks/useAutosave";
@@ -33,6 +35,7 @@ import { LinkPopover } from "./LinkPopover";
 import { MetadataHeader } from "./MetadataHeader";
 import { PageInfoPopover } from "./PageInfoPopover";
 import { SlashMenuExtension } from "./SlashMenu";
+import { TableToolbar } from "./TableToolbar";
 
 // ─── Extensions ────────────────────────────────────────────────────────────────
 
@@ -60,6 +63,11 @@ const extensions = [
     transformCopiedText: false,
     transformPastedText: true,
   }),
+  PikosImage.configure({
+    allowBase64: false,
+    inline: false,
+  }),
+  PikosTable,
   SlashMenuExtension,
   TabIndent,
   WebKitInputRuleFix,
@@ -237,6 +245,7 @@ export function EditorPane() {
       {editor && !isAddingLink && (
         <FormatToolbar editor={editor} onAddLink={() => setIsAddingLink(true)} />
       )}
+      {editor && <TableToolbar editor={editor} />}
       {editor && (
         <LinkPopover
           editor={editor}

@@ -117,7 +117,7 @@ export function DataSettings({
 }: DataSettingsProps) {
   const { workspace } = useWorkspace();
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
-  const [jsonExport, setJsonExport] = useState<ExportState>({ status: "idle" });
+  const [csvExport, setCsvExport] = useState<ExportState>({ status: "idle" });
   const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
 
   async function handleExportSqlite() {
@@ -130,13 +130,13 @@ export function DataSettings({
     }
   }
 
-  async function handleExportJson() {
-    setJsonExport({ status: "saving" });
+  async function handleExportCsv() {
+    setCsvExport({ status: "saving" });
     try {
-      const dest = await invoke<string>("export_json");
-      setJsonExport({ path: dest, status: "done" });
+      const dest = await invoke<string>("export_csv");
+      setCsvExport({ path: dest, status: "done" });
     } catch (e: unknown) {
-      setJsonExport({ message: String(e), status: "error" });
+      setCsvExport({ message: String(e), status: "error" });
     }
   }
 
@@ -211,11 +211,11 @@ export function DataSettings({
             state={sqliteExport}
           />
           <ExportRow
-            description="Human-readable export of all pages, folders, and schedules."
+            description="Spreadsheet of all pages with metadata. Re-importable."
             disabled={!workspace}
-            label="Export as JSON"
-            onExport={() => void handleExportJson()}
-            state={jsonExport}
+            label="Export as CSV"
+            onExport={() => void handleExportCsv()}
+            state={csvExport}
           />
           <ExportRow
             description="Markdown files with YAML frontmatter. Obsidian-compatible."

@@ -7,7 +7,14 @@ import { format, isValid, parse } from "date-fns";
 
 import { NLP_PRIORITY_MAP } from "@/shared/constants/priorities";
 
-import type { ImportFolder, ImportMeta, ImportPage, ImportPlan, ImportWarning } from "./types";
+import type {
+  ImageRef,
+  ImportFolder,
+  ImportMeta,
+  ImportPage,
+  ImportPlan,
+  ImportWarning,
+} from "./types";
 
 // ─── Date parsing ────────────────────────────────────────────────────────────
 
@@ -193,13 +200,121 @@ export function extractWikilinks(body: string): string[] {
   return [...new Set(links)];
 }
 
+// ─── Image reference extraction ──────────────────────────────────────────────
+
+const IMAGE_EXT_PATTERN = "png|jpg|jpeg|gif|webp|svg|bmp|avif";
+
+/** Obsidian wiki-embed with known image extension: ![[photo.png]] */
+const WIKI_IMAGE_EXT_RE = new RegExp(
+  `!\\[\\[([^\\]|]+\\.(?:${IMAGE_EXT_PATTERN}))(?:\\|[^\\]]*)?\\]\\]`,
+  "gi"
+);
+
+/** Obsidian wiki-embed WITHOUT a known image extension.
+ *  These are speculative — could be images or note transclusions.
+ *  Tried during resolution; left as-is if they don't resolve to an image file. */
+const WIKI_EMBED_ANY_RE = /!\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]/gi;
+
+/** Standard markdown image: ![alt](path/to/image.png) — excludes http(s) URLs */
+const STANDARD_IMAGE_RE = new RegExp(
+  `!\\[([^\\]]*)\\]\\((?!https?:\\/\\/)([^)]+\\.(?:${IMAGE_EXT_PATTERN}))\\)`,
+  "gi"
+);
+
+export function extractImageRefs(body: string): ImageRef[] {
+  const refs: { index: number; ref: ImageRef }[] = [];
+
+  // Wiki-style with extension: ![[image.png]] — definitely an image
+  let m;
+  WIKI_IMAGE_EXT_RE.lastIndex = 0;
+  while ((m = WIKI_IMAGE_EXT_RE.exec(body)) !== null) {
+    const sourcePath = m[1]!.trim();
+    refs.push({
+      index: m.index,
+      ref: {
+        altText:
+          sourcePath
+            .split("/")
+            .pop()
+            ?.replace(/\.[^.]+$/, "") ?? "",
+        fullMatch: m[0],
+        sourcePath,
+        syntax: "wiki",
+      },
+    });
+  }
+
+  // Wiki-style without extension: ![[Some Name]] — speculative
+  // Skip if already matched by the extension regex (check index overlap)
+  const matchedRanges = refs.map((r) => ({
+    end: r.index + r.ref.fullMatch.length,
+    start: r.index,
+  }));
+
+  WIKI_EMBED_ANY_RE.lastIndex = 0;
+  while ((m = WIKI_EMBED_ANY_RE.exec(body)) !== null) {
+    const idx = m.index;
+    // Skip if this range overlaps with an already-matched embed
+    if (matchedRanges.some((r) => idx >= r.start && idx < r.end)) continue;
+
+    const sourcePath = m[1]!.trim();
+    refs.push({
+      index: idx,
+      ref: {
+        altText: sourcePath.split("/").pop() ?? "",
+        fullMatch: m[0],
+        sourcePath,
+        speculative: true,
+        syntax: "wiki",
+      },
+    });
+  }
+
+  // Standard: ![alt](relative/path.png) — definitely an image
+  STANDARD_IMAGE_RE.lastIndex = 0;
+  while ((m = STANDARD_IMAGE_RE.exec(body)) !== null) {
+    const altText = m[1] ?? "";
+    const sourcePath = m[2]!;
+    refs.push({
+      index: m.index,
+      ref: {
+        altText,
+        fullMatch: m[0],
+        sourcePath,
+        syntax: "standard",
+      },
+    });
+  }
+
+  // Return in document order
+  return refs.sort((a, b) => a.index - b.index).map((r) => r.ref);
+}
+
+// ─── Callout transformation ──────────────────────────────────────────────────
+
+/**
+ * Transform Obsidian callouts into standard blockquotes with a bold type label.
+ * `> [!note] Title` → `> **Note:** Title`
+ * `> [!warning]` → `> **Warning:**`
+ * Multi-line callout bodies are preserved as blockquote continuation lines.
+ */
+const CALLOUT_RE = /^(>\s*)\[!(\w+)\]\s*(.*)/gm;
+
+export function transformCallouts(body: string): string {
+  return body.replace(CALLOUT_RE, (_match, prefix: string, type: string, title: string) => {
+    const label = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+    if (title.trim()) {
+      return `${prefix}**${label}:** ${title}`;
+    }
+    return `${prefix}**${label}:**`;
+  });
+}
+
 // ─── Unsupported content detection ────────────────────────────────────────────
 
 const UNSUPPORTED_PATTERNS = [
-  { label: "embedded image", pattern: /!\[\[.+?\]\]/g },
   { label: "mermaid diagram", pattern: /```mermaid[\s\S]*?```/g },
   { label: "dataview query", pattern: /```dataview[\s\S]*?```/g },
-  { label: "callout", pattern: /^>\s*\[!.+?\]/gm },
 ];
 
 function detectUnsupportedContent(body: string): string[] {
@@ -270,11 +385,18 @@ export function parseMarkdownVault(files: VaultFile[]): ImportPlan {
     // Extract wikilinks before any content transformation
     const wikilinks = extractWikilinks(body);
 
+    // Extract image references for later resolution
+    const imageRefs = extractImageRefs(body);
+
+    // Transform Obsidian callouts into standard blockquotes
+    const transformedBody = transformCallouts(body);
+
     pages.push({
-      body,
+      body: transformedBody,
       completedAt: null,
       createdAt: frontmatter.created,
       folderKey,
+      imageRefs,
       priority: frontmatter.priority,
       reminderMinutes: [],
       scheduledEnd: null,

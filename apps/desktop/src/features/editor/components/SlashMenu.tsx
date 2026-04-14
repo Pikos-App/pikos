@@ -16,6 +16,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import tippy from "tippy.js";
 import type { Instance as TippyInstance } from "tippy.js";
 
+import { insertImageFromDialog } from "../extensions/PikosImage";
+
 // ─── Command definitions ────────────────────────────────────────────────────
 
 interface SlashCommand {
@@ -89,6 +91,21 @@ const COMMANDS: SlashCommand[] = [
     description: "Divider between sections",
     icon: "—",
     title: "Horizontal Rule",
+  },
+  {
+    aliases: ["grid", "spreadsheet"],
+    command: (editor) =>
+      editor.chain().focus().insertTable({ cols: 3, rows: 3, withHeaderRow: true }).run(),
+    description: "Insert a data table",
+    icon: "⊞",
+    title: "Table",
+  },
+  {
+    aliases: ["img", "picture", "photo", "upload"],
+    command: (editor) => void insertImageFromDialog(editor.view),
+    description: "Upload an image from your files",
+    icon: "🖼",
+    title: "Image",
   },
 ];
 

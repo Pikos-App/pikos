@@ -5,6 +5,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import type { JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
+import Image from "@tiptap/extension-image";
+import { Table } from "@tiptap/extension-table";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableRow } from "@tiptap/extension-table-row";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import Underline from "@tiptap/extension-underline";
@@ -23,7 +28,7 @@ import {
   suggestValueMappings,
 } from "../parsers/csv";
 import { parseMarkdownVault, type VaultFile } from "../parsers/markdown";
-import type { CSVMappingConfig, ImportPlan } from "../parsers/types";
+import type { CSVMappingConfig, ImageRef, ImportPlan } from "../parsers/types";
 import { cleanTitle } from "../parsers/utils";
 
 // ─── Markdown → Tiptap JSON conversion ───────────────────────────────────────
@@ -82,6 +87,11 @@ export function convertMarkdownToTiptap(md: string): string {
         TaskList,
         TaskItem.configure({ nested: true }),
         Underline,
+        Image.configure({ allowBase64: false, inline: false }),
+        Table.configure({ resizable: false }),
+        TableRow,
+        TableCell,
+        TableHeader,
         Markdown.configure({
           // Obsidian renders single \n as line breaks (non-CommonMark).
           // Without this, single newlines collapse to spaces.
@@ -105,6 +115,106 @@ function wrapPlainText(text: string): string {
     type: "paragraph",
   }));
   return JSON.stringify({ content: paragraphs, type: "doc" });
+}
+
+// ─── Image import helpers ────────────────────────────────────────────────────
+
+/**
+ * Resolve image references in a markdown body, copy files to workspace assets,
+ * and rewrite the body with the saved absolute paths.
+ * Returns the rewritten body and any warnings.
+ */
+async function resolveImportImages(
+  body: string,
+  imageRefs: ImageRef[],
+  vaultRoot: string
+): Promise<{ body: string; warnings: string[] }> {
+  if (imageRefs.length === 0) return { body, warnings: [] };
+
+  const warnings: string[] = [];
+  let rewritten = body;
+
+  // Deduplicate by sourcePath — same image referenced multiple times should copy once
+  const pathToSaved = new Map<string, string>();
+
+  for (const ref of imageRefs) {
+    // Skip if we already processed this source path
+    if (pathToSaved.has(ref.sourcePath)) {
+      const savedPath = pathToSaved.get(ref.sourcePath)!;
+      rewritten = rewriteImageRef(rewritten, ref, savedPath);
+      continue;
+    }
+
+    // Resolve relative to vault root
+    const sep = vaultRoot.endsWith("/") ? "" : "/";
+    const basePath = `${vaultRoot}${sep}${ref.sourcePath}`;
+
+    // Try the path as-is first, then with common image extensions (Obsidian
+    // allows extensionless embeds like ![[Screenshot 2026-04-13 at 7.41.23 PM]])
+    const hasExt = /\.\w+$/.test(ref.sourcePath);
+    const candidates = hasExt
+      ? [basePath]
+      : [basePath, ...["png", "jpg", "jpeg", "gif", "webp", "svg"].map((e) => `${basePath}.${e}`)];
+
+    let saved = false;
+    for (const candidate of candidates) {
+      try {
+        const savedPath = await invoke<string>("save_asset", { sourcePath: candidate });
+        pathToSaved.set(ref.sourcePath, savedPath);
+        rewritten = rewriteImageRef(rewritten, ref, savedPath);
+        saved = true;
+        break;
+      } catch {
+        // Try next candidate
+      }
+    }
+
+    if (!saved) {
+      if (ref.speculative) {
+        // Speculative ref (extensionless wiki-embed) — leave as-is in the body.
+        // It's probably a note transclusion, not an image.
+      } else {
+        // Definite image ref that couldn't be resolved — warn and strip
+        warnings.push(`Image not found: ${ref.sourcePath}`);
+        rewritten = rewritten.replace(ref.fullMatch, "");
+      }
+    }
+  }
+
+  return { body: rewritten, warnings };
+}
+
+/** Rewrite a single image reference in the markdown body. */
+function rewriteImageRef(body: string, ref: ImageRef, savedPath: string): string {
+  // Angle brackets handle spaces in paths (e.g. "Application Support")
+  const replacement = `![${ref.altText}](<${savedPath}>)`;
+  return body.replace(ref.fullMatch, replacement);
+}
+
+/** Walk Tiptap JSON and add data-asset-path to image nodes that have local src. */
+function addAssetPathsToJson(json: JSONContent): JSONContent {
+  if (json.type === "image" && json.attrs?.["src"]) {
+    const src = json.attrs["src"] as string;
+    // If src looks like an absolute filesystem path, set it as data-asset-path.
+    // Decode URI encoding (tiptap-markdown encodes spaces as %20) so the
+    // path matches the actual filesystem.
+    if (src.startsWith("/") && !src.startsWith("//")) {
+      const decodedSrc = decodeURIComponent(src);
+      return {
+        ...json,
+        attrs: { ...json.attrs, "data-asset-path": decodedSrc, src: decodedSrc },
+      };
+    }
+  }
+
+  if (json.content) {
+    return {
+      ...json,
+      content: json.content.map(addAssetPathsToJson),
+    };
+  }
+
+  return json;
 }
 
 // ─── File reading ─────────────────────────────────────────────────────────────
@@ -193,6 +303,7 @@ export function useImport() {
       }
       const plan = parseMarkdownVault(files);
       plan.meta.skipped.push(...skipped);
+      plan.vaultRoot = dirPath;
       setState({ plan, step: "preview" });
     } catch (e) {
       setState({ message: String(e), step: "error" });
@@ -263,13 +374,25 @@ export function useImport() {
       // (handles plain CSV bodies as single paragraphs).
       const convert = getMarkdownConverter();
 
-      // Build batch items
-      const batchPages: ImportBatchItem[] = plan.pages.map((p) => {
-        const content = p.body ? convert(p.body) : wrapPlainText("");
-        const parsed = JSON.parse(content);
+      // Build batch items — process images for markdown imports
+      const batchPages: ImportBatchItem[] = [];
+      for (const p of plan.pages) {
+        let bodyToConvert = p.body;
+
+        // Resolve and copy images if this is a markdown import with image refs
+        if (p.imageRefs.length > 0 && plan.vaultRoot) {
+          const result = await resolveImportImages(bodyToConvert, p.imageRefs, plan.vaultRoot);
+          bodyToConvert = result.body;
+          // Image warnings are informational — don't block import
+        }
+
+        const rawContent = bodyToConvert ? convert(bodyToConvert) : wrapPlainText("");
+        // Add data-asset-path to image nodes so export can find the files
+        const parsed = addAssetPathsToJson(JSON.parse(rawContent) as JSONContent);
+        const content = JSON.stringify(parsed);
         const contentText = extractText(parsed);
 
-        return {
+        batchPages.push({
           completedAt: p.completedAt,
           content,
           contentText,
@@ -285,8 +408,8 @@ export function useImport() {
           tags: p.tags,
           title: cleanTitle(p.title),
           updatedAt: p.updatedAt,
-        };
-      });
+        });
+      }
 
       const result = await importBatch({
         batchTag,

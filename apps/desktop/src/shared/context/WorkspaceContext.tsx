@@ -332,6 +332,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         // connectDb uses create_if_missing — silently recreates if file is gone (stale path)
         await connectDb(ws.dbPath);
 
+        // Ensure the workspace assets directory exists alongside the DB
+        const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
+        await tauriInvoke("init_assets_dir");
+
         // Update lastOpenedAt in the registry
         const now = new Date().toISOString();
         const updated: Workspace = { ...ws, lastOpenedAt: now };
@@ -385,6 +389,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       };
 
       await connectDb(dbPath);
+
+      // Ensure the workspace assets directory exists alongside the DB
+      const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
+      await tauriInvoke("init_assets_dir");
 
       // Seed tutorial data for first-time users (idempotent — skips if already seeded)
       const { seedTutorial } = await import("@/shared/seeds/tutorial");

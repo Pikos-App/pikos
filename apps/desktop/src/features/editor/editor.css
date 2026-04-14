@@ -230,6 +230,63 @@
   line-height: 1.5;
 }
 
+/* ─── Tables ──────────────────────────────────────────────────────────────── */
+
+.editor-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+  overflow: hidden;
+}
+
+.editor-content th,
+.editor-content td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  min-width: 80px;
+  vertical-align: top;
+  position: relative;
+}
+
+.editor-content th {
+  background: var(--muted);
+  font-weight: 500;
+  text-align: left;
+}
+
+.editor-content td > p,
+.editor-content th > p {
+  margin: 0;
+}
+
+/* Selected cell highlight */
+.editor-content .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--interactive-primary) 10%, transparent);
+  pointer-events: none;
+}
+
+/* ─── Images ──────────────────────────────────────────────────────────────── */
+
+.editor-content .pikos-image-wrapper {
+  margin: 0.75em 0;
+  line-height: 0;
+}
+
+.editor-content .pikos-image-wrapper img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+.editor-content .pikos-image-selected img {
+  outline: 2px solid var(--interactive-primary);
+  outline-offset: 2px;
+}
+
 /* ─── Horizontal rule ──────────────────────────────────────────────────────── */
 
 .editor-content hr {
@@ -343,6 +400,11 @@
 .bubble-toolbar-btn.is-active {
   background: var(--surface-active);
   color: var(--text-secondary);
+}
+
+.bubble-toolbar-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* ─── Link popover ─────────────────────────────────────────────────────────── */
