@@ -151,7 +151,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     count: rows.length,
     estimateSize: (index) => {
       const row = rows[index];
-      if (!row) return 48;
+      if (!row) return 52;
       switch (row.type) {
         case "section-header":
         case "completed-toggle":
@@ -162,7 +162,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
         case "empty-completed":
           return 40;
         case "page":
-          return 48;
+          return row.page.subtitle ? 68 : 52;
       }
     },
     getItemKey: (index) => rows[index]?.key ?? String(index),

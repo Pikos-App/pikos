@@ -152,7 +152,7 @@ export function PageListItem({
   onMoveToFolder,
   onPriorityChange: _onPriorityChange,
   onRenameCancel,
-  onRenameChange,
+  onRenameChange: _onRenameChange,
   onRenameCommit,
   onRenameStart,
   onSelect,
@@ -172,12 +172,6 @@ export function PageListItem({
 
   useMinuteTick();
 
-  function commit() {
-    const trimmed = inputRef.current?.value.trim() ?? "";
-    if (trimmed) onRenameCommit(trimmed);
-    else onRenameCancel();
-  }
-
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -193,7 +187,7 @@ export function PageListItem({
           {...attributes}
           {...listeners}
           className={cn(
-            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-2.5 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
+            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-3 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
             isActive
               ? "bg-surface-selected text-accent-foreground"
               : isSelected
@@ -232,45 +226,62 @@ export function PageListItem({
                 : undefined
             }
             checked={page.status === "done"}
-            className="mt-[2px]"
+            className="mt-px"
             onChange={() => onToggleStatus()}
           />
 
           {/* Content */}
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
-              <div className="relative min-w-0 flex-1">
+              <div className="min-w-0 flex-1">
                 <span
                   className={cn(
-                    "type-body block truncate leading-none font-medium",
-                    isRenaming && "invisible",
-                    page.status === "done" && "text-muted-foreground"
+                    "type-body block leading-none font-medium outline-none",
+                    isRenaming
+                      ? "cursor-text overflow-hidden whitespace-nowrap caret-foreground"
+                      : "truncate",
+                    page.status === "done" && !isRenaming && "text-muted-foreground"
                   )}
+                  contentEditable={isRenaming}
+                  key={isRenaming ? "editing" : "display"}
+                  onBlur={
+                    isRenaming
+                      ? (e) => {
+                          const trimmed = e.currentTarget.textContent?.trim() ?? "";
+                          if (trimmed) onRenameCommit(trimmed);
+                          else onRenameCancel();
+                        }
+                      : undefined
+                  }
+                  onClick={isRenaming ? (e) => e.stopPropagation() : undefined}
+                  onKeyDown={
+                    isRenaming
+                      ? (e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            onRenameCancel();
+                          }
+                        }
+                      : undefined
+                  }
+                  onPaste={
+                    isRenaming
+                      ? (e) => {
+                          e.preventDefault();
+                          const text = e.clipboardData.getData("text/plain").replace(/\n/g, " ");
+                          document.execCommand("insertText", false, text);
+                        }
+                      : undefined
+                  }
+                  ref={inputRef as React.RefObject<HTMLSpanElement>}
+                  role={isRenaming ? "textbox" : undefined}
+                  suppressContentEditableWarning
                 >
                   {page.title || "Untitled"}
                 </span>
-                {isRenaming && (
-                  <input
-                    autoCapitalize="off"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    className="type-body absolute inset-0 w-full border-0 bg-transparent p-0 leading-none font-medium text-foreground outline-none"
-                    defaultValue={page.title}
-                    onBlur={commit}
-                    onChange={(e) => onRenameChange?.(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        commit();
-                      } else if (e.key === "Escape") {
-                        e.preventDefault();
-                        onRenameCancel();
-                      }
-                    }}
-                    ref={inputRef}
-                  />
-                )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {page.scheduledStart &&

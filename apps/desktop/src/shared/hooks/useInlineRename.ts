@@ -6,19 +6,29 @@ import { useEffect, useRef } from "react";
  * when rename is triggered from a context menu.
  */
 export function useInlineRename(isRenaming: boolean) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLSpanElement>(null);
   const suppressRef = useRef(false);
 
   useEffect(() => {
     if (!isRenaming) return;
-    // Retry focus across a few frames — the input may not be mounted yet
-    // when a new folder is created and renaming starts in the same batch.
+    // Retry focus across a few frames — the element may not be mounted yet
+    // when a new item is created and renaming starts in the same batch.
     let attempt = 0;
     function tryFocus() {
       const el = inputRef.current;
       if (el) {
         el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
+        if (el instanceof HTMLInputElement) {
+          el.setSelectionRange(el.value.length, el.value.length);
+        } else {
+          // contentEditable: place cursor at end
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          range.collapse(false);
+          const sel = window.getSelection();
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        }
       } else if (attempt < 5) {
         attempt++;
         requestAnimationFrame(tryFocus);

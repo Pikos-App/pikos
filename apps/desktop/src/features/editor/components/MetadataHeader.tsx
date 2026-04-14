@@ -233,6 +233,8 @@ export function MetadataHeader({
   const [titleValue, setTitleValue] = useState(page.title ?? "");
   const [titleFocused, setTitleFocused] = useState(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  const titleDivRef = useRef<HTMLDivElement>(null);
+  const titleHeightRef = useRef<number | undefined>(undefined);
 
   const [prevTitle, setPrevTitle] = useState(page.title ?? "");
   if ((page.title ?? "") !== prevTitle) {
@@ -240,11 +242,23 @@ export function MetadataHeader({
     if (!titleFocused) setTitleValue(page.title ?? "");
   }
 
-  // Auto-resize and focus when the textarea mounts (titleFocused becomes true).
+  function handleTitleFocus() {
+    // Measure div height before swapping so textarea starts at exactly the same size.
+    if (titleDivRef.current) {
+      titleHeightRef.current = titleDivRef.current.offsetHeight;
+    }
+    setTitleFocused(true);
+  }
+
+  // Auto-resize textarea and focus on mount.
   useEffect(() => {
     const el = titleRef.current;
     if (!el) return;
-    el.style.height = "auto";
+    // Shrink to 0 to measure true scrollHeight (avoids stale height inflating it).
+    // On first mount after focus, start from the div's measured height so the
+    // initial frame has no shift — scrollHeight will only grow from there.
+    el.style.height = titleHeightRef.current !== undefined ? `${titleHeightRef.current}px` : "0";
+    titleHeightRef.current = undefined;
     el.style.height = `${el.scrollHeight}px`;
     if (titleFocused) {
       el.focus();
@@ -263,6 +277,8 @@ export function MetadataHeader({
   const [subtitleValue, setSubtitleValue] = useState(page.subtitle ?? "");
   const [subtitleFocused, setSubtitleFocused] = useState(false);
   const subtitleRef = useRef<HTMLTextAreaElement>(null);
+  const subtitleDivRef = useRef<HTMLDivElement>(null);
+  const subtitleHeightRef = useRef<number | undefined>(undefined);
 
   const [prevSubtitle, setPrevSubtitle] = useState(page.subtitle ?? "");
   if ((page.subtitle ?? "") !== prevSubtitle) {
@@ -270,11 +286,20 @@ export function MetadataHeader({
     if (!subtitleFocused) setSubtitleValue(page.subtitle ?? "");
   }
 
-  // Auto-resize and focus when the subtitle textarea mounts.
+  function handleSubtitleFocus() {
+    if (subtitleDivRef.current) {
+      subtitleHeightRef.current = subtitleDivRef.current.offsetHeight;
+    }
+    setSubtitleFocused(true);
+  }
+
+  // Auto-resize textarea and focus on mount.
   useEffect(() => {
     const el = subtitleRef.current;
     if (!el) return;
-    el.style.height = "auto";
+    el.style.height =
+      subtitleHeightRef.current !== undefined ? `${subtitleHeightRef.current}px` : "0";
+    subtitleHeightRef.current = undefined;
     el.style.height = `${el.scrollHeight}px`;
     if (subtitleFocused) {
       el.focus();
@@ -310,14 +335,14 @@ export function MetadataHeader({
               autoCapitalize="off"
               autoComplete="off"
               autoCorrect="off"
-              className="type-display w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-faint"
+              className="type-display [margin:0] block w-full resize-none overflow-hidden bg-transparent [padding:0] outline-none [border:none] placeholder:text-faint"
               onBlur={() => setTitleFocused(false)}
               onChange={handleTitleChange}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
                   setTitleFocused(false);
-                  setSubtitleFocused(true);
+                  handleSubtitleFocus();
                 }
                 if (e.key === "Escape") {
                   e.preventDefault();
@@ -332,15 +357,16 @@ export function MetadataHeader({
           ) : (
             <div
               aria-label="Page title"
-              className="type-display line-clamp-2 w-full cursor-text bg-transparent outline-none placeholder:text-faint"
-              onClick={() => setTitleFocused(true)}
-              onFocus={() => setTitleFocused(true)}
+              className="type-display line-clamp-2 w-full cursor-text bg-transparent outline-none"
+              onClick={handleTitleFocus}
+              onFocus={handleTitleFocus}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  setTitleFocused(true);
+                  handleTitleFocus();
                 }
               }}
+              ref={titleDivRef}
               role="button"
               tabIndex={0}
             >
@@ -355,7 +381,7 @@ export function MetadataHeader({
             autoCapitalize="off"
             autoComplete="off"
             autoCorrect="off"
-            className="type-body mt-1 w-full resize-none overflow-hidden bg-transparent leading-relaxed text-muted-foreground outline-none placeholder:text-faint"
+            className="type-body [margin-inline:0] mt-1 [margin-bottom:0] block w-full resize-none overflow-hidden bg-transparent [padding:0] leading-relaxed text-muted-foreground outline-none [border:none] placeholder:text-faint"
             onBlur={() => setSubtitleFocused(false)}
             onChange={handleSubtitleChange}
             onKeyDown={(e) => {
@@ -381,14 +407,15 @@ export function MetadataHeader({
           <div
             aria-label="Page description"
             className="type-body mt-1 w-full cursor-text leading-relaxed text-muted-foreground outline-none"
-            onClick={() => setSubtitleFocused(true)}
-            onFocus={() => setSubtitleFocused(true)}
+            onClick={handleSubtitleFocus}
+            onFocus={handleSubtitleFocus}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                setSubtitleFocused(true);
+                handleSubtitleFocus();
               }
             }}
+            ref={subtitleDivRef}
             role="button"
             tabIndex={0}
           >

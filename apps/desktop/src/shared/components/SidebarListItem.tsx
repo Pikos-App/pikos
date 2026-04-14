@@ -12,7 +12,7 @@ interface SidebarListItemProps extends Omit<React.HTMLAttributes<HTMLDivElement>
   onRenameCommit: (value: string) => void;
   onRenameCancel: () => void;
   /** inputRef from useInlineRename — attached to the rename input. */
-  inputRef: React.RefObject<HTMLInputElement | null>;
+  inputRef: React.RefObject<HTMLInputElement | HTMLSpanElement | null>;
   /** Extra flex layout classes, e.g. "items-center gap-2" or "flex-col gap-0.5". */
   className?: string;
   /** Highlights the item as a valid drop target for a dragged page. */
@@ -52,8 +52,9 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
     ref
   ) {
     function commit() {
-      const trimmed = inputRef.current?.value.trim() ?? "";
-      onRenameCommit(trimmed || "Untitled");
+      const el = inputRef.current;
+      const raw = el instanceof HTMLInputElement ? el.value : (el?.textContent ?? "");
+      onRenameCommit(raw.trim() || "Untitled");
     }
 
     return (
@@ -106,7 +107,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
                 }
               }}
               placeholder="Untitled"
-              ref={inputRef}
+              ref={inputRef as React.RefObject<HTMLInputElement>}
             />
           )}
         </div>
