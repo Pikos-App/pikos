@@ -30,12 +30,20 @@ function readLeftPanelWidth(): number {
   }
 }
 
+// Persist active settings tab across open/close cycles so import/undo
+// workflows return to the Data tab instead of resetting to General.
+let lastSection: SettingsSection = "general";
+
 export function SettingsPage() {
   const { setActiveViewId, setSettingsOpen, settingsOpen } = useUI();
   const { clearLastImport, lastImportResult, undoLastImport, workspace } = useWorkspace();
   const isFullscreen = useIsFullscreen();
   const [sidebarWidth] = useState(readLeftPanelWidth);
-  const [section, setSection] = useState<SettingsSection>("general");
+  const [section, setSectionState] = useState<SettingsSection>(lastSection);
+  const setSection = (s: SettingsSection) => {
+    lastSection = s;
+    setSectionState(s);
+  };
   const [usageStats, setUsageStats] = useState<UsageStatsData | null>(null);
   const {
     applyCSVMapping,

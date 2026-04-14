@@ -3,6 +3,7 @@
 import { extractText } from "@pikos/core";
 import { invoke } from "@tauri-apps/api/core";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import type { JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
@@ -27,29 +28,75 @@ import { cleanTitle } from "../parsers/utils";
 
 // ─── Markdown → Tiptap JSON conversion ───────────────────────────────────────
 
+/**
+ * Obsidian renders blank lines (\n\n) as visible empty lines the user can click on.
+ * Standard markdown just uses them as paragraph separators with no intermediate content.
+ * After converting markdown → Tiptap JSON, insert empty paragraph nodes between
+ * top-level blocks to match Obsidian's visual behavior.
+ *
+ * For 3+ consecutive newlines (extra blank lines), additional empty paragraphs are added.
+ */
+export function insertBlankLineParagraphs(md: string, json: JSONContent): JSONContent {
+  if (!json.content || json.content.length < 2) return json;
+
+  // Count how many blank lines each \n\n+ separator represents.
+  // Split the markdown by block separators, keeping separators.
+  const separators: number[] = [];
+  for (const m of md.matchAll(/\n{2,}/g)) {
+    // \n\n = 1 blank line, \n\n\n = 2 blank lines, etc.
+    separators.push(m[0].length - 1);
+  }
+
+  const newContent: JSONContent[] = [];
+  for (let i = 0; i < json.content.length; i++) {
+    newContent.push(json.content[i]!);
+
+    // Insert empty paragraphs after each node (except the last)
+    if (i < json.content.length - 1) {
+      const blankLines = separators[i] ?? 1;
+      for (let j = 0; j < blankLines; j++) {
+        newContent.push({ type: "paragraph" });
+      }
+    }
+  }
+
+  return { ...json, content: newContent };
+}
+
 let cachedConvert: ((md: string) => string) | null = null;
 
 function getMarkdownConverter(): (md: string) => string {
   if (cachedConvert) return cachedConvert;
-
-  const editor = new Editor({
-    content: "",
-    extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Underline,
-      Markdown.configure({ transformPastedText: false }),
-    ],
-  });
-
-  cachedConvert = (md: string): string => {
-    editor.commands.setContent(md);
-    return JSON.stringify(editor.getJSON());
-  };
-
+  cachedConvert = convertMarkdownToTiptap;
   return cachedConvert;
 }
+
+/** Convert an Obsidian markdown string to a Tiptap JSON string. */
+export function convertMarkdownToTiptap(md: string): string {
+  // Lazy-init a single editor instance for the lifetime of the app.
+  if (!sharedEditor) {
+    sharedEditor = new Editor({
+      content: "",
+      extensions: [
+        StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        Underline,
+        Markdown.configure({
+          // Obsidian renders single \n as line breaks (non-CommonMark).
+          // Without this, single newlines collapse to spaces.
+          breaks: true,
+          transformPastedText: false,
+        }),
+      ],
+    });
+  }
+
+  sharedEditor.commands.setContent(md);
+  return JSON.stringify(insertBlankLineParagraphs(md, sharedEditor.getJSON()));
+}
+
+let sharedEditor: Editor | null = null;
 
 function wrapPlainText(text: string): string {
   if (!text) return JSON.stringify({ content: [], type: "doc" });
