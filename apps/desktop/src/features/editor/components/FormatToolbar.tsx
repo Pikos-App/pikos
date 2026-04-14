@@ -101,7 +101,7 @@ export function FormatToolbar({ editor, onAddLink }: FormatToolbarProps) {
           command: () => editor.chain().focus().toggleStrike().run(),
           icon: <Strikethrough size={14} strokeWidth={2.5} />,
           isActive: isStrike,
-          shortcut: "mod+shift+x",
+          shortcut: "mod+shift+s",
           title: "Strikethrough",
         },
         {
