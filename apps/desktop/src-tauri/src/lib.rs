@@ -3,11 +3,12 @@
 #![allow(clippy::drop_non_drop)]
 
 use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 
 mod db;
 mod markdown;
 mod notifications;
+mod window_state;
 
 use db::{
     connect_db, DbState,
@@ -49,11 +50,26 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(notifications::scheduler::run(handle));
+
+            // Restore saved window size/position. Replaces tauri-plugin-window-state
+            // which had a drift bug on macOS with our custom title bar.
+            window_state::restore(app.handle());
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Save on every resize/move so state is always current on disk.
+            // CloseRequested doesn't fire reliably on macOS Cmd+Q (NSApp
+            // terminate), so we can't depend on it for persistence.
+            match event {
+                WindowEvent::Resized(_) | WindowEvent::Moved(_) => {
+                    window_state::save(window.app_handle());
+                }
+                _ => {}
+            }
         })
         .menu(|handle| {
             // Custom menu without Print (Cmd+P) — that shortcut is used for search palette.
