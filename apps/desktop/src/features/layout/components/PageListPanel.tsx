@@ -294,27 +294,34 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   function renderVirtualRow(row: VirtualRow) {
     switch (row.type) {
       case "empty-state":
-        return activeViewId === "today" ? (
-          <EmptyState icon={Sun} message="Nothing scheduled for today">
-            <p className="type-ui-sm mt-1 text-subtle">
-              Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
-              to create a page or drag one here
-            </p>
-          </EmptyState>
-        ) : activeViewId === "inbox" ? (
-          <EmptyState icon={CircleCheck} message="No pages in your inbox">
-            <p className="type-ui-sm mt-1 text-subtle">
-              Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
-              to create a new page
-            </p>
-          </EmptyState>
-        ) : (
-          <EmptyState icon={FilePlus} message="No pages in this folder">
-            <p className="type-ui-sm mt-1 text-subtle">
-              Press <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd>{" "}
-              to add a page
-            </p>
-          </EmptyState>
+        return (
+          <div className="border-b border-border">
+            {activeViewId === "today" ? (
+              <EmptyState icon={Sun} message="Nothing scheduled for today">
+                <p className="type-ui-sm mt-1 text-subtle">
+                  Press{" "}
+                  <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd> to
+                  create a page or drag one here
+                </p>
+              </EmptyState>
+            ) : activeViewId === "inbox" ? (
+              <EmptyState icon={CircleCheck} message="No pages in your inbox">
+                <p className="type-ui-sm mt-1 text-subtle">
+                  Press{" "}
+                  <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd> to
+                  create a new page
+                </p>
+              </EmptyState>
+            ) : (
+              <EmptyState icon={FilePlus} message="No pages in this folder">
+                <p className="type-ui-sm mt-1 text-subtle">
+                  Press{" "}
+                  <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘N</kbd> to
+                  add a page
+                </p>
+              </EmptyState>
+            )}
+          </div>
         );
 
       case "section-header":
@@ -362,7 +369,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
               </div>
             )}
             <button
-              className="type-ui-sm flex w-full items-center gap-1.5 border-t border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
+              className="type-ui-sm flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
               onClick={toggleCompletedCollapsed}
             >
               <ChevronRight
