@@ -387,6 +387,9 @@ export function QuickAddDialog() {
             onChange={(id) => {
               setFolderValue(id);
               setFolderManual(true);
+              // Restore focus to the main input so the keyboard-only flow works:
+              // user picks folder → immediately presses Enter to submit.
+              inputRef.current?.focus();
             }}
             value={folderValue}
           />
