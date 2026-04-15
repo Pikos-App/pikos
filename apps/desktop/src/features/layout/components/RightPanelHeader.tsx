@@ -10,21 +10,24 @@ import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { useUI } from "@/shared/context/UIContext";
 
+import { useLeftNavToggle } from "../hooks/useLeftNavToggle";
+
 interface RightPanelHeaderProps {
   children?: ReactNode;
 }
 
 export function RightPanelHeader({ children }: RightPanelHeaderProps) {
   const ui = useUI();
+  const leftNav = useLeftNavToggle();
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 border-border pr-3 pl-2">
       {/* Sidebar toggle */}
       <TooltipIconButton
         className="text-text-tertiary/50"
-        icon={ui.sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        label={ui.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        onClick={() => ui.setSidebarCollapsed(!ui.sidebarCollapsed)}
+        icon={leftNav.isOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+        label={leftNav.isOpen ? "Collapse sidebar" : "Expand sidebar"}
+        onClick={leftNav.toggle}
         shortcut="mod+\"
       />
 

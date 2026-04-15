@@ -1,10 +1,12 @@
 import { closestCenter, type CollisionDetection, DndContext, DragOverlay } from "@dnd-kit/core";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 import { useUI } from "@/shared/context/UIContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
+import { shouldHideSidebar, shouldOverlayPageList, useLayoutMode } from "../breakpoints";
 import { usePanelResize } from "../hooks/usePanelResize";
 import { useThreePanelDnD } from "../hooks/useThreePanelDnD";
 import { EditorPanel } from "./EditorPanel";
@@ -15,8 +17,33 @@ import { TitleBar } from "./TitleBar";
 const PANEL_SPRING = { damping: 35, stiffness: 350, type: "spring" as const };
 
 export function ThreePanelLayout() {
-  const { clearSelection, isDraggingOverCalendar, selectedPageIds, sidebarCollapsed } = useUI();
+  const {
+    activePageId,
+    clearSelection,
+    isDraggingOverCalendar,
+    pageListDrawerOpen,
+    selectedPageIds,
+    setPageListDrawerOpen,
+    sidebarCollapsed,
+  } = useUI();
   const isFullscreen = useIsFullscreen();
+  const layoutMode = useLayoutMode();
+  const hideSidebar = shouldHideSidebar(layoutMode);
+  const pageListOverlay = shouldOverlayPageList(layoutMode);
+
+  // Auto-close the overlay drawer when the user picks a page. External state
+  // change → side effect, so an effect is appropriate here.
+  const prevActivePageRef = useRef(activePageId);
+  useEffect(() => {
+    if (prevActivePageRef.current !== activePageId && pageListDrawerOpen) {
+      setPageListDrawerOpen(false);
+    }
+    prevActivePageRef.current = activePageId;
+  }, [activePageId, pageListDrawerOpen, setPageListDrawerOpen]);
+
+  // The drawer is only rendered at the sm breakpoint — gating here lets us
+  // avoid resetting the underlying state when the viewport grows.
+  const drawerVisible = pageListOverlay && pageListDrawerOpen;
 
   // Suppress all dnd-kit collision detection while the cursor is over the
   // calendar — prevents page items from shifting position during a calendar drop.
@@ -66,36 +93,66 @@ export function ThreePanelLayout() {
         role="main"
       >
         {!isFullscreen && <TitleBar />}
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
+          {/* Left folder sidebar — hidden at md/sm or when manually collapsed. */}
           <motion.div
             animate={{
-              opacity: sidebarCollapsed ? 0 : 1,
-              width: sidebarCollapsed ? 0 : left.width,
+              opacity: sidebarCollapsed || hideSidebar ? 0 : 1,
+              width: sidebarCollapsed || hideSidebar ? 0 : left.width,
             }}
             className={cn(
               "h-full shrink-0 overflow-hidden",
-              sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
+              sidebarCollapsed || hideSidebar ? "pointer-events-none" : "pointer-events-auto"
             )}
             transition={PANEL_SPRING}
           >
             <Sidebar onResizeStart={left.onResizeStart} width={left.width} />
           </motion.div>
 
-          <motion.div
-            animate={{
-              opacity: sidebarCollapsed ? 0 : 1,
-              width: sidebarCollapsed ? 0 : mid.width,
-            }}
-            className={cn(
-              "h-full shrink-0 overflow-hidden",
-              sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
-            )}
-            transition={PANEL_SPRING}
-          >
-            <PageListPanel onResizeStart={mid.onResizeStart} width={mid.width} />
-          </motion.div>
+          {/* Middle page list — inline at xl/lg/md, hidden at sm (rendered as overlay below). */}
+          {!pageListOverlay && (
+            <motion.div
+              animate={{
+                opacity: sidebarCollapsed ? 0 : 1,
+                width: sidebarCollapsed ? 0 : mid.width,
+              }}
+              className={cn(
+                "h-full shrink-0 overflow-hidden",
+                sidebarCollapsed ? "pointer-events-none" : "pointer-events-auto"
+              )}
+              transition={PANEL_SPRING}
+            >
+              <PageListPanel onResizeStart={mid.onResizeStart} width={mid.width} />
+            </motion.div>
+          )}
 
           <EditorPanel />
+
+          {/* sm overlay drawer — absolute, slides in from the left with a backdrop. */}
+          <AnimatePresence>
+            {drawerVisible && (
+              <>
+                <motion.div
+                  animate={{ opacity: 1 }}
+                  aria-hidden
+                  className="absolute inset-0 z-40 bg-background/60"
+                  exit={{ opacity: 0 }}
+                  initial={{ opacity: 0 }}
+                  onClick={() => setPageListDrawerOpen(false)}
+                  transition={{ duration: 0.15 }}
+                />
+                <motion.div
+                  animate={{ x: 0 }}
+                  className="absolute inset-y-0 left-0 z-50 w-[280px] shadow-xl"
+                  exit={{ x: "-100%" }}
+                  initial={{ x: "-100%" }}
+                  transition={PANEL_SPRING}
+                >
+                  <PageListPanel onResizeStart={mid.onResizeStart} width={280} />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

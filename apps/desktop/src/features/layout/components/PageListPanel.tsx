@@ -26,6 +26,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { FolderSwitcher } from "@/features/folders";
+import { shouldHideSidebar, useLayoutMode } from "@/features/layout/breakpoints";
 import { groupTodayPages, PageListItem, usePageList } from "@/features/pages";
 import type { SortMode } from "@/features/pages";
 import { cn } from "@/lib/utils";
@@ -87,6 +89,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     togglePageSelection,
   } = useUI();
   const sortMode = activeViewId !== "today" ? getSortMode(activeViewId) : "date";
+  const sidebarHidden = shouldHideSidebar(useLayoutMode());
   const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
   const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage("pikos:overdueCollapsed", true);
   // Completed accordion resets to collapsed on every view navigation (no persistence).
@@ -393,13 +396,17 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     >
       {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
-        <span className="type-ui min-w-0 truncate text-foreground">
-          {activeViewId === "today"
-            ? "Today"
-            : activeViewId === "inbox"
-              ? "Inbox"
-              : (folders.find((f) => f.id === activeViewId)?.name ?? "Pages")}
-        </span>
+        {sidebarHidden ? (
+          <FolderSwitcher />
+        ) : (
+          <span className="type-ui min-w-0 truncate text-foreground">
+            {activeViewId === "today"
+              ? "Today"
+              : activeViewId === "inbox"
+                ? "Inbox"
+                : (folders.find((f) => f.id === activeViewId)?.name ?? "Pages")}
+          </span>
+        )}
         <IconToolbar aria-label="Page actions" className="flex items-center gap-0.5">
           <TooltipIconButton
             icon={<Search size={13} />}

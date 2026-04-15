@@ -1,17 +1,21 @@
 // EditorPanel — right panel. Owns the shared header (RightPanelHeader) and
 // toggles between EditorPane and CalendarView via Cmd+Shift+C.
 
-import { addWeeks, subWeeks } from "date-fns";
+import { addDays, subDays } from "date-fns";
 
 import { CalendarHeader, CalendarView } from "@/features/calendar";
 import { EditorPane } from "@/features/editor";
+import { getCalendarDayCount, useLayoutMode } from "@/features/layout/breakpoints";
 import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
+import { useLeftNavToggle } from "../hooks/useLeftNavToggle";
 import { RightPanelHeader } from "./RightPanelHeader";
 
 export function EditorPanel() {
   const ui = useUI();
+  const dayCount = getCalendarDayCount(useLayoutMode());
+  const leftNav = useLeftNavToggle();
 
   useKeyboardShortcut(
     "Mod+Shift+C",
@@ -21,20 +25,14 @@ export function EditorPanel() {
     { allowInInputs: true }
   );
 
-  useKeyboardShortcut(
-    "Mod+\\",
-    () => {
-      ui.setSidebarCollapsed(!ui.sidebarCollapsed);
-    },
-    { allowInInputs: true }
-  );
+  useKeyboardShortcut("Mod+\\", leftNav.toggle, { allowInInputs: true });
 
   function handlePrevWeek() {
-    ui.setReferenceDate(subWeeks(ui.referenceDate, 1));
+    ui.setReferenceDate(subDays(ui.referenceDate, dayCount));
   }
 
   function handleNextWeek() {
-    ui.setReferenceDate(addWeeks(ui.referenceDate, 1));
+    ui.setReferenceDate(addDays(ui.referenceDate, dayCount));
   }
 
   function handleToday() {
@@ -46,6 +44,7 @@ export function EditorPanel() {
       <RightPanelHeader>
         {ui.rightPanel === "calendar" && (
           <CalendarHeader
+            dayCount={dayCount}
             onNextWeek={handleNextWeek}
             onPrevWeek={handlePrevWeek}
             onToday={handleToday}

@@ -219,9 +219,13 @@ export function WeekGrid({
       const scrollRect = scrollEl.getBoundingClientRect();
       const columnsRect = columnsEl.getBoundingClientRect();
 
-      const columnWidth = columnsRect.width / 7;
+      const dayCount = days.length;
+      const columnWidth = columnsRect.width / dayCount;
       const cursorXInColumns = ev.clientX - columnsRect.left;
-      const ghostDayIndex = Math.max(0, Math.min(6, Math.floor(cursorXInColumns / columnWidth)));
+      const ghostDayIndex = Math.max(
+        0,
+        Math.min(dayCount - 1, Math.floor(cursorXInColumns / columnWidth))
+      );
 
       if (ev.clientY < scrollRect.top) {
         // Cursor is in the all-day zone — hide timed ghost, highlight the target column.
@@ -366,10 +370,11 @@ export function WeekGrid({
 
       const scrollRect = scrollEl.getBoundingClientRect();
       const columnsRect = columnsEl.getBoundingClientRect();
-      const columnWidth = columnsRect.width / 7;
+      const dayCount = days.length;
+      const columnWidth = columnsRect.width / dayCount;
       const hoverDayIndex = Math.max(
         0,
-        Math.min(6, Math.floor((ev.clientX - columnsRect.left) / columnWidth))
+        Math.min(dayCount - 1, Math.floor((ev.clientX - columnsRect.left) / columnWidth))
       );
 
       // Cursor is in the all-day/header zone — track horizontal column, hide timed ghost.
@@ -393,7 +398,7 @@ export function WeekGrid({
       );
       const ghostDayIndex = Math.max(
         0,
-        Math.min(6, Math.floor((ev.clientX - columnsRect.left) / columnWidth))
+        Math.min(dayCount - 1, Math.floor((ev.clientX - columnsRect.left) / columnWidth))
       );
 
       allDayGhostPositionRef.current = { dayIndex: ghostDayIndex, top: ghostTop };
@@ -475,10 +480,11 @@ export function WeekGrid({
       return null;
     }
 
-    const columnWidth = columnsRect.width / 7;
+    const dayCount = days.length;
+    const columnWidth = columnsRect.width / dayCount;
     const dayIndex = Math.max(
       0,
-      Math.min(6, Math.floor((clientX - columnsRect.left) / columnWidth))
+      Math.min(dayCount - 1, Math.floor((clientX - columnsRect.left) / columnWidth))
     );
     const targetDay = days[dayIndex];
     if (!targetDay) {

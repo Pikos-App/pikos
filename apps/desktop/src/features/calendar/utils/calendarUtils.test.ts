@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAllDayItems,
+  buildCalendarDays,
   buildDayBlocks,
   chipFolderStyle,
   COMPACT_BLOCK_HEIGHT,
@@ -95,6 +96,46 @@ describe("weekDays", () => {
     expect(days).toHaveLength(7);
     expect(days[0]!.getDay()).toBe(0); // Sunday
     expect(days[6]!.getDay()).toBe(6); // Saturday
+  });
+});
+
+describe("buildCalendarDays", () => {
+  it("returns 7 days anchored at the week start when dayCount=7", () => {
+    const wed = new Date(2026, 2, 18); // Wednesday
+    const days = buildCalendarDays(wed, 7);
+    expect(days).toHaveLength(7);
+    expect(days[0]!.getDay()).toBe(1); // Monday
+  });
+
+  it("returns dayCount days anchored at refDate when dayCount<7", () => {
+    const wed = new Date(2026, 2, 18);
+    const days = buildCalendarDays(wed, 3);
+    expect(days).toHaveLength(3);
+    expect(days[0]!.getDate()).toBe(18); // starts on ref date itself
+    expect(days[1]!.getDate()).toBe(19);
+    expect(days[2]!.getDate()).toBe(20);
+  });
+
+  it("returns 5 consecutive days when dayCount=5", () => {
+    const fri = new Date(2026, 2, 20);
+    const days = buildCalendarDays(fri, 5);
+    expect(days).toHaveLength(5);
+    expect(days[0]!.getDate()).toBe(20);
+    expect(days[4]!.getDate()).toBe(24);
+  });
+
+  it("respects weekStartsOn=0 for dayCount=7", () => {
+    const wed = new Date(2026, 2, 18);
+    const days = buildCalendarDays(wed, 7, 0);
+    expect(days[0]!.getDay()).toBe(0); // Sunday
+  });
+
+  it("days are always consecutive", () => {
+    const days = buildCalendarDays(new Date(2026, 2, 18), 5);
+    for (let i = 1; i < days.length; i++) {
+      const diff = days[i]!.getDate() - days[i - 1]!.getDate();
+      expect(diff).toBe(1);
+    }
   });
 });
 

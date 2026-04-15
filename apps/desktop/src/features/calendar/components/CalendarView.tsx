@@ -3,16 +3,17 @@
 // Expands rrule recurrence rules into virtual occurrences for the visible week.
 // Navigation (prev/next/today) is owned by EditorPanel via UIContext.referenceDate.
 
-import { format, isSameWeek } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import { useEffect, useState } from "react";
 
+import { getCalendarDayCount, useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import { useRecurrenceExpansion } from "../hooks/useRecurrenceExpansion";
-import { weekDays } from "../utils/calendarUtils";
+import { buildCalendarDays } from "../utils/calendarUtils";
 import { WeekGrid } from "./WeekGrid";
 
 export function CalendarView() {
@@ -39,8 +40,11 @@ export function CalendarView() {
     (document.activeElement as HTMLElement | null)?.blur();
   }, []);
 
-  const days = weekDays(referenceDate, weekStart);
-  const isCurrentWeek = isSameWeek(referenceDate, new Date(), { weekStartsOn: weekStart });
+  const layoutMode = useLayoutMode();
+  const dayCount = getCalendarDayCount(layoutMode);
+  const days = buildCalendarDays(referenceDate, dayCount, weekStart);
+  const today = new Date();
+  const isCurrentWeek = days.some((d) => isSameDay(d, today));
 
   // Expand rrule recurrence rules into virtual calendar occurrences for this week.
   const expandedPages = useRecurrenceExpansion({

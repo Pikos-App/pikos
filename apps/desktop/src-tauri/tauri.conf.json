@@ -16,6 +16,8 @@
         "title": "Pikos",
         "width": 1480,
         "height": 920,
+        "minWidth": 560,
+        "minHeight": 480,
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true

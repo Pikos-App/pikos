@@ -1,4 +1,4 @@
-import { addDays, format, isSameDay, isSameMonth } from "date-fns";
+import { addDays, format, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
-import { weekStart } from "../utils/calendarUtils";
+import { buildCalendarDays } from "../utils/calendarUtils";
 
 interface CalendarHeaderProps {
+  dayCount: number;
   onNextWeek: () => void;
   onPrevWeek: () => void;
   onToday: () => void;
@@ -17,23 +18,26 @@ interface CalendarHeaderProps {
 
 // Inner navigation content for the calendar — rendered as children of RightPanelHeader.
 export function CalendarHeader({
+  dayCount,
   onNextWeek,
   onPrevWeek,
   onToday,
   referenceDate,
 }: CalendarHeaderProps) {
-  const monday = weekStart(referenceDate);
-  const isCurrentWeek = isSameDay(weekStart(new Date()), monday);
+  const visibleDays = buildCalendarDays(referenceDate, dayCount);
+  const first = visibleDays[0]!;
+  const last = visibleDays[visibleDays.length - 1]!;
+  const today = startOfDay(new Date());
+  const isCurrentWeek = isWithinInterval(today, { end: addDays(last, 1), start: first });
 
   useKeyboardShortcut("ArrowLeft", onPrevWeek);
   useKeyboardShortcut("ArrowRight", onNextWeek);
   useKeyboardShortcut("t", onToday);
 
-  // Show week range: "Mar 16 – 22, 2026" or "Mar 30 – Apr 5, 2026"
-  const sunday = addDays(monday, 6);
-  const weekLabel = isSameMonth(monday, sunday)
-    ? `${format(monday, "MMM d")} – ${format(sunday, "d, yyyy")}`
-    : `${format(monday, "MMM d")} – ${format(sunday, "MMM d, yyyy")}`;
+  // Show visible range: "Mar 16 – 22, 2026" or "Mar 30 – Apr 5, 2026"
+  const weekLabel = isSameMonth(first, last)
+    ? `${format(first, "MMM d")} – ${format(last, "d, yyyy")}`
+    : `${format(first, "MMM d")} – ${format(last, "MMM d, yyyy")}`;
 
   return (
     <>

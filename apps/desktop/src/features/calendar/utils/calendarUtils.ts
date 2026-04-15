@@ -80,6 +80,18 @@ export function weekDays(date: Date, weekStartsOn: 0 | 1 = 1): Date[] {
   return Array.from({ length: 7 }, (_, i) => addDays(first, i));
 }
 
+/**
+ * Returns the Date[] the calendar should render for a given reference date and
+ * day count. When `dayCount === 7` the array is anchored at the week start (so
+ * stepping by weeks keeps Mon–Sun alignment). When `dayCount < 7` the array
+ * starts at `date` itself, so prev/next steps show adjacent days without
+ * week-boundary jumps.
+ */
+export function buildCalendarDays(date: Date, dayCount: number, weekStartsOn: 0 | 1 = 1): Date[] {
+  const first = dayCount === 7 ? weekStart(date, weekStartsOn) : startOfDay(date);
+  return Array.from({ length: dayCount }, (_, i) => addDays(first, i));
+}
+
 /** Returns the last day of the week containing `date`. */
 export function weekEnd(date: Date, weekStartsOn: 0 | 1 = 1): Date {
   return endOfWeek(date, { weekStartsOn });

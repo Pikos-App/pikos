@@ -34,6 +34,9 @@ export interface UIContextValue {
   /** Both left panels hidden. Persisted to localStorage. */
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (v: boolean | ((prev: boolean) => boolean)) => void;
+  /** Page list overlay drawer open state. Only meaningful at the sm breakpoint. Not persisted. */
+  pageListDrawerOpen: boolean;
+  setPageListDrawerOpen: (v: boolean) => void;
   /** Per-view sort mode. Persisted to localStorage. */
   getSortMode: (viewId: string) => SortMode;
   setSortMode: (viewId: string, mode: SortMode) => void;
@@ -124,6 +127,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     new Date().toISOString()
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
+  const [pageListDrawerOpen, setPageListDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openSortMenu, setOpenSortMenu] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState<string | null>(null);
@@ -261,6 +265,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     openDialog,
     openPage,
     openSortMenu,
+    pageListDrawerOpen,
     referenceDate,
     registerExternalDragUpdater,
     rightPanel,
@@ -272,6 +277,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setIsDraggingOverCalendar,
     setOpenDialog,
     setOpenSortMenu,
+    setPageListDrawerOpen,
     setRangeSelection,
     setReferenceDate,
     setRightPanel,
