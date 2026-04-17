@@ -497,11 +497,31 @@ describe("buildDayBlocks", () => {
     expect(blocks2[0]!.top).toBe(0);
     expect(blocks2[0]!.height).toBe(GRID_HEIGHT);
 
-    // Day 3 (Mar 17): ends at 2 PM
+    // Day 3 (Mar 17): ends at 2 PM. Height MUST clip to the real end time —
+    // regression guard for a bug where continuation-before blocks extended by the
+    // full event duration (42h) rather than the visible-on-this-day portion.
     const blocks3 = buildDayBlocks(pages, new Date(2026, 2, 17));
     expect(blocks3).toHaveLength(1);
     expect(blocks3[0]!.isContinuationBefore).toBe(true);
     expect(blocks3[0]!.isContinuationAfter).toBeUndefined();
+    expect(blocks3[0]!.top).toBe(0);
+    expect(blocks3[0]!.height).toBe(14 * HOUR_HEIGHT); // 2 PM = 14h from midnight
+  });
+
+  it("no-end event at the end of a day is never a continuation", () => {
+    // Regression guard: a point-in-time event (no scheduledEnd) at 11:45 PM
+    // should not be treated as `isContinuationAfter` just because its visual
+    // block would extend past midnight.
+    const pages = [
+      makePage({
+        scheduledStart: "2026-03-15T23:45:00",
+        title: "Point in time",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]!.isContinuationAfter).toBeUndefined();
+    expect(blocks[0]!.isCompact).toBe(true);
   });
 
   it("cross-day event does not appear on unrelated days", () => {
