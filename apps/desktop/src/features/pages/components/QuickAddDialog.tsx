@@ -177,7 +177,11 @@ export function QuickAddDialog() {
       }
 
       if (!dateManual) {
-        setDateValue(parsed.scheduledStart ?? null);
+        // Recurring results without an explicit date anchor to today so the
+        // chip matches what submit will do (resolvedDate ?? localToday()).
+        const effectiveStart =
+          parsed.scheduledStart ?? (result.type === "recurring" ? localToday() : null);
+        setDateValue(effectiveStart);
         const hasTime = parsed.scheduledStart?.includes("T") ?? false;
         setEndDateValue(hasTime ? (parsed.scheduledEnd ?? null) : null);
       }
@@ -433,6 +437,25 @@ export function QuickAddDialog() {
             value={dateValue}
           />
 
+          <RecurrencePopover
+            anchorDate={dateValue}
+            onChange={(rrule) => {
+              setRruleValue(rrule);
+              setRruleManual(true);
+              // If the user picks a rule without a date set, anchor to today
+              // so the chip's implicit "Starts today" becomes concrete on the
+              // date chip too.
+              if (rrule && !dateValue) {
+                setDateValue(localToday());
+                setDateManual(true);
+              }
+              inputRef.current?.focus();
+            }}
+            rrule={rruleValue}
+            variant="compact"
+            {...(finiteLabel ? { overrideLabel: finiteLabel } : {})}
+          />
+
           <BylineSeparator />
 
           <PriorityDropdown
@@ -458,34 +481,6 @@ export function QuickAddDialog() {
             }}
             selected={tagsValue}
           />
-
-          <BylineSeparator />
-
-          <RecurrencePopover
-            anchorDate={dateValue}
-            onChange={(rrule) => {
-              setRruleValue(rrule);
-              setRruleManual(true);
-              // If the user picks a rule without a date set, anchor to today
-              // so the chip's implicit "Starts today" becomes concrete on the
-              // date chip too.
-              if (rrule && !dateValue) {
-                setDateValue(localToday());
-                setDateManual(true);
-              }
-              inputRef.current?.focus();
-            }}
-            rrule={rruleValue}
-          />
-
-          {finiteLabel && (
-            <>
-              <BylineSeparator />
-              <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                {finiteLabel}
-              </span>
-            </>
-          )}
 
           <button
             className="ml-auto shrink-0 rounded bg-primary px-3 py-1 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"

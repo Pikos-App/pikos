@@ -16,6 +16,7 @@ import {
   addMinutes,
   differenceInMinutes,
   endOfDay,
+  format,
   getHours,
   getMinutes,
   getSeconds,
@@ -235,6 +236,43 @@ export function rruleToLabel(rruleStr: string): string {
   } catch {
     return rruleStr;
   }
+}
+
+const SHORT_FREQ_LABEL: Record<RecurrenceFreq, string> = {
+  DAILY: "Daily",
+  MONTHLY: "Monthly",
+  WEEKLY: "Weekly",
+  YEARLY: "Yearly",
+};
+
+const SHORT_INTERVAL_UNIT: Record<RecurrenceFreq, string> = {
+  DAILY: "days",
+  MONTHLY: "months",
+  WEEKLY: "weeks",
+  YEARLY: "years",
+};
+
+/**
+ * Compact label for space-constrained bylines (e.g. QuickAddDialog).
+ *   FREQ=WEEKLY;BYDAY=MO            → "Weekly"
+ *   FREQ=WEEKLY;INTERVAL=2          → "Every 2 weeks"
+ *   FREQ=WEEKLY;BYDAY=MO;COUNT=10   → "Weekly × 10"
+ *   FREQ=WEEKLY;BYDAY=MO;UNTIL=...  → "Weekly thru Jun 28"
+ * BYDAY is intentionally dropped — the date chip next to it already conveys
+ * the anchor weekday.
+ */
+export function rruleToShortLabel(rruleStr: string): string {
+  const opts = parseRrule(rruleStr);
+  if (!opts) return rruleStr;
+
+  const base =
+    opts.interval > 1
+      ? `Every ${opts.interval} ${SHORT_INTERVAL_UNIT[opts.freq]}`
+      : SHORT_FREQ_LABEL[opts.freq];
+
+  if (opts.count != null) return `${base} × ${opts.count}`;
+  if (opts.until) return `${base} thru ${format(parseLocalISO(opts.until), "MMM d")}`;
+  return base;
 }
 
 // ─── RRULE editor helpers ─────────────────────────────────────────────────────

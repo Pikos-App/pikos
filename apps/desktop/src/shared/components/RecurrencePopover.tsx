@@ -19,6 +19,7 @@ import {
   type RecurrenceOptions,
   type RecurrenceWeekday,
   rruleToLabel,
+  rruleToShortLabel,
 } from "@pikos/core";
 import { addMonths, format } from "date-fns";
 import { CalendarDays, Check, ChevronDown, Repeat2 } from "lucide-react";
@@ -86,12 +87,19 @@ interface RecurrencePopoverProps {
   /** Tooltip shown on the disabled chip (e.g., "Set a date first"). */
   disabledHint?: string;
   /**
-   * "label" (default) — icon + cadence text; used where space isn't constrained
-   *   (QuickAdd dialog, PageBlockPopover, VirtualPageBlockPopover).
-   * "icon" — icon-only with a hover tooltip; used in the page byline where
-   *   the label would crowd other metadata chips.
+   * "label" (default) — icon + cadence text always; used in PageBlockPopover,
+   *   VirtualPageBlockPopover, MetadataHeader.
+   * "icon" — icon-only with a hover tooltip; used in the page byline.
+   * "compact" — icon-only when no rule / override, icon + short label when
+   *   set; used in QuickAddDialog so the empty state is unobtrusive.
    */
-  variant?: "icon" | "label";
+  variant?: "icon" | "label" | "compact";
+  /**
+   * External label shown next to the icon (in compact/label modes) when no
+   * rrule is set. Used by QuickAddDialog to display NLP finite previews like
+   * "3 occurrences" in the same trigger as the recurrence icon.
+   */
+  overrideLabel?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -170,9 +178,9 @@ function computePresets(anchor: Date): Preset[] {
   ];
 }
 
-function formatTriggerLabel(rrule: string | null): string {
+function formatTriggerLabel(rrule: string | null, short: boolean): string {
   if (!rrule) return "Does not repeat";
-  return rruleToLabel(rrule);
+  return short ? rruleToShortLabel(rrule) : rruleToLabel(rrule);
 }
 
 function formatEndDateLabel(iso: string | undefined): string {
@@ -188,6 +196,7 @@ export function RecurrencePopover({
   disabled = false,
   disabledHint,
   onChange,
+  overrideLabel,
   readOnly = false,
   rrule,
   variant = "label",
@@ -209,7 +218,11 @@ export function RecurrencePopover({
 
   const options = rrule ? parseRrule(rrule) : null;
   const hasRule = options !== null;
-  const triggerLabel = formatTriggerLabel(rrule);
+  // Short form in the trigger; full form stays in the popover preview.
+  // overrideLabel wins when no rule is set (e.g. finite NLP "3 occurrences").
+  const triggerLabel = hasRule
+    ? formatTriggerLabel(rrule, /* short */ true)
+    : (overrideLabel ?? formatTriggerLabel(rrule, /* short */ true));
 
   const anchor = anchorDate ? parseLocalISO(anchorDate) : new Date();
   const presets = computePresets(anchor);
@@ -342,15 +355,23 @@ export function RecurrencePopover({
 
   // ── Trigger ──────────────────────────────────────────────────────────────────
 
-  const isIcon = variant === "icon";
-  const iconTooltipText = disabled ? (disabledHint ?? "Set a date first") : triggerLabel;
+  // In compact mode the label appears only when a rule or override is set —
+  // so the empty state renders as icon-only (no "Does not repeat" text).
+  const hasLabelContent = hasRule || !!overrideLabel;
+  const showLabel = variant === "label" || (variant === "compact" && hasLabelContent);
+  const isIconOnly = variant === "icon" || !showLabel;
+  const iconTooltipText = disabled
+    ? (disabledHint ?? "Set a date first")
+    : hasLabelContent
+      ? triggerLabel
+      : "Set recurrence";
 
   const triggerButton = (
     <button
-      aria-label={hasRule ? `Recurrence: ${triggerLabel}` : "Set recurrence"}
+      aria-label={hasLabelContent ? `Recurrence: ${triggerLabel}` : "Set recurrence"}
       className={cn(
         "inline-flex items-center gap-1 rounded transition-colors focus:outline-none",
-        isIcon
+        isIconOnly
           ? "shrink-0 whitespace-nowrap"
           : // In label mode allow the chip to shrink inside a bounded flex row
             // (e.g. PageBlockPopover's metadata row); the label itself truncates
@@ -360,7 +381,7 @@ export function RecurrencePopover({
           ? "cursor-not-allowed text-muted-foreground/30"
           : readOnly
             ? "text-muted-foreground"
-            : hasRule
+            : hasLabelContent
               ? "text-muted-foreground hover:text-foreground"
               : "text-muted-foreground/60 hover:text-muted-foreground"
       )}
@@ -368,12 +389,12 @@ export function RecurrencePopover({
       type="button"
     >
       <Repeat2 aria-hidden="true" className="shrink-0" size={13} />
-      {!isIcon && <span className="truncate">{triggerLabel}</span>}
+      {showLabel && <span className="truncate">{triggerLabel}</span>}
     </button>
   );
 
   if (disabled || readOnly) {
-    if (isIcon) {
+    if (isIconOnly) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>
@@ -388,7 +409,7 @@ export function RecurrencePopover({
 
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>
-      {isIcon ? (
+      {isIconOnly ? (
         <Tooltip>
           <PopoverTrigger asChild>
             <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>

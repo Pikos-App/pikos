@@ -325,3 +325,110 @@ appTest("create folder inline via QuickAdd FolderChip @tier2", async ({ app }) =
     app.locator("[data-page-list-item]").filter({ hasText: "page in fresh folder" })
   ).not.toBeVisible();
 });
+
+// ─── T2-12: Bounded recurrence round-trip (NLP → 1 page + rrule) ────────────
+//
+// Regression guard for the "bulk 10 pages" bug. NLP bounded-recurrence inputs
+// ("every X + window") must produce ONE page with an rrule, not N copies.
+
+appTest("QuickAdd bounded recurrence creates 1 page with rrule @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  await app
+    .getByPlaceholder(/what's on your mind/i)
+    .fill("practice piano every monday at 3pm for 4 weeks");
+
+  // Short-form chip should read "Weekly thru <MMM d>" (bounded via UNTIL).
+  await expect(
+    dialog.getByRole("button", { name: /Recurrence: Weekly thru/i })
+  ).toBeVisible({ timeout: 2000 });
+
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Exactly one page — not 4.
+  const pages = app.locator("[data-page-list-item]").filter({ hasText: "practice piano" });
+  await expect(pages).toHaveCount(1);
+});
+
+// ─── T2-13: Default-daily round-trip ("N times" with no cadence) ────────────
+//
+// "meditate 10 times" → the parser defaults to FREQ=DAILY + COUNT=10.
+// Verifies one page is created (not 10) and the chip shows the daily cadence.
+
+appTest("QuickAdd 'N times' defaults to daily recurring @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  await app.getByPlaceholder(/what's on your mind/i).fill("meditate 10 times");
+
+  // Chip reads "Daily × 10".
+  await expect(
+    dialog.getByRole("button", { name: /Recurrence: Daily × 10/i })
+  ).toBeVisible({ timeout: 2000 });
+
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  const pages = app.locator("[data-page-list-item]").filter({ hasText: "meditate" });
+  await expect(pages).toHaveCount(1);
+});
+
+// ─── T2-14: Finite bulk create (m/w/f → 3 separate pages) ───────────────────
+//
+// Finite recurrence (bare slash days, no "every") still produces N independent
+// pages — each on its own concrete date. Distinct from the recurring-template
+// path above.
+
+appTest("QuickAdd m/w/f creates 3 separate pages @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  await app.getByPlaceholder(/what's on your mind/i).fill("swim m/w/f");
+
+  // Finite preview appears in the recurrence chip's override label slot.
+  await expect(
+    dialog.getByRole("button", { name: /Recurrence: 3 occurrences/i })
+  ).toBeVisible({ timeout: 2000 });
+
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Three separate pages, one per scheduled weekday.
+  const pages = app.locator("[data-page-list-item]").filter({ hasText: "swim" });
+  await expect(pages).toHaveCount(3);
+});
+
+// ─── T2-15: Manual chip override survives continued NLP typing ──────────────
+//
+// If the user sets a chip explicitly, subsequent NLP re-parses must not
+// overwrite it. Verified on priority (cheapest chip to interact with) — the
+// same `*Manual` flag pattern guards date, folder, and rrule.
+
+appTest("QuickAdd manual priority override survives further typing @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  const input = app.getByPlaceholder(/what's on your mind/i);
+  await input.fill("report !low");
+  await expect(dialog.getByRole("button", { name: "Priority: Low" })).toBeVisible({
+    timeout: 2000,
+  });
+
+  // Open the priority dropdown and pick High manually.
+  await dialog.getByRole("button", { name: "Priority: Low" }).click();
+  await app.getByRole("menuitem", { name: /High/ }).click();
+  await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
+
+  // Keep typing — NLP re-parses and would normally set priority=low from !low.
+  // The manual flag should prevent the override.
+  await input.fill("report !low tomorrow");
+  // Give the 200ms debounce time to fire.
+  await app.waitForTimeout(400);
+  await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
+});

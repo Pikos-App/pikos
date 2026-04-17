@@ -21,6 +21,7 @@ export {
   nextOccurrenceAfter,
   parseRrule,
   rruleToLabel,
+  rruleToShortLabel,
 } from "./utils/recurrence";
 export type {
   RecurrenceFreq,

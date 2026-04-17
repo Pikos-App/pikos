@@ -8,6 +8,7 @@ import {
   nextOccurrenceAfter,
   parseRrule,
   rruleToLabel,
+  rruleToShortLabel,
 } from "./recurrence";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -304,6 +305,52 @@ describe("rruleToLabel", () => {
 
   it("falls back to raw string on invalid input", () => {
     expect(rruleToLabel("INVALID_RRULE")).toBe("INVALID_RRULE");
+  });
+});
+
+// ─── rruleToShortLabel ────────────────────────────────────────────────────
+
+describe("rruleToShortLabel", () => {
+  it("FREQ=DAILY → Daily", () => {
+    expect(rruleToShortLabel("FREQ=DAILY")).toBe("Daily");
+  });
+
+  it("FREQ=WEEKLY → Weekly (drops BYDAY)", () => {
+    expect(rruleToShortLabel("FREQ=WEEKLY;BYDAY=MO")).toBe("Weekly");
+  });
+
+  it("FREQ=MONTHLY → Monthly", () => {
+    expect(rruleToShortLabel("FREQ=MONTHLY")).toBe("Monthly");
+  });
+
+  it("FREQ=YEARLY → Yearly", () => {
+    expect(rruleToShortLabel("FREQ=YEARLY")).toBe("Yearly");
+  });
+
+  it("interval > 1 → Every N <unit>", () => {
+    expect(rruleToShortLabel("FREQ=WEEKLY;INTERVAL=2")).toBe("Every 2 weeks");
+    expect(rruleToShortLabel("FREQ=DAILY;INTERVAL=3")).toBe("Every 3 days");
+    expect(rruleToShortLabel("FREQ=MONTHLY;INTERVAL=6")).toBe("Every 6 months");
+  });
+
+  it("COUNT → appends × N", () => {
+    expect(rruleToShortLabel("FREQ=WEEKLY;BYDAY=MO;COUNT=10")).toBe("Weekly × 10");
+    expect(rruleToShortLabel("FREQ=DAILY;COUNT=5")).toBe("Daily × 5");
+  });
+
+  it("UNTIL → appends thru <MMM d>", () => {
+    expect(rruleToShortLabel("FREQ=WEEKLY;BYDAY=MO;UNTIL=20260628T235959Z")).toBe(
+      "Weekly thru Jun 28"
+    );
+    expect(rruleToShortLabel("FREQ=DAILY;UNTIL=20260105T235959Z")).toBe("Daily thru Jan 5");
+  });
+
+  it("interval > 1 with COUNT", () => {
+    expect(rruleToShortLabel("FREQ=WEEKLY;INTERVAL=2;COUNT=4")).toBe("Every 2 weeks × 4");
+  });
+
+  it("falls back to raw string on invalid input", () => {
+    expect(rruleToShortLabel("INVALID_RRULE")).toBe("INVALID_RRULE");
   });
 });
 

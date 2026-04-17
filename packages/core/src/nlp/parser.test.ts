@@ -298,15 +298,6 @@ describe("NL Page Creation Parser", () => {
       expect(r.inputs[4]!.scheduledStart).toContain("2026-03-20");
     });
 
-    it("every monday for 2 weeks → finite (2 Mondays: 3/16, 3/23)", () => {
-      const r = parseInput("every monday for 2 weeks", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      expect(r.count).toBe(2);
-      expect(r.inputs[0]!.scheduledStart).toContain("2026-03-16");
-      expect(r.inputs[1]!.scheduledStart).toContain("2026-03-23");
-    });
-
     it("t/th/f slash syntax — t maps to Tuesday", () => {
       const r = parseInput("run t/th/f at 3pm", NOW);
       expect(r.type).toBe("finite");
@@ -633,6 +624,432 @@ describe("NL Page Creation Parser", () => {
     });
   });
 
+  // ─── 7i. Bounded recurrence (every X + window) ───────────────────────────
+  //
+  // "every X for N weeks/days/months" or "N times" or "through <date>"
+  // should yield ONE recurring page with a bounded RRULE (COUNT or UNTIL),
+  // expanded virtually — NOT N independent pages.
+
+  describe("bounded recurrence — every X + window", () => {
+    it("run every monday at 3pm for 10 weeks → recurring with UNTIL, 10 Mondays", () => {
+      const r = parseInput("run every monday at 3pm for 10 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title).toBe("run");
+      expect(r.input.scheduledStart).toContain("2026-03-16"); // next Monday
+      expect(r.input.scheduledStart).toContain("15:00");
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.rrule).toContain("UNTIL=");
+      expect(r.rrule).not.toContain("COUNT=");
+      // Expansion yields exactly 10 Mondays.
+      const rule = RRule.fromString(`DTSTART:20260316T150000Z\nRRULE:${r.rrule}`);
+      expect(rule.all().length).toBe(10);
+    });
+
+    it("reproduces user bug: run ~dog every monday at 3pm for 10 weeks → 1 page, not 10", () => {
+      const r = parseInput("run ~dog every monday at 3pm for 10 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.folderQuery).toBe("dog");
+      expect(r.input.title).toBe("run");
+    });
+
+    it("every monday 10 times → recurring with COUNT=10", () => {
+      const r = parseInput("standup every monday at 9am 10 times", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("COUNT=10");
+      expect(r.rrule).not.toContain("UNTIL=");
+      expect(r.rrule).toContain("BYDAY=MO");
+    });
+
+    it("every monday for 2 weeks → recurring, expansion yields 2 Mondays", () => {
+      const r = parseInput("every monday for 2 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.rrule).toContain("UNTIL=");
+      expect(r.input.scheduledStart).toBe("2026-03-16");
+      const rule = RRule.fromString(`DTSTART:20260316T000000Z\nRRULE:${r.rrule}`);
+      expect(rule.all().length).toBe(2);
+    });
+
+    it("every day for 5 days → FREQ=DAILY, expansion yields 5 days", () => {
+      const r = parseInput("water plant every day at 7am for 5 days", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("UNTIL=");
+      // 7am with NOW=12:00 → tomorrow (3/16); 5-day window ends 3/20.
+      expect(r.input.scheduledStart).toBe("2026-03-16T07:00:00");
+      const rule = RRule.fromString(`DTSTART:20260316T070000Z\nRRULE:${r.rrule}`);
+      expect(rule.all().length).toBe(5);
+    });
+
+    it("every month for 3 months → FREQ=MONTHLY, 3 occurrences", () => {
+      const r = parseInput("pay rent every month for 3 months", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=MONTHLY");
+      expect(r.rrule).toContain("UNTIL=");
+      // dtstart = today (2026-03-15). UNTIL ≈ +89 days ≈ June 11.
+      // Monthly from 3/15: 3/15, 4/15, 5/15, 6/15 — but UNTIL < 6/15 → 3 occurrences.
+      const rule = RRule.fromString(`DTSTART:20260315T000000Z\nRRULE:${r.rrule}`);
+      expect(rule.all().length).toBe(3);
+    });
+
+    it("every monday through april 30 → UNTIL=2026-04-30", () => {
+      const r = parseInput("standup every monday through april 30", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("UNTIL=2026043");
+      expect(r.rrule).toContain("BYDAY=MO");
+      // Mondays on/before Apr 30: 3/16, 3/23, 3/30, 4/6, 4/13, 4/20, 4/27 = 7
+      const rule = RRule.fromString(`DTSTART:20260316T000000Z\nRRULE:${r.rrule}`);
+      expect(rule.all().length).toBe(7);
+    });
+
+    it("every tuesday and thursday for 2 weeks → BYDAY=TU,TH, 4 occurrences", () => {
+      const r = parseInput("gym every tuesday and thursday at 6pm for 2 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=TU,TH");
+      expect(r.rrule).toContain("UNTIL=");
+      // From 3/15, scheduledStart = Tue 3/17 18:00. 2 weeks window = through 3/30.
+      // Occurrences: 3/17, 3/19, 3/24, 3/26 = 4
+      const rule = RRule.fromString(`DTSTART:20260317T180000Z\nRRULE:${r.rrule}`);
+      expect(rule.all().length).toBe(4);
+    });
+
+    it("every weekday for 2 weeks → BYDAY=MO..FR, 10 occurrences", () => {
+      const r = parseInput("standup every weekday at 9am for 2 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO,TU,WE,TH,FR");
+      expect(r.rrule).toContain("UNTIL=");
+      const rule = RRule.fromString(`DTSTART:20260316T090000Z\nRRULE:${r.rrule}`);
+      expect(rule.all().length).toBe(10);
+    });
+
+    it("bounded recurrence preserves tags, folder, priority", () => {
+      const r = parseInput("standup every monday at 9am for 4 weeks #work !high ~Engineering", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.tags).toEqual(["work"]);
+      expect(r.input.priority).toBe("high");
+      expect(r.input.folderQuery).toBe("Engineering");
+      expect(r.input.title).toBe("standup");
+    });
+
+    it("bounded recurrence RRULE does NOT contain DTSTART", () => {
+      const r = parseInput("every monday for 4 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).not.toContain("DTSTART");
+    });
+
+    it("bounded recurrence RRULE is round-trip parseable", () => {
+      const r = parseInput("every monday for 10 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      const rule = RRule.fromString("RRULE:" + r.rrule);
+      expect(rule).toBeDefined();
+    });
+  });
+
+  // ─── 7j. Composition: every + slash / plural days ────────────────────────
+  //
+  // "every [week] <day-list>" should augment the infinite weekly rule with
+  // BYDAY rather than overwrite it with a finite-slash list.
+
+  describe("every + day-list composition", () => {
+    it("run every week m/f → infinite BYDAY=MO,FR", () => {
+      const r = parseInput("run every week m/f", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("BYDAY=MO,FR");
+      expect(r.input.title).toBe("run");
+    });
+
+    it("run every week m/f for 10 weeks → bounded BYDAY=MO,FR", () => {
+      const r = parseInput("run every week m/f for 10 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO,FR");
+      expect(r.rrule).toContain("UNTIL=");
+    });
+
+    it("run every m/f → infinite BYDAY=MO,FR (implicit weekly)", () => {
+      const r = parseInput("run every m/f at 3pm", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("BYDAY=MO,FR");
+      expect(r.input.scheduledStart).toContain("15:00");
+      expect(r.input.title).toBe("run");
+    });
+
+    it("run every m/w/f → infinite BYDAY=MO,WE,FR", () => {
+      const r = parseInput("run every m/w/f at 3pm", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO,WE,FR");
+    });
+
+    it("standup every week mondays and wednesdays at 9am → BYDAY=MO,WE", () => {
+      const r = parseInput("standup every week mondays and wednesdays at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("BYDAY=MO,WE");
+    });
+
+    it("regression: bare m/f (no every) stays finite", () => {
+      const r = parseInput("run m/f at 3pm", NOW);
+      expect(r.type).toBe("finite");
+    });
+
+    it("regression: bare weekdays (no every) stays finite", () => {
+      const r = parseInput("standup weekdays", NOW);
+      expect(r.type).toBe("finite");
+    });
+  });
+
+  // ─── 7k. Default daily when window given without cadence ─────────────────
+  //
+  // A window ("10 times", "for 2 weeks", "through <date>") without an explicit
+  // cadence word defaults to FREQ=DAILY. Keeps the user's count/boundary
+  // signal meaningful instead of silently stripping it from the title.
+
+  describe("default daily when window present but no cadence", () => {
+    it("run dog 10 times → FREQ=DAILY;COUNT=10, title 'run dog'", () => {
+      const r = parseInput("run dog 10 times", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("COUNT=10");
+      expect(r.rrule).not.toContain("BYDAY=");
+      expect(r.input.title).toBe("run dog");
+    });
+
+    it("run dog 10 times tomorrow → FREQ=DAILY;COUNT=10 from tomorrow", () => {
+      const r = parseInput("run dog 10 times tomorrow", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("COUNT=10");
+      expect(r.input.scheduledStart).toBe("2026-03-16");
+      expect(r.input.title).toBe("run dog");
+    });
+
+    it("meditate for 2 weeks at 8am → FREQ=DAILY;UNTIL, 14 daily occurrences", () => {
+      const r = parseInput("meditate for 2 weeks at 8am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("UNTIL=");
+      // 8am with NOW=12:00 → tomorrow (3/16); 2-week window → 14 occurrences.
+      expect(r.input.scheduledStart).toBe("2026-03-16T08:00:00");
+      expect(r.input.title).toBe("meditate");
+      const rule = RRule.fromString(`DTSTART:20260316T080000Z\nRRULE:${r.rrule}`);
+      expect(rule.all().length).toBe(14);
+    });
+
+    it("practice piano through june → FREQ=DAILY with UNTIL in june", () => {
+      const r = parseInput("practice piano through june", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("UNTIL=202606");
+      expect(r.input.title).toBe("practice piano");
+    });
+
+    it("run dog (no window) → single, title unchanged", () => {
+      const r = parseInput("run dog", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("run dog");
+    });
+
+    it("regression: run m/w/f for 2 weeks stays finite (slash has cadence)", () => {
+      const r = parseInput("run m/w/f for 2 weeks", NOW);
+      expect(r.type).toBe("finite");
+    });
+
+    it("regression: explicit 'daily 10 times' unchanged", () => {
+      const r = parseInput("run dog daily 10 times", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("COUNT=10");
+    });
+  });
+
+  // ─── 7l. "until" / "till" as window boundary (synonym of "through") ──────
+
+  describe("until / till as window boundary", () => {
+    it("every monday until april 30 → UNTIL", () => {
+      const r = parseInput("standup every monday until april 30", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.rrule).toContain("UNTIL=2026043");
+    });
+
+    it("meditate until june → default FREQ=DAILY with UNTIL", () => {
+      const r = parseInput("meditate until june", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("UNTIL=202606");
+      expect(r.input.title).toBe("meditate");
+    });
+
+    it("'till' works as alias", () => {
+      const r = parseInput("practice every day till june", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("UNTIL=");
+    });
+  });
+
+  // ─── 7m. Interval cadences (biweekly / every other / every N) ────────────
+
+  describe("interval cadences", () => {
+    it("biweekly → FREQ=WEEKLY;INTERVAL=2", () => {
+      const r = parseInput("sync biweekly", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("INTERVAL=2");
+      expect(r.input.title).toBe("sync");
+    });
+
+    it("bimonthly → FREQ=MONTHLY;INTERVAL=2", () => {
+      const r = parseInput("rent bimonthly", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=MONTHLY");
+      expect(r.rrule).toContain("INTERVAL=2");
+    });
+
+    it("fortnightly → FREQ=WEEKLY;INTERVAL=2", () => {
+      const r = parseInput("review fortnightly", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("INTERVAL=2");
+    });
+
+    it("every other week → FREQ=WEEKLY;INTERVAL=2", () => {
+      const r = parseInput("sync every other week", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("INTERVAL=2");
+    });
+
+    it("every other day → FREQ=DAILY;INTERVAL=2", () => {
+      const r = parseInput("water plants every other day", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("INTERVAL=2");
+    });
+
+    it("every 2 weeks → FREQ=WEEKLY;INTERVAL=2", () => {
+      const r = parseInput("sync every 2 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("INTERVAL=2");
+    });
+
+    it("every 3 days → FREQ=DAILY;INTERVAL=3", () => {
+      const r = parseInput("water plants every 3 days", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("INTERVAL=3");
+    });
+
+    it("every 6 months → FREQ=MONTHLY;INTERVAL=6", () => {
+      const r = parseInput("checkup every 6 months", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=MONTHLY");
+      expect(r.rrule).toContain("INTERVAL=6");
+    });
+
+    it("every 2 weeks + COUNT → bounded", () => {
+      const r = parseInput("sync every 2 weeks 5 times", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("INTERVAL=2");
+      expect(r.rrule).toContain("COUNT=5");
+    });
+  });
+
+  // ─── 7n. Yearly / annually ───────────────────────────────────────────────
+
+  describe("yearly cadence", () => {
+    it("yearly → FREQ=YEARLY", () => {
+      const r = parseInput("renewal yearly", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=YEARLY");
+      expect(r.input.title).toBe("renewal");
+    });
+
+    it("annually → FREQ=YEARLY", () => {
+      const r = parseInput("taxes annually", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=YEARLY");
+    });
+
+    it("every year → FREQ=YEARLY", () => {
+      const r = parseInput("birthday every year", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=YEARLY");
+    });
+  });
+
+  // ─── 7o. Time ranges (from X to Y) ───────────────────────────────────────
+
+  describe("time ranges", () => {
+    it("meeting from 3pm to 5pm → start 15:00, end 17:00", () => {
+      const r = parseInput("meeting from 3pm to 5pm", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toContain("15:00");
+      expect(r.input.scheduledEnd).toContain("17:00");
+      expect(r.input.durationMinutes).toBe(120);
+    });
+
+    it("meeting 3pm to 5pm tomorrow → tomorrow 15:00–17:00", () => {
+      const r = parseInput("meeting 3pm to 5pm tomorrow", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toContain("2026-03-16");
+      expect(r.input.scheduledStart).toContain("15:00");
+      expect(r.input.scheduledEnd).toContain("2026-03-16");
+      expect(r.input.scheduledEnd).toContain("17:00");
+    });
+
+    it("every monday 3pm to 5pm → recurring with time range", () => {
+      const r = parseInput("sync every monday 3pm to 5pm", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toContain("15:00");
+      expect(r.input.scheduledEnd).toContain("17:00");
+      expect(r.rrule).toContain("BYDAY=MO");
+    });
+  });
+
   // ─── 8. RRULE validation ──────────────────────────────────────────────────
 
   describe("RRULE validation", () => {
@@ -663,9 +1080,12 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.durationMinutes).toBe(60);
     });
 
-    it("task for 2 weeks alone → single (no days specified)", () => {
+    it("task for 2 weeks alone → defaults to daily (window + no cadence)", () => {
       const r = parseInput("task for 2 weeks", NOW);
-      expect(r.type).toBe("single");
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.input.title).toBe("task");
     });
 
     it("run m/w/f for 1h for 2 weeks → finite, duration=60, window=2 weeks", () => {
