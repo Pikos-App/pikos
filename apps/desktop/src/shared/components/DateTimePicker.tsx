@@ -17,7 +17,7 @@ import {
   isTomorrow,
   startOfDay,
 } from "date-fns";
-import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -508,8 +508,13 @@ export function DateTimePicker({
   }
 
   function applyCustomDuration() {
-    const parsed = parseInt(customDurationStr);
-    if (!isNaN(parsed) && parsed > 0) selectDuration(parsed);
+    const trimmed = customDurationStr.trim();
+    if (trimmed === "") {
+      selectDuration(null);
+    } else {
+      const parsed = parseCustomDurationStr(trimmed);
+      if (parsed !== null) selectDuration(parsed);
+    }
     setCustomDurationActive(false);
     setCustomDurationStr("");
   }
@@ -727,7 +732,7 @@ export function DateTimePicker({
                 autoCapitalize="off"
                 autoComplete="off"
                 autoCorrect="off"
-                className="w-full cursor-text border-none bg-transparent px-0.5 py-1 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/25"
+                className="w-full cursor-text border-none bg-transparent px-0.5 py-1 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/60"
                 onBlur={applyCustomTimeInput}
                 onChange={(event) => setCustomTimeStr(event.target.value)}
                 onKeyDown={(event) => {
@@ -769,19 +774,17 @@ export function DateTimePicker({
                 );
               })}
 
-              <div className="flex shrink-0 items-center whitespace-nowrap">
+              <div className="flex w-20 shrink-0 items-center whitespace-nowrap">
                 {customDurationActive ? (
                   <input
                     autoCapitalize="off"
                     autoComplete="off"
                     autoCorrect="off"
                     autoFocus
-                    className="h-6 w-full cursor-text border-none bg-transparent px-0.5 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/25"
-                    inputMode="numeric"
+                    className="h-6 w-full cursor-text border-none bg-transparent px-0.5 text-xs text-foreground/80 outline-none placeholder:text-muted-foreground/60"
+                    inputMode="text"
                     onBlur={applyCustomDuration}
-                    onChange={(event) =>
-                      setCustomDurationStr(event.target.value.replace(/\D/g, ""))
-                    }
+                    onChange={(event) => setCustomDurationStr(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -792,15 +795,20 @@ export function DateTimePicker({
                         setCustomDurationStr("");
                       }
                     }}
-                    placeholder="min"
+                    placeholder="1h 30m"
                     type="text"
                     value={customDurationStr}
                   />
                 ) : (
                   <button
+                    aria-label={
+                      isCustomDuration && durationMinutes != null
+                        ? `Edit custom duration (${formatDurationLabel(durationMinutes)})`
+                        : "Set custom duration"
+                    }
                     aria-pressed={isCustomDuration}
                     className={cn(
-                      "h-6 w-full rounded px-1.5 text-xs transition-colors",
+                      "group inline-flex h-6 w-full items-center gap-1 rounded px-1.5 text-xs transition-colors",
                       isCustomDuration
                         ? "font-medium text-primary"
                         : "text-foreground/55 hover:text-foreground"
@@ -812,9 +820,16 @@ export function DateTimePicker({
                       setCustomDurationActive(true);
                     }}
                   >
-                    {isCustomDuration && durationMinutes != null
-                      ? formatDurationLabel(durationMinutes)
-                      : "Custom"}
+                    <span>
+                      {isCustomDuration && durationMinutes != null
+                        ? formatDurationLabel(durationMinutes)
+                        : "Custom"}
+                    </span>
+                    <Pencil
+                      aria-hidden="true"
+                      className="text-muted-foreground/60 transition-opacity group-hover:text-foreground"
+                      size={10}
+                    />
                   </button>
                 )}
               </div>
@@ -855,4 +870,25 @@ function parseCustomTimeStr(input: string): { hour24: number; minute: number } |
   if (period === "pm" && hours !== 12) hours += 12;
   if (period === "am" && hours === 12) hours = 0;
   return { hour24: hours, minute: minutes };
+}
+
+// ── Custom duration string parser ─────────────────────────────────────────────
+// Accepts: "90", "90m", "1h", "1.5h", "1h 30m", "1h30m". Plain numbers → minutes.
+
+function parseCustomDurationStr(input: string): number | null {
+  const normalized = input.trim().toLowerCase().replace(/\s+/g, "");
+  if (!normalized) return null;
+
+  if (/^\d+(\.\d+)?$/.test(normalized)) {
+    const n = parseFloat(normalized);
+    return n > 0 ? Math.round(n) : null;
+  }
+
+  const match = normalized.match(/^(?:(\d+(?:\.\d+)?)h)?(?:(\d+)m)?$/);
+  if (!match || (match[1] === undefined && match[2] === undefined)) return null;
+
+  const hours = match[1] !== undefined ? parseFloat(match[1]) : 0;
+  const minutes = match[2] !== undefined ? parseInt(match[2]) : 0;
+  const total = Math.round(hours * 60 + minutes);
+  return total > 0 ? total : null;
 }
