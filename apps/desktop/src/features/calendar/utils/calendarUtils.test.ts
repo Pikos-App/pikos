@@ -2,6 +2,7 @@ import type { PageSummary } from "@pikos/core";
 import { describe, expect, it } from "vitest";
 
 import {
+  assignAllDayRows,
   buildAllDayItems,
   buildCalendarDays,
   buildDayBlocks,
@@ -189,7 +190,69 @@ describe("buildAllDayItems", () => {
       makePage({ scheduledStart: null, title: "No schedule" }),
     ];
     const result = buildAllDayItems(pages, day);
-    expect(result.map((p) => p.title)).toEqual(["All-day match"]);
+    expect(result.map((r) => r.page.title)).toEqual(["All-day match"]);
+    expect(result[0]?.isContinuationBefore).toBe(false);
+  });
+
+  it("includes a multi-day all-day event on every day in range", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-18",
+        scheduledStart: "2026-03-15",
+        title: "Trip",
+      }),
+    ];
+    const day15 = buildAllDayItems(pages, new Date(2026, 2, 15));
+    const day16 = buildAllDayItems(pages, new Date(2026, 2, 16));
+    const day18 = buildAllDayItems(pages, new Date(2026, 2, 18));
+    const day19 = buildAllDayItems(pages, new Date(2026, 2, 19));
+
+    expect(day15).toHaveLength(1);
+    expect(day15[0]?.isContinuationBefore).toBe(false);
+    expect(day16[0]?.isContinuationBefore).toBe(true);
+    expect(day18[0]?.isContinuationBefore).toBe(true);
+    expect(day19).toHaveLength(0);
+  });
+});
+
+// ─── assignAllDayRows ────────────────────────────────────────────────────────
+
+describe("assignAllDayRows", () => {
+  const days = Array.from({ length: 5 }, (_, i) => new Date(2026, 2, 15 + i));
+
+  it("places a multi-day event on the same row across every day it covers", () => {
+    const pages = [
+      makePage({
+        id: "trip",
+        scheduledEnd: "2026-03-18",
+        scheduledStart: "2026-03-15",
+      }),
+    ];
+    const slots = assignAllDayRows(pages, days);
+    expect(slots).toHaveLength(5);
+    // Row 0 occupied on days 0..3, empty on day 4
+    expect(slots[0]?.[0]?.page.id).toBe("trip");
+    expect(slots[1]?.[0]?.page.id).toBe("trip");
+    expect(slots[3]?.[0]?.page.id).toBe("trip");
+    expect(slots[4]?.[0]).toBe(null);
+  });
+
+  it("stacks a single-day event below a concurrent multi-day event", () => {
+    const pages = [
+      makePage({
+        id: "trip",
+        scheduledEnd: "2026-03-18",
+        scheduledStart: "2026-03-15",
+      }),
+      makePage({ id: "lunch", scheduledStart: "2026-03-16" }),
+    ];
+    const slots = assignAllDayRows(pages, days);
+    // Day index 1 = March 16 — trip on row 0, lunch on row 1
+    expect(slots[1]?.[0]?.page.id).toBe("trip");
+    expect(slots[1]?.[1]?.page.id).toBe("lunch");
+    // Day index 2 = March 17 — only trip, but row 1 exists as an empty slot
+    expect(slots[2]?.[0]?.page.id).toBe("trip");
+    expect(slots[2]?.[1]).toBe(null);
   });
 });
 

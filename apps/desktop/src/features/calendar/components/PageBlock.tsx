@@ -92,8 +92,11 @@ export function PageBlock({
       ? new Date(startDate.getTime() + (snapY(Math.max(resizeHeight, 0)) / HOUR_HEIGHT) * 3_600_000)
       : null;
   const timeLabel = formatTimeRange(startDate, liveEndDate ?? endDate);
-  const showTimeLabel = !isRenderingCompact && displayHeight >= 36;
+  const showTimeLabel = !isRenderingCompact && displayHeight >= 36 && !isContinuationBefore;
   const isDone = page.status === "done";
+  // Multi-day events render as one visual bar: only the first day shows the
+  // title/checkbox. Continuation days keep the colored bar as a click target.
+  const showLabel = !isContinuationBefore;
 
   // Popover open state. Opens automatically for a freshly-created block so the
   // user lands directly on the metadata editor with no layout shift.
@@ -302,10 +305,12 @@ export function PageBlock({
             onMouseDown={handleBlockMouseDown}
             style={sharedStyle}
           >
-            {checkbox}
-            <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
-              {page.title || "Untitled"}
-            </span>
+            {showLabel && checkbox}
+            {showLabel && (
+              <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
+                {page.title || "Untitled"}
+              </span>
+            )}
             {resizeHandle}
           </button>
         ) : (
@@ -330,12 +335,14 @@ export function PageBlock({
             onMouseDown={handleBlockMouseDown}
             style={sharedStyle}
           >
-            <div className="flex w-full min-w-0 items-start gap-1">
-              {checkbox}
-              <p className="type-body-sm line-clamp-3 min-w-0 text-left font-medium text-foreground">
-                {page.title || "Untitled"}
-              </p>
-            </div>
+            {showLabel && (
+              <div className="flex w-full min-w-0 items-start gap-1">
+                {checkbox}
+                <p className="type-body-sm line-clamp-3 min-w-0 text-left font-medium text-foreground">
+                  {page.title || "Untitled"}
+                </p>
+              </div>
+            )}
             {showTimeLabel && (
               <p className="type-ui-sm mt-0.5 truncate pl-[16px] text-subtle">{timeLabel}</p>
             )}
@@ -352,6 +359,7 @@ export function PageBlock({
       >
         {isRecurring ? (
           <VirtualPageBlockPopover
+            onClose={() => setPopoverOpen(false)}
             onSkip={() => {
               setPopoverOpen(false);
               void handleSkipOccurrence();

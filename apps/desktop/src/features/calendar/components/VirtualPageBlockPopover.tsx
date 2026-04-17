@@ -13,10 +13,11 @@ import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyb
 
 interface VirtualPageBlockPopoverProps {
   page: VirtualOccurrence;
+  onClose?: () => void;
   onSkip: () => void;
 }
 
-export function VirtualPageBlockPopover({ onSkip, page }: VirtualPageBlockPopoverProps) {
+export function VirtualPageBlockPopover({ onClose, onSkip, page }: VirtualPageBlockPopoverProps) {
   const { folders, recurrenceRules } = useWorkspace();
   const { openPage } = useUI();
 
@@ -74,6 +75,7 @@ export function VirtualPageBlockPopover({ onSkip, page }: VirtualPageBlockPopove
           onClick={(e) => {
             e.stopPropagation();
             openPage(page.id);
+            onClose?.();
           }}
         >
           <ExternalLink size={11} />

@@ -1,4 +1,4 @@
-import type { PageSummary, VirtualOccurrence } from "@pikos/core";
+import type { VirtualOccurrence } from "@pikos/core";
 import { format } from "date-fns";
 import { Repeat2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 
 import { useRecurringActions } from "../hooks/useRecurringActions";
+import type { AllDayItem } from "../utils/calendarUtils";
 import {
   CHIP_BASE_CLASSES,
   CHIP_DEFAULT_COLOR_CLASSES,
@@ -28,18 +29,19 @@ export interface AllDayColumnProps {
   isAllDayDragTarget: boolean;
   /** Highlighted when a timed block is being dragged over this column's all-day zone. */
   isTimedDragTarget: boolean;
-  items: PageSummary[];
   onAutoOpenConsumed: () => void;
   onChipDragStart: (info: { folderColor: string | undefined; pageId: string }) => void;
   onCreateAllDay: (day: Date) => Promise<void> | void;
   onPageDoubleClick: (pageId: string) => void;
+  /** Row-aligned slots across all visible days — null means empty row. */
+  slots: (AllDayItem | null)[];
 }
 
 interface AllDayChipProps {
   autoOpenPopover?: boolean;
   draggingPageId: string | null;
   folderColor: string | undefined;
-  item: PageSummary;
+  item: AllDayItem;
   onAutoOpenConsumed?: () => void;
   onDoubleClick: (pageId: string) => void;
   onDragStart: (info: { folderColor: string | undefined; pageId: string }) => void;
@@ -54,12 +56,14 @@ function AllDayChip({
   onDoubleClick,
   onDragStart,
 }: AllDayChipProps) {
+  const { isContinuationBefore, page } = item;
   const { requestDeletePage } = useUndoDelete();
   const {
     isRecurring,
     skipOccurrence: handleSkipOccurrence,
     toggleStatus,
-  } = useRecurringActions(item);
+  } = useRecurringActions(page);
+  const showLabel = !isContinuationBefore;
   // Popover opens automatically for a freshly-created chip. Parent may flip
   // autoOpenPopover to true on a later render (chip mounts between
   // scheduleOnce's commit and setAutoOpenPageId's commit), so we latch on the
@@ -98,7 +102,7 @@ function AllDayChip({
     if (clickTimerRef.current !== null) {
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
-      onDoubleClick(item.id);
+      onDoubleClick(page.id);
       return;
     }
     clickTimerRef.current = setTimeout(() => {
@@ -128,7 +132,7 @@ function AllDayChip({
         }
         setPopoverOpen(false);
         isChipDraggingRef.current = true;
-        onDragStart({ folderColor, pageId: item.id });
+        onDragStart({ folderColor, pageId: page.id });
       }
     }
 
@@ -150,35 +154,39 @@ function AllDayChip({
     toggleStatus();
   }
 
-  const isDone = item.status === "done";
-  const isBeingDragged = draggingPageId === item.id;
+  const isDone = page.status === "done";
+  const isBeingDragged = draggingPageId === page.id;
   const chipStyle = folderColor ? chipFolderStyle(folderColor) : undefined;
 
   return (
     <Popover onOpenChange={handlePopoverOpenChange} open={popoverOpen}>
       <PopoverTrigger asChild>
         <button
-          aria-label={item.title || "Untitled"}
+          aria-label={page.title || "Untitled"}
           className={cn(
             "flex w-full items-center gap-1",
             CHIP_BASE_CLASSES,
             !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
             isDone && "opacity-50",
-            isBeingDragged && "opacity-40"
+            isBeingDragged && "opacity-40",
+            isContinuationBefore && "rounded-l-none border-l-0"
           )}
           onClick={handleClick}
           onContextMenu={(e) => e.preventDefault()}
           onMouseDown={handleMouseDown}
           style={chipStyle}
         >
-          {isRecurring ? (
-            <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
-          ) : (
-            <TaskCheckbox as="span" checked={isDone} onChange={handleCheckboxClick} />
+          {showLabel &&
+            (isRecurring ? (
+              <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
+            ) : (
+              <TaskCheckbox as="span" checked={isDone} onChange={handleCheckboxClick} />
+            ))}
+          {showLabel && (
+            <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
+              {page.title || "Untitled"}
+            </span>
           )}
-          <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
-            {item.title || "Untitled"}
-          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -191,21 +199,22 @@ function AllDayChip({
       >
         {isRecurring ? (
           <VirtualPageBlockPopover
+            onClose={() => setPopoverOpen(false)}
             onSkip={() => {
               setPopoverOpen(false);
               void handleSkipOccurrence();
             }}
-            page={item as VirtualOccurrence}
+            page={page as VirtualOccurrence}
           />
         ) : (
           <PageBlockPopover
             onClose={() => setPopoverOpen(false)}
             onDelete={() => {
               setPopoverOpen(false);
-              requestDeletePage(item);
+              requestDeletePage(page);
             }}
             onRemoveDate={() => setPopoverOpen(false)}
-            page={item}
+            page={page}
           />
         )}
       </PopoverContent>
@@ -220,11 +229,11 @@ export function AllDayColumn({
   folderColorMap,
   isAllDayDragTarget,
   isTimedDragTarget,
-  items,
   onAutoOpenConsumed,
   onChipDragStart,
   onCreateAllDay,
   onPageDoubleClick,
+  slots,
 }: AllDayColumnProps) {
   const weekend = day.getDay() === 0 || day.getDay() === 6;
 
@@ -243,17 +252,22 @@ export function AllDayColumn({
       )}
       onClick={handleColumnClick}
     >
-      {/* Event chips — full column width minus px-1 margin */}
+      {/* Row-aligned slots — nulls render as transparent spacers so multi-day chips line up across columns. */}
       <div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
-        {items.map((item) => {
-          const folderColor = item.folderId ? folderColorMap.get(item.folderId) : undefined;
+        {slots.map((slot, rowIdx) => {
+          if (slot === null) {
+            return <div aria-hidden className="h-[19px] shrink-0" key={`empty-${rowIdx}`} />;
+          }
+          const folderColor = slot.page.folderId
+            ? folderColorMap.get(slot.page.folderId)
+            : undefined;
           return (
             <AllDayChip
-              autoOpenPopover={autoOpenPageId === item.id}
+              autoOpenPopover={autoOpenPageId === slot.page.id}
               draggingPageId={draggingPageId}
               folderColor={folderColor}
-              item={item}
-              key={item.id}
+              item={slot}
+              key={slot.page.id}
               onAutoOpenConsumed={onAutoOpenConsumed}
               onDoubleClick={onPageDoubleClick}
               onDragStart={onChipDragStart}

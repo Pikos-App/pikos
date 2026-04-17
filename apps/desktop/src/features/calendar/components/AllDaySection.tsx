@@ -7,7 +7,7 @@ import type { PageSummary } from "@pikos/core";
 
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-import { buildAllDayItems } from "../utils/calendarUtils";
+import { assignAllDayRows } from "../utils/calendarUtils";
 import { AllDayColumn } from "./AllDayColumn";
 
 interface AllDaySectionProps {
@@ -43,6 +43,7 @@ export function AllDaySection({
   const folderColorMap = new Map(
     folders.flatMap((f) => (f.color ? [[f.id, f.color] as [string, string]] : []))
   );
+  const slotsByDay = assignAllDayRows(pages, days);
 
   return (
     <div className="relative shrink-0 border-b border-border/50">
@@ -51,7 +52,7 @@ export function AllDaySection({
         <div className="w-14 shrink-0" />
 
         {days.map((day, dayIndex) => {
-          const items = buildAllDayItems(pages, day);
+          const slots = slotsByDay[dayIndex] ?? [];
           return (
             <AllDayColumn
               autoOpenPageId={autoOpenPageId}
@@ -60,12 +61,12 @@ export function AllDaySection({
               folderColorMap={folderColorMap}
               isAllDayDragTarget={allDayDragHoverIndex === dayIndex}
               isTimedDragTarget={timedDragTarget?.dayIndex === dayIndex}
-              items={items}
               key={day.toISOString()}
               onAutoOpenConsumed={onAutoOpenConsumed}
               onChipDragStart={onChipDragStart}
               onCreateAllDay={onCreateAllDay}
               onPageDoubleClick={onPageDoubleClick}
+              slots={slots}
             />
           );
         })}

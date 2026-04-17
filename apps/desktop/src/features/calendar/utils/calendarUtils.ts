@@ -107,18 +107,95 @@ export function isAllDayPage(scheduledStart: string): boolean {
   return !scheduledStart.includes("T");
 }
 
+export interface AllDayItem {
+  page: PageSummary;
+  /** True on days after the event's first day (multi-day events). */
+  isContinuationBefore: boolean;
+}
+
 /**
- * Returns pages that are scheduled as all-day events on `day`.
+ * Returns pages scheduled as all-day events that overlap `day`.
  * Compares date strings directly to avoid UTC/local midnight ambiguity.
+ * Multi-day all-day events appear on every day in [scheduledStart, scheduledEnd];
+ * isContinuationBefore distinguishes the first day from continuation days.
  */
-export function buildAllDayItems(pages: PageSummary[], day: Date): PageSummary[] {
+export function buildAllDayItems(pages: PageSummary[], day: Date): AllDayItem[] {
   const dayStr = format(day, "yyyy-MM-dd");
-  return pages.filter(
-    (page) =>
-      page.scheduledStart != null &&
-      isAllDayPage(page.scheduledStart) &&
-      page.scheduledStart === dayStr
-  );
+  const results: AllDayItem[] = [];
+  for (const page of pages) {
+    if (page.scheduledStart == null || !isAllDayPage(page.scheduledStart)) continue;
+    const start = page.scheduledStart;
+    const end = page.scheduledEnd && isAllDayPage(page.scheduledEnd) ? page.scheduledEnd : start;
+    if (dayStr < start || dayStr > end) continue;
+    results.push({ isContinuationBefore: dayStr > start, page });
+  }
+  return results;
+}
+
+/**
+ * Assigns each page a stable row index across visible days so that multi-day
+ * all-day events render on the same row in every column they touch. Each slot
+ * in the returned array is either an AllDayItem (chip) or null (empty row).
+ * All days share the same slot count.
+ */
+export function assignAllDayRows(pages: PageSummary[], days: Date[]): (AllDayItem | null)[][] {
+  const itemsByDay = days.map((d) => buildAllDayItems(pages, d));
+
+  interface Span {
+    end: number;
+    items: AllDayItem[];
+    pageId: string;
+    start: number;
+  }
+  const spans: Span[] = [];
+  const byPage = new Map<string, Span>();
+  itemsByDay.forEach((dayItems, dayIdx) => {
+    for (const item of dayItems) {
+      const existing = byPage.get(item.page.id);
+      if (existing) {
+        existing.end = dayIdx;
+        existing.items.push(item);
+      } else {
+        const span: Span = { end: dayIdx, items: [item], pageId: item.page.id, start: dayIdx };
+        byPage.set(item.page.id, span);
+        spans.push(span);
+      }
+    }
+  });
+  spans.sort((a, b) => a.start - b.start || a.pageId.localeCompare(b.pageId));
+
+  const usedByDay: Set<number>[] = days.map(() => new Set());
+  const rowByPage = new Map<string, number>();
+  for (const span of spans) {
+    let row = 0;
+    for (;;) {
+      let free = true;
+      for (let i = span.start; i <= span.end; i++) {
+        if (usedByDay[i]!.has(row)) {
+          free = false;
+          break;
+        }
+      }
+      if (free) break;
+      row++;
+    }
+    rowByPage.set(span.pageId, row);
+    for (let i = span.start; i <= span.end; i++) usedByDay[i]!.add(row);
+  }
+
+  let totalRows = 0;
+  for (const s of usedByDay) {
+    for (const r of s) totalRows = Math.max(totalRows, r + 1);
+  }
+
+  return itemsByDay.map((dayItems) => {
+    const row: (AllDayItem | null)[] = new Array<AllDayItem | null>(totalRows).fill(null);
+    for (const item of dayItems) {
+      const r = rowByPage.get(item.page.id);
+      if (r !== undefined) row[r] = item;
+    }
+    return row;
+  });
 }
 
 // ─── Time → pixel ─────────────────────────────────────────────────────────────
