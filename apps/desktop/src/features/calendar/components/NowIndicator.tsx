@@ -1,15 +1,6 @@
-import { useEffect, useState } from "react";
-
 import { timeToY } from "../utils/calendarUtils";
 
-export function NowIndicator() {
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
+export function NowIndicator({ now }: { now: Date }) {
   const top = timeToY(now);
 
   return (

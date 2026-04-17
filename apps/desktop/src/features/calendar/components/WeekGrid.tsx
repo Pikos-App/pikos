@@ -1,5 +1,6 @@
 import type { PageSummary } from "@pikos/core";
 import { format, isSameDay } from "date-fns";
+import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -14,7 +15,9 @@ function isWeekend(day: Date) {
 import { useHeightResize } from "../hooks/useHeightResize";
 import type { CalendarBlock } from "../utils/calendarUtils";
 import {
+  chipFolderStyle,
   COMPACT_BLOCK_HEIGHT,
+  formatTimeRange,
   GRID_HEIGHT,
   GRID_START_HOUR,
   HOUR_HEIGHT,
@@ -92,17 +95,20 @@ export function WeekGrid({
 
   // ── Drag-to-reschedule ──────────────────────────────────────────────────────
   const dragRef = useRef<DragRefState | null>(null);
-  // Mutable ghost position (avoids stale closures in window handlers)
   const dragGhostPositionRef = useRef<{ dayIndex: number; top: number } | null>(null);
-  // State used for rendering
-  const [dragRenderState, setDragRenderState] = useState<{
-    pageId: string;
-    dayIndex: number;
-    top: number;
+  const [timedDraggingPageId, setTimedDraggingPageId] = useState<string | null>(null);
+  const [ghostContent, setGhostContent] = useState<{
+    folderColor: string | undefined;
     height: number;
     isCompact: boolean;
-    folderColor: string | undefined;
+    isDone: boolean;
+    title: string;
   } | null>(null);
+  const ghostElRef = useRef<HTMLDivElement>(null);
+  const ghostTimeLabelRef = useRef<HTMLParagraphElement>(null);
+  const rafIdRef = useRef(0);
+  const resizeRafIdRef = useRef(0);
+  const timedAllDayTargetDayIndexRef = useRef<number | null>(null);
 
   // ── Resize ──────────────────────────────────────────────────────────────────
   const resizeRef = useRef<ResizeRefState | null>(null);
@@ -175,6 +181,36 @@ export function WeekGrid({
     window.addEventListener("click", handler, true);
   }
 
+  // ── Ghost positioning (bypasses React render cycle) ─────────────────────────
+
+  function positionGhost(dayIndex: number, top: number, height: number) {
+    const el = ghostElRef.current;
+    const cols = dayColumnsRef.current;
+    if (!el || !cols) return;
+    const colW = cols.clientWidth / days.length;
+    el.style.left = `${dayIndex * colW + 2}px`;
+    el.style.top = `${top}px`;
+    el.style.width = `${colW - 4}px`;
+    el.style.height = `${height}px`;
+    if (ghostTimeLabelRef.current) {
+      const day = days[dayIndex];
+      if (day) {
+        ghostTimeLabelRef.current.textContent = formatTimeRange(
+          yToDate(top, day),
+          yToDate(top + height, day)
+        );
+      }
+    }
+  }
+
+  function hideGhost() {
+    if (ghostElRef.current) ghostElRef.current.style.display = "none";
+  }
+
+  function showGhost() {
+    if (ghostElRef.current) ghostElRef.current.style.display = "";
+  }
+
   // ── Drag handlers ──────────────────────────────────────────────────────────
 
   function handleBlockDragStart({
@@ -194,19 +230,21 @@ export function WeekGrid({
 
     disableSelect("dragging-grab");
     dragRef.current = { block, folderColor, grabOffsetY, pageId };
-    const initialGhost = { dayIndex, top: snapY(Math.max(0, block.top)) };
-    dragGhostPositionRef.current = initialGhost;
+    const initialTop = snapY(Math.max(0, block.top));
+    dragGhostPositionRef.current = { dayIndex, top: initialTop };
+    timedAllDayTargetDayIndexRef.current = null;
 
-    setDragRenderState({
-      dayIndex: initialGhost.dayIndex,
+    const page = pages.find((p) => p.id === pageId);
+    const blockH = block.isCompact ? COMPACT_BLOCK_HEIGHT : block.height;
+    setTimedDraggingPageId(pageId);
+    setGhostContent({
       folderColor,
-      height: block.height,
+      height: blockH,
       isCompact: block.isCompact,
-      pageId,
-      top: initialGhost.top,
+      isDone: page?.status === "done",
+      title: page?.title ?? "Untitled",
     });
 
-    // Track raw cursor Y so onUp can detect all-day zone drops.
     let lastClientY = clientY;
 
     function onMove(ev: MouseEvent) {
@@ -228,29 +266,32 @@ export function WeekGrid({
       );
 
       if (ev.clientY < scrollRect.top) {
-        // Cursor is in the all-day zone — hide timed ghost, highlight the target column.
+        cancelAnimationFrame(rafIdRef.current);
+        hideGhost();
         dragGhostPositionRef.current = { dayIndex: ghostDayIndex, top: 0 };
-        setDragRenderState(null);
-        setTimedDragAllDayTarget({ dayIndex: ghostDayIndex, folderColor: state.folderColor });
+        if (timedAllDayTargetDayIndexRef.current !== ghostDayIndex) {
+          timedAllDayTargetDayIndexRef.current = ghostDayIndex;
+          setTimedDragAllDayTarget({ dayIndex: ghostDayIndex, folderColor: state.folderColor });
+        }
         return;
       }
 
-      // Cursor is in the timed grid — restore ghost, clear all-day highlight.
-      setTimedDragAllDayTarget(null);
+      if (timedAllDayTargetDayIndexRef.current !== null) {
+        timedAllDayTargetDayIndexRef.current = null;
+        setTimedDragAllDayTarget(null);
+      }
 
       const cursorYInGrid = ev.clientY - scrollRect.top + scrollEl.scrollTop;
-      const blockH = state.block.isCompact ? COMPACT_BLOCK_HEIGHT : state.block.height;
+      const bH = state.block.isCompact ? COMPACT_BLOCK_HEIGHT : state.block.height;
       const rawTop = cursorYInGrid - state.grabOffsetY;
-      const ghostTop = snapY(Math.max(0, Math.min(GRID_HEIGHT - blockH, rawTop)));
+      const ghostTop = snapY(Math.max(0, Math.min(GRID_HEIGHT - bH, rawTop)));
 
       dragGhostPositionRef.current = { dayIndex: ghostDayIndex, top: ghostTop };
-      setDragRenderState({
-        dayIndex: ghostDayIndex,
-        folderColor: state.folderColor,
-        height: state.block.height,
-        isCompact: state.block.isCompact,
-        pageId: state.pageId,
-        top: ghostTop,
+
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = requestAnimationFrame(() => {
+        showGhost();
+        positionGhost(ghostDayIndex, ghostTop, bH);
       });
     }
 
@@ -259,17 +300,19 @@ export function WeekGrid({
       window.removeEventListener("mouseup", onUp);
       enableSelect();
       eatNextClick();
+      cancelAnimationFrame(rafIdRef.current);
 
       const state = dragRef.current;
       const ghostPos = dragGhostPositionRef.current;
       dragRef.current = null;
       dragGhostPositionRef.current = null;
-      setDragRenderState(null);
+      timedAllDayTargetDayIndexRef.current = null;
+      setTimedDraggingPageId(null);
+      setGhostContent(null);
       setTimedDragAllDayTarget(null);
 
       if (!state || !ghostPos) return;
 
-      // Dropped above the timed grid → schedule as all-day on the target column's day.
       const scrollElUp = scrollRef.current;
       if (scrollElUp && lastClientY < scrollElUp.getBoundingClientRect().top) {
         const allDayTarget = days[ghostPos.dayIndex];
@@ -306,7 +349,7 @@ export function WeekGrid({
     resizeRef.current = { block, dayIndex, pageId };
     const initialBottom = block.top + block.height;
     resizeGhostBottomRef.current = initialBottom;
-    setResizeRenderState({ bottom: initialBottom, pageId });
+    setResizeRenderState({ bottom: initialBottom, dayIndex, pageId });
 
     function onMove(ev: MouseEvent) {
       const state = resizeRef.current;
@@ -320,7 +363,14 @@ export function WeekGrid({
       const ghostBottom = Math.max(minBottom, Math.min(GRID_HEIGHT, cursorYInGrid));
 
       resizeGhostBottomRef.current = ghostBottom;
-      setResizeRenderState({ bottom: ghostBottom, pageId: state.pageId });
+      cancelAnimationFrame(resizeRafIdRef.current);
+      resizeRafIdRef.current = requestAnimationFrame(() => {
+        setResizeRenderState({
+          bottom: ghostBottom,
+          dayIndex: state.dayIndex,
+          pageId: state.pageId,
+        });
+      });
     }
 
     function onUp() {
@@ -328,6 +378,7 @@ export function WeekGrid({
       window.removeEventListener("mouseup", onUp);
       enableSelect();
       eatNextClick();
+      cancelAnimationFrame(resizeRafIdRef.current);
 
       const state = resizeRef.current;
       const ghostBottom = resizeGhostBottomRef.current;
@@ -597,10 +648,11 @@ export function WeekGrid({
       <div aria-label="Time grid" className="min-h-0 flex-1 overflow-y-auto" ref={scrollRef}>
         <div className="flex">
           <TimeGutter />
-          <div className="flex flex-1" ref={dayColumnsRef}>
+          <div className="relative flex flex-1" ref={dayColumnsRef}>
             {days.map((day, i) => {
               // Only pass the drag ghost to the column it targets.
-              // Priority: all-day chip drag > internal block drag > external list drag.
+              // Priority: all-day chip drag > external list drag. Internal block
+              // drag uses a ref-positioned overlay (below) to avoid per-frame re-renders.
               const colDragGhost: DragGhost | null =
                 allDayDragRenderState?.dayIndex === i
                   ? {
@@ -612,32 +664,22 @@ export function WeekGrid({
                       title: pages.find((p) => p.id === allDayDragRenderState.pageId)?.title,
                       top: allDayDragRenderState.top,
                     }
-                  : dragRenderState?.dayIndex === i
+                  : externalPreview && !externalPreview.isAllDay && externalPreview.dayIndex === i
                     ? {
-                        folderColor: dragRenderState.folderColor,
-                        height: dragRenderState.height,
-                        isCompact: dragRenderState.isCompact,
-                        isDone:
-                          pages.find((p) => p.id === dragRenderState.pageId)?.status === "done",
-                        title: pages.find((p) => p.id === dragRenderState.pageId)?.title,
-                        top: dragRenderState.top,
+                        folderColor: externalPreview.folderColor,
+                        height:
+                          externalPreview.durationMs != null
+                            ? Math.max(
+                                (externalPreview.durationMs / 3_600_000) * HOUR_HEIGHT,
+                                COMPACT_BLOCK_HEIGHT
+                              )
+                            : COMPACT_BLOCK_HEIGHT,
+                        isCompact: externalPreview.durationMs == null,
+                        isDone: externalPreview.isDone,
+                        title: externalPreview.title,
+                        top: externalPreview.top,
                       }
-                    : externalPreview && !externalPreview.isAllDay && externalPreview.dayIndex === i
-                      ? {
-                          folderColor: externalPreview.folderColor,
-                          height:
-                            externalPreview.durationMs != null
-                              ? Math.max(
-                                  (externalPreview.durationMs / 3_600_000) * HOUR_HEIGHT,
-                                  COMPACT_BLOCK_HEIGHT
-                                )
-                              : COMPACT_BLOCK_HEIGHT,
-                          isCompact: externalPreview.durationMs == null,
-                          isDone: externalPreview.isDone,
-                          title: externalPreview.title,
-                          top: externalPreview.top,
-                        }
-                      : null;
+                    : null;
 
               return (
                 <DayColumn
@@ -645,7 +687,7 @@ export function WeekGrid({
                   day={day}
                   dayIndex={i}
                   dragGhost={colDragGhost}
-                  draggingPageId={dragRenderState?.pageId ?? null}
+                  draggingPageId={timedDraggingPageId}
                   isCurrentWeek={isCurrentWeek}
                   key={day.toISOString()}
                   now={today}
@@ -655,10 +697,80 @@ export function WeekGrid({
                   onCreatePage={onCreatePage}
                   onPageDoubleClick={onPageDoubleClick}
                   pages={pages}
-                  resizeGhost={resizeRenderState}
+                  resizeGhost={resizeRenderState?.dayIndex === i ? resizeRenderState : null}
                 />
               );
             })}
+
+            {/* Drag ghost overlay — content via state (2x/gesture), position via ref (every frame) */}
+            {ghostContent && (
+              <div
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute z-30 overflow-hidden rounded-sm border-l-2 opacity-80",
+                  ghostContent.isCompact
+                    ? "flex items-center gap-1 px-1.5"
+                    : "flex flex-col items-start px-1.5 py-0.5"
+                )}
+                ref={(el) => {
+                  ghostElRef.current = el;
+                  if (el && dragGhostPositionRef.current) {
+                    positionGhost(
+                      dragGhostPositionRef.current.dayIndex,
+                      dragGhostPositionRef.current.top,
+                      ghostContent.height
+                    );
+                  }
+                }}
+                style={
+                  ghostContent.folderColor
+                    ? chipFolderStyle(ghostContent.folderColor)
+                    : { backgroundColor: "rgba(59,130,246,0.25)", borderColor: "rgb(59,130,246)" }
+                }
+              >
+                {ghostContent.isCompact ? (
+                  <>
+                    <span
+                      className={cn(
+                        "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                        ghostContent.isDone
+                          ? "border-foreground/40 bg-foreground/10"
+                          : "border-current/30"
+                      )}
+                    >
+                      {ghostContent.isDone && <Check size={8} strokeWidth={2.5} />}
+                    </span>
+                    <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
+                      {ghostContent.title || "Untitled"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex w-full min-w-0 items-center gap-1">
+                      <span
+                        className={cn(
+                          "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                          ghostContent.isDone
+                            ? "border-foreground/40 bg-foreground/10"
+                            : "border-current/30"
+                        )}
+                      >
+                        {ghostContent.isDone && <Check size={8} strokeWidth={2.5} />}
+                      </span>
+                      <p className="type-body-sm min-w-0 truncate font-medium text-foreground">
+                        {ghostContent.title || "Untitled"}
+                      </p>
+                    </div>
+                    {ghostContent.height >= 36 && (
+                      <p
+                        className="type-ui-sm mt-0.5 truncate text-subtle"
+                        ref={ghostTimeLabelRef}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

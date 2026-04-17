@@ -14,7 +14,12 @@ html.dragging-grab * {
 }
 html.dragging-resize,
 html.dragging-resize * {
-  cursor: ns-resize !important;
+  cursor: row-resize !important;
+}
+/* Kill CSS transitions during drag/resize to prevent animation jank */
+html.dragging-grab *,
+html.dragging-resize * {
+  transition-duration: 0s !important;
 }
 
 /* Task checkbox hover — needs plain CSS to override inline border-color from priority props */

@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const E2E_PORT = 1421;
+
 export default defineConfig({
   expect: {
     timeout: 5_000,
@@ -32,16 +34,16 @@ export default defineConfig({
   retries: process.env["CI"] ? 2 : 0,
   testDir: "./e2e",
   use: {
-    baseURL: "http://localhost:1420",
+    baseURL: `http://localhost:${E2E_PORT}`,
     screenshot: "only-on-failure",
     timeout: 15_000,
     trace: "on-first-retry",
   },
   webServer: {
-    command: "VITE_TEST_MODE=true pnpm vite",
+    command: `VITE_TEST_MODE=true pnpm vite --port ${E2E_PORT}`,
     reuseExistingServer: !process.env["CI"],
     timeout: 30_000,
-    url: "http://localhost:1420",
+    url: `http://localhost:${E2E_PORT}`,
   },
   workers: process.env["CI"] ? 1 : undefined,
 });

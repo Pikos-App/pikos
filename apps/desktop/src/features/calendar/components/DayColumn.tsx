@@ -47,6 +47,8 @@ export interface DragGhost {
 
 export interface ResizeGhost {
   pageId: string;
+  /** Day column index the resize gesture originated on — scopes the ghost to a single continuation segment of a multi-day block. */
+  dayIndex: number;
   /** Absolute Y from grid top — DayColumn converts to height for the matching block. */
   bottom: number;
 }
@@ -206,7 +208,7 @@ export function DayColumn({
         style={{ height: GRID_HEIGHT }}
       >
         {/* Now indicator */}
-        {showNowIndicator && <NowIndicator />}
+        {showNowIndicator && <NowIndicator now={now} />}
 
         {/* Draft ghost block — shown while dragging to create */}
         {draft && (
@@ -296,7 +298,7 @@ export function DayColumn({
 
           // Resize ghost: override height for the block being resized.
           const resizeHeight =
-            resizeGhost?.pageId === block.page.id
+            resizeGhost?.pageId === block.page.id && resizeGhost.dayIndex === dayIndex
               ? Math.max(resizeGhost.bottom - block.top, 0)
               : undefined;
 

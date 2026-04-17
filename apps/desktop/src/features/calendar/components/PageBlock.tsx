@@ -22,8 +22,8 @@ import type { CalendarBlock } from "../utils/calendarUtils";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
-/** Bottom-edge zone height (px) that triggers the resize cursor. */
-const RESIZE_ZONE = 8;
+/** Bottom-edge handle height (px) for the duration resize gesture. */
+const RESIZE_ZONE = 4;
 
 interface PageBlockProps {
   block: CalendarBlock;
@@ -79,9 +79,10 @@ export function PageBlock({
   const widthPct = 100 / totalColumns;
   const leftPct = column * widthPct;
 
-  const displayHeight = resizeHeight !== undefined ? Math.max(resizeHeight, 0) : height;
+  const isResizing = resizeHeight !== undefined;
+  const displayHeight = isResizing ? Math.max(resizeHeight, 0) : height;
   // While being resized, a compact chip grows into a tall block.
-  const isRenderingCompact = isCompact && resizeHeight === undefined;
+  const isRenderingCompact = isCompact && !isResizing;
   // During resize, show the live end time (snapped to 15 min to match commit behaviour).
   const liveEndDate =
     resizeHeight !== undefined
@@ -116,8 +117,9 @@ export function PageBlock({
   // opening the popover after the drag is released.
   const isBlockDraggingRef = useRef(false);
 
-  // Whether the cursor is hovering over the bottom resize zone.
-  const [inResizeZone, setInResizeZone] = useState(false);
+  // Resize is disabled on continuation-after segments (the visual bottom is the
+  // day boundary, not the real event end) so the handle isn't rendered there.
+  const resizeEnabled = !!onResizeStart && !isContinuationAfter;
 
   // Cleanup timer on unmount.
   useEffect(() => {
@@ -152,27 +154,22 @@ export function PageBlock({
   }
 
   /**
-   * Mousedown on the block body.
-   * - Bottom RESIZE_ZONE px of non-compact blocks → resize gesture.
-   * - Otherwise → detect drag vs click by movement threshold.
+   * Mousedown on the block body (drag-to-reschedule). The resize handle is a
+   * separate element and does not route through here.
    */
   function handleBlockMouseDown(e: React.MouseEvent) {
     if (e.button !== 0) return; // let right-click reach ContextMenuTrigger unmodified
     e.stopPropagation();
+    if (!onDragStart) return;
 
     const startX = e.clientX;
     const startY = e.clientY;
 
-    // Check resize zone: bottom RESIZE_ZONE px of the block.
-    const inResize =
-      onResizeStart &&
-      e.clientY >= (e.currentTarget as HTMLElement).getBoundingClientRect().bottom - RESIZE_ZONE;
-
-    if (!inResize && !onDragStart) return;
-
-    // Capture callbacks to avoid stale closure issues.
-    const fireResizeStart = inResize ? onResizeStart : undefined;
-    const fireDragStart = !inResize ? onDragStart : undefined;
+    // Swap the cursor immediately on mousedown for instant mode feedback, before
+    // the drag threshold is crossed. WeekGrid reapplies the same class when the
+    // drag actually starts and removes it on its own mouseup — we still clean
+    // up here in case the gesture never crosses the threshold.
+    document.documentElement.classList.add("dragging-grab");
 
     function onMove(ev: MouseEvent) {
       if (
@@ -181,38 +178,65 @@ export function PageBlock({
       ) {
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
-        // Cancel any pending single-click timer.
         if (clickTimerRef.current !== null) {
           clearTimeout(clickTimerRef.current);
           clickTimerRef.current = null;
         }
         setPopoverOpen(false);
         isBlockDraggingRef.current = true;
-        if (fireResizeStart) {
-          fireResizeStart();
-        } else {
-          fireDragStart?.(startX, startY);
-        }
+        onDragStart?.(startX, startY);
       }
     }
 
     function onUp() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      document.documentElement.classList.remove("dragging-grab");
     }
 
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   }
 
-  function handleBlockMouseMove(e: React.MouseEvent) {
+  /**
+   * Mousedown on the bottom resize handle. Always starts a resize gesture —
+   * even a plain click suppresses the popover (via isBlockDraggingRef).
+   */
+  function handleResizeHandleMouseDown(e: React.MouseEvent) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
     if (!onResizeStart) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setInResizeZone(e.clientY >= rect.bottom - RESIZE_ZONE);
-  }
 
-  function handleBlockMouseLeave() {
-    setInResizeZone(false);
+    isBlockDraggingRef.current = true;
+    document.documentElement.classList.add("dragging-resize");
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+
+    function onMove(ev: MouseEvent) {
+      if (
+        Math.abs(ev.clientX - startX) > DRAG_THRESHOLD ||
+        Math.abs(ev.clientY - startY) > DRAG_THRESHOLD
+      ) {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        if (clickTimerRef.current !== null) {
+          clearTimeout(clickTimerRef.current);
+          clickTimerRef.current = null;
+        }
+        setPopoverOpen(false);
+        onResizeStart?.();
+      }
+    }
+
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.documentElement.classList.remove("dragging-resize");
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   }
 
   function handleCheckboxClick(e: React.MouseEvent) {
@@ -242,6 +266,16 @@ export function PageBlock({
     <TaskCheckbox as="span" checked={isDone} className="mt-1" onChange={handleCheckboxClick} />
   );
 
+  const resizeHandle = resizeEnabled ? (
+    <div
+      aria-hidden
+      className="absolute right-0 bottom-0 left-0 cursor-row-resize!"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={handleResizeHandleMouseDown}
+      style={{ height: RESIZE_ZONE }}
+    />
+  ) : null;
+
   return (
     <Popover onOpenChange={handlePopoverOpenChange} open={popoverOpen}>
       <PopoverTrigger asChild>
@@ -254,19 +288,21 @@ export function PageBlock({
               "flex items-center gap-1",
               !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
               isDone && "opacity-50",
-              isDragging && "opacity-40",
-              inResizeZone ? "cursor-ns-resize" : "cursor-default"
+              isResizing
+                ? "cursor-row-resize!"
+                : isDragging
+                  ? "cursor-grabbing! opacity-40"
+                  : "cursor-default!"
             )}
             onClick={handleClick}
             onMouseDown={handleBlockMouseDown}
-            onMouseLeave={handleBlockMouseLeave}
-            onMouseMove={handleBlockMouseMove}
             style={sharedStyle}
           >
             {checkbox}
             <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
               {page.title || "Untitled"}
             </span>
+            {resizeHandle}
           </button>
         ) : (
           <button
@@ -274,16 +310,19 @@ export function PageBlock({
             className={cn(
               "absolute flex flex-col items-start overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               !folderColor && "border-blue-500 bg-blue-500/15",
-              isDone ? "opacity-50" : "transition-all hover:opacity-80 hover:shadow-sm",
-              isDragging && "opacity-40",
-              inResizeZone ? "cursor-ns-resize" : "cursor-default",
+              isDone
+                ? "opacity-50"
+                : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
+              isResizing
+                ? "cursor-row-resize!"
+                : isDragging
+                  ? "cursor-grabbing! opacity-40"
+                  : "cursor-default!",
               isContinuationBefore && "rounded-t-none",
               isContinuationAfter && "rounded-b-none"
             )}
             onClick={handleClick}
             onMouseDown={handleBlockMouseDown}
-            onMouseLeave={handleBlockMouseLeave}
-            onMouseMove={handleBlockMouseMove}
             style={sharedStyle}
           >
             <div className="flex w-full min-w-0 items-start gap-1">
@@ -295,6 +334,7 @@ export function PageBlock({
             {showTimeLabel && (
               <p className="type-ui-sm mt-0.5 truncate pl-[16px] text-subtle">{timeLabel}</p>
             )}
+            {resizeHandle}
           </button>
         )}
       </PopoverTrigger>

@@ -1,4 +1,10 @@
-import { closestCenter, type CollisionDetection, DndContext, DragOverlay } from "@dnd-kit/core";
+import {
+  closestCenter,
+  type CollisionDetection,
+  DndContext,
+  DragOverlay,
+  pointerWithin,
+} from "@dnd-kit/core";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef } from "react";
 
@@ -45,9 +51,22 @@ export function ThreePanelLayout() {
   // avoid resetting the underlying state when the viewport grows.
   const drawerVisible = pageListOverlay && pageListDrawerOpen;
 
-  // Suppress all dnd-kit collision detection while the cursor is over the
-  // calendar — prevents page items from shifting position during a calendar drop.
-  const collisionDetection: CollisionDetection = isDraggingOverCalendar ? () => [] : closestCenter;
+  // Custom collision: first check what's under the pointer, then pick the
+  // closest center among those candidates. Prevents folder droppables from
+  // activating when the cursor is still in the page list panel.
+  // Over the calendar, suppress all collisions so page items don't shift.
+  const collisionDetection: CollisionDetection = isDraggingOverCalendar
+    ? () => []
+    : (args) => {
+        const pointerHits = pointerWithin(args);
+        if (pointerHits.length === 0) return [];
+        return closestCenter({
+          ...args,
+          droppableContainers: args.droppableContainers.filter((c) =>
+            pointerHits.some((h) => h.id === c.id)
+          ),
+        });
+      };
 
   const left = usePanelResize({
     defaultWidth: 180,

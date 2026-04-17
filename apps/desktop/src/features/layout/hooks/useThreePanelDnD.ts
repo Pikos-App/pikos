@@ -64,6 +64,18 @@ export function useThreePanelDnD() {
   // Tracks whether cursor is currently over the calendar to avoid redundant state updates.
   const overCalendarRef = useRef(false);
 
+  // Lock cursor to grabbing and disable text selection while any drag is active.
+  const isDragging = activePageData !== null || activeFolderData !== null;
+  useEffect(() => {
+    if (!isDragging) return;
+    document.body.style.userSelect = "none";
+    document.documentElement.classList.add("dragging-grab");
+    return () => {
+      document.body.style.userSelect = "";
+      document.documentElement.classList.remove("dragging-grab");
+    };
+  }, [isDragging]);
+
   // While a page is being dragged, track cursor position and update the
   // WeekGrid ghost preview via callExternalDragUpdater.
   useEffect(() => {
