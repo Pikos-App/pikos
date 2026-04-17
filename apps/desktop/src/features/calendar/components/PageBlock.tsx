@@ -23,8 +23,13 @@ import type { CalendarBlock } from "../utils/calendarUtils";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
-/** Bottom-edge handle height (px) for the duration resize gesture. */
-const RESIZE_ZONE = 4;
+/**
+ * Bottom-edge handle height (px) for the duration resize gesture. Drops to 3px
+ * on short blocks (< 30px) so the handle stays well under a third of block height.
+ */
+function resizeZoneFor(displayHeight: number): number {
+  return displayHeight < 30 ? 3 : 4;
+}
 
 interface PageBlockProps {
   block: CalendarBlock;
@@ -87,6 +92,9 @@ export function PageBlock({
   const displayHeight = isResizing ? Math.max(resizeHeight, 0) : height;
   // While being resized, a compact chip grows into a tall block.
   const isRenderingCompact = isCompact && !isResizing;
+  // At compact density a 15-min block is ~10px; default type-body-sm is too tall
+  // to fit. Below 16px we switch to a tighter micro variant (10px text, 10px checkbox).
+  const isMicro = isRenderingCompact && displayHeight < 16;
   // During resize, show the live end time (snapped to 15 min to match commit behaviour).
   const liveEndDate =
     resizeHeight !== undefined
@@ -96,7 +104,10 @@ export function PageBlock({
         )
       : null;
   const timeLabel = formatTimeRange(startDate, liveEndDate ?? endDate);
-  const showTimeLabel = !isRenderingCompact && displayHeight >= 36 && !isContinuationBefore;
+  // Time label needs a second line of text to fit. Threshold matches a 1-hour
+  // block at compact density (40px) — below this the block is too short for
+  // stacked title + time without clipping.
+  const showTimeLabel = !isRenderingCompact && displayHeight >= 40 && !isContinuationBefore;
   const isDone = page.status === "done";
   // Multi-day events render as one visual bar: only the first day shows the
   // title/checkbox. Continuation days keep the colored bar as a click target.
@@ -262,18 +273,34 @@ export function PageBlock({
 
   const sharedStyle = {
     ...(folderColor ? chipFolderStyle(folderColor) : undefined),
-    height: isRenderingCompact ? undefined : displayHeight,
+    // Height now always proportional to the computed block height, even in chip
+    // mode — overrides CHIP_BASE_CLASSES's default h-[19px] via inline style.
+    height: displayHeight,
     left: `${leftPct}%`,
     top,
     width: `calc(${widthPct}% - 2px)`,
   };
 
-  // Virtual recurring blocks show the recurring icon instead of a checkbox.
-  // The head block (real page) keeps the normal checkbox.
+  // One unified 14px icon size across chip + stacked layouts; only micro shrinks
+  // (10px) to fit the compact-density quarter-hour row. Vertical offsets align
+  // the hollow-square checkbox with the text's glyph cap-height, not the flex
+  // line-box edge (which sits ~2-3px above cap-top for type-body-sm).
+  // Micro also tightens the corner radius — --radius-sm on a 10px square reads
+  // as fully round, so we drop to 2px to preserve the checkbox silhouette.
+  const iconClass = cn(
+    isMicro ? "h-2.5 w-2.5 rounded-[3px]" : "h-3.5 w-3.5",
+    !isMicro && isRenderingCompact && "mt-px",
+    !isMicro && !isRenderingCompact && "mt-[3px]"
+  );
   const checkbox = isRecurring ? (
-    <Repeat2 aria-label="Recurring" className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+    <Repeat2 aria-label="Recurring" className={cn("shrink-0 text-muted-foreground", iconClass)} />
   ) : (
-    <TaskCheckbox as="span" checked={isDone} className="mt-1" onChange={handleCheckboxClick} />
+    <TaskCheckbox
+      as="span"
+      checked={isDone}
+      className={cn(iconClass, "cursor-pointer!")}
+      onChange={handleCheckboxClick}
+    />
   );
 
   const resizeHandle = resizeEnabled ? (
@@ -282,7 +309,7 @@ export function PageBlock({
       className="absolute right-0 bottom-0 left-0 cursor-row-resize!"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={handleResizeHandleMouseDown}
-      style={{ height: RESIZE_ZONE }}
+      style={{ height: resizeZoneFor(displayHeight) }}
     />
   ) : null;
 
@@ -295,10 +322,12 @@ export function PageBlock({
             className={cn(
               "absolute select-none",
               CHIP_BASE_CLASSES,
-              "flex items-center gap-1",
+              "flex items-center gap-1 rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs",
               !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
               isDone && "opacity-50",
               isHighlighted && "animate-highlight-flash",
+              isContinuationBefore && "rounded-tl-none rounded-tr-none",
+              isContinuationAfter && "rounded-br-none rounded-bl-none",
               isResizing
                 ? "cursor-row-resize!"
                 : isDragging
@@ -311,7 +340,12 @@ export function PageBlock({
           >
             {showLabel && checkbox}
             {showLabel && (
-              <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
+              <span
+                className={cn(
+                  "min-w-0 truncate font-medium text-foreground",
+                  isMicro ? "-mt-px text-[10px] leading-none" : "type-body-sm"
+                )}
+              >
                 {page.title || "Untitled"}
               </span>
             )}
@@ -321,7 +355,7 @@ export function PageBlock({
           <button
             aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
             className={cn(
-              "absolute flex flex-col items-start overflow-hidden rounded-sm border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              "absolute flex flex-col items-start overflow-hidden rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               !folderColor && "border-blue-500 bg-blue-500/15",
               isDone
                 ? "opacity-50"
@@ -332,8 +366,8 @@ export function PageBlock({
                 : isDragging
                   ? "cursor-grabbing! opacity-40"
                   : "cursor-default!",
-              isContinuationBefore && "rounded-t-none",
-              isContinuationAfter && "rounded-b-none"
+              isContinuationBefore && "rounded-tl-none rounded-tr-none",
+              isContinuationAfter && "rounded-br-none rounded-bl-none"
             )}
             onClick={handleClick}
             onMouseDown={handleBlockMouseDown}
@@ -342,13 +376,13 @@ export function PageBlock({
             {showLabel && (
               <div className="flex w-full min-w-0 items-start gap-1">
                 {checkbox}
-                <p className="type-body-sm line-clamp-3 min-w-0 text-left font-medium text-foreground">
+                <p className="type-body-sm line-clamp-3 min-w-0 text-left leading-tight font-medium text-foreground">
                   {page.title || "Untitled"}
                 </p>
               </div>
             )}
             {showTimeLabel && (
-              <p className="type-ui-sm mt-0.5 truncate pl-[16px] text-subtle">{timeLabel}</p>
+              <p className="type-ui-sm mt-0.5 truncate pl-[18px] text-subtle">{timeLabel}</p>
             )}
             {resizeHandle}
           </button>

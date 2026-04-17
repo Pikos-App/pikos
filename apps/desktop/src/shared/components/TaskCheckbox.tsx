@@ -24,9 +24,9 @@ export function TaskCheckbox({
       aria-checked={checked}
       aria-label={checked ? "Mark not done" : "Mark done"}
       className={cn(
-        "task-checkbox flex h-4 w-4 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border-[1.5px] transition-[background-color,border-color] duration-[var(--transition-fast)]",
+        "task-checkbox flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border-[1.5px] transition-[background-color,border-color] duration-(--transition-fast)",
         checked && "border-muted-foreground/40 bg-muted-foreground/40",
-        !checked && !borderColor && "border-[var(--border-primary)]",
+        !checked && !borderColor && "border-border-primary",
         className
       )}
       onClick={(e: React.MouseEvent) => {

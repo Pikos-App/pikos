@@ -236,7 +236,7 @@ export function DayColumn({
                 : "flex flex-col items-start px-1.5 py-0.5"
             )}
             style={{
-              height: dragGhost.isCompact ? metrics.compactBlockHeight : dragGhost.height,
+              height: dragGhost.height,
               left: 2,
               right: 2,
               top: dragGhost.top,
@@ -249,13 +249,19 @@ export function DayColumn({
               <>
                 <span
                   className={cn(
-                    "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                    "flex shrink-0 items-center justify-center rounded-[2px] border",
+                    dragGhost.height < 16 ? "h-2.5 w-2.5" : "h-3.5 w-3.5",
                     dragGhost.isDone ? "border-foreground/40 bg-foreground/10" : "border-current/30"
                   )}
                 >
                   {dragGhost.isDone && <Check size={8} strokeWidth={2.5} />}
                 </span>
-                <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
+                <span
+                  className={cn(
+                    "min-w-0 truncate font-medium text-foreground",
+                    dragGhost.height < 16 ? "-mt-px text-[10px] leading-none" : "type-body-sm"
+                  )}
+                >
                   {dragGhost.title || "Untitled"}
                 </span>
               </>
@@ -276,7 +282,7 @@ export function DayColumn({
                     {dragGhost.title || "Untitled"}
                   </p>
                 </div>
-                {dragGhost.height >= 36 && (
+                {dragGhost.height >= 40 && (
                   <p className="type-ui-sm mt-0.5 truncate text-subtle">
                     {formatTimeRange(
                       yToDate(dragGhost.top, day, metrics.hourHeight),

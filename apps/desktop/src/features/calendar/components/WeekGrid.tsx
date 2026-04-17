@@ -1,10 +1,13 @@
 import type { PageSummary } from "@pikos/core";
 import { format, isSameDay } from "date-fns";
 import { Check } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
-import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import {
+  CalendarSettingsContext,
+  useCalendarSettings,
+} from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 
@@ -14,7 +17,7 @@ function isWeekend(day: Date) {
 }
 
 import { useHeightResize } from "../hooks/useHeightResize";
-import type { CalendarBlock } from "../utils/calendarUtils";
+import type { CalendarBlock, CalendarMetrics } from "../utils/calendarUtils";
 import {
   chipFolderStyle,
   formatTimeRange,
@@ -88,12 +91,42 @@ export function WeekGrid({
   pages,
 }: WeekGridProps) {
   const { registerExternalDragUpdater } = useUI();
-  const { metrics } = useCalendarSettings();
+  const settings = useCalendarSettings();
   const weekGridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dayColumnsRef = useRef<HTMLDivElement>(null);
   useMinuteTick();
   const today = new Date();
+
+  // Measure the scroll container so we can inflate hour rows when the viewport
+  // is taller than 24 * baseHourHeight. Goal: calendar always fills available
+  // space instead of leaving empty area below the last hour at any density.
+  const [containerHeight, setContainerHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setContainerHeight(el.clientHeight);
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setContainerHeight(entry.contentRect.height);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Derived "effective" metrics: hour height grows to fit the viewport when
+  // the base density leaves empty space. Shrinks back when content overflows.
+  const effectiveHourHeight = Math.max(
+    settings.metrics.hourHeight,
+    containerHeight / VISIBLE_HOURS
+  );
+  const metrics: CalendarMetrics = {
+    compactBlockHeight: effectiveHourHeight / 4,
+    gridHeight: effectiveHourHeight * VISIBLE_HOURS,
+    hourHeight: effectiveHourHeight,
+    minResizeHeight: (15 / 60) * effectiveHourHeight,
+  };
+  const settingsValue = { ...settings, metrics };
 
   // ── Drag-to-reschedule ──────────────────────────────────────────────────────
   const dragRef = useRef<DragRefState | null>(null);
@@ -266,7 +299,7 @@ export function WeekGrid({
     timedAllDayTargetDayIndexRef.current = null;
 
     const page = pages.find((p) => p.id === pageId);
-    const blockH = block.isCompact ? metrics.compactBlockHeight : block.height;
+    const blockH = block.height;
     setTimedDraggingPageId(pageId);
     setGhostContent({
       folderColor,
@@ -313,7 +346,7 @@ export function WeekGrid({
       }
 
       const cursorYInGrid = ev.clientY - scrollRect.top + scrollEl.scrollTop;
-      const bH = state.block.isCompact ? metrics.compactBlockHeight : state.block.height;
+      const bH = state.block.height;
       const rawTop = cursorYInGrid - state.grabOffsetY;
       const ghostTop = snapY(
         Math.max(0, Math.min(metrics.gridHeight - bH, rawTop)),
@@ -360,11 +393,12 @@ export function WeekGrid({
       const newStart = yToDate(ghostPos.top, targetDay, metrics.hourHeight);
       const fmt = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm:ss");
 
-      let newEnd: string | undefined;
-      if (!state.block.isCompact) {
-        const durationMs = state.block.endDate.getTime() - state.block.startDate.getTime();
-        newEnd = fmt(new Date(newStart.getTime() + durationMs));
-      }
+      // Preserve duration whenever the event actually has one. The previous
+      // `!isCompact` check conflated "rendered as chip" with "no explicit end",
+      // which dropped the duration of short-but-timed events (e.g. 30m at
+      // compact density) on drag.
+      const durationMs = state.block.endDate.getTime() - state.block.startDate.getTime();
+      const newEnd = durationMs > 0 ? fmt(new Date(newStart.getTime() + durationMs)) : undefined;
 
       onReschedule(state.pageId, fmt(newStart), newEnd);
     }
@@ -623,171 +657,160 @@ export function WeekGrid({
   }, [registerExternalDragUpdater]);
 
   return (
-    <div
-      aria-label="Week calendar"
-      className="flex min-h-0 flex-1 flex-col"
-      ref={weekGridRef}
-      role="region"
-    >
-      {/* Day header — "Mon 16", "Tue 17", etc. Today's date gets a pill highlight */}
-      <div className="flex shrink-0 border-t border-b border-border/40">
-        {/* Gutter spacer */}
-        <div className="w-14 shrink-0" />
-        {days.map((day) => {
-          const isToday = isSameDay(day, today);
-          return (
-            <div
-              aria-label={format(day, "EEEE, MMMM d")}
-              className={cn(
-                "flex min-w-0 flex-1 items-center justify-center gap-1 border-l border-border/40 py-1.5 first:border-l-0",
-                isWeekend(day) ? "bg-white/[0.012]" : ""
-              )}
-              key={day.toISOString()}
-            >
-              <span
-                className={cn(
-                  "type-ui-sm tracking-wide uppercase",
-                  isToday ? "text-primary" : "text-subtle"
-                )}
-              >
-                {format(day, "EEE")}
-              </span>
-              <span
-                className={cn("type-ui-sm tabular-nums", isToday ? "text-primary" : "text-subtle")}
-              >
-                {format(day, "d")}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* All-day row — includes date numbers at top of each column */}
-      <AllDaySection
-        allDayDragHoverIndex={allDayDragHoverIndex}
-        autoOpenPageId={autoOpenPageId}
-        days={days}
-        draggingPageId={allDayDraggingPageId}
-        height={allDay.height}
-        onAutoOpenConsumed={onAutoOpenConsumed}
-        onChipDragStart={handleAllDayChipDragStart}
-        onCreateAllDay={onCreateAllDay}
-        onPageDoubleClick={onPageDoubleClick}
-        onResizeStart={allDay.onResizeStart}
-        pages={pages}
-        timedDragTarget={
-          externalPreview?.isAllDay
-            ? { dayIndex: externalPreview.dayIndex, folderColor: externalPreview.folderColor }
-            : timedDragAllDayTarget
-        }
-      />
-
-      {/* Scrollable time grid */}
-      <div aria-label="Time grid" className="min-h-0 flex-1 overflow-y-auto" ref={scrollRef}>
-        <div className="flex">
-          <TimeGutter />
-          <div className="relative flex flex-1" ref={dayColumnsRef}>
-            {days.map((day, i) => {
-              // Only pass the drag ghost to the column it targets.
-              // Priority: all-day chip drag > external list drag. Internal block
-              // drag uses a ref-positioned overlay (below) to avoid per-frame re-renders.
-              const colDragGhost: DragGhost | null =
-                allDayDragRenderState?.dayIndex === i
-                  ? {
-                      folderColor: allDayDragRenderState.folderColor,
-                      height: metrics.compactBlockHeight,
-                      isCompact: true,
-                      isDone:
-                        pages.find((p) => p.id === allDayDragRenderState.pageId)?.status === "done",
-                      title: pages.find((p) => p.id === allDayDragRenderState.pageId)?.title,
-                      top: allDayDragRenderState.top,
-                    }
-                  : externalPreview && !externalPreview.isAllDay && externalPreview.dayIndex === i
-                    ? {
-                        folderColor: externalPreview.folderColor,
-                        height:
-                          externalPreview.durationMs != null
-                            ? Math.max(
-                                (externalPreview.durationMs / 3_600_000) * metrics.hourHeight,
-                                metrics.compactBlockHeight
-                              )
-                            : metrics.compactBlockHeight,
-                        isCompact: externalPreview.durationMs == null,
-                        isDone: externalPreview.isDone,
-                        title: externalPreview.title,
-                        top: externalPreview.top,
-                      }
-                    : null;
-
-              return (
-                <DayColumn
-                  autoOpenPageId={autoOpenPageId}
-                  day={day}
-                  dayIndex={i}
-                  dragGhost={colDragGhost}
-                  draggingPageId={timedDraggingPageId}
-                  isCurrentWeek={isCurrentWeek}
-                  key={day.toISOString()}
-                  now={today}
-                  onAutoOpenConsumed={onAutoOpenConsumed}
-                  onBlockDragStart={handleBlockDragStart}
-                  onBlockResizeStart={handleBlockResizeStart}
-                  onCreatePage={onCreatePage}
-                  onPageDoubleClick={onPageDoubleClick}
-                  pages={pages}
-                  resizeGhost={resizeRenderState?.dayIndex === i ? resizeRenderState : null}
-                />
-              );
-            })}
-
-            {/* Drag ghost overlay — content via state (2x/gesture), position via ref (every frame) */}
-            {ghostContent && (
+    <CalendarSettingsContext.Provider value={settingsValue}>
+      <div
+        aria-label="Week calendar"
+        className="flex min-h-0 flex-1 flex-col"
+        ref={weekGridRef}
+        role="region"
+      >
+        {/* Day header — "Mon 16", "Tue 17", etc. Today's date gets a pill highlight */}
+        <div className="flex shrink-0 border-t border-b border-border/40">
+          {/* Gutter spacer */}
+          <div className="w-14 shrink-0" />
+          {days.map((day) => {
+            const isToday = isSameDay(day, today);
+            return (
               <div
-                aria-hidden
+                aria-label={format(day, "EEEE, MMMM d")}
                 className={cn(
-                  "pointer-events-none absolute z-30 overflow-hidden rounded-sm border-l-2 opacity-80",
-                  ghostContent.isCompact
-                    ? "flex items-center gap-1 px-1.5"
-                    : "flex flex-col items-start px-1.5 py-0.5"
+                  "flex min-w-0 flex-1 items-center justify-center gap-1 border-l border-border/40 py-1.5 first:border-l-0",
+                  isWeekend(day) ? "bg-white/[0.012]" : ""
                 )}
-                ref={(el) => {
-                  ghostElRef.current = el;
-                  if (el && dragGhostPositionRef.current) {
-                    positionGhost(
-                      dragGhostPositionRef.current.dayIndex,
-                      dragGhostPositionRef.current.top,
-                      ghostContent.height
-                    );
-                  }
-                }}
-                style={
-                  ghostContent.folderColor
-                    ? chipFolderStyle(ghostContent.folderColor)
-                    : { backgroundColor: "rgba(59,130,246,0.25)", borderColor: "rgb(59,130,246)" }
-                }
+                key={day.toISOString()}
               >
-                {ghostContent.isCompact ? (
-                  <>
-                    <span
-                      className={cn(
-                        "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
-                        ghostContent.isDone
-                          ? "border-foreground/40 bg-foreground/10"
-                          : "border-current/30"
-                      )}
-                    >
-                      {ghostContent.isDone && <Check size={8} strokeWidth={2.5} />}
-                    </span>
-                    <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
-                      {ghostContent.title || "Untitled"}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex w-full min-w-0 items-center gap-1">
+                <span
+                  className={cn(
+                    "type-ui-sm tracking-wide uppercase",
+                    isToday ? "text-primary" : "text-subtle"
+                  )}
+                >
+                  {format(day, "EEE")}
+                </span>
+                <span
+                  className={cn(
+                    "type-ui-sm tabular-nums",
+                    isToday ? "text-primary" : "text-subtle"
+                  )}
+                >
+                  {format(day, "d")}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* All-day row — includes date numbers at top of each column */}
+        <AllDaySection
+          allDayDragHoverIndex={allDayDragHoverIndex}
+          autoOpenPageId={autoOpenPageId}
+          days={days}
+          draggingPageId={allDayDraggingPageId}
+          height={allDay.height}
+          onAutoOpenConsumed={onAutoOpenConsumed}
+          onChipDragStart={handleAllDayChipDragStart}
+          onCreateAllDay={onCreateAllDay}
+          onPageDoubleClick={onPageDoubleClick}
+          onResizeStart={allDay.onResizeStart}
+          pages={pages}
+          timedDragTarget={
+            externalPreview?.isAllDay
+              ? { dayIndex: externalPreview.dayIndex, folderColor: externalPreview.folderColor }
+              : timedDragAllDayTarget
+          }
+        />
+
+        {/* Scrollable time grid */}
+        <div aria-label="Time grid" className="min-h-0 flex-1 overflow-y-auto" ref={scrollRef}>
+          <div className="flex">
+            <TimeGutter />
+            <div className="relative flex flex-1" ref={dayColumnsRef}>
+              {days.map((day, i) => {
+                // Only pass the drag ghost to the column it targets.
+                // Priority: all-day chip drag > external list drag. Internal block
+                // drag uses a ref-positioned overlay (below) to avoid per-frame re-renders.
+                const colDragGhost: DragGhost | null =
+                  allDayDragRenderState?.dayIndex === i
+                    ? {
+                        folderColor: allDayDragRenderState.folderColor,
+                        height: metrics.compactBlockHeight,
+                        isCompact: true,
+                        isDone:
+                          pages.find((p) => p.id === allDayDragRenderState.pageId)?.status ===
+                          "done",
+                        title: pages.find((p) => p.id === allDayDragRenderState.pageId)?.title,
+                        top: allDayDragRenderState.top,
+                      }
+                    : externalPreview && !externalPreview.isAllDay && externalPreview.dayIndex === i
+                      ? {
+                          folderColor: externalPreview.folderColor,
+                          height:
+                            externalPreview.durationMs != null
+                              ? Math.max(
+                                  (externalPreview.durationMs / 3_600_000) * metrics.hourHeight,
+                                  metrics.compactBlockHeight
+                                )
+                              : metrics.compactBlockHeight,
+                          isCompact: externalPreview.durationMs == null,
+                          isDone: externalPreview.isDone,
+                          title: externalPreview.title,
+                          top: externalPreview.top,
+                        }
+                      : null;
+
+                return (
+                  <DayColumn
+                    autoOpenPageId={autoOpenPageId}
+                    day={day}
+                    dayIndex={i}
+                    dragGhost={colDragGhost}
+                    draggingPageId={timedDraggingPageId}
+                    isCurrentWeek={isCurrentWeek}
+                    key={day.toISOString()}
+                    now={today}
+                    onAutoOpenConsumed={onAutoOpenConsumed}
+                    onBlockDragStart={handleBlockDragStart}
+                    onBlockResizeStart={handleBlockResizeStart}
+                    onCreatePage={onCreatePage}
+                    onPageDoubleClick={onPageDoubleClick}
+                    pages={pages}
+                    resizeGhost={resizeRenderState?.dayIndex === i ? resizeRenderState : null}
+                  />
+                );
+              })}
+
+              {/* Drag ghost overlay — content via state (2x/gesture), position via ref (every frame) */}
+              {ghostContent && (
+                <div
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute z-30 overflow-hidden rounded-sm border-l-2 opacity-80",
+                    ghostContent.isCompact
+                      ? "flex items-center gap-1 px-1.5"
+                      : "flex flex-col items-start px-1.5 py-0.5"
+                  )}
+                  ref={(el) => {
+                    ghostElRef.current = el;
+                    if (el && dragGhostPositionRef.current) {
+                      positionGhost(
+                        dragGhostPositionRef.current.dayIndex,
+                        dragGhostPositionRef.current.top,
+                        ghostContent.height
+                      );
+                    }
+                  }}
+                  style={
+                    ghostContent.folderColor
+                      ? chipFolderStyle(ghostContent.folderColor)
+                      : { backgroundColor: "rgba(59,130,246,0.25)", borderColor: "rgb(59,130,246)" }
+                  }
+                >
+                  {ghostContent.isCompact ? (
+                    <>
                       <span
                         className={cn(
-                          "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                          "flex shrink-0 items-center justify-center rounded-[2px] border",
+                          ghostContent.height < 16 ? "h-2.5 w-2.5" : "h-3.5 w-3.5",
                           ghostContent.isDone
                             ? "border-foreground/40 bg-foreground/10"
                             : "border-current/30"
@@ -795,23 +818,48 @@ export function WeekGrid({
                       >
                         {ghostContent.isDone && <Check size={8} strokeWidth={2.5} />}
                       </span>
-                      <p className="type-body-sm min-w-0 truncate font-medium text-foreground">
+                      <span
+                        className={cn(
+                          "min-w-0 truncate font-medium text-foreground",
+                          ghostContent.height < 16
+                            ? "-mt-px text-[10px] leading-none"
+                            : "type-body-sm"
+                        )}
+                      >
                         {ghostContent.title || "Untitled"}
-                      </p>
-                    </div>
-                    {ghostContent.height >= 36 && (
-                      <p
-                        className="type-ui-sm mt-0.5 truncate text-subtle"
-                        ref={ghostTimeLabelRef}
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-            )}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex w-full min-w-0 items-center gap-1">
+                        <span
+                          className={cn(
+                            "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                            ghostContent.isDone
+                              ? "border-foreground/40 bg-foreground/10"
+                              : "border-current/30"
+                          )}
+                        >
+                          {ghostContent.isDone && <Check size={8} strokeWidth={2.5} />}
+                        </span>
+                        <p className="type-body-sm min-w-0 truncate font-medium text-foreground">
+                          {ghostContent.title || "Untitled"}
+                        </p>
+                      </div>
+                      {ghostContent.height >= 40 && (
+                        <p
+                          className="type-ui-sm mt-0.5 truncate text-subtle"
+                          ref={ghostTimeLabelRef}
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </CalendarSettingsContext.Provider>
   );
 }

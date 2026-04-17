@@ -323,6 +323,30 @@ describe("buildDayBlocks", () => {
     expect(blocks[0]!.height).toBe(COMPACT_BLOCK_HEIGHT);
   });
 
+  it("20-min event rounds up to 30-min visual height", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-15T10:20:00",
+        scheduledStart: "2026-03-15T10:00:00",
+        title: "20m",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    expect(blocks[0]!.height).toBe((30 / 60) * HOUR_HEIGHT); // 32px at normal density
+  });
+
+  it("40-min event rounds up to 45-min visual height", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-15T10:40:00",
+        scheduledStart: "2026-03-15T10:00:00",
+        title: "40m",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    expect(blocks[0]!.height).toBe((45 / 60) * HOUR_HEIGHT); // 48px at normal density
+  });
+
   it("excludes all-day events", () => {
     const pages = [
       makePage({ scheduledStart: "2026-03-15", title: "All-day" }),

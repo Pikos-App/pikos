@@ -28,9 +28,21 @@ export const VISIBLE_HOURS = 24;
 
 /** Default "normal" density metrics. Tests and legacy callers read these directly. */
 export const HOUR_HEIGHT = 64;
-export const COMPACT_BLOCK_HEIGHT = 19;
 export const GRID_HEIGHT = VISIBLE_HOURS * HOUR_HEIGHT;
 export const MIN_RESIZE_HEIGHT = (15 / 60) * HOUR_HEIGHT;
+
+/**
+ * Visual height for a 15-minute ("quarter hour") block. Every timed event renders
+ * at a multiple of this — durations are rounded up to the next 15-minute slot so
+ * short events remain readable.
+ */
+export const COMPACT_BLOCK_HEIGHT = HOUR_HEIGHT / 4;
+
+/**
+ * Layout threshold (px): below this a block renders as a single-line chip, above
+ * this as a stacked title+time block. Density-independent.
+ */
+export const CHIP_STACKED_THRESHOLD = 28;
 
 /** User-selectable density. */
 export type CalendarDensity = "compact" | "normal" | "spacious";
@@ -38,6 +50,7 @@ export type CalendarDensity = "compact" | "normal" | "spacious";
 /** Snapshot of the layout constants that scale with density. */
 export interface CalendarMetrics {
   hourHeight: number;
+  /** Height of a 15-minute slot — the minimum block height for timed events. */
   compactBlockHeight: number;
   gridHeight: number;
   minResizeHeight: number;
@@ -49,17 +62,11 @@ const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
   spacious: 88,
 };
 
-const DENSITY_COMPACT_HEIGHT: Record<CalendarDensity, number> = {
-  compact: 16,
-  normal: 19,
-  spacious: 24,
-};
-
 /** Derive a full CalendarMetrics snapshot from a density choice. */
 export function computeCalendarMetrics(density: CalendarDensity): CalendarMetrics {
   const hourHeight = DENSITY_HOUR_HEIGHT[density];
   return {
-    compactBlockHeight: DENSITY_COMPACT_HEIGHT[density],
+    compactBlockHeight: hourHeight / 4,
     gridHeight: hourHeight * VISIBLE_HOURS,
     hourHeight,
     minResizeHeight: (15 / 60) * hourHeight,
@@ -69,10 +76,7 @@ export function computeCalendarMetrics(density: CalendarDensity): CalendarMetric
 /** Baseline metrics for tests + callers that don't have settings context. */
 export const DEFAULT_METRICS: CalendarMetrics = computeCalendarMetrics("normal");
 
-/**
- * Minimum duration in minutes for a block to render proportionally.
- * Below this threshold (or when there is no scheduledEnd) the block renders as a compact chip.
- */
+/** Slot size (minutes) used to round up short event durations for visual height. */
 export const MIN_TIMED_MINUTES = 15;
 
 /**
@@ -333,28 +337,52 @@ export function buildDayBlocks(
     const hasExplicitEnd = !!page.scheduledEnd;
     const realEnd = hasExplicitEnd ? parseISO(page.scheduledEnd!) : realStart;
 
-    // Determine if the event is compact (only when fully within one day)
     const durationMinutes = hasExplicitEnd ? (realEnd.getTime() - realStart.getTime()) / 60_000 : 0;
-    const isCompact = !hasExplicitEnd || durationMinutes < MIN_TIMED_MINUTES;
 
-    // Clamp start/end to this day's grid boundaries for cross-day events
+    // Clamp start/end to this day's grid boundaries for cross-day events.
+    // A zero- or sub-minute event (no end, or ≤ 0 min) is never a "continuation" —
+    // it's a point-in-time and gets the 15-min minimum visual block.
     const isContinuationBefore = realStart < dayStart;
-    const isContinuationAfter = !isCompact && realEnd >= dayEnd;
+    const isContinuationAfter = hasExplicitEnd && durationMinutes > 0 && realEnd >= dayEnd;
 
     // For visual positioning, clamp to the day's grid boundaries (midnight ↔ midnight)
     const visualStart = isContinuationBefore ? dayStart : realStart;
     const visualEnd = isContinuationAfter ? dayEnd : realEnd;
 
     const top = timeToY(visualStart, metrics.hourHeight);
-    // isContinuationAfter's visualEnd is next-day midnight, which timeToY reads as 0;
-    // substitute gridHeight directly so the block extends to the bottom of the grid.
-    const endY = isContinuationAfter ? metrics.gridHeight : timeToY(visualEnd, metrics.hourHeight);
-    const height = isCompact ? metrics.compactBlockHeight : Math.max(endY - top, 4);
+    // Visual duration rounds up to the nearest 15-min slot, minimum 15 min.
+    // Short events stay readable; no-end events behave like 15-min events.
+    // Only used for blocks that fit entirely within one day — continuation
+    // segments derive their end from the day boundary instead.
+    const visualDurationMin = Math.max(
+      MIN_TIMED_MINUTES,
+      Math.ceil(Math.max(durationMinutes, 0) / MIN_TIMED_MINUTES) * MIN_TIMED_MINUTES
+    );
+    const heightFromDuration = (visualDurationMin / 60) * metrics.hourHeight;
+    let endY: number;
+    if (isContinuationAfter) {
+      // Event continues into the next day — extend to the bottom of this day's grid.
+      endY = metrics.gridHeight;
+    } else if (isContinuationBefore) {
+      // Event started before this day — render from day-top to the real event end,
+      // NOT top + full-event duration (which would over-extend past the real end).
+      endY = timeToY(visualEnd, metrics.hourHeight);
+    } else {
+      // Event fits within this day — use the round-up proportional height.
+      endY = Math.min(metrics.gridHeight, top + heightFromDuration);
+    }
+    const height = Math.max(endY - top, 4);
 
-    // For overlap calculation, compact blocks claim a 15-min footprint
-    const overlapEnd = isCompact
-      ? new Date(visualStart.getTime() + MIN_TIMED_MINUTES * 60_000)
-      : visualEnd;
+    // Chip (single-line) rendering when the block isn't tall enough to stack
+    // title + time. Height-based — density-independent.
+    const isCompact = !isContinuationAfter && height < CHIP_STACKED_THRESHOLD;
+
+    // For overlap calculation, use the visual duration so snapped-up short events
+    // claim their rounded slot (two 10-min events at 4:00 and 4:05 both claim a
+    // 15-min slot → they correctly column-partition).
+    const overlapEnd = isContinuationAfter
+      ? visualEnd
+      : new Date(visualStart.getTime() + visualDurationMin * 60_000);
 
     return {
       endDate: realEnd,

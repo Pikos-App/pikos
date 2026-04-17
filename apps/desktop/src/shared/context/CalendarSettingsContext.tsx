@@ -23,7 +23,7 @@ export interface CalendarSettingsValue {
   metrics: CalendarMetrics;
 }
 
-const CalendarSettingsContext = createContext<CalendarSettingsValue | null>(null);
+export const CalendarSettingsContext = createContext<CalendarSettingsValue | null>(null);
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 

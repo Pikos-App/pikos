@@ -164,7 +164,7 @@ function AllDayChip({
         <button
           aria-label={page.title || "Untitled"}
           className={cn(
-            "flex w-full items-center gap-1",
+            "flex w-full cursor-default! items-center gap-1",
             CHIP_BASE_CLASSES,
             !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
             isDone && "opacity-50",
@@ -178,9 +178,17 @@ function AllDayChip({
         >
           {showLabel &&
             (isRecurring ? (
-              <Repeat2 aria-label="Recurring" className="h-3 w-3 shrink-0 text-muted-foreground" />
+              <Repeat2
+                aria-label="Recurring"
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              />
             ) : (
-              <TaskCheckbox as="span" checked={isDone} onChange={handleCheckboxClick} />
+              <TaskCheckbox
+                as="span"
+                checked={isDone}
+                className="h-3.5 w-3.5 cursor-pointer!"
+                onChange={handleCheckboxClick}
+              />
             ))}
           {showLabel && (
             <span className="type-body-sm min-w-0 truncate font-medium text-foreground">
