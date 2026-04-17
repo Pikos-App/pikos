@@ -280,9 +280,12 @@ appTest("create recurring page shows recurrence label @tier2", async ({ app }) =
   const listItem = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
   await expect(listItem).toBeVisible();
 
-  // Open the page and verify recurrence label in the editor byline
+  // Open the page and verify recurrence in the editor byline. The byline chip
+  // is icon-only — the cadence lives on the button's accessible name (aria-label).
   await listItem.click();
-  await expect(app.getByText(/every week on Monday/i)).toBeVisible();
+  await expect(
+    app.getByRole("button", { name: /recurrence: every week on Monday/i })
+  ).toBeVisible();
 });
 
 // ─── T2-11: Create folder inline from FolderChip in QuickAdd ────────────────
