@@ -4,18 +4,16 @@ import { Check } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import {
   buildDayBlocks,
   chipFolderStyle,
-  COMPACT_BLOCK_HEIGHT,
   DRAG_THRESHOLD,
   formatTimeRange,
   GRID_END_HOUR,
-  GRID_HEIGHT,
   GRID_START_HOUR,
-  HOUR_HEIGHT,
   yToDate,
 } from "../utils/calendarUtils";
 import type { CalendarBlock } from "../utils/calendarUtils";
@@ -70,9 +68,6 @@ interface DayColumnProps {
   resizeGhost: ResizeGhost | null;
 }
 
-/** Minimum drag height in px — enforces 15-min minimum on drag-create. */
-const MIN_DRAG_HEIGHT = (15 / 60) * HOUR_HEIGHT;
-
 export function DayColumn({
   autoOpenPageId,
   day,
@@ -90,13 +85,17 @@ export function DayColumn({
   resizeGhost,
 }: DayColumnProps) {
   const { folders } = useWorkspace();
+  const { metrics } = useCalendarSettings();
   const folderColorMap = new Map(
     folders.flatMap((f) => (f.color ? [[f.id, f.color] as [string, string]] : []))
   );
 
-  const blocks = buildDayBlocks(pages, day);
+  const blocks = buildDayBlocks(pages, day, metrics);
   const showNowIndicator = isCurrentWeek && isSameDay(now, day);
   const weekend = day.getDay() === 0 || day.getDay() === 6;
+
+  // Minimum drag height in px — enforces 15-min minimum on drag-create (scales with density).
+  const minDragHeight = metrics.minResizeHeight;
 
   // Hour and half-hour grid lines
   const hours = Array.from(
@@ -142,7 +141,7 @@ export function DayColumn({
       }
       if (dragRef.current.isDragging) {
         setDraft({
-          endY: Math.max(currentY, dragRef.current.startY + MIN_DRAG_HEIGHT),
+          endY: Math.max(currentY, dragRef.current.startY + minDragHeight),
           startY: dragRef.current.startY,
         });
       }
@@ -159,11 +158,11 @@ export function DayColumn({
 
       const currentRect = containerRef.current?.getBoundingClientRect();
       const upY = currentRect ? ev.clientY - currentRect.top : mouseDownY;
-      const start = yToDate(mouseDownY, day);
+      const start = yToDate(mouseDownY, day, metrics.hourHeight);
 
       if (isDragging) {
-        const endY = Math.max(upY, mouseDownY + MIN_DRAG_HEIGHT);
-        const end = yToDate(endY, day);
+        const endY = Math.max(upY, mouseDownY + minDragHeight);
+        const end = yToDate(endY, day, metrics.hourHeight);
         void onCreatePage(day, start, end > start ? end : undefined);
       } else {
         void onCreatePage(day, start);
@@ -187,14 +186,16 @@ export function DayColumn({
           <div
             className="absolute inset-x-0"
             key={hour}
-            style={{ height: HOUR_HEIGHT, top: (hour - GRID_START_HOUR) * HOUR_HEIGHT }}
+            style={{ height: metrics.hourHeight, top: hour * metrics.hourHeight }}
           >
-            {/* Hour line */}
-            <div className="absolute inset-x-0 top-0 border-t border-border/40" />
+            {/* Hour line — skipped for the first row; its top edge is the grid boundary. */}
+            {hour !== GRID_START_HOUR && (
+              <div className="absolute inset-x-0 top-0 border-t border-border/40" />
+            )}
             {/* Half-hour line */}
             <div
               className="absolute inset-x-0 border-t border-border/20"
-              style={{ top: HOUR_HEIGHT / 2 }}
+              style={{ top: metrics.hourHeight / 2 }}
             />
           </div>
         ))}
@@ -205,7 +206,7 @@ export function DayColumn({
         className="relative cursor-cell"
         onMouseDown={handleMouseDown}
         ref={containerRef}
-        style={{ height: GRID_HEIGHT }}
+        style={{ height: metrics.gridHeight }}
       >
         {/* Now indicator */}
         {showNowIndicator && <NowIndicator now={now} />}
@@ -216,7 +217,7 @@ export function DayColumn({
             aria-hidden
             className="pointer-events-none absolute rounded-sm border-l-2 border-blue-500 bg-blue-500/20 opacity-75"
             style={{
-              height: Math.max(draft.endY - draft.startY, COMPACT_BLOCK_HEIGHT),
+              height: Math.max(draft.endY - draft.startY, metrics.compactBlockHeight),
               left: 2,
               right: 2,
               top: draft.startY,
@@ -235,7 +236,7 @@ export function DayColumn({
                 : "flex flex-col items-start px-1.5 py-0.5"
             )}
             style={{
-              height: dragGhost.isCompact ? COMPACT_BLOCK_HEIGHT : dragGhost.height,
+              height: dragGhost.isCompact ? metrics.compactBlockHeight : dragGhost.height,
               left: 2,
               right: 2,
               top: dragGhost.top,
@@ -278,8 +279,8 @@ export function DayColumn({
                 {dragGhost.height >= 36 && (
                   <p className="type-ui-sm mt-0.5 truncate text-subtle">
                     {formatTimeRange(
-                      yToDate(dragGhost.top, day),
-                      yToDate(dragGhost.top + dragGhost.height, day)
+                      yToDate(dragGhost.top, day, metrics.hourHeight),
+                      yToDate(dragGhost.top + dragGhost.height, day, metrics.hourHeight)
                     )}
                   </p>
                 )}

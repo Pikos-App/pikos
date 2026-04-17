@@ -8,6 +8,7 @@ import { SettingsPage } from "@/features/settings";
 import { UndoToast } from "@/shared/components/UndoToast";
 import { UpdateDialog } from "@/shared/components/UpdateDialog";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
+import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
 import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
 import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
@@ -165,11 +166,13 @@ export default function App() {
             <UpdateProvider>
               <UIProvider>
                 <EditorSettingsProvider>
-                  <UndoDeleteProvider>
-                    <TooltipProvider delayDuration={400}>
-                      <WorkspaceGate />
-                    </TooltipProvider>
-                  </UndoDeleteProvider>
+                  <CalendarSettingsProvider>
+                    <UndoDeleteProvider>
+                      <TooltipProvider delayDuration={400}>
+                        <WorkspaceGate />
+                      </TooltipProvider>
+                    </UndoDeleteProvider>
+                  </CalendarSettingsProvider>
                 </EditorSettingsProvider>
               </UIProvider>
             </UpdateProvider>

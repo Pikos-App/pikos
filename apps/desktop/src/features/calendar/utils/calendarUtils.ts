@@ -18,26 +18,56 @@ import {
 /** Delay (ms) to distinguish single click (popover) from double click (open editor). */
 export const CLICK_DELAY = 200;
 
-/** Height in pixels for one hour in the time grid. Tune here to adjust zoom. */
-export const HOUR_HEIGHT = 64;
-
-/** First visible hour (6 = 6:00 AM). */
-export const GRID_START_HOUR = 6;
-
-/** Last visible hour, exclusive (23 = 11:00 PM). Grid ends at 23:00. */
-export const GRID_END_HOUR = 23;
-
-/** Total number of visible hours in the grid. */
-export const VISIBLE_HOURS = GRID_END_HOUR - GRID_START_HOUR;
-
-/** Total scrollable height of the time grid in pixels. */
-export const GRID_HEIGHT = VISIBLE_HOURS * HOUR_HEIGHT;
-
 /**
- * Fixed height for compact event chips (no scheduledEnd, or duration < 15 min).
- * Large enough for a single line of text; visually distinct from proportional blocks.
+ * The calendar grid renders the full 24-hour day. GRID_START_HOUR / GRID_END_HOUR
+ * used to clip to "working hours" but are now fixed — scrolling reveals the rest.
  */
+export const GRID_START_HOUR = 0;
+export const GRID_END_HOUR = 24;
+export const VISIBLE_HOURS = 24;
+
+/** Default "normal" density metrics. Tests and legacy callers read these directly. */
+export const HOUR_HEIGHT = 64;
 export const COMPACT_BLOCK_HEIGHT = 19;
+export const GRID_HEIGHT = VISIBLE_HOURS * HOUR_HEIGHT;
+export const MIN_RESIZE_HEIGHT = (15 / 60) * HOUR_HEIGHT;
+
+/** User-selectable density. */
+export type CalendarDensity = "compact" | "normal" | "spacious";
+
+/** Snapshot of the layout constants that scale with density. */
+export interface CalendarMetrics {
+  hourHeight: number;
+  compactBlockHeight: number;
+  gridHeight: number;
+  minResizeHeight: number;
+}
+
+const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
+  compact: 40,
+  normal: 64,
+  spacious: 88,
+};
+
+const DENSITY_COMPACT_HEIGHT: Record<CalendarDensity, number> = {
+  compact: 16,
+  normal: 19,
+  spacious: 24,
+};
+
+/** Derive a full CalendarMetrics snapshot from a density choice. */
+export function computeCalendarMetrics(density: CalendarDensity): CalendarMetrics {
+  const hourHeight = DENSITY_HOUR_HEIGHT[density];
+  return {
+    compactBlockHeight: DENSITY_COMPACT_HEIGHT[density],
+    gridHeight: hourHeight * VISIBLE_HOURS,
+    hourHeight,
+    minResizeHeight: (15 / 60) * hourHeight,
+  };
+}
+
+/** Baseline metrics for tests + callers that don't have settings context. */
+export const DEFAULT_METRICS: CalendarMetrics = computeCalendarMetrics("normal");
 
 /**
  * Minimum duration in minutes for a block to render proportionally.
@@ -201,14 +231,15 @@ export function assignAllDayRows(pages: PageSummary[], days: Date[]): (AllDayIte
 // ─── Time → pixel ─────────────────────────────────────────────────────────────
 
 /**
- * Converts a Date's time to a pixel offset from the top of the visible grid.
- * Hours before GRID_START_HOUR clamp to 0. Hours after GRID_END_HOUR clamp to GRID_HEIGHT.
+ * Converts a Date's time to a pixel offset from the top of the 24-hour grid.
+ * Clamps to [0, 24 * hourHeight].
  */
-export function timeToY(date: Date): number {
+export function timeToY(date: Date, hourHeight: number = HOUR_HEIGHT): number {
   const hours = getHours(date);
   const minutes = getMinutes(date);
-  const totalMinutes = (hours - GRID_START_HOUR) * 60 + minutes;
-  return Math.min(Math.max(totalMinutes * (HOUR_HEIGHT / 60), 0), GRID_HEIGHT);
+  const totalMinutes = hours * 60 + minutes;
+  const gridHeight = hourHeight * VISIBLE_HOURS;
+  return Math.min(Math.max(totalMinutes * (hourHeight / 60), 0), gridHeight);
 }
 
 // ─── Colour helpers ───────────────────────────────────────────────────────────
@@ -259,7 +290,11 @@ export interface CalendarBlock {
  * - On middle days: renders full grid height (isContinuationBefore + isContinuationAfter)
  * - On the end day: renders from top of grid to event end (isContinuationBefore)
  */
-export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[] {
+export function buildDayBlocks(
+  pages: PageSummary[],
+  day: Date,
+  metrics: CalendarMetrics = DEFAULT_METRICS
+): CalendarBlock[] {
   const dayStart = startOfDay(day);
   const dayEnd = addDays(dayStart, 1);
 
@@ -306,16 +341,15 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
     const isContinuationBefore = realStart < dayStart;
     const isContinuationAfter = !isCompact && realEnd >= dayEnd;
 
-    // For visual positioning, clamp to the day's grid boundaries
-    const visualStart = isContinuationBefore
-      ? new Date(dayStart.getTime() + GRID_START_HOUR * 3_600_000)
-      : realStart;
-    const visualEnd = isContinuationAfter
-      ? new Date(dayStart.getTime() + GRID_END_HOUR * 3_600_000)
-      : realEnd;
+    // For visual positioning, clamp to the day's grid boundaries (midnight ↔ midnight)
+    const visualStart = isContinuationBefore ? dayStart : realStart;
+    const visualEnd = isContinuationAfter ? dayEnd : realEnd;
 
-    const top = timeToY(visualStart);
-    const height = isCompact ? COMPACT_BLOCK_HEIGHT : Math.max(timeToY(visualEnd) - top, 4);
+    const top = timeToY(visualStart, metrics.hourHeight);
+    // isContinuationAfter's visualEnd is next-day midnight, which timeToY reads as 0;
+    // substitute gridHeight directly so the block extends to the bottom of the grid.
+    const endY = isContinuationAfter ? metrics.gridHeight : timeToY(visualEnd, metrics.hourHeight);
+    const height = isCompact ? metrics.compactBlockHeight : Math.max(endY - top, 4);
 
     // For overlap calculation, compact blocks claim a 15-min footprint
     const overlapEnd = isCompact
@@ -344,9 +378,7 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
 
   for (const raw of raws) {
     // Use visual start for column assignment
-    const visualStart = raw.isContinuationBefore
-      ? new Date(dayStart.getTime() + GRID_START_HOUR * 3_600_000)
-      : raw.startDate;
+    const visualStart = raw.isContinuationBefore ? dayStart : raw.startDate;
 
     let assigned = -1;
     for (let col = 0; col < columnOverlapEnds.length; col++) {
@@ -372,12 +404,8 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
     for (let j = 0; j < raws.length; j++) {
       if (i === j) continue;
       const other = raws[j]!;
-      const visualStartI = raw.isContinuationBefore
-        ? new Date(dayStart.getTime() + GRID_START_HOUR * 3_600_000)
-        : raw.startDate;
-      const visualStartJ = other.isContinuationBefore
-        ? new Date(dayStart.getTime() + GRID_START_HOUR * 3_600_000)
-        : other.startDate;
+      const visualStartI = raw.isContinuationBefore ? dayStart : raw.startDate;
+      const visualStartJ = other.isContinuationBefore ? dayStart : other.startDate;
       const overlaps = visualStartI < other.overlapEnd && raw.overlapEnd > visualStartJ;
       if (overlaps) {
         maxColumn = Math.max(maxColumn, assignments[j]!);
@@ -402,9 +430,6 @@ export function buildDayBlocks(pages: PageSummary[], day: Date): CalendarBlock[]
 
 // ─── Coordinate helpers ───────────────────────────────────────────────────────
 
-/** Minimum block height in px for resize operations — enforces 15-minute minimum. */
-export const MIN_RESIZE_HEIGHT = (15 / 60) * HOUR_HEIGHT;
-
 /** Pixel movement threshold before a mousedown is treated as a drag gesture. */
 export const DRAG_THRESHOLD = 4;
 
@@ -412,23 +437,20 @@ export const DRAG_THRESHOLD = 4;
  * Snaps a raw pixel Y offset to the nearest 15-minute grid line.
  * Does not clamp — use Math.max/min around the call site as needed.
  */
-export function snapY(y: number): number {
-  const rawMinutes = (y / HOUR_HEIGHT) * 60;
+export function snapY(y: number, hourHeight: number = HOUR_HEIGHT): number {
+  const rawMinutes = (y / hourHeight) * 60;
   const snapped = Math.round(rawMinutes / 15) * 15;
-  return (snapped / 60) * HOUR_HEIGHT;
+  return (snapped / 60) * hourHeight;
 }
 
 /**
  * Converts a raw pixel Y offset (from the grid container top) to a Date snapped to
- * the nearest 15-minute boundary on `day`. Clamps to [GRID_START_HOUR, GRID_END_HOUR].
+ * the nearest 15-minute boundary on `day`. Clamps to [00:00, 24:00] on `day`.
  */
-export function yToDate(y: number, day: Date): Date {
-  const rawMinutes = (y / HOUR_HEIGHT) * 60 + GRID_START_HOUR * 60;
+export function yToDate(y: number, day: Date, hourHeight: number = HOUR_HEIGHT): Date {
+  const rawMinutes = (y / hourHeight) * 60;
   const snappedMinutes = Math.round(rawMinutes / 15) * 15;
-  const clampedMinutes = Math.min(
-    Math.max(snappedMinutes, GRID_START_HOUR * 60),
-    GRID_END_HOUR * 60
-  );
+  const clampedMinutes = Math.min(Math.max(snappedMinutes, 0), VISIBLE_HOURS * 60);
   return addMinutes(startOfDay(day), clampedMinutes);
 }
 

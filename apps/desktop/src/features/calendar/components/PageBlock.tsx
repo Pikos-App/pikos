@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 
@@ -16,7 +17,6 @@ import {
   CLICK_DELAY,
   DRAG_THRESHOLD,
   formatTimeRange,
-  HOUR_HEIGHT,
   snapY,
 } from "../utils/calendarUtils";
 import type { CalendarBlock } from "../utils/calendarUtils";
@@ -72,6 +72,7 @@ export function PageBlock({
   } = block;
   const { requestDeletePage } = useUndoDelete();
   const { highlightedPageId } = useUI();
+  const { metrics } = useCalendarSettings();
   const {
     isRecurring,
     skipOccurrence: handleSkipOccurrence,
@@ -89,7 +90,10 @@ export function PageBlock({
   // During resize, show the live end time (snapped to 15 min to match commit behaviour).
   const liveEndDate =
     resizeHeight !== undefined
-      ? new Date(startDate.getTime() + (snapY(Math.max(resizeHeight, 0)) / HOUR_HEIGHT) * 3_600_000)
+      ? new Date(
+          startDate.getTime() +
+            (snapY(Math.max(resizeHeight, 0), metrics.hourHeight) / metrics.hourHeight) * 3_600_000
+        )
       : null;
   const timeLabel = formatTimeRange(startDate, liveEndDate ?? endDate);
   const showTimeLabel = !isRenderingCompact && displayHeight >= 36 && !isContinuationBefore;

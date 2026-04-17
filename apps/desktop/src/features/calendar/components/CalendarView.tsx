@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { getCalendarDayCount, useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -30,6 +31,7 @@ export function CalendarView() {
   const { activeViewId, openPage, referenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
   const { defaultFolderId: settingsDefaultFolder, weekStart } = useAppSettings();
+  const { dayCount: preferredDayCount } = useCalendarSettings();
   const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
   // ID of the page that should auto-open its metadata popover after calendar creation.
@@ -41,7 +43,10 @@ export function CalendarView() {
   }, []);
 
   const layoutMode = useLayoutMode();
-  const dayCount = getCalendarDayCount(layoutMode);
+  // User preference wins, but breakpoint caps it — choosing 7 on a narrow window
+  // would truncate day columns to unusable widths.
+  const maxDayCount = getCalendarDayCount(layoutMode);
+  const dayCount = Math.min(preferredDayCount, maxDayCount);
   const days = buildCalendarDays(referenceDate, dayCount, weekStart);
   const today = new Date();
   const isCurrentWeek = days.some((d) => isSameDay(d, today));

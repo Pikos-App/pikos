@@ -4,10 +4,13 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Bug, Check, CheckCircle, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
 
+import type { CalendarDensity } from "@/features/calendar/utils/calendarUtils";
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import type { CalendarDayCount } from "@/shared/context/CalendarSettingsContext";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import type { LineWidth } from "@/shared/context/EditorSettingsContext";
 import type { ThemeMode } from "@/shared/context/ThemeContext";
@@ -79,6 +82,19 @@ const LINE_WIDTH_OPTIONS: { id: LineWidth; label: string }[] = [
   { id: "full", label: "Full" },
 ];
 
+const CALENDAR_DAY_COUNT_OPTIONS: { id: CalendarDayCount; label: string }[] = [
+  { id: 1, label: "1" },
+  { id: 3, label: "3" },
+  { id: 5, label: "5" },
+  { id: 7, label: "7" },
+];
+
+const CALENDAR_DENSITY_OPTIONS: { id: CalendarDensity; label: string }[] = [
+  { id: "compact", label: "Compact" },
+  { id: "normal", label: "Normal" },
+  { id: "spacious", label: "Spacious" },
+];
+
 // ─── Component ────────────────────────────────────────────────────────────
 
 export function GeneralSettings() {
@@ -87,6 +103,12 @@ export function GeneralSettings() {
   const { defaultFolderId, setDefaultFolderId, setWeekStart, weekStart } = useAppSettings();
   const { mode, setTheme } = useTheme();
   const { lineWidth, setLineWidth } = useEditorSettings();
+  const {
+    dayCount: calendarDayCount,
+    density: calendarDensity,
+    setDayCount: setCalendarDayCount,
+    setDensity: setCalendarDensity,
+  } = useCalendarSettings();
 
   return (
     <div className="max-w-lg">
@@ -177,6 +199,56 @@ export function GeneralSettings() {
                   )}
                   key={opt.id}
                   onClick={() => setLineWidth(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Calendar day count */}
+          <div className="flex items-center justify-between border-b border-border py-3">
+            <div>
+              <p className="text-sm font-medium">Calendar days shown</p>
+              <p className="text-xs text-muted-foreground">
+                Number of day columns in the calendar. Narrow windows may show fewer.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-md border border-border bg-background p-0.5">
+              {CALENDAR_DAY_COUNT_OPTIONS.map((opt) => (
+                <button
+                  className={cn(
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    calendarDayCount === opt.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  key={opt.id}
+                  onClick={() => setCalendarDayCount(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Calendar density */}
+          <div className="flex items-center justify-between border-b border-border py-3">
+            <div>
+              <p className="text-sm font-medium">Calendar density</p>
+              <p className="text-xs text-muted-foreground">How tall each hour row renders.</p>
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-md border border-border bg-background p-0.5">
+              {CALENDAR_DENSITY_OPTIONS.map((opt) => (
+                <button
+                  className={cn(
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    calendarDensity === opt.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  key={opt.id}
+                  onClick={() => setCalendarDensity(opt.id)}
                 >
                   {opt.label}
                 </button>

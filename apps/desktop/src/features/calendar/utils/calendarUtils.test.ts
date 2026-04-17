@@ -517,20 +517,21 @@ describe("buildDayBlocks", () => {
 // ─── timeToY ─────────────────────────────────────────────────────────────────
 
 describe("timeToY", () => {
-  it("6:00 AM → 0 (grid start)", () => {
-    expect(timeToY(new Date(2026, 2, 15, 6, 0))).toBe(0);
+  it("midnight → 0 (grid start)", () => {
+    expect(timeToY(new Date(2026, 2, 15, 0, 0))).toBe(0);
   });
 
-  it("5:00 AM → 0 (clamped)", () => {
-    expect(timeToY(new Date(2026, 2, 15, 5, 0))).toBe(0);
+  it("6:00 AM → 6 * HOUR_HEIGHT", () => {
+    expect(timeToY(new Date(2026, 2, 15, 6, 0))).toBe(6 * HOUR_HEIGHT);
   });
 
-  it("11:00 PM → GRID_HEIGHT (clamped)", () => {
-    expect(timeToY(new Date(2026, 2, 15, 23, 0))).toBe(GRID_HEIGHT);
+  it("11:00 PM → 23 * HOUR_HEIGHT (not clamped, full 24h grid)", () => {
+    expect(timeToY(new Date(2026, 2, 15, 23, 0))).toBe(23 * HOUR_HEIGHT);
+    expect(timeToY(new Date(2026, 2, 15, 23, 0))).toBeLessThan(GRID_HEIGHT);
   });
 
-  it("9:30 AM → (3.5 * HOUR_HEIGHT)", () => {
-    expect(timeToY(new Date(2026, 2, 15, 9, 30))).toBe(3.5 * HOUR_HEIGHT);
+  it("9:30 AM → 9.5 * HOUR_HEIGHT", () => {
+    expect(timeToY(new Date(2026, 2, 15, 9, 30))).toBe(9.5 * HOUR_HEIGHT);
   });
 });
 
@@ -539,14 +540,14 @@ describe("timeToY", () => {
 describe("yToDate", () => {
   const day = new Date(2026, 2, 15);
 
-  it("0px → 6:00 AM on given day", () => {
+  it("0px → midnight on given day", () => {
     const result = yToDate(0, day);
-    expect(result.getHours()).toBe(6);
+    expect(result.getHours()).toBe(0);
     expect(result.getMinutes()).toBe(0);
   });
 
   it("snaps to 15-min boundaries", () => {
-    // A y-value that corresponds to ~6:07 should snap to 6:00
+    // A y-value that corresponds to ~0:07 should snap to 0:00
     const sevenMinY = (7 / 60) * HOUR_HEIGHT;
     const result = yToDate(sevenMinY, day);
     expect(result.getMinutes() % 15).toBe(0);

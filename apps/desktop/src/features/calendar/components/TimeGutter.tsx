@@ -1,6 +1,10 @@
-import { GRID_END_HOUR, GRID_START_HOUR, HOUR_HEIGHT } from "../utils/calendarUtils";
+import { cn } from "@/lib/utils";
+import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+
+import { GRID_END_HOUR, GRID_START_HOUR } from "../utils/calendarUtils";
 
 export function TimeGutter() {
+  const { metrics } = useCalendarSettings();
   const hours = Array.from(
     { length: GRID_END_HOUR - GRID_START_HOUR },
     (_, i) => GRID_START_HOUR + i
@@ -18,13 +22,19 @@ export function TimeGutter() {
                 ? "12 PM"
                 : `${hour - 12} PM`;
 
+        // Every other label sits above its hour line (-mt-2). The 12 AM label
+        // has no line above it (it's the top of the grid), so pin it below the
+        // edge to keep it fully visible.
+        const isFirst = hour === GRID_START_HOUR;
         return (
           <div
             className="relative flex items-start justify-end pr-2"
             key={hour}
-            style={{ height: HOUR_HEIGHT }}
+            style={{ height: metrics.hourHeight }}
           >
-            <span className="type-ui-sm -mt-2 text-subtle">{label}</span>
+            <span className={cn("type-ui-sm text-subtle", isFirst ? "mt-1" : "-mt-2")}>
+              {label}
+            </span>
           </div>
         );
       })}
