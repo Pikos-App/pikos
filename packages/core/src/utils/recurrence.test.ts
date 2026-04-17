@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { PageRecurrenceRule, PageSchedule, PageSummary } from "../types";
 import {
+  buildRrule,
   computeNextEnd,
   expandRecurrenceForRange,
   nextOccurrenceAfter,
+  parseRrule,
   rruleToLabel,
 } from "./recurrence";
 
@@ -302,5 +304,107 @@ describe("rruleToLabel", () => {
 
   it("falls back to raw string on invalid input", () => {
     expect(rruleToLabel("INVALID_RRULE")).toBe("INVALID_RRULE");
+  });
+});
+
+// ─── parseRrule ───────────────────────────────────────────────────────────────
+
+describe("parseRrule", () => {
+  it("parses FREQ and defaults interval to 1", () => {
+    expect(parseRrule("FREQ=DAILY")).toEqual({ freq: "DAILY", interval: 1 });
+    expect(parseRrule("FREQ=WEEKLY")).toEqual({ freq: "WEEKLY", interval: 1 });
+    expect(parseRrule("FREQ=MONTHLY")).toEqual({ freq: "MONTHLY", interval: 1 });
+    expect(parseRrule("FREQ=YEARLY")).toEqual({ freq: "YEARLY", interval: 1 });
+  });
+
+  it("parses explicit interval", () => {
+    expect(parseRrule("FREQ=WEEKLY;INTERVAL=3")).toEqual({ freq: "WEEKLY", interval: 3 });
+  });
+
+  it("parses BYDAY using rrule.js 0=Monday indexing", () => {
+    const result = parseRrule("FREQ=WEEKLY;BYDAY=MO,WE,FR");
+    expect(result?.byweekday).toEqual([0, 2, 4]);
+  });
+
+  it("parses COUNT end condition", () => {
+    const result = parseRrule("FREQ=DAILY;COUNT=10");
+    expect(result).toEqual({ count: 10, freq: "DAILY", interval: 1 });
+    expect(result?.until).toBeUndefined();
+  });
+
+  it("parses UNTIL end condition as YYYY-MM-DD", () => {
+    const result = parseRrule("FREQ=WEEKLY;UNTIL=20260615T235959Z");
+    expect(result?.until).toBe("2026-06-15");
+    expect(result?.count).toBeUndefined();
+  });
+
+  it("returns null for unparseable input", () => {
+    expect(parseRrule("NOT_A_RULE")).toBeNull();
+  });
+
+  it("returns null when FREQ is missing", () => {
+    // rrule.js accepts INTERVAL-only strings but we require a FREQ.
+    expect(parseRrule("INTERVAL=2")).toBeNull();
+  });
+});
+
+// ─── buildRrule ───────────────────────────────────────────────────────────────
+
+describe("buildRrule", () => {
+  it("builds a weekly rule with FREQ", () => {
+    expect(buildRrule({ freq: "WEEKLY", interval: 1 })).toContain("FREQ=WEEKLY");
+  });
+
+  it("never prepends RRULE:", () => {
+    const result = buildRrule({ freq: "DAILY", interval: 1 });
+    expect(result.startsWith("RRULE:")).toBe(false);
+  });
+
+  it("emits the chosen interval", () => {
+    expect(buildRrule({ freq: "DAILY", interval: 2 })).toContain("INTERVAL=2");
+    expect(buildRrule({ freq: "DAILY", interval: 5 })).toContain("INTERVAL=5");
+  });
+
+  it("floors fractional intervals and clamps minimum to 1", () => {
+    expect(buildRrule({ freq: "DAILY", interval: 2.9 })).toContain("INTERVAL=2");
+    expect(buildRrule({ freq: "DAILY", interval: 0 })).toContain("INTERVAL=1");
+    expect(buildRrule({ freq: "DAILY", interval: -5 })).toContain("INTERVAL=1");
+  });
+
+  it("emits BYDAY for weekly with weekday indices", () => {
+    const result = buildRrule({ byweekday: [0, 2, 4], freq: "WEEKLY", interval: 1 });
+    expect(result).toContain("BYDAY=MO,WE,FR");
+  });
+
+  it("omits BYDAY when byweekday is empty", () => {
+    expect(buildRrule({ byweekday: [], freq: "WEEKLY", interval: 1 })).not.toContain("BYDAY");
+  });
+
+  it("emits COUNT end condition", () => {
+    expect(buildRrule({ count: 5, freq: "DAILY", interval: 1 })).toContain("COUNT=5");
+  });
+
+  it("emits UNTIL end condition as end-of-day UTC", () => {
+    // UNTIL is set to 23:59:59 UTC so the final occurrence on that local date
+    // is included.
+    const result = buildRrule({ freq: "WEEKLY", interval: 1, until: "2026-06-15" });
+    expect(result).toContain("UNTIL=20260615T235959Z");
+  });
+
+  it("roundtrips through parseRrule → buildRrule", () => {
+    const cases = [
+      "FREQ=DAILY",
+      "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR",
+      "FREQ=MONTHLY;COUNT=12",
+      "FREQ=YEARLY;UNTIL=20301231T235959Z",
+    ];
+    for (const original of cases) {
+      const parsed = parseRrule(original);
+      expect(parsed).not.toBeNull();
+      const rebuilt = buildRrule(parsed!);
+      // Re-parse rebuilt and compare options structurally — string order may
+      // differ (rrule.js doesn't preserve field order).
+      expect(parseRrule(rebuilt)).toEqual(parsed);
+    }
   });
 });

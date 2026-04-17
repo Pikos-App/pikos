@@ -31,6 +31,10 @@ export interface UIContextValue {
   /** Currently viewed week reference date. Persisted so panel toggles don't reset the week. */
   referenceDate: Date;
   setReferenceDate: (d: Date) => void;
+  /** Page ID to briefly flash after navigation (e.g. "View in calendar" jump). Cleared automatically. */
+  highlightedPageId: string | null;
+  /** Trigger a one-shot highlight animation on the page's calendar block. */
+  flashPageBlock: (pageId: string) => void;
   /** Both left panels hidden. Persisted to localStorage. */
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (v: boolean | ((prev: boolean) => boolean)) => void;
@@ -137,6 +141,17 @@ export function UIProvider({ children }: { children: ReactNode }) {
   );
 
   const [isDraggingOverCalendar, setIsDraggingOverCalendar] = useState(false);
+  const [highlightedPageId, setHighlightedPageId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function flashPageBlock(pageId: string) {
+    if (highlightTimerRef.current !== null) clearTimeout(highlightTimerRef.current);
+    setHighlightedPageId(pageId);
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightedPageId(null);
+      highlightTimerRef.current = null;
+    }, 1600);
+  }
 
   // ── Multi-select state ──────────────────────────────────────────────────────
   const [selectedPageIds, setSelectedPageIds] = useState<ReadonlySet<string>>(new Set());
@@ -259,7 +274,9 @@ export function UIProvider({ children }: { children: ReactNode }) {
     activeViewId,
     callExternalDragUpdater,
     clearSelection,
+    flashPageBlock,
     getSortMode,
+    highlightedPageId,
     isDraggingOverCalendar,
     lastEditorPageId,
     openDialog,

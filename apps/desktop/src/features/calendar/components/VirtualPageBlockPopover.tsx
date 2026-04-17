@@ -2,9 +2,9 @@
 // Shows page metadata without editing. Actions: open page, skip this occurrence.
 
 import type { VirtualOccurrence } from "@pikos/core";
-import { rruleToLabel } from "@pikos/core";
 import { CalendarX, ExternalLink } from "lucide-react";
 
+import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { useUI } from "@/shared/context/UIContext";
@@ -25,7 +25,6 @@ export function VirtualPageBlockPopover({ onSkip, page }: VirtualPageBlockPopove
 
   const rule = recurrenceRules.find((r) => r.id === page.ruleId);
   const folder = folders.find((f) => f.id === page.folderId);
-  const cadenceLabel = rule ? rruleToLabel(rule.rrule) : null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -55,10 +54,15 @@ export function VirtualPageBlockPopover({ onSkip, page }: VirtualPageBlockPopove
           </div>
         )}
 
-        {cadenceLabel && (
+        {rule && (
           <div className="flex items-center gap-3">
             <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Repeats</span>
-            <span className="text-sm text-muted-foreground">{cadenceLabel}</span>
+            <RecurrencePopover
+              anchorDate={rule.scheduledStart}
+              onChange={() => undefined}
+              readOnly
+              rrule={rule.rrule}
+            />
           </div>
         )}
       </div>

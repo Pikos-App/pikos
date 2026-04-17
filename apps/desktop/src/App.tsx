@@ -31,7 +31,7 @@ function useTrackPageOpened() {
       updatePage(activePageId, { lastOpenedAt: new Date().toISOString() });
     }
     if (!activePageId) prevIdRef.current = null;
-  }, [activePageId, updatePage]);
+  }, [activePageId]);
 }
 
 /** Handle native menu events via global callback invoked from Tauri eval(). */

@@ -49,6 +49,22 @@ html.dragging-resize * {
   animation: shake 0.3s ease;
 }
 
+/* One-shot ring flash — used to locate a page block after jumping from
+   elsewhere in the app ("View in calendar"). */
+@keyframes highlight-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent);
+  }
+  20%,
+  60% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 65%, transparent);
+  }
+}
+.animate-highlight-flash {
+  animation: highlight-flash 1.6s ease-out;
+}
+
 /* All buttons should use pointer cursor by default */
 button,
 [role="button"] {

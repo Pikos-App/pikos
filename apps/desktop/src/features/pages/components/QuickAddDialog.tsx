@@ -4,9 +4,8 @@
 // but input text is never modified. On submit, the parser extracts the clean
 // title and all metadata from the full input.
 
-import { localToday, parseInput, rruleToLabel } from "@pikos/core";
+import { localToday, parseInput } from "@pikos/core";
 import type { Folder, PagePriority, PageUpdate, ParseResult } from "@pikos/core";
-import { Repeat2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
@@ -16,6 +15,7 @@ import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { TagsPopover } from "@/features/pages/components/TagsPopover";
 import { cn } from "@/lib/utils";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
+import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { NLP_PRIORITY_MAP } from "@/shared/constants/priorities";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -80,7 +80,9 @@ export function QuickAddDialog() {
   const [dateManual, setDateManual] = useState(false);
   const [priorityManual, setPriorityManual] = useState(false);
   const [folderManual, setFolderManual] = useState(false);
-  const [recurrenceLabel, setRecurrenceLabel] = useState<string | null>(null);
+  const [rruleValue, setRruleValue] = useState<string | null>(null);
+  const [rruleManual, setRruleManual] = useState(false);
+  const [finiteLabel, setFiniteLabel] = useState<string | null>(null);
 
   // ── Reset form fields when the dialog opens ───────────────────────────────────
   useEffect(() => {
@@ -96,7 +98,9 @@ export function QuickAddDialog() {
     setDateManual(activeViewId === "today");
     setPriorityManual(false);
     setFolderManual(false);
-    setRecurrenceLabel(null);
+    setRruleValue(null);
+    setRruleManual(false);
+    setFiniteLabel(null);
     setAddedFeedback(null);
   }, [isOpen]);
 
@@ -144,7 +148,8 @@ export function QuickAddDialog() {
         if (!priorityManual) setPriorityValue(0);
         if (!folderManual) setFolderValue(defaultFolderId);
         setNlpTags([]);
-        setRecurrenceLabel(null);
+        if (!rruleManual) setRruleValue(null);
+        setFiniteLabel(null);
         return;
       }
 
@@ -157,13 +162,18 @@ export function QuickAddDialog() {
             : result.input;
       if (!parsed) return;
 
-      // Show recurrence preview label
+      // Show recurrence / finite preview.
+      // Recurrence chip tracks rruleValue; finite stays as a separate label
+      // since finite produces N independent pages, not a recurring rule.
       if (result.type === "recurring") {
-        setRecurrenceLabel(rruleToLabel(result.rrule));
+        if (!rruleManual) setRruleValue(result.rrule);
+        setFiniteLabel(null);
       } else if (result.type === "finite") {
-        setRecurrenceLabel(`${result.count} occurrence${result.count === 1 ? "" : "s"}`);
+        if (!rruleManual) setRruleValue(null);
+        setFiniteLabel(`${result.count} occurrence${result.count === 1 ? "" : "s"}`);
       } else {
-        setRecurrenceLabel(null);
+        if (!rruleManual) setRruleValue(null);
+        setFiniteLabel(null);
       }
 
       if (!dateManual) {
@@ -195,7 +205,16 @@ export function QuickAddDialog() {
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [inputValue, folders, defaultFolderId, folderValue, dateManual, priorityManual, folderManual]);
+  }, [
+    inputValue,
+    folders,
+    defaultFolderId,
+    folderValue,
+    dateManual,
+    priorityManual,
+    folderManual,
+    rruleManual,
+  ]);
 
   // ── Key handler ───────────────────────────────────────────────────────────────
 
@@ -266,7 +285,9 @@ export function QuickAddDialog() {
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
     if (finalTags.length > 0) patch.tags = finalTags;
 
-    if (result.type === "recurring") {
+    // Chip-set rrule takes precedence. Falls back to NLP-derived rrule when
+    // the user hasn't touched the chip.
+    if (rruleValue) {
       // Infinite recurrence: 1 template page + recurrence rule.
       const page = await createPage({ folderId: resolvedFolderId, title });
       if (Object.keys(patch).length > 0) updatePage(page.id, patch);
@@ -275,7 +296,7 @@ export function QuickAddDialog() {
       const ruleStart = resolvedDate ?? localToday();
       await createRecurrence({
         pageId: page.id,
-        rrule: result.rrule,
+        rrule: rruleValue,
         scheduledStart: ruleStart,
         ...(parsed?.scheduledEnd ? { scheduledEnd: parsed.scheduledEnd } : {}),
         timezone: tz,
@@ -338,6 +359,9 @@ export function QuickAddDialog() {
     setPriorityValue(0);
     setNlpTags([]);
     setManualTags([]);
+    setRruleValue(null);
+    setRruleManual(false);
+    setFiniteLabel(null);
     setDateManual(false);
     setPriorityManual(false);
     // Keep folderValue and folderManual — user stays in same folder scope.
@@ -435,12 +459,30 @@ export function QuickAddDialog() {
             selected={tagsValue}
           />
 
-          {recurrenceLabel && (
+          <BylineSeparator />
+
+          <RecurrencePopover
+            anchorDate={dateValue}
+            onChange={(rrule) => {
+              setRruleValue(rrule);
+              setRruleManual(true);
+              // If the user picks a rule without a date set, anchor to today
+              // so the chip's implicit "Starts today" becomes concrete on the
+              // date chip too.
+              if (rrule && !dateValue) {
+                setDateValue(localToday());
+                setDateManual(true);
+              }
+              inputRef.current?.focus();
+            }}
+            rrule={rruleValue}
+          />
+
+          {finiteLabel && (
             <>
               <BylineSeparator />
               <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                <Repeat2 className="h-3 w-3" />
-                {recurrenceLabel}
+                {finiteLabel}
               </span>
             </>
           )}

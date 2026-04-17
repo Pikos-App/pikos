@@ -22,7 +22,13 @@ import {
   nextOccurrenceAfter,
   parseLocalISO,
 } from "@pikos/core";
-import type { FolderUpdate, NewRecurrenceRule, PageUpdate, StorageAdapter } from "@pikos/core";
+import type {
+  FolderUpdate,
+  NewRecurrenceRule,
+  PageUpdate,
+  RecurrenceRuleUpdate,
+  StorageAdapter,
+} from "@pikos/core";
 import { appDataDir } from "@tauri-apps/api/path";
 import { load } from "@tauri-apps/plugin-store";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -96,7 +102,9 @@ export interface WorkspaceContextValue {
   recurrenceRules: PageRecurrenceRule[];
   /** Create a recurrence rule for a page. */
   createRecurrence: (data: NewRecurrenceRule) => Promise<PageRecurrenceRule>;
-  /** Delete a recurrence rule by its ID. */
+  /** Update an existing recurrence rule. */
+  updateRecurrence: (ruleId: string, updates: RecurrenceRuleUpdate) => Promise<PageRecurrenceRule>;
+  /** Delete a recurrence rule by its ID. Cascades to materialised page_schedules overrides. */
   deleteRecurrence: (ruleId: string) => Promise<void>;
   /** List all materialised schedule rows in a date range (for rrule override filtering). */
   listSchedulesRange: (start: string, end: string) => Promise<import("@pikos/core").PageSchedule[]>;
@@ -709,6 +717,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return rule;
   }
 
+  async function updateRecurrence(
+    ruleId: string,
+    updates: RecurrenceRuleUpdate
+  ): Promise<PageRecurrenceRule> {
+    const updated = await adapter.updateRecurrenceRule(ruleId, updates);
+    setRecurrenceRules((prev) => prev.map((r) => (r.id === ruleId ? updated : r)));
+    return updated;
+  }
+
   async function deleteRecurrence(ruleId: string): Promise<void> {
     await adapter.deleteRecurrenceRule(ruleId);
     setRecurrenceRules((prev) => prev.filter((r) => r.id !== ruleId));
@@ -1048,6 +1065,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     undoLastImport,
     updateFolder,
     updatePage,
+    updateRecurrence,
     workspace,
   };
 

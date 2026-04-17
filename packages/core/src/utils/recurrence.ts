@@ -236,3 +236,111 @@ export function rruleToLabel(rruleStr: string): string {
     return rruleStr;
   }
 }
+
+// ─── RRULE editor helpers ─────────────────────────────────────────────────────
+// Used by the recurrence picker UI to parse/rebuild RRULE strings from a
+// simplified, typed options object. The data model stores RRULE without
+// DTSTART — the anchor lives on the page separately.
+
+export type RecurrenceFreq = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+
+/**
+ * Weekday index using rrule.js convention: 0 = Monday … 6 = Sunday.
+ * Used by `byweekday` on weekly rules.
+ */
+export type RecurrenceWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface RecurrenceOptions {
+  freq: RecurrenceFreq;
+  /** Positive integer ≥ 1. Default 1. */
+  interval: number;
+  /** Weekdays for FREQ=WEEKLY (rrule.js: 0=Monday … 6=Sunday). */
+  byweekday?: RecurrenceWeekday[];
+  /** End condition — exactly one of `count` or `until` may be set. */
+  count?: number;
+  /** End condition as YYYY-MM-DD (date-only). */
+  until?: string;
+}
+
+const FREQ_BY_CONST: Record<number, RecurrenceFreq> = {
+  [RRule.DAILY]: "DAILY",
+  [RRule.MONTHLY]: "MONTHLY",
+  [RRule.WEEKLY]: "WEEKLY",
+  [RRule.YEARLY]: "YEARLY",
+};
+
+const CONST_BY_FREQ: Record<RecurrenceFreq, number> = {
+  DAILY: RRule.DAILY,
+  MONTHLY: RRule.MONTHLY,
+  WEEKLY: RRule.WEEKLY,
+  YEARLY: RRule.YEARLY,
+};
+
+/**
+ * Parse an RRULE string (without "RRULE:" prefix) into typed options.
+ * Returns null if the string is unparseable or has an unsupported FREQ.
+ */
+export function parseRrule(rruleStr: string): RecurrenceOptions | null {
+  try {
+    const parsed = RRule.parseString(rruleStr);
+    const freq = parsed.freq !== undefined ? FREQ_BY_CONST[parsed.freq] : undefined;
+    if (!freq) return null;
+
+    const options: RecurrenceOptions = {
+      freq,
+      interval: parsed.interval ?? 1,
+    };
+
+    if (parsed.byweekday) {
+      const days = Array.isArray(parsed.byweekday) ? parsed.byweekday : [parsed.byweekday];
+      const numeric = days
+        .map((d): number =>
+          typeof d === "number" ? d : typeof d === "object" && "weekday" in d ? d.weekday : -1
+        )
+        .filter((n): n is RecurrenceWeekday => n >= 0 && n <= 6);
+      if (numeric.length > 0) options.byweekday = numeric;
+    }
+
+    if (parsed.count != null) options.count = parsed.count;
+    if (parsed.until) {
+      // rrule UNTIL is a Date in UTC — reduce to YYYY-MM-DD.
+      const d = parsed.until;
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(d.getUTCDate()).padStart(2, "0");
+      options.until = `${y}-${m}-${day}`;
+    }
+
+    return options;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build an RRULE string from typed options. Never emits DTSTART — the anchor
+ * is stored on the page separately. Strips the "RRULE:" prefix so the result
+ * matches the data-model convention.
+ */
+export function buildRrule(options: RecurrenceOptions): string {
+  const rruleOpts: ConstructorParameters<typeof RRule>[0] = {
+    freq: CONST_BY_FREQ[options.freq],
+    interval: Math.max(1, Math.floor(options.interval)),
+  };
+
+  if (options.byweekday && options.byweekday.length > 0) {
+    rruleOpts.byweekday = [...options.byweekday];
+  }
+
+  if (options.count != null) {
+    rruleOpts.count = options.count;
+  } else if (options.until) {
+    // UNTIL is interpreted as end-of-day UTC so the final occurrence on that
+    // local date is included.
+    const [y, m, d] = options.until.split("-").map(Number);
+    if (y && m && d) rruleOpts.until = new Date(Date.UTC(y, m - 1, d, 23, 59, 59));
+  }
+
+  const rrule = new RRule(rruleOpts);
+  return rrule.toString().replace(/^RRULE:/, "");
+}

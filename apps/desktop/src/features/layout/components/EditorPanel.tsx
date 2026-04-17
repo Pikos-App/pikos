@@ -53,7 +53,15 @@ export function EditorPanel() {
         )}
       </RightPanelHeader>
 
-      {ui.rightPanel === "editor" ? <EditorPane /> : <CalendarView />}
+      {/* Both mounted and toggled via `hidden` to eliminate the unmount/remount
+          flash when switching panels. The first mount pays the cost for both
+          subtrees; subsequent toggles are instant and preserve scroll/focus. */}
+      <div className="flex min-h-0 flex-1 flex-col" hidden={ui.rightPanel !== "editor"}>
+        <EditorPane />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col" hidden={ui.rightPanel !== "calendar"}>
+        <CalendarView />
+      </div>
     </div>
   );
 }

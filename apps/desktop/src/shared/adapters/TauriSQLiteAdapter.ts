@@ -27,7 +27,53 @@ import type {
   RecurrenceRuleUpdate,
   StorageAdapter,
 } from "@pikos/core";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke as rawInvoke } from "@tauri-apps/api/core";
+
+// ─── Dev-mode IPC watchdog ────────────────────────────────────────────────────
+// Catches render-loop bugs that flood the Tauri IPC channel before they crash
+// the webview. If any command fires more than WATCHDOG_THRESHOLD times within
+// WATCHDOG_WINDOW_MS, we log an error + stack trace pointing at the caller —
+// and throttle subsequent warnings for the same command so the console stays
+// readable. DEV-only; `invoke` passes straight through in production.
+
+const WATCHDOG_WINDOW_MS = 100;
+const WATCHDOG_THRESHOLD = 20;
+const WATCHDOG_COOLDOWN_MS = 2000;
+const callLog = new Map<string, number[]>();
+const cooldownUntil = new Map<string, number>();
+
+function watchdog(command: string): void {
+  const now = performance.now();
+  const timestamps = callLog.get(command) ?? [];
+  // Drop timestamps outside the rolling window.
+  const cutoff = now - WATCHDOG_WINDOW_MS;
+  let firstInWindow = 0;
+  while (firstInWindow < timestamps.length && timestamps[firstInWindow]! < cutoff) {
+    firstInWindow++;
+  }
+  const recent = firstInWindow === 0 ? timestamps : timestamps.slice(firstInWindow);
+  recent.push(now);
+  callLog.set(command, recent);
+
+  if (recent.length <= WATCHDOG_THRESHOLD) return;
+  const cooldown = cooldownUntil.get(command) ?? 0;
+  if (now < cooldown) return;
+  cooldownUntil.set(command, now + WATCHDOG_COOLDOWN_MS);
+
+  // console.error captures a stack trace in browser devtools; the user can
+  // click through to the effect/component responsible for the runaway calls.
+
+  console.error(
+    `[IPC watchdog] "${command}" fired ${recent.length}× in ${WATCHDOG_WINDOW_MS}ms — likely render-loop bug. ` +
+      `Expand stack trace to locate the caller. Further warnings for this command suppressed for ${WATCHDOG_COOLDOWN_MS}ms.`,
+    new Error("IPC flood stack trace")
+  );
+}
+
+function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (import.meta.env.DEV) watchdog(command);
+  return rawInvoke<T>(command, args);
+}
 
 /**
  * Open (or create) the SQLite workspace at `path` and run migrations.

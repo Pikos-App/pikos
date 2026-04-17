@@ -2,13 +2,14 @@
 // key={page.id} in parent resets all state on page switch.
 
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
-import { nowLocalISO, parseLocalISO, rruleToLabel } from "@pikos/core";
-import { AlertTriangle, CalendarDays, Repeat2 } from "lucide-react";
+import { localToday, nowLocalISO, parseLocalISO } from "@pikos/core";
+import { AlertTriangle, CalendarDays } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FolderChip, PriorityDropdown, TagsPopover } from "@/features/pages";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
+import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
@@ -36,6 +37,7 @@ function Byline({
   onFolderChange,
   onOpenInCalendar,
   onPriorityChange,
+  onRecurrenceChange,
   onStatusChange,
   onTagToggle,
   page,
@@ -48,6 +50,7 @@ function Byline({
   onFolderChange: (folderId: string | null) => void;
   onPriorityChange: (priority: PagePriority) => void;
   onTagToggle: (name: string) => void;
+  onRecurrenceChange: (rrule: string | null) => void;
   onOpenInCalendar?: () => void;
   saveError?: string | null;
   onErrorClick?: () => void;
@@ -55,7 +58,6 @@ function Byline({
   const isDone = page.status === "done";
   const { recurrenceRules } = useWorkspace();
   const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
-  const cadenceLabel = recurrenceRule ? rruleToLabel(recurrenceRule.rrule) : null;
 
   return (
     <div className="type-ui-sm flex items-center gap-2 overflow-hidden pt-2 pb-4 text-subtle">
@@ -78,42 +80,26 @@ function Byline({
       <BylineSeparator />
       <FolderChip folders={folders} onChange={onFolderChange} value={page.folderId} />
 
-      {/* Date */}
+      {/* Schedule cluster — date chip + bell + recurrence + calendar-jump, no inner dots */}
       <BylineSeparator />
-      <DateSchedulePopover page={page} />
-
-      {/* Reminder bell — per-page reminder override */}
-      {!!page.scheduledStart && (
-        <>
-          <BylineSeparator />
-          <ReminderDropdown pageId={page.id} />
-        </>
-      )}
-
-      {/* Recurrence cadence label */}
-      {cadenceLabel && (
-        <>
-          <BylineSeparator />
-          <span className="inline-flex shrink-0 items-center gap-1">
-            <Repeat2 className="h-3 w-3" />
-            {cadenceLabel}
-          </span>
-        </>
-      )}
-
-      {/* Jump to calendar at scheduled date */}
-      {onOpenInCalendar && (
-        <>
-          <BylineSeparator />
+      <div className="inline-flex shrink-0 items-center gap-2">
+        <DateSchedulePopover page={page} />
+        {!!page.scheduledStart && <ReminderDropdown pageId={page.id} />}
+        <RecurrencePopover
+          anchorDate={page.scheduledStart ?? null}
+          onChange={onRecurrenceChange}
+          rrule={recurrenceRule?.rrule ?? null}
+          variant="icon"
+        />
+        {onOpenInCalendar && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 aria-label="View in calendar"
-                className="inline-flex items-center gap-1 rounded transition-colors hover:text-muted-foreground focus:outline-none"
+                className="inline-flex items-center rounded transition-colors hover:text-muted-foreground focus:outline-none"
                 onClick={onOpenInCalendar}
               >
-                <CalendarDays size={14} />
-                <span>View</span>
+                <CalendarDays size={13} />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -122,8 +108,8 @@ function Byline({
               </span>
             </TooltipContent>
           </Tooltip>
-        </>
-      )}
+        )}
+      </div>
 
       {/* Priority */}
       <BylineSeparator />
@@ -176,15 +162,19 @@ export function MetadataHeader({
   const {
     clearPageError,
     completeRecurringPage,
+    createRecurrence,
+    deleteRecurrence,
     flushPage,
     folders,
     pageErrors,
     recurrenceRules,
+    scheduleOnce,
     tags,
     updatePage,
+    updateRecurrence,
   } = useWorkspace();
   const { lineWidth } = useEditorSettings();
-  const { setReferenceDate, setRightPanel } = useUI();
+  const { flashPageBlock, setReferenceDate, setRightPanel } = useUI();
   const allTagNames = tags.map((t) => t.name);
 
   const metadataError = pageErrors.get(page.id) ?? null;
@@ -219,6 +209,7 @@ export function MetadataHeader({
   function handleOpenInCalendar() {
     setReferenceDate(parseLocalISO(page.scheduledStart!));
     setRightPanel("calendar");
+    flashPageBlock(page.id);
   }
 
   function handleTagToggle(name: string) {
@@ -226,6 +217,34 @@ export function MetadataHeader({
       ? page.tags.filter((t) => t !== name)
       : [...page.tags, name];
     updatePage(page.id, { tags: next });
+  }
+
+  async function handleRecurrenceChange(rrule: string | null) {
+    const existing = recurrenceRules.find((r) => r.pageId === page.id);
+    if (!rrule) {
+      if (existing) await deleteRecurrence(existing.id);
+      return;
+    }
+    if (existing) {
+      await updateRecurrence(existing.id, { rrule });
+      return;
+    }
+    // No existing rule. If the page has no date yet, anchor to today so the
+    // first occurrence is concrete; scheduleOnce updates the page state
+    // optimistically so the date chip fills in immediately.
+    let anchorStart = page.scheduledStart;
+    if (!anchorStart) {
+      anchorStart = localToday();
+      void scheduleOnce(page.id, anchorStart);
+    }
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    await createRecurrence({
+      pageId: page.id,
+      rrule,
+      scheduledStart: anchorStart,
+      ...(page.scheduledEnd ? { scheduledEnd: page.scheduledEnd } : {}),
+      timezone: tz,
+    });
   }
 
   // ── Title ──────────────────────────────────────────────────────────────────
@@ -434,6 +453,7 @@ export function MetadataHeader({
           onFolderChange={handleFolderChange}
           {...(page.scheduledStart ? { onOpenInCalendar: handleOpenInCalendar } : {})}
           onPriorityChange={handlePriorityChange}
+          onRecurrenceChange={(rrule) => void handleRecurrenceChange(rrule)}
           onStatusChange={handleStatusChange}
           onTagToggle={handleTagToggle}
           page={page}

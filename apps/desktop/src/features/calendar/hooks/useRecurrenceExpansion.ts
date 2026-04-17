@@ -34,24 +34,27 @@ export function useRecurrenceExpansion({
   const [rangeSchedules, setRangeSchedules] = useState<PageSchedule[]>([]);
   const abortRef = useRef(0);
 
-  // Fetch range schedules when the visible week or rules change.
-  useEffect(() => {
-    if (recurrenceRules.length === 0) return;
+  const rangeStartDate = days[0];
+  const lastDay = days[days.length - 1];
+  const rangeEndDate = lastDay ? addDays(lastDay, 1) : null;
+  const startStr = rangeStartDate ? formatDateOnly(rangeStartDate) : null;
+  const endStr = rangeEndDate ? formatDateOnly(rangeEndDate) : null;
+  const ruleCount = recurrenceRules.length;
 
-    const rangeStart = days[0];
-    const rangeEnd = addDays(days[days.length - 1]!, 1);
-    if (!rangeStart || !rangeEnd) return;
+  useEffect(() => {
+    if (!startStr || !endStr || ruleCount === 0) return;
 
     const token = ++abortRef.current;
-    const startStr = formatDateOnly(rangeStart);
-    const endStr = formatDateOnly(rangeEnd);
-
     void listSchedulesRange(startStr, endStr).then((schedules) => {
       if (token !== abortRef.current) return;
-
-      setRangeSchedules(schedules);
+      setRangeSchedules((prev) => {
+        if (prev.length === schedules.length && prev.every((p, i) => p.id === schedules[i]?.id)) {
+          return prev;
+        }
+        return schedules;
+      });
     });
-  }, [days, recurrenceRules, listSchedulesRange]);
+  }, [startStr, endStr, ruleCount]);
 
   // No rules → return pages as-is (no virtual occurrences).
   if (recurrenceRules.length === 0) return pages;

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 
 import { useRecurringActions } from "../hooks/useRecurringActions";
@@ -70,11 +71,13 @@ export function PageBlock({
     totalColumns,
   } = block;
   const { requestDeletePage } = useUndoDelete();
+  const { highlightedPageId } = useUI();
   const {
     isRecurring,
     skipOccurrence: handleSkipOccurrence,
     toggleStatus,
   } = useRecurringActions(page);
+  const isHighlighted = highlightedPageId === page.id;
 
   const widthPct = 100 / totalColumns;
   const leftPct = column * widthPct;
@@ -288,6 +291,7 @@ export function PageBlock({
               "flex items-center gap-1",
               !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
               isDone && "opacity-50",
+              isHighlighted && "animate-highlight-flash",
               isResizing
                 ? "cursor-row-resize!"
                 : isDragging
@@ -313,6 +317,7 @@ export function PageBlock({
               isDone
                 ? "opacity-50"
                 : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
+              isHighlighted && "animate-highlight-flash",
               isResizing
                 ? "cursor-row-resize!"
                 : isDragging

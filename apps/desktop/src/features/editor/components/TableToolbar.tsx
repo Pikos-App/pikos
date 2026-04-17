@@ -83,7 +83,7 @@ export function TableToolbar({ editor }: TableToolbarProps) {
     const scrollContainer = editor.view.dom.closest(".overflow-y-auto");
     scrollContainer?.addEventListener("scroll", reposition, { passive: true });
     return () => scrollContainer?.removeEventListener("scroll", reposition);
-  });
+  }, [isInTable, editor]);
 
   if (!isInTable) return null;
 

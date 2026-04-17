@@ -15,10 +15,17 @@ export {
 } from "./utils/dates";
 export { extractText } from "./utils/extractText";
 export {
+  buildRrule,
   computeNextEnd,
   expandRecurrenceForRange,
   nextOccurrenceAfter,
+  parseRrule,
   rruleToLabel,
 } from "./utils/recurrence";
-export type { VirtualOccurrence } from "./utils/recurrence";
+export type {
+  RecurrenceFreq,
+  RecurrenceOptions,
+  RecurrenceWeekday,
+  VirtualOccurrence,
+} from "./utils/recurrence";
 export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";

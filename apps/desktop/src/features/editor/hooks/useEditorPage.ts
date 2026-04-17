@@ -54,7 +54,7 @@ export function useEditorPage(): EditorPageState {
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [activePageId, getPage]);
+  }, [activePageId]);
 
   // Listen for external updates to the active page (e.g. from other contexts)
   useEffect(() => {
@@ -63,7 +63,7 @@ export function useEditorPage(): EditorPageState {
         setLoadedPage(updated);
       }
     });
-  }, [on]);
+  }, []);
 
   // Merge context summary (optimistic state) into loadedPage so that schedule,
   // status, priority and other metadata changes from scheduleOnce/updatePage

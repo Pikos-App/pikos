@@ -9,6 +9,7 @@ import { useState } from "react";
 
 import { FolderChip, PriorityDropdown } from "@/features/pages";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
+import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
@@ -27,10 +28,13 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   const {
     clearSchedule,
     completeRecurringPage,
+    createRecurrence,
+    deleteRecurrence,
     folders,
     recurrenceRules,
     scheduleOnce,
     updatePage,
+    updateRecurrence,
   } = useWorkspace();
   const { openPage } = useUI();
 
@@ -119,6 +123,29 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
     }
   }
 
+  async function handleRecurrenceChange(rrule: string | null) {
+    const existing = recurrenceRules.find((r) => r.pageId === page.id);
+    if (!rrule) {
+      if (existing) await deleteRecurrence(existing.id);
+      return;
+    }
+    if (existing) {
+      await updateRecurrence(existing.id, { rrule });
+      return;
+    }
+    if (!page.scheduledStart) return;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    await createRecurrence({
+      pageId: page.id,
+      rrule,
+      scheduledStart: page.scheduledStart,
+      ...(page.scheduledEnd ? { scheduledEnd: page.scheduledEnd } : {}),
+      timezone: tz,
+    });
+  }
+
+  const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
+
   function handleOpenPage(e: React.MouseEvent) {
     e.stopPropagation();
     openPage(page.id);
@@ -180,6 +207,16 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
             />
             {page.scheduledStart && <ReminderDropdown iconSize={12} pageId={page.id} />}
           </div>
+        </div>
+
+        {/* Repeats */}
+        <div className="flex items-center gap-3">
+          <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Repeats</span>
+          <RecurrencePopover
+            anchorDate={page.scheduledStart ?? null}
+            onChange={(rrule) => void handleRecurrenceChange(rrule)}
+            rrule={recurrenceRule?.rrule ?? null}
+          />
         </div>
 
         {/* Priority */}
