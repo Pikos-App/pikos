@@ -28,7 +28,6 @@ export function usePageList() {
   const completedPages = completed.completedPages.filter((p) => !hiddenIds.has(p.id));
 
   function handleDeleteRequest(page: PageSummary) {
-    if (activePage?.id === page.id) setActivePage(null);
     requestDeletePage(page);
   }
 

@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { UIProvider, useUI } from "@/shared/context/UIContext";
 import { useWorkspace, WorkspaceProvider } from "@/shared/context/WorkspaceContext";
 
 import { UndoDeleteProvider, useUndoDelete } from "./UndoDeleteContext";
@@ -12,16 +13,19 @@ vi.stubEnv("VITE_TEST_MODE", "true");
 function wrapper({ children }: { children: ReactNode }) {
   return (
     <WorkspaceProvider>
-      <UndoDeleteProvider>{children}</UndoDeleteProvider>
+      <UIProvider>
+        <UndoDeleteProvider>{children}</UndoDeleteProvider>
+      </UIProvider>
     </WorkspaceProvider>
   );
 }
 
-/** Render both hooks, init workspace, and seed a page + folder. */
+/** Render all three hooks, init workspace, and seed a page + folder. */
 async function setup() {
-  const hook = renderHook(() => ({ undo: useUndoDelete(), workspace: useWorkspace() }), {
-    wrapper,
-  });
+  const hook = renderHook(
+    () => ({ ui: useUI(), undo: useUndoDelete(), workspace: useWorkspace() }),
+    { wrapper }
+  );
 
   await act(async () => {
     await hook.result.current.workspace.selectWorkspace();
@@ -74,6 +78,40 @@ describe("requestDeletePage", () => {
 
     expect(hook.result.current.undo.undoItems).toHaveLength(1);
   });
+
+  it("closes the editor when the active page is deleted", async () => {
+    const { hook, pageId } = await setup();
+
+    act(() => {
+      hook.result.current.ui.setActivePage(pageId);
+    });
+    expect(hook.result.current.ui.activePageId).toBe(pageId);
+
+    act(() => {
+      hook.result.current.undo.requestDeletePage({ id: pageId, title: "Test Page" });
+    });
+
+    expect(hook.result.current.ui.activePageId).toBeNull();
+  });
+
+  it("leaves the active page alone when a different page is deleted", async () => {
+    const { hook, pageId } = await setup();
+    let otherId!: string;
+    await act(async () => {
+      const other = await hook.result.current.workspace.createPage({ title: "Other" });
+      otherId = other.id;
+    });
+
+    act(() => {
+      hook.result.current.ui.setActivePage(pageId);
+    });
+
+    act(() => {
+      hook.result.current.undo.requestDeletePage({ id: otherId, title: "Other" });
+    });
+
+    expect(hook.result.current.ui.activePageId).toBe(pageId);
+  });
 });
 
 // ─── Folder deletion ─────────────────────────────────────────────────────────
@@ -113,6 +151,47 @@ describe("requestDeleteFolder", () => {
     });
 
     expect(hook.result.current.undo.undoItems[0]!.label).toBe("Work");
+  });
+
+  it("closes the editor when the active page lives in the deleted folder", async () => {
+    const { folderId, hook, pageId } = await setup();
+    const folder = hook.result.current.workspace.folders.find((f) => f.id === folderId)!;
+
+    act(() => {
+      hook.result.current.ui.setActivePage(pageId);
+    });
+
+    act(() => {
+      hook.result.current.undo.requestDeleteFolder(folder, 1);
+    });
+
+    expect(hook.result.current.ui.activePageId).toBeNull();
+  });
+
+  it("leaves the active page alone when it lives in a different folder", async () => {
+    const { folderId, hook } = await setup();
+    const folder = hook.result.current.workspace.folders.find((f) => f.id === folderId)!;
+
+    // Page in another folder
+    let otherId!: string;
+    await act(async () => {
+      const otherFolder = await hook.result.current.workspace.createFolder({ name: "Other" });
+      const other = await hook.result.current.workspace.createPage({
+        folderId: otherFolder.id,
+        title: "Other page",
+      });
+      otherId = other.id;
+    });
+
+    act(() => {
+      hook.result.current.ui.setActivePage(otherId);
+    });
+
+    act(() => {
+      hook.result.current.undo.requestDeleteFolder(folder, 1);
+    });
+
+    expect(hook.result.current.ui.activePageId).toBe(otherId);
   });
 });
 

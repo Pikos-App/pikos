@@ -3,12 +3,13 @@
 // UndoDeleteContext — app-wide deferred page/folder deletion with undo.
 // Items are hidden from the UI immediately; the real DB delete fires when the
 // UndoToast timer expires (onDismiss). Undo cancels the pending delete.
-// Callers are responsible for deselecting the active page before calling requestDeletePage.
+// Deleting the active page also clears the editor — no caller-side bookkeeping.
 
 import type { Folder, PageSummary } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
 import type { UndoToastItem } from "@/shared/components/UndoToast";
+import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 export interface UndoDeleteContextValue {
@@ -40,7 +41,8 @@ const FOLDER_UNDO_PREFIX = "folder:";
 const UndoDeleteContext = createContext<UndoDeleteContextValue | null>(null);
 
 export function UndoDeleteProvider({ children }: { children: ReactNode }) {
-  const { restoreFolder, restorePage, softDeleteFolder, softDeletePage } = useWorkspace();
+  const { pages, restoreFolder, restorePage, softDeleteFolder, softDeletePage } = useWorkspace();
+  const { activePageId, setActivePage } = useUI();
 
   const pendingDeleteIds = useRef<Set<string>>(new Set());
   const [hiddenPageIds, setHiddenPageIds] = useState<Set<string>>(new Set());
@@ -55,6 +57,9 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
   function requestDeletePage(page: Pick<PageSummary, "id" | "title">) {
     if (pendingDeleteIds.current.has(page.id)) return;
     pendingDeleteIds.current.add(page.id);
+    // Close the editor if we're about to hide the active page — otherwise the
+    // editor keeps rendering a stale page that no longer exists in any list.
+    if (activePageId === page.id) setActivePage(null);
     setHiddenPageIds((prev) => new Set([...prev, page.id]));
     setUndoItems((prev) => [...prev, { id: page.id, label: page.title }]);
     // Soft-delete immediately — page disappears from all DB queries
@@ -66,6 +71,10 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     if (pendingDeleteIds.current.has(undoId)) return;
     pendingDeleteIds.current.add(undoId);
     pendingFolderIds.current.add(folder.id);
+    // Close the editor if the active page lives inside the folder we're about
+    // to hide — the cascade soft-delete removes it from the pages list.
+    const activePage = activePageId ? pages.find((p) => p.id === activePageId) : null;
+    if (activePage && activePage.folderId === folder.id) setActivePage(null);
     setHiddenFolderIds((prev) => new Set([...prev, folder.id]));
     const suffix = pageCount > 0 ? ` (${pageCount} ${pageCount === 1 ? "page" : "pages"})` : "";
     setUndoItems((prev) => [
