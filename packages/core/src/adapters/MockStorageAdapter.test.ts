@@ -95,6 +95,30 @@ describe("_refreshDenorm", () => {
 
     vi.useRealTimers();
   });
+
+  it("falls back to the earliest past schedule when no future schedule exists", async () => {
+    // Regression: previously the mock stripped denorm to null when only past
+    // schedules existed. That caused just-created past-date multi-day events
+    // to appear momentarily and then "revert" — the debounced updatePage
+    // write re-read the adapter's stripped record and overwrote React's
+    // optimistic state. Rust adapter (schedules.rs:refresh_schedule_denorm)
+    // falls back to the earliest past — this mock must match.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 15, 12, 0, 0));
+
+    const page = await createTestPage();
+    await adapter.createPageSchedule({
+      pageId: page.id,
+      scheduledEnd: "2026-03-12",
+      scheduledStart: "2026-03-10",
+    });
+
+    const updated = await adapter.getPage(page.id);
+    expect(updated?.scheduledStart).toBe("2026-03-10");
+    expect(updated?.scheduledEnd).toBe("2026-03-12");
+
+    vi.useRealTimers();
+  });
 });
 
 // ─── listPagesToday ──────────────────────────────────────────────────────────
@@ -337,6 +361,28 @@ describe("matchesFilter (via listPages)", () => {
     const results = await adapter.listPages({ query: "ipsum" });
     expect(results).toHaveLength(1);
     expect(results[0]!.title).toBe("notes");
+  });
+
+  it("hasSchedule=true returns only pages with a scheduledStart", async () => {
+    const scheduled = await createTestPage({ title: "scheduled" });
+    await adapter.createPageSchedule({ pageId: scheduled.id, scheduledStart: "2026-03-15" });
+    await createTestPage({ title: "no schedule" });
+
+    const results = await adapter.listPages({ hasSchedule: true });
+    expect(results.map((r) => r.title)).toEqual(["scheduled"]);
+  });
+
+  it("compound: status=done + hasSchedule=true returns completed scheduled pages only", async () => {
+    // This is the calendar's use case — pulls done items that occupy a
+    // time slot without also loading every unscheduled completed page.
+    const doneSched = await createTestPage({ status: "done", title: "done+sched" });
+    await adapter.createPageSchedule({ pageId: doneSched.id, scheduledStart: "2026-03-15" });
+    await createTestPage({ status: "done", title: "done no sched" });
+    const activeSched = await createTestPage({ status: "not_started", title: "active+sched" });
+    await adapter.createPageSchedule({ pageId: activeSched.id, scheduledStart: "2026-03-15" });
+
+    const results = await adapter.listPages({ hasSchedule: true, status: "done" });
+    expect(results.map((r) => r.title)).toEqual(["done+sched"]);
   });
 
   it("compound filter: folderId + status + tags", async () => {

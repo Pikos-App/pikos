@@ -269,8 +269,12 @@ appTest("create recurring page shows recurrence label @tier2", async ({ app }) =
   const input = app.getByPlaceholder(/what's on your mind/i);
   await input.fill("standup every monday at 9am");
 
-  // Wait for NLP debounce — recurrence label should appear in byline
-  await expect(dialog.getByText(/every week on Monday/i)).toBeVisible({ timeout: 2000 });
+  // Wait for NLP debounce — the recurrence chip in the byline is compact
+  // (visible text is the short form "Weekly"; the full cadence lives in the
+  // button's aria-label so screen readers get the weekday anchor).
+  await expect(
+    dialog.getByRole("button", { name: /recurrence: every week on Monday/i })
+  ).toBeVisible({ timeout: 2000 });
 
   // Submit
   await app.keyboard.press("Enter");
@@ -340,9 +344,10 @@ appTest("QuickAdd bounded recurrence creates 1 page with rrule @tier2", async ({
     .getByPlaceholder(/what's on your mind/i)
     .fill("practice piano every monday at 3pm for 4 weeks");
 
-  // Short-form chip should read "Weekly thru <MMM d>" (bounded via UNTIL).
+  // Aria-label uses the long cadence — "every week on Monday until …" — so
+  // screen-reader users hear the weekday anchor and end date.
   await expect(
-    dialog.getByRole("button", { name: /Recurrence: Weekly thru/i })
+    dialog.getByRole("button", { name: /Recurrence: every week on Monday until/i })
   ).toBeVisible({ timeout: 2000 });
 
   await app.keyboard.press("Enter");
@@ -365,9 +370,9 @@ appTest("QuickAdd 'N times' defaults to daily recurring @tier2", async ({ app })
 
   await app.getByPlaceholder(/what's on your mind/i).fill("meditate 10 times");
 
-  // Chip reads "Daily × 10".
+  // Aria-label uses the long cadence — "every day for 10 times".
   await expect(
-    dialog.getByRole("button", { name: /Recurrence: Daily × 10/i })
+    dialog.getByRole("button", { name: /Recurrence: every day for 10 times/i })
   ).toBeVisible({ timeout: 2000 });
 
   await app.keyboard.press("Enter");

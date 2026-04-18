@@ -14,7 +14,7 @@ import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import { useRecurrenceExpansion } from "../hooks/useRecurrenceExpansion";
-import { buildCalendarDays } from "../utils/calendarUtils";
+import { buildCalendarDays, clampDayCount } from "../utils/calendarUtils";
 import { WeekGrid } from "./WeekGrid";
 
 export function CalendarView() {
@@ -45,8 +45,7 @@ export function CalendarView() {
   const layoutMode = useLayoutMode();
   // User preference wins, but breakpoint caps it — choosing 7 on a narrow window
   // would truncate day columns to unusable widths.
-  const maxDayCount = getCalendarDayCount(layoutMode);
-  const dayCount = Math.min(preferredDayCount, maxDayCount);
+  const dayCount = clampDayCount(preferredDayCount, getCalendarDayCount(layoutMode));
   const days = buildCalendarDays(referenceDate, dayCount, weekStart);
   const today = new Date();
   const isCurrentWeek = days.some((d) => isSameDay(d, today));
@@ -77,12 +76,18 @@ export function CalendarView() {
     setAutoOpenPageId(page.id);
   }
 
-  // Click on an empty all-day column → create all-day page for that date.
-  async function handleCreateAllDay(day: Date) {
+  // Click (or drag across columns) on empty all-day space → create all-day page.
+  // `end` is undefined for a single-day click; set by the drag-to-create gesture
+  // for a multi-day span.
+  async function handleCreateAllDay(start: Date, end?: Date) {
     const folderId = activeViewId === "today" || activeViewId === "inbox" ? null : activeViewId;
     const page = await createPage({ folderId });
-    // Date-only string → isAllDayPage() returns true.
-    await scheduleOnce(page.id, format(day, "yyyy-MM-dd"));
+    // Date-only strings → isAllDayPage() returns true.
+    await scheduleOnce(
+      page.id,
+      format(start, "yyyy-MM-dd"),
+      end ? format(end, "yyyy-MM-dd") : undefined
+    );
     setAutoOpenPageId(page.id);
   }
 

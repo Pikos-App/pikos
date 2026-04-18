@@ -185,6 +185,10 @@ export interface PageFilter {
   query?: string;
   scheduledAfter?: string; // ISO 8601
   scheduledBefore?: string; // ISO 8601
+  /** When true, only pages with a non-null scheduledStart match — used to
+   * pull scheduled completed pages into the calendar view without also
+   * loading every unscheduled completed page ever created. */
+  hasSchedule?: boolean;
 }
 
 // ─── Completed pages (lazy-loaded) ──────────────────────────────────────────

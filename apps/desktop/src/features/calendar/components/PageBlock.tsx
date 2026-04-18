@@ -1,6 +1,5 @@
 import type { VirtualOccurrence } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -9,13 +8,13 @@ import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 
+import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import {
+  beginDragThreshold,
   CHIP_BASE_CLASSES,
   CHIP_DEFAULT_COLOR_CLASSES,
   chipFolderStyle,
-  CLICK_DELAY,
-  DRAG_THRESHOLD,
   formatTimeRange,
   snapY,
 } from "../utils/calendarUtils";
@@ -113,66 +112,22 @@ export function PageBlock({
   // title/checkbox. Continuation days keep the colored bar as a click target.
   const showLabel = !isContinuationBefore;
 
-  // Popover open state. Opens automatically for a freshly-created block so the
-  // user lands directly on the metadata editor with no layout shift.
-  // The parent may flip autoOpenPopover to true on a later render (the block
-  // mounts between scheduleOnce's commit and setAutoOpenPageId's commit), so
-  // we latch on the rising edge via the render-time derived-state pattern.
-  const [popoverOpen, setPopoverOpen] = useState(autoOpenPopover ?? false);
-  const [autoOpenHandled, setAutoOpenHandled] = useState(autoOpenPopover ?? false);
-  if (autoOpenPopover && !autoOpenHandled) {
-    setAutoOpenHandled(true);
-    setPopoverOpen(true);
-  }
-  function handlePopoverOpenChange(open: boolean) {
-    setPopoverOpen(open);
-    if (!open && autoOpenHandled) {
-      onAutoOpenConsumed?.();
-    }
-  }
-
-  // Timer ref for single vs double click discrimination.
-  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Set when a drag gesture is detected — prevents the subsequent click from
-  // opening the popover after the drag is released.
-  const isBlockDraggingRef = useRef(false);
+  const {
+    handleClick,
+    handlePopoverOpenChange,
+    markDragging,
+    popoverOpen,
+    setPopoverOpen,
+    suppressPendingClick,
+  } = useCalendarBlockPopover({
+    autoOpenPopover: autoOpenPopover ?? false,
+    onAutoOpenConsumed,
+    onDoubleClick: () => onDoubleClick(page.id),
+  });
 
   // Resize is disabled on continuation-after segments (the visual bottom is the
   // day boundary, not the real event end) so the handle isn't rendered there.
   const resizeEnabled = !!onResizeStart && !isContinuationAfter;
-
-  // Cleanup timer on unmount.
-  useEffect(() => {
-    return () => {
-      if (clickTimerRef.current !== null) clearTimeout(clickTimerRef.current);
-    };
-  }, []);
-
-  /**
-   * Discriminate single click (open popover) from double click (open editor).
-   * A double click fires onClick twice quickly; we detect this via a short timer.
-   */
-  function handleClick(e: React.MouseEvent) {
-    e.stopPropagation();
-    // Swallow the click that fires at the end of a drag gesture.
-    if (isBlockDraggingRef.current) {
-      setTimeout(() => {
-        isBlockDraggingRef.current = false;
-      }, 0);
-      return;
-    }
-    if (clickTimerRef.current !== null) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-      onDoubleClick(page.id);
-      return;
-    }
-    clickTimerRef.current = setTimeout(() => {
-      clickTimerRef.current = null;
-      setPopoverOpen(true);
-    }, CLICK_DELAY);
-  }
 
   /**
    * Mousedown on the block body (drag-to-reschedule). The resize handle is a
@@ -182,92 +137,41 @@ export function PageBlock({
     if (e.button !== 0) return; // let right-click reach ContextMenuTrigger unmodified
     e.stopPropagation();
     if (!onDragStart) return;
-
-    const startX = e.clientX;
-    const startY = e.clientY;
-
-    // Swap the cursor immediately on mousedown for instant mode feedback, before
-    // the drag threshold is crossed. WeekGrid reapplies the same class when the
-    // drag actually starts and removes it on its own mouseup — we still clean
-    // up here in case the gesture never crosses the threshold.
-    document.documentElement.classList.add("dragging-grab");
-
-    function onMove(ev: MouseEvent) {
-      if (
-        Math.abs(ev.clientX - startX) > DRAG_THRESHOLD ||
-        Math.abs(ev.clientY - startY) > DRAG_THRESHOLD
-      ) {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        if (clickTimerRef.current !== null) {
-          clearTimeout(clickTimerRef.current);
-          clickTimerRef.current = null;
-        }
+    const { clientX: startX, clientY: startY } = e;
+    beginDragThreshold(startX, startY, {
+      bodyCursor: "dragging-grab",
+      onCrossed: () => {
+        suppressPendingClick();
         setPopoverOpen(false);
-        isBlockDraggingRef.current = true;
-        onDragStart?.(startX, startY);
-      }
-    }
-
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      document.documentElement.classList.remove("dragging-grab");
-    }
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+        markDragging();
+        onDragStart(startX, startY);
+      },
+    });
   }
 
   /**
-   * Mousedown on the bottom resize handle. Always starts a resize gesture —
-   * even a plain click suppresses the popover (via isBlockDraggingRef).
+   * Mousedown on the bottom resize handle. Marks the gesture as a drag
+   * immediately so a plain click on the handle still suppresses the popover,
+   * then waits for the threshold before telling the parent to start resizing.
    */
   function handleResizeHandleMouseDown(e: React.MouseEvent) {
     if (e.button !== 0) return;
     e.stopPropagation();
     if (!onResizeStart) return;
-
-    isBlockDraggingRef.current = true;
-    document.documentElement.classList.add("dragging-resize");
-
-    const startX = e.clientX;
-    const startY = e.clientY;
-
-    function onMove(ev: MouseEvent) {
-      if (
-        Math.abs(ev.clientX - startX) > DRAG_THRESHOLD ||
-        Math.abs(ev.clientY - startY) > DRAG_THRESHOLD
-      ) {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        if (clickTimerRef.current !== null) {
-          clearTimeout(clickTimerRef.current);
-          clickTimerRef.current = null;
-        }
+    markDragging();
+    beginDragThreshold(e.clientX, e.clientY, {
+      bodyCursor: "dragging-resize",
+      onCrossed: () => {
+        suppressPendingClick();
         setPopoverOpen(false);
-        onResizeStart?.();
-      }
-    }
-
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      document.documentElement.classList.remove("dragging-resize");
-    }
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+        onResizeStart();
+      },
+    });
   }
 
   function handleCheckboxClick(e: React.MouseEvent) {
     e.stopPropagation();
-    // Cancel any pending single-click popover timer so the checkbox click
-    // doesn't also open the popover.
-    if (clickTimerRef.current !== null) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-    }
+    suppressPendingClick();
     toggleStatus();
   }
 

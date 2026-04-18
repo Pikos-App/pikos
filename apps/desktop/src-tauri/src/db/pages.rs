@@ -235,6 +235,10 @@ pub struct PageFilter {
     pub query: Option<String>,
     pub scheduled_after: Option<String>,
     pub scheduled_before: Option<String>,
+    /// When Some(true), restrict to rows where scheduled_start IS NOT NULL —
+    /// used by the calendar to pull completed scheduled pages without also
+    /// loading unscheduled completed pages.
+    pub has_schedule: Option<bool>,
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -548,6 +552,9 @@ pub async fn list_pages(
         if let Some(ref before) = f.scheduled_before {
             builder.push(" AND scheduled_start <= ");
             builder.push_bind(before.clone());
+        }
+        if f.has_schedule == Some(true) {
+            builder.push(" AND scheduled_start IS NOT NULL");
         }
         if let Some(ref query) = f.query {
             let like = format!("%{query}%");

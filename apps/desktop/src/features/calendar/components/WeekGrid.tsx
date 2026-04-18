@@ -20,7 +20,9 @@ import { useHeightResize } from "../hooks/useHeightResize";
 import type { CalendarBlock, CalendarMetrics } from "../utils/calendarUtils";
 import {
   chipFolderStyle,
+  computeAllDayEdgeResize,
   formatTimeRange,
+  shiftAllDayEnd,
   snapY,
   VISIBLE_HOURS,
   yToDate,
@@ -35,7 +37,8 @@ interface WeekGridProps {
   autoOpenPageId: string | null;
   isCurrentWeek: boolean;
   onAutoOpenConsumed: () => void;
-  onCreateAllDay: (day: Date) => Promise<void> | void;
+  /** Create an all-day page. Optional end date for multi-day spans (drag-to-create). */
+  onCreateAllDay: (start: Date, end?: Date) => Promise<void> | void;
   onCreatePage: (day: Date, start: Date, end?: Date) => Promise<void> | void;
   onPageDoubleClick: (pageId: string) => void;
   onReschedule: (pageId: string, start: string, end?: string) => void;
@@ -149,6 +152,34 @@ export function WeekGrid({
   const resizeRef = useRef<ResizeRefState | null>(null);
   const resizeGhostBottomRef = useRef<number | null>(null);
   const [resizeRenderState, setResizeRenderState] = useState<ResizeGhost | null>(null);
+
+  // ── All-day edge resize ────────────────────────────────────────────────────
+  // Dragging the left or right edge of an all-day chip extends/shrinks the span.
+  // Live preview is rendered by overriding the page's scheduledStart/End in the
+  // pages list passed to AllDaySection — existing layout machinery reflows naturally.
+  interface AllDayEdgePreview {
+    pageId: string;
+    startDate: string;
+    endDate: string;
+  }
+  const allDayEdgeResizePreviewRef = useRef<AllDayEdgePreview | null>(null);
+  const [allDayEdgeResizePreview, setAllDayEdgeResizePreview] = useState<AllDayEdgePreview | null>(
+    null
+  );
+
+  // ── All-day drag-to-create ─────────────────────────────────────────────────
+  // Mousedown on empty all-day space → track cursor across columns, render a
+  // ghost overlay (absolutely positioned — does NOT participate in page row
+  // assignment), commit on mouseup as a new page. The overlay approach avoids
+  // the popover open-close-open dance that happens when a fake preview page
+  // shares/swaps rows with the real chip.
+  interface AllDayCreatePreview {
+    startDayIndex: number;
+    endDayIndex: number;
+    moved: boolean;
+  }
+  const allDayCreatePreviewRef = useRef<AllDayCreatePreview | null>(null);
+  const [allDayCreatePreview, setAllDayCreatePreview] = useState<AllDayCreatePreview | null>(null);
 
   // ── All-day drag state (all-day chip dragged into timed grid) ───────────────
   interface AllDayDragRefState {
@@ -548,7 +579,12 @@ export function WeekGrid({
       if (scrollEl && ev.clientY < scrollEl.getBoundingClientRect().top) {
         if (hoverColumn === null) return;
         const targetDay = days[hoverColumn];
-        if (targetDay) onReschedule(state.pageId, format(targetDay, "yyyy-MM-dd"), undefined);
+        if (!targetDay) return;
+        const startStr = format(targetDay, "yyyy-MM-dd");
+        // Preserve a multi-day span: a 4-day event dragged stays 4 days long.
+        const page = pages.find((p) => p.id === state.pageId);
+        const endStr = shiftAllDayEnd(page?.scheduledStart, page?.scheduledEnd, targetDay);
+        onReschedule(state.pageId, startStr, endStr);
         return;
       }
 
@@ -563,6 +599,150 @@ export function WeekGrid({
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   }
+
+  // ── All-day edge resize ────────────────────────────────────────────────────
+  // Clamps the grabbed edge to visible days. Past-edge-of-week drags stop at
+  // the boundary — out-of-week extension is handled via the popover's date
+  // picker. The non-grabbed ("anchor") edge is the opposite end of the span
+  // at gesture start; during the drag, start = min(grabbed, anchor), end = max,
+  // so crossing over the anchor flips the semantics without losing the range.
+
+  function dayIndexFromClientX(clientX: number): number | null {
+    const columnsEl = dayColumnsRef.current;
+    if (!columnsEl) return null;
+    const rect = columnsEl.getBoundingClientRect();
+    const columnWidth = rect.width / days.length;
+    return Math.max(0, Math.min(days.length - 1, Math.floor((clientX - rect.left) / columnWidth)));
+  }
+
+  function handleAllDayEdgeResizeStart({
+    edge,
+    pageId,
+  }: {
+    clientX: number;
+    clientY: number;
+    edge: "start" | "end";
+    pageId: string;
+  }) {
+    const page = pages.find((p) => p.id === pageId);
+    if (!page?.scheduledStart) return;
+    const startStr = page.scheduledStart;
+    const endStr = page.scheduledEnd ?? page.scheduledStart;
+    // Anchor = the edge NOT being dragged. Stays fixed for the gesture.
+    const anchorStr = edge === "start" ? endStr : startStr;
+
+    disableSelect("dragging-resize");
+    allDayEdgeResizePreviewRef.current = { endDate: endStr, pageId, startDate: startStr };
+    setAllDayEdgeResizePreview({ endDate: endStr, pageId, startDate: startStr });
+
+    function onMove(ev: MouseEvent) {
+      const idx = dayIndexFromClientX(ev.clientX);
+      if (idx === null) return;
+      const grabbedDay = days[idx];
+      if (!grabbedDay) return;
+      const grabbedStr = format(grabbedDay, "yyyy-MM-dd");
+      const { end: nextEnd, start: nextStart } = computeAllDayEdgeResize(anchorStr, grabbedStr);
+      const prev = allDayEdgeResizePreviewRef.current;
+      if (prev?.startDate === nextStart && prev.endDate === nextEnd) return;
+      const next = { endDate: nextEnd, pageId, startDate: nextStart };
+      allDayEdgeResizePreviewRef.current = next;
+      setAllDayEdgeResizePreview(next);
+    }
+
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      enableSelect();
+      eatNextClick();
+      const final = allDayEdgeResizePreviewRef.current;
+      allDayEdgeResizePreviewRef.current = null;
+      setAllDayEdgeResizePreview(null);
+      if (!final) return;
+      const endArg = final.startDate === final.endDate ? undefined : final.endDate;
+      onReschedule(final.pageId, final.startDate, endArg);
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  // ── All-day drag-to-create ─────────────────────────────────────────────────
+  // Mousedown on empty all-day space; mouseup commits.
+  //   - No movement (plain click): single-day create → onCreateAllDay(start)
+  //   - Dragged across columns: multi-day span → onCreateAllDay(start, end)
+
+  function handleAllDayCreateDragStart({
+    clientX,
+    dayIndex,
+  }: {
+    clientX: number;
+    clientY: number;
+    dayIndex: number;
+  }) {
+    disableSelect("dragging-grab");
+    allDayCreatePreviewRef.current = {
+      endDayIndex: dayIndex,
+      moved: false,
+      startDayIndex: dayIndex,
+    };
+    // Ghost renders immediately at the first-free-row of the clicked column
+    // (see AllDaySection) so it lands exactly where the real chip will mount on
+    // commit — no visual jump between ghost → chip.
+    setAllDayCreatePreview({ endDayIndex: dayIndex, moved: false, startDayIndex: dayIndex });
+    const originClientX = clientX;
+
+    function onMove(ev: MouseEvent) {
+      const state = allDayCreatePreviewRef.current;
+      if (!state) return;
+      const idx = dayIndexFromClientX(ev.clientX);
+      if (idx === null) return;
+      const moved =
+        state.moved || Math.abs(ev.clientX - originClientX) > 4 || idx !== state.startDayIndex;
+      if (state.endDayIndex === idx && state.moved === moved) return;
+      const next = { endDayIndex: idx, moved, startDayIndex: state.startDayIndex };
+      allDayCreatePreviewRef.current = next;
+      setAllDayCreatePreview(next);
+    }
+
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      enableSelect();
+      eatNextClick();
+      const state = allDayCreatePreviewRef.current;
+      // Clear the ghost overlay synchronously; the create/schedule chain below
+      // is fast (setPages is optimistic) so the real chip appears on the next
+      // render with minimal gap. The overlay is not a PageSummary, so it
+      // doesn't interfere with row assignment or popover anchoring.
+      allDayCreatePreviewRef.current = null;
+      setAllDayCreatePreview(null);
+      if (!state) return;
+      const lo = Math.min(state.startDayIndex, state.endDayIndex);
+      const hi = Math.max(state.startDayIndex, state.endDayIndex);
+      const startDay = days[lo];
+      const endDay = days[hi];
+      if (!startDay || !endDay) return;
+      void onCreateAllDay(startDay, state.moved && lo !== hi ? endDay : undefined);
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  // Page list passed to AllDaySection, with live override for edge-resize
+  // preview. Drag-to-create preview is rendered separately as an absolute
+  // overlay so it doesn't participate in row assignment (see AllDaySection).
+  const displayedAllDayPages: PageSummary[] = allDayEdgeResizePreview
+    ? pages.map((p) =>
+        p.id === allDayEdgeResizePreview.pageId
+          ? {
+              ...p,
+              scheduledEnd: allDayEdgeResizePreview.endDate,
+              scheduledStart: allDayEdgeResizePreview.startDate,
+            }
+          : p
+      )
+    : pages;
 
   // ── External drag updater: called by useThreePanelDnD on every mousemove ───
   // Computes the drop slot from cursor coords, updates local preview state for
@@ -664,20 +844,32 @@ export function WeekGrid({
         ref={weekGridRef}
         role="region"
       >
-        {/* Day header — "Mon 16", "Tue 17", etc. Today's date gets a pill highlight */}
+        {/* Day header — "Mon 16", "Tue 17", etc. Today's date gets a pill
+            highlight. Mousedown routes through the same drag-to-create handler
+            as the all-day column, so the header stays clickable even when the
+            all-day section is scrolled past the fold. */}
         <div className="flex shrink-0 border-t border-b border-border/40">
           {/* Gutter spacer */}
           <div className="w-14 shrink-0" />
-          {days.map((day) => {
+          {days.map((day, i) => {
             const isToday = isSameDay(day, today);
             return (
               <div
                 aria-label={format(day, "EEEE, MMMM d")}
                 className={cn(
-                  "flex min-w-0 flex-1 items-center justify-center gap-1 border-l border-border/40 py-1.5 first:border-l-0",
+                  "flex min-w-0 flex-1 cursor-cell items-center justify-center gap-1 border-l border-border/40 py-1.5 first:border-l-0",
                   isWeekend(day) ? "bg-white/[0.012]" : ""
                 )}
                 key={day.toISOString()}
+                onMouseDown={(e) => {
+                  if (e.button !== 0) return;
+                  e.preventDefault();
+                  handleAllDayCreateDragStart({
+                    clientX: e.clientX,
+                    clientY: e.clientY,
+                    dayIndex: i,
+                  });
+                }}
               >
                 <span
                   className={cn(
@@ -704,15 +896,24 @@ export function WeekGrid({
         <AllDaySection
           allDayDragHoverIndex={allDayDragHoverIndex}
           autoOpenPageId={autoOpenPageId}
+          createPreview={
+            allDayCreatePreview
+              ? {
+                  endDayIndex: allDayCreatePreview.endDayIndex,
+                  startDayIndex: allDayCreatePreview.startDayIndex,
+                }
+              : null
+          }
           days={days}
           draggingPageId={allDayDraggingPageId}
           height={allDay.height}
           onAutoOpenConsumed={onAutoOpenConsumed}
           onChipDragStart={handleAllDayChipDragStart}
-          onCreateAllDay={onCreateAllDay}
+          onCreateDragStart={handleAllDayCreateDragStart}
+          onEdgeResizeStart={handleAllDayEdgeResizeStart}
           onPageDoubleClick={onPageDoubleClick}
           onResizeStart={allDay.onResizeStart}
-          pages={pages}
+          pages={displayedAllDayPages}
           timedDragTarget={
             externalPreview?.isAllDay
               ? { dayIndex: externalPreview.dayIndex, folderColor: externalPreview.folderColor }

@@ -61,6 +61,7 @@ function matchesFilter(page: Page, filter: PageFilter): boolean {
   if (filter.scheduledBefore !== undefined && page.scheduledStart != null) {
     if (page.scheduledStart > filter.scheduledBefore) return false;
   }
+  if (filter.hasSchedule === true && page.scheduledStart == null) return false;
   if (filter.query !== undefined && filter.query.length > 0) {
     const q = filter.query.toLowerCase();
     const haystack = `${page.title} ${page.subtitle ?? ""} ${page.content}`.toLowerCase();
@@ -503,10 +504,20 @@ export class MockStorageAdapter implements StorageAdapter {
   private _refreshDenorm(pageId: string): void {
     const page = this.pages.get(pageId);
     if (!page) return;
+    // Mirror the Rust adapter (src-tauri/src/db/schedules.rs:refresh_schedule_denorm):
+    // prefer the earliest UPCOMING non-override schedule; fall back to the
+    // earliest past schedule when no future exists; NULL only when no schedules.
+    // Stripping the denorm for past-only events was a bug — it caused recent
+    // optimistic updates to be overwritten by an empty denorm on next write,
+    // which looked like a silent revert of the just-created chip.
     const today = new Date().toISOString().slice(0, 10);
-    const next = [...this.schedules.values()]
-      .filter((s) => s.pageId === pageId && !s.ruleId && s.scheduledStart >= today)
-      .sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart))[0];
+    const candidates = [...this.schedules.values()].filter((s) => s.pageId === pageId && !s.ruleId);
+    const next = candidates.sort((a, b) => {
+      const aGroup = a.scheduledStart >= today ? 0 : 1;
+      const bGroup = b.scheduledStart >= today ? 0 : 1;
+      if (aGroup !== bGroup) return aGroup - bGroup;
+      return a.scheduledStart.localeCompare(b.scheduledStart);
+    })[0];
     const updated = { ...page, updatedAt: now() };
     if (next) {
       updated.scheduledStart = next.scheduledStart;

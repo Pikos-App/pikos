@@ -223,6 +223,12 @@ export function RecurrencePopover({
   const triggerLabel = hasRule
     ? formatTriggerLabel(rrule, /* short */ true)
     : (overrideLabel ?? formatTriggerLabel(rrule, /* short */ true));
+  // Screen readers don't see the adjacent date chip that visually conveys
+  // BYDAY, so the aria-label carries the full cadence ("every week on
+  // Monday") even when the visible text is the short "Weekly".
+  const ariaTriggerLabel = hasRule
+    ? formatTriggerLabel(rrule, /* short */ false)
+    : (overrideLabel ?? formatTriggerLabel(rrule, /* short */ false));
 
   const anchor = anchorDate ? parseLocalISO(anchorDate) : new Date();
   const presets = computePresets(anchor);
@@ -368,7 +374,7 @@ export function RecurrencePopover({
 
   const triggerButton = (
     <button
-      aria-label={hasLabelContent ? `Recurrence: ${triggerLabel}` : "Set recurrence"}
+      aria-label={hasLabelContent ? `Recurrence: ${ariaTriggerLabel}` : "Set recurrence"}
       className={cn(
         "inline-flex items-center gap-1 rounded transition-colors focus:outline-none",
         isIconOnly

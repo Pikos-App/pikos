@@ -377,6 +377,11 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // Captured from chrono's end component when a time range is parsed
   // (e.g. "3pm to 5pm"). Applied to scheduledEnd below.
   let chronoEnd: Date | undefined;
+  // Captured when chrono parses a multi-day date range (e.g. "April 18-25",
+  // "from Mon to Fri"). Applied to scheduledEnd as a date-only string. Only
+  // used when the start is also date-only — multi-day timed ranges are
+  // intentionally not supported (ambiguous semantics).
+  let chronoEndDate: Date | undefined;
 
   // Use chrono to parse any remaining date/time
   const chronoResults = chrono.parse(text, ref, { forwardDate: true });
@@ -384,8 +389,12 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     const result = chronoResults[0]!;
     const parsed = result.date();
 
-    if (result.end && (result.end.isCertain("hour") || result.end.isCertain("minute"))) {
-      chronoEnd = result.end.date();
+    if (result.end) {
+      if (result.end.isCertain("hour") || result.end.isCertain("minute")) {
+        chronoEnd = result.end.date();
+      } else if (result.end.isCertain("day")) {
+        chronoEndDate = result.end.date();
+      }
     }
 
     // Check if a time component was explicitly set
@@ -512,6 +521,13 @@ export function parseInput(raw: string, now?: Date): ParseResult {
         if (derivedMinutes > 0) {
           baseInput.durationMinutes = derivedMinutes;
         }
+      }
+    } else if (chronoEndDate && !hasTime && !scheduledStart.includes("T")) {
+      // Multi-day all-day range ("April 18-25", "from Mon to Fri").
+      // Only when start is date-only — multi-day timed events aren't supported.
+      const endDateStr = formatDateOnly(chronoEndDate);
+      if (endDateStr > scheduledStart) {
+        baseInput.scheduledEnd = endDateStr;
       }
     }
   }

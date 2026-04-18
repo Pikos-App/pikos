@@ -4,6 +4,7 @@
 import { addDays, subDays } from "date-fns";
 
 import { CalendarHeader, CalendarView } from "@/features/calendar";
+import { clampDayCount, dayCountNavStep } from "@/features/calendar/utils/calendarUtils";
 import { EditorPane } from "@/features/editor";
 import { getCalendarDayCount, useLayoutMode } from "@/features/layout/breakpoints";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
@@ -18,7 +19,8 @@ export function EditorPanel() {
   // Must match CalendarView's effective day count — otherwise prev/next step by
   // the breakpoint max (7) while the view renders fewer days, skipping dates.
   const { dayCount: preferredDayCount } = useCalendarSettings();
-  const dayCount = Math.min(preferredDayCount, getCalendarDayCount(useLayoutMode()));
+  const dayCount = clampDayCount(preferredDayCount, getCalendarDayCount(useLayoutMode()));
+  const navStep = dayCountNavStep(dayCount);
   const leftNav = useLeftNavToggle();
 
   useKeyboardShortcut(
@@ -32,11 +34,11 @@ export function EditorPanel() {
   useKeyboardShortcut("Mod+\\", leftNav.toggle, { allowInInputs: true });
 
   function handlePrevWeek() {
-    ui.setReferenceDate(subDays(ui.referenceDate, dayCount));
+    ui.setReferenceDate(subDays(ui.referenceDate, navStep));
   }
 
   function handleNextWeek() {
-    ui.setReferenceDate(addDays(ui.referenceDate, dayCount));
+    ui.setReferenceDate(addDays(ui.referenceDate, navStep));
   }
 
   function handleToday() {

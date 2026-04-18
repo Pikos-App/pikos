@@ -27,7 +27,7 @@ describe("dayCount", () => {
 
   it("can be set to each option", () => {
     const { result } = setup();
-    for (const count of [1, 3, 5, 7] as const) {
+    for (const count of [1, 3, 5, "mf", 7] as const) {
       act(() => result.current.setDayCount(count));
       expect(result.current.dayCount).toBe(count);
     }
@@ -37,6 +37,12 @@ describe("dayCount", () => {
     const { result } = setup();
     act(() => result.current.setDayCount(3));
     expect(JSON.parse(localStorage.getItem("pikos:calendarDayCount")!)).toBe(3);
+  });
+
+  it("persists 'mf' as a string", () => {
+    const { result } = setup();
+    act(() => result.current.setDayCount("mf"));
+    expect(JSON.parse(localStorage.getItem("pikos:calendarDayCount")!)).toBe("mf");
   });
 });
 

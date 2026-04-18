@@ -10,6 +10,7 @@ import { parseLocalISO } from "@pikos/core";
 import {
   addDays,
   addHours,
+  differenceInCalendarDays,
   format,
   getHours,
   getMinutes,
@@ -79,8 +80,17 @@ function formatTriggerLabel(
     !isAllDay && endIso && endIso.length > 10
       ? Math.round((parseLocalISO(endIso).getTime() - parseLocalISO(iso).getTime()) / 60000)
       : null;
+  // All-day multi-day span: "N days" suffix (e.g. "Apr 15 · 4d").
+  const spanDays =
+    isAllDay && endIso && endIso.length === 10
+      ? differenceInCalendarDays(parseLocalISO(endIso), date) + 1
+      : null;
   const durationSuffix =
-    durationMinutes && durationMinutes > 0 ? ` · ${formatDurationLabel(durationMinutes)}` : "";
+    durationMinutes && durationMinutes > 0
+      ? ` · ${formatDurationLabel(durationMinutes)}`
+      : spanDays && spanDays > 1
+        ? ` · ${spanDays}d`
+        : "";
 
   const isPast = isAllDay ? date < startOfDay(now) : date < now;
   // Due soon: not past, within next 48 hours, not done
@@ -137,6 +147,16 @@ const DURATION_PRESETS = [
   { label: "1h", minutes: 60 },
   { label: "1.5h", minutes: 90 },
   { label: "2h", minutes: 120 },
+] as const;
+
+// Span length presets for all-day events. "2d" = start + 1 day (2-day span).
+// Parallel to DURATION_PRESETS but expressed in days for calendar-only events.
+const DAYS_PRESETS = [
+  { days: 2, label: "2d" },
+  { days: 3, label: "3d" },
+  { days: 5, label: "5d" },
+  { days: 7, label: "1w" },
+  { days: 14, label: "2w" },
 ] as const;
 
 // ── MiniCalendar ──────────────────────────────────────────────────────────────
@@ -319,6 +339,10 @@ export function DateTimePicker({
   const [customTimeStr, setCustomTimeStr] = useState("");
   const [customDurationActive, setCustomDurationActive] = useState(false);
   const [customDurationStr, setCustomDurationStr] = useState("");
+  // Nested popover for picking a custom end date on all-day events.
+  const [endDatePopoverOpen, setEndDatePopoverOpen] = useState(false);
+  const [endViewYear, setEndViewYear] = useState(() => new Date().getFullYear());
+  const [endViewMonth, setEndViewMonth] = useState(() => new Date().getMonth());
 
   const timeListRef = useRef<HTMLDivElement>(null);
 
@@ -519,6 +543,28 @@ export function DateTimePicker({
     setCustomDurationStr("");
   }
 
+  // ── End-date actions (all-day only) ───────────────────────────────────────────
+
+  /** Set the end date for an all-day event. `days` = span length (2 = start + 1). */
+  function selectEndDays(days: number | null) {
+    if (!onEndChange) return;
+    if (!selectedDate) return;
+    if (days === null || days <= 1) {
+      onEndChange(null);
+      return;
+    }
+    onEndChange(toISODateOnly(addDays(selectedDate, days - 1)));
+  }
+
+  function selectEndDate(date: Date) {
+    if (!onEndChange || !selectedDate) return;
+    if (date <= selectedDate) {
+      onEndChange(null);
+      return;
+    }
+    onEndChange(toISODateOnly(date));
+  }
+
   // ── Clear all ─────────────────────────────────────────────────────────────────
 
   function handleClearAll() {
@@ -553,6 +599,18 @@ export function DateTimePicker({
     !DURATION_PRESETS.some((preset) => preset.minutes === durationMinutes);
 
   const showDurationSection = onEndChange !== undefined && selectedTime !== null;
+
+  // ── End-date section (all-day only) ──────────────────────────────────────────
+  // Mirrors the Duration section but expresses span length in days instead of
+  // minutes. Only renders when `onEndChange` is provided and the start is
+  // all-day — timed events use the Duration presets instead.
+  const showEndDateSection = onEndChange !== undefined && hasDate && selectedTime === null;
+
+  const endDate =
+    endValue && endValue.length === 10 && selectedDate ? parseLocalISO(endValue) : null;
+  const spanDays =
+    endDate && selectedDate ? differenceInCalendarDays(endDate, selectedDate) + 1 : 1;
+  const isCustomSpan = spanDays > 1 && !DAYS_PRESETS.some((preset) => preset.days === spanDays);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -839,6 +897,111 @@ export function DateTimePicker({
                   {formatTimeOfDay(selectedTime.hour24, selectedTime.minute)}
                   <span className="mx-1 text-foreground/30">→</span>
                   {endTimeLabel}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Ends section — all-day events only. Parallel to Duration: presets +
+            Custom opens a nested MiniCalendar for a precise end date. */}
+        {showEndDateSection && (
+          <div className="border-t border-border/60 px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {DAYS_PRESETS.map(({ days, label }) => {
+                const isActive = spanDays === days;
+                return (
+                  <button
+                    aria-label={`Ends in ${label}`}
+                    aria-pressed={isActive}
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-xs transition-colors",
+                      isActive
+                        ? "font-medium text-primary"
+                        : "text-foreground/55 hover:text-foreground"
+                    )}
+                    key={days}
+                    onClick={() => selectEndDays(isActive ? null : days)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+
+              <Popover
+                onOpenChange={(next) => {
+                  if (next) {
+                    const ref = endDate ?? selectedDate ?? new Date();
+                    setEndViewYear(ref.getFullYear());
+                    setEndViewMonth(ref.getMonth());
+                  }
+                  setEndDatePopoverOpen(next);
+                }}
+                open={endDatePopoverOpen}
+              >
+                <PopoverTrigger asChild>
+                  <button
+                    aria-label={
+                      isCustomSpan
+                        ? `Edit custom end date (${spanDays}d)`
+                        : "Pick a custom end date"
+                    }
+                    aria-pressed={isCustomSpan}
+                    className={cn(
+                      "group inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-xs transition-colors",
+                      isCustomSpan
+                        ? "font-medium text-primary"
+                        : "text-foreground/55 hover:text-foreground"
+                    )}
+                  >
+                    <span>{isCustomSpan ? `${spanDays}d` : "Custom"}</span>
+                    <Pencil
+                      aria-hidden="true"
+                      className="text-muted-foreground/60 transition-opacity group-hover:text-foreground"
+                      size={10}
+                    />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="w-[260px] p-3"
+                  side="bottom"
+                  sideOffset={4}
+                >
+                  <MiniCalendar
+                    month={endViewMonth}
+                    onNext={() => {
+                      if (endViewMonth === 11) {
+                        setEndViewMonth(0);
+                        setEndViewYear((y) => y + 1);
+                      } else {
+                        setEndViewMonth((m) => m + 1);
+                      }
+                    }}
+                    onPrev={() => {
+                      if (endViewMonth === 0) {
+                        setEndViewMonth(11);
+                        setEndViewYear((y) => y - 1);
+                      } else {
+                        setEndViewMonth((m) => m - 1);
+                      }
+                    }}
+                    onSelect={(date) => {
+                      selectEndDate(date);
+                      setEndDatePopoverOpen(false);
+                    }}
+                    selectedDate={endDate}
+                    weekStartsOn={weekStart}
+                    year={endViewYear}
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {selectedDate && spanDays > 1 && endDate && (
+                <p className="ml-auto text-xs text-foreground/60">
+                  {format(selectedDate, "MMM d")}
+                  <span className="mx-1 text-foreground/30">→</span>
+                  {format(endDate, "MMM d")}
                 </p>
               )}
             </div>

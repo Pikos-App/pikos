@@ -4,13 +4,12 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Bug, Check, CheckCircle, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
 
-import type { CalendarDensity } from "@/features/calendar/utils/calendarUtils";
+import type { CalendarDayCount, CalendarDensity } from "@/features/calendar/utils/calendarUtils";
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
-import type { CalendarDayCount } from "@/shared/context/CalendarSettingsContext";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import type { LineWidth } from "@/shared/context/EditorSettingsContext";
 import type { ThemeMode } from "@/shared/context/ThemeContext";
@@ -86,6 +85,7 @@ const CALENDAR_DAY_COUNT_OPTIONS: { id: CalendarDayCount; label: string }[] = [
   { id: 1, label: "1" },
   { id: 3, label: "3" },
   { id: 5, label: "5" },
+  { id: "mf", label: "M–F" },
   { id: 7, label: "7" },
 ];
 

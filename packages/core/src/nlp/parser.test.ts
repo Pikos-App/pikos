@@ -1050,6 +1050,71 @@ describe("NL Page Creation Parser", () => {
     });
   });
 
+  // ─── Multi-day all-day ranges ────────────────────────────────────────────
+  // chrono-node handles the parsing — we only need to plumb `result.end` into
+  // scheduledEnd for date-only spans. Only supported when start is date-only
+  // (timed events with a date range are deliberately treated as single-day
+  // timed to avoid ambiguous semantics).
+
+  describe("multi-day all-day ranges", () => {
+    it("'vacation April 18-25' → Apr 18 → Apr 25, date-only", () => {
+      const r = parseInput("vacation April 18-25", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("vacation");
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBe("2026-04-25");
+    });
+
+    it("'vacation from April 18 to April 25' → Apr 18 → Apr 25", () => {
+      const r = parseInput("vacation from April 18 to April 25", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBe("2026-04-25");
+    });
+
+    it("'offsite April 18 to April 20' → Apr 18 → Apr 20", () => {
+      // "to" joins a date range; chrono returns both dates with day-certainty.
+      // (NOTE: "through" is reserved by the bounded-recurrence window parser —
+      // "April 18 through April 25" becomes a daily-recurring window, not a span.)
+      const r = parseInput("offsite April 18 to April 20", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBe("2026-04-20");
+    });
+
+    it("single bare date (no range) → no scheduledEnd", () => {
+      const r = parseInput("vacation April 18", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBeUndefined();
+    });
+
+    it("date range with time → treated as single-day timed (range ignored)", () => {
+      // Intentionally conservative: mixed semantics are too error-prone.
+      const r = parseInput("trip April 18-20 at 3pm", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toContain("2026-04-18");
+      expect(r.input.scheduledStart).toContain("15:00");
+      // End, if present, should be on the same day (from time range), never Apr 20.
+      if (r.input.scheduledEnd) {
+        expect(r.input.scheduledEnd).toContain("2026-04-18");
+      }
+    });
+
+    it("time range on same day still works (unaffected)", () => {
+      const r = parseInput("meeting 3pm to 5pm", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toContain("15:00");
+      expect(r.input.scheduledEnd).toContain("17:00");
+    });
+  });
+
   // ─── 8. RRULE validation ──────────────────────────────────────────────────
 
   describe("RRULE validation", () => {

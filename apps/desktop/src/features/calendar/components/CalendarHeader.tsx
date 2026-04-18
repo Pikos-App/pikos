@@ -6,10 +6,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
-import { buildCalendarDays } from "../utils/calendarUtils";
+import { buildCalendarDays, type CalendarDayCount } from "../utils/calendarUtils";
 
 interface CalendarHeaderProps {
-  dayCount: number;
+  dayCount: CalendarDayCount;
   onNextWeek: () => void;
   onPrevWeek: () => void;
   onToday: () => void;

@@ -4,6 +4,7 @@
 import { createContext, type ReactNode, useContext } from "react";
 
 import {
+  type CalendarDayCount,
   type CalendarDensity,
   type CalendarMetrics,
   computeCalendarMetrics,
@@ -12,7 +13,7 @@ import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type CalendarDayCount = 1 | 3 | 5 | 7;
+export type { CalendarDayCount };
 
 export interface CalendarSettingsValue {
   dayCount: CalendarDayCount;

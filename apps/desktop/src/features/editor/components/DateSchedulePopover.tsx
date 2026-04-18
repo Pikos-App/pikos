@@ -2,8 +2,11 @@
 // Thin feature-component wrapper around the shared DateTimePicker.
 
 import type { Page } from "@pikos/core";
-import { formatLocalISO, parseLocalISO } from "@pikos/core";
 
+import {
+  computeScheduleTransition,
+  normalizeEndInput,
+} from "@/features/calendar/utils/calendarUtils";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
@@ -19,26 +22,17 @@ export function DateSchedulePopover({ page }: DateSchedulePopoverProps) {
       void clearSchedule(page.id);
       return;
     }
-    // Preserve duration when changing start on a timed event.
-    let endIso = page.scheduledEnd ?? undefined;
-    if (
-      iso.includes("T") &&
-      page.scheduledStart?.includes("T") &&
-      page.scheduledEnd?.includes("T")
-    ) {
-      const durationMs =
-        parseLocalISO(page.scheduledEnd).getTime() - parseLocalISO(page.scheduledStart).getTime();
-      if (durationMs > 0) {
-        endIso = formatLocalISO(new Date(parseLocalISO(iso).getTime() + durationMs));
-      }
-    }
-    void scheduleOnce(page.id, iso, endIso);
+    const { end, start } = computeScheduleTransition(
+      { end: page.scheduledEnd, start: page.scheduledStart },
+      iso
+    );
+    void scheduleOnce(page.id, start, end);
   }
 
   function handleEndChange(endIso: string | null) {
-    if (page.scheduledStart) {
-      void scheduleOnce(page.id, page.scheduledStart, endIso ?? undefined);
-    }
+    if (!page.scheduledStart) return;
+    const next = normalizeEndInput(page.scheduledStart, endIso);
+    void scheduleOnce(page.id, page.scheduledStart, next);
   }
 
   return (
