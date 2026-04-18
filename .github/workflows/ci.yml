@@ -37,8 +37,11 @@ jobs:
       - name: Verify (typecheck + lint + prettier + depcruise + unit tests)
         run: pnpm verify
 
+      - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
+        run: pnpm audit:source
+
   # ── Job 2: E2E ─────────────────────────────────────────────────────────────
-  # Full Playwright E2E suite (all tiers). Pre-push hook only runs tier1.
+  # Full Playwright E2E suite (tier1 + tier2). Pre-push also runs these plus perf(dev).
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest

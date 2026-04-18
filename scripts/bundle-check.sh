@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Bundle size check: builds the desktop app and asserts no chunk exceeds the budget.
-# Slow (~30s) — runs in pre-push only when BUNDLE_CHECK=1, always runs in CI.
+# Slow (~30s) — runs in pre-push (skip with SKIP_BUNDLE_CHECK=1) and always in CI.
+# Side-effect: doubles as a prod-build smoke test.
 
 set -o pipefail
 
