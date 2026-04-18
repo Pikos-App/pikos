@@ -4,20 +4,20 @@ import { describe, expect, it } from "vitest";
 import { seedTutorial } from "./tutorial";
 
 describe("seedTutorial", () => {
-  it("creates Tutorial folder with 5 pages", async () => {
+  it("creates the Start here folder with 5 pages", async () => {
     const adapter = new MockStorageAdapter();
     const result = await seedTutorial(adapter);
 
     expect(result).not.toBeNull();
     const { folderId, welcomePageId } = result!;
 
-    // Single Tutorial folder created
+    // Single tutorial folder created ("Start here")
     const folders = await adapter.listFolders();
     expect(folders).toHaveLength(1);
-    expect(folders[0]!.name).toBe("Tutorial");
+    expect(folders[0]!.name).toBe("Start here");
     expect(folders[0]!.id).toBe(folderId);
 
-    // 5 pages total, all in Tutorial folder
+    // 5 pages total, all in the tutorial folder
     const pages = await adapter.listPages();
     expect(pages).toHaveLength(5);
     expect(pages.every((p) => p.folderId === folderId)).toBe(true);
