@@ -189,12 +189,6 @@ export function WeekGrid({
 
   const allDayDragRef = useRef<AllDayDragRefState | null>(null);
   const allDayGhostPositionRef = useRef<{ dayIndex: number; top: number } | null>(null);
-  const [allDayDragRenderState, setAllDayDragRenderState] = useState<{
-    dayIndex: number;
-    folderColor: string | undefined;
-    pageId: string;
-    top: number;
-  } | null>(null);
   // Separate state so the AllDaySection re-renders to dim the dragged chip.
   const [allDayDraggingPageId, setAllDayDraggingPageId] = useState<string | null>(null);
   // Column index highlighted while an all-day chip is dragged horizontally in the all-day zone.
@@ -513,6 +507,17 @@ export function WeekGrid({
     allDayHoverColumnRef.current = null;
     setAllDayDraggingPageId(pageId);
 
+    // Render the ghost DOM once up-front. Position updates during the drag go
+    // through positionGhost() — ref-based, no React re-render per frame.
+    const page = pages.find((p) => p.id === pageId);
+    setGhostContent({
+      folderColor,
+      height: metrics.compactBlockHeight,
+      isCompact: true,
+      isDone: page?.status === "done",
+      title: page?.title ?? "Untitled",
+    });
+
     function onMove(ev: MouseEvent) {
       const scrollEl = scrollRef.current;
       const columnsEl = dayColumnsRef.current;
@@ -531,29 +536,35 @@ export function WeekGrid({
       if (ev.clientY < scrollRect.top) {
         if (allDayGhostPositionRef.current !== null) {
           allDayGhostPositionRef.current = null;
-          setAllDayDragRenderState(null);
+          cancelAnimationFrame(rafIdRef.current);
+          hideGhost();
         }
-        allDayHoverColumnRef.current = hoverDayIndex;
-        setAllDayDragHoverIndex(hoverDayIndex);
+        if (allDayHoverColumnRef.current !== hoverDayIndex) {
+          allDayHoverColumnRef.current = hoverDayIndex;
+          setAllDayDragHoverIndex(hoverDayIndex);
+        }
         return;
       }
 
       // Cursor is in the timed grid — clear all-day hover, show timed ghost.
-      allDayHoverColumnRef.current = null;
-      setAllDayDragHoverIndex(null);
+      if (allDayHoverColumnRef.current !== null) {
+        allDayHoverColumnRef.current = null;
+        setAllDayDragHoverIndex(null);
+      }
 
       const cursorYInGrid = ev.clientY - scrollRect.top + scrollEl.scrollTop;
       const ghostTop = snapY(
         Math.max(0, Math.min(metrics.gridHeight - metrics.compactBlockHeight, cursorYInGrid)),
         metrics.hourHeight
       );
-      const ghostDayIndex = Math.max(
-        0,
-        Math.min(dayCount - 1, Math.floor((ev.clientX - columnsRect.left) / columnWidth))
-      );
 
-      allDayGhostPositionRef.current = { dayIndex: ghostDayIndex, top: ghostTop };
-      setAllDayDragRenderState({ dayIndex: ghostDayIndex, folderColor, pageId, top: ghostTop });
+      allDayGhostPositionRef.current = { dayIndex: hoverDayIndex, top: ghostTop };
+
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = requestAnimationFrame(() => {
+        showGhost();
+        positionGhost(hoverDayIndex, ghostTop, metrics.compactBlockHeight);
+      });
     }
 
     function onUp(ev: MouseEvent) {
@@ -561,6 +572,7 @@ export function WeekGrid({
       window.removeEventListener("mouseup", onUp);
       enableSelect();
       eatNextClick();
+      cancelAnimationFrame(rafIdRef.current);
 
       const state = allDayDragRef.current;
       const ghostPos = allDayGhostPositionRef.current;
@@ -568,7 +580,7 @@ export function WeekGrid({
       allDayDragRef.current = null;
       allDayGhostPositionRef.current = null;
       allDayHoverColumnRef.current = null;
-      setAllDayDragRenderState(null);
+      setGhostContent(null);
       setAllDayDraggingPageId(null);
       setAllDayDragHoverIndex(null);
 
@@ -927,37 +939,26 @@ export function WeekGrid({
             <TimeGutter />
             <div className="relative flex flex-1" ref={dayColumnsRef}>
               {days.map((day, i) => {
-                // Only pass the drag ghost to the column it targets.
-                // Priority: all-day chip drag > external list drag. Internal block
-                // drag uses a ref-positioned overlay (below) to avoid per-frame re-renders.
+                // External page-list drag ghost only. Internal block drag and
+                // all-day chip drag both use the ref-positioned overlay below
+                // to avoid per-frame re-renders.
                 const colDragGhost: DragGhost | null =
-                  allDayDragRenderState?.dayIndex === i
+                  externalPreview && !externalPreview.isAllDay && externalPreview.dayIndex === i
                     ? {
-                        folderColor: allDayDragRenderState.folderColor,
-                        height: metrics.compactBlockHeight,
-                        isCompact: true,
-                        isDone:
-                          pages.find((p) => p.id === allDayDragRenderState.pageId)?.status ===
-                          "done",
-                        title: pages.find((p) => p.id === allDayDragRenderState.pageId)?.title,
-                        top: allDayDragRenderState.top,
+                        folderColor: externalPreview.folderColor,
+                        height:
+                          externalPreview.durationMs != null
+                            ? Math.max(
+                                (externalPreview.durationMs / 3_600_000) * metrics.hourHeight,
+                                metrics.compactBlockHeight
+                              )
+                            : metrics.compactBlockHeight,
+                        isCompact: externalPreview.durationMs == null,
+                        isDone: externalPreview.isDone,
+                        title: externalPreview.title,
+                        top: externalPreview.top,
                       }
-                    : externalPreview && !externalPreview.isAllDay && externalPreview.dayIndex === i
-                      ? {
-                          folderColor: externalPreview.folderColor,
-                          height:
-                            externalPreview.durationMs != null
-                              ? Math.max(
-                                  (externalPreview.durationMs / 3_600_000) * metrics.hourHeight,
-                                  metrics.compactBlockHeight
-                                )
-                              : metrics.compactBlockHeight,
-                          isCompact: externalPreview.durationMs == null,
-                          isDone: externalPreview.isDone,
-                          title: externalPreview.title,
-                          top: externalPreview.top,
-                        }
-                      : null;
+                    : null;
 
                 return (
                   <DayColumn
