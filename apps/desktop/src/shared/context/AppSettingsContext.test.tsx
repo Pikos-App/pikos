@@ -144,6 +144,26 @@ describe("overdueAlerts", () => {
   });
 });
 
+describe("summaryTime", () => {
+  it("defaults to 07:00", () => {
+    const { result } = setup();
+    expect(result.current.summaryTime).toBe("07:00");
+  });
+
+  it("can be changed and persists", () => {
+    const { result } = setup();
+    act(() => result.current.setSummaryTime("09:00"));
+    expect(result.current.summaryTime).toBe("09:00");
+    expect(JSON.parse(localStorage.getItem("pikos:summaryTime")!)).toBe("09:00");
+  });
+
+  it("reads persisted value on mount", () => {
+    localStorage.setItem("pikos:summaryTime", JSON.stringify("06:30"));
+    const { result } = setup();
+    expect(result.current.summaryTime).toBe("06:30");
+  });
+});
+
 describe("quiet hours", () => {
   it("defaults to disabled with 22:00-08:00 window", () => {
     const { result } = setup();

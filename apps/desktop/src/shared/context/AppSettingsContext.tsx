@@ -28,9 +28,12 @@ export interface AppSettingsValue {
   /** Version string the user chose to skip (e.g. "1.2.0"). null = no skip. */
   skippedVersion: string | null;
   setSkippedVersion: (v: string | null) => void;
-  /** Overdue alerts — fire once per day for past-due scheduled pages. Default: true. */
+  /** Daily summary — fire once per day with today + overdue counts. Default: true. */
   overdueAlerts: boolean;
   setOverdueAlerts: (v: boolean) => void;
+  /** Time of day the daily summary fires (HH:MM, 24h). Deferred if inside quiet hours. Default: "07:00". */
+  summaryTime: string;
+  setSummaryTime: (v: string) => void;
   /** Quiet hours — suppress notifications during a time window. Default: off. */
   quietHoursEnabled: boolean;
   setQuietHoursEnabled: (v: boolean) => void;
@@ -65,6 +68,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     null
   );
   const [overdueAlerts, setOverdueAlerts] = useLocalStorage<boolean>("pikos:overdueAlerts", true);
+  const [summaryTime, setSummaryTime] = useLocalStorage<string>("pikos:summaryTime", "07:00");
   const [quietHoursEnabled, setQuietHoursEnabled] = useLocalStorage<boolean>(
     "pikos:quietHoursEnabled",
     false
@@ -89,6 +93,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
             quietHoursEnabled,
             quietHoursEnd,
             quietHoursStart,
+            summaryTime,
           },
         })
       )
@@ -99,6 +104,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     notificationsEnabled,
     defaultReminderMinutes,
     overdueAlerts,
+    summaryTime,
     quietHoursEnabled,
     quietHoursStart,
     quietHoursEnd,
@@ -120,8 +126,10 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setQuietHoursEnd,
     setQuietHoursStart,
     setSkippedVersion,
+    setSummaryTime,
     setWeekStart,
     skippedVersion,
+    summaryTime,
     weekStart,
   };
 

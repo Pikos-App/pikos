@@ -23,7 +23,7 @@ const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
   { id: 30, label: "30 min before" },
 ];
 
-const QUIET_HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
 
 function formatTime24to12(time: string): string {
   const parts = time.split(":").map(Number);
@@ -48,6 +48,8 @@ export function NotificationSettings() {
     setQuietHoursEnabled,
     setQuietHoursEnd,
     setQuietHoursStart,
+    setSummaryTime,
+    summaryTime,
   } = useAppSettings();
 
   // Permission state
@@ -168,20 +170,44 @@ export function NotificationSettings() {
             </div>
           </div>
 
-          {/* Overdue alerts */}
+          {/* Daily summary */}
           <div
             className={cn(
-              "flex items-center justify-between border-b border-border py-3 transition-opacity",
+              "border-b border-border py-3 transition-opacity",
               disabled && "pointer-events-none opacity-40"
             )}
           >
-            <div>
-              <p className="text-sm font-medium">Overdue alerts</p>
-              <p className="text-xs text-muted-foreground">
-                Remind me once per day for overdue items.
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Daily summary</p>
+                <p className="text-xs text-muted-foreground">
+                  One notification per day with today's schedule and overdue items. Deferred if
+                  inside quiet hours.
+                </p>
+              </div>
+              <Switch checked={overdueAlerts} onCheckedChange={setOverdueAlerts} />
             </div>
-            <Switch checked={overdueAlerts} onCheckedChange={setOverdueAlerts} />
+
+            {overdueAlerts && (
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Fire at</span>
+                <Select onValueChange={setSummaryTime} value={summaryTime}>
+                  <SelectTrigger
+                    aria-label="Daily summary time"
+                    className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HOUR_OPTIONS.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {formatTime24to12(t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Quiet hours */}
@@ -208,7 +234,7 @@ export function NotificationSettings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {QUIET_HOUR_OPTIONS.map((t) => (
+                    {HOUR_OPTIONS.map((t) => (
                       <SelectItem key={t} value={t}>
                         {formatTime24to12(t)}
                       </SelectItem>
@@ -224,7 +250,7 @@ export function NotificationSettings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {QUIET_HOUR_OPTIONS.map((t) => (
+                    {HOUR_OPTIONS.map((t) => (
                       <SelectItem key={t} value={t}>
                         {formatTime24to12(t)}
                       </SelectItem>

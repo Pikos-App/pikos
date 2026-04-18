@@ -35,7 +35,7 @@ use db::{
 
 use notifications::scheduler::{
     check_notification_permission, request_notification_permission,
-    update_notification_settings, NotificationSettingsState,
+    update_notification_settings, NotificationSettingsState, SchedulerRuntimeState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -43,6 +43,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(DbState::new())
         .manage(NotificationSettingsState::new())
+        .manage(SchedulerRuntimeState::new())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

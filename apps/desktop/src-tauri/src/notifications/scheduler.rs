@@ -4,10 +4,19 @@
 //! so it stays alive even when the webview is backgrounded or throttled.
 //! Ticks once per minute, aligned to the clock minute boundary, and queries
 //! SQLite for due reminders, firing OS desktop notifications.
+//!
+//! Two delivery paths:
+//! 1. Per-reminder: fires at `scheduled_start - minutes_before` for timed events.
+//!    All-day events are excluded — they'd fire at midnight-minus-N which is
+//!    never what the user wants.
+//! 2. Daily summary: fires once per local day with today's schedule + overdue
+//!    counts. Triggered at quiet-hours-end, or at 07:00+ if quiet hours are
+//!    disabled. This is also the catch-up mechanism for reminders that would
+//!    have fired during quiet hours.
 
 use std::time::Duration;
 
-use chrono::Timelike;
+use chrono::{Datelike, NaiveDate, Timelike};
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_notification::NotificationExt;
@@ -21,8 +30,14 @@ pub struct NotificationSettings {
     pub enabled: bool,
     /// Default lead time in minutes (0 = at start, 5, 10, 15, 30).
     pub default_minutes_before: i64,
-    /// Overdue alerts — fire once per day for pages past their scheduled end.
+    /// Daily summary — one notification per day with today's schedule + overdue.
+    /// Fires at the first non-quiet tick at or after `summary_time`.
     pub overdue_alerts: bool,
+    /// When the daily summary should fire (HH:MM, 24h format). If this time
+    /// falls inside quiet hours, the summary is deferred to the first
+    /// non-quiet tick after it (quiet hours can be daytime — e.g. a focus
+    /// block — so don't assume they're overnight).
+    pub summary_time: String, // e.g. "07:00"
     /// Quiet hours — suppress notifications between these times (HH:MM, 24h format).
     pub quiet_hours_enabled: bool,
     pub quiet_hours_start: String, // e.g. "22:00"
@@ -35,6 +50,7 @@ impl Default for NotificationSettings {
             enabled: true,
             default_minutes_before: 10,
             overdue_alerts: true,
+            summary_time: "07:00".to_string(),
             quiet_hours_enabled: false,
             quiet_hours_start: "22:00".to_string(),
             quiet_hours_end: "08:00".to_string(),
@@ -48,6 +64,26 @@ pub struct NotificationSettingsState(pub tokio::sync::Mutex<NotificationSettings
 impl NotificationSettingsState {
     pub fn new() -> Self {
         NotificationSettingsState(tokio::sync::Mutex::new(NotificationSettings::default()))
+    }
+}
+
+/// In-memory scheduler state carried across ticks.
+#[derive(Default)]
+struct SchedulerRuntime {
+    /// Local date of the last fired daily summary. Fast-path dedup; the DB
+    /// marker row is the source of truth across restarts.
+    last_summary_date: Option<NaiveDate>,
+}
+
+pub struct SchedulerRuntimeState(tokio::sync::Mutex<SchedulerRuntime>);
+
+impl SchedulerRuntimeState {
+    pub fn new() -> Self {
+        SchedulerRuntimeState(tokio::sync::Mutex::new(SchedulerRuntime::default()))
+    }
+
+    async fn lock(&self) -> tokio::sync::MutexGuard<'_, SchedulerRuntime> {
+        self.0.lock().await
     }
 }
 
@@ -121,26 +157,50 @@ struct DueReminder {
     minutes_before: i64,
 }
 
-#[derive(sqlx::FromRow)]
-struct OverduePage {
-    page_id: String,
-}
-
 /// Check if the current local time falls within quiet hours.
-fn is_quiet_hours(settings: &NotificationSettings) -> bool {
+fn is_quiet_hours(settings: &NotificationSettings, now: &chrono::DateTime<chrono::Local>) -> bool {
     if !settings.quiet_hours_enabled {
         return false;
     }
 
-    let now = chrono::Local::now().format("%H:%M").to_string();
+    let now_str = now.format("%H:%M").to_string();
     let start = &settings.quiet_hours_start;
     let end = &settings.quiet_hours_end;
 
     if start <= end {
-        &now >= start && &now < end
+        &now_str >= start && &now_str < end
     } else {
-        &now >= start || &now < end
+        &now_str >= start || &now_str < end
     }
+}
+
+/// Decide whether the daily summary should fire on this tick.
+///
+/// Fires once per local day, gated on all of:
+/// - overdue_alerts enabled
+/// - not currently in quiet hours
+/// - local time is at or after `summary_time`
+/// - not already fired today
+///
+/// If `summary_time` falls inside quiet hours, this returns false until the
+/// first non-quiet tick after it. Works for both overnight and daytime quiet
+/// hours: a 07:00 summary with 22:00–10:00 quiet hours defers to 10:00; a
+/// 14:00 summary with 13:00–15:00 quiet hours defers to 15:00.
+fn should_fire_daily_summary(
+    runtime: &SchedulerRuntime,
+    settings: &NotificationSettings,
+    now_quiet: bool,
+    now: &chrono::DateTime<chrono::Local>,
+) -> bool {
+    if !settings.overdue_alerts || now_quiet {
+        return false;
+    }
+    let today = now.date_naive();
+    if runtime.last_summary_date == Some(today) {
+        return false;
+    }
+    let now_hm = now.format("%H:%M").to_string();
+    now_hm >= settings.summary_time
 }
 
 /// Query for due reminders and fire OS notifications.
@@ -151,7 +211,7 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
         guard.clone()
     };
 
-    if !settings.enabled || is_quiet_hours(&settings) {
+    if !settings.enabled {
         return Ok(());
     }
 
@@ -164,6 +224,30 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
     };
 
     let now = chrono::Local::now();
+    let now_quiet = is_quiet_hours(&settings, &now);
+
+    // Daily summary decision uses current runtime state; we mutate after.
+    let fire_summary = {
+        let runtime_state = app.state::<SchedulerRuntimeState>();
+        let guard = runtime_state.lock().await;
+        should_fire_daily_summary(&guard, &settings, now_quiet, &now)
+    };
+
+    if fire_summary {
+        // Populate last_summary_date even if nothing to report, so we don't
+        // keep re-querying for the rest of the day.
+        let _ = fire_daily_summary(app, &pool, &now).await?;
+        let runtime_state = app.state::<SchedulerRuntimeState>();
+        let mut guard = runtime_state.lock().await;
+        guard.last_summary_date = Some(now.date_naive());
+    }
+
+    // During quiet hours, suppress individual per-reminder notifications.
+    // They'll be surfaced via tomorrow's daily summary as overdue.
+    if now_quiet {
+        return Ok(());
+    }
+
     // Use space separator to match SQLite's datetime() output format.
     // datetime() returns 'YYYY-MM-DD HH:MM:SS' — BETWEEN comparisons are
     // lexicographic, so both sides must use the same separator.
@@ -171,23 +255,15 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
     let window_start = (now - chrono::Duration::seconds(60))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
-    let today = now.format("%Y-%m-%d").to_string();
 
-    // 1. Fire reminders for pages with explicit page_reminders rows
     fire_explicit_reminders(app, &pool, &window_start, &now_ts).await?;
-
-    // 2. Fire default reminders for scheduled pages without explicit reminders
     fire_default_reminders(app, &pool, &settings, &window_start, &now_ts).await?;
-
-    // 3. Overdue alerts
-    if settings.overdue_alerts {
-        fire_overdue_alerts(app, &pool, &now_ts, &today).await?;
-    }
 
     Ok(())
 }
 
 /// Pages that have rows in page_reminders — use those specific lead times.
+/// All-day events (scheduled_start like 'YYYY-MM-DD', no 'T') are excluded.
 async fn fire_explicit_reminders(
     app: &AppHandle,
     pool: &SqlitePool,
@@ -204,6 +280,7 @@ async fn fire_explicit_reminders(
            AND p.deleted_at IS NULL
            AND ps.status != 'done'
            AND pr.minutes_before >= 0
+           AND ps.scheduled_start LIKE '%T%'
            AND datetime(ps.scheduled_start, '-' || pr.minutes_before || ' minutes')
                BETWEEN ? AND ?
            AND NOT EXISTS (
@@ -226,6 +303,7 @@ async fn fire_explicit_reminders(
 }
 
 /// Pages without page_reminders rows — use the global default lead time.
+/// All-day events are excluded (see `fire_explicit_reminders`).
 async fn fire_default_reminders(
     app: &AppHandle,
     pool: &SqlitePool,
@@ -243,6 +321,7 @@ async fn fire_default_reminders(
          WHERE p.status != 'done'
            AND p.deleted_at IS NULL
            AND ps.status != 'done'
+           AND ps.scheduled_start LIKE '%T%'
            AND NOT EXISTS (
              SELECT 1 FROM page_reminders pr WHERE pr.page_id = ps.page_id
            )
@@ -269,83 +348,106 @@ async fn fire_default_reminders(
     Ok(())
 }
 
-/// Overdue alerts: one summary notification per cycle.
+/// Daily summary — one notification per local day. Returns true if delivered.
 ///
-/// Only items overdue within the last 24 hours are eligible — older items are
-/// noise (the user already knows they're overdue). All eligible items are
-/// summarized in a single notification regardless of count, then logged so
-/// they don't re-notify today.
-async fn fire_overdue_alerts(
+/// Dedup: a marker row in notification_log with `type='overdue'`,
+/// `page_id IS NULL`, `schedule_id IS NULL`. The marker is always inserted
+/// even if there's nothing to report, so we don't keep re-querying.
+///
+/// Counts:
+/// - `today_count` — pages scheduled today (timed or all-day), status != done.
+/// - `overdue_count` — timed events with scheduled_start in [now-24h, now),
+///   status != done, page created > 5 minutes ago (skip import batches).
+async fn fire_daily_summary(
     app: &AppHandle,
     pool: &SqlitePool,
-    now_ts: &str,
-    today: &str,
-) -> Result<(), String> {
-    let recent_cutoff = (chrono::Local::now() - chrono::Duration::minutes(5))
+    now: &chrono::DateTime<chrono::Local>,
+) -> Result<bool, String> {
+    let today = now.format("%Y-%m-%d").to_string();
+
+    // Persistent dedup across restarts.
+    let already_fired: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM notification_log
+         WHERE type = 'overdue'
+           AND page_id IS NULL
+           AND schedule_id IS NULL
+           AND date(fired_at) = ?",
+    )
+    .bind(&today)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if already_fired.0 > 0 {
+        return Ok(false);
+    }
+
+    let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let stale_cutoff = (*now - chrono::Duration::hours(24))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
-    let stale_cutoff = (chrono::Local::now() - chrono::Duration::hours(24))
+    let recent_cutoff = (*now - chrono::Duration::minutes(5))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
 
-    let overdue: Vec<OverduePage> = sqlx::query_as(
-        "SELECT DISTINCT ps.page_id
+    // Today's scheduled count — includes all-day and timed, dedup by page.
+    let today_row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT ps.page_id)
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
          WHERE p.status != 'done'
            AND p.deleted_at IS NULL
            AND ps.status != 'done'
+           AND date(ps.scheduled_start) = ?",
+    )
+    .bind(&today)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let today_count = today_row.0;
+
+    // Overdue count — timed events only, in the last 24h.
+    let overdue_row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT ps.page_id)
+         FROM page_schedules ps
+         JOIN pages p ON p.id = ps.page_id
+         WHERE p.status != 'done'
+           AND p.deleted_at IS NULL
+           AND ps.status != 'done'
+           AND ps.scheduled_start LIKE '%T%'
            AND datetime(ps.scheduled_start) < datetime(?)
            AND datetime(ps.scheduled_start) >= datetime(?)
-           AND datetime(p.created_at) < datetime(?)
-           AND NOT EXISTS (
-             SELECT 1 FROM notification_log nl
-             WHERE nl.page_id = ps.page_id
-               AND nl.type = 'overdue'
-               AND date(nl.fired_at) = ?
-           )
-         ORDER BY ps.scheduled_start DESC",
+           AND datetime(p.created_at) < datetime(?)",
     )
-    .bind(now_ts)
+    .bind(&now_ts)
     .bind(&stale_cutoff)
     .bind(&recent_cutoff)
-    .bind(today)
-    .fetch_all(pool)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let overdue_count = overdue_row.0;
+
+    // Insert marker row (local time, consistent with date(fired_at)=today above).
+    let log_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
+         VALUES (?, NULL, NULL, 'overdue', ?)",
+    )
+    .bind(&log_id)
+    .bind(&now_ts)
+    .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    if overdue.is_empty() {
-        return Ok(());
+    if today_count == 0 && overdue_count == 0 {
+        return Ok(false);
     }
 
-    // Log every page so we don't re-notify today.
-    for row in &overdue {
-        let log_id = uuid::Uuid::new_v4().to_string();
-        let fired_at = chrono::Utc::now()
-            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-            .to_string();
+    let title = format_summary_title(now);
+    let body = format_summary_body(today_count, overdue_count);
+    deliver(app, &title, &body);
 
-        sqlx::query(
-            "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
-             VALUES (?, ?, NULL, 'overdue', ?)",
-        )
-        .bind(&log_id)
-        .bind(&row.page_id)
-        .bind(&fired_at)
-        .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-
-    let count = overdue.len();
-    let title = if count == 1 {
-        "1 item overdue".to_string()
-    } else {
-        format!("{count} items overdue")
-    };
-    deliver(app, &title, "Open Pikos to review.");
-
-    Ok(())
+    Ok(true)
 }
 
 // ─── Delivery ────────────────────────────────────────────────────────────────
@@ -386,6 +488,50 @@ fn format_time_from_iso(scheduled_start: &str) -> String {
     } else {
         String::new()
     }
+}
+
+/// Pretty title for the daily summary: "Today — Sat, Apr 18"
+fn format_summary_title(now: &chrono::DateTime<chrono::Local>) -> String {
+    let weekday = match now.weekday() {
+        chrono::Weekday::Mon => "Mon",
+        chrono::Weekday::Tue => "Tue",
+        chrono::Weekday::Wed => "Wed",
+        chrono::Weekday::Thu => "Thu",
+        chrono::Weekday::Fri => "Fri",
+        chrono::Weekday::Sat => "Sat",
+        chrono::Weekday::Sun => "Sun",
+    };
+    let month = match now.month() {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        _ => "Dec",
+    };
+    format!("Today — {}, {} {}", weekday, month, now.day())
+}
+
+/// Body for the daily summary. Omits zero counts.
+/// "3 scheduled · 2 overdue\nOpen Pikos to review."
+fn format_summary_body(today_count: i64, overdue_count: i64) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if today_count > 0 {
+        parts.push(format!("{} scheduled", today_count));
+    }
+    if overdue_count > 0 {
+        parts.push(format!("{} overdue", overdue_count));
+    }
+    if parts.is_empty() {
+        return "Open Pikos to review.".to_string();
+    }
+    format!("{}\nOpen Pikos to review.", parts.join(" · "))
 }
 
 async fn fire_reminder(
@@ -435,4 +581,254 @@ pub async fn prune_notification_log(pool: &SqlitePool) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn settings_with_quiet(start: &str, end: &str) -> NotificationSettings {
+        NotificationSettings {
+            enabled: true,
+            default_minutes_before: 10,
+            overdue_alerts: true,
+            summary_time: "07:00".to_string(),
+            quiet_hours_enabled: true,
+            quiet_hours_start: start.to_string(),
+            quiet_hours_end: end.to_string(),
+        }
+    }
+
+    fn local_at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> chrono::DateTime<chrono::Local> {
+        chrono::Local.with_ymd_and_hms(y, mo, d, h, mi, 0).unwrap()
+    }
+
+    // ─── is_quiet_hours ──────────────────────────────────────────────────
+
+    #[test]
+    fn quiet_hours_disabled_always_false() {
+        let mut s = settings_with_quiet("22:00", "08:00");
+        s.quiet_hours_enabled = false;
+        assert!(!is_quiet_hours(&s, &local_at(2026, 4, 18, 23, 0)));
+        assert!(!is_quiet_hours(&s, &local_at(2026, 4, 18, 3, 0)));
+    }
+
+    #[test]
+    fn quiet_hours_overnight_window() {
+        // 22:00 → 08:00 wraps midnight
+        let s = settings_with_quiet("22:00", "08:00");
+        assert!(is_quiet_hours(&s, &local_at(2026, 4, 18, 22, 0))); // start inclusive
+        assert!(is_quiet_hours(&s, &local_at(2026, 4, 18, 23, 30)));
+        assert!(is_quiet_hours(&s, &local_at(2026, 4, 19, 2, 0)));
+        assert!(is_quiet_hours(&s, &local_at(2026, 4, 19, 7, 59)));
+        assert!(!is_quiet_hours(&s, &local_at(2026, 4, 19, 8, 0))); // end exclusive
+        assert!(!is_quiet_hours(&s, &local_at(2026, 4, 18, 12, 0)));
+        assert!(!is_quiet_hours(&s, &local_at(2026, 4, 18, 21, 59)));
+    }
+
+    #[test]
+    fn quiet_hours_daytime_window() {
+        // 13:00 → 15:00 same-day (e.g. afternoon focus block)
+        let s = settings_with_quiet("13:00", "15:00");
+        assert!(is_quiet_hours(&s, &local_at(2026, 4, 18, 13, 0)));
+        assert!(is_quiet_hours(&s, &local_at(2026, 4, 18, 14, 30)));
+        assert!(!is_quiet_hours(&s, &local_at(2026, 4, 18, 15, 0)));
+        assert!(!is_quiet_hours(&s, &local_at(2026, 4, 18, 12, 59)));
+    }
+
+    // ─── should_fire_daily_summary ───────────────────────────────────────
+
+    #[test]
+    fn summary_blocked_when_overdue_alerts_off() {
+        let mut s = settings_with_quiet("22:00", "08:00");
+        s.overdue_alerts = false;
+        let rt = SchedulerRuntime::default();
+        assert!(!should_fire_daily_summary(
+            &rt,
+            &s,
+            false,
+            &local_at(2026, 4, 18, 8, 0)
+        ));
+    }
+
+    #[test]
+    fn summary_blocked_during_quiet_hours() {
+        let s = settings_with_quiet("22:00", "08:00");
+        let rt = SchedulerRuntime::default();
+        assert!(!should_fire_daily_summary(
+            &rt,
+            &s,
+            true,
+            &local_at(2026, 4, 18, 23, 0)
+        ));
+    }
+
+    #[test]
+    fn summary_fires_after_quiet_hours_end_when_summary_time_passed() {
+        // Summary 07:00, quiet 22:00-08:00: at 08:00 both conditions met.
+        let s = settings_with_quiet("22:00", "08:00");
+        let rt = SchedulerRuntime::default();
+        assert!(should_fire_daily_summary(
+            &rt,
+            &s,
+            false,
+            &local_at(2026, 4, 18, 8, 0)
+        ));
+    }
+
+    #[test]
+    fn summary_fires_at_configured_time_when_quiet_hours_off() {
+        let mut s = settings_with_quiet("22:00", "08:00");
+        s.quiet_hours_enabled = false;
+        s.summary_time = "09:30".to_string();
+        let rt = SchedulerRuntime::default();
+        assert!(should_fire_daily_summary(
+            &rt,
+            &s,
+            false,
+            &local_at(2026, 4, 18, 9, 30)
+        ));
+        assert!(!should_fire_daily_summary(
+            &rt,
+            &s,
+            false,
+            &local_at(2026, 4, 18, 9, 29)
+        ));
+    }
+
+    #[test]
+    fn summary_deferred_when_summary_time_inside_daytime_quiet_hours() {
+        // Summary 14:00, quiet 13:00-15:00 (daytime focus block).
+        // At 14:00 now_quiet=true → don't fire.
+        // At 15:00 now_quiet=false, summary_time passed → fire.
+        let mut s = settings_with_quiet("13:00", "15:00");
+        s.summary_time = "14:00".to_string();
+        let rt = SchedulerRuntime::default();
+        assert!(!should_fire_daily_summary(
+            &rt,
+            &s,
+            true, // caller determines now_quiet
+            &local_at(2026, 4, 18, 14, 0)
+        ));
+        assert!(should_fire_daily_summary(
+            &rt,
+            &s,
+            false,
+            &local_at(2026, 4, 18, 15, 0)
+        ));
+    }
+
+    #[test]
+    fn summary_deferred_when_summary_time_inside_late_quiet_hours() {
+        // Summary 09:00, quiet 22:00-10:00 (late-wake user).
+        // At 09:00 now_quiet=true → don't fire. At 10:00 → fire.
+        let mut s = settings_with_quiet("22:00", "10:00");
+        s.summary_time = "09:00".to_string();
+        let rt = SchedulerRuntime::default();
+        assert!(!should_fire_daily_summary(
+            &rt,
+            &s,
+            true,
+            &local_at(2026, 4, 18, 9, 0)
+        ));
+        assert!(should_fire_daily_summary(
+            &rt,
+            &s,
+            false,
+            &local_at(2026, 4, 18, 10, 0)
+        ));
+    }
+
+    #[test]
+    fn summary_does_not_refire_same_day() {
+        let s = settings_with_quiet("22:00", "08:00");
+        let today = local_at(2026, 4, 18, 9, 0).date_naive();
+        let rt = SchedulerRuntime {
+            last_summary_date: Some(today),
+        };
+        assert!(!should_fire_daily_summary(
+            &rt,
+            &s,
+            false,
+            &local_at(2026, 4, 18, 9, 0)
+        ));
+    }
+
+    #[test]
+    fn summary_fires_next_day_after_previous() {
+        let s = settings_with_quiet("22:00", "08:00");
+        let yesterday = local_at(2026, 4, 17, 8, 0).date_naive();
+        let rt = SchedulerRuntime {
+            last_summary_date: Some(yesterday),
+        };
+        assert!(should_fire_daily_summary(
+            &rt,
+            &s,
+            false,
+            &local_at(2026, 4, 18, 8, 0)
+        ));
+    }
+
+    // ─── format helpers ──────────────────────────────────────────────────
+
+    #[test]
+    fn lead_time_boundaries() {
+        assert_eq!(format_lead_time(0), "now");
+        assert_eq!(format_lead_time(5), "in 5 min");
+        assert_eq!(format_lead_time(59), "in 59 min");
+        assert_eq!(format_lead_time(60), "in 1 hour");
+        assert_eq!(format_lead_time(120), "in 2 hours");
+        assert_eq!(format_lead_time(180), "in 3 hours");
+    }
+
+    #[test]
+    fn time_from_iso_valid() {
+        assert_eq!(format_time_from_iso("2026-04-18T09:30:00"), "9:30am");
+        assert_eq!(format_time_from_iso("2026-04-18T14:05:00"), "2:05pm");
+    }
+
+    #[test]
+    fn time_from_iso_invalid() {
+        assert_eq!(format_time_from_iso("2026-04-18"), ""); // all-day string
+        assert_eq!(format_time_from_iso("garbage"), "");
+    }
+
+    #[test]
+    fn summary_title_format() {
+        // 2026-04-18 is a Saturday
+        let t = format_summary_title(&local_at(2026, 4, 18, 8, 0));
+        assert_eq!(t, "Today — Sat, Apr 18");
+    }
+
+    #[test]
+    fn summary_body_both_counts() {
+        assert_eq!(
+            format_summary_body(3, 2),
+            "3 scheduled · 2 overdue\nOpen Pikos to review."
+        );
+    }
+
+    #[test]
+    fn summary_body_today_only() {
+        assert_eq!(
+            format_summary_body(3, 0),
+            "3 scheduled\nOpen Pikos to review."
+        );
+    }
+
+    #[test]
+    fn summary_body_overdue_only() {
+        assert_eq!(
+            format_summary_body(0, 2),
+            "2 overdue\nOpen Pikos to review."
+        );
+    }
+
+    #[test]
+    fn summary_body_empty() {
+        assert_eq!(format_summary_body(0, 0), "Open Pikos to review.");
+    }
 }
