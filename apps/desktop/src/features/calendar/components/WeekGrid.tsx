@@ -93,7 +93,7 @@ export function WeekGrid({
   onReschedule,
   pages,
 }: WeekGridProps) {
-  const { registerExternalDragUpdater } = useUI();
+  const { registerExternalDragUpdater, rightPanel } = useUI();
   const settings = useCalendarSettings();
   const weekGridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -102,8 +102,8 @@ export function WeekGrid({
   const today = new Date();
 
   // Measure the scroll container so we can inflate hour rows when the viewport
-  // is taller than 24 * baseHourHeight. Goal: calendar always fills available
-  // space instead of leaving empty area below the last hour at any density.
+  // is taller than `FIT_TO_VIEWPORT_HOURS * baseHourHeight`. Goal: calendar
+  // uses the available vertical space for bigger, more readable blocks.
   const [containerHeight, setContainerHeight] = useState(0);
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -117,11 +117,29 @@ export function WeekGrid({
     return () => observer.disconnect();
   }, []);
 
-  // Derived "effective" metrics: hour height grows to fit the viewport when
-  // the base density leaves empty space. Shrinks back when content overflows.
+  // EditorPanel toggles panels via `hidden` (both mounted), so on first load
+  // the calendar container has clientHeight=0 and ResizeObserver isn't guaranteed
+  // to re-fire when `display: none → block`. Remeasure explicitly when the
+  // panel becomes visible so the scroll-restore effect has a real height to
+  // work with.
+  useLayoutEffect(() => {
+    if (rightPanel !== "calendar") return;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.clientHeight > 0 && el.clientHeight !== containerHeight) {
+      setContainerHeight(el.clientHeight);
+    }
+  }, [rightPanel, containerHeight]);
+
+  // Fit-to-viewport sizes hours so ~FIT_TO_VIEWPORT_HOURS of the day fit in
+  // the visible area (roughly "waking hours"). Anything above or below that
+  // window stays scrollable — otherwise a tall viewport would fit all 24
+  // hours exactly, leaving zero scroll room and breaking the smart-start scroll
+  // to 7am on first open.
+  const FIT_TO_VIEWPORT_HOURS = 16;
   const effectiveHourHeight = Math.max(
     settings.metrics.hourHeight,
-    containerHeight / VISIBLE_HOURS
+    containerHeight / FIT_TO_VIEWPORT_HOURS
   );
   const metrics: CalendarMetrics = {
     compactBlockHeight: effectiveHourHeight / 4,
@@ -224,18 +242,28 @@ export function WeekGrid({
   // Initial scroll: restore saved scrollHour, else smart-start at max(7am, now-1h).
   // Persist scroll position as an hour offset (0–24) so the saved value survives
   // density changes — `scrollTop = scrollHour * hourHeight` regardless of density.
+  //
+  // Runs once, but deferred until containerHeight is measured — otherwise
+  // metrics.hourHeight is the pre-fit-to-viewport base value and scrollTop
+  // lands at the wrong hour on tall monitors.
+  const didRestoreScrollRef = useRef(false);
   useEffect(() => {
+    if (didRestoreScrollRef.current) return;
+    if (containerHeight === 0) return;
     const el = scrollRef.current;
     if (!el) return;
+    didRestoreScrollRef.current = true;
     const raw = localStorage.getItem(SCROLL_STORAGE_KEY);
     const saved = raw !== null ? Number(raw) : NaN;
-    const scrollHour = Number.isFinite(saved)
-      ? Math.min(Math.max(saved, 0), VISIBLE_HOURS)
+    // Values under 0.5h are treated as unset. Earlier builds had a scroll-clamp
+    // bug on tall monitors that persisted scrollHour=0, which would otherwise
+    // pin the calendar to midnight on every subsequent open.
+    const hasUsableSaved = Number.isFinite(saved) && saved >= 0.5;
+    const scrollHour = hasUsableSaved
+      ? Math.min(saved, VISIBLE_HOURS)
       : Math.max(7, new Date().getHours() - 1);
     el.scrollTop = scrollHour * metrics.hourHeight;
-    // Intentionally runs once on mount — subsequent density changes shouldn't
-    // snap scroll back to a saved position.
-  }, []);
+  }, [containerHeight, metrics.hourHeight]);
 
   // Persist scrollHour on scroll (debounced).
   useEffect(() => {
