@@ -1,6 +1,6 @@
 [package]
 name = "pkos"
-version = "0.2.1"
+version = "0.2.2"
 description = "Pikos — notes, tasks, and calendar"
 authors = ["Alex King"]
 license = "BUSL-1.1"
