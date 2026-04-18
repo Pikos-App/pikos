@@ -257,21 +257,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   // Shared helper — loads pages + folders from adapter. Stored in a ref so both
   // the mount effect and selectWorkspace can call it without dep-array issues.
-  //
-  // Loads two page sets: active (status=not_started) for everything, plus
-  // completed-with-schedule for the calendar. Completed unscheduled pages are
-  // loaded lazily via useCompletedPages when a user expands that section —
-  // merging them as needed keeps the initial set bounded.
+  // Loads only active pages at init; completed pages are fetched lazily —
+  // via useCompletedPages for the per-folder Completed section, and via
+  // CalendarView for the visible date range.
   const loadWorkspaceDataRef = useRef(async () => {
     setIsLoading(true);
     try {
-      const [activePages, scheduledDonePages, loadedFolders, loadedRules] = await Promise.all([
+      const [loadedPages, loadedFolders, loadedRules] = await Promise.all([
         adapter.listPages({ status: "not_started" }),
-        adapter.listPages({ hasSchedule: true, status: "done" }),
         adapter.listFolders(),
         adapter.listRecurrenceRules(),
       ]);
-      setPages([...activePages, ...scheduledDonePages]);
+      setPages(loadedPages);
       setFolders(loadedFolders);
       setRecurrenceRules(loadedRules);
     } finally {
@@ -645,15 +642,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   async function restoreFolder(id: string) {
     await adapter.restoreFolder(id);
-    // Re-fetch folders and pages to get the restored state. Mirrors the
-    // initial load: active + scheduled-completed, so the calendar still has
-    // everything it needs after an undo-folder-delete.
-    const [activePages, scheduledDonePages, loadedFolders] = await Promise.all([
+    // Re-fetch folders and pages to get the restored state
+    const [loadedPages, loadedFolders] = await Promise.all([
       adapter.listPages({ status: "not_started" }),
-      adapter.listPages({ hasSchedule: true, status: "done" }),
       adapter.listFolders(),
     ]);
-    setPages([...activePages, ...scheduledDonePages]);
+    setPages(loadedPages);
     setFolders(loadedFolders);
   }
 

@@ -3,7 +3,7 @@
 // Expands rrule recurrence rules into virtual occurrences for the visible week.
 // Navigation (prev/next/today) is owned by EditorPanel via UIContext.referenceDate.
 
-import { format, isSameDay } from "date-fns";
+import { addDays, format, isSameDay } from "date-fns";
 import { useEffect, useState } from "react";
 
 import { getCalendarDayCount, useLayoutMode } from "@/features/layout/breakpoints";
@@ -17,6 +17,15 @@ import { useRecurrenceExpansion } from "../hooks/useRecurrenceExpansion";
 import { buildCalendarDays, clampDayCount } from "../utils/calendarUtils";
 import { WeekGrid } from "./WeekGrid";
 
+/**
+ * Buffer (days) subtracted from the visible window's first day when fetching
+ * completed scheduled pages. `listPages` filters by scheduledStart, so a
+ * multi-day event that started before the window but extends into it would
+ * otherwise be missed. 31 days covers every realistic multi-day span
+ * (vacations, sprints) without ballooning the query.
+ */
+const COMPLETED_LOOKBACK_DAYS = 31;
+
 export function CalendarView() {
   const {
     createPage,
@@ -24,9 +33,11 @@ export function CalendarView() {
     flushPage,
     getPage,
     listSchedulesRange,
+    mergePages,
     pages,
     recurrenceRules,
     scheduleOnce,
+    storage,
   } = useWorkspace();
   const { activeViewId, openPage, referenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
@@ -49,6 +60,36 @@ export function CalendarView() {
   const days = buildCalendarDays(referenceDate, dayCount, weekStart);
   const today = new Date();
   const isCurrentWeek = days.some((d) => isSameDay(d, today));
+
+  // Load completed scheduled pages that overlap the visible range. Active
+  // pages are all loaded at init so multi-day spans and navigation Just Work;
+  // completed pages are fetched lazily here (and only here) so a user with
+  // years of completed history doesn't pay that cost on workspace load.
+  // mergePages dedupes across navigations.
+  const rangeStart = days[0];
+  const rangeEnd = days[days.length - 1];
+  const rangeKey =
+    rangeStart && rangeEnd
+      ? `${format(rangeStart, "yyyy-MM-dd")}|${format(rangeEnd, "yyyy-MM-dd")}`
+      : null;
+  useEffect(() => {
+    if (!storage || !rangeStart || !rangeEnd) return;
+    const scheduledAfter = format(addDays(rangeStart, -COMPLETED_LOOKBACK_DAYS), "yyyy-MM-dd");
+    const scheduledBefore = format(rangeEnd, "yyyy-MM-dd");
+    let cancelled = false;
+    void (async () => {
+      const completed = await storage.listPages({
+        hasSchedule: true,
+        scheduledAfter,
+        scheduledBefore,
+        status: "done",
+      });
+      if (!cancelled) mergePages(completed);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storage, rangeKey, mergePages, rangeStart, rangeEnd]);
 
   // Expand rrule recurrence rules into virtual calendar occurrences for this week.
   const expandedPages = useRecurrenceExpansion({

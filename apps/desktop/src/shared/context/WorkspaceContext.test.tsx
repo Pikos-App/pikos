@@ -729,7 +729,7 @@ describe("mergePages", () => {
 // ─── Initial load excludes completed ────────────────────────────────────────
 
 describe("initial load", () => {
-  it("does not include completed pages in pages array on mount", async () => {
+  it("filters listPages to status=not_started", async () => {
     const spy = vi.spyOn(MockStorageAdapter.prototype, "listPages");
     const hook = renderHook(() => useWorkspace(), { wrapper });
 
@@ -739,5 +739,37 @@ describe("initial load", () => {
 
     // listPages should have been called with status filter
     expect(spy).toHaveBeenCalledWith({ status: "not_started" });
+  });
+
+  it("does not pull completed pages into the pages array on reload", async () => {
+    // Guards against reintroducing a bulk completed load at init — the
+    // Inbox/folder Completed sections rely on lazy pagination, and the
+    // calendar pulls its own range-scoped completed set separately. A
+    // completed page sitting in storage must stay out of `pages` until
+    // something explicitly asks for it.
+    const hook = await setup();
+
+    // Drop a completed page directly into the adapter, bypassing React
+    // state — simulates a pre-existing completion from a prior session.
+    await act(async () => {
+      const storage = hook.hook.result.current.storage;
+      if (!storage) throw new Error("storage should exist after selectWorkspace");
+      await storage.createPage({
+        content: "",
+        folderId: null,
+        priority: 0,
+        status: "done",
+        tags: [],
+        title: "Completed long ago",
+      });
+    });
+
+    // Trigger a fresh workspace load.
+    await act(async () => {
+      await hook.hook.result.current.selectWorkspace();
+    });
+
+    const donePages = hook.hook.result.current.pages.filter((p) => p.status === "done");
+    expect(donePages).toHaveLength(0);
   });
 });
