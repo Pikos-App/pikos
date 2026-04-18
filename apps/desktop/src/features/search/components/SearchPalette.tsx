@@ -1,4 +1,4 @@
-// SearchPalette — Cmd+P unified search palette.
+// SearchPalette — Cmd+K unified search palette.
 // Single FTS5 query with bm25() weighting: title matches rank first,
 // content matches show a snippet below. Frontend handles highlighting.
 

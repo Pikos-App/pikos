@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { seedTutorial } from "./tutorial";
 
 describe("seedTutorial", () => {
-  it("creates Tutorial folder with 4 pages", async () => {
+  it("creates Tutorial folder with 5 pages", async () => {
     const adapter = new MockStorageAdapter();
     const result = await seedTutorial(adapter);
 
@@ -17,9 +17,9 @@ describe("seedTutorial", () => {
     expect(folders[0]!.name).toBe("Tutorial");
     expect(folders[0]!.id).toBe(folderId);
 
-    // 4 pages total, all in Tutorial folder
+    // 5 pages total, all in Tutorial folder
     const pages = await adapter.listPages();
-    expect(pages).toHaveLength(4);
+    expect(pages).toHaveLength(5);
     expect(pages.every((p) => p.folderId === folderId)).toBe(true);
 
     // Welcome page ID matches
@@ -53,6 +53,6 @@ describe("seedTutorial", () => {
 
     // No duplicate pages
     const pages = await adapter.listPages();
-    expect(pages).toHaveLength(4);
+    expect(pages).toHaveLength(5);
   });
 });

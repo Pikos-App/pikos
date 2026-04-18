@@ -73,7 +73,6 @@ pub fn run() {
             }
         })
         .menu(|handle| {
-            // Custom menu without Print (Cmd+P) — that shortcut is used for search palette.
             let settings = MenuItemBuilder::new("Settings…")
                 .id("settings")
                 .accelerator("CmdOrCtrl+,")
