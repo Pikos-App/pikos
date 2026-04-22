@@ -1076,8 +1076,9 @@ describe("NL Page Creation Parser", () => {
 
     it("'offsite April 18 to April 20' → Apr 18 → Apr 20", () => {
       // "to" joins a date range; chrono returns both dates with day-certainty.
-      // (NOTE: "through" is reserved by the bounded-recurrence window parser —
-      // "April 18 through April 25" becomes a daily-recurring window, not a span.)
+      // "through" / "thru" between "<Month> <day>" pairs is normalized to "to"
+      // at the top of parseInput so spans parse identically — see the dedicated
+      // "'<Month> <day> through ...'" cases below.
       const r = parseInput("offsite April 18 to April 20", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
@@ -1112,6 +1113,61 @@ describe("NL Page Creation Parser", () => {
       if (r.type !== "single") return;
       expect(r.input.scheduledStart).toContain("15:00");
       expect(r.input.scheduledEnd).toContain("17:00");
+    });
+
+    // "<Month> <day> through <day>" gets normalized to "... to ..." up front;
+    // without this, chrono reads "2 through 10" as a time range (2am–10am) and
+    // the result is a 2am timed event tomorrow instead of the span the user typed.
+    it("'travel May 2 through 10' → May 2 → May 10 span", () => {
+      const r = parseInput("travel May 2 through 10", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("travel");
+      expect(r.input.scheduledStart).toBe("2026-05-02");
+      expect(r.input.scheduledEnd).toBe("2026-05-10");
+    });
+
+    it("'travel May 2 thru 10' → same span via 'thru' alias", () => {
+      const r = parseInput("travel May 2 thru 10", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-05-02");
+      expect(r.input.scheduledEnd).toBe("2026-05-10");
+    });
+
+    it("'trip April 18 through April 25' → span, not recurring window", () => {
+      const r = parseInput("trip April 18 through April 25", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBe("2026-04-25");
+    });
+
+    it("'trip Dec 28 through Jan 3' → cross-year span", () => {
+      const r = parseInput("trip Dec 28 through Jan 3", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-12-28");
+      expect(r.input.scheduledEnd).toBe("2027-01-03");
+    });
+
+    // Regression: cadence + "through" stays a bounded-recurrence window —
+    // the rewrite only fires when a "<Month> <day>" literal sits immediately
+    // before "through", which isn't the case here.
+    it("regression: 'practice piano through june' still a daily window", () => {
+      const r = parseInput("practice piano through june", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+      expect(r.rrule).toContain("UNTIL=202606");
+    });
+
+    it("regression: 'standup every monday through april 30' stays bounded", () => {
+      const r = parseInput("standup every monday through april 30", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.rrule).toContain("UNTIL=2026043");
     });
   });
 

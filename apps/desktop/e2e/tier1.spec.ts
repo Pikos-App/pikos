@@ -38,6 +38,63 @@ appTest("create page via Quick Add @tier1", async ({ app }) => {
   await expect(app.locator("[data-page-list-item]").getByText("team meeting")).toBeVisible();
 });
 
+// ─── T1-2b: Quick Add NLP multi-day all-day range ──────────────────────────
+// Guards the parser + chip wiring for multi-day all-day inputs. Regressions to
+// watch for: (a) "through" between numbers used to be mis-parsed as a time
+// range (2–10 am) instead of a date span; (b) QuickAddDialog used to drop
+// `scheduledEnd` for all-day events, so the chip collapsed to the start day.
+
+appTest("Quick Add parses multi-day all-day ranges @tier1", async ({ app }) => {
+  // Dec 28–31 is the latest safe span in a calendar year; chrono.forwardDate
+  // rolls it forward past Dec 28, so the exact label may carry a year suffix
+  // in the narrow window where we're already past it. The regex tolerates both.
+  async function openQuickAdd() {
+    await app.keyboard.press(mod("Mod+n"));
+    await expect(app.getByRole("dialog", { name: "Quick add" })).toBeVisible();
+  }
+
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  const input = app.getByPlaceholder(/what's on your mind/i);
+
+  // 1. Hyphenated range — the original syntax that already worked.
+  await openQuickAdd();
+  await input.fill("trip Dec 28-31");
+  await expect(dialog.getByRole("button", { name: /Scheduled: Dec 28.*31/ })).toBeVisible();
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // 2. "through <bare digit>" — the previously broken path. Chrono reads
+  //    "28 through 31" as a time range; the normalizer rewrites to "28 to 31"
+  //    so both syntaxes emit the same span.
+  await openQuickAdd();
+  await input.fill("offsite Dec 28 through 31");
+  await expect(dialog.getByRole("button", { name: /Scheduled: Dec 28.*31/ })).toBeVisible();
+  // Not a timed "Tomorrow …am" chip (the regression symptom).
+  await expect(dialog.getByRole("button", { name: /Tomorrow/ })).not.toBeVisible();
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // 3. Single bare date — no range, so the chip stays the start-only label.
+  await openQuickAdd();
+  await input.fill("review Dec 28");
+  const chip = dialog.getByRole("button", { name: /Scheduled: Dec 28/ });
+  await expect(chip).toBeVisible();
+  await expect(chip).not.toHaveAccessibleName(/31/);
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Page list: both range pages render the span in their date chip; the
+  // single-day page renders just the start.
+  const tripItem = app.locator("[data-page-list-item]").filter({ hasText: "trip" });
+  const offsiteItem = app.locator("[data-page-list-item]").filter({ hasText: "offsite" });
+  const reviewItem = app.locator("[data-page-list-item]").filter({ hasText: "review" });
+
+  await expect(tripItem).toContainText(/Dec 28.*31/);
+  await expect(offsiteItem).toContainText(/Dec 28.*31/);
+  await expect(reviewItem).toContainText(/Dec 28/);
+  await expect(reviewItem).not.toContainText(/31/);
+});
+
 // ─── T1-3: Open page and edit content ────────────────────────────────────────
 
 appTest("open page and edit content @tier1", async ({ app }) => {

@@ -18,6 +18,7 @@ import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
+import { formatDateRange } from "@/shared/utils/formatDateRange";
 
 // Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p
 function formatTime(date: Date): string {
@@ -287,8 +288,31 @@ export function PageListItem({
                 {page.scheduledStart &&
                   (() => {
                     const isCompleted = page.status === "done";
-                    const { isPast, label, tooltip } =
-                      !isCompleted && showRelative
+                    // Multi-day all-day span: show the explicit range ("May 2 – 10").
+                    // Falls back to single-date formatting for timed events or
+                    // when end is missing/equal to start.
+                    const isAllDaySpan =
+                      page.scheduledStart.length === 10 &&
+                      typeof page.scheduledEnd === "string" &&
+                      page.scheduledEnd.length === 10 &&
+                      page.scheduledEnd > page.scheduledStart;
+                    const { isPast, label, tooltip } = isAllDaySpan
+                      ? (() => {
+                          const d = formatDate(page.scheduledStart);
+                          return {
+                            isPast: d.isPast,
+                            label: formatDateRange(page.scheduledStart, page.scheduledEnd),
+                            tooltip: `${d.tooltip} – ${parseLocalISO(
+                              page.scheduledEnd!
+                            ).toLocaleDateString("en-US", {
+                              day: "numeric",
+                              month: "long",
+                              weekday: "long",
+                              year: "numeric",
+                            })}`,
+                          };
+                        })()
+                      : !isCompleted && showRelative
                         ? formatRelativeTime(page.scheduledStart)
                         : formatDate(page.scheduledStart);
                     const dueSoon = !isCompleted && !isPast && isDueSoon(page.scheduledStart);

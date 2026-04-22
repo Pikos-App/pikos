@@ -86,6 +86,18 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
   let text = raw;
 
+  // --- 0. Normalize "<Month> <day> through/thru [<Month>] <day>" to "... to ...".
+  // chrono handles "May 2 to 10" as a date range but mis-parses "May 2 through 10"
+  // as the time range 2–10 (am). The window parser below consumes "through <word>"
+  // for bounded recurrence, but bare "through <digit>" falls through to chrono.
+  // Rewriting to "to" lets chrono emit the span we want, and leaves cadence uses
+  // like "practice piano through june" / "every monday through april 30" alone.
+  text = text.replace(
+    /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(st|nd|rd|th)?\s+(?:through|thru)\s+((?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+)?(\d{1,2})(st|nd|rd|th)?\b/gi,
+    (_, m1: string, d1: string, _s1: string | undefined, m2: string | undefined, d2: string) =>
+      m2 ? `${m1} ${d1} to ${m2}${d2}` : `${m1} ${d1} to ${d2}`
+  );
+
   // --- 1. Tags: #word ---
   const tags: string[] = [];
   text = text.replace(/#(\w+)/g, (_, tag: string) => {

@@ -24,6 +24,7 @@ import { useEffect, useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
+import { formatDateRange } from "@/shared/utils/formatDateRange";
 
 // ── ISO formatters ────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ function computeEndTimeLabel(hour24: number, minute: number, durationMinutes: nu
 
 // ── Trigger label ─────────────────────────────────────────────────────────────
 
-function formatTriggerLabel(
+export function formatTriggerLabel(
   iso: string,
   endIso: string | null | undefined,
   isDone: boolean
@@ -80,24 +81,23 @@ function formatTriggerLabel(
     !isAllDay && endIso && endIso.length > 10
       ? Math.round((parseLocalISO(endIso).getTime() - parseLocalISO(iso).getTime()) / 60000)
       : null;
-  // All-day multi-day span: "N days" suffix (e.g. "Apr 15 · 4d").
-  const spanDays =
-    isAllDay && endIso && endIso.length === 10
-      ? differenceInCalendarDays(parseLocalISO(endIso), date) + 1
-      : null;
+  const isAllDaySpan = isAllDay && endIso && endIso.length === 10 && endIso > iso;
   const durationSuffix =
-    durationMinutes && durationMinutes > 0
-      ? ` · ${formatDurationLabel(durationMinutes)}`
-      : spanDays && spanDays > 1
-        ? ` · ${spanDays}d`
-        : "";
+    durationMinutes && durationMinutes > 0 ? ` · ${formatDurationLabel(durationMinutes)}` : "";
 
   const isPast = isAllDay ? date < startOfDay(now) : date < now;
   // Due soon: not past, within next 48 hours, not done
   const dueSoon = !isPast && !isDone && date < addHours(now, 48);
 
+  // Multi-day all-day: show the explicit range ("May 2 – 10"). Skipping the
+  // Today/Tomorrow relative labels — a span isn't "today", and the end date is
+  // the more informative signal.
+  if (isAllDaySpan) {
+    return { isDueSoon: dueSoon, isPast: isPast && !isDone, label: formatDateRange(iso, endIso) };
+  }
+
   if (isToday(date)) {
-    if (isAllDay) return { isDueSoon: dueSoon, isPast: false, label: `Today${durationSuffix}` };
+    if (isAllDay) return { isDueSoon: dueSoon, isPast: false, label: "Today" };
     return {
       isDueSoon: dueSoon,
       isPast: isPast && !isDone,
@@ -105,7 +105,7 @@ function formatTriggerLabel(
     };
   }
   if (isTomorrow(date)) {
-    if (isAllDay) return { isDueSoon: dueSoon, isPast: false, label: `Tomorrow${durationSuffix}` };
+    if (isAllDay) return { isDueSoon: dueSoon, isPast: false, label: "Tomorrow" };
     return {
       isDueSoon: dueSoon,
       isPast: false,
@@ -120,7 +120,7 @@ function formatTriggerLabel(
       label: `${dateStr} ${formatTimeCompact(getHours(date), getMinutes(date))}${durationSuffix}`,
     };
   }
-  return { isDueSoon: dueSoon, isPast: isPast && !isDone, label: `${dateStr}${durationSuffix}` };
+  return { isDueSoon: dueSoon, isPast: isPast && !isDone, label: dateStr };
 }
 
 // ── Time slots ────────────────────────────────────────────────────────────────

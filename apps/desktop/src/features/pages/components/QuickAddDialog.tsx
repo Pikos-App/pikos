@@ -182,8 +182,7 @@ export function QuickAddDialog() {
         const effectiveStart =
           parsed.scheduledStart ?? (result.type === "recurring" ? localToday() : null);
         setDateValue(effectiveStart);
-        const hasTime = parsed.scheduledStart?.includes("T") ?? false;
-        setEndDateValue(hasTime ? (parsed.scheduledEnd ?? null) : null);
+        setEndDateValue(parsed.scheduledEnd ?? null);
       }
 
       if (!priorityManual) {
@@ -334,8 +333,7 @@ export function QuickAddDialog() {
     if (Object.keys(patch).length > 0) updatePage(page.id, patch);
 
     if (resolvedDate) {
-      const hasTime = resolvedDate.includes("T");
-      const resolvedEnd = hasTime ? (parsed?.scheduledEnd ?? endDateValue ?? undefined) : undefined;
+      const resolvedEnd = parsed?.scheduledEnd ?? endDateValue ?? undefined;
       await scheduleOnce(page.id, resolvedDate, resolvedEnd);
     }
 
