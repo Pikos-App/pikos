@@ -21,10 +21,10 @@ const links = [
 ---
 
 <footer class={className}>
-  <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400 dark:text-gray-500">
+  <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-neutral-400 dark:text-neutral-500">
     {links.filter((l) => l.href !== current).map((l) => (
-      <a href={l.href} class="transition-colors hover:text-orange-500 dark:hover:text-orange-400">{l.label}</a>
+      <a href={l.href} class="transition-colors hover:text-primary-500 dark:hover:text-primary-400">{l.label}</a>
     ))}
-    <span>Pikos by <a href="https://alexking.dev" class="text-orange-500 hover:underline">Alex King</a></span>
+    <span>Pikos by <a href="https://alexking.dev" class="text-primary-500 hover:underline">Alex King</a></span>
   </div>
 </footer>

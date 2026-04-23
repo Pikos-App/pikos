@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pikos logo — contact sheet</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #3a3a37;
+    font-family: 'Inter', -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: #f0efed;
+    padding: 40px;
+  }
+
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+  }
+  .intro {
+    font-size: 14px;
+    opacity: 0.65;
+    margin-bottom: 40px;
+    max-width: 700px;
+  }
+
+  .section {
+    margin-bottom: 48px;
+  }
+  .section-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.55;
+    margin-bottom: 16px;
+    font-family: ui-monospace, 'SF Mono', monospace;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .chip {
+    background: #272724;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    min-width: 140px;
+  }
+  .chip.light { background: #f8f8f6; color: #161613; }
+  .chip.light .size { color: #6e6d69; }
+
+  .chip img {
+    display: block;
+    image-rendering: -webkit-optimize-contrast;
+  }
+  .chip .size {
+    font-size: 11px;
+    font-family: ui-monospace, 'SF Mono', monospace;
+    opacity: 0.55;
+  }
+
+  /* Size-1x frames for clean pixel alignment */
+  .frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.1);
+    border-radius: 8px;
+    padding: 8px;
+  }
+  .chip.light .frame { background: rgba(0,0,0,0.04); }
+
+  .tokens {
+    background: #1e1e1b;
+    border-radius: 12px;
+    padding: 20px;
+    font-family: ui-monospace, 'SF Mono', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    max-width: 600px;
+  }
+  .tokens .key { opacity: 0.55; }
+  .tokens .swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+</style>
+</head>
+<body>
+
+<h1>Pikos logo — contact sheet</h1>
+<p class="intro">
+  Visual review of all logo variants at common rendering sizes. Terracotta brand system —
+  <code>#a65544</code> on light surfaces, <code>#c06a58</code> on dark. Warm near-black
+  container <code>#161613</code>.
+</p>
+
+<!-- ═══════════════ TOKENS ═══════════════ -->
+<div class="section">
+  <div class="section-label">Brand tokens</div>
+  <div class="tokens">
+    <div><span class="swatch" style="background:#a65544"></span><span class="key">brand-500 (light)</span> &nbsp; #a65544</div>
+    <div><span class="swatch" style="background:#c06a58"></span><span class="key">brand-400 (dark)</span> &nbsp; #c06a58</div>
+    <div><span class="swatch" style="background:#161613"></span><span class="key">neutral-900 (dark surface)</span> &nbsp; #161613</div>
+    <div><span class="swatch" style="background:#f8f8f6;border:1px solid #ccc"></span><span class="key">neutral-50 (light surface)</span> &nbsp; #f8f8f6</div>
+  </div>
+</div>
+
+<!-- ═══════════════ MASTER (with container) ═══════════════ -->
+<div class="section">
+  <div class="section-label">Master — all sizes use the same proportions</div>
+  <div class="row">
+    <div class="chip"><div class="frame"><img src="png/pikos-1024.png" width="128" height="128" alt=""/></div><div class="size">1024 @ 128</div></div>
+    <div class="chip"><div class="frame"><img src="png/pikos-512.png" width="96" height="96" alt=""/></div><div class="size">512</div></div>
+    <div class="chip"><div class="frame"><img src="png/pikos-256.png" width="64" height="64" alt=""/></div><div class="size">256 @ 64</div></div>
+    <div class="chip"><div class="frame"><img src="png/pikos-128.png" width="48" height="48" alt=""/></div><div class="size">128 @ 48</div></div>
+    <div class="chip"><div class="frame"><img src="png/pikos-64.png" width="64" height="64" alt=""/></div><div class="size">64</div></div>
+    <div class="chip"><div class="frame"><img src="png/pikos-48.png" width="48" height="48" alt=""/></div><div class="size">48</div></div>
+    <div class="chip"><div class="frame"><img src="png/pikos-32.png" width="32" height="32" alt=""/></div><div class="size">32</div></div>
+    <div class="chip"><div class="frame"><img src="png/pikos-16.png" width="16" height="16" alt=""/></div><div class="size">16</div></div>
+  </div>
+</div>
+
+<!-- ═══════════════ LIGHT MODE ═══════════════ -->
+<div class="section">
+  <div class="section-label">Light mode — mark only (for light app surfaces)</div>
+  <div class="row">
+    <div class="chip light"><div class="frame"><img src="png/pikos-light-512.png" width="96" height="96" alt=""/></div><div class="size">512</div></div>
+    <div class="chip light"><div class="frame"><img src="png/pikos-light-256.png" width="64" height="64" alt=""/></div><div class="size">256</div></div>
+    <div class="chip light"><div class="frame"><img src="png/pikos-light-128.png" width="48" height="48" alt=""/></div><div class="size">128</div></div>
+    <div class="chip light"><div class="frame"><img src="png/pikos-light-64.png" width="64" height="64" alt=""/></div><div class="size">64</div></div>
+  </div>
+</div>
+
+<!-- ═══════════════ FAVICON ═══════════════ -->
+<div class="section">
+  <div class="section-label">Favicon set (for &lt;head&gt; tags)</div>
+  <div class="row">
+    <div class="chip"><div class="frame"><img src="favicon/favicon-512.png" width="96" height="96" alt=""/></div><div class="size">512</div></div>
+    <div class="chip"><div class="frame"><img src="favicon/favicon-192.png" width="72" height="72" alt=""/></div><div class="size">192 · Android</div></div>
+    <div class="chip"><div class="frame"><img src="favicon/favicon-180.png" width="72" height="72" alt=""/></div><div class="size">180 · Apple touch</div></div>
+    <div class="chip"><div class="frame"><img src="favicon/favicon-48.png" width="48" height="48" alt=""/></div><div class="size">48</div></div>
+    <div class="chip"><div class="frame"><img src="favicon/favicon-32.png" width="32" height="32" alt=""/></div><div class="size">32</div></div>
+    <div class="chip"><div class="frame"><img src="favicon/favicon-16.png" width="16" height="16" alt=""/></div><div class="size">16</div></div>
+  </div>
+</div>
+
+</body>
+</html>

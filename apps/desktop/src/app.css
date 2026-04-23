@@ -77,22 +77,35 @@ button,
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    PRIMITIVE COLOR SCALES
-   Static values — available as Tailwind utilities (e.g. bg-brand-500).
+   Static values — available as Tailwind utilities (e.g. bg-primary-500).
    Do NOT use primitives directly in components — use semantic tokens instead.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 @theme {
-  /* ─── Brand — warm, confident teal-green ─── */
-  --color-brand-50: #e6faf4;
-  --color-brand-100: #b3f0de;
-  --color-brand-200: #80e6c8;
-  --color-brand-300: #4ddcb2;
-  --color-brand-400: #2dd4a8;
-  --color-brand-500: #1aae8a;
-  --color-brand-600: #14896c;
-  --color-brand-700: #0e644e;
-  --color-brand-800: #083f30;
-  --color-brand-900: #041f18;
+  /* ─── Brand — terracotta. Identity only (app icon, About screen).
+         Never on interactive UI — that's primary-*. ─── */
+  --color-brand-50: #f9ebe7;
+  --color-brand-100: #f0cec5;
+  --color-brand-200: #e3a798;
+  --color-brand-300: #d18270;
+  --color-brand-400: #c06a58;
+  --color-brand-500: #a65544;
+  --color-brand-600: #8b4537;
+  --color-brand-700: #6e372c;
+  --color-brand-800: #4d2720;
+  --color-brand-900: #2a1612;
+
+  /* ─── Primary — teal. Active, link, current, primary action. ─── */
+  --color-primary-50: #e6faf4;
+  --color-primary-100: #b3f0de;
+  --color-primary-200: #80e6c8;
+  --color-primary-300: #4ddcb2;
+  --color-primary-400: #2dd4a8;
+  --color-primary-500: #1aae8a;
+  --color-primary-600: #14896c;
+  --color-primary-700: #0e644e;
+  --color-primary-800: #083f30;
+  --color-primary-900: #041f18;
 
   /* ─── Neutral — warm gray, NOT blue-gray ─── */
   --color-neutral-0: #ffffff;
@@ -110,12 +123,18 @@ button,
   --color-neutral-900: #161613;
   --color-neutral-950: #0f0f0d;
 
-  /* ─── Accent — amber, for non-urgent attention ─── */
-  --color-accent-amber-400: #f59e42;
-  --color-accent-amber-500: #d4850f;
-  --color-accent-amber-600: #a36a0b;
+  /* ─── Warning — amber, for soft attention (due-soon, notice). ─── */
+  --color-warning-400: #e8a44c;
+  --color-warning-500: #c78f3a;
+  --color-warning-600: #8f6526;
 
-  /* ─── Status colors (match Tailwind defaults — intentional) ─── */
+  /* ─── Danger — red, for urgent / destructive / overdue. ─── */
+  --color-danger-400: #f87171;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+
+  /* ─── Status colors (match Tailwind defaults — intentional).
+         Used as user-assignable category colors, NOT semantic status. ─── */
   --color-red-400: #f87171;
   --color-red-500: #ef4444;
   --color-red-600: #dc2626;
@@ -159,6 +178,10 @@ button,
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 :root {
+  /* ─── Identity ─── */
+  /* Terracotta. Identity-only — never on interactive UI. */
+  --brand-identity: var(--color-brand-500);
+
   /* ─── Surfaces ─── */
   --surface-primary: #ffffff;
   --surface-secondary: #fbfbf9;
@@ -263,6 +286,9 @@ button,
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 .dark {
+  /* ─── Identity ─── */
+  --brand-identity: var(--color-brand-400);
+
   /* ─── Surfaces ─── */
   --surface-primary: #161613;
   --surface-secondary: #141412;
@@ -453,9 +479,9 @@ button,
     display: none; /* Chrome / Safari / Tauri */
   }
 
-  /* Brand-tinted text selection */
+  /* Primary-tinted text selection */
   ::selection {
-    background: color-mix(in srgb, var(--color-brand-400) 25%, transparent);
+    background: color-mix(in srgb, var(--color-primary-400) 25%, transparent);
   }
 
   /* Reduced motion preference */

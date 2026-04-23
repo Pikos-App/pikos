@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <title>Pikos — light mode mark</title>
+  <desc>Pikos logomark for light surfaces. Terracotta brand-500 (deeper).</desc>
+
+  <rect x="84" y="44" width="64" height="88" rx="6"
+        fill="none" stroke="#a65544" stroke-width="5"
+        opacity="0.40"/>
+  <rect x="68" y="56" width="64" height="88" rx="6"
+        fill="none" stroke="#a65544" stroke-width="5"
+        opacity="0.70"/>
+  <rect x="52" y="68" width="64" height="88" rx="6"
+        fill="#a65544"/>
+</svg>

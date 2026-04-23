@@ -78,26 +78,26 @@ const tags = [...new Set(posts.map((p) => p.tag))];
   <main class="mx-auto max-w-2xl px-8 py-20">
 
     <!-- Back to home -->
-    <a href="/" class="inline-flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-orange-500 dark:text-gray-500 dark:hover:text-orange-400">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
       Home
     </a>
 
-    <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Blog</h1>
-    <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">Honest writing about building Pikos — the app, the decisions, the trade-offs.</p>
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Blog</h1>
+    <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Honest writing about building Pikos — the app, the decisions, the trade-offs.</p>
 
     <!-- Tag filters -->
     <div class="mt-6 flex flex-wrap gap-2">
       <button
         data-tag="all"
-        class="tag-filter cursor-pointer rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-orange-300 hover:text-orange-600 dark:border-gray-700 dark:text-gray-400 dark:hover:border-orange-800 dark:hover:text-orange-400"
+        class="tag-filter cursor-pointer rounded-full border border-neutral-200 px-3 py-1 text-xs font-medium text-neutral-600 transition-colors hover:border-primary-400 hover:text-primary-500 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-primary-500/40 dark:hover:text-primary-400"
       >
         All
       </button>
       {tags.map((tag) => (
         <button
           data-tag={tag}
-          class="tag-filter cursor-pointer rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:border-orange-300 hover:text-orange-600 dark:border-gray-700 dark:text-gray-400 dark:hover:border-orange-800 dark:hover:text-orange-400"
+          class="tag-filter cursor-pointer rounded-full border border-neutral-200 px-3 py-1 text-xs font-medium text-neutral-600 transition-colors hover:border-primary-400 hover:text-primary-500 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-primary-500/40 dark:hover:text-primary-400"
         >
           {tag}
         </button>
@@ -107,16 +107,16 @@ const tags = [...new Set(posts.map((p) => p.tag))];
     <div class="mt-10 space-y-6" id="posts">
       {posts.map((post) => (
         <article class="group" data-post-tag={post.tag}>
-          <a href={`/blog/${post.slug}`} class="block rounded-lg border border-gray-100 bg-white px-6 py-5 transition-colors hover:border-orange-200 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-orange-900">
+          <a href={`/blog/${post.slug}`} class="block rounded-lg border border-neutral-100 bg-white px-6 py-5 transition-colors hover:border-primary-400/30 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-primary-500/40">
             <div class="flex items-center gap-2">
-              <time class="text-xs text-gray-400 dark:text-gray-500" datetime={post.date}>
+              <time class="text-xs text-neutral-400 dark:text-neutral-500" datetime={post.date}>
                 {new Date(post.date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
               </time>
-              <span class="text-gray-200 dark:text-gray-700">&middot;</span>
-              <span class="text-xs font-medium text-orange-500 dark:text-orange-400">{post.tag}</span>
+              <span class="text-neutral-200 dark:text-neutral-700">&middot;</span>
+              <span class="text-xs font-medium text-primary-500 dark:text-primary-400">{post.tag}</span>
             </div>
-            <h2 class="mt-1.5 text-lg font-semibold text-gray-900 transition-colors group-hover:text-orange-500 dark:text-gray-50 dark:group-hover:text-orange-400">{post.title}</h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{post.description}</p>
+            <h2 class="mt-1.5 text-lg font-semibold text-neutral-900 transition-colors group-hover:text-primary-500 dark:text-neutral-50 dark:group-hover:text-primary-400">{post.title}</h2>
+            <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{post.description}</p>
           </a>
         </article>
       ))}
@@ -128,24 +128,17 @@ const tags = [...new Set(posts.map((p) => p.tag))];
 </Base>
 
 <style>
-  :global(body) {
-    background-color: #fafaf9;
-  }
-
-  :global(html.dark body) {
-    background-color: #030712;
-  }
 
   .tag-filter[data-active] {
-    border-color: #f97316;
-    color: #f97316;
-    background-color: rgba(249, 115, 22, 0.08);
+    border-color: var(--color-primary-500);
+    color: var(--color-primary-500);
+    background-color: color-mix(in srgb, var(--color-primary-400) 10%, transparent);
   }
 
   :global(html.dark) .tag-filter[data-active] {
-    border-color: #c2410c;
-    color: #fb923c;
-    background-color: rgba(249, 115, 22, 0.1);
+    border-color: var(--color-primary-400);
+    color: var(--color-primary-400);
+    background-color: color-mix(in srgb, var(--color-primary-400) 10%, transparent);
   }
 </style>
 

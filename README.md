@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="apps/brand/svg/pikos-dark.svg" alt="Pikos" width="128" height="128">
+</p>
+
 # Pikos
 
 Notes, tasks, and calendar — in one app, on your device.

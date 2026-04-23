@@ -33,16 +33,16 @@ const jsonLd = {
   <main class="mx-auto max-w-2xl px-8 py-20">
 
     <!-- Back to blog -->
-    <a href="/blog" class="inline-flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-orange-500 dark:text-gray-500 dark:hover:text-orange-400">
+    <a href="/blog" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
       Blog
     </a>
 
     <article>
-      <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">{title}</h1>
-      <time class="mt-3 block text-sm text-gray-400 dark:text-gray-500" datetime={date}>{formattedDate}</time>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">{title}</h1>
+      <time class="mt-3 block text-sm text-neutral-400 dark:text-neutral-500" datetime={date}>{formattedDate}</time>
 
-      <div class="prose mt-10 text-base leading-relaxed text-gray-600 dark:text-gray-300">
+      <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
         <slot />
       </div>
     </article>
@@ -53,33 +53,26 @@ const jsonLd = {
 </Base>
 
 <style>
-  :global(body) {
-    background-color: #fafaf9;
-  }
-
-  :global(html.dark body) {
-    background-color: #030712;
-  }
 
   /* Prose styles for blog content */
   .prose :global(h2) {
     padding-top: 1rem;
     font-size: 1.5rem;
     font-weight: 600;
-    color: var(--heading-color, #111827);
+    color: var(--color-neutral-900);
   }
   :global(html.dark) .prose :global(h2) {
-    color: #f9fafb;
+    color: var(--color-neutral-100);
   }
 
   .prose :global(h3) {
     padding-top: 0.5rem;
     font-size: 1.125rem;
     font-weight: 600;
-    color: var(--heading-color, #111827);
+    color: var(--color-neutral-900);
   }
   :global(html.dark) .prose :global(h3) {
-    color: #f9fafb;
+    color: var(--color-neutral-100);
   }
 
   .prose :global(p) {
@@ -97,7 +90,10 @@ const jsonLd = {
   }
 
   .prose :global(a) {
-    color: #f97316;
+    color: var(--color-primary-500);
+  }
+  :global(html.dark) .prose :global(a) {
+    color: var(--color-primary-400);
   }
   .prose :global(a:hover) {
     text-decoration: underline;
@@ -105,22 +101,22 @@ const jsonLd = {
 
   .prose :global(code) {
     border-radius: 0.25rem;
-    background-color: #f3f4f6;
+    background-color: var(--color-neutral-150);
     padding: 0.125rem 0.375rem;
     font-size: 0.875rem;
   }
   :global(html.dark) .prose :global(code) {
-    background-color: #1f2937;
+    background-color: var(--color-neutral-800);
   }
 
   .prose :global(blockquote) {
     margin-top: 1.5rem;
-    border-left: 3px solid #e5e7eb;
+    border-left: 3px solid var(--color-neutral-200);
     padding-left: 1rem;
     font-style: italic;
-    color: #9ca3af;
+    color: var(--color-neutral-400);
   }
   :global(html.dark) .prose :global(blockquote) {
-    border-left-color: #374151;
+    border-left-color: var(--color-neutral-700);
   }
 </style>

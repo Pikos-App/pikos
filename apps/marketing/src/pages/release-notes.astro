@@ -8,35 +8,35 @@ import Footer from "../components/Footer.astro";
   <main class="mx-auto max-w-2xl px-8 py-20">
 
     <!-- Back to home -->
-    <a href="/" class="inline-flex items-center gap-1 text-sm text-gray-400 transition-colors hover:text-orange-500 dark:text-gray-500 dark:hover:text-orange-400">
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
       Home
     </a>
 
-    <h1 class="mt-8 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Release Notes</h1>
-    <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">What ships in each release.</p>
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Release Notes</h1>
+    <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">What ships in each release.</p>
 
     <div class="mt-12 space-y-16">
 
       <!-- ── 1.0.0 ─────────────────────────────────────────────────────── -->
       <article>
         <div class="flex items-center gap-3">
-          <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-50">1.0.0</h2>
-          <span class="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">Initial Release</span>
+          <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">1.0.0</h2>
+          <span class="rounded-full bg-warning-400/15 px-2.5 py-0.5 text-xs font-medium text-warning-600 dark:bg-warning-500/20 dark:text-warning-400">Initial Release</span>
         </div>
-        <time class="mt-1 block text-sm text-gray-400 dark:text-gray-500" datetime="2026-04-01">April 1, 2026</time>
+        <time class="mt-1 block text-sm text-neutral-400 dark:text-neutral-500" datetime="2026-04-01">April 1, 2026</time>
 
-        <div class="mt-6 space-y-6 text-base leading-relaxed text-gray-600 dark:text-gray-300">
+        <div class="mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
 
           <p>
             The first public release of Pikos. Notes, tasks, and calendar — unified in a single local-first desktop app.
           </p>
 
-          <h3 class="pt-2 text-lg font-semibold text-gray-900 dark:text-gray-50">Editor</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Editor</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Rich text editor with bold, italic, underline, strikethrough, and inline code</li>
             <li>Headings (H1, H2, H3), bullet lists, ordered lists, task checklists, code blocks, and blockquotes</li>
-            <li>Slash command menu — type <code class="rounded bg-gray-100 px-1.5 py-0.5 text-sm dark:bg-gray-800">/</code> to insert any block type with fuzzy search</li>
+            <li>Slash command menu — type <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">/</code> to insert any block type with fuzzy search</li>
             <li>Floating format toolbar on text selection</li>
             <li>Link insertion and auto-linking on paste</li>
             <li>Find in page with match highlighting and navigation</li>
@@ -44,7 +44,7 @@ import Footer from "../components/Footer.astro";
             <li>Autosave with optimistic UI updates</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-gray-900 dark:text-gray-50">Pages &amp; Organization</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Pages &amp; Organization</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Quick add dialog with natural language parsing — extracts priority, due date, tags, and folder automatically</li>
             <li>Page status tracking: Open and Done</li>
@@ -57,24 +57,24 @@ import Footer from "../components/Footer.astro";
             <li>Soft delete with undo</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-gray-900 dark:text-gray-50">Calendar</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Calendar</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Week calendar view with all-day and timed events</li>
             <li>Drag to reschedule pages on the calendar</li>
             <li>Click a time slot to create a new page</li>
             <li>Live "now" indicator</li>
-            <li>Arrow keys for week navigation, <code class="rounded bg-gray-100 px-1.5 py-0.5 text-sm dark:bg-gray-800">T</code> to jump to today</li>
+            <li>Arrow keys for week navigation, <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">T</code> to jump to today</li>
             <li>Date and time picker with duration preservation</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-gray-900 dark:text-gray-50">Search</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Search</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Full-text search palette with BM25 ranking — title matches rank first</li>
             <li>Content preview with query highlighting</li>
             <li>Results show priority, date, and tags inline</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-gray-900 dark:text-gray-50">Layout &amp; Navigation</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Layout &amp; Navigation</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Three-panel layout: sidebar, page list, editor or calendar</li>
             <li>Resizable panels with persistent widths</li>
@@ -84,7 +84,7 @@ import Footer from "../components/Footer.astro";
             <li>Context menus for pages and folders</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-gray-900 dark:text-gray-50">Data &amp; Privacy</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Data &amp; Privacy</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>All data stored locally in SQLite — nothing leaves your device</li>
             <li>No account required, no sign-up</li>
@@ -92,7 +92,7 @@ import Footer from "../components/Footer.astro";
             <li>Open, portable database format</li>
           </ul>
 
-          <h3 class="pt-2 text-lg font-semibold text-gray-900 dark:text-gray-50">Appearance</h3>
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Appearance</h3>
           <ul class="list-disc space-y-1.5 pl-5">
             <li>Light, dark, and system theme modes</li>
             <li>Keyboard shortcuts reference in settings</li>
@@ -109,11 +109,5 @@ import Footer from "../components/Footer.astro";
 </Base>
 
 <style>
-  :global(body) {
-    background-color: #fafaf9;
-  }
 
-  :global(html.dark body) {
-    background-color: #030712;
-  }
-</style>
+  </style>
