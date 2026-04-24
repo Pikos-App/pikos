@@ -191,6 +191,7 @@ button,
   --surface-hover: #f0efed;
   --surface-active: #e6e5e2;
   --surface-selected: color-mix(in srgb, #2dd4a8 10%, transparent);
+  --surface-nav-selected: #ebeae7;
 
   /* ─── Text ─── */
   --text-primary: #161613;
@@ -298,6 +299,7 @@ button,
   --surface-hover: #272724;
   --surface-active: #3a3a37;
   --surface-selected: color-mix(in srgb, #2dd4a8 12%, transparent);
+  --surface-nav-selected: #2f2f2c;
 
   /* ─── Text ─── */
   --text-primary: #f0efed;
@@ -359,6 +361,7 @@ button,
   --color-surface-hover: var(--surface-hover);
   --color-surface-active: var(--surface-active);
   --color-surface-selected: var(--surface-selected);
+  --color-surface-nav-selected: var(--surface-nav-selected);
 
   /* ── Semantic text tokens ── */
   --color-text-primary: var(--text-primary);

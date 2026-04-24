@@ -1,6 +1,7 @@
 import { forwardRef, type RefCallback } from "react";
 
 import { cn } from "@/lib/utils";
+import { useListSettings } from "@/shared/context/ListSettingsContext";
 
 interface SidebarListItemProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "prefix"> {
   isActive: boolean;
@@ -57,6 +58,8 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
       onRenameCommit(raw.trim() || "Untitled");
     }
 
+    const { density } = useListSettings();
+
     return (
       <div
         aria-current={isActive ? "true" : undefined}
@@ -71,11 +74,12 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
         {...rest}
         {...(dragProps as React.HTMLAttributes<HTMLDivElement>)}
         className={cn(
-          "type-ui flex cursor-pointer rounded-r border-l-2 px-2 py-2.5 transition-[background-color,color] duration-[120ms] ease-out outline-none select-none",
+          "type-ui flex cursor-pointer rounded-r border-l-2 px-2 transition-[background-color,color] duration-[120ms] ease-out outline-none select-none",
+          density === "compact" ? "py-1.5" : density === "spacious" ? "py-3" : "py-2.5",
           isDragOver
             ? "border-l-transparent bg-primary/10 text-foreground ring-1 ring-primary/40"
             : isActive
-              ? "border-l-interactive-primary bg-surface-selected text-accent-foreground"
+              ? "border-l-border bg-surface-nav-selected text-foreground"
               : "border-l-transparent text-muted-foreground hover:bg-surface-hover hover:text-foreground",
           className
         )}

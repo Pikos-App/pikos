@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { useListSettings } from "@/shared/context/ListSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
@@ -170,6 +171,8 @@ export function PageListItem({
   });
   const { contextMenuContentProps, inputRef, prepareRenameFromMenu } = useInlineRename(isRenaming);
   const { openPage } = useUI();
+  const { density } = useListSettings();
+  const showSubtitle = density !== "compact" && Boolean(page.subtitle);
 
   useMinuteTick();
 
@@ -188,12 +191,17 @@ export function PageListItem({
           {...attributes}
           {...listeners}
           className={cn(
-            "flex cursor-pointer items-start gap-3 border-b border-border px-3 py-3 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
+            "flex cursor-pointer items-start border-b border-l-2 border-border px-3 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
+            density === "compact"
+              ? "gap-2 py-2"
+              : density === "spacious"
+                ? "gap-3 py-4"
+                : "gap-3 py-3",
             isActive
-              ? "bg-surface-selected text-accent-foreground"
+              ? "border-l-interactive-primary bg-surface-selected text-accent-foreground"
               : isSelected
-                ? "bg-surface-selected/50 text-accent-foreground"
-                : "hover:bg-surface-hover"
+                ? "border-l-transparent bg-surface-selected/50 text-accent-foreground"
+                : "border-l-transparent hover:bg-surface-hover"
           )}
           data-page-item
           data-selected={isSelected ? "true" : undefined}
@@ -338,7 +346,7 @@ export function PageListItem({
                   })()}
               </div>
             </div>
-            {page.subtitle && (
+            {showSubtitle && (
               <p className="type-body-sm mt-0.5 truncate text-subtle">{page.subtitle}</p>
             )}
           </div>

@@ -12,6 +12,8 @@ import type { WeekStart } from "@/shared/context/AppSettingsContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import type { LineWidth } from "@/shared/context/EditorSettingsContext";
+import { useListSettings } from "@/shared/context/ListSettingsContext";
+import type { ListDensity } from "@/shared/context/ListSettingsContext";
 import type { ThemeMode } from "@/shared/context/ThemeContext";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { useUpdate } from "@/shared/context/UpdateContext";
@@ -95,6 +97,12 @@ const CALENDAR_DENSITY_OPTIONS: { id: CalendarDensity; label: string }[] = [
   { id: "spacious", label: "Spacious" },
 ];
 
+const LIST_DENSITY_OPTIONS: { id: ListDensity; label: string }[] = [
+  { id: "compact", label: "Compact" },
+  { id: "cozy", label: "Cozy" },
+  { id: "spacious", label: "Spacious" },
+];
+
 // ─── Component ────────────────────────────────────────────────────────────
 
 export function GeneralSettings() {
@@ -109,6 +117,7 @@ export function GeneralSettings() {
     setDayCount: setCalendarDayCount,
     setDensity: setCalendarDensity,
   } = useCalendarSettings();
+  const { density: listDensity, setDensity: setListDensity } = useListSettings();
 
   return (
     <div className="max-w-lg">
@@ -175,6 +184,32 @@ export function GeneralSettings() {
                   )}
                   key={opt.id}
                   onClick={() => setTheme(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* List density */}
+          <div className="flex items-center justify-between border-b border-border py-3">
+            <div>
+              <p className="text-sm font-medium">List density</p>
+              <p className="text-xs text-muted-foreground">
+                How tightly rows pack in the page and folder lists.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-1 rounded-md border border-border bg-background p-0.5">
+              {LIST_DENSITY_OPTIONS.map((opt) => (
+                <button
+                  className={cn(
+                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    listDensity === opt.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  key={opt.id}
+                  onClick={() => setListDensity(opt.id)}
                 >
                   {opt.label}
                 </button>

@@ -35,6 +35,7 @@ import { EmptyState } from "@/shared/components/EmptyState";
 import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
+import { useListSettings } from "@/shared/context/ListSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
@@ -90,6 +91,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   } = useUI();
   const sortMode = activeViewId !== "today" ? getSortMode(activeViewId) : "date";
   const sidebarHidden = shouldHideSidebar(useLayoutMode());
+  const { density } = useListSettings();
   const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
   const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage("pikos:overdueCollapsed", true);
   // Completed accordion resets to collapsed on every view navigation (no persistence).
@@ -164,8 +166,12 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           return 200;
         case "empty-completed":
           return 40;
-        case "page":
-          return row.page.subtitle ? 68 : 52;
+        case "page": {
+          // Compact hides subtitle; cozy matches current; spacious adds ~8px.
+          if (density === "compact") return 40;
+          const base = row.page.subtitle ? 68 : 52;
+          return density === "spacious" ? base + 8 : base;
+        }
       }
     },
     getItemKey: (index) => rows[index]?.key ?? String(index),

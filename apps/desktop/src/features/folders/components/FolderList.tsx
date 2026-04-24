@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
+import { useListSettings } from "@/shared/context/ListSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 
@@ -42,6 +43,8 @@ export function FolderList() {
     todayCount,
   } = useFolderList();
   const { openSortMenu, setOpenSortMenu } = useUI();
+  const { density } = useListSettings();
+  const folderRowHeight = density === "compact" ? 28 : density === "spacious" ? 38 : 32;
 
   // ── Keyboard navigation ───────────────────────────────────────────────────
 
@@ -100,7 +103,7 @@ export function FolderList() {
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual + React Compiler known issue
   const virtualizer = useVirtualizer({
     count: folders.length,
-    estimateSize: () => 32,
+    estimateSize: () => folderRowHeight,
     getItemKey: (index) => folders[index]?.id ?? String(index),
     getScrollElement: () => scrollElementRef.current,
     overscan: 10,

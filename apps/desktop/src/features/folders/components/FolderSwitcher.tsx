@@ -142,7 +142,7 @@ function Row({ badge, dot, icon, isActive, label, onSelect }: RowProps) {
       className={cn(
         "type-ui-sm flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-[background-color,color] duration-[var(--transition-fast)]",
         isActive
-          ? "bg-surface-selected text-accent-foreground"
+          ? "bg-surface-nav-selected text-foreground"
           : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
       )}
       onClick={onSelect}
