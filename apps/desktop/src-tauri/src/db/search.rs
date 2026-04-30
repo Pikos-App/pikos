@@ -216,20 +216,21 @@ pub async fn search_pages(
     let pool = state.get_pool().await?;
 
     // Sanitize and build FTS5 prefix query.
-    // Each token is cleaned of FTS5 special chars. The last token gets a
-    // trailing `*` for prefix matching (the user is still typing it).
+    // Split each whitespace-separated word into runs of alphanumeric chars;
+    // any other character (hyphen, apostrophe, paren, etc.) is treated as a
+    // token separator. This matches what FTS5's default unicode61 tokenizer
+    // does when indexing, so a query for "multi-color" finds the same docs as
+    // "multi color". Critically, it also prevents FTS5 from interpreting `-`
+    // as a NOT operator / column qualifier (e.g. `multi-color` → "no such
+    // column: color") or `'` as a phrase delimiter (`don't` → syntax error).
+    // The last token gets a trailing `*` for prefix matching.
     let tokens: Vec<String> = q
         .split_whitespace()
-        .filter_map(|token| {
-            let clean: String = token
-                .chars()
-                .filter(|c| c.is_alphanumeric() || *c == '\'' || *c == '-')
-                .collect();
-            if clean.is_empty() {
-                None
-            } else {
-                Some(clean)
-            }
+        .flat_map(|word| {
+            word.split(|c: char| !c.is_alphanumeric())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
         })
         .collect();
 

@@ -74,7 +74,15 @@ export interface WorkspaceContextValue {
   /** Consume one-shot navigation target set by tutorial seed. Returns null if none pending. */
   consumePendingNavigation: () => { pageId: string; folderId: string } | null;
   /** Dev tool: wipe all data and re-seed with a scenario. */
-  resetAndSeed: (scenario: "tutorial" | "realistic" | "stress") => Promise<void>;
+  resetAndSeed: (
+    scenario:
+      | "tutorial"
+      | "realistic"
+      | "stress"
+      | "calendar"
+      | "calendar-colors"
+      | "calendar-edges"
+  ) => Promise<void>;
   createPage: (opts: { title?: string; folderId?: string | null }) => Promise<Page>;
   /** Debounced 800ms — optimistic update applied immediately; DB write batched. */
   updatePage: (id: string, patch: PageUpdate) => void;
@@ -308,6 +316,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         } else if (import.meta.env.DEV && seedScenario === "stress") {
           const { seedStress } = await import("@/shared/seeds/stress");
           await seedStress(adapter);
+        } else if (import.meta.env.DEV && seedScenario === "calendar") {
+          const { seedCalendar } = await import("@/shared/seeds/calendar");
+          await seedCalendar(adapter);
+        } else if (import.meta.env.DEV && seedScenario === "calendar-colors") {
+          const { seedCalendarColors } = await import("@/shared/seeds/calendarColors");
+          await seedCalendarColors(adapter);
+        } else if (import.meta.env.DEV && seedScenario === "calendar-edges") {
+          const { seedCalendarEdgeCases } = await import("@/shared/seeds/calendarEdgeCases");
+          await seedCalendarEdgeCases(adapter);
         }
         await loadWorkspaceDataRef.current();
         setWorkspace({
@@ -893,7 +910,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return adapter.searchTags(query);
   }
 
-  async function resetAndSeed(scenario: "tutorial" | "realistic" | "stress"): Promise<void> {
+  async function resetAndSeed(
+    scenario:
+      | "tutorial"
+      | "realistic"
+      | "stress"
+      | "calendar"
+      | "calendar-colors"
+      | "calendar-edges"
+  ): Promise<void> {
     if (!import.meta.env.DEV) return;
     if (import.meta.env["VITE_TEST_MODE"] === "true") {
       (adapter as MockStorageAdapter).clear();
@@ -916,6 +941,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } else if (scenario === "stress") {
       const { seedStress } = await import("@/shared/seeds/stress");
       await seedStress(adapter);
+    } else if (scenario === "calendar") {
+      const { seedCalendar } = await import("@/shared/seeds/calendar");
+      await seedCalendar(adapter);
+    } else if (scenario === "calendar-colors") {
+      const { seedCalendarColors } = await import("@/shared/seeds/calendarColors");
+      await seedCalendarColors(adapter);
+    } else if (scenario === "calendar-edges") {
+      const { seedCalendarEdgeCases } = await import("@/shared/seeds/calendarEdgeCases");
+      await seedCalendarEdgeCases(adapter);
     }
     await loadWorkspaceDataRef.current();
   }

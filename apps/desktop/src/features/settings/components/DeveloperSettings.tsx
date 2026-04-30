@@ -17,7 +17,13 @@ import { Button } from "@/components/ui/button";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
-type SeedScenario = "tutorial" | "realistic" | "stress";
+type SeedScenario =
+  | "tutorial"
+  | "realistic"
+  | "stress"
+  | "calendar"
+  | "calendar-colors"
+  | "calendar-edges";
 
 const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[] = [
   {
@@ -34,6 +40,22 @@ const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[]
     description: "Heavy load: many folders, pages, and schedules.",
     id: "stress",
     label: "Stress",
+  },
+  {
+    description: "7 days of progressively denser overlap patterns for layout testing.",
+    id: "calendar",
+    label: "Calendar layout",
+  },
+  {
+    description: "Same as Calendar layout, split across 5 color-coded folders.",
+    id: "calendar-colors",
+    label: "Calendar (multi-color)",
+  },
+  {
+    description:
+      "Targeted regression fixtures across 4 weeks (cross-midnight, containment, density, color muting).",
+    id: "calendar-edges",
+    label: "Calendar edge cases",
   },
 ];
 
