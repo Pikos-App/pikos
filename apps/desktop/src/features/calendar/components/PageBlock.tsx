@@ -15,6 +15,8 @@ import {
   CHIP_BASE_CLASSES,
   CHIP_DEFAULT_COLOR_CLASSES,
   chipFolderStyle,
+  crossingMidnightsCount,
+  formatMultiDayTimeRange,
   formatTimeRange,
   snapY,
 } from "../utils/calendarUtils";
@@ -40,6 +42,13 @@ interface PageBlockProps {
   onDoubleClick: (pageId: string) => void;
   /** When true, dims the block — used while it is being dragged to a new position. */
   isDragging?: boolean;
+  /**
+   * When true, the block's rendered width has dropped below the
+   * "legible-time" threshold (COMPACT_MODE_WIDTH_PX). Renders single-line
+   * title only, drops the time row, and hides the checkbox until hover.
+   * Independent of the height-driven `isCompact` chip mode.
+   */
+  isCompactWidth?: boolean;
   /** Called (with initial clientX/Y) when drag threshold is crossed on the block body. */
   onDragStart?: (clientX: number, clientY: number) => void;
   /** Called when the user mousedowns in the bottom resize zone. */
@@ -55,6 +64,7 @@ export function PageBlock({
   autoOpenPopover,
   block,
   folderColor,
+  isCompactWidth,
   isDragging,
   onAutoOpenConsumed,
   onDoubleClick,
@@ -63,16 +73,16 @@ export function PageBlock({
   resizeHeight,
 }: PageBlockProps) {
   const {
-    column,
     endDate,
     height,
     isCompact,
     isContinuationAfter,
     isContinuationBefore,
+    leftPct,
     page,
     startDate,
     top,
-    totalColumns,
+    widthPct,
   } = block;
   const { requestDeletePage } = useUndoDelete();
   const { highlightedPageId } = useUI();
@@ -83,9 +93,6 @@ export function PageBlock({
     toggleStatus,
   } = useRecurringActions(page);
   const isHighlighted = highlightedPageId === page.id;
-
-  const widthPct = 100 / totalColumns;
-  const leftPct = column * widthPct;
 
   const isResizing = resizeHeight !== undefined;
   const displayHeight = isResizing ? Math.max(resizeHeight, 0) : height;
@@ -102,11 +109,22 @@ export function PageBlock({
             (snapY(Math.max(resizeHeight, 0), metrics.hourHeight) / metrics.hourHeight) * 3_600_000
         )
       : null;
-  const timeLabel = formatTimeRange(startDate, liveEndDate ?? endDate);
-  // Time label needs a second line of text to fit. Threshold matches a 1-hour
-  // block at compact density (40px) — below this the block is too short for
-  // stacked title + time without clipping.
+  // First segment of a 2+-midnight event shows the full bookend label
+  // "9 AM Mon – 5 PM Thu" so both endpoints are visible at a glance.
+  const isMultiDayTimed = crossingMidnightsCount(startDate, endDate) >= 2;
+  const timeLabel =
+    isMultiDayTimed && !isContinuationBefore
+      ? formatMultiDayTimeRange(startDate, liveEndDate ?? endDate)
+      : formatTimeRange(startDate, liveEndDate ?? endDate);
+  // Layout tiers by available height:
+  //   < 40px → 1-line title only (no time row — wouldn't fit cleanly)
+  //   40-52  → 1-line title + time row
+  //   ≥ 52px → 2-line title + time row
+  // This keeps short blocks (e.g. 45min, 48px) showing their time, while
+  // tall blocks still get a 2-line title for long page names.
+  // `isCompactWidth` always forces a 1-line title regardless of height.
   const showTimeLabel = !isRenderingCompact && displayHeight >= 40 && !isContinuationBefore;
+  const useTwoLineTitle = !isCompactWidth && displayHeight >= 52;
   const isDone = page.status === "done";
   // Multi-day events render as one visual bar: only the first day shows the
   // title/checkbox. Continuation days keep the colored bar as a click target.
@@ -125,18 +143,40 @@ export function PageBlock({
     onDoubleClick: () => onDoubleClick(page.id),
   });
 
-  // Resize is disabled on continuation-after segments (the visual bottom is the
-  // day boundary, not the real event end) so the handle isn't rendered there.
-  const resizeEnabled = !!onResizeStart && !isContinuationAfter;
+  // Cross-midnight events render as two segments. Segment A (start day) has
+  // isContinuationAfter; segment B (end day) has isContinuationBefore. Per
+  // spec, segment B is read-only — drag and resize both come from segment A.
+  // Resize on segment A is also disabled because its visual bottom is the day
+  // boundary, not the real event end.
+  const isSplitSegment = isContinuationBefore || isContinuationAfter;
+  const isSegmentB = isContinuationBefore === true;
+  const resizeEnabled = !!onResizeStart && !isContinuationAfter && !isSegmentB;
+
+  /**
+   * Hover linkage across split segments. Both segments share `page.id`, so
+   * toggling a class on every `[data-cal-page-id="…"]` element lights up the
+   * partner segment without a context round-trip. The CSS rule lives in
+   * app.css and mirrors the `:hover` styling on a single block.
+   */
+  function applyHoverLink(active: boolean) {
+    if (!isSplitSegment) return;
+    const els = document.querySelectorAll(`[data-cal-page-id="${page.id}"]`);
+    for (const el of els) {
+      el.classList.toggle("cal-segment-hover", active);
+    }
+  }
 
   /**
    * Mousedown on the block body (drag-to-reschedule). The resize handle is a
-   * separate element and does not route through here.
+   * separate element and does not route through here. Segment B blocks the
+   * drag entirely so a two-segment event can only be rescheduled from its
+   * start segment.
    */
   function handleBlockMouseDown(e: React.MouseEvent) {
     if (e.button !== 0) return; // let right-click reach ContextMenuTrigger unmodified
     e.stopPropagation();
     if (!onDragStart) return;
+    if (isSegmentB) return;
     const { clientX: startX, clientY: startY } = e;
     beginDragThreshold(startX, startY, {
       bodyCursor: "dragging-grab",
@@ -177,8 +217,11 @@ export function PageBlock({
 
   const sharedStyle = {
     ...(folderColor ? chipFolderStyle(folderColor) : undefined),
-    // Height now always proportional to the computed block height, even in chip
-    // mode — overrides CHIP_BASE_CLASSES's default h-[19px] via inline style.
+    // Full computed height — adjacent blocks touch directly. The bg-derived
+    // outline (see app.css `[data-cal-page-id]`) of A.bottom and B.top
+    // coincide at the same pixel and paint as one 1px seam. Cascaded blocks
+    // use the same outline so back-to-back and overlapping events share one
+    // consistent border treatment — no extra moat or shadow.
     height: displayHeight,
     left: `${leftPct}%`,
     top,
@@ -196,11 +239,15 @@ export function PageBlock({
     !isMicro && isRenderingCompact && "mt-px",
     !isMicro && !isRenderingCompact && "mt-[3px]"
   );
+  // Checkbox stroke tracks the event's accent (the left-border stripe), not
+  // the fill — so it stays legible on muted fills and against any folder
+  // color. Default-blue blocks fall back to blue-500.
   const checkbox = isRecurring ? (
     <Repeat2 aria-label="Recurring" className={cn("shrink-0 text-muted-foreground", iconClass)} />
   ) : (
     <TaskCheckbox
       as="span"
+      borderColor={folderColor ?? "rgb(59 130 246)"}
       checked={isDone}
       className={cn(iconClass, "cursor-pointer!")}
       onChange={handleCheckboxClick}
@@ -238,8 +285,11 @@ export function PageBlock({
                   ? "cursor-grabbing! opacity-40"
                   : "cursor-default!"
             )}
+            data-cal-page-id={page.id}
             onClick={handleClick}
             onMouseDown={handleBlockMouseDown}
+            onMouseEnter={() => applyHoverLink(true)}
+            onMouseLeave={() => applyHoverLink(false)}
             style={sharedStyle}
           >
             {showLabel && checkbox}
@@ -260,7 +310,7 @@ export function PageBlock({
             aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
             className={cn(
               "absolute flex flex-col items-start overflow-hidden rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-              !folderColor && "border-blue-500 bg-blue-500/15",
+              !folderColor && "border-blue-500 bg-blue-500/20 dark:bg-blue-500/25",
               isDone
                 ? "opacity-50"
                 : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
@@ -273,14 +323,22 @@ export function PageBlock({
               isContinuationBefore && "rounded-tl-none rounded-tr-none",
               isContinuationAfter && "rounded-br-none rounded-bl-none"
             )}
+            data-cal-page-id={page.id}
             onClick={handleClick}
             onMouseDown={handleBlockMouseDown}
+            onMouseEnter={() => applyHoverLink(true)}
+            onMouseLeave={() => applyHoverLink(false)}
             style={sharedStyle}
           >
             {showLabel && (
               <div className="flex w-full min-w-0 items-start gap-1">
                 {checkbox}
-                <p className="type-body-sm line-clamp-3 min-w-0 text-left leading-tight font-medium text-foreground">
+                <p
+                  className={cn(
+                    "type-body-sm min-w-0 text-left leading-tight font-medium text-foreground",
+                    useTwoLineTitle ? "line-clamp-2" : "truncate"
+                  )}
+                >
                   {page.title || "Untitled"}
                 </p>
               </div>

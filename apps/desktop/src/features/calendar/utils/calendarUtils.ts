@@ -123,7 +123,8 @@ export const CHIP_BASE_CLASSES =
   "type-body-sm h-[19px] overflow-hidden truncate rounded-sm border-l-[2px] px-1.5 leading-none font-medium text-foreground transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" as const;
 
 /** Default chip colors when no folder color is set. */
-export const CHIP_DEFAULT_COLOR_CLASSES = "border-blue-500 bg-blue-500/20" as const;
+export const CHIP_DEFAULT_COLOR_CLASSES =
+  "border-blue-500 bg-blue-500/20 dark:bg-blue-500/25" as const;
 
 // ─── All-day layout constants ────────────────────────────────────────────────
 // Bars in the all-day section are absolutely positioned. Row N sits at
@@ -141,15 +142,17 @@ export const ALL_DAY_ROW_HEIGHT = ALL_DAY_BAR_HEIGHT + ALL_DAY_ROW_GAP;
 export const ALL_DAY_TOP_PADDING = 4;
 
 /**
- * Inline color style for chips when a folder color is present.
- * Sets --event-color so CSS can apply mode-aware background opacity
- * (12% in light mode, 15% in dark mode — see app.css event-color rules).
+ * Inline color style for chips when a folder color is present. Sets
+ * --event-color so CSS can derive mode-aware background, soft surround
+ * border, and full-saturation left-edge accent — see app.css `--event-color`
+ * rules. We don't set `borderColor` inline because CSS needs to vary it
+ * between sides (left = full, others = softened).
+ *
+ * Returns CSSProperties so React's `style` prop accepts the result. The cast
+ * is required because custom CSS properties aren't part of CSSProperties.
  */
-export function chipFolderStyle(folderColor: string): {
-  "--event-color": string;
-  borderColor: string;
-} {
-  return { "--event-color": folderColor, borderColor: folderColor };
+export function chipFolderStyle(folderColor: string): CSSProperties {
+  return { "--event-color": folderColor } as CSSProperties;
 }
 
 // ─── Week helpers ─────────────────────────────────────────────────────────────
@@ -200,6 +203,22 @@ export function weekEnd(date: Date, weekStartsOn: 0 | 1 = 1): Date {
  */
 export function isAllDayPage(scheduledStart: string): boolean {
   return !scheduledStart.includes("T");
+}
+
+/**
+ * Counts midnight boundaries strictly between start and end. An event ending
+ * exactly at midnight (e.g. 11pm → next day 00:00) returns 0 — it touches but
+ * doesn't cross. DST-safe: walks one calendar day at a time.
+ */
+export function crossingMidnightsCount(start: Date, end: Date): number {
+  if (end <= start) return 0;
+  let count = 0;
+  let cursor = addDays(startOfDay(start), 1);
+  while (cursor < end) {
+    count++;
+    cursor = addDays(cursor, 1);
+  }
+  return count;
 }
 
 export interface AllDayItem {
@@ -611,10 +630,10 @@ export interface CalendarBlock {
   height: number;
   /** True when duration < MIN_TIMED_MINUTES or there is no scheduledEnd. */
   isCompact: boolean;
-  /** 0-based column index within overlap group */
-  column: number;
-  /** Total number of columns in this overlap group */
-  totalColumns: number;
+  /** Horizontal position as percent of the day column's width (0..100). */
+  leftPct: number;
+  /** Horizontal extent as percent of the day column's width (0..100). */
+  widthPct: number;
   /** True when this block is a continuation from the previous day (event started before this day). */
   isContinuationBefore?: boolean;
   /** True when this event extends past the end of this day's grid. */
@@ -622,9 +641,135 @@ export interface CalendarBlock {
 }
 
 /**
+ * Below this rendered width (px) a block switches to single-line "ultra
+ * compact" rendering: title only, time hidden, checkbox hidden until hover.
+ * Tuned for 7-day-week columns where standard cascade depth-2 events land
+ * around 100–120 px and start losing their time row.
+ */
+export const COMPACT_MODE_WIDTH_PX = 100;
+
+/**
+ * If any block would render below this rendered width (px), the layout
+ * collapses the smallest blocks into a `+N more` pill at the cluster's
+ * right edge instead of letting their titles truncate to a single letter.
+ */
+export const OVERFLOW_MIN_WIDTH_PX = 60;
+
+/**
+ * Data the overflow pill needs — separate from CalendarBlock so the pill
+ * isn't a synthetic page. The pill replaces the slot of the rightmost
+ * cascaded under-width event, with a min-width floor so "+N more" stays
+ * legible on narrow columns. Renders as a single chip at the slot's top.
+ */
+export interface OverflowPill {
+  /** y-position (px from grid top) — top of the topmost collapsed event. */
+  top: number;
+  /** Pixel height (matches a compact chip). */
+  height: number;
+  /** Horizontal position as percent of the day column's width. */
+  leftPct: number;
+  /** Horizontal extent as percent of the day column's width. */
+  widthPct: number;
+  /** Page ids that were collapsed into this pill. */
+  pageIds: string[];
+}
+
+/**
+ * Collapses any blocks that would render narrower than OVERFLOW_MIN_WIDTH_PX
+ * into a right-edge "+N more" pill. Returns the surviving blocks plus an
+ * optional pill describing the collapsed ones. When `columnWidth <= 0` (no
+ * measurement yet) returns the input unchanged so first paint isn't lossy.
+ *
+ * The pill anchors at the topmost collapsed block's `top` so it sits inside
+ * the dense cluster rather than floating in empty space.
+ */
+export function collapseUnderWidth(
+  blocks: CalendarBlock[],
+  columnWidth: number
+): { visible: CalendarBlock[]; pill: OverflowPill | null } {
+  if (columnWidth <= 0) return { pill: null, visible: blocks };
+  const underWidth: CalendarBlock[] = [];
+  const visible: CalendarBlock[] = [];
+  for (const b of blocks) {
+    const renderedWidth = (b.widthPct / 100) * columnWidth;
+    if (renderedWidth < OVERFLOW_MIN_WIDTH_PX) {
+      underWidth.push(b);
+    } else {
+      visible.push(b);
+    }
+  }
+  if (underWidth.length === 0) return { pill: null, visible };
+
+  // Horizontal position: take the slot of the rightmost-cascaded under-width
+  // event. If that slot is too narrow to render "+N more" legibly, expand
+  // the pill leftward to a minimum readable width.
+  const slotHost = underWidth.reduce(
+    (best, b) => (b.leftPct > best.leftPct ? b : best),
+    underWidth[0]!
+  );
+  const minPillPct = Math.min(50, (PILL_MIN_WIDTH_PX / columnWidth) * 100);
+  const widthPct = Math.max(slotHost.widthPct, minPillPct);
+  const leftPct = Math.min(slotHost.leftPct, 100 - widthPct);
+
+  const pill: OverflowPill = {
+    height: COMPACT_BLOCK_HEIGHT,
+    leftPct,
+    pageIds: underWidth.map((b) => b.page.id),
+    top: slotHost.top,
+    widthPct,
+  };
+  return { pill, visible };
+}
+
+/** Minimum pixel width for the pill — ensures "+N more" stays legible even
+ * when the rightmost-cascaded slot is very narrow. */
+const PILL_MIN_WIDTH_PX = 64;
+
+/**
+ * Horizontal indent (% of day-column width) per cascade depth step. Each
+ * time-overlapping event gets pushed right by this amount so its host's
+ * title/time row stays visible at the top-left. Tuned for 7-day-week columns
+ * (~150–180 px wide): smaller and depth-3 events lose readability; larger and
+ * the host's title gets squeezed at depth 1.
+ */
+export const CASCADE_OFFSET_PCT = 12;
+
+/**
+ * Maximum leftPct a cascading event can reach. Once cascaded past this, deeper
+ * events all land at the same indent — they keep stacking in DOM order so each
+ * still gets a visible left edge from the host underneath.
+ */
+const CASCADE_MAX_LEFT_PCT = 60;
+
+/**
+ * Minimum vertical separation (px) between two overlapping events' tops for
+ * cascade to remain readable. Pairs with tops closer than this are split into
+ * equal sub-columns instead — cascading them would put both titles in the
+ * same horizontal band. Roughly the height of a 2-line title + time row.
+ */
+const CASCADE_MIN_TOP_GAP_PX = 40;
+
+/**
+ * Tighter threshold used for chip-vs-chip pairs. Chips are short (~19px) and
+ * their single-line text doesn't reach into a host's title/time row, so 30
+ * min apart already separates them visually — no need to split them into
+ * sub-columns when they're not actually stacking on top of each other.
+ */
+const CHIP_COLLISION_GAP_PX = 20;
+
+/**
  * Given all pages, returns positioned CalendarBlock[] for `day`.
  * All-day events are excluded (use buildAllDayItems instead).
- * Handles overlap by assigning equal-width column slots.
+ *
+ * Overlap handling: a **nested cascade** matching Google Calendar's "Russian-
+ * doll" look. Each subsequent overlap depth indents right by CASCADE_OFFSET_PCT
+ * and renders on top of its host, so the host's title stays visible at the
+ * top-left while the guest peeks out on the right.
+ *
+ * Events whose tops are within CASCADE_MIN_TOP_GAP_PX (e.g. same start time, or
+ * very close starts) cannot cascade legibly — both titles would land in the
+ * same band — so they're collected into a "text-collision component" and split
+ * into equal sub-columns side-by-side instead.
  *
  * Events that span across midnight are shown on each day they touch:
  * - On the start day: renders from event start to bottom of grid (isContinuationAfter)
@@ -639,14 +784,16 @@ export function buildDayBlocks(
   const dayStart = startOfDay(day);
   const dayEnd = addDays(dayStart, 1);
 
-  // Filter: must have a timed scheduledStart that overlaps with this day
+  // Filter: must have a timed scheduledStart that overlaps with this day.
+  // Multi-day timed events are NOT promoted to the all-day row — they render
+  // here as one segment per day they touch (continuation flags on each
+  // segment drive the radius + label rules in PageBlock).
   const overlapping = pages.filter((page) => {
     if (!page.scheduledStart) return false;
     if (isAllDayPage(page.scheduledStart)) return false;
     try {
       const start = parseISO(page.scheduledStart);
       const end = page.scheduledEnd ? parseISO(page.scheduledEnd) : start;
-      // Event overlaps with day if it starts before day ends AND ends after day starts
       return start < dayEnd && end > dayStart;
     } catch {
       return false;
@@ -655,142 +802,287 @@ export function buildDayBlocks(
 
   if (overlapping.length === 0) return [];
 
-  // Build raw blocks
-  interface RawBlock {
-    endDate: Date;
-    height: number;
-    isContinuationAfter: boolean;
-    isContinuationBefore: boolean;
-    isCompact: boolean;
-    /** End used only for overlap layout — may differ from endDate for compact blocks */
-    overlapEnd: Date;
-    page: PageSummary;
-    startDate: Date;
-    top: number;
+  const raws: RawBlock[] = overlapping.map((page) =>
+    buildRawBlock(page, dayStart, dayEnd, metrics)
+  );
+
+  // Sort by visual top, then start time, then id — gives identical time ranges
+  // a deterministic depth ordering across re-renders.
+  raws.sort(
+    (a, b) =>
+      a.top - b.top ||
+      a.startDate.getTime() - b.startDate.getTime() ||
+      a.page.id.localeCompare(b.page.id)
+  );
+
+  const clusters = groupIntoClusters(raws);
+  const blocks: CalendarBlock[] = [];
+
+  for (const cluster of clusters) {
+    const assignments = assignColumns(cluster);
+    const components = findTextCollisionComponents(cluster);
+
+    for (let i = 0; i < cluster.length; i++) {
+      const raw = cluster[i]!;
+      const component = components[i]!;
+      let leftPct: number;
+      let widthPct: number;
+
+      if (component.length > 1) {
+        // Close-top events (titles would clash if cascaded shoulder-to-shoulder).
+        // Host takes the left half; the rest cascade inside the right half so
+        // each subsequent guest still gets readable width — beats an N-way
+        // equal split that crushes every chip down to a single letter when
+        // N >= 3 in a narrow column.
+        const subCol = component.indexOf(i);
+        if (subCol === 0) {
+          leftPct = 0;
+          widthPct = 50;
+        } else {
+          // The (subCol-1)-th cascade step inside the right 50% — half-scaled
+          // offset so the visible indent matches a normal cascade in a full
+          // column. Capped at CASCADE_MAX_LEFT_PCT before scaling.
+          const cascadeDepth = subCol - 1;
+          const relativeOffset = Math.min(cascadeDepth * CASCADE_OFFSET_PCT, CASCADE_MAX_LEFT_PCT);
+          leftPct = 50 + relativeOffset / 2;
+          widthPct = 100 - leftPct;
+        }
+      } else {
+        // Cascade at the event's sweep-line column. leftPct grows with depth;
+        // widthPct fills the remaining column width so the deepest guest still
+        // stretches to the right edge.
+        const column = assignments[i]!;
+        leftPct = Math.min(column * CASCADE_OFFSET_PCT, CASCADE_MAX_LEFT_PCT);
+        widthPct = 100 - leftPct;
+      }
+
+      // Clipping invariant: no block may render past the right edge of its
+      // day column. The cluster math should already respect this, but cap
+      // defensively so any future edit can't bleed across the column line.
+      if (leftPct < 0) leftPct = 0;
+      if (leftPct > 100) leftPct = 100;
+      if (widthPct < 0) widthPct = 0;
+      if (leftPct + widthPct > 100) widthPct = 100 - leftPct;
+
+      blocks.push({
+        endDate: raw.endDate,
+        height: raw.height,
+        isCompact: raw.isCompact,
+        leftPct,
+        page: raw.page,
+        startDate: raw.startDate,
+        top: raw.top,
+        widthPct,
+        ...(raw.isContinuationAfter ? { isContinuationAfter: true as const } : {}),
+        ...(raw.isContinuationBefore ? { isContinuationBefore: true as const } : {}),
+      });
+    }
   }
 
-  const raws: RawBlock[] = overlapping.map((page) => {
-    const realStart = parseISO(page.scheduledStart!);
-    const hasExplicitEnd = !!page.scheduledEnd;
-    const realEnd = hasExplicitEnd ? parseISO(page.scheduledEnd!) : realStart;
+  // Emit in leftPct order so deeper-cascade events appear later in the DOM and
+  // paint on top of their hosts.
+  blocks.sort((a, b) => a.leftPct - b.leftPct || a.top - b.top);
 
-    const durationMinutes = hasExplicitEnd ? (realEnd.getTime() - realStart.getTime()) / 60_000 : 0;
+  return blocks;
+}
 
-    // Clamp start/end to this day's grid boundaries for cross-day events.
-    // A zero- or sub-minute event (no end, or ≤ 0 min) is never a "continuation" —
-    // it's a point-in-time and gets the 15-min minimum visual block.
-    const isContinuationBefore = realStart < dayStart;
-    const isContinuationAfter = hasExplicitEnd && durationMinutes > 0 && realEnd >= dayEnd;
-
-    // For visual positioning, clamp to the day's grid boundaries (midnight ↔ midnight)
-    const visualStart = isContinuationBefore ? dayStart : realStart;
-    const visualEnd = isContinuationAfter ? dayEnd : realEnd;
-
-    const top = timeToY(visualStart, metrics.hourHeight);
-    // Visual duration rounds up to the nearest 15-min slot, minimum 15 min.
-    // Short events stay readable; no-end events behave like 15-min events.
-    // Only used for blocks that fit entirely within one day — continuation
-    // segments derive their end from the day boundary instead.
-    const visualDurationMin = Math.max(
-      MIN_TIMED_MINUTES,
-      Math.ceil(Math.max(durationMinutes, 0) / MIN_TIMED_MINUTES) * MIN_TIMED_MINUTES
-    );
-    const heightFromDuration = (visualDurationMin / 60) * metrics.hourHeight;
-    let endY: number;
-    if (isContinuationAfter) {
-      // Event continues into the next day — extend to the bottom of this day's grid.
-      endY = metrics.gridHeight;
-    } else if (isContinuationBefore) {
-      // Event started before this day — render from day-top to the real event end,
-      // NOT top + full-event duration (which would over-extend past the real end).
-      endY = timeToY(visualEnd, metrics.hourHeight);
-    } else {
-      // Event fits within this day — use the round-up proportional height.
-      endY = Math.min(metrics.gridHeight, top + heightFromDuration);
+/**
+ * Connected components of "events whose tops are within CASCADE_MIN_TOP_GAP_PX
+ * of each other AND both render with stacked title+time layout." Each event
+ * maps to the cluster-indices of its component (including itself), sorted by
+ * visual position. Components of size 1 mean "cascade is safe"; size >= 2
+ * means "split into host 50% + right-half cascade."
+ *
+ * Compact (chip) events are excluded from collision detection: their single
+ * line of text doesn't clash with a host's title/time row, so they should
+ * just cascade like any other nested event. This keeps a 2h block with three
+ * point reminders inside it from collapsing every chip into a tiny sub-column
+ * — the chips render almost-full-width within their host instead.
+ */
+function findTextCollisionComponents(cluster: RawBlock[]): number[][] {
+  const adj: number[][] = cluster.map(() => []);
+  for (let i = 0; i < cluster.length; i++) {
+    for (let j = i + 1; j < cluster.length; j++) {
+      const a = cluster[i]!;
+      const b = cluster[j]!;
+      const gap = Math.abs(a.top - b.top);
+      // Two non-compact events conflict if either's header would land in the
+      // other's title/time row. A chip vs anything else conflicts only when
+      // the chip lands in the other's header area. Two chips conflict only at
+      // near-identical times — they're short enough that 30 min apart already
+      // gives them their own visual row.
+      const threshold = a.isCompact && b.isCompact ? CHIP_COLLISION_GAP_PX : CASCADE_MIN_TOP_GAP_PX;
+      if (gap < threshold) {
+        adj[i]!.push(j);
+        adj[j]!.push(i);
+      }
     }
-    const height = Math.max(endY - top, 4);
+  }
 
-    // Chip (single-line) rendering when the block isn't tall enough to stack
-    // title + time. Height-based — density-independent.
-    const isCompact = !isContinuationAfter && height < CHIP_STACKED_THRESHOLD;
+  const compIdOf = new Array<number>(cluster.length).fill(-1);
+  const componentMembers: number[][] = [];
+  for (let i = 0; i < cluster.length; i++) {
+    if (compIdOf[i] !== -1) continue;
+    const id = componentMembers.length;
+    const stack = [i];
+    const members: number[] = [];
+    compIdOf[i] = id;
+    while (stack.length > 0) {
+      const v = stack.pop()!;
+      members.push(v);
+      for (const u of adj[v]!) {
+        if (compIdOf[u] === -1) {
+          compIdOf[u] = id;
+          stack.push(u);
+        }
+      }
+    }
+    members.sort(
+      (a, b) =>
+        cluster[a]!.top - cluster[b]!.top ||
+        cluster[a]!.startDate.getTime() - cluster[b]!.startDate.getTime() ||
+        cluster[a]!.page.id.localeCompare(cluster[b]!.page.id)
+    );
+    componentMembers.push(members);
+  }
 
-    // For overlap calculation, use the visual duration so snapped-up short events
-    // claim their rounded slot (two 10-min events at 4:00 and 4:05 both claim a
-    // 15-min slot → they correctly column-partition).
-    const overlapEnd = isContinuationAfter
-      ? visualEnd
-      : new Date(visualStart.getTime() + visualDurationMin * 60_000);
+  return cluster.map((_, i) => componentMembers[compIdOf[i]!]!);
+}
 
-    return {
-      endDate: realEnd,
-      height,
-      isCompact,
-      isContinuationAfter,
-      isContinuationBefore,
-      overlapEnd,
-      page,
-      startDate: realStart,
-      top,
-    };
-  });
+// ─── Cluster & column helpers ───────────────────────────────────────────────
 
-  // Sort by visual top position (continuation blocks sort to top of grid)
-  raws.sort((a, b) => a.top - b.top || a.startDate.getTime() - b.startDate.getTime());
-
-  // Assign overlap columns (greedy sweep-line)
-  const columnOverlapEnds: Date[] = [];
-  const assignments: number[] = [];
+/**
+ * Group raws into transitively-connected overlap clusters. Requires the input
+ * to be sorted by `top`. Two raws belong to the same cluster iff their visual
+ * time ranges form a connected component under the overlap relation (so
+ * A-overlaps-B and B-overlaps-C puts A, B, C in one cluster even if A and C
+ * don't overlap each other).
+ */
+function groupIntoClusters(raws: RawBlock[]): RawBlock[][] {
+  const clusters: RawBlock[][] = [];
+  let current: RawBlock[] = [];
+  let currentEnd = Number.NEGATIVE_INFINITY;
 
   for (const raw of raws) {
-    // Use visual start for column assignment
-    const visualStart = raw.isContinuationBefore ? dayStart : raw.startDate;
+    const start = raw.visualStart.getTime();
+    const end = raw.overlapEnd.getTime();
+    if (start >= currentEnd && current.length > 0) {
+      clusters.push(current);
+      current = [];
+      currentEnd = Number.NEGATIVE_INFINITY;
+    }
+    current.push(raw);
+    if (end > currentEnd) currentEnd = end;
+  }
+  if (current.length > 0) clusters.push(current);
+  return clusters;
+}
 
+/**
+ * Greedy sweep-line column assignment within a single cluster. Returns an
+ * array parallel to `cluster` holding the column index assigned to each raw.
+ *
+ * Cascade-aware fallback: when col N is freed but col N+1 is still alive,
+ * we DON'T fall back to col N. Cascade renders col 0 at full width
+ * (`widthPct = 100 - leftPct`), so reusing a low column under an alive
+ * higher one would paint the new event behind the higher cascade and
+ * render it as a thin sliver on the left. Always allocate a new column to
+ * the right of every still-alive column so the new event paints on top.
+ */
+function assignColumns(cluster: RawBlock[]): number[] {
+  const columnOverlapEnds: number[] = [];
+  const assignments: number[] = new Array<number>(cluster.length);
+
+  for (let i = 0; i < cluster.length; i++) {
+    const raw = cluster[i]!;
+    const startMs = raw.visualStart.getTime();
+    // Walk from highest column down. Reuse a free col only if every column
+    // above it is also free for this event — otherwise the new event would
+    // be hidden by an alive cascade above.
     let assigned = -1;
-    for (let col = 0; col < columnOverlapEnds.length; col++) {
-      const colEnd = columnOverlapEnds[col];
-      if (colEnd !== undefined && colEnd <= visualStart) {
-        assigned = col;
-        break;
-      }
+    for (let col = columnOverlapEnds.length - 1; col >= 0; col--) {
+      if (columnOverlapEnds[col]! > startMs) break; // alive — block fallback
+      assigned = col;
     }
     if (assigned === -1) {
       assigned = columnOverlapEnds.length;
-      columnOverlapEnds.push(raw.overlapEnd);
+      columnOverlapEnds.push(raw.overlapEnd.getTime());
     } else {
-      columnOverlapEnds[assigned] = raw.overlapEnd;
+      columnOverlapEnds[assigned] = raw.overlapEnd.getTime();
     }
-    assignments.push(assigned);
+    assignments[i] = assigned;
   }
+  return assignments;
+}
 
-  // Determine totalColumns per block (max col index among overlapping blocks + 1)
-  const blocks: CalendarBlock[] = raws.map((raw, i) => {
-    const column = assignments[i]!;
-    let maxColumn = column;
-    for (let j = 0; j < raws.length; j++) {
-      if (i === j) continue;
-      const other = raws[j]!;
-      const visualStartI = raw.isContinuationBefore ? dayStart : raw.startDate;
-      const visualStartJ = other.isContinuationBefore ? dayStart : other.startDate;
-      const overlaps = visualStartI < other.overlapEnd && raw.overlapEnd > visualStartJ;
-      if (overlaps) {
-        maxColumn = Math.max(maxColumn, assignments[j]!);
-      }
-    }
-    return {
-      column,
-      endDate: raw.endDate,
-      height: raw.height,
-      isCompact: raw.isCompact,
-      ...(raw.isContinuationAfter ? { isContinuationAfter: true as const } : {}),
-      ...(raw.isContinuationBefore ? { isContinuationBefore: true as const } : {}),
-      page: raw.page,
-      startDate: raw.startDate,
-      top: raw.top,
-      totalColumns: maxColumn + 1,
-    };
-  });
+// ─── Raw block construction ──────────────────────────────────────────────────
 
-  return blocks;
+/** Intermediate representation used by the layout pass — not exported. */
+interface RawBlock {
+  endDate: Date;
+  height: number;
+  isContinuationAfter: boolean;
+  isContinuationBefore: boolean;
+  isCompact: boolean;
+  /** Visual end (may differ from endDate for compact blocks) — used for overlap math. */
+  overlapEnd: Date;
+  /** Visual start clamped to the day's grid boundary. */
+  visualStart: Date;
+  page: PageSummary;
+  startDate: Date;
+  top: number;
+}
+
+function buildRawBlock(
+  page: PageSummary,
+  dayStart: Date,
+  dayEnd: Date,
+  metrics: CalendarMetrics
+): RawBlock {
+  const realStart = parseISO(page.scheduledStart!);
+  const hasExplicitEnd = !!page.scheduledEnd;
+  const realEnd = hasExplicitEnd ? parseISO(page.scheduledEnd!) : realStart;
+
+  const durationMinutes = hasExplicitEnd ? (realEnd.getTime() - realStart.getTime()) / 60_000 : 0;
+
+  const isContinuationBefore = realStart < dayStart;
+  const isContinuationAfter = hasExplicitEnd && durationMinutes > 0 && realEnd >= dayEnd;
+
+  const visualStart = isContinuationBefore ? dayStart : realStart;
+  const visualEnd = isContinuationAfter ? dayEnd : realEnd;
+
+  const top = timeToY(visualStart, metrics.hourHeight);
+  const visualDurationMin = Math.max(
+    MIN_TIMED_MINUTES,
+    Math.ceil(Math.max(durationMinutes, 0) / MIN_TIMED_MINUTES) * MIN_TIMED_MINUTES
+  );
+  const heightFromDuration = (visualDurationMin / 60) * metrics.hourHeight;
+  let endY: number;
+  if (isContinuationAfter) {
+    endY = metrics.gridHeight;
+  } else if (isContinuationBefore) {
+    endY = timeToY(visualEnd, metrics.hourHeight);
+  } else {
+    endY = Math.min(metrics.gridHeight, top + heightFromDuration);
+  }
+  const height = Math.max(endY - top, 4);
+  const isCompact = !isContinuationAfter && height < CHIP_STACKED_THRESHOLD;
+  const overlapEnd = isContinuationAfter
+    ? visualEnd
+    : new Date(visualStart.getTime() + visualDurationMin * 60_000);
+
+  return {
+    endDate: realEnd,
+    height,
+    isCompact,
+    isContinuationAfter,
+    isContinuationBefore,
+    overlapEnd,
+    page,
+    startDate: realStart,
+    top,
+    visualStart,
+  };
 }
 
 // ─── Coordinate helpers ───────────────────────────────────────────────────────
@@ -822,8 +1114,9 @@ export function yToDate(y: number, day: Date, hourHeight: number = HOUR_HEIGHT):
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
 /**
- * Formats a time range for display in a PageBlock.
- * e.g. "9:00 – 10:30 AM" (shares AM/PM when both are the same period)
+ * Formats a time range for display in a PageBlock. Uses an unspaced en-dash
+ * (e.g. "9–10:30 AM") so the label fits inside narrow cascaded blocks where
+ * a spaced dash would push the trailing period past the truncation edge.
  */
 export function formatTimeRange(start: Date, end: Date): string {
   const startHour = getHours(start);
@@ -839,9 +1132,27 @@ export function formatTimeRange(start: Date, end: Date): string {
   };
 
   if (startPeriod === endPeriod) {
-    return `${fmt(start, false)} – ${fmt(end, true)}`;
+    return `${fmt(start, false)}–${fmt(end, true)}`;
   }
-  return `${fmt(start, true)} – ${fmt(end, true)}`;
+  return `${fmt(start, true)}–${fmt(end, true)}`;
+}
+
+/**
+ * Formats the first-segment label for a multi-day timed event. Includes
+ * day-of-week on each side so the user can read both bookends without
+ * counting columns: `"9 AM Mon – 5 PM Thu"`. Only applied on the first
+ * segment of a multi-day event; subsequent days show the title alone.
+ */
+export function formatMultiDayTimeRange(start: Date, end: Date): string {
+  const fmt = (d: Date) => {
+    const h = getHours(d) % 12 || 12;
+    const m = getMinutes(d);
+    const minStr = m === 0 ? "" : `:${String(m).padStart(2, "0")}`;
+    const period = getHours(d) < 12 ? "AM" : "PM";
+    const dow = format(d, "EEE");
+    return `${h}${minStr} ${period} ${dow}`;
+  };
+  return `${fmt(start)} – ${fmt(end)}`;
 }
 
 // ─── Gesture helpers ─────────────────────────────────────────────────────────

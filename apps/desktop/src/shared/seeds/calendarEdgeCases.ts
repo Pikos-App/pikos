@@ -8,7 +8,7 @@
 //   Week 1 (M+0…Su+6) — INTENTIONALLY EMPTY. The realistic baseline lives in
 //                       the `calendar` and `calendar-colors` seeds.
 //   Week 2 (M+7…Su+13)  — Cross-midnight events (single midnight, stay timed)
-//   Week 3 (M+14…Su+20) — Multi-midnight promotion + true all-day events
+//   Week 3 (M+14…Su+20) — Multi-midnight timed segments + true all-day events
 //   Week 4 (M+21…Su+27) — Containment edge cases (sections 5/6)
 //   Week 5 (M+28…Su+34) — Density + multi-folder color muting + clipping
 //
@@ -81,7 +81,7 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
       bullets(
         "Week 1 (current Mon–Sun) — empty. Realistic baseline lives in `calendar` / `calendar-colors` seeds.",
         "Week 2 — cross-midnight events (single midnight, stay timed)",
-        "Week 3 — multi-midnight timed promotion + true all-day (intentionally co-located)",
+        "Week 3 — multi-midnight timed segments + true all-day (intentionally co-located)",
         "Week 4 — containment edge cases (adjacent / overlap / marginal / nested)",
         "Week 5 — density + multi-folder color muting + column clipping"
       ),
@@ -178,13 +178,13 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     title: "[FIXTURE] Cross-midnight long (dominates Thu AM)",
   });
 
-  // Fri+11 → Sat+12: 24-hour single-midnight (must NOT promote to all-day row)
+  // Fri+11 → Sat+12: 24-hour single-midnight, two split segments
   await addTimed({
     endDay: dayN(12),
     endHour: 23,
     startDay: dayN(11),
     startHour: 23,
-    title: "[FIXTURE] Cross-midnight 24h (no promote)",
+    title: "[FIXTURE] Cross-midnight 24h",
   });
 
   // Sat+12 → Sun+13: cross-midnight + same-day overlap on origin day
@@ -203,43 +203,44 @@ export async function seedCalendarEdgeCases(adapter: StorageAdapter): Promise<vo
     title: "[FIXTURE] Cross-midnight overlap peer",
   });
 
-  // ── Week 3 — Multi-midnight promotion + true all-day ─────────────────────
-  // Promoted timed events stack with true all-days in the all-day row.
+  // ── Week 3 — Multi-day timed (segments per day) + true all-day ──────────
+  // Multi-day timed events render as N+1 segments in the timed grid; only
+  // start-time-less events end up in the all-day row.
 
-  // Mon+14 → Wed+16: 2-midnight SHORT (~26 hrs, 2 midnights → promotes)
+  // Mon+14 → Wed+16: 2-midnight SHORT (~26 hrs, 3 segments)
   await addTimed({
     endDay: dayN(16),
     endHour: 1,
     startDay: dayN(14),
     startHour: 23,
-    title: "[FIXTURE] 2-midnight short (promote)",
+    title: "[FIXTURE] 2-midnight short (3 segments)",
   });
 
-  // Tue+15 → Thu+17: 2-midnight LONG (48 hrs)
+  // Tue+15 → Thu+17: 2-midnight LONG (48 hrs, 3 segments)
   await addTimed({
     endDay: dayN(17),
     endHour: 10,
     startDay: dayN(15),
     startHour: 10,
-    title: "[FIXTURE] 2-midnight long (promote)",
+    title: "[FIXTURE] 2-midnight long (3 segments)",
   });
 
-  // Mon+14 → Thu+17: 3-midnight (spans 4 day columns)
+  // Mon+14 → Thu+17: 3-midnight (4 segments across Mon–Thu)
   await addTimed({
     endDay: dayN(17),
     endHour: 17,
     startDay: dayN(14),
     startHour: 9,
-    title: "[FIXTURE] 3-midnight (promote, 4 columns)",
+    title: "[FIXTURE] 3-midnight (4 segments)",
   });
 
-  // Tue+15 → Wed+16: multi-day all-day, overlaps the promoted timed events
-  // (verifies stacking in the all-day row without collision)
+  // Tue+15 → Wed+16: multi-day TRUE all-day, sits in the all-day row alongside
+  // the timed segments below it.
   await addAllDay({
     endDay: dayN(16),
     folder: "personal",
     startDay: dayN(15),
-    title: "[FIXTURE] All-day Offsite (overlaps promoted)",
+    title: "[FIXTURE] All-day Offsite",
   });
 
   // Fri+18: single-day true all-day

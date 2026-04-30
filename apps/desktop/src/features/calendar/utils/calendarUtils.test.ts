@@ -8,14 +8,18 @@ import {
   buildAllDayItems,
   buildCalendarDays,
   buildDayBlocks,
+  CASCADE_OFFSET_PCT,
   chipFolderStyle,
   clampDayCount,
+  collapseUnderWidth,
   COMPACT_BLOCK_HEIGHT,
   computeAllDayEdgeResize,
   computeScheduleTransition,
+  crossingMidnightsCount,
   dayCountColumns,
   dayCountNavStep,
   firstFreeRowInSpan,
+  formatMultiDayTimeRange,
   formatTimeRange,
   GRID_HEIGHT,
   GRID_START_HOUR,
@@ -23,6 +27,7 @@ import {
   HOUR_HEIGHT,
   isAllDayPage,
   normalizeEndInput,
+  OVERFLOW_MIN_WIDTH_PX,
   shiftAllDayEnd,
   snapY,
   timeToY,
@@ -240,9 +245,8 @@ describe("weekEnd", () => {
 // ─── chipFolderStyle ────────────────────────────────────────────────────────
 
 describe("chipFolderStyle", () => {
-  it("returns --event-color CSS property and borderColor", () => {
-    const style = chipFolderStyle("#ff0000");
-    expect(style.borderColor).toBe("#ff0000");
+  it("returns --event-color CSS property", () => {
+    const style = chipFolderStyle("#ff0000") as Record<string, string>;
     expect(style["--event-color"]).toBe("#ff0000");
   });
 });
@@ -256,6 +260,52 @@ describe("isAllDayPage", () => {
 
   it("datetime string → false", () => {
     expect(isAllDayPage("2026-03-15T14:00:00")).toBe(false);
+  });
+});
+
+// ─── crossingMidnightsCount ──────────────────────────────────────────────────
+
+describe("crossingMidnightsCount", () => {
+  it("same-day event → 0", () => {
+    const start = new Date(2026, 2, 15, 10);
+    const end = new Date(2026, 2, 15, 14);
+    expect(crossingMidnightsCount(start, end)).toBe(0);
+  });
+
+  it("ends exactly at midnight → 0 (touches, doesn't cross)", () => {
+    const start = new Date(2026, 2, 15, 23);
+    const end = new Date(2026, 2, 16, 0);
+    expect(crossingMidnightsCount(start, end)).toBe(0);
+  });
+
+  it("crosses one midnight (Mon 6pm → Tue 2am) → 1", () => {
+    const start = new Date(2026, 2, 16, 18);
+    const end = new Date(2026, 2, 17, 2);
+    expect(crossingMidnightsCount(start, end)).toBe(1);
+  });
+
+  it("24-hour event (1 midnight) → 1", () => {
+    const start = new Date(2026, 2, 15, 23);
+    const end = new Date(2026, 2, 16, 23);
+    expect(crossingMidnightsCount(start, end)).toBe(1);
+  });
+
+  it("crosses two midnights (Mon 11pm → Wed 1am) → 2", () => {
+    const start = new Date(2026, 2, 16, 23);
+    const end = new Date(2026, 2, 18, 1);
+    expect(crossingMidnightsCount(start, end)).toBe(2);
+  });
+
+  it("Tue 10am → Thu 10am → 2", () => {
+    const start = new Date(2026, 2, 17, 10);
+    const end = new Date(2026, 2, 19, 10);
+    expect(crossingMidnightsCount(start, end)).toBe(2);
+  });
+
+  it("end before start → 0", () => {
+    const start = new Date(2026, 2, 18, 10);
+    const end = new Date(2026, 2, 17, 10);
+    expect(crossingMidnightsCount(start, end)).toBe(0);
   });
 });
 
@@ -306,6 +356,24 @@ describe("buildAllDayItems", () => {
     const result = buildAllDayItems(pages, new Date(2026, 2, 15));
     expect(result[0]?.isContinuationBefore).toBe(false);
     expect(result[0]?.isContinuationAfter).toBe(false);
+  });
+
+  it("ignores timed events entirely — even multi-day ones (they go to the timed grid)", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-19T10:00:00",
+        scheduledStart: "2026-03-17T10:00:00",
+        title: "Multi-day workshop",
+      }),
+      makePage({
+        scheduledEnd: "2026-03-17T02:00:00",
+        scheduledStart: "2026-03-16T18:00:00",
+        title: "Late evening",
+      }),
+    ];
+    expect(buildAllDayItems(pages, new Date(2026, 2, 17))).toHaveLength(0);
+    expect(buildAllDayItems(pages, new Date(2026, 2, 18))).toHaveLength(0);
+    expect(buildAllDayItems(pages, new Date(2026, 2, 19))).toHaveLength(0);
   });
 });
 
@@ -768,12 +836,115 @@ describe("shiftAllDayEnd", () => {
   });
 });
 
+// ─── collapseUnderWidth ──────────────────────────────────────────────────────
+
+describe("collapseUnderWidth", () => {
+  function makeBlock(
+    pageId: string,
+    leftPct: number,
+    widthPct: number,
+    top = 0,
+    height = 60
+  ): import("./calendarUtils").CalendarBlock {
+    return {
+      endDate: new Date(),
+      height,
+      isCompact: false,
+      leftPct,
+      page: makePage({ id: pageId }),
+      startDate: new Date(),
+      top,
+      widthPct,
+    };
+  }
+
+  it("no measurement (columnWidth=0) → unchanged, no pill", () => {
+    const blocks = [makeBlock("a", 0, 50), makeBlock("b", 50, 50)];
+    const { pill, visible } = collapseUnderWidth(blocks, 0);
+    expect(visible).toBe(blocks);
+    expect(pill).toBe(null);
+  });
+
+  it("all blocks above threshold → no pill", () => {
+    // Column width 200, two blocks at 50% each = 100px each (above threshold).
+    const blocks = [makeBlock("a", 0, 50), makeBlock("b", 50, 50)];
+    const result = collapseUnderWidth(blocks, 200);
+    expect(result.visible).toHaveLength(2);
+    expect(result.pill).toBe(null);
+  });
+
+  it("pill anchors at rightmost collapsed slot, expanded to PILL_MIN_WIDTH_PX", () => {
+    // Column 200 → min pill = (64/200)*100 = 32%. Slot is at 86/14 (only
+    // 28px wide), expand left so the pill has a readable 32% width and
+    // stays right-anchored.
+    const blocks = [
+      makeBlock("wide", 0, 60),
+      makeBlock("n1", 60, 13, 100),
+      makeBlock("n2", 73, 13, 200),
+      makeBlock("n3", 86, 14, 150),
+    ];
+    const { pill, visible } = collapseUnderWidth(blocks, 200);
+    expect(visible.map((b) => b.page.id)).toEqual(["wide"]);
+    expect(pill?.pageIds).toEqual(["n1", "n2", "n3"]);
+    expect(pill?.widthPct).toBe(32);
+    expect(pill?.leftPct).toBe(68);
+    expect(pill?.top).toBe(150);
+  });
+
+  it("pill widthPct caps at 50% on extremely narrow columns", () => {
+    // Column 80px → uncapped floor would be 80%. Cap kicks in at 50%.
+    const blocks = [makeBlock("a", 0, 30), makeBlock("b", 30, 30), makeBlock("c", 60, 40)];
+    const { pill } = collapseUnderWidth(blocks, 80);
+    // All three are under the 60px collapse threshold (24, 24, 32 px).
+    expect(pill?.widthPct).toBe(50);
+    expect(pill?.leftPct).toBe(50);
+  });
+
+  it("pill height is COMPACT_BLOCK_HEIGHT (chip-sized)", () => {
+    const blocks = [makeBlock("n1", 50, 20, 100, 40), makeBlock("n2", 70, 20, 200, 60)];
+    const { pill } = collapseUnderWidth(blocks, 100);
+    expect(pill?.height).toBe(COMPACT_BLOCK_HEIGHT);
+  });
+
+  it("pill top tracks the rightmost-cascaded slot's top", () => {
+    const blocks = [
+      makeBlock("n1", 50, 20, 100, 40),
+      makeBlock("n2", 70, 20, 200, 60), // rightmost (highest leftPct)
+    ];
+    const { pill } = collapseUnderWidth(blocks, 100);
+    expect(pill?.top).toBe(200);
+  });
+
+  it("uses OVERFLOW_MIN_WIDTH_PX as the threshold", () => {
+    // Block at exactly threshold passes; one pixel under collapses.
+    const ok = makeBlock("ok", 0, OVERFLOW_MIN_WIDTH_PX);
+    const bad = makeBlock("bad", 50, OVERFLOW_MIN_WIDTH_PX - 1);
+    const { pill, visible } = collapseUnderWidth([ok, bad], 100);
+    expect(visible.map((b) => b.page.id)).toEqual(["ok"]);
+    expect(pill?.pageIds).toEqual(["bad"]);
+  });
+
+  it("conservation: every input block ends up either visible or in the pill", () => {
+    // Mixed cluster — wide host, narrow chips of various widthPct/leftPct.
+    const blocks = [
+      makeBlock("a", 0, 60), // wide → visible
+      makeBlock("b", 60, 12, 100), // narrow → collapsed
+      makeBlock("c", 72, 14, 200), // narrow → collapsed
+      makeBlock("d", 86, 14, 300), // narrow → collapsed
+    ];
+    const { pill, visible } = collapseUnderWidth(blocks, 200);
+    const seen = new Set<string>([...visible.map((b) => b.page.id), ...(pill?.pageIds ?? [])]);
+    expect(seen.size).toBe(blocks.length);
+    for (const b of blocks) expect(seen.has(b.page.id)).toBe(true);
+  });
+});
+
 // ─── buildDayBlocks ──────────────────────────────────────────────────────────
 
 describe("buildDayBlocks", () => {
   const day = new Date(2026, 2, 15); // March 15
 
-  it("single timed event → correct top/height/column", () => {
+  it("single timed event → full-width, left 0", () => {
     const pages = [
       makePage({
         scheduledEnd: "2026-03-15T10:00:00",
@@ -784,21 +955,48 @@ describe("buildDayBlocks", () => {
     const blocks = buildDayBlocks(pages, day);
     expect(blocks).toHaveLength(1);
     const b = blocks[0]!;
-    expect(b.top).toBe((9 - GRID_START_HOUR) * HOUR_HEIGHT); // 3 * 64 = 192
-    expect(b.height).toBe(HOUR_HEIGHT); // 1 hour = 64px
-    expect(b.column).toBe(0);
-    expect(b.totalColumns).toBe(1);
+    expect(b.top).toBe((9 - GRID_START_HOUR) * HOUR_HEIGHT);
+    expect(b.height).toBe(HOUR_HEIGHT);
+    expect(b.leftPct).toBe(0);
+    expect(b.widthPct).toBe(100);
     expect(b.isCompact).toBe(false);
   });
 
-  it("two overlapping events → 2 columns", () => {
+  it("two overlapping events with far tops → cascade (host full width, guest indented)", () => {
     const pages = [
       makePage({
+        id: "a",
+        scheduledEnd: "2026-03-15T11:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "A",
+      }),
+      makePage({
+        id: "b",
+        scheduledEnd: "2026-03-15T11:30:00",
+        scheduledStart: "2026-03-15T10:00:00",
+        title: "B",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    expect(blocks).toHaveLength(2);
+    const a = blocks.find((b) => b.page.id === "a")!;
+    const b = blocks.find((b) => b.page.id === "b")!;
+    expect(a.leftPct).toBe(0);
+    expect(a.widthPct).toBe(100);
+    expect(b.leftPct).toBe(CASCADE_OFFSET_PCT);
+    expect(b.widthPct).toBe(100 - CASCADE_OFFSET_PCT);
+  });
+
+  it("two overlapping events with close tops → split 50/50 (would collide cascading)", () => {
+    const pages = [
+      makePage({
+        id: "a",
         scheduledEnd: "2026-03-15T10:00:00",
         scheduledStart: "2026-03-15T09:00:00",
         title: "A",
       }),
       makePage({
+        id: "b",
         scheduledEnd: "2026-03-15T10:30:00",
         scheduledStart: "2026-03-15T09:30:00",
         title: "B",
@@ -806,12 +1004,324 @@ describe("buildDayBlocks", () => {
     ];
     const blocks = buildDayBlocks(pages, day);
     expect(blocks).toHaveLength(2);
-    // They should be in separate columns
-    const columns = blocks.map((b) => b.column);
-    expect(new Set(columns).size).toBe(2);
-    // Both should see totalColumns = 2
-    expect(blocks[0]!.totalColumns).toBe(2);
-    expect(blocks[1]!.totalColumns).toBe(2);
+    blocks.forEach((b) => expect(b.widthPct).toBe(50));
+    const lefts = blocks.map((b) => b.leftPct).sort((x, y) => x - y);
+    expect(lefts).toEqual([0, 50]);
+  });
+
+  it("three close-top events → host 50%, second guest 50%, third cascades inside right half", () => {
+    const pages = [
+      makePage({
+        id: "a",
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "A",
+      }),
+      makePage({
+        id: "b",
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:15:00",
+        title: "B",
+      }),
+      makePage({
+        id: "c",
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:30:00",
+        title: "C",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    const byId = Object.fromEntries(blocks.map((b) => [b.page.id, b]));
+    expect(byId["a"]!.leftPct).toBe(0);
+    expect(byId["a"]!.widthPct).toBe(50);
+    expect(byId["b"]!.leftPct).toBe(50);
+    expect(byId["b"]!.widthPct).toBe(50);
+    // c is at cascade depth 1 inside the right 50%: relativeOffset =
+    // CASCADE_OFFSET_PCT, leftPct = 50 + CASCADE_OFFSET_PCT/2.
+    expect(byId["c"]!.leftPct).toBe(50 + CASCADE_OFFSET_PCT / 2);
+    expect(byId["c"]!.widthPct).toBe(50 - CASCADE_OFFSET_PCT / 2);
+  });
+
+  it("three overlapping events with spread-out tops → cascade depth 0/1/2", () => {
+    const pages = [
+      makePage({
+        id: "a",
+        scheduledEnd: "2026-03-15T13:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "A",
+      }),
+      makePage({
+        id: "b",
+        scheduledEnd: "2026-03-15T13:00:00",
+        scheduledStart: "2026-03-15T10:15:00",
+        title: "B",
+      }),
+      makePage({
+        id: "c",
+        scheduledEnd: "2026-03-15T13:00:00",
+        scheduledStart: "2026-03-15T11:30:00",
+        title: "C",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    const a = blocks.find((x) => x.page.id === "a")!;
+    const b = blocks.find((x) => x.page.id === "b")!;
+    const c = blocks.find((x) => x.page.id === "c")!;
+    expect(a.leftPct).toBe(0);
+    expect(a.widthPct).toBe(100);
+    expect(b.leftPct).toBe(CASCADE_OFFSET_PCT);
+    expect(b.widthPct).toBe(100 - CASCADE_OFFSET_PCT);
+    expect(c.leftPct).toBe(2 * CASCADE_OFFSET_PCT);
+    expect(c.widthPct).toBe(100 - 2 * CASCADE_OFFSET_PCT);
+  });
+
+  it("very deep pile of close-top events → host 50%, rest cascade inside right half", () => {
+    const pages = Array.from({ length: 6 }, (_, i) =>
+      makePage({
+        id: `p${i}`,
+        scheduledEnd: "2026-03-15T11:00:00",
+        scheduledStart: `2026-03-15T09:${String(i * 5).padStart(2, "0")}:00`,
+        title: `P${i}`,
+      })
+    );
+    const blocks = buildDayBlocks(pages, day);
+    const byId = Object.fromEntries(blocks.map((b) => [b.page.id, b]));
+    // p0 = host on the left half.
+    expect(byId["p0"]!.leftPct).toBe(0);
+    expect(byId["p0"]!.widthPct).toBe(50);
+    // p1..p5 cascade inside the right 50% with half-scaled offset.
+    for (let i = 1; i < 6; i++) {
+      const cascadeDepth = i - 1;
+      const relativeOffset = Math.min(cascadeDepth * CASCADE_OFFSET_PCT, 60);
+      const expectedLeft = 50 + relativeOffset / 2;
+      expect(byId[`p${i}`]!.leftPct).toBe(expectedLeft);
+      expect(byId[`p${i}`]!.widthPct).toBe(100 - expectedLeft);
+    }
+  });
+
+  it("cascade is capped (depth ≥ 4 events all sit at CASCADE_MAX_LEFT_PCT)", () => {
+    // Five events with tops 1h apart. Depths 0..3 cascade; depth 4 lands at
+    // the cap — leftPct stops growing so the deepest still has width.
+    const pages = Array.from({ length: 5 }, (_, i) =>
+      makePage({
+        id: `p${i}`,
+        scheduledEnd: "2026-03-15T20:00:00",
+        scheduledStart: `2026-03-15T${String(9 + i).padStart(2, "0")}:00:00`,
+        title: `P${i}`,
+      })
+    );
+    const blocks = buildDayBlocks(pages, day);
+    const byId = Object.fromEntries(blocks.map((b) => [b.page.id, b]));
+    expect(byId["p0"]!.leftPct).toBe(0);
+    expect(byId["p1"]!.leftPct).toBe(CASCADE_OFFSET_PCT);
+    expect(byId["p2"]!.leftPct).toBe(2 * CASCADE_OFFSET_PCT);
+    expect(byId["p3"]!.leftPct).toBe(3 * CASCADE_OFFSET_PCT);
+    // p4 is depth 4 — leftPct caps; widthPct stays at 100 - cap.
+    expect(byId["p4"]!.leftPct).toBeLessThanOrEqual(60);
+    expect(byId["p4"]!.widthPct).toBeGreaterThanOrEqual(40);
+  });
+
+  it("mixed cluster: close-top pair splits, unrelated events still cascade", () => {
+    const pages = [
+      makePage({
+        id: "e0",
+        scheduledEnd: "2026-03-15T15:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "E0",
+      }),
+      makePage({
+        id: "e1",
+        scheduledEnd: "2026-03-15T15:00:00",
+        scheduledStart: "2026-03-15T09:15:00",
+        title: "E1",
+      }),
+      makePage({
+        id: "e2",
+        scheduledEnd: "2026-03-15T15:00:00",
+        scheduledStart: "2026-03-15T11:00:00",
+        title: "E2",
+      }),
+      makePage({
+        id: "e3",
+        scheduledEnd: "2026-03-15T15:00:00",
+        scheduledStart: "2026-03-15T12:30:00",
+        title: "E3",
+      }),
+      makePage({
+        id: "e4",
+        scheduledEnd: "2026-03-15T15:00:00",
+        scheduledStart: "2026-03-15T14:00:00",
+        title: "E4",
+      }),
+    ];
+    const byId = Object.fromEntries(buildDayBlocks(pages, day).map((b) => [b.page.id, b]));
+    // e0/e1 collide on top → split 50/50.
+    expect(byId["e0"]!.widthPct).toBe(50);
+    expect(byId["e1"]!.widthPct).toBe(50);
+    expect(new Set([byId["e0"]!.leftPct, byId["e1"]!.leftPct])).toEqual(new Set([0, 50]));
+    // e2-e4 are spread out → cascade. None should be as narrow as a 5-way split.
+    for (const id of ["e2", "e3", "e4"]) {
+      expect(byId[id]!.widthPct).toBeGreaterThanOrEqual(100 - 60);
+    }
+  });
+
+  it("containment (host fully contains guest) → guest cascades on top of host", () => {
+    const pages = [
+      makePage({
+        id: "host",
+        scheduledEnd: "2026-03-15T11:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "Host",
+      }),
+      makePage({
+        id: "guest",
+        scheduledEnd: "2026-03-15T10:30:00",
+        scheduledStart: "2026-03-15T10:00:00",
+        title: "Guest",
+      }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    expect(blocks).toHaveLength(2);
+    const host = blocks.find((b) => b.page.id === "host")!;
+    const guest = blocks.find((b) => b.page.id === "guest")!;
+    expect(host.leftPct).toBe(0);
+    expect(host.widthPct).toBe(100);
+    expect(guest.leftPct).toBe(CASCADE_OFFSET_PCT);
+    expect(guest.widthPct).toBe(100 - CASCADE_OFFSET_PCT);
+    // Both keep their own time-accurate top/height.
+    expect(host.top).toBe(9 * HOUR_HEIGHT);
+    expect(host.height).toBe(2 * HOUR_HEIGHT);
+    expect(guest.top).toBe(10 * HOUR_HEIGHT);
+    expect(guest.height).toBe(0.5 * HOUR_HEIGHT);
+    // DOM order: host (depth 0) before guest (depth 1) so guest paints on top.
+    expect(blocks.indexOf(host)).toBeLessThan(blocks.indexOf(guest));
+  });
+
+  it("identical range → split (same tops always collide), stable ordering by id", () => {
+    const pagesA = [
+      makePage({
+        id: "aaa",
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "A",
+      }),
+      makePage({
+        id: "bbb",
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "B",
+      }),
+    ];
+    const first = buildDayBlocks(pagesA, day);
+    const second = buildDayBlocks([...pagesA].reverse(), day);
+    const pickIds = (blocks: ReturnType<typeof buildDayBlocks>) =>
+      blocks.slice().map((b) => b.page.id);
+    expect(pickIds(first)).toEqual(["aaa", "bbb"]);
+    expect(pickIds(second)).toEqual(["aaa", "bbb"]);
+    first.forEach((b) => expect(b.widthPct).toBe(50));
+  });
+
+  it("long host + chips: header-overlapping chip splits 50/50, body chips cascade", () => {
+    // Sunday meal prep (12-2 PM) with three reminder chips. The first chip
+    // (12:30) lands inside the host's title/time area (32px below host top
+    // < CASCADE_MIN_TOP_GAP_PX) so it splits 50/50 with the host. Later chips
+    // (1pm, 1:30pm) are well below the header and cascade like normal nested
+    // events at sweep-line depth 1.
+    const pages = [
+      makePage({
+        id: "host",
+        scheduledEnd: "2026-03-15T14:00:00",
+        scheduledStart: "2026-03-15T12:00:00",
+        title: "Sunday meal prep",
+      }),
+      makePage({ id: "c1", scheduledStart: "2026-03-15T12:30:00", title: "Start rice" }),
+      makePage({ id: "c2", scheduledStart: "2026-03-15T13:00:00", title: "Preheat oven" }),
+      makePage({ id: "c3", scheduledStart: "2026-03-15T13:30:00", title: "Pack lunch" }),
+    ];
+    const byId = Object.fromEntries(buildDayBlocks(pages, day).map((b) => [b.page.id, b]));
+    // Host + first chip collide (chip in host's header) → 50/50 split.
+    expect(byId["host"]!.leftPct).toBe(0);
+    expect(byId["host"]!.widthPct).toBe(50);
+    expect(byId["c1"]!.leftPct).toBe(50);
+    expect(byId["c1"]!.widthPct).toBe(50);
+    // Other chips don't collide (chip-vs-chip threshold is much tighter, and
+    // their gap to the host > CASCADE_MIN_TOP_GAP_PX) → cascade depth 1.
+    for (const id of ["c2", "c3"]) {
+      expect(byId[id]!.leftPct).toBe(CASCADE_OFFSET_PCT);
+      expect(byId[id]!.widthPct).toBe(100 - CASCADE_OFFSET_PCT);
+      expect(byId[id]!.isCompact).toBe(true);
+    }
+  });
+
+  it("non-overlapping earlier event stays full width regardless of later pile", () => {
+    const pages = [
+      makePage({
+        id: "solo",
+        scheduledEnd: "2026-03-15T10:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "Solo",
+      }),
+      makePage({
+        id: "p1",
+        scheduledEnd: "2026-03-15T12:00:00",
+        scheduledStart: "2026-03-15T11:00:00",
+        title: "P1",
+      }),
+      makePage({
+        id: "p2",
+        scheduledEnd: "2026-03-15T12:00:00",
+        scheduledStart: "2026-03-15T11:15:00",
+        title: "P2",
+      }),
+      makePage({
+        id: "p3",
+        scheduledEnd: "2026-03-15T12:00:00",
+        scheduledStart: "2026-03-15T11:30:00",
+        title: "P3",
+      }),
+    ];
+    const byId = Object.fromEntries(buildDayBlocks(pages, day).map((b) => [b.page.id, b]));
+    // Solo is its own cluster — full width, independent of the later pile.
+    expect(byId["solo"]!.leftPct).toBe(0);
+    expect(byId["solo"]!.widthPct).toBe(100);
+    // The pile has close tops → host 50%, second guest 50%, third cascades.
+    expect(byId["p1"]!.leftPct).toBe(0);
+    expect(byId["p1"]!.widthPct).toBe(50);
+    expect(byId["p2"]!.leftPct).toBe(50);
+    expect(byId["p2"]!.widthPct).toBe(50);
+    expect(byId["p3"]!.leftPct).toBe(50 + CASCADE_OFFSET_PCT / 2);
+    expect(byId["p3"]!.widthPct).toBe(50 - CASCADE_OFFSET_PCT / 2);
+  });
+
+  it("third event doesn't fall back to col 0 when col 1 is still alive (cascade visibility)", () => {
+    // A 8:30–10:30, B 9:30–12:30, C 11:00–12:00. A ends before C starts so
+    // col 0 is technically free, BUT col 1 (B) is still alive at 11:00. C
+    // must NOT reuse col 0 — otherwise it'd render at leftPct=0/widthPct=100
+    // and B's cascade would cover it (the bug). Force C to a fresh col 2.
+    const pages = [
+      makePage({
+        id: "a",
+        scheduledEnd: "2026-03-15T10:30:00",
+        scheduledStart: "2026-03-15T08:30:00",
+        title: "A",
+      }),
+      makePage({
+        id: "b",
+        scheduledEnd: "2026-03-15T12:30:00",
+        scheduledStart: "2026-03-15T09:30:00",
+        title: "B",
+      }),
+      makePage({
+        id: "c",
+        scheduledEnd: "2026-03-15T12:00:00",
+        scheduledStart: "2026-03-15T11:00:00",
+        title: "C",
+      }),
+    ];
+    const byId = Object.fromEntries(buildDayBlocks(pages, day).map((bb) => [bb.page.id, bb]));
+    expect(byId["a"]!.leftPct).toBe(0);
+    expect(byId["b"]!.leftPct).toBe(CASCADE_OFFSET_PCT);
+    expect(byId["c"]!.leftPct).toBe(2 * CASCADE_OFFSET_PCT);
   });
 
   it("no-end event → isCompact=true, height=COMPACT_BLOCK_HEIGHT", () => {
@@ -844,7 +1354,7 @@ describe("buildDayBlocks", () => {
       }),
     ];
     const blocks = buildDayBlocks(pages, day);
-    expect(blocks[0]!.height).toBe((30 / 60) * HOUR_HEIGHT); // 32px at normal density
+    expect(blocks[0]!.height).toBe((30 / 60) * HOUR_HEIGHT);
   });
 
   it("40-min event rounds up to 45-min visual height", () => {
@@ -856,7 +1366,7 @@ describe("buildDayBlocks", () => {
       }),
     ];
     const blocks = buildDayBlocks(pages, day);
-    expect(blocks[0]!.height).toBe((45 / 60) * HOUR_HEIGHT); // 48px at normal density
+    expect(blocks[0]!.height).toBe((45 / 60) * HOUR_HEIGHT);
   });
 
   it("excludes all-day events", () => {
@@ -873,54 +1383,71 @@ describe("buildDayBlocks", () => {
     expect(blocks[0]!.page.title).toBe("Timed");
   });
 
-  it("empty input → []", () => {
+  it("multi-day timed event renders as one segment per day (Mon → Thu = 4 segments)", () => {
+    // 9 AM Sun → 5 PM Wed: present on Sun, Mon, Tue, Wed columns. Sun gets
+    // segment from 9am to grid bottom (continuation after). Mon/Tue are
+    // full-grid continuations both ways. Wed runs from grid top to 5pm.
+    const pages = [
+      makePage({
+        id: "trip",
+        scheduledEnd: "2026-03-18T17:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "Conference",
+      }),
+    ];
+    const sun = buildDayBlocks(pages, new Date(2026, 2, 15));
+    expect(sun).toHaveLength(1);
+    expect(sun[0]!.top).toBe(9 * HOUR_HEIGHT);
+    expect(sun[0]!.isContinuationAfter).toBe(true);
+    expect(sun[0]!.isContinuationBefore).toBeUndefined();
+
+    const mon = buildDayBlocks(pages, new Date(2026, 2, 16));
+    expect(mon).toHaveLength(1);
+    expect(mon[0]!.top).toBe(0);
+    expect(mon[0]!.isContinuationBefore).toBe(true);
+    expect(mon[0]!.isContinuationAfter).toBe(true);
+
+    const tue = buildDayBlocks(pages, new Date(2026, 2, 17));
+    expect(tue).toHaveLength(1);
+    expect(tue[0]!.top).toBe(0);
+    expect(tue[0]!.isContinuationBefore).toBe(true);
+    expect(tue[0]!.isContinuationAfter).toBe(true);
+
+    const wed = buildDayBlocks(pages, new Date(2026, 2, 18));
+    expect(wed).toHaveLength(1);
+    expect(wed[0]!.top).toBe(0);
+    expect(wed[0]!.height).toBe(17 * HOUR_HEIGHT);
+    expect(wed[0]!.isContinuationBefore).toBe(true);
+    expect(wed[0]!.isContinuationAfter).toBeUndefined();
+  });
+
+  it("multi-day timed event: present on every spanned day, absent on adjacent days", () => {
+    // Sun 9 AM → Wed 5 PM. Should appear on Sun/Mon/Tue/Wed, NOT on the
+    // day before (Sat) or after (Thu).
+    const pages = [
+      makePage({
+        id: "trip",
+        scheduledEnd: "2026-03-18T17:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "Trip",
+      }),
+    ];
+    const sat = buildDayBlocks(pages, new Date(2026, 2, 14));
+    const sun = buildDayBlocks(pages, new Date(2026, 2, 15));
+    const mon = buildDayBlocks(pages, new Date(2026, 2, 16));
+    const tue = buildDayBlocks(pages, new Date(2026, 2, 17));
+    const wed = buildDayBlocks(pages, new Date(2026, 2, 18));
+    const thu = buildDayBlocks(pages, new Date(2026, 2, 19));
+    expect(sat).toHaveLength(0);
+    expect(sun).toHaveLength(1);
+    expect(mon).toHaveLength(1);
+    expect(tue).toHaveLength(1);
+    expect(wed).toHaveLength(1);
+    expect(thu).toHaveLength(0);
+  });
+
+  it("empty input → empty array", () => {
     expect(buildDayBlocks([], day)).toEqual([]);
-  });
-
-  it("three overlapping events → 3 columns", () => {
-    const pages = [
-      makePage({
-        scheduledEnd: "2026-03-15T10:00:00",
-        scheduledStart: "2026-03-15T09:00:00",
-        title: "A",
-      }),
-      makePage({
-        scheduledEnd: "2026-03-15T10:00:00",
-        scheduledStart: "2026-03-15T09:15:00",
-        title: "B",
-      }),
-      makePage({
-        scheduledEnd: "2026-03-15T10:00:00",
-        scheduledStart: "2026-03-15T09:30:00",
-        title: "C",
-      }),
-    ];
-    const blocks = buildDayBlocks(pages, day);
-    expect(blocks).toHaveLength(3);
-    const columns = new Set(blocks.map((b) => b.column));
-    expect(columns.size).toBe(3);
-    blocks.forEach((b) => expect(b.totalColumns).toBe(3));
-  });
-
-  it("non-overlapping events → each gets its own column 0", () => {
-    const pages = [
-      makePage({
-        scheduledEnd: "2026-03-15T10:00:00",
-        scheduledStart: "2026-03-15T09:00:00",
-        title: "A",
-      }),
-      makePage({
-        scheduledEnd: "2026-03-15T12:00:00",
-        scheduledStart: "2026-03-15T11:00:00",
-        title: "B",
-      }),
-    ];
-    const blocks = buildDayBlocks(pages, day);
-    expect(blocks).toHaveLength(2);
-    blocks.forEach((b) => {
-      expect(b.column).toBe(0);
-      expect(b.totalColumns).toBe(1);
-    });
   });
 
   it("ignores pages from other days", () => {
@@ -950,21 +1477,19 @@ describe("buildDayBlocks", () => {
       }),
     ];
 
-    // March 15: shows from 10 PM to grid end, with isContinuationAfter
     const blocksDay1 = buildDayBlocks(pages, day);
     expect(blocksDay1).toHaveLength(1);
     const b1 = blocksDay1[0]!;
-    expect(b1.top).toBe((22 - GRID_START_HOUR) * HOUR_HEIGHT); // 10 PM
-    expect(b1.height).toBe(GRID_HEIGHT - b1.top); // extends to grid bottom
+    expect(b1.top).toBe((22 - GRID_START_HOUR) * HOUR_HEIGHT);
+    expect(b1.height).toBe(GRID_HEIGHT - b1.top);
     expect(b1.isContinuationAfter).toBe(true);
     expect(b1.isContinuationBefore).toBeUndefined();
 
-    // March 16: shows from grid start to 2 AM, with isContinuationBefore
     const nextDay = new Date(2026, 2, 16);
     const blocksDay2 = buildDayBlocks(pages, nextDay);
     expect(blocksDay2).toHaveLength(1);
     const b2 = blocksDay2[0]!;
-    expect(b2.top).toBe(0); // grid start (6 AM clamped)
+    expect(b2.top).toBe(0);
     expect(b2.isContinuationBefore).toBe(true);
     expect(b2.isContinuationAfter).toBeUndefined();
   });
@@ -972,7 +1497,7 @@ describe("buildDayBlocks", () => {
   it("event ending exactly at midnight clamps to grid end", () => {
     const pages = [
       makePage({
-        scheduledEnd: "2026-03-16T00:00:00", // exactly midnight
+        scheduledEnd: "2026-03-16T00:00:00",
         scheduledStart: "2026-03-15T16:30:00",
         title: "Evening block",
       }),
@@ -983,47 +1508,36 @@ describe("buildDayBlocks", () => {
     const b = blocks[0]!;
     expect(b.isContinuationAfter).toBe(true);
     expect(b.top).toBe((16.5 - GRID_START_HOUR) * HOUR_HEIGHT);
-    expect(b.height).toBe(GRID_HEIGHT - b.top); // extends to grid bottom, not 0
+    expect(b.height).toBe(GRID_HEIGHT - b.top);
   });
 
-  it("multi-day event shows on all spanned days", () => {
+  it("one-midnight event renders as split segments on both spanned days", () => {
+    // Single midnight crossed → segment A on day 1 runs to bottom of grid;
+    // segment B on day 2 runs from top of grid to event end.
     const pages = [
       makePage({
-        scheduledEnd: "2026-03-17T14:00:00",
-        scheduledStart: "2026-03-15T20:00:00",
-        title: "Conference",
+        scheduledEnd: "2026-03-16T02:45:00",
+        scheduledStart: "2026-03-15T18:15:00",
+        title: "Late evening",
       }),
     ];
 
-    // Day 1 (Mar 15): starts at 8 PM, continues after
-    const blocks1 = buildDayBlocks(pages, day);
-    expect(blocks1).toHaveLength(1);
-    expect(blocks1[0]!.isContinuationAfter).toBe(true);
-    expect(blocks1[0]!.isContinuationBefore).toBeUndefined();
+    // Day 1 (segment A): start = 18:15, end = bottom of grid.
+    const day1 = buildDayBlocks(pages, day);
+    expect(day1).toHaveLength(1);
+    expect(day1[0]!.isContinuationAfter).toBe(true);
+    expect(day1[0]!.isContinuationBefore).toBeUndefined();
 
-    // Day 2 (Mar 16): full-day continuation
-    const blocks2 = buildDayBlocks(pages, new Date(2026, 2, 16));
-    expect(blocks2).toHaveLength(1);
-    expect(blocks2[0]!.isContinuationBefore).toBe(true);
-    expect(blocks2[0]!.isContinuationAfter).toBe(true);
-    expect(blocks2[0]!.top).toBe(0);
-    expect(blocks2[0]!.height).toBe(GRID_HEIGHT);
-
-    // Day 3 (Mar 17): ends at 2 PM. Height MUST clip to the real end time —
-    // regression guard for a bug where continuation-before blocks extended by the
-    // full event duration (42h) rather than the visible-on-this-day portion.
-    const blocks3 = buildDayBlocks(pages, new Date(2026, 2, 17));
-    expect(blocks3).toHaveLength(1);
-    expect(blocks3[0]!.isContinuationBefore).toBe(true);
-    expect(blocks3[0]!.isContinuationAfter).toBeUndefined();
-    expect(blocks3[0]!.top).toBe(0);
-    expect(blocks3[0]!.height).toBe(14 * HOUR_HEIGHT); // 2 PM = 14h from midnight
+    // Day 2 (segment B): start = top, end = 02:45.
+    const day2 = buildDayBlocks(pages, new Date(2026, 2, 16));
+    expect(day2).toHaveLength(1);
+    expect(day2[0]!.isContinuationBefore).toBe(true);
+    expect(day2[0]!.isContinuationAfter).toBeUndefined();
+    expect(day2[0]!.top).toBe(0);
+    expect(day2[0]!.height).toBe(2.75 * HOUR_HEIGHT);
   });
 
   it("no-end event at the end of a day is never a continuation", () => {
-    // Regression guard: a point-in-time event (no scheduledEnd) at 11:45 PM
-    // should not be treated as `isContinuationAfter` just because its visual
-    // block would extend past midnight.
     const pages = [
       makePage({
         scheduledStart: "2026-03-15T23:45:00",
@@ -1044,11 +1558,76 @@ describe("buildDayBlocks", () => {
         title: "Late night",
       }),
     ];
-    // March 17: should not appear
     expect(buildDayBlocks(pages, new Date(2026, 2, 17))).toHaveLength(0);
   });
 
-  it("cross-day event overlaps correctly with same-day events", () => {
+  it("cross-midnight 11pm→1am: split into 1h on day 1, 1h on day 2", () => {
+    const pages = [
+      makePage({
+        id: "late",
+        scheduledEnd: "2026-03-16T01:00:00",
+        scheduledStart: "2026-03-15T23:00:00",
+        title: "Late",
+      }),
+    ];
+    const a = buildDayBlocks(pages, day);
+    expect(a).toHaveLength(1);
+    expect(a[0]!.isContinuationAfter).toBe(true);
+    expect(a[0]!.isContinuationBefore).toBeUndefined();
+    expect(a[0]!.top).toBe(23 * HOUR_HEIGHT);
+    expect(a[0]!.height).toBe(HOUR_HEIGHT);
+
+    const b = buildDayBlocks(pages, new Date(2026, 2, 16));
+    expect(b).toHaveLength(1);
+    expect(b[0]!.isContinuationBefore).toBe(true);
+    expect(b[0]!.isContinuationAfter).toBeUndefined();
+    expect(b[0]!.top).toBe(0);
+    expect(b[0]!.height).toBe(HOUR_HEIGHT);
+  });
+
+  it("cross-midnight 6pm→6am: 6h on day 1, 6h on day 2", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-16T06:00:00",
+        scheduledStart: "2026-03-15T18:00:00",
+        title: "Long night",
+      }),
+    ];
+    const a = buildDayBlocks(pages, day);
+    expect(a[0]!.top).toBe(18 * HOUR_HEIGHT);
+    expect(a[0]!.height).toBe(6 * HOUR_HEIGHT);
+    expect(a[0]!.isContinuationAfter).toBe(true);
+
+    const b = buildDayBlocks(pages, new Date(2026, 2, 16));
+    expect(b[0]!.top).toBe(0);
+    expect(b[0]!.height).toBe(6 * HOUR_HEIGHT);
+    expect(b[0]!.isContinuationBefore).toBe(true);
+  });
+
+  it("24-hour event (1 midnight): split as 1h on day 1 + 23h on day 2", () => {
+    const pages = [
+      makePage({
+        scheduledEnd: "2026-03-16T23:00:00", // Mon 11pm
+        scheduledStart: "2026-03-15T23:00:00", // Sun 11pm
+        title: "Day-long",
+      }),
+    ];
+    // Sunday — segment A: 11pm to bottom (1h before midnight).
+    const sun = buildDayBlocks(pages, day);
+    expect(sun).toHaveLength(1);
+    expect(sun[0]!.isContinuationAfter).toBe(true);
+    expect(sun[0]!.top).toBe(23 * HOUR_HEIGHT);
+    // Monday — segment B: top to 11pm.
+    const mon = buildDayBlocks(pages, new Date(2026, 2, 16));
+    expect(mon).toHaveLength(1);
+    expect(mon[0]!.isContinuationBefore).toBe(true);
+    expect(mon[0]!.top).toBe(0);
+    expect(mon[0]!.height).toBe(23 * HOUR_HEIGHT);
+  });
+
+  it("cross-day event with same-day overlap cascades when tops are far apart", () => {
+    // Overnight visually starts at midnight (top=0), Morning at 8am.
+    // Top gap >> CASCADE_MIN_TOP_GAP_PX → cascade.
     const pages = [
       makePage({
         scheduledEnd: "2026-03-16T10:00:00",
@@ -1061,12 +1640,54 @@ describe("buildDayBlocks", () => {
         title: "Morning",
       }),
     ];
-    // March 16: both events should appear and overlap
     const nextDay = new Date(2026, 2, 16);
     const blocks = buildDayBlocks(pages, nextDay);
     expect(blocks).toHaveLength(2);
-    // They overlap (overnight continues from grid start, morning is at 8 AM)
-    expect(blocks.some((b) => b.totalColumns === 2)).toBe(true);
+    const overnight = blocks.find((b) => b.page.title === "Overnight")!;
+    const morning = blocks.find((b) => b.page.title === "Morning")!;
+    expect(overnight.leftPct).toBe(0);
+    expect(morning.leftPct).toBe(CASCADE_OFFSET_PCT);
+  });
+
+  it("clipping invariant: every block stays inside its column (leftPct + widthPct ≤ 100)", () => {
+    // A pathological mix: deep cascade, close-top split, point clusters,
+    // and a containment guest. None of these should produce a block whose
+    // rendered width extends past the day-column right edge.
+    const pages = [
+      makePage({
+        id: "host",
+        scheduledEnd: "2026-03-15T18:00:00",
+        scheduledStart: "2026-03-15T09:00:00",
+        title: "Host",
+      }),
+      makePage({
+        id: "g1",
+        scheduledEnd: "2026-03-15T13:00:00",
+        scheduledStart: "2026-03-15T10:00:00",
+        title: "G1",
+      }),
+      makePage({
+        id: "g2",
+        scheduledEnd: "2026-03-15T13:00:00",
+        scheduledStart: "2026-03-15T11:00:00",
+        title: "G2",
+      }),
+      makePage({
+        id: "g3",
+        scheduledEnd: "2026-03-15T13:00:00",
+        scheduledStart: "2026-03-15T12:00:00",
+        title: "G3",
+      }),
+      makePage({ id: "p1", scheduledStart: "2026-03-15T14:00:00", title: "P1" }),
+      makePage({ id: "p2", scheduledStart: "2026-03-15T14:00:00", title: "P2" }),
+      makePage({ id: "p3", scheduledStart: "2026-03-15T14:00:00", title: "P3" }),
+    ];
+    const blocks = buildDayBlocks(pages, day);
+    for (const b of blocks) {
+      expect(b.leftPct).toBeGreaterThanOrEqual(0);
+      expect(b.widthPct).toBeGreaterThanOrEqual(0);
+      expect(b.leftPct + b.widthPct).toBeLessThanOrEqual(100);
+    }
   });
 });
 
@@ -1129,16 +1750,33 @@ describe("snapY", () => {
 // ─── formatTimeRange ─────────────────────────────────────────────────────────
 
 describe("formatTimeRange", () => {
-  it("same period → shares AM/PM", () => {
+  it("same period → shares AM/PM, unspaced dash", () => {
     const start = new Date(2026, 2, 15, 9, 0);
     const end = new Date(2026, 2, 15, 10, 30);
-    expect(formatTimeRange(start, end)).toBe("9 – 10:30 AM");
+    expect(formatTimeRange(start, end)).toBe("9–10:30 AM");
   });
 
-  it("cross period → both AM/PM shown", () => {
+  it("cross period → both AM/PM shown, unspaced dash", () => {
     const start = new Date(2026, 2, 15, 11, 30);
     const end = new Date(2026, 2, 15, 13, 0);
-    expect(formatTimeRange(start, end)).toBe("11:30 AM – 1 PM");
+    expect(formatTimeRange(start, end)).toBe("11:30 AM–1 PM");
+  });
+});
+
+// ─── formatMultiDayTimeRange ────────────────────────────────────────────────
+
+describe("formatMultiDayTimeRange", () => {
+  it("includes day-of-week on each side", () => {
+    // 2026-03-17 is a Tuesday, 2026-03-19 is a Thursday.
+    const start = new Date(2026, 2, 17, 10);
+    const end = new Date(2026, 2, 19, 17);
+    expect(formatMultiDayTimeRange(start, end)).toBe("10 AM Tue – 5 PM Thu");
+  });
+
+  it("preserves minutes when non-zero", () => {
+    const start = new Date(2026, 2, 16, 9, 30);
+    const end = new Date(2026, 2, 18, 14, 15);
+    expect(formatMultiDayTimeRange(start, end)).toBe("9:30 AM Mon – 2:15 PM Wed");
   });
 });
 

@@ -1,7 +1,7 @@
 import type { PageSummary } from "@pikos/core";
 import { isSameDay } from "date-fns";
 import { Check } from "lucide-react";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
@@ -10,6 +10,8 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import {
   buildDayBlocks,
   chipFolderStyle,
+  collapseUnderWidth,
+  COMPACT_MODE_WIDTH_PX,
   DRAG_THRESHOLD,
   formatTimeRange,
   GRID_END_HOUR,
@@ -18,6 +20,7 @@ import {
 } from "../utils/calendarUtils";
 import type { CalendarBlock } from "../utils/calendarUtils";
 import { NowIndicator } from "./NowIndicator";
+import { OverflowPill } from "./OverflowPill";
 import { PageBlock } from "./PageBlock";
 
 export interface BlockDragStartInfo {
@@ -106,6 +109,26 @@ export function DayColumn({
   // Ref to the absolutely-positioned block container (used for Y offset calculation).
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Column width drives the dense-day overflow + compact-mode rules. Sync
+  // first read via useLayoutEffect to avoid a frame of "wide" rendering
+  // before ResizeObserver fires; then RO for live width changes.
+  const [columnWidth, setColumnWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const sync = () => {
+      const next = el.getBoundingClientRect().width;
+      setColumnWidth((prev) => (prev === next ? prev : next));
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const { pill, visible: visibleBlocks } = collapseUnderWidth(blocks, columnWidth);
+  const pagesById = new Map(pages.map((p) => [p.id, p]));
+
   // Draft ghost block — visible while dragging to set duration before page creation.
   const [draft, setDraft] = useState<{ startY: number; endY: number } | null>(null);
 
@@ -165,7 +188,14 @@ export function DayColumn({
         const end = yToDate(endY, day, metrics.hourHeight);
         void onCreatePage(day, start, end > start ? end : undefined);
       } else {
-        void onCreatePage(day, start);
+        // Single click — only create when the y position is in empty grid.
+        // `blocks` includes both visible blocks AND those collapsed into the
+        // overflow pill, so clicks above or below the pill (which sit on top
+        // of collapsed-event slots) don't fire phantom pages.
+        const yOccupied = blocks.some((b) => mouseDownY >= b.top && mouseDownY <= b.top + b.height);
+        if (!yOccupied) {
+          void onCreatePage(day, start);
+        }
       }
     }
 
@@ -296,12 +326,17 @@ export function DayColumn({
         )}
 
         {/* Page blocks */}
-        {blocks.map((block) => {
+        {visibleBlocks.map((block) => {
           const folderColor = block.page.folderId
             ? folderColorMap.get(block.page.folderId)
             : undefined;
           const autoOpen = autoOpenPageId === block.page.id;
           const isBeingDragged = draggingPageId === block.page.id;
+          // Compact mode: the block's rendered width has dropped below the
+          // legible-time threshold. PageBlock collapses to a single-line
+          // title-only render and hides the checkbox until hover.
+          const isCompactWidth =
+            columnWidth > 0 && (block.widthPct / 100) * columnWidth < COMPACT_MODE_WIDTH_PX;
 
           // Resize ghost: override height for the block being resized.
           const resizeHeight =
@@ -314,6 +349,7 @@ export function DayColumn({
               autoOpenPopover={autoOpen}
               block={block}
               folderColor={folderColor}
+              isCompactWidth={isCompactWidth}
               isDragging={isBeingDragged}
               key={block.page.id}
               onAutoOpenConsumed={onAutoOpenConsumed}
@@ -334,6 +370,7 @@ export function DayColumn({
             />
           );
         })}
+        {pill && <OverflowPill onOpen={onPageDoubleClick} pagesById={pagesById} pill={pill} />}
       </div>
     </div>
   );
