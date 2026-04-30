@@ -4,43 +4,52 @@ import { describe, expect, it } from "vitest";
 import { seedTutorial } from "./tutorial";
 
 describe("seedTutorial", () => {
-  it("creates the Start here folder with 5 pages", async () => {
+  it("creates the Start here folder with 3 pages", async () => {
     const adapter = new MockStorageAdapter();
     const result = await seedTutorial(adapter);
 
     expect(result).not.toBeNull();
     const { folderId, welcomePageId } = result!;
 
-    // Single tutorial folder created ("Start here")
     const folders = await adapter.listFolders();
     expect(folders).toHaveLength(1);
     expect(folders[0]!.name).toBe("Start here");
     expect(folders[0]!.id).toBe(folderId);
 
-    // 5 pages total, all in the tutorial folder
     const pages = await adapter.listPages();
-    expect(pages).toHaveLength(5);
+    expect(pages).toHaveLength(3);
     expect(pages.every((p) => p.folderId === folderId)).toBe(true);
 
-    // Welcome page ID matches
     const welcomePage = pages.find((p) => p.id === welcomePageId);
     expect(welcomePage).toBeDefined();
     expect(welcomePage!.title).toMatch(/Welcome to Pikos/);
   });
 
-  it("creates page schedules for workflow and example pages", async () => {
+  it("creates page schedules for the welcome and how-it-works pages", async () => {
     const adapter = new MockStorageAdapter();
     await seedTutorial(adapter);
 
     const pages = await adapter.listPages();
-    const workflowPage = pages.find((p) => p.title === "Quick add, schedule, complete")!;
-    const examplePage = pages.find((p) => p.title === "Example: weekly planning")!;
+    const welcomePage = pages.find((p) => p.title.startsWith("Welcome to Pikos"))!;
+    const howPage = pages.find((p) => p.title === "How it works")!;
 
-    const workflowSchedules = await adapter.listPageSchedules(workflowPage.id);
-    expect(workflowSchedules).toHaveLength(1);
+    const welcomeSchedules = await adapter.listPageSchedules(welcomePage.id);
+    expect(welcomeSchedules).toHaveLength(1);
 
-    const exampleSchedules = await adapter.listPageSchedules(examplePage.id);
-    expect(exampleSchedules).toHaveLength(1);
+    const howSchedules = await adapter.listPageSchedules(howPage.id);
+    expect(howSchedules).toHaveLength(1);
+  });
+
+  it("uses the local timezone for schedules", async () => {
+    const adapter = new MockStorageAdapter();
+    await seedTutorial(adapter);
+
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const pages = await adapter.listPages();
+    const welcomePage = pages.find((p) => p.title.startsWith("Welcome to Pikos"))!;
+    const [schedule] = await adapter.listPageSchedules(welcomePage.id);
+
+    expect(schedule!.timezone).toBe(localTz);
   });
 
   it("is idempotent — returns null on second call", async () => {
@@ -51,8 +60,7 @@ describe("seedTutorial", () => {
     const second = await seedTutorial(adapter);
     expect(second).toBeNull();
 
-    // No duplicate pages
     const pages = await adapter.listPages();
-    expect(pages).toHaveLength(5);
+    expect(pages).toHaveLength(3);
   });
 });
