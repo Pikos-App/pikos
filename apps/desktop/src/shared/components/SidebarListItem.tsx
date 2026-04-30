@@ -74,13 +74,13 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
         {...rest}
         {...(dragProps as React.HTMLAttributes<HTMLDivElement>)}
         className={cn(
-          "type-ui flex cursor-pointer rounded-r border-l-2 px-2 transition-[background-color,color] duration-[120ms] ease-out outline-none select-none",
+          "type-ui flex cursor-pointer rounded px-2 transition-[background-color,color] duration-[120ms] ease-out outline-none select-none",
           density === "compact" ? "py-1.5" : density === "spacious" ? "py-3" : "py-2.5",
           isDragOver
-            ? "border-l-transparent bg-primary/10 text-foreground ring-1 ring-primary/40"
+            ? "bg-primary/10 text-foreground ring-1 ring-primary/40"
             : isActive
-              ? "border-l-border bg-surface-nav-selected text-foreground"
-              : "border-l-transparent text-muted-foreground hover:bg-surface-hover hover:text-foreground",
+              ? "bg-surface-nav-selected text-foreground"
+              : "text-muted-foreground hover:bg-surface-hover hover:text-foreground",
           className
         )}
         onClick={isRenaming ? undefined : onSelect}
@@ -92,7 +92,9 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
       >
         {prefix}
         <div className="relative min-h-[1lh] min-w-0 flex-1">
-          <div className={cn("flex min-w-0", isRenaming && "invisible")}>{children}</div>
+          <div className={cn("flex min-w-0 items-center", isRenaming && "invisible")}>
+            {children}
+          </div>
           {isRenaming && (
             <input
               aria-label={`Rename ${label}`}

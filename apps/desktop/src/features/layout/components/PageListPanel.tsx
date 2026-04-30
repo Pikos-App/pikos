@@ -168,7 +168,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           return 40;
         case "page": {
           // Compact hides subtitle; cozy matches current; spacious adds ~8px.
-          if (density === "compact") return 40;
+          if (density === "compact") return 44;
           const base = row.page.subtitle ? 68 : 52;
           return density === "spacious" ? base + 8 : base;
         }

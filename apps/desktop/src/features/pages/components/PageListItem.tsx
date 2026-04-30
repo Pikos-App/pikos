@@ -193,7 +193,7 @@ export function PageListItem({
           className={cn(
             "flex cursor-pointer items-start border-b border-l-2 border-border px-3 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
             density === "compact"
-              ? "gap-2 py-2"
+              ? "gap-2 py-2.5"
               : density === "spacious"
                 ? "gap-3 py-4"
                 : "gap-3 py-3",
