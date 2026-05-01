@@ -15,6 +15,12 @@ document.addEventListener("contextmenu", (e) => {
   e.preventDefault();
 });
 
+// Suppress the browser's default file-drop behavior (navigate to file URL).
+// ProseMirror's editor calls preventDefault inside its own drop handler, so
+// in-editor drops still work; this only catches drops on non-editor areas.
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => e.preventDefault());
+
 const root = document.getElementById("root");
 if (!root) throw new Error("#root element not found");
 

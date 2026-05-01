@@ -28,6 +28,7 @@ import { TabIndent } from "../extensions/TabIndent";
 import { WebKitInputRuleFix } from "../extensions/WebKitInputRuleFix";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
+import { registerActiveEditor } from "../utils/imageDropBridge";
 import { FindContentPopover } from "./FindContentPopover";
 import { FormatToolbar } from "./FormatToolbar";
 import { LinkPopover } from "./LinkPopover";
@@ -120,6 +121,12 @@ export function EditorPane() {
     }
     dom.addEventListener("click", handleClick);
     return () => dom.removeEventListener("click", handleClick);
+  }, [editor]);
+
+  // Register editor for native (Tauri) file-drop routing — see imageDropBridge.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    return registerActiveEditor(editor);
   }, [editor]);
 
   // ─── Page switch: load content into existing editor instance ──────────────
