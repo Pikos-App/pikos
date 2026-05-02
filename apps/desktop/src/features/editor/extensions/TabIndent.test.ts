@@ -260,6 +260,7 @@ describe("Escape collapses selection", () => {
 
     expect(editor.state.selection.empty).toBe(true);
     expect(editor.state.selection.from).toBe(6);
+    editor.destroy();
   });
 
   it("collapses a select-all to cursor at end", () => {
@@ -271,6 +272,7 @@ describe("Escape collapses selection", () => {
     editor.view.dom.dispatchEvent(escape);
 
     expect(editor.state.selection.empty).toBe(true);
+    editor.destroy();
   });
 
   it("does nothing when selection is already collapsed", () => {
@@ -284,5 +286,6 @@ describe("Escape collapses selection", () => {
     // Cursor unchanged
     expect(editor.state.selection.from).toBe(posBefore);
     expect(editor.state.selection.empty).toBe(true);
+    editor.destroy();
   });
 });
