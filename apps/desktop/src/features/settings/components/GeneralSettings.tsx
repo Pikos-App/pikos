@@ -383,7 +383,7 @@ export function GeneralSettings() {
         <div className="rounded-lg border border-border bg-card px-4">
           <div className="flex items-center justify-between border-b border-border py-3">
             <div>
-              <p className="text-sm font-medium">Report a bug</p>
+              <p className="text-sm font-medium">Report a bug…</p>
               <p className="text-xs text-muted-foreground">
                 Opens pikos.app with your version info pre-filled.
               </p>

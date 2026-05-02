@@ -209,11 +209,16 @@ pub fn run() {
                 .build()?;
 
             // ── Help ─────────────────────────────────────────────────────
-            let pikos_help = MenuItemBuilder::new("Pikos Help")
-                .id("pikos_help")
+            let help_docs = MenuItemBuilder::new("Pikos FAQ")
+                .id("help_docs")
+                .build(handle)?;
+            let help_bug = MenuItemBuilder::new("Report a Bug…")
+                .id("help_bug")
                 .build(handle)?;
             let help_menu = SubmenuBuilder::new(handle, "Help")
-                .item(&pikos_help)
+                .item(&help_docs)
+                .separator()
+                .item(&help_bug)
                 .build()?;
 
             MenuBuilder::new(handle)
@@ -228,8 +233,17 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let id = event.id().0.clone();
             match id.as_str() {
-                "pikos_help" => {
-                    let _ = tauri_plugin_opener::open_url("https://pikos.app", None::<&str>);
+                "help_docs" => {
+                    let _ = tauri_plugin_opener::open_url("https://pikos.app/faq", None::<&str>);
+                }
+                "help_bug" => {
+                    let os = if cfg!(target_os = "macos") { "macOS" } else { "Linux" };
+                    let url = format!(
+                        "https://pikos.app/bugs?os={}&version={}",
+                        os,
+                        env!("CARGO_PKG_VERSION"),
+                    );
+                    let _ = tauri_plugin_opener::open_url(&url, None::<&str>);
                 }
                 "new_page" | "close_page" | "settings"
                 | "toggle_sidebar" | "toggle_calendar" => {
