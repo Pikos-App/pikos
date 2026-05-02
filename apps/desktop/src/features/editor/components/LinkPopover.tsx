@@ -8,6 +8,10 @@ import { useEditorState } from "@tiptap/react";
 import { Check, Copy, ExternalLink, Pencil, Unlink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("LinkPopover");
+
 interface LinkPopoverProps {
   editor: Editor;
   isAddingLink: boolean;
@@ -234,10 +238,14 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
     close();
   };
 
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(linkHref);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(linkHref);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      log.warn("clipboard write failed", err);
+    }
   };
 
   const handleOpen = () => {
@@ -329,7 +337,7 @@ export function LinkPopover({ editor, isAddingLink, onAddingLinkChange }: LinkPo
           <button className="link-popover-btn" onClick={handleOpen} title="Open link">
             <ExternalLink size={13} />
           </button>
-          <button className="link-popover-btn" onClick={handleCopy} title="Copy URL">
+          <button className="link-popover-btn" onClick={() => void handleCopy()} title="Copy URL">
             {copied ? <Check size={13} /> : <Copy size={13} />}
           </button>
           <button className="link-popover-btn" onClick={handleEdit} title="Edit link">

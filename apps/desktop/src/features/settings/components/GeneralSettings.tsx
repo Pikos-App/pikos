@@ -18,6 +18,7 @@ import type { ThemeMode } from "@/shared/context/ThemeContext";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { useUpdate } from "@/shared/context/UpdateContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { createLogger } from "@/shared/logger";
 
 // ─── Shared layout ────────────────────────────────────────────────────────
 
@@ -41,14 +42,19 @@ function SettingsSection({
 
 // ─── Feedback helpers ─────────────────────────────────────────────────────
 
+const log = createLogger("GeneralSettings");
+
 function CopyEmailRow() {
   const [copied, setCopied] = useState(false);
 
-  function handleCopy() {
-    void navigator.clipboard.writeText("hello@pikos.app").then(() => {
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText("hello@pikos.app");
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    } catch (err) {
+      log.warn("clipboard write failed", err);
+    }
   }
 
   return (
@@ -59,7 +65,7 @@ function CopyEmailRow() {
       </div>
       <button
         className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
-        onClick={handleCopy}
+        onClick={() => void handleCopy()}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         {copied ? "Copied" : "Copy email"}
