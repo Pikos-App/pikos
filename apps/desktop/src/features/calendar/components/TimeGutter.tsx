@@ -115,8 +115,7 @@ export function TimeGutter() {
         // it pinned just below the band edge (mt-1) so it doesn't overlap
         // with the band's "Xam" label.
         const isTopOfGrid = hour === GRID_START_HOUR;
-        const isFirstAfterCollapsed =
-          collapse.topCollapsed && hour === collapse.topHour;
+        const isFirstAfterCollapsed = collapse.topCollapsed && hour === collapse.topHour;
         // The bottomHour label, when the bottom is collapsed, is rendered by
         // the bottom band itself — skip it here to avoid duplicates.
         if (collapse.bottomCollapsed && hour === collapse.bottomHour) return null;

@@ -2063,3 +2063,72 @@ describe("remapBlocksForCollapse", () => {
     expect(r.visible[0]!.height).toBe(64);
   });
 });
+
+describe("remapBlocksForCollapse — boundary cases", () => {
+  const config = { bottomCollapsed: true, bottomHour: 22, topCollapsed: true, topHour: 6 };
+  const g = buildCollapseGeometry(config, 64);
+
+  function block(top: number, height: number, id: string) {
+    return {
+      endDate: new Date(),
+      height,
+      isCompact: true,
+      leftPct: 0,
+      page: makePage({ id }),
+      startDate: new Date(),
+      top,
+      widthPct: 100,
+    };
+  }
+
+  it("block straddling top boundary stays visible with rewritten top/height", () => {
+    // event 5am-9am: starts in collapsed top band, ends in middle.
+    const r = remapBlocksForCollapse([block(64 * 5, 64 * 4, "boundary")], g);
+    expect(r.visible).toHaveLength(1);
+    expect(r.topCollapsedPageIds).toEqual([]);
+    const v = r.visible[0]!;
+    expect(v.top).toBeCloseTo((5 / 6) * 40, 5);
+    expect(v.top + v.height).toBeCloseTo(g.middleStart + 3 * 64, 5);
+  });
+
+  it("block straddling bottom boundary stays visible", () => {
+    const r = remapBlocksForCollapse([block(64 * 21, 64 * 2, "evening")], g);
+    expect(r.visible).toHaveLength(1);
+    expect(r.bottomCollapsedPageIds).toEqual([]);
+    expect(r.visible[0]!.top).toBe(g.middleStart + 15 * 64);
+  });
+
+  it("block ending exactly at topHour boundary → top-collapsed", () => {
+    const r = remapBlocksForCollapse([block(64 * 4, 64 * 2, "early")], g);
+    expect(r.topCollapsedPageIds).toEqual(["early"]);
+    expect(r.visible).toHaveLength(0);
+  });
+
+  it("block starting exactly at bottomHour → bottom-collapsed", () => {
+    const r = remapBlocksForCollapse([block(64 * 22, 64 * 2, "late")], g);
+    expect(r.bottomCollapsedPageIds).toEqual(["late"]);
+    expect(r.visible).toHaveLength(0);
+  });
+
+  it("when no bands collapsed, every block stays visible", () => {
+    const noCollapse = buildCollapseGeometry(
+      { bottomCollapsed: false, bottomHour: 22, topCollapsed: false, topHour: 6 },
+      64
+    );
+    const r = remapBlocksForCollapse(
+      [block(64 * 2, 64, "early"), block(64 * 23, 64, "late")],
+      noCollapse
+    );
+    expect(r.topCollapsedPageIds).toEqual([]);
+    expect(r.bottomCollapsedPageIds).toEqual([]);
+    expect(r.visible).toHaveLength(2);
+  });
+
+  it("multiple blocks in collapsed band aggregate in source order", () => {
+    const r = remapBlocksForCollapse(
+      [block(0, 32, "first"), block(32, 32, "second"), block(64, 32, "third")],
+      g
+    );
+    expect(r.topCollapsedPageIds).toEqual(["first", "second", "third"]);
+  });
+});

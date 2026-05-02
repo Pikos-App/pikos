@@ -181,9 +181,7 @@ export function buildCollapseGeometry(
   config: CalendarCollapseConfig,
   hourHeight: number
 ): CollapseGeometry {
-  const topBandHeight = config.topCollapsed
-    ? COLLAPSED_BAND_HEIGHT
-    : config.topHour * hourHeight;
+  const topBandHeight = config.topCollapsed ? COLLAPSED_BAND_HEIGHT : config.topHour * hourHeight;
   const middleHeight = (config.bottomHour - config.topHour) * hourHeight;
   const bottomBandHeight = config.bottomCollapsed
     ? COLLAPSED_BAND_HEIGHT
@@ -206,8 +204,7 @@ export function buildCollapseGeometry(
  * middle region the mapping is 1:1 with hourHeight; inside a collapsed band
  * it linearly compresses the band's hour range into COLLAPSED_BAND_HEIGHT. */
 export function mapHourToY(hour: number, geometry: CollapseGeometry): number {
-  const { bottomBandHeight, config, hourHeight, middleEnd, middleStart, topBandHeight } =
-    geometry;
+  const { bottomBandHeight, config, hourHeight, middleEnd, middleStart, topBandHeight } = geometry;
   const { bottomCollapsed, bottomHour, topCollapsed, topHour } = config;
   if (hour <= topHour) {
     if (topCollapsed) {
@@ -229,8 +226,7 @@ export function mapHourToY(hour: number, geometry: CollapseGeometry): number {
 /** Inverse of mapHourToY — pixel Y to calendar hour (0..24). Used when
  * translating drag/resize/create gestures back into times. */
 export function mapYToHour(y: number, geometry: CollapseGeometry): number {
-  const { bottomBandHeight, config, hourHeight, middleEnd, middleStart, topBandHeight } =
-    geometry;
+  const { bottomBandHeight, config, hourHeight, middleEnd, middleStart, topBandHeight } = geometry;
   const { bottomCollapsed, bottomHour, topCollapsed, topHour } = config;
   if (y <= middleStart) {
     if (topCollapsed) {
@@ -282,7 +278,7 @@ export function mapYToDate(y: number, day: Date, geometry: CollapseGeometry): Da
  * aware grid. Returns a pixel Y in the same coord system as the input. */
 export function snapYCollapse(y: number, geometry: CollapseGeometry): number {
   const hour = mapYToHour(y, geometry);
-  const snappedHour = (Math.round(hour * 4) / 4);
+  const snappedHour = Math.round(hour * 4) / 4;
   return mapHourToY(snappedHour, geometry);
 }
 

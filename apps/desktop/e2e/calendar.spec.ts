@@ -358,3 +358,86 @@ appTest(
     await expect(continuationChips.first()).toContainText("Conference");
   }
 );
+
+// ─── Collapsible time bands ────────────────────────────────────────────────
+
+appTest("collapsed top/bottom bands render labelled chevrons by default @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+
+  // Defaults: top collapsed at 6 AM, bottom collapsed at 10 PM. Each band is
+  // a single button labelled "Expand <start> to <end>".
+  await expect(app.getByRole("button", { name: "Expand 12 AM to 6 AM" })).toBeVisible();
+  await expect(app.getByRole("button", { name: "Expand 10 PM to 12 AM" })).toBeVisible();
+});
+
+appTest("clicking a band expands it; clicking the chevron collapses again @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+
+  // Click the top band → it expands. The expanded state surfaces a "Collapse"
+  // button at the top of the gutter and an "Adjust top collapse boundary"
+  // separator near the boundary line.
+  const topBand = app.getByRole("button", { name: "Expand 12 AM to 6 AM" });
+  await topBand.click();
+  await expect(topBand).not.toBeVisible();
+  await expect(app.getByRole("button", { name: "Collapse 12 AM to 6 AM" })).toBeVisible();
+  await expect(app.getByRole("separator", { name: "Adjust top collapse boundary" })).toBeVisible();
+
+  // Click the collapse chevron to fold the band back.
+  await app.getByRole("button", { name: "Collapse 12 AM to 6 AM" }).click();
+  await expect(app.getByRole("button", { name: "Expand 12 AM to 6 AM" })).toBeVisible();
+});
+
+appTest("collapse state persists across reload @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+
+  // Expand the bottom band, then reload — the band should still be expanded.
+  await app.getByRole("button", { name: "Expand 10 PM to 12 AM" }).click();
+  await expect(app.getByRole("button", { name: "Collapse 10 PM to 12 AM" })).toBeVisible();
+
+  await app.reload();
+  await openCalendarMode(app);
+
+  await expect(app.getByRole("button", { name: "Collapse 10 PM to 12 AM" })).toBeVisible();
+  await expect(app.getByRole("button", { name: "Expand 10 PM to 12 AM" })).not.toBeVisible();
+});
+
+appTest("events in a collapsed band render as a clickable +N more pill @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+  const calendar = calendarRegion(app);
+
+  // Expand the top band so we can drop a timed event inside [0am, 6am).
+  await app.getByRole("button", { name: "Expand 12 AM to 6 AM" }).click();
+
+  // Scroll the timed grid to the very top so a click near the top of the
+  // visible grid lands at midnight, not at the smart-start scroll position.
+  await app.locator('[aria-label="Time grid"]').evaluate((el) => {
+    el.scrollTop = 0;
+  });
+
+  // Click ~12 px into the timed grid for the last visible day column. With
+  // the top band expanded and scrollTop=0, this lands inside [0, 1) AM.
+  const cols = app.locator('[aria-label^="All-day events,"]');
+  const colCount = await cols.count();
+  const targetAllDay = cols.nth(colCount - 1);
+  const allDayBox = await targetAllDay.boundingBox();
+  if (!allDayBox) throw new Error("all-day column missing");
+  const timedX = allDayBox.x + allDayBox.width / 2;
+  const timedY = allDayBox.y + allDayBox.height + 12;
+  await app.mouse.click(timedX, timedY);
+
+  const titleInput = app.getByPlaceholder("Untitled");
+  await expect(titleInput).toBeFocused();
+  await titleInput.fill("Early bird");
+  await app.keyboard.press("Enter");
+  await expect(calendar.getByText("Early bird").first()).toBeVisible();
+
+  // Re-collapse the top band. The event now falls inside the collapsed band
+  // so it should be replaced by a +N more pill instead of rendering directly.
+  await app.getByRole("button", { name: "Collapse 12 AM to 6 AM" }).click();
+  const pill = calendar.getByRole("button", { name: /\d+ more events?/ });
+  await expect(pill.first()).toBeVisible();
+
+  // Clicking the pill opens a popover listing the hidden events by title.
+  await pill.first().click();
+  await expect(app.getByRole("button", { name: /Early bird/ }).first()).toBeVisible();
+});

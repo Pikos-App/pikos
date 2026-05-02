@@ -140,18 +140,12 @@ export function WeekGrid({
   // for the middle range, falling back to a min of 16 so an all-expanded grid
   // remains scrollable instead of collapsing into a fully-shown 24h view that
   // would leave zero scroll room.
-  const visibleMiddleHours = Math.max(
-    settings.collapse.bottomHour - settings.collapse.topHour,
-    16
-  );
+  const visibleMiddleHours = Math.max(settings.collapse.bottomHour - settings.collapse.topHour, 16);
   const effectiveHourHeight = Math.max(
     settings.metrics.hourHeight,
     containerHeight / visibleMiddleHours
   );
-  const geometry: CollapseGeometry = buildCollapseGeometry(
-    settings.collapse,
-    effectiveHourHeight
-  );
+  const geometry: CollapseGeometry = buildCollapseGeometry(settings.collapse, effectiveHourHeight);
   const metrics: CalendarMetrics = {
     compactBlockHeight: effectiveHourHeight / 4,
     gridHeight: geometry.totalHeight,

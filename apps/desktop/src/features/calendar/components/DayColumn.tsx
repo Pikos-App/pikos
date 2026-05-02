@@ -130,10 +130,7 @@ export function DayColumn({
   // the dim overlay below.
   const hourLineFirst = collapse.topCollapsed ? collapse.topHour : GRID_START_HOUR;
   const hourLineLast = collapse.bottomCollapsed ? collapse.bottomHour : GRID_END_HOUR;
-  const hours = Array.from(
-    { length: hourLineLast - hourLineFirst },
-    (_, i) => hourLineFirst + i
-  );
+  const hours = Array.from({ length: hourLineLast - hourLineFirst }, (_, i) => hourLineFirst + i);
 
   // Ref to the absolutely-positioned block container (used for Y offset calculation).
   const containerRef = useRef<HTMLDivElement>(null);
