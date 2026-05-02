@@ -7,10 +7,13 @@ import {
   buildAllDayBars,
   buildAllDayItems,
   buildCalendarDays,
+  buildCollapseGeometry,
   buildDayBlocks,
   CASCADE_OFFSET_PCT,
   chipFolderStyle,
+  clampBottomHour,
   clampDayCount,
+  clampTopHour,
   collapseUnderWidth,
   COMPACT_BLOCK_HEIGHT,
   computeAllDayEdgeResize,
@@ -26,8 +29,12 @@ import {
   hexToRgba,
   HOUR_HEIGHT,
   isAllDayPage,
+  mapHourToY,
+  mapYToDate,
+  mapYToHour,
   normalizeEndInput,
   OVERFLOW_MIN_WIDTH_PX,
+  remapBlocksForCollapse,
   shiftAllDayEnd,
   snapY,
   timeToY,
@@ -1915,5 +1922,213 @@ describe("hexToRgba", () => {
 
   it("invalid hex → fallback indigo", () => {
     expect(hexToRgba("zzz", 0.5)).toBe("rgba(99,102,241,0.5)");
+  });
+});
+
+// ─── Collapse geometry ───────────────────────────────────────────────────────
+
+describe("buildCollapseGeometry", () => {
+  it("both bands collapsed → 40 + middle + 40", () => {
+    const g = buildCollapseGeometry(
+      { bottomCollapsed: true, bottomHour: 22, topCollapsed: true, topHour: 6 },
+      64
+    );
+    expect(g.topBandHeight).toBe(40);
+    expect(g.middleHeight).toBe(16 * 64);
+    expect(g.bottomBandHeight).toBe(40);
+    expect(g.totalHeight).toBe(40 + 16 * 64 + 40);
+  });
+
+  it("both bands expanded → full 24 * hourHeight", () => {
+    const g = buildCollapseGeometry(
+      { bottomCollapsed: false, bottomHour: 22, topCollapsed: false, topHour: 6 },
+      64
+    );
+    expect(g.totalHeight).toBe(24 * 64);
+  });
+});
+
+describe("mapHourToY / mapYToHour", () => {
+  const config = { bottomCollapsed: true, bottomHour: 22, topCollapsed: true, topHour: 6 };
+  const g = buildCollapseGeometry(config, 64);
+
+  it("hour 0 → y 0", () => {
+    expect(mapHourToY(0, g)).toBe(0);
+  });
+
+  it("hour topHour → start of middle region", () => {
+    expect(mapHourToY(6, g)).toBe(g.middleStart);
+  });
+
+  it("hour bottomHour → end of middle region", () => {
+    expect(mapHourToY(22, g)).toBe(g.middleEnd);
+  });
+
+  it("hour 24 → totalHeight", () => {
+    expect(mapHourToY(24, g)).toBe(g.totalHeight);
+  });
+
+  it("middle hour follows 1:1 hourHeight scaling", () => {
+    expect(mapHourToY(10, g)).toBe(g.middleStart + 4 * 64);
+  });
+
+  it("inverse: y 0 → hour 0, y middleStart → topHour, y middleEnd → bottomHour", () => {
+    expect(mapYToHour(0, g)).toBe(0);
+    expect(mapYToHour(g.middleStart, g)).toBe(6);
+    expect(mapYToHour(g.middleEnd, g)).toBe(22);
+    expect(mapYToHour(g.totalHeight, g)).toBe(24);
+  });
+
+  it("round-trip in middle region preserves hour value", () => {
+    for (const h of [7, 9.5, 12, 18, 21]) {
+      expect(mapYToHour(mapHourToY(h, g), g)).toBeCloseTo(h, 5);
+    }
+  });
+});
+
+describe("mapYToDate", () => {
+  const config = { bottomCollapsed: true, bottomHour: 22, topCollapsed: true, topHour: 6 };
+  const g = buildCollapseGeometry(config, 64);
+  const day = new Date(2026, 4, 1);
+
+  it("y inside top collapsed band clamps to topHour boundary", () => {
+    const r = mapYToDate(20, day, g);
+    expect(r.getHours()).toBe(6);
+    expect(r.getMinutes()).toBe(0);
+  });
+
+  it("y inside bottom collapsed band clamps to bottomHour boundary", () => {
+    const r = mapYToDate(g.middleEnd + 20, day, g);
+    expect(r.getHours()).toBe(22);
+    expect(r.getMinutes()).toBe(0);
+  });
+
+  it("y in middle region snaps to nearest 15 min", () => {
+    const r = mapYToDate(g.middleStart + 64 * 3 + 64 * 0.1, day, g);
+    expect(r.getHours()).toBe(9);
+    expect(r.getMinutes() % 15).toBe(0);
+  });
+});
+
+describe("clampTopHour / clampBottomHour", () => {
+  it("topHour stays at least 1 below bottomHour", () => {
+    expect(clampTopHour(20, 22)).toBe(12);
+    expect(clampTopHour(8, 22)).toBe(8);
+  });
+
+  it("bottomHour stays at least 1 above topHour", () => {
+    expect(clampBottomHour(2, 6)).toBe(12);
+    expect(clampBottomHour(20, 6)).toBe(20);
+  });
+
+  it("hard caps respect 0..24", () => {
+    expect(clampTopHour(-5, 22)).toBe(0);
+    expect(clampBottomHour(99, 6)).toBe(24);
+  });
+});
+
+describe("remapBlocksForCollapse", () => {
+  const config = { bottomCollapsed: true, bottomHour: 22, topCollapsed: true, topHour: 6 };
+  const g = buildCollapseGeometry(config, 64);
+
+  function block(top: number, height: number, id: string) {
+    return {
+      endDate: new Date(),
+      height,
+      isCompact: true,
+      leftPct: 0,
+      page: makePage({ id }),
+      startDate: new Date(),
+      top,
+      widthPct: 100,
+    };
+  }
+
+  it("blocks fully in top collapsed range → topCollapsedPageIds", () => {
+    const r = remapBlocksForCollapse([block(0, 64, "a"), block(64 * 4, 64, "b")], g);
+    expect(r.topCollapsedPageIds).toEqual(["a", "b"]);
+    expect(r.visible).toHaveLength(0);
+  });
+
+  it("blocks fully in bottom collapsed range → bottomCollapsedPageIds", () => {
+    const r = remapBlocksForCollapse([block(64 * 22, 64, "x"), block(64 * 23, 64, "y")], g);
+    expect(r.bottomCollapsedPageIds).toEqual(["x", "y"]);
+    expect(r.visible).toHaveLength(0);
+  });
+
+  it("blocks in middle range → remapped via geometry, stay visible", () => {
+    const r = remapBlocksForCollapse([block(64 * 9, 64, "m")], g);
+    expect(r.visible).toHaveLength(1);
+    expect(r.visible[0]!.top).toBe(g.middleStart + (9 - 6) * 64);
+    expect(r.visible[0]!.height).toBe(64);
+  });
+});
+
+describe("remapBlocksForCollapse — boundary cases", () => {
+  const config = { bottomCollapsed: true, bottomHour: 22, topCollapsed: true, topHour: 6 };
+  const g = buildCollapseGeometry(config, 64);
+
+  function block(top: number, height: number, id: string) {
+    return {
+      endDate: new Date(),
+      height,
+      isCompact: true,
+      leftPct: 0,
+      page: makePage({ id }),
+      startDate: new Date(),
+      top,
+      widthPct: 100,
+    };
+  }
+
+  it("block straddling top boundary stays visible with rewritten top/height", () => {
+    // event 5am-9am: starts in collapsed top band, ends in middle.
+    const r = remapBlocksForCollapse([block(64 * 5, 64 * 4, "boundary")], g);
+    expect(r.visible).toHaveLength(1);
+    expect(r.topCollapsedPageIds).toEqual([]);
+    const v = r.visible[0]!;
+    expect(v.top).toBeCloseTo((5 / 6) * 40, 5);
+    expect(v.top + v.height).toBeCloseTo(g.middleStart + 3 * 64, 5);
+  });
+
+  it("block straddling bottom boundary stays visible", () => {
+    const r = remapBlocksForCollapse([block(64 * 21, 64 * 2, "evening")], g);
+    expect(r.visible).toHaveLength(1);
+    expect(r.bottomCollapsedPageIds).toEqual([]);
+    expect(r.visible[0]!.top).toBe(g.middleStart + 15 * 64);
+  });
+
+  it("block ending exactly at topHour boundary → top-collapsed", () => {
+    const r = remapBlocksForCollapse([block(64 * 4, 64 * 2, "early")], g);
+    expect(r.topCollapsedPageIds).toEqual(["early"]);
+    expect(r.visible).toHaveLength(0);
+  });
+
+  it("block starting exactly at bottomHour → bottom-collapsed", () => {
+    const r = remapBlocksForCollapse([block(64 * 22, 64 * 2, "late")], g);
+    expect(r.bottomCollapsedPageIds).toEqual(["late"]);
+    expect(r.visible).toHaveLength(0);
+  });
+
+  it("when no bands collapsed, every block stays visible", () => {
+    const noCollapse = buildCollapseGeometry(
+      { bottomCollapsed: false, bottomHour: 22, topCollapsed: false, topHour: 6 },
+      64
+    );
+    const r = remapBlocksForCollapse(
+      [block(64 * 2, 64, "early"), block(64 * 23, 64, "late")],
+      noCollapse
+    );
+    expect(r.topCollapsedPageIds).toEqual([]);
+    expect(r.bottomCollapsedPageIds).toEqual([]);
+    expect(r.visible).toHaveLength(2);
+  });
+
+  it("multiple blocks in collapsed band aggregate in source order", () => {
+    const r = remapBlocksForCollapse(
+      [block(0, 32, "first"), block(32, 32, "second"), block(64, 32, "third")],
+      g
+    );
+    expect(r.topCollapsedPageIds).toEqual(["first", "second", "third"]);
   });
 });

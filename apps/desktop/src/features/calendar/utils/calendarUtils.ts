@@ -92,6 +92,13 @@ export interface CalendarMetrics {
   minResizeHeight: number;
 }
 
+/** Combined metrics + collapse geometry — passed to renderers so they don't
+ * have to recompute pixel offsets on every block. */
+export interface CalendarLayout {
+  metrics: CalendarMetrics;
+  geometry: CollapseGeometry;
+}
+
 const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
   compact: 40,
   normal: 64,
@@ -111,6 +118,228 @@ export function computeCalendarMetrics(density: CalendarDensity): CalendarMetric
 
 /** Baseline metrics for tests + callers that don't have settings context. */
 export const DEFAULT_METRICS: CalendarMetrics = computeCalendarMetrics("normal");
+
+// ─── Collapsed time bands ─────────────────────────────────────────────────────
+// The calendar can hide the early-morning ([0, topHour)) and late-evening
+// ([bottomHour, 24)) ranges behind small fixed-height bands so the readable
+// "waking hours" middle dominates the viewport. Each band is independently
+// toggleable; bounds X = topHour and Y = bottomHour are user-adjustable when
+// the band is expanded (drag handle in the gutter). Pages that fall fully
+// inside a collapsed band collapse into a clickable "+N more" pill at the
+// band's edge — same component used for cluster-overflow elsewhere.
+
+export interface CalendarCollapseConfig {
+  /** Upper bound of the top collapsible band (exclusive). 0..23. */
+  topHour: number;
+  /** Lower bound of the bottom collapsible band (inclusive). 1..24. */
+  bottomHour: number;
+  /** When true, hours [0, topHour) render as a fixed-height band. */
+  topCollapsed: boolean;
+  /** When true, hours [bottomHour, 24) render as a fixed-height band. */
+  bottomCollapsed: boolean;
+}
+
+/** Pixel height of each collapsed band. Matches the screenshot: ~40px so two
+ * stacked labels (e.g. "12 AM"/"6 AM") plus a chevron remain comfortably legible. */
+export const COLLAPSED_BAND_HEIGHT = 40;
+
+/** Hard limits the user can drag the bounds to. Top must stay below bottom by
+ * at least 1 hour so the middle "waking hours" region never disappears. */
+export const MIN_TOP_HOUR = 0;
+export const MAX_TOP_HOUR = 12;
+export const MIN_BOTTOM_HOUR = 12;
+export const MAX_BOTTOM_HOUR = 24;
+export const MIN_VISIBLE_HOURS = 1;
+
+export const DEFAULT_COLLAPSE_CONFIG: CalendarCollapseConfig = {
+  bottomCollapsed: true,
+  bottomHour: 22,
+  topCollapsed: true,
+  topHour: 6,
+};
+
+/**
+ * Pre-computed pixel offsets for the three regions of the calendar grid under
+ * a given collapse config. All coordinates are pixels from the grid top.
+ *
+ *   [0, topBandHeight)              → collapsed top band (or expanded [0, topHour))
+ *   [middleStart, middleEnd)        → middle "waking hours" — always 1:1 with hour height
+ *   [middleEnd, totalHeight)        → collapsed bottom band (or expanded [bottomHour, 24))
+ */
+export interface CollapseGeometry {
+  config: CalendarCollapseConfig;
+  hourHeight: number;
+  topBandHeight: number;
+  middleStart: number;
+  middleEnd: number;
+  middleHeight: number;
+  bottomBandHeight: number;
+  totalHeight: number;
+}
+
+export function buildCollapseGeometry(
+  config: CalendarCollapseConfig,
+  hourHeight: number
+): CollapseGeometry {
+  const topBandHeight = config.topCollapsed ? COLLAPSED_BAND_HEIGHT : config.topHour * hourHeight;
+  const middleHeight = (config.bottomHour - config.topHour) * hourHeight;
+  const bottomBandHeight = config.bottomCollapsed
+    ? COLLAPSED_BAND_HEIGHT
+    : (24 - config.bottomHour) * hourHeight;
+  const middleStart = topBandHeight;
+  const middleEnd = middleStart + middleHeight;
+  return {
+    bottomBandHeight,
+    config,
+    hourHeight,
+    middleEnd,
+    middleHeight,
+    middleStart,
+    topBandHeight,
+    totalHeight: middleEnd + bottomBandHeight,
+  };
+}
+
+/** Maps a calendar hour (0..24, fractional ok) to a pixel Y offset. Inside the
+ * middle region the mapping is 1:1 with hourHeight; inside a collapsed band
+ * it linearly compresses the band's hour range into COLLAPSED_BAND_HEIGHT. */
+export function mapHourToY(hour: number, geometry: CollapseGeometry): number {
+  const { bottomBandHeight, config, hourHeight, middleEnd, middleStart, topBandHeight } = geometry;
+  const { bottomCollapsed, bottomHour, topCollapsed, topHour } = config;
+  if (hour <= topHour) {
+    if (topCollapsed) {
+      const denom = topHour > 0 ? topHour : 1;
+      return (hour / denom) * topBandHeight;
+    }
+    return hour * hourHeight;
+  }
+  if (hour >= bottomHour) {
+    if (bottomCollapsed) {
+      const denom = bottomHour < 24 ? 24 - bottomHour : 1;
+      return middleEnd + ((hour - bottomHour) / denom) * bottomBandHeight;
+    }
+    return middleEnd + (hour - bottomHour) * hourHeight;
+  }
+  return middleStart + (hour - topHour) * hourHeight;
+}
+
+/** Inverse of mapHourToY — pixel Y to calendar hour (0..24). Used when
+ * translating drag/resize/create gestures back into times. */
+export function mapYToHour(y: number, geometry: CollapseGeometry): number {
+  const { bottomBandHeight, config, hourHeight, middleEnd, middleStart, topBandHeight } = geometry;
+  const { bottomCollapsed, bottomHour, topCollapsed, topHour } = config;
+  if (y <= middleStart) {
+    if (topCollapsed) {
+      const denom = topBandHeight > 0 ? topBandHeight : 1;
+      return (y / denom) * topHour;
+    }
+    return y / hourHeight;
+  }
+  if (y >= middleEnd) {
+    if (bottomCollapsed) {
+      const denom = bottomBandHeight > 0 ? bottomBandHeight : 1;
+      return bottomHour + ((y - middleEnd) / denom) * (24 - bottomHour);
+    }
+    return bottomHour + (y - middleEnd) / hourHeight;
+  }
+  return topHour + (y - middleStart) / hourHeight;
+}
+
+/** Pixel offset of a Date's time on the collapse-aware grid. */
+export function mapDateToY(date: Date, geometry: CollapseGeometry): number {
+  const totalHours = getHours(date) + getMinutes(date) / 60;
+  return mapHourToY(totalHours, geometry);
+}
+
+/**
+ * Snaps a pixel Y to the nearest 15-minute mark on the collapse-aware grid
+ * and returns the corresponding Date on `day`. Mirrors the contract of
+ * `yToDate` but respects collapsed bands.
+ *
+ * Y values inside a collapsed band are clamped to the band's nearest visible
+ * edge: drops in the top band snap to the bottomHour boundary's hour-equivalent
+ * (== topHour), and drops in the bottom band snap to bottomHour. This means
+ * users can't accidentally schedule events into invisible territory while a
+ * band is collapsed; they expand first, then drop precisely.
+ */
+export function mapYToDate(y: number, day: Date, geometry: CollapseGeometry): Date {
+  const { config, middleEnd, middleStart } = geometry;
+  let clampedY = y;
+  if (config.topCollapsed && clampedY < middleStart) clampedY = middleStart;
+  if (config.bottomCollapsed && clampedY > middleEnd) clampedY = middleEnd;
+  const hour = mapYToHour(clampedY, geometry);
+  const rawMinutes = hour * 60;
+  const snappedMinutes = Math.round(rawMinutes / 15) * 15;
+  const clamped = Math.min(Math.max(snappedMinutes, 0), VISIBLE_HOURS * 60);
+  return addMinutes(startOfDay(day), clamped);
+}
+
+/** Snaps a raw pixel Y to the nearest 15-minute grid line on the collapse-
+ * aware grid. Returns a pixel Y in the same coord system as the input. */
+export function snapYCollapse(y: number, geometry: CollapseGeometry): number {
+  const hour = mapYToHour(y, geometry);
+  const snappedHour = Math.round(hour * 4) / 4;
+  return mapHourToY(snappedHour, geometry);
+}
+
+/** Clamps a hypothetical topHour value to the legal range given bottomHour. */
+export function clampTopHour(value: number, bottomHour: number): number {
+  const max = Math.min(MAX_TOP_HOUR, bottomHour - MIN_VISIBLE_HOURS);
+  return Math.max(MIN_TOP_HOUR, Math.min(max, value));
+}
+
+/** Clamps a hypothetical bottomHour value to the legal range given topHour. */
+export function clampBottomHour(value: number, topHour: number): number {
+  const min = Math.max(MIN_BOTTOM_HOUR, topHour + MIN_VISIBLE_HOURS);
+  return Math.min(MAX_BOTTOM_HOUR, Math.max(min, value));
+}
+
+// ─── Block remapping for collapsed bands ──────────────────────────────────────
+
+/**
+ * Result of remapping a day's CalendarBlocks against a collapse geometry.
+ * Blocks fully inside a collapsed band drop out of `visible` and their page
+ * ids accumulate into one of the *Pill arrays — the renderer emits a single
+ * `+N more` chip in that band's pixel range. Blocks straddling a boundary
+ * stay in `visible` with their `top` and `height` rewritten through the
+ * geometry; visually they grow out of the compressed band into the middle.
+ */
+export interface RemappedBlocks {
+  visible: CalendarBlock[];
+  topCollapsedPageIds: string[];
+  bottomCollapsedPageIds: string[];
+}
+
+export function remapBlocksForCollapse(
+  blocks: CalendarBlock[],
+  geometry: CollapseGeometry
+): RemappedBlocks {
+  const { config, hourHeight } = geometry;
+  const visible: CalendarBlock[] = [];
+  const topCollapsedPageIds: string[] = [];
+  const bottomCollapsedPageIds: string[] = [];
+
+  for (const b of blocks) {
+    const startHour = b.top / hourHeight;
+    const endHour = (b.top + b.height) / hourHeight;
+
+    if (config.topCollapsed && endHour <= config.topHour) {
+      topCollapsedPageIds.push(b.page.id);
+      continue;
+    }
+    if (config.bottomCollapsed && startHour >= config.bottomHour) {
+      bottomCollapsedPageIds.push(b.page.id);
+      continue;
+    }
+
+    const newTop = mapHourToY(startHour, geometry);
+    const newBottom = mapHourToY(endHour, geometry);
+    const newHeight = Math.max(newBottom - newTop, 4);
+    visible.push({ ...b, height: newHeight, top: newTop });
+  }
+
+  return { bottomCollapsedPageIds, topCollapsedPageIds, visible };
+}
 
 /** Slot size (minutes) used to round up short event durations for visual height. */
 export const MIN_TIMED_MINUTES = 15;

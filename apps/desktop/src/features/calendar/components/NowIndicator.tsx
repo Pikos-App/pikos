@@ -1,10 +1,10 @@
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 
-import { timeToY } from "../utils/calendarUtils";
+import { mapDateToY } from "../utils/calendarUtils";
 
 export function NowIndicator({ now }: { now: Date }) {
-  const { metrics } = useCalendarSettings();
-  const top = timeToY(now, metrics.hourHeight);
+  const { geometry } = useCalendarSettings();
+  const top = mapDateToY(now, geometry);
 
   return (
     <div className="pointer-events-none absolute inset-x-0 z-20" style={{ top }}>

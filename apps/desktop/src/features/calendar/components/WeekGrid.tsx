@@ -17,15 +17,18 @@ function isWeekend(day: Date) {
 }
 
 import { useHeightResize } from "../hooks/useHeightResize";
-import type { CalendarBlock, CalendarMetrics } from "../utils/calendarUtils";
+import type { CalendarBlock, CalendarMetrics, CollapseGeometry } from "../utils/calendarUtils";
 import {
+  buildCollapseGeometry,
   chipFolderStyle,
   computeAllDayEdgeResize,
   formatTimeRange,
+  mapHourToY,
+  mapYToDate,
+  mapYToHour,
   shiftAllDayEnd,
-  snapY,
+  snapYCollapse,
   VISIBLE_HOURS,
-  yToDate,
 } from "../utils/calendarUtils";
 import { AllDaySection } from "./AllDaySection";
 import type { BlockDragStartInfo, BlockResizeStartInfo, DragGhost, ResizeGhost } from "./DayColumn";
@@ -131,23 +134,25 @@ export function WeekGrid({
     }
   }, [rightPanel, containerHeight]);
 
-  // Fit-to-viewport sizes hours so ~FIT_TO_VIEWPORT_HOURS of the day fit in
-  // the visible area (roughly "waking hours"). Anything above or below that
-  // window stays scrollable — otherwise a tall viewport would fit all 24
-  // hours exactly, leaving zero scroll room and breaking the smart-start scroll
-  // to 7am on first open.
-  const FIT_TO_VIEWPORT_HOURS = 16;
+  // Fit-to-viewport sizes hours so the visible "waking hours" middle fills
+  // the available height. With both bands collapsed at the default 6am/10pm
+  // boundaries that's exactly 16 hours; with the bands expanded we still aim
+  // for the middle range, falling back to a min of 16 so an all-expanded grid
+  // remains scrollable instead of collapsing into a fully-shown 24h view that
+  // would leave zero scroll room.
+  const visibleMiddleHours = Math.max(settings.collapse.bottomHour - settings.collapse.topHour, 16);
   const effectiveHourHeight = Math.max(
     settings.metrics.hourHeight,
-    containerHeight / FIT_TO_VIEWPORT_HOURS
+    containerHeight / visibleMiddleHours
   );
+  const geometry: CollapseGeometry = buildCollapseGeometry(settings.collapse, effectiveHourHeight);
   const metrics: CalendarMetrics = {
     compactBlockHeight: effectiveHourHeight / 4,
-    gridHeight: effectiveHourHeight * VISIBLE_HOURS,
+    gridHeight: geometry.totalHeight,
     hourHeight: effectiveHourHeight,
     minResizeHeight: (15 / 60) * effectiveHourHeight,
   };
-  const settingsValue = { ...settings, metrics };
+  const settingsValue = { ...settings, geometry, metrics };
 
   // ── Drag-to-reschedule ──────────────────────────────────────────────────────
   const dragRef = useRef<DragRefState | null>(null);
@@ -241,7 +246,8 @@ export function WeekGrid({
 
   // Initial scroll: restore saved scrollHour, else smart-start at max(7am, now-1h).
   // Persist scroll position as an hour offset (0–24) so the saved value survives
-  // density changes — `scrollTop = scrollHour * hourHeight` regardless of density.
+  // density changes — converted to/from pixels via the collapse-aware mapping
+  // so a saved 9am also lands at 9am after the user toggles a band.
   //
   // Runs once, but deferred until containerHeight is measured — otherwise
   // metrics.hourHeight is the pre-fit-to-viewport base value and scrollTop
@@ -262,8 +268,8 @@ export function WeekGrid({
     const scrollHour = hasUsableSaved
       ? Math.min(saved, VISIBLE_HOURS)
       : Math.max(7, new Date().getHours() - 1);
-    el.scrollTop = scrollHour * metrics.hourHeight;
-  }, [containerHeight, metrics.hourHeight]);
+    el.scrollTop = mapHourToY(scrollHour, geometry);
+  }, [containerHeight, geometry]);
 
   // Persist scrollHour on scroll (debounced).
   useEffect(() => {
@@ -274,7 +280,7 @@ export function WeekGrid({
       if (!el) return;
       if (tid !== null) clearTimeout(tid);
       tid = setTimeout(() => {
-        const scrollHour = el.scrollTop / metrics.hourHeight;
+        const scrollHour = mapYToHour(el.scrollTop, geometry);
         localStorage.setItem(SCROLL_STORAGE_KEY, String(scrollHour));
       }, SCROLL_PERSIST_DEBOUNCE_MS);
     }
@@ -283,7 +289,7 @@ export function WeekGrid({
       el.removeEventListener("scroll", handle);
       if (tid !== null) clearTimeout(tid);
     };
-  }, [metrics.hourHeight]);
+  }, [geometry]);
 
   /**
    * Eats the next window click event in the capture phase.
@@ -313,8 +319,8 @@ export function WeekGrid({
       const day = days[dayIndex];
       if (day) {
         ghostTimeLabelRef.current.textContent = formatTimeRange(
-          yToDate(top, day, metrics.hourHeight),
-          yToDate(top + height, day, metrics.hourHeight)
+          mapYToDate(top, day, geometry),
+          mapYToDate(top + height, day, geometry)
         );
       }
     }
@@ -347,7 +353,7 @@ export function WeekGrid({
 
     disableSelect("dragging-grab");
     dragRef.current = { block, folderColor, grabOffsetY, pageId };
-    const initialTop = snapY(Math.max(0, block.top), metrics.hourHeight);
+    const initialTop = snapYCollapse(Math.max(0, block.top), geometry);
     dragGhostPositionRef.current = { dayIndex, top: initialTop };
     timedAllDayTargetDayIndexRef.current = null;
 
@@ -401,9 +407,9 @@ export function WeekGrid({
       const cursorYInGrid = ev.clientY - scrollRect.top + scrollEl.scrollTop;
       const bH = state.block.height;
       const rawTop = cursorYInGrid - state.grabOffsetY;
-      const ghostTop = snapY(
+      const ghostTop = snapYCollapse(
         Math.max(0, Math.min(metrics.gridHeight - bH, rawTop)),
-        metrics.hourHeight
+        geometry
       );
 
       dragGhostPositionRef.current = { dayIndex: ghostDayIndex, top: ghostTop };
@@ -443,7 +449,7 @@ export function WeekGrid({
       const targetDay = days[ghostPos.dayIndex];
       if (!targetDay) return;
 
-      const newStart = yToDate(ghostPos.top, targetDay, metrics.hourHeight);
+      const newStart = mapYToDate(ghostPos.top, targetDay, geometry);
       const fmt = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm:ss");
 
       // Preserve duration whenever the event actually has one. The previous
@@ -511,7 +517,7 @@ export function WeekGrid({
       const targetDay = days[state.dayIndex];
       if (!targetDay) return;
 
-      const newEnd = yToDate(ghostBottom, targetDay, metrics.hourHeight);
+      const newEnd = mapYToDate(ghostBottom, targetDay, geometry);
       const fmt = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm:ss");
       onReschedule(state.pageId, fmt(state.block.startDate), fmt(newEnd));
     }
@@ -581,9 +587,9 @@ export function WeekGrid({
       }
 
       const cursorYInGrid = ev.clientY - scrollRect.top + scrollEl.scrollTop;
-      const ghostTop = snapY(
+      const ghostTop = snapYCollapse(
         Math.max(0, Math.min(metrics.gridHeight - metrics.compactBlockHeight, cursorYInGrid)),
-        metrics.hourHeight
+        geometry
       );
 
       allDayGhostPositionRef.current = { dayIndex: hoverDayIndex, top: ghostTop };
@@ -632,7 +638,7 @@ export function WeekGrid({
       if (!ghostPos) return;
       const targetDay = days[ghostPos.dayIndex];
       if (!targetDay) return;
-      const newStart = yToDate(ghostPos.top, targetDay, metrics.hourHeight);
+      const newStart = mapYToDate(ghostPos.top, targetDay, geometry);
       onReschedule(state.pageId, format(newStart, "yyyy-MM-dd'T'HH:mm:ss"), undefined);
     }
 
@@ -844,11 +850,11 @@ export function WeekGrid({
       durationMs != null
         ? Math.max((durationMs / 3_600_000) * metrics.hourHeight, metrics.compactBlockHeight)
         : metrics.compactBlockHeight;
-    const top = snapY(
+    const top = snapYCollapse(
       Math.max(0, Math.min(metrics.gridHeight - ghostHeight, cursorYInGrid)),
-      metrics.hourHeight
+      geometry
     );
-    const newStart = yToDate(top, targetDay, metrics.hourHeight);
+    const newStart = mapYToDate(top, targetDay, geometry);
     setExternalPreview({
       dayIndex,
       folderColor,
