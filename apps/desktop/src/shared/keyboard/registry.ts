@@ -1,6 +1,10 @@
 // Central keyboard registry with scopes and "Mod" abstraction
 // Provides: register/unregister, active scopes, and a single event handler
 
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("Keyboard");
+
 export type Binding = {
   id: string;
   combo: string; // e.g., "Mod+Shift+D"
@@ -140,7 +144,7 @@ export const Keyboard = {
         try {
           b.handler();
         } catch (err) {
-          console.error(`Keyboard handler failed for ${b.id}`, err);
+          log.error(`Handler failed for ${b.id}`, err);
         }
         return; // stop at first match in current top scope
       }
@@ -180,9 +184,7 @@ export const Keyboard = {
     for (const b of store.values()) {
       const sig = `${b.scope ?? "global"}::${conflictKey(b.parsed)}`;
       if (sig === signature) {
-        console.warn(
-          `Keyboard: conflict detected for combo ${binding.combo} in scope ${scope} (existing: ${b.id}).`
-        );
+        log.warn(`Conflict for combo ${binding.combo} in scope ${scope} (existing: ${b.id})`);
       }
     }
 

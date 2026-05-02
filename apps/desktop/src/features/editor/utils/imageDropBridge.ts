@@ -7,6 +7,10 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Editor } from "@tiptap/react";
 
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("imageDropBridge");
+
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"];
 
 let activeEditor: Editor | null = null;
@@ -33,7 +37,9 @@ async function insertImageAt(editor: Editor, sourcePath: string, pos: number): P
     editor.view.dispatch(tr);
     return pos + node.nodeSize;
   } catch (e) {
-    console.error("[imageDropBridge] save_asset failed:", e);
+    // Don't pass `e` directly — the Tauri command's error string can echo
+    // the user's source path. Log only a fixed message + error class name.
+    log.error("save_asset failed", e instanceof Error ? e.name : "unknown");
     return pos;
   }
 }
@@ -73,7 +79,7 @@ async function init(): Promise<void> {
     });
   } catch (e) {
     // Non-Tauri env (tests, marketing site) — bridge becomes a no-op.
-    console.warn("[imageDropBridge] init skipped:", e);
+    log.warn("init skipped", e);
   }
 }
 

@@ -132,9 +132,13 @@ pub async fn run(app: AppHandle) {
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
 
+    log::info!("Notification scheduler started");
+
     // Request notification permission on startup. On macOS this triggers
     // the OS permission dialog if not yet determined.
-    let _ = app.notification().request_permission();
+    if let Err(e) = app.notification().request_permission() {
+        log::warn!("Notification permission request failed: {e}");
+    }
 
     loop {
         let now = chrono::Local::now();
@@ -144,7 +148,11 @@ pub async fn run(app: AppHandle) {
             - Duration::from_nanos(nanos_offset.min(secs_until_next_minute * 1_000_000_000));
         tokio::time::sleep(wait).await;
 
-        let _ = check_and_fire(&app).await;
+        if let Err(e) = check_and_fire(&app).await {
+            // Tick failure is recoverable — next tick retries. Surface as
+            // warn so a recurring underlying issue is visible in the log.
+            log::warn!("Scheduler tick failed: {e}");
+        }
     }
 }
 

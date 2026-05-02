@@ -33,4 +33,6 @@ sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
 tokio = { version = "1", features = ["sync"] }
+tauri-plugin-log = "2"
+log = "0.4"
 

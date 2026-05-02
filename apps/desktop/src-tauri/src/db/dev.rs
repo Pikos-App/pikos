@@ -214,31 +214,40 @@ pub async fn get_usage_stats(state: tauri::State<'_, DbState>) -> Result<UsageSt
 pub async fn reset_db(state: tauri::State<'_, DbState>) -> Result<(), String> {
     let pool = state.get_pool().await?;
 
-    sqlx::query("DELETE FROM focus_sessions")
+    let sessions = sqlx::query("DELETE FROM focus_sessions")
         .execute(&pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .rows_affected();
 
-    sqlx::query("DELETE FROM page_schedules")
+    let schedules = sqlx::query("DELETE FROM page_schedules")
         .execute(&pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .rows_affected();
 
-    sqlx::query("DELETE FROM page_recurrence_rules")
+    let rules = sqlx::query("DELETE FROM page_recurrence_rules")
         .execute(&pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .rows_affected();
 
-    sqlx::query("DELETE FROM pages")
+    let pages = sqlx::query("DELETE FROM pages")
         .execute(&pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .rows_affected();
 
-    sqlx::query("DELETE FROM folders")
+    let folders = sqlx::query("DELETE FROM folders")
         .execute(&pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .rows_affected();
 
+    log::info!(
+        "reset_db: deleted {pages} pages, {folders} folders, {schedules} schedules, \
+         {rules} recurrence rules, {sessions} focus sessions"
+    );
     Ok(())
 }
 
@@ -314,6 +323,9 @@ pub async fn export_json(state: tauri::State<'_, DbState>) -> Result<String, Str
     asset_paths.sort();
     asset_paths.dedup();
 
+    let pages_len = pages.len();
+    let folders_len = folders.len();
+
     let export = serde_json::json!({
         "version": 1,
         "exported_at": chrono::Utc::now().to_rfc3339(),
@@ -332,6 +344,10 @@ pub async fn export_json(state: tauri::State<'_, DbState>) -> Result<String, Str
     let json_str = serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?;
     std::fs::write(&dest, json_str).map_err(|e| e.to_string())?;
 
+    log::info!(
+        "export_json: {pages_len} pages, {folders_len} folders → {}",
+        dest.replacen(&home, "~", 1)
+    );
     Ok(dest)
 }
 
@@ -352,6 +368,7 @@ pub async fn backup_db(state: tauri::State<'_, DbState>) -> Result<String, Strin
         .await
         .map_err(|e| e.to_string())?;
 
+    log::info!("backup_db: wrote to {}", dest.replacen(&home, "~", 1));
     Ok(dest)
 }
 
@@ -490,7 +507,8 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
                     let relative = format!("assets/{}", filename);
 
                     if let Err(e) = std::fs::copy(source, &dest) {
-                        eprintln!("Warning: failed to copy asset {}: {}", abs_path, e);
+                        // abs_path is a user asset path — log only the io::ErrorKind, not the path.
+                        log::warn!("export_markdown: failed to copy asset ({})", e.kind());
                         continue;
                     }
                     copied_assets.insert(abs_path.to_string(), relative);
@@ -576,6 +594,12 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
         std::fs::write(&filepath, full).map_err(|e| e.to_string())?;
     }
 
+    log::info!(
+        "export_markdown: {} pages, {} assets → {}",
+        pages.len(),
+        copied_assets.len(),
+        base_dir.replacen(&home, "~", 1)
+    );
     Ok(base_dir)
 }
 
@@ -677,6 +701,11 @@ pub async fn export_csv(state: tauri::State<'_, DbState>) -> Result<String, Stri
 
     std::fs::write(&dest, out).map_err(|e| e.to_string())?;
 
+    log::info!(
+        "export_csv: {} pages → {}",
+        pages.len(),
+        dest.replacen(&home, "~", 1)
+    );
     Ok(dest)
 }
 

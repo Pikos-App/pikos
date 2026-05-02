@@ -124,6 +124,7 @@ pub async fn connect_db(path: String, state: tauri::State<'_, DbState>) -> Resul
         .map_err(|e| e.to_string())?;
 
     *state.0.lock().await = Some(pool);
+    log::info!("DB connected, migrations applied");
     Ok(())
 }
 
@@ -137,6 +138,7 @@ async fn backfill_content_text(pool: &SqlitePool) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
+    let mut backfilled = 0usize;
     for (id, content) in &rows {
         let text = extract_text_from_tiptap(content);
         if !text.is_empty() {
@@ -146,8 +148,12 @@ async fn backfill_content_text(pool: &SqlitePool) -> Result<(), String> {
                 .execute(pool)
                 .await
                 .map_err(|e| e.to_string())?;
+            backfilled += 1;
         }
     }
 
+    if backfilled > 0 {
+        log::info!("Backfilled content_text for {backfilled} pages");
+    }
     Ok(())
 }

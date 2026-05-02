@@ -12,6 +12,9 @@ import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("SearchPalette");
 
 // ── Highlight helper ──────────────────────────────────────────────────────────
 // Splits text into alternating plain / matched segments based on query words.
@@ -137,8 +140,10 @@ export function SearchPalette() {
           setResults(res);
           setCompletedCount(count);
         })
-        .catch((err) => {
-          console.error("search failed:", err);
+        .catch((err: unknown) => {
+          // FTS5 syntax errors echo the user's query. Log only the error
+          // class — never pass `err` directly, never log the query text.
+          log.error("search failed", err instanceof Error ? err.name : "unknown");
         });
     }, 150);
     return () => clearTimeout(timer);

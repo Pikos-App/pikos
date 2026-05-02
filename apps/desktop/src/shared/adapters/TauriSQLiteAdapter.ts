@@ -29,6 +29,10 @@ import type {
 } from "@pikos/core";
 import { invoke as rawInvoke } from "@tauri-apps/api/core";
 
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("IPC-watchdog");
+
 // ─── Dev-mode IPC watchdog ────────────────────────────────────────────────────
 // Catches render-loop bugs that flood the Tauri IPC channel before they crash
 // the webview. If any command fires more than WATCHDOG_THRESHOLD times within
@@ -60,12 +64,11 @@ function watchdog(command: string): void {
   if (now < cooldown) return;
   cooldownUntil.set(command, now + WATCHDOG_COOLDOWN_MS);
 
-  // console.error captures a stack trace in browser devtools; the user can
-  // click through to the effect/component responsible for the runaway calls.
-
-  console.error(
-    `[IPC watchdog] "${command}" fired ${recent.length}× in ${WATCHDOG_WINDOW_MS}ms — likely render-loop bug. ` +
-      `Expand stack trace to locate the caller. Further warnings for this command suppressed for ${WATCHDOG_COOLDOWN_MS}ms.`,
+  // Pass an Error so DevTools renders a clickable stack trace pointing at
+  // the effect/component responsible for the runaway calls.
+  log.error(
+    `"${command}" fired ${recent.length}× in ${WATCHDOG_WINDOW_MS}ms — likely render-loop bug. ` +
+      `Further warnings for this command suppressed for ${WATCHDOG_COOLDOWN_MS}ms.`,
     new Error("IPC flood stack trace")
   );
 }

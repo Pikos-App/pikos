@@ -4,6 +4,10 @@
 
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("Theme");
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ThemeMode = "dark" | "light" | "system";
@@ -93,6 +97,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Sync meta tag on mount (index.html inline script handles .dark class but not meta).
   useEffect(() => {
     applyToDOM(resolvedTheme);
+    log.debug(`Applied theme on mount: mode=${mode} resolved=${resolvedTheme}`);
   }, []);
 
   const value: ThemeContextValue = { mode, resolvedTheme, setTheme };

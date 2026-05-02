@@ -14,6 +14,9 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { ReminderLeadTime } from "@/shared/context/AppSettingsContext";
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("NotificationSettings");
 
 const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
   { id: 0, label: "At time of event" },
@@ -65,7 +68,11 @@ export function NotificationSettings() {
       const granted = await invoke<boolean>("check_notification_permission");
       setPermissionGranted(granted);
       return granted;
-    } catch {
+    } catch (e) {
+      // Tauri unavailable (browser preview) or OS unsupported. Falls back
+      // to "unknown" UI state — surface as warn since the user expected
+      // notifications to work.
+      log.warn("checkPermission failed", e instanceof Error ? e.name : "unknown");
       setPermissionGranted(null);
       return null;
     }
@@ -75,9 +82,12 @@ export function NotificationSettings() {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const granted = await invoke<boolean>("request_notification_permission");
+      log.info(`Permission request: ${granted ? "granted" : "denied"}`);
       setPermissionGranted(granted);
-    } catch {
-      // Platform doesn't support permission requests or Tauri unavailable
+    } catch (e) {
+      // Surface so we don't silently leave the user thinking notifications
+      // are on. Connects to backlog item #18.
+      log.error("requestPermission failed", e instanceof Error ? e.name : "unknown");
     }
   }
 

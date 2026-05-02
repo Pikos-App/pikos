@@ -7,6 +7,10 @@ import Image from "@tiptap/extension-image";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("PikosImage");
+
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"];
 
 function isImageFile(filename: string): boolean {
@@ -57,7 +61,8 @@ async function handleFiles(files: File[], view: EditorView, pos?: number): Promi
         view.dispatch(tr);
       }
     } catch (e) {
-      console.error("[PikosImage] Failed to save asset:", e);
+      // Tauri command error may echo the user's source path. Log class only.
+      log.error("Failed to save asset", e instanceof Error ? e.name : "unknown");
     }
   }
 
@@ -220,6 +225,7 @@ export async function insertImageFromDialog(view: EditorView): Promise<void> {
       view.dispatch(tr);
     }
   } catch (e) {
-    console.error("[PikosImage] Failed to upload from dialog:", e);
+    // Tauri command error may echo the user's source path. Log class only.
+    log.error("Failed to upload from dialog", e instanceof Error ? e.name : "unknown");
   }
 }

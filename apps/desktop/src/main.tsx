@@ -4,6 +4,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import App from "./App";
+import { installGlobalErrorHandlers } from "./shared/logger";
+
+installGlobalErrorHandlers();
 
 // Suppress the WebView's native right-click menu globally.
 // Radix ContextMenu calls preventDefault() on events it handles, so custom

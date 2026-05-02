@@ -1,6 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("ErrorBoundary");
 
 interface Props {
   children: ReactNode;
@@ -19,7 +22,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("[ErrorBoundary]", error, info.componentStack);
+    // Component stack contains React component names only — safe to log.
+    // Error is sanitized (paths scrubbed) by the logger before file write.
+    log.error(`Render error in${info.componentStack ?? ""}`, error);
   }
 
   reset = () => {

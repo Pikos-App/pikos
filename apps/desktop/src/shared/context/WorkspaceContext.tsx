@@ -34,6 +34,9 @@ import { load } from "@tauri-apps/plugin-store";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("WorkspaceContext");
 
 /** Strip heavy fields (content, contentText) to produce a lightweight page summary for lists. */
 function toPageSummary(page: Page): PageSummary {
@@ -373,9 +376,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
         await loadWorkspaceDataRef.current();
         setWorkspace(updated);
+        log.info(`Workspace loaded (id=${ws.id})`);
         listenersRef.current.get("workspace:loaded")?.forEach((h) => h(updated as unknown));
       } catch (e) {
-        console.error("[WorkspaceContext] auto-init failed:", e);
+        log.error("auto-init failed", e);
         setIsLoading(false);
       }
     }
@@ -426,6 +430,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const { seedTutorial } = await import("@/shared/seeds/tutorial");
       const seedResult = await seedTutorial(adapter);
       if (seedResult) {
+        log.info("Tutorial seed planted");
         pendingNavigationRef.current = {
           folderId: seedResult.folderId,
           pageId: seedResult.welcomePageId,
@@ -439,9 +444,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       await loadWorkspaceDataRef.current();
       setWorkspace(ws);
+      log.info(`Workspace created (id=${ws.id})`);
       emit("workspace:loaded", ws);
     } catch (e) {
-      console.error("[WorkspaceContext] selectWorkspace failed:", e);
+      log.error("selectWorkspace failed", e);
       setIsLoading(false);
     }
   }

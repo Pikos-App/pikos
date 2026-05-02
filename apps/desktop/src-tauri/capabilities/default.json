@@ -25,6 +25,7 @@
     "process:allow-restart",
     "updater:default",
     "notification:default",
+    "log:default",
     {
       "identifier": "fs:scope",
       "allow": [

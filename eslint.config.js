@@ -63,6 +63,23 @@ export default tseslint.config(
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
+      "no-console": "error",
+    },
+  },
+  // Tests legitimately spy on console.* (e.g. suppressing React's expected
+  // error logs when asserting hooks throw outside their provider).
+  {
+    files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+    rules: {
+      "no-console": "off",
+    },
+  },
+  // logger.ts is the single allowed console site — it routes dev output to
+  // console.* and prod output to tauri-plugin-log.
+  {
+    files: ["**/shared/logger.ts"],
+    rules: {
+      "no-console": "off",
     },
   },
   // shadcn/ui components export CVA variants alongside components — intentional pattern
