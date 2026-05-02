@@ -395,10 +395,60 @@ appTest("collapse state persists across reload @tier2", async ({ app }) => {
   await expect(app.getByRole("button", { name: "Collapse 10 PM to 12 AM" })).toBeVisible();
 
   await app.reload();
+  // Re-wait for workspace mount before sending the calendar shortcut —
+  // otherwise the keypress can fire while the app shell is still booting and
+  // get dropped before any handler is mounted.
+  await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
   await openCalendarMode(app);
 
   await expect(app.getByRole("button", { name: "Collapse 10 PM to 12 AM" })).toBeVisible();
   await expect(app.getByRole("button", { name: "Expand 10 PM to 12 AM" })).not.toBeVisible();
+});
+
+appTest("clicking a day-column's band overlay also expands the band @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+
+  // Each day column renders its own band-overlay button (one per visible day),
+  // so users can click the empty band area in any column — not just the gutter
+  // chevron — to expand it. They share an aria-label, so target the first.
+  const columnBand = app.getByRole("button", { name: "Expand collapsed early-morning hours" });
+  await expect(columnBand.first()).toBeVisible();
+  await columnBand.first().click();
+
+  // Expansion is global state, so the gutter's collapsed chevron disappears,
+  // every column's band-overlay button is gone, and the gutter exposes the
+  // collapse target instead.
+  await expect(app.getByRole("button", { name: "Expand 12 AM to 6 AM" })).not.toBeVisible();
+  await expect(columnBand).toHaveCount(0);
+  await expect(app.getByRole("button", { name: "Collapse 12 AM to 6 AM" })).toBeVisible();
+});
+
+appTest("dragging the top-boundary handle moves the band's hour @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+
+  // Expand the top band to surface its boundary drag handle.
+  await app.getByRole("button", { name: "Expand 12 AM to 6 AM" }).click();
+  const handle = app.getByRole("separator", { name: "Adjust top collapse boundary" });
+  await expect(handle).toBeVisible();
+
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error("boundary handle missing");
+
+  // Drag down — far enough that even a fit-to-viewport stretched hour height
+  // rounds to at least one whole hour. TimeGutter's drag handler snaps to
+  // whole hours and clamps to the legal range, so the boundary lands on a
+  // discrete hour boundary.
+  const startX = handleBox.x + handleBox.width / 2;
+  const startY = handleBox.y + handleBox.height / 2;
+  await app.mouse.move(startX, startY);
+  await app.mouse.down();
+  await app.mouse.move(startX, startY + 240, { steps: 8 });
+  await app.mouse.up();
+
+  // The gutter's collapse button now reflects the new boundary — anything
+  // strictly past 6 AM is acceptable; pixel ratio depends on density.
+  await expect(app.getByRole("button", { name: "Collapse 12 AM to 6 AM" })).not.toBeVisible();
+  await expect(app.getByRole("button", { name: /^Collapse 12 AM to (?!6 AM)\d/ })).toBeVisible();
 });
 
 appTest("events in a collapsed band render as a clickable +N more pill @tier2", async ({ app }) => {

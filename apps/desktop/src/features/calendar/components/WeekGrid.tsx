@@ -21,6 +21,7 @@ import type { CalendarBlock, CalendarMetrics, CollapseGeometry } from "../utils/
 import {
   buildCollapseGeometry,
   chipFolderStyle,
+  COLLAPSED_BAND_HEIGHT,
   computeAllDayEdgeResize,
   formatTimeRange,
   mapHourToY,
@@ -134,17 +135,20 @@ export function WeekGrid({
     }
   }, [rightPanel, containerHeight]);
 
-  // Fit-to-viewport sizes hours so the visible "waking hours" middle fills
-  // the available height. With both bands collapsed at the default 6am/10pm
-  // boundaries that's exactly 16 hours; with the bands expanded we still aim
-  // for the middle range, falling back to a min of 16 so an all-expanded grid
-  // remains scrollable instead of collapsing into a fully-shown 24h view that
-  // would leave zero scroll room.
-  const visibleMiddleHours = Math.max(settings.collapse.bottomHour - settings.collapse.topHour, 16);
-  const effectiveHourHeight = Math.max(
-    settings.metrics.hourHeight,
-    containerHeight / visibleMiddleHours
-  );
+  // Fit-to-viewport sizes hours so the rendered grid fills the available
+  // height exactly — midnight (or whichever hour ends the visible range)
+  // sits at the bottom edge of the scroll area with no dead space below.
+  // Fixed-height collapsed bands subtract from the available space first so
+  // the per-hour stretch only divides the truly hour-pitched portion.
+  const renderedHours =
+    (settings.collapse.topCollapsed ? 0 : settings.collapse.topHour) +
+    (settings.collapse.bottomHour - settings.collapse.topHour) +
+    (settings.collapse.bottomCollapsed ? 0 : 24 - settings.collapse.bottomHour);
+  const fixedBandTotal =
+    (settings.collapse.topCollapsed ? COLLAPSED_BAND_HEIGHT : 0) +
+    (settings.collapse.bottomCollapsed ? COLLAPSED_BAND_HEIGHT : 0);
+  const fillHourHeight = renderedHours > 0 ? (containerHeight - fixedBandTotal) / renderedHours : 0;
+  const effectiveHourHeight = Math.max(settings.metrics.hourHeight, fillHourHeight);
   const geometry: CollapseGeometry = buildCollapseGeometry(settings.collapse, effectiveHourHeight);
   const metrics: CalendarMetrics = {
     compactBlockHeight: effectiveHourHeight / 4,
@@ -1035,11 +1039,7 @@ export function WeekGrid({
                       );
                     }
                   }}
-                  style={
-                    ghostContent.folderColor
-                      ? chipFolderStyle(ghostContent.folderColor)
-                      : { backgroundColor: "rgba(59,130,246,0.25)", borderColor: "rgb(59,130,246)" }
-                  }
+                  style={chipFolderStyle(ghostContent.folderColor)}
                 >
                   {ghostContent.isCompact ? (
                     <>

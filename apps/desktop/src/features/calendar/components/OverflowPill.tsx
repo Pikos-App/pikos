@@ -30,9 +30,9 @@ export function OverflowPill({ onOpen, pagesById, pill }: OverflowPillProps) {
         <button
           aria-label={`${pill.pageIds.length} more events`}
           className={cn(
-            "absolute z-30 flex items-center justify-center overflow-hidden select-none",
-            "type-ui-sm border border-border/60 bg-popover px-1.5 pb-px leading-none whitespace-nowrap text-foreground",
-            "transition-colors hover:brightness-110",
+            "absolute z-30 flex cursor-pointer items-center justify-center overflow-hidden select-none",
+            "type-ui-sm border border-dashed border-border/60 bg-background px-1.5 pb-px leading-none whitespace-nowrap text-subtle",
+            "transition-colors hover:border-border/80 hover:bg-accent hover:text-foreground",
             "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           )}
           onClick={(e) => e.stopPropagation()}

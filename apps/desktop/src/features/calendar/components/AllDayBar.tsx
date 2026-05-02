@@ -13,7 +13,6 @@ import {
   type AllDayBar as AllDayBarData,
   beginDragThreshold,
   CHIP_BASE_CLASSES,
-  CHIP_DEFAULT_COLOR_CLASSES,
   chipFolderStyle,
 } from "../utils/calendarUtils";
 import { PageBlockPopover } from "./PageBlockPopover";
@@ -112,7 +111,7 @@ export function AllDayBar({
 
   const isDone = page.status === "done";
   const isBeingDragged = draggingPageId === page.id;
-  const chipStyle = folderColor ? chipFolderStyle(folderColor) : undefined;
+  const chipStyle = chipFolderStyle(folderColor);
   // Edge handles only appear on a real (non-continuation) boundary, so a
   // multi-week event that crosses into this view has no left handle here —
   // extending across weeks goes through the popover's date picker.
@@ -127,7 +126,6 @@ export function AllDayBar({
           className={cn(
             "pointer-events-auto absolute flex cursor-default! items-center gap-1",
             CHIP_BASE_CLASSES,
-            !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
             isDone && "opacity-50",
             isBeingDragged && "opacity-40",
             continuesLeft && "rounded-tl-none rounded-bl-none",

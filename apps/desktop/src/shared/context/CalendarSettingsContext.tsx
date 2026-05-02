@@ -2,7 +2,7 @@
 // preferences for the calendar panel. All persisted to localStorage.
 // Consumed by CalendarView + WeekGrid + children.
 
-import { createContext, type ReactNode, useCallback, useContext } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useState } from "react";
 
 import {
   buildCollapseGeometry,
@@ -37,6 +37,11 @@ export interface CalendarSettingsValue {
   setBottomCollapsed: (v: boolean) => void;
   setTopHour: (v: number) => void;
   setBottomHour: (v: number) => void;
+  /** Which collapsed band the cursor is hovering, if any. Synced across the
+   * gutter chevron button and every day-column band overlay so hovering one
+   * lights up the entire band as a single click target. */
+  hoveredBand: "top" | "bottom" | null;
+  setHoveredBand: (v: "top" | "bottom" | null) => void;
 }
 
 export const CalendarSettingsContext = createContext<CalendarSettingsValue | null>(null);
@@ -81,16 +86,21 @@ export function CalendarSettingsProvider({ children }: { children: ReactNode }) 
     [topHour, setBottomHourRaw]
   );
 
+  // Ephemeral, not persisted — pointer-tracking state for the band hover sync.
+  const [hoveredBand, setHoveredBand] = useState<"top" | "bottom" | null>(null);
+
   const value: CalendarSettingsValue = {
     collapse,
     dayCount,
     density,
     geometry,
+    hoveredBand,
     metrics,
     setBottomCollapsed: setBottomCollapsedRaw,
     setBottomHour,
     setDayCount,
     setDensity,
+    setHoveredBand,
     setTopCollapsed: setTopCollapsedRaw,
     setTopHour,
   };

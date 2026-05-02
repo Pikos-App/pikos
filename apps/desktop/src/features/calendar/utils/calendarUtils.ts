@@ -143,6 +143,22 @@ export interface CalendarCollapseConfig {
  * stacked labels (e.g. "12 AM"/"6 AM") plus a chevron remain comfortably legible. */
 export const COLLAPSED_BAND_HEIGHT = 40;
 
+/** Pixel height of the `+N more` pill rendered inside a collapsed band. Floor
+ * keeps the chip readable on narrow bands; ceiling stops it from dominating
+ * tall ones. The pill is centered, so the gap above and below is
+ * `(bandHeight - pillHeight) / 2` — straddling blocks anchor to that gap so
+ * they emerge just past the pill edge. */
+export function collapsedBandPillHeight(bandHeight: number): number {
+  return Math.min(20, Math.max(14, bandHeight - 8));
+}
+
+/** Vertical padding between a collapsed band's edge and its `+N more` pill —
+ * also the offset that straddling blocks slip into the band by, so they read
+ * as "partially in the collapsed time" without overlapping the pill. */
+export function collapsedBandInnerOffset(bandHeight: number): number {
+  return (bandHeight - collapsedBandPillHeight(bandHeight)) / 2;
+}
+
 /** Hard limits the user can drag the bounds to. Top must stay below bottom by
  * at least 1 hour so the middle "waking hours" region never disappears. */
 export const MIN_TOP_HOUR = 0;
@@ -332,10 +348,31 @@ export function remapBlocksForCollapse(
       continue;
     }
 
-    const newTop = mapHourToY(startHour, geometry);
-    const newBottom = mapHourToY(endHour, geometry);
+    // Blocks straddling a collapsed boundary slip just past the band's `+N
+    // more` pill — same vertical padding the pill uses inside the band — so
+    // they all emerge from the same y regardless of start-time-within-band,
+    // while still rendering slightly into the collapsed space to signal that
+    // they're partially in the compressed range. Without this, blocks would
+    // either cascade by start-minute (meaningless on a compressed band) or
+    // sit flush at the boundary (no visual cue that they extend into it).
+    const rawTop = mapHourToY(startHour, geometry);
+    const rawBottom = mapHourToY(endHour, geometry);
+    const straddlesTopBand = config.topCollapsed && startHour < config.topHour;
+    const straddlesBottomBand = config.bottomCollapsed && endHour > config.bottomHour;
+    const newTop = straddlesTopBand
+      ? geometry.topBandHeight - collapsedBandInnerOffset(geometry.topBandHeight) + 1
+      : rawTop;
+    const newBottom = straddlesBottomBand
+      ? geometry.middleEnd + collapsedBandInnerOffset(geometry.bottomBandHeight) - 1
+      : rawBottom;
     const newHeight = Math.max(newBottom - newTop, 4);
-    visible.push({ ...b, height: newHeight, top: newTop });
+    visible.push({
+      ...b,
+      height: newHeight,
+      top: newTop,
+      ...(straddlesTopBand ? { straddlesTopBand: true as const } : {}),
+      ...(straddlesBottomBand ? { straddlesBottomBand: true as const } : {}),
+    });
   }
 
   return { bottomCollapsedPageIds, topCollapsedPageIds, visible };
@@ -351,9 +388,11 @@ export const MIN_TIMED_MINUTES = 15;
 export const CHIP_BASE_CLASSES =
   "type-body-sm h-[19px] overflow-hidden truncate rounded-sm border-l-[2px] px-1.5 leading-none font-medium text-foreground transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" as const;
 
-/** Default chip colors when no folder color is set. */
-export const CHIP_DEFAULT_COLOR_CLASSES =
-  "border-blue-500 bg-blue-500/20 dark:bg-blue-500/25" as const;
+/** Default folder accent (Tailwind blue-500) used when a page has no folder
+ * colour. Routed through the same `--event-color` CSS rule as folder colours
+ * so every block fill is an opaque `color-mix` with the background — no
+ * alpha-blending muddiness when blocks stack. */
+export const DEFAULT_EVENT_COLOR = "rgb(59 130 246)" as const;
 
 // ─── All-day layout constants ────────────────────────────────────────────────
 // Bars in the all-day section are absolutely positioned. Row N sits at
@@ -371,17 +410,17 @@ export const ALL_DAY_ROW_HEIGHT = ALL_DAY_BAR_HEIGHT + ALL_DAY_ROW_GAP;
 export const ALL_DAY_TOP_PADDING = 4;
 
 /**
- * Inline color style for chips when a folder color is present. Sets
- * --event-color so CSS can derive mode-aware background, soft surround
- * border, and full-saturation left-edge accent — see app.css `--event-color`
- * rules. We don't set `borderColor` inline because CSS needs to vary it
- * between sides (left = full, others = softened).
+ * Inline `--event-color` style for chips. CSS derives the mode-aware
+ * background (opaque color-mix with `--background`) and the full-saturation
+ * left-edge accent — see app.css `--event-color` rules. Pages without a
+ * folder colour fall back to DEFAULT_EVENT_COLOR so every chip routes
+ * through the same opaque-fill path.
  *
  * Returns CSSProperties so React's `style` prop accepts the result. The cast
  * is required because custom CSS properties aren't part of CSSProperties.
  */
-export function chipFolderStyle(folderColor: string): CSSProperties {
-  return { "--event-color": folderColor } as CSSProperties;
+export function chipFolderStyle(folderColor?: string | null): CSSProperties {
+  return { "--event-color": folderColor ?? DEFAULT_EVENT_COLOR } as CSSProperties;
 }
 
 // ─── Week helpers ─────────────────────────────────────────────────────────────
@@ -867,6 +906,12 @@ export interface CalendarBlock {
   isContinuationBefore?: boolean;
   /** True when this event extends past the end of this day's grid. */
   isContinuationAfter?: boolean;
+  /** True when the block straddles the top collapsed band (some of its time
+   * falls inside the compressed band). Drives a square top-edge cue. */
+  straddlesTopBand?: boolean;
+  /** True when the block straddles the bottom collapsed band. Drives a square
+   * bottom-edge cue. */
+  straddlesBottomBand?: boolean;
 }
 
 /**
@@ -1286,13 +1331,19 @@ function buildRawBlock(
     Math.ceil(Math.max(durationMinutes, 0) / MIN_TIMED_MINUTES) * MIN_TIMED_MINUTES
   );
   const heightFromDuration = (visualDurationMin / 60) * metrics.hourHeight;
+  // Raw 24h pixel height — `top` is computed in this same coord system via
+  // `timeToY`. `metrics.gridHeight` is the collapse-remapped total (smaller
+  // than raw 24h when bands are collapsed); using it here would clamp end-of-
+  // day events to a y above their `top` and squash them to the 4px floor.
+  // `remapBlocksForCollapse` projects raw → remapped coords downstream.
+  const rawGridHeight = metrics.hourHeight * VISIBLE_HOURS;
   let endY: number;
   if (isContinuationAfter) {
-    endY = metrics.gridHeight;
+    endY = rawGridHeight;
   } else if (isContinuationBefore) {
     endY = timeToY(visualEnd, metrics.hourHeight);
   } else {
-    endY = Math.min(metrics.gridHeight, top + heightFromDuration);
+    endY = Math.min(rawGridHeight, top + heightFromDuration);
   }
   const height = Math.max(endY - top, 4);
   const isCompact = !isContinuationAfter && height < CHIP_STACKED_THRESHOLD;

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronsDownUp, ChevronUp } from "lucide-react";
+import { ChevronsDownUp } from "lucide-react";
 import { useCallback } from "react";
 
 import { cn } from "@/lib/utils";
@@ -24,9 +24,11 @@ export function TimeGutter() {
   const {
     collapse,
     geometry,
+    hoveredBand,
     metrics,
     setBottomCollapsed,
     setBottomHour,
+    setHoveredBand,
     setTopCollapsed,
     setTopHour,
   } = useCalendarSettings();
@@ -75,13 +77,19 @@ export function TimeGutter() {
       {/* ── Top region ─────────────────────────────────────────────────── */}
       {collapse.topCollapsed ? (
         // Compressed band: two endpoint labels + chevron between, click to expand.
+        // Bottom divider matches the day columns so the band/middle seam reads
+        // as one continuous line across gutter and grid. Hover state is synced
+        // via context so hovering any column lights up the gutter too.
         <button
           aria-label={`Expand ${hourLabel(0)} to ${hourLabel(collapse.topHour)}`}
           className={cn(
             "absolute inset-x-0 top-0 flex flex-col items-center justify-between",
-            "py-1 text-foreground/70 hover:bg-foreground/[0.04]"
+            "cursor-pointer border-b border-border/60 py-1 text-foreground/70",
+            hoveredBand === "top" && "bg-foreground/[0.04]"
           )}
           onClick={() => setTopCollapsed(false)}
+          onMouseEnter={() => setHoveredBand("top")}
+          onMouseLeave={() => setHoveredBand(null)}
           style={{ height: geometry.topBandHeight }}
           type="button"
         >
@@ -90,50 +98,51 @@ export function TimeGutter() {
           <span className="type-ui-sm">{hourLabel(collapse.topHour)}</span>
         </button>
       ) : (
-        // Expanded: collapse-up chevron at the very top, hour labels for [0, topHour].
-        <>
-          <button
-            aria-label={`Collapse ${hourLabel(0)} to ${hourLabel(collapse.topHour)}`}
-            className={cn(
-              "absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-sm",
-              "text-subtle hover:bg-foreground/[0.06] hover:text-foreground"
-            )}
-            onClick={() => setTopCollapsed(true)}
-            type="button"
-          >
-            <ChevronUp aria-hidden className="h-3 w-3" strokeWidth={1.5} />
-          </button>
-        </>
+        // Expanded: the full top band area is the click target to collapse.
+        // Hour labels render on top (pointer-events-none) so they don't intercept.
+        <button
+          aria-label={`Collapse ${hourLabel(0)} to ${hourLabel(collapse.topHour)}`}
+          className="absolute inset-x-0 top-0 hover:bg-foreground/[0.04]"
+          onClick={() => setTopCollapsed(true)}
+          style={{ height: geometry.topBandHeight }}
+          type="button"
+        />
       )}
 
       {/* ── Middle hour labels — same placement rule for both states ─── */}
       {middleHours.map((hour) => {
         const y = mapHourToY(hour, geometry);
         // 12 AM at top of grid pins below the edge so it stays visible; every
-        // other label sits above its hour line (-mt-2). When the top band is
-        // collapsed, the first middle label IS the topHour boundary — keep
-        // it pinned just below the band edge (mt-1) so it doesn't overlap
-        // with the band's "Xam" label.
+        // other label sits above its hour line (-mt-2).
         const isTopOfGrid = hour === GRID_START_HOUR;
-        const isFirstAfterCollapsed = collapse.topCollapsed && hour === collapse.topHour;
+        const isBottomOfGrid = hour === GRID_END_HOUR;
         // The bottomHour label, when the bottom is collapsed, is rendered by
         // the bottom band itself — skip it here to avoid duplicates.
         if (collapse.bottomCollapsed && hour === collapse.bottomHour) return null;
         // The topHour label, when the top is collapsed, is rendered by the
         // top band — skip the duplicate here.
         if (collapse.topCollapsed && hour === collapse.topHour) return null;
+        // 12 AM at the bottom of the grid: anchor to the gutter's bottom edge
+        // instead of placing a full-hour-tall box at y=totalHeight. The latter
+        // would extend the scroll area below the visible content and leave
+        // dead space under midnight.
+        if (isBottomOfGrid) {
+          return (
+            <span
+              className="type-ui-sm pointer-events-none absolute right-0 bottom-0 pr-2 text-subtle"
+              key={hour}
+            >
+              {hourLabel(hour)}
+            </span>
+          );
+        }
         return (
           <div
-            className="absolute inset-x-0 flex items-start justify-end pr-2"
+            className="pointer-events-none absolute inset-x-0 flex items-start justify-end pr-2"
             key={hour}
             style={{ height: metrics.hourHeight, top: y }}
           >
-            <span
-              className={cn(
-                "type-ui-sm text-subtle",
-                isTopOfGrid || isFirstAfterCollapsed ? "mt-1" : "-mt-2"
-              )}
-            >
+            <span className={cn("type-ui-sm text-subtle", isTopOfGrid ? "mt-1" : "-mt-2")}>
               {hourLabel(hour)}
             </span>
           </div>
@@ -142,6 +151,8 @@ export function TimeGutter() {
 
       {/* ── Boundary drag handles (only visible when the corresponding
             band is expanded) — let the user adjust X or Y by dragging. */}
+      {/* Drag handle sits on the middle-area side of each boundary so the
+          horizontal line never slices through the "6 AM" / "10 PM" label. */}
       {!collapse.topCollapsed && (
         <div
           aria-label="Adjust top collapse boundary"
@@ -158,7 +169,7 @@ export function TimeGutter() {
           role="separator"
           style={{
             height: 6,
-            top: mapHourToY(collapse.topHour, geometry) - 3,
+            top: mapHourToY(collapse.topHour, geometry) + 6,
           }}
           tabIndex={-1}
         />
@@ -179,7 +190,7 @@ export function TimeGutter() {
           role="separator"
           style={{
             height: 6,
-            top: mapHourToY(collapse.bottomHour, geometry) - 3,
+            top: mapHourToY(collapse.bottomHour, geometry) - 12,
           }}
           tabIndex={-1}
         />
@@ -191,9 +202,12 @@ export function TimeGutter() {
           aria-label={`Expand ${hourLabel(collapse.bottomHour)} to ${hourLabel(0)}`}
           className={cn(
             "absolute inset-x-0 flex flex-col items-center justify-between",
-            "py-1 text-foreground/70 hover:bg-foreground/[0.04]"
+            "cursor-pointer border-t border-border/60 py-1 text-foreground/70",
+            hoveredBand === "bottom" && "bg-foreground/[0.04]"
           )}
           onClick={() => setBottomCollapsed(false)}
+          onMouseEnter={() => setHoveredBand("bottom")}
+          onMouseLeave={() => setHoveredBand(null)}
           style={{ height: geometry.bottomBandHeight, top: geometry.middleEnd }}
           type="button"
         >
@@ -202,18 +216,14 @@ export function TimeGutter() {
           <span className="type-ui-sm">{hourLabel(0)}</span>
         </button>
       ) : (
+        // Expanded: the full bottom band area is the click target to collapse.
         <button
           aria-label={`Collapse ${hourLabel(collapse.bottomHour)} to ${hourLabel(0)}`}
-          className={cn(
-            "absolute right-0.5 flex h-4 w-4 items-center justify-center rounded-sm",
-            "text-subtle hover:bg-foreground/[0.06] hover:text-foreground"
-          )}
+          className="absolute inset-x-0 hover:bg-foreground/[0.04]"
           onClick={() => setBottomCollapsed(true)}
-          style={{ top: geometry.totalHeight - 18 }}
+          style={{ height: geometry.bottomBandHeight, top: geometry.middleEnd }}
           type="button"
-        >
-          <ChevronDown aria-hidden className="h-3 w-3" strokeWidth={1.5} />
-        </button>
+        />
       )}
     </div>
   );

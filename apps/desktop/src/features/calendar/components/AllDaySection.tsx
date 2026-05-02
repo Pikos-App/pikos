@@ -16,6 +16,7 @@ import {
   assignStableAllDayRows,
   barPositionStyle,
   buildAllDayBars,
+  chipFolderStyle,
   firstFreeRowInSpan,
 } from "../utils/calendarUtils";
 import { AllDayBar } from "./AllDayBar";
@@ -127,7 +128,7 @@ export function AllDaySection({
                   aria-label={`All-day events, ${format(day, "EEEE MMMM d")}`}
                   className={cn(
                     "relative min-w-0 flex-1 cursor-cell",
-                    "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border/40 first:before:hidden",
+                    "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border/40",
                     weekend && "bg-white/[0.012]",
                     (isAllDayTarget || isTimedTarget) && "bg-accent/30"
                   )}
@@ -168,8 +169,9 @@ export function AllDaySection({
             {previewBounds && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute rounded-sm border-l-[2px] border-blue-500 bg-blue-500/20"
+                className="pointer-events-none absolute rounded-sm border-l-[2px]"
                 style={{
+                  ...chipFolderStyle(),
                   height: ALL_DAY_BAR_HEIGHT,
                   left: `${(previewBounds.lo / columnCount) * 100}%`,
                   top: previewTopPx,

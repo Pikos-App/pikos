@@ -10,6 +10,7 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import {
   buildDayBlocks,
   chipFolderStyle,
+  collapsedBandPillHeight,
   collapseUnderWidth,
   COMPACT_MODE_WIDTH_PX,
   DRAG_THRESHOLD,
@@ -25,22 +26,25 @@ import { NowIndicator } from "./NowIndicator";
 import { OverflowPill } from "./OverflowPill";
 import { PageBlock } from "./PageBlock";
 
-/** Builds an OverflowPill positioned in the middle of a collapsed time band.
- * The pill is anchored to leftPct=0/widthPct=100 so the "+N more" stays the
- * full width of the column and is easily clickable inside the squished band. */
+/** Builds an OverflowPill for a collapsed time band. Anchored to
+ * leftPct=0/widthPct=100 so "+N more" spans the column's full width inside
+ * the squished band. Top-band pills hug the band's top edge; bottom-band
+ * pills hug the bottom — leaving the band's inner edge clear so the tops of
+ * straddling blocks can intrude visibly without overlapping the pill. */
+const PILL_OUTER_EDGE_PAD = 2;
+
 function makeCollapsedBandPill(
   pageIds: string[],
   bandTop: number,
-  bandHeight: number
+  bandHeight: number,
+  edge: "top" | "bottom"
 ): OverflowPillData {
-  const pillHeight = Math.min(20, Math.max(14, bandHeight - 8));
-  return {
-    height: pillHeight,
-    leftPct: 0,
-    pageIds,
-    top: bandTop + (bandHeight - pillHeight) / 2,
-    widthPct: 100,
-  };
+  const pillHeight = collapsedBandPillHeight(bandHeight);
+  const top =
+    edge === "top"
+      ? bandTop + PILL_OUTER_EDGE_PAD
+      : bandTop + bandHeight - pillHeight - PILL_OUTER_EDGE_PAD;
+  return { height: pillHeight, leftPct: 0, pageIds, top, widthPct: 100 };
 }
 
 export interface BlockDragStartInfo {
@@ -108,7 +112,15 @@ export function DayColumn({
   resizeGhost,
 }: DayColumnProps) {
   const { folders } = useWorkspace();
-  const { collapse, geometry, metrics } = useCalendarSettings();
+  const {
+    collapse,
+    geometry,
+    hoveredBand,
+    metrics,
+    setBottomCollapsed,
+    setHoveredBand,
+    setTopCollapsed,
+  } = useCalendarSettings();
   const folderColorMap = new Map(
     folders.flatMap((f) => (f.color ? [[f.id, f.color] as [string, string]] : []))
   );
@@ -237,18 +249,20 @@ export function DayColumn({
       )}
     >
       {/* Hour + half-hour grid lines — only emitted for the visible (non-
-          collapsed) hour range. The collapsed bands above/below render as a
-          slightly darker stripe so they read as "compressed time". */}
+          collapsed) hour range. Each collapsed band gets a 1px divider at
+          the band/middle boundary so straddling blocks visibly poke through
+          into compressed time, but no separate background tint (the band
+          shares the column's surface). */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         {collapse.topCollapsed && (
           <div
-            className="absolute inset-x-0 top-0 bg-foreground/[0.015]"
+            className="absolute inset-x-0 top-0 border-b border-border/60"
             style={{ height: geometry.topBandHeight }}
           />
         )}
         {collapse.bottomCollapsed && (
           <div
-            className="absolute inset-x-0 bg-foreground/[0.015]"
+            className="absolute inset-x-0 border-t border-border/60"
             style={{ height: geometry.bottomBandHeight, top: geometry.middleEnd }}
           />
         )}
@@ -279,6 +293,49 @@ export function DayColumn({
         ref={containerRef}
         style={{ height: metrics.gridHeight }}
       >
+        {/* Click-to-expand overlays for collapsed bands. Sit at the bottom of
+            the stacking order so straddling blocks and the band's `+N more`
+            pill stay clickable; absorb clicks on the empty band area and
+            expand the band rather than create a hidden-time event. Hover
+            state is synced via context so hovering any column lights up the
+            entire band — gutter included — as a single click target. */}
+        {collapse.topCollapsed && (
+          <button
+            aria-label="Expand collapsed early-morning hours"
+            className={cn(
+              "absolute inset-x-0 top-0 cursor-pointer",
+              hoveredBand === "top" && "bg-foreground/[0.04]"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              setTopCollapsed(false);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseEnter={() => setHoveredBand("top")}
+            onMouseLeave={() => setHoveredBand(null)}
+            style={{ height: geometry.topBandHeight }}
+            type="button"
+          />
+        )}
+        {collapse.bottomCollapsed && (
+          <button
+            aria-label="Expand collapsed late-evening hours"
+            className={cn(
+              "absolute inset-x-0 cursor-pointer",
+              hoveredBand === "bottom" && "bg-foreground/[0.04]"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              setBottomCollapsed(false);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseEnter={() => setHoveredBand("bottom")}
+            onMouseLeave={() => setHoveredBand(null)}
+            style={{ height: geometry.bottomBandHeight, top: geometry.middleEnd }}
+            type="button"
+          />
+        )}
+
         {/* Now indicator */}
         {showNowIndicator && <NowIndicator now={now} />}
 
@@ -286,8 +343,9 @@ export function DayColumn({
         {draft && (
           <div
             aria-hidden
-            className="pointer-events-none absolute rounded-sm border-l-2 border-blue-500 bg-blue-500/20 opacity-75"
+            className="pointer-events-none absolute rounded-sm border-l-2 opacity-75"
             style={{
+              ...chipFolderStyle(),
               height: Math.max(draft.endY - draft.startY, metrics.compactBlockHeight),
               left: 2,
               right: 2,
@@ -311,9 +369,7 @@ export function DayColumn({
               left: 2,
               right: 2,
               top: dragGhost.top,
-              ...(dragGhost.folderColor
-                ? chipFolderStyle(dragGhost.folderColor)
-                : { backgroundColor: "rgba(59,130,246,0.25)", borderColor: "rgb(59,130,246)" }),
+              ...chipFolderStyle(dragGhost.folderColor),
             }}
           >
             {dragGhost.isCompact ? (
@@ -421,7 +477,7 @@ export function DayColumn({
           <OverflowPill
             onOpen={onPageDoubleClick}
             pagesById={pagesById}
-            pill={makeCollapsedBandPill(topCollapsedPageIds, 0, geometry.topBandHeight)}
+            pill={makeCollapsedBandPill(topCollapsedPageIds, 0, geometry.topBandHeight, "top")}
           />
         )}
         {bottomCollapsedPageIds.length > 0 && (
@@ -431,7 +487,8 @@ export function DayColumn({
             pill={makeCollapsedBandPill(
               bottomCollapsedPageIds,
               geometry.middleEnd,
-              geometry.bottomBandHeight
+              geometry.bottomBandHeight,
+              "bottom"
             )}
           />
         )}

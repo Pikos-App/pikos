@@ -13,9 +13,9 @@ import { useRecurringActions } from "../hooks/useRecurringActions";
 import {
   beginDragThreshold,
   CHIP_BASE_CLASSES,
-  CHIP_DEFAULT_COLOR_CLASSES,
   chipFolderStyle,
   crossingMidnightsCount,
+  DEFAULT_EVENT_COLOR,
   formatMultiDayTimeRange,
   formatTimeRange,
   snapY,
@@ -81,6 +81,8 @@ export function PageBlock({
     leftPct,
     page,
     startDate,
+    straddlesBottomBand,
+    straddlesTopBand,
     top,
     widthPct,
   } = block;
@@ -216,7 +218,7 @@ export function PageBlock({
   }
 
   const sharedStyle = {
-    ...(folderColor ? chipFolderStyle(folderColor) : undefined),
+    ...chipFolderStyle(folderColor),
     // Full computed height — adjacent blocks touch directly. The bg-derived
     // outline (see app.css `[data-cal-page-id]`) of A.bottom and B.top
     // coincide at the same pixel and paint as one 1px seam. Cascaded blocks
@@ -241,13 +243,13 @@ export function PageBlock({
   );
   // Checkbox stroke tracks the event's accent (the left-border stripe), not
   // the fill — so it stays legible on muted fills and against any folder
-  // color. Default-blue blocks fall back to blue-500.
+  // color. Same fallback the chip background uses when no folder colour is set.
   const checkbox = isRecurring ? (
     <Repeat2 aria-label="Recurring" className={cn("shrink-0 text-muted-foreground", iconClass)} />
   ) : (
     <TaskCheckbox
       as="span"
-      borderColor={folderColor ?? "rgb(59 130 246)"}
+      borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
       checked={isDone}
       className={cn(iconClass, "cursor-pointer!")}
       onChange={handleCheckboxClick}
@@ -274,11 +276,10 @@ export function PageBlock({
               "absolute select-none",
               CHIP_BASE_CLASSES,
               "flex items-center gap-1 rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs",
-              !folderColor && CHIP_DEFAULT_COLOR_CLASSES,
               isDone && "opacity-50",
               isHighlighted && "animate-highlight-flash",
-              isContinuationBefore && "rounded-tl-none rounded-tr-none",
-              isContinuationAfter && "rounded-br-none rounded-bl-none",
+              (isContinuationBefore || straddlesTopBand) && "rounded-tl-none rounded-tr-none",
+              (isContinuationAfter || straddlesBottomBand) && "rounded-br-none rounded-bl-none",
               isResizing
                 ? "cursor-row-resize!"
                 : isDragging
@@ -310,7 +311,6 @@ export function PageBlock({
             aria-label={`${page.title || "Untitled"}, ${timeLabel}`}
             className={cn(
               "absolute flex flex-col items-start overflow-hidden rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs border-l-2 px-1.5 py-0.5 select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-              !folderColor && "border-blue-500 bg-blue-500/20 dark:bg-blue-500/25",
               isDone
                 ? "opacity-50"
                 : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
@@ -320,8 +320,8 @@ export function PageBlock({
                 : isDragging
                   ? "cursor-grabbing! opacity-40"
                   : "cursor-default!",
-              isContinuationBefore && "rounded-tl-none rounded-tr-none",
-              isContinuationAfter && "rounded-br-none rounded-bl-none"
+              (isContinuationBefore || straddlesTopBand) && "rounded-tl-none rounded-tr-none",
+              (isContinuationAfter || straddlesBottomBand) && "rounded-br-none rounded-bl-none"
             )}
             data-cal-page-id={page.id}
             onClick={handleClick}

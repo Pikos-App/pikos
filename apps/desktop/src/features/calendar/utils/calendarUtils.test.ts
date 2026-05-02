@@ -14,6 +14,9 @@ import {
   clampBottomHour,
   clampDayCount,
   clampTopHour,
+  COLLAPSED_BAND_HEIGHT,
+  collapsedBandInnerOffset,
+  collapsedBandPillHeight,
   collapseUnderWidth,
   COMPACT_BLOCK_HEIGHT,
   computeAllDayEdgeResize,
@@ -252,9 +255,14 @@ describe("weekEnd", () => {
 // ─── chipFolderStyle ────────────────────────────────────────────────────────
 
 describe("chipFolderStyle", () => {
-  it("returns --event-color CSS property", () => {
+  it("returns --event-color CSS property when a folder color is provided", () => {
     const style = chipFolderStyle("#ff0000") as Record<string, string>;
     expect(style["--event-color"]).toBe("#ff0000");
+  });
+
+  it("falls back to the default event color when none is provided", () => {
+    const style = chipFolderStyle() as Record<string, string>;
+    expect(style["--event-color"]).toBeTruthy();
   });
 });
 
@@ -2081,14 +2089,48 @@ describe("remapBlocksForCollapse — boundary cases", () => {
     };
   }
 
-  it("block straddling top boundary stays visible with rewritten top/height", () => {
-    // event 5am-9am: starts in collapsed top band, ends in middle.
+  it("block straddling top boundary clamps top to just past the band's pill", () => {
+    // event 5am-9am: starts in collapsed top band, ends in middle. The block's
+    // visual top sits 1px below the pill's bottom edge so straddling events all
+    // emerge from the same y while still rendering slightly into the band.
+    const expectedTop = g.topBandHeight - collapsedBandInnerOffset(g.topBandHeight) + 1;
     const r = remapBlocksForCollapse([block(64 * 5, 64 * 4, "boundary")], g);
     expect(r.visible).toHaveLength(1);
     expect(r.topCollapsedPageIds).toEqual([]);
     const v = r.visible[0]!;
-    expect(v.top).toBeCloseTo((5 / 6) * 40, 5);
+    expect(v.top).toBe(expectedTop);
     expect(v.top + v.height).toBeCloseTo(g.middleStart + 3 * 64, 5);
+  });
+
+  it("multiple top-straddling blocks share the same visual top", () => {
+    // 5:00–8:00, 5:15–6:15, 5:30–6:30, 5:45–6:45 should all start at the same
+    // anchor below the pill, not cascade by start-minute within the band.
+    const expectedTop = g.topBandHeight - collapsedBandInnerOffset(g.topBandHeight) + 1;
+    const r = remapBlocksForCollapse(
+      [
+        block(64 * 5, 64 * 3, "a"),
+        block(64 * 5.25, 64, "b"),
+        block(64 * 5.5, 64, "c"),
+        block(64 * 5.75, 64, "d"),
+      ],
+      g
+    );
+    expect(r.visible).toHaveLength(4);
+    for (const v of r.visible) {
+      expect(v.top).toBe(expectedTop);
+    }
+  });
+
+  it("block straddling bottom boundary clamps bottom to just past the band's pill", () => {
+    // event 21:00–24:00: starts in middle, ends in collapsed bottom band. The
+    // block's visual bottom mirrors the top: 1px above the pill's top edge.
+    const expectedBottom = g.middleEnd + collapsedBandInnerOffset(g.bottomBandHeight) - 1;
+    const r = remapBlocksForCollapse([block(64 * 21, 64 * 3, "late")], g);
+    expect(r.visible).toHaveLength(1);
+    expect(r.bottomCollapsedPageIds).toEqual([]);
+    const v = r.visible[0]!;
+    expect(v.top).toBe(g.middleStart + 15 * 64);
+    expect(v.top + v.height).toBe(expectedBottom);
   });
 
   it("block straddling bottom boundary stays visible", () => {
@@ -2130,5 +2172,65 @@ describe("remapBlocksForCollapse — boundary cases", () => {
       g
     );
     expect(r.topCollapsedPageIds).toEqual(["first", "second", "third"]);
+  });
+
+  it("tags top-straddling blocks with straddlesTopBand", () => {
+    const r = remapBlocksForCollapse([block(64 * 5, 64 * 4, "boundary")], g);
+    expect(r.visible[0]!.straddlesTopBand).toBe(true);
+    expect(r.visible[0]!.straddlesBottomBand).toBeUndefined();
+  });
+
+  it("tags bottom-straddling blocks with straddlesBottomBand", () => {
+    const r = remapBlocksForCollapse([block(64 * 21, 64 * 3, "late")], g);
+    expect(r.visible[0]!.straddlesBottomBand).toBe(true);
+    expect(r.visible[0]!.straddlesTopBand).toBeUndefined();
+  });
+
+  it("a 24h continuation segment straddles both bands", () => {
+    // Multi-day continuation: top=0, height=24h. Both straddle flags set so
+    // top+bottom corners square (matching the existing isContinuation* path).
+    const r = remapBlocksForCollapse([block(0, 64 * 24, "all-day-timed")], g);
+    expect(r.visible).toHaveLength(1);
+    expect(r.visible[0]!.straddlesTopBand).toBe(true);
+    expect(r.visible[0]!.straddlesBottomBand).toBe(true);
+  });
+
+  it("blocks fully in middle range have no straddle flags", () => {
+    const r = remapBlocksForCollapse([block(64 * 9, 64, "middle")], g);
+    expect(r.visible[0]!.straddlesTopBand).toBeUndefined();
+    expect(r.visible[0]!.straddlesBottomBand).toBeUndefined();
+  });
+});
+
+// ─── collapsedBandPillHeight / collapsedBandInnerOffset ──────────────────────
+
+describe("collapsedBandPillHeight", () => {
+  it("returns the default band's pill height inside the [14, 20] envelope", () => {
+    const h = collapsedBandPillHeight(COLLAPSED_BAND_HEIGHT);
+    expect(h).toBeGreaterThanOrEqual(14);
+    expect(h).toBeLessThanOrEqual(20);
+  });
+
+  it("clamps to a 14px floor for very narrow bands", () => {
+    expect(collapsedBandPillHeight(10)).toBe(14);
+    expect(collapsedBandPillHeight(0)).toBe(14);
+  });
+
+  it("clamps to a 20px ceiling for tall bands", () => {
+    expect(collapsedBandPillHeight(60)).toBe(20);
+    expect(collapsedBandPillHeight(200)).toBe(20);
+  });
+});
+
+describe("collapsedBandInnerOffset", () => {
+  it("equals the symmetric padding on each side of the centered pill", () => {
+    const bandHeight = COLLAPSED_BAND_HEIGHT;
+    const pillHeight = collapsedBandPillHeight(bandHeight);
+    expect(collapsedBandInnerOffset(bandHeight)).toBe((bandHeight - pillHeight) / 2);
+  });
+
+  it("never goes negative — pill height is clamped against the band height", () => {
+    expect(collapsedBandInnerOffset(14)).toBeGreaterThanOrEqual(0);
+    expect(collapsedBandInnerOffset(40)).toBeGreaterThanOrEqual(0);
   });
 });
