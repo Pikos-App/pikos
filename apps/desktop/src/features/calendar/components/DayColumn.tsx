@@ -16,12 +16,32 @@ import {
   formatTimeRange,
   GRID_END_HOUR,
   GRID_START_HOUR,
-  yToDate,
+  mapHourToY,
+  mapYToDate,
+  remapBlocksForCollapse,
 } from "../utils/calendarUtils";
-import type { CalendarBlock } from "../utils/calendarUtils";
+import type { CalendarBlock, OverflowPill as OverflowPillData } from "../utils/calendarUtils";
 import { NowIndicator } from "./NowIndicator";
 import { OverflowPill } from "./OverflowPill";
 import { PageBlock } from "./PageBlock";
+
+/** Builds an OverflowPill positioned in the middle of a collapsed time band.
+ * The pill is anchored to leftPct=0/widthPct=100 so the "+N more" stays the
+ * full width of the column and is easily clickable inside the squished band. */
+function makeCollapsedBandPill(
+  pageIds: string[],
+  bandTop: number,
+  bandHeight: number
+): OverflowPillData {
+  const pillHeight = Math.min(20, Math.max(14, bandHeight - 8));
+  return {
+    height: pillHeight,
+    leftPct: 0,
+    pageIds,
+    top: bandTop + (bandHeight - pillHeight) / 2,
+    widthPct: 100,
+  };
+}
 
 export interface BlockDragStartInfo {
   pageId: string;
@@ -88,22 +108,31 @@ export function DayColumn({
   resizeGhost,
 }: DayColumnProps) {
   const { folders } = useWorkspace();
-  const { metrics } = useCalendarSettings();
+  const { collapse, geometry, metrics } = useCalendarSettings();
   const folderColorMap = new Map(
     folders.flatMap((f) => (f.color ? [[f.id, f.color] as [string, string]] : []))
   );
 
-  const blocks = buildDayBlocks(pages, day, metrics);
+  const rawBlocks = buildDayBlocks(pages, day, metrics);
+  const {
+    bottomCollapsedPageIds,
+    topCollapsedPageIds,
+    visible: blocks,
+  } = remapBlocksForCollapse(rawBlocks, geometry);
   const showNowIndicator = isCurrentWeek && isSameDay(now, day);
   const weekend = day.getDay() === 0 || day.getDay() === 6;
 
   // Minimum drag height in px — enforces 15-min minimum on drag-create (scales with density).
   const minDragHeight = metrics.minResizeHeight;
 
-  // Hour and half-hour grid lines
+  // Hour and half-hour grid lines — only the visible (non-collapsed) hour
+  // range gets gridlines; the collapsed bands render as solid stripes via
+  // the dim overlay below.
+  const hourLineFirst = collapse.topCollapsed ? collapse.topHour : GRID_START_HOUR;
+  const hourLineLast = collapse.bottomCollapsed ? collapse.bottomHour : GRID_END_HOUR;
   const hours = Array.from(
-    { length: GRID_END_HOUR - GRID_START_HOUR },
-    (_, i) => GRID_START_HOUR + i
+    { length: hourLineLast - hourLineFirst },
+    (_, i) => hourLineFirst + i
   );
 
   // Ref to the absolutely-positioned block container (used for Y offset calculation).
@@ -181,11 +210,11 @@ export function DayColumn({
 
       const currentRect = containerRef.current?.getBoundingClientRect();
       const upY = currentRect ? ev.clientY - currentRect.top : mouseDownY;
-      const start = yToDate(mouseDownY, day, metrics.hourHeight);
+      const start = mapYToDate(mouseDownY, day, geometry);
 
       if (isDragging) {
         const endY = Math.max(upY, mouseDownY + minDragHeight);
-        const end = yToDate(endY, day, metrics.hourHeight);
+        const end = mapYToDate(endY, day, geometry);
         void onCreatePage(day, start, end > start ? end : undefined);
       } else {
         // Single click — only create when the y position is in empty grid.
@@ -210,15 +239,30 @@ export function DayColumn({
         weekend ? "bg-white/[0.012]" : ""
       )}
     >
-      {/* Hour + half-hour grid lines */}
+      {/* Hour + half-hour grid lines — only emitted for the visible (non-
+          collapsed) hour range. The collapsed bands above/below render as a
+          slightly darker stripe so they read as "compressed time". */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
+        {collapse.topCollapsed && (
+          <div
+            className="absolute inset-x-0 top-0 bg-foreground/[0.015]"
+            style={{ height: geometry.topBandHeight }}
+          />
+        )}
+        {collapse.bottomCollapsed && (
+          <div
+            className="absolute inset-x-0 bg-foreground/[0.015]"
+            style={{ height: geometry.bottomBandHeight, top: geometry.middleEnd }}
+          />
+        )}
         {hours.map((hour) => (
           <div
             className="absolute inset-x-0"
             key={hour}
-            style={{ height: metrics.hourHeight, top: hour * metrics.hourHeight }}
+            style={{ height: metrics.hourHeight, top: mapHourToY(hour, geometry) }}
           >
-            {/* Hour line — skipped for the first row; its top edge is the grid boundary. */}
+            {/* Hour line — skipped for the very first row of the grid (its top
+                edge is the grid boundary). Always drawn at internal hours. */}
             {hour !== GRID_START_HOUR && (
               <div className="absolute inset-x-0 top-0 border-t border-border/40" />
             )}
@@ -315,8 +359,8 @@ export function DayColumn({
                 {dragGhost.height >= 40 && (
                   <p className="type-ui-sm mt-0.5 truncate text-subtle">
                     {formatTimeRange(
-                      yToDate(dragGhost.top, day, metrics.hourHeight),
-                      yToDate(dragGhost.top + dragGhost.height, day, metrics.hourHeight)
+                      mapYToDate(dragGhost.top, day, geometry),
+                      mapYToDate(dragGhost.top + dragGhost.height, day, geometry)
                     )}
                   </p>
                 )}
@@ -371,6 +415,29 @@ export function DayColumn({
           );
         })}
         {pill && <OverflowPill onOpen={onPageDoubleClick} pagesById={pagesById} pill={pill} />}
+
+        {/* Collapsed-band overflow pills — one per band when there are pages
+            whose entire span sits inside a collapsed time range. Anchored to
+            the band's pixel slice so the chip is centered vertically inside
+            the compressed band. */}
+        {topCollapsedPageIds.length > 0 && (
+          <OverflowPill
+            onOpen={onPageDoubleClick}
+            pagesById={pagesById}
+            pill={makeCollapsedBandPill(topCollapsedPageIds, 0, geometry.topBandHeight)}
+          />
+        )}
+        {bottomCollapsedPageIds.length > 0 && (
+          <OverflowPill
+            onOpen={onPageDoubleClick}
+            pagesById={pagesById}
+            pill={makeCollapsedBandPill(
+              bottomCollapsedPageIds,
+              geometry.middleEnd,
+              geometry.bottomBandHeight
+            )}
+          />
+        )}
       </div>
     </div>
   );
