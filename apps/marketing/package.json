@@ -9,7 +9,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check",
-    "lint": "echo 'No lint configured for marketing (Astro files, not React)'"
+    "lint": "echo 'No lint configured for marketing (Astro files, not React)'",
+    "build:og": "node scripts/build-og.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.18",
