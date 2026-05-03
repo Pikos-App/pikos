@@ -58,7 +58,7 @@ export function ConfirmDialog({
           <AlertDialogAction
             className={cn(
               variant === "destructive" &&
-                "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                "text-destructive-foreground bg-destructive hover:bg-destructive/90"
             )}
             disabled={busy}
             onClick={(e) => {

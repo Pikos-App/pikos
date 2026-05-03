@@ -136,11 +136,7 @@ function AppShell() {
       <SettingsPage />
       <QuickAddDialog />
       <SearchPalette />
-      <Toast
-        duration={UNDO_TOAST_DURATION_MS}
-        items={toastItems}
-        onDismiss={handleToastDismiss}
-      />
+      <Toast duration={UNDO_TOAST_DURATION_MS} items={toastItems} onDismiss={handleToastDismiss} />
       <UpdateDialog updater={updater} />
     </>
   );
