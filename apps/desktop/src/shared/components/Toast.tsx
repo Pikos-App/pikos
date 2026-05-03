@@ -1,20 +1,29 @@
-// UndoToast — animated toast with undo action.
-// Auto-dismisses after `duration` ms. Pauses dismissal while the mouse is over the toast.
+// Toast — animated transient notification with optional inline action.
+// Auto-dismisses after `duration` ms. Pauses dismissal while the mouse is over
+// the toast. Pass an `action` to render a clickable button (e.g. "Undo");
+// omit it for a non-actionable notice.
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
-export interface UndoToastItem {
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
+export interface ToastItem {
   id: string;
   label: string;
   /** Per-item duration override. Falls back to the component-level `duration` prop. */
   duration?: number;
+  /** Optional action button. Action's onClick is responsible for any cleanup. */
+  action?: ToastAction;
 }
 
-interface UndoToastProps {
-  items: UndoToastItem[];
+interface ToastProps {
+  items: ToastItem[];
   duration?: number;
-  onUndo: (id: string) => void;
+  /** Fires when the timer expires (no action taken). */
   onDismiss: (id: string) => void;
 }
 
@@ -22,11 +31,9 @@ function SingleToast({
   duration: defaultDuration = 5000,
   item,
   onDismiss,
-  onUndo,
 }: {
-  item: UndoToastItem;
+  item: ToastItem;
   duration: number;
-  onUndo: (id: string) => void;
   onDismiss: (id: string) => void;
 }) {
   const duration = item.duration ?? defaultDuration;
@@ -40,9 +47,9 @@ function SingleToast({
   });
 
   // Keep callbacks in a ref so the RAF loop always sees the latest versions
-  const callbacksRef = useRef({ onDismiss, onUndo });
+  const callbacksRef = useRef({ action: item.action, onDismiss });
   useEffect(() => {
-    callbacksRef.current = { onDismiss, onUndo };
+    callbacksRef.current = { action: item.action, onDismiss };
   });
 
   useEffect(() => {
@@ -92,36 +99,38 @@ function SingleToast({
     stateRef.current.startTime = null;
   }
 
-  function handleUndo() {
+  function handleAction() {
     const s = stateRef.current;
     if (s.dismissed) return;
     s.dismissed = true;
     if (s.raf !== null) cancelAnimationFrame(s.raf);
-    onUndo(item.id);
+    item.action?.onClick();
   }
+
+  const action = item.action;
 
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      aria-label={`Deleted \u201c${item.label || "Untitled"}\u201d`}
+      aria-label={item.label}
       className="relative flex w-80 items-center gap-3 overflow-hidden rounded-lg border border-border bg-popover px-3 py-2.5 shadow-lg"
       exit={{ opacity: 0, y: 8 }}
       initial={{ opacity: 0, y: 8 }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      role="alert"
+      role={action ? "alert" : "status"}
       transition={{ duration: 0.18 }}
     >
-      <span className="flex-1 truncate text-sm text-foreground">
-        Deleted <span className="font-medium">&ldquo;{item.label || "Untitled"}&rdquo;</span>
-      </span>
-      <button
-        aria-label={`Undo delete \u201c${item.label || "Untitled"}\u201d`}
-        className="shrink-0 text-xs font-medium text-primary hover:text-primary/80"
-        onClick={handleUndo}
-      >
-        Undo
-      </button>
+      <span className="flex-1 truncate text-sm text-foreground">{item.label}</span>
+      {action && (
+        <button
+          aria-label={action.label}
+          className="shrink-0 text-xs font-medium text-primary hover:text-primary/80"
+          onClick={handleAction}
+        >
+          {action.label}
+        </button>
+      )}
       {/* Progress bar */}
       <div className="absolute bottom-0 left-0 h-[2px] w-full bg-primary/20">
         <div
@@ -133,13 +142,13 @@ function SingleToast({
   );
 }
 
-export function UndoToast({ duration = 5000, items, onDismiss, onUndo }: UndoToastProps) {
+export function Toast({ duration = 5000, items, onDismiss }: ToastProps) {
   return (
     <div className="pointer-events-none fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2">
       <AnimatePresence mode="popLayout">
         {items.map((item) => (
           <div className="pointer-events-auto" key={item.id}>
-            <SingleToast duration={duration} item={item} onDismiss={onDismiss} onUndo={onUndo} />
+            <SingleToast duration={duration} item={item} onDismiss={onDismiss} />
           </div>
         ))}
       </AnimatePresence>

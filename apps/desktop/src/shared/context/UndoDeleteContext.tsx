@@ -2,13 +2,15 @@
 
 // UndoDeleteContext — app-wide deferred page/folder deletion with undo.
 // Items are hidden from the UI immediately; the real DB delete fires when the
-// UndoToast timer expires (onDismiss). Undo cancels the pending delete.
-// Deleting the active page also clears the editor — no caller-side bookkeeping.
+// toast timer expires (onDismiss). Clicking the toast's Undo action cancels the
+// pending delete. Deleting the active page also clears the editor — no
+// caller-side bookkeeping. Also exposes generic helpers (`showNotice`,
+// `requestUndoableAction`) that ride the same toast surface.
 
 import type { Folder, PageSummary } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
-import type { UndoToastItem } from "@/shared/components/UndoToast";
+import type { ToastItem } from "@/shared/components/Toast";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
@@ -21,21 +23,23 @@ export interface UndoDeleteContextValue {
   hiddenPageIds: Set<string>;
   /** Set of folder IDs currently pending deletion — filter these from all views. */
   hiddenFolderIds: Set<string>;
-  /** Items to render in the UndoToast. */
-  undoItems: UndoToastItem[];
-  /** Called by UndoToast when the visual timer expires — commits the real DB delete. */
-  handleUndoDismiss: (id: string) => void;
-  /** Called by UndoToast when the user clicks Undo — restores the item. */
-  handleUndoDelete: (id: string) => void;
+  /** Items to render in the global Toast surface. */
+  toastItems: ToastItem[];
+  /** Called by Toast when the visual timer expires — commits pending deletes. */
+  handleToastDismiss: (id: string) => void;
 
   /** Generic undoable action — shows a toast, calls undo callback if user clicks Undo. */
   requestUndoableAction: (id: string, label: string, undoFn: () => void) => void;
+
+  /** Non-reversible confirmation — shows a toast with no action button. */
+  showNotice: (label: string, durationMs?: number) => void;
 
   // Backwards-compat alias
   /** @deprecated Use hiddenPageIds instead. */
   hiddenIds: Set<string>;
 }
 
+const NOTICE_PREFIX = "notice:";
 const FOLDER_UNDO_PREFIX = "folder:";
 
 const UndoDeleteContext = createContext<UndoDeleteContextValue | null>(null);
@@ -47,12 +51,40 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
   const pendingDeleteIds = useRef<Set<string>>(new Set());
   const [hiddenPageIds, setHiddenPageIds] = useState<Set<string>>(new Set());
   const [hiddenFolderIds, setHiddenFolderIds] = useState<Set<string>>(new Set());
-  const [undoItems, setUndoItems] = useState<UndoToastItem[]>([]);
-  // Generic undoable action callbacks, keyed by undo item ID
+  const [toastItems, setToastItems] = useState<ToastItem[]>([]);
+  // Generic undoable action callbacks, keyed by toast item ID
   const undoCallbacks = useRef<Map<string, () => void>>(new Map());
 
   // Track which folder IDs are pending so we know how to undo
   const pendingFolderIds = useRef<Set<string>>(new Set());
+
+  function removeToast(id: string) {
+    setToastItems((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  function undoPage(id: string) {
+    pendingDeleteIds.current.delete(id);
+    setHiddenPageIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    void restorePage(id);
+    removeToast(id);
+  }
+
+  function undoFolder(undoId: string) {
+    pendingDeleteIds.current.delete(undoId);
+    const folderId = undoId.slice(FOLDER_UNDO_PREFIX.length);
+    pendingFolderIds.current.delete(folderId);
+    setHiddenFolderIds((prev) => {
+      const next = new Set(prev);
+      next.delete(folderId);
+      return next;
+    });
+    void restoreFolder(folderId);
+    removeToast(undoId);
+  }
 
   function requestDeletePage(page: Pick<PageSummary, "id" | "title">) {
     if (pendingDeleteIds.current.has(page.id)) return;
@@ -61,7 +93,15 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     // editor keeps rendering a stale page that no longer exists in any list.
     if (activePageId === page.id) setActivePage(null);
     setHiddenPageIds((prev) => new Set([...prev, page.id]));
-    setUndoItems((prev) => [...prev, { id: page.id, label: page.title }]);
+    const title = page.title || "Untitled";
+    setToastItems((prev) => [
+      ...prev,
+      {
+        action: { label: "Undo", onClick: () => undoPage(page.id) },
+        id: page.id,
+        label: `Deleted “${title}”`,
+      },
+    ]);
     // Soft-delete immediately — page disappears from all DB queries
     void softDeletePage(page.id);
   }
@@ -77,46 +117,25 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
     if (activePage && activePage.folderId === folder.id) setActivePage(null);
     setHiddenFolderIds((prev) => new Set([...prev, folder.id]));
     const suffix = pageCount > 0 ? ` (${pageCount} ${pageCount === 1 ? "page" : "pages"})` : "";
-    setUndoItems((prev) => [
+    setToastItems((prev) => [
       ...prev,
-      { duration: 16000, id: undoId, label: `${folder.name}${suffix}` },
+      {
+        action: { label: "Undo", onClick: () => undoFolder(undoId) },
+        duration: 16000,
+        id: undoId,
+        label: `Deleted “${folder.name}${suffix}”`,
+      },
     ]);
     // Soft-delete folder + all its pages immediately
     void softDeleteFolder(folder.id);
   }
 
-  function handleUndoDismiss(id: string) {
+  function handleToastDismiss(id: string) {
     pendingDeleteIds.current.delete(id);
     undoCallbacks.current.delete(id);
 
-    if (id.startsWith(FOLDER_UNDO_PREFIX)) {
-      const folderId = id.slice(FOLDER_UNDO_PREFIX.length);
-      pendingFolderIds.current.delete(folderId);
-      setHiddenFolderIds((prev) => {
-        const next = new Set(prev);
-        next.delete(folderId);
-        return next;
-      });
-    } else {
-      setHiddenPageIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-
-    setUndoItems((prev) => prev.filter((item) => item.id !== id));
-  }
-
-  function handleUndoDelete(id: string) {
-    pendingDeleteIds.current.delete(id);
-
-    // Check for generic undoable action first
-    const cb = undoCallbacks.current.get(id);
-    if (cb) {
-      undoCallbacks.current.delete(id);
-      cb();
-      setUndoItems((prev) => prev.filter((item) => item.id !== id));
+    if (id.startsWith(NOTICE_PREFIX)) {
+      removeToast(id);
       return;
     }
 
@@ -128,35 +147,56 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
         next.delete(folderId);
         return next;
       });
-      void restoreFolder(folderId);
     } else {
       setHiddenPageIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
         return next;
       });
-      void restorePage(id);
     }
 
-    setUndoItems((prev) => prev.filter((item) => item.id !== id));
+    removeToast(id);
   }
 
   function requestUndoableAction(id: string, label: string, undoFn: () => void) {
     pendingDeleteIds.current.add(id);
     undoCallbacks.current.set(id, undoFn);
-    setUndoItems((prev) => [...prev, { id, label }]);
+    setToastItems((prev) => [
+      ...prev,
+      {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            pendingDeleteIds.current.delete(id);
+            undoCallbacks.current.delete(id);
+            undoFn();
+            removeToast(id);
+          },
+        },
+        id,
+        label,
+      },
+    ]);
+  }
+
+  function showNotice(label: string, durationMs?: number) {
+    const id = `${NOTICE_PREFIX}${crypto.randomUUID()}`;
+    setToastItems((prev) => [
+      ...prev,
+      { id, label, ...(durationMs !== undefined ? { duration: durationMs } : {}) },
+    ]);
   }
 
   const value: UndoDeleteContextValue = {
-    handleUndoDelete,
-    handleUndoDismiss,
+    handleToastDismiss,
     hiddenFolderIds,
     hiddenIds: hiddenPageIds,
     hiddenPageIds,
     requestDeleteFolder,
     requestDeletePage,
     requestUndoableAction,
-    undoItems,
+    showNotice,
+    toastItems,
   };
 
   return <UndoDeleteContext.Provider value={value}>{children}</UndoDeleteContext.Provider>;

@@ -56,7 +56,7 @@ afterEach(() => {
 // ─── Page deletion ───────────────────────────────────────────────────────────
 
 describe("requestDeletePage", () => {
-  it("hides the page and creates an undo item", async () => {
+  it("hides the page and creates a toast item with an Undo action", async () => {
     const { hook, pageId } = await setup();
 
     act(() => {
@@ -65,7 +65,12 @@ describe("requestDeletePage", () => {
 
     expect(hook.result.current.undo.hiddenPageIds.has(pageId)).toBe(true);
     expect(hook.result.current.undo.hiddenIds.has(pageId)).toBe(true);
-    expect(hook.result.current.undo.undoItems).toEqual([{ id: pageId, label: "Test Page" }]);
+    const items = hook.result.current.undo.toastItems;
+    expect(items).toHaveLength(1);
+    expect(items[0]!.id).toBe(pageId);
+    expect(items[0]!.label).toBe("Deleted “Test Page”");
+    expect(items[0]!.action?.label).toBe("Undo");
+    expect(typeof items[0]!.action?.onClick).toBe("function");
   });
 
   it("ignores duplicate delete requests for the same page", async () => {
@@ -76,7 +81,17 @@ describe("requestDeletePage", () => {
       hook.result.current.undo.requestDeletePage({ id: pageId, title: "Test Page" });
     });
 
-    expect(hook.result.current.undo.undoItems).toHaveLength(1);
+    expect(hook.result.current.undo.toastItems).toHaveLength(1);
+  });
+
+  it("falls back to “Untitled” when the page has no title", async () => {
+    const { hook, pageId } = await setup();
+
+    act(() => {
+      hook.result.current.undo.requestDeletePage({ id: pageId, title: "" });
+    });
+
+    expect(hook.result.current.undo.toastItems[0]!.label).toBe("Deleted “Untitled”");
   });
 
   it("closes the editor when the active page is deleted", async () => {
@@ -117,7 +132,7 @@ describe("requestDeletePage", () => {
 // ─── Folder deletion ─────────────────────────────────────────────────────────
 
 describe("requestDeleteFolder", () => {
-  it("hides the folder and creates an undo item with page count suffix", async () => {
+  it("hides the folder and creates a toast item with page count suffix", async () => {
     const { folderId, hook } = await setup();
     const folder = hook.result.current.workspace.folders.find((f) => f.id === folderId)!;
 
@@ -126,9 +141,12 @@ describe("requestDeleteFolder", () => {
     });
 
     expect(hook.result.current.undo.hiddenFolderIds.has(folderId)).toBe(true);
-    expect(hook.result.current.undo.undoItems).toEqual([
-      { duration: 16000, id: `folder:${folderId}`, label: "Work (1 page)" },
-    ]);
+    const items = hook.result.current.undo.toastItems;
+    expect(items).toHaveLength(1);
+    expect(items[0]!.id).toBe(`folder:${folderId}`);
+    expect(items[0]!.label).toBe("Deleted “Work (1 page)”");
+    expect(items[0]!.duration).toBe(16000);
+    expect(items[0]!.action?.label).toBe("Undo");
   });
 
   it("pluralises page count suffix for multiple pages", async () => {
@@ -139,7 +157,7 @@ describe("requestDeleteFolder", () => {
       hook.result.current.undo.requestDeleteFolder(folder, 3);
     });
 
-    expect(hook.result.current.undo.undoItems[0]!.label).toBe("Work (3 pages)");
+    expect(hook.result.current.undo.toastItems[0]!.label).toBe("Deleted “Work (3 pages)”");
   });
 
   it("omits suffix when page count is 0", async () => {
@@ -150,7 +168,7 @@ describe("requestDeleteFolder", () => {
       hook.result.current.undo.requestDeleteFolder(folder, 0);
     });
 
-    expect(hook.result.current.undo.undoItems[0]!.label).toBe("Work");
+    expect(hook.result.current.undo.toastItems[0]!.label).toBe("Deleted “Work”");
   });
 
   it("closes the editor when the active page lives in the deleted folder", async () => {
@@ -195,24 +213,24 @@ describe("requestDeleteFolder", () => {
   });
 });
 
-// ─── handleUndoDismiss (toast timer expired → commit delete) ─────────────────
+// ─── handleToastDismiss (toast timer expired → commit delete) ────────────────
 
-describe("handleUndoDismiss", () => {
-  it("removes page from hidden set and undo items", async () => {
+describe("handleToastDismiss", () => {
+  it("removes page from hidden set and toast items", async () => {
     const { hook, pageId } = await setup();
 
     act(() => {
       hook.result.current.undo.requestDeletePage({ id: pageId, title: "Test Page" });
     });
     act(() => {
-      hook.result.current.undo.handleUndoDismiss(pageId);
+      hook.result.current.undo.handleToastDismiss(pageId);
     });
 
     expect(hook.result.current.undo.hiddenPageIds.size).toBe(0);
-    expect(hook.result.current.undo.undoItems).toHaveLength(0);
+    expect(hook.result.current.undo.toastItems).toHaveLength(0);
   });
 
-  it("removes folder from hidden set and undo items", async () => {
+  it("removes folder from hidden set and toast items", async () => {
     const { folderId, hook } = await setup();
     const folder = hook.result.current.workspace.folders.find((f) => f.id === folderId)!;
 
@@ -220,17 +238,17 @@ describe("handleUndoDismiss", () => {
       hook.result.current.undo.requestDeleteFolder(folder, 1);
     });
     act(() => {
-      hook.result.current.undo.handleUndoDismiss(`folder:${folderId}`);
+      hook.result.current.undo.handleToastDismiss(`folder:${folderId}`);
     });
 
     expect(hook.result.current.undo.hiddenFolderIds.size).toBe(0);
-    expect(hook.result.current.undo.undoItems).toHaveLength(0);
+    expect(hook.result.current.undo.toastItems).toHaveLength(0);
   });
 });
 
-// ─── handleUndoDelete (user clicked "Undo") ──────────────────────────────────
+// ─── Undo action (user clicked the toast button) ─────────────────────────────
 
-describe("handleUndoDelete", () => {
+describe("undo action", () => {
   it("restores a page — removes from hidden set and calls restorePage", async () => {
     const restoreSpy = vi.spyOn(MockStorageAdapter.prototype, "restorePage");
     const { hook, pageId } = await setup();
@@ -239,11 +257,11 @@ describe("handleUndoDelete", () => {
       hook.result.current.undo.requestDeletePage({ id: pageId, title: "Test Page" });
     });
     act(() => {
-      hook.result.current.undo.handleUndoDelete(pageId);
+      hook.result.current.undo.toastItems[0]!.action?.onClick();
     });
 
     expect(hook.result.current.undo.hiddenPageIds.size).toBe(0);
-    expect(hook.result.current.undo.undoItems).toHaveLength(0);
+    expect(hook.result.current.undo.toastItems).toHaveLength(0);
     expect(restoreSpy).toHaveBeenCalledWith(pageId);
   });
 
@@ -256,11 +274,53 @@ describe("handleUndoDelete", () => {
       hook.result.current.undo.requestDeleteFolder(folder, 1);
     });
     act(() => {
-      hook.result.current.undo.handleUndoDelete(`folder:${folderId}`);
+      hook.result.current.undo.toastItems[0]!.action?.onClick();
     });
 
     expect(hook.result.current.undo.hiddenFolderIds.size).toBe(0);
-    expect(hook.result.current.undo.undoItems).toHaveLength(0);
+    expect(hook.result.current.undo.toastItems).toHaveLength(0);
     expect(restoreSpy).toHaveBeenCalledWith(folderId);
+  });
+});
+
+// ─── Notice (non-actionable confirmation) ────────────────────────────────────
+
+describe("showNotice", () => {
+  it("appends a toast item without an action", async () => {
+    const { hook } = await setup();
+
+    act(() => {
+      hook.result.current.undo.showNotice("All data deleted.");
+    });
+
+    const items = hook.result.current.undo.toastItems;
+    expect(items).toHaveLength(1);
+    expect(items[0]!.label).toBe("All data deleted.");
+    expect(items[0]!.action).toBeUndefined();
+  });
+
+  it("respects a per-notice duration override", async () => {
+    const { hook } = await setup();
+
+    act(() => {
+      hook.result.current.undo.showNotice("Quick notice", 1500);
+    });
+
+    expect(hook.result.current.undo.toastItems[0]!.duration).toBe(1500);
+  });
+
+  it("dismiss removes the notice without touching hidden sets", async () => {
+    const { hook } = await setup();
+
+    act(() => {
+      hook.result.current.undo.showNotice("All data deleted.");
+    });
+    const id = hook.result.current.undo.toastItems[0]!.id;
+
+    act(() => {
+      hook.result.current.undo.handleToastDismiss(id);
+    });
+
+    expect(hook.result.current.undo.toastItems).toHaveLength(0);
   });
 });

@@ -1,19 +1,10 @@
-// DeveloperSettings — seed scripts + database reset. Dev-only tooling.
+// DeveloperSettings — seed scripts for development. Dev-only tooling.
+// The user-facing "Delete All Data" action lives in General settings.
 
-import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
@@ -59,32 +50,13 @@ const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[]
   },
 ];
 
-type PendingAction = { type: "reset" } | { type: "seed"; scenario: SeedScenario };
-
 export function DeveloperSettings() {
-  const { reload, resetAndSeed, workspace } = useWorkspace();
+  const { resetAndSeed, workspace } = useWorkspace();
   const { setSettingsOpen } = useUI();
-  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [pending, setPending] = useState<SeedScenario | null>(null);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<string | null>(null);
   const [logError, setLogError] = useState(false);
-
-  async function handleReset() {
-    if (!workspace) return;
-    setRunning(true);
-    setLog(null);
-    try {
-      await invoke("reset_db");
-      await reload();
-      setLog("Database cleared.");
-      setLogError(false);
-    } catch (e: unknown) {
-      setLog(String(e));
-      setLogError(true);
-    } finally {
-      setRunning(false);
-    }
-  }
 
   async function handleSeed(scenario: SeedScenario) {
     if (!workspace) return;
@@ -101,54 +73,20 @@ export function DeveloperSettings() {
     }
   }
 
-  function confirm(action: PendingAction) {
-    setPending(action);
-  }
-
   async function handleConfirm() {
     if (!pending) return;
+    const scenario = pending;
     setPending(null);
-    if (pending.type === "reset") {
-      await handleReset();
-    } else {
-      await handleSeed(pending.scenario);
-    }
+    await handleSeed(scenario);
   }
-
-  const dialogTitle =
-    pending?.type === "reset" ? "Clear database?" : `Seed with "${pending?.scenario}" data?`;
-
-  const dialogDescription =
-    pending?.type === "reset"
-      ? "All pages, folders, schedules, and focus sessions will be permanently deleted. This cannot be undone."
-      : `The current database will be wiped and replaced with the "${pending?.scenario}" seed data. This cannot be undone.`;
 
   return (
     <div className="max-w-lg">
       <h2 className="mb-1 text-base font-semibold">Developer Tools</h2>
       <p className="mb-6 text-sm text-muted-foreground">
-        Seed scripts and database utilities. For development use only.
+        Seed scripts for development. For destructive actions affecting all data, see General →
+        Danger Zone.
       </p>
-
-      {/* Reset */}
-      <div className="mb-4 rounded-lg border border-border bg-card p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium">Clear database</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Permanently delete all data. Schema and migrations are preserved.
-            </p>
-          </div>
-          <Button
-            disabled={running || !workspace}
-            onClick={() => confirm({ type: "reset" })}
-            size="sm"
-            variant="destructive"
-          >
-            Clear
-          </Button>
-        </div>
-      </div>
 
       {/* Seed scenarios */}
       <div className="divide-y divide-border rounded-lg border border-border bg-card">
@@ -160,7 +98,7 @@ export function DeveloperSettings() {
             </div>
             <Button
               disabled={running || !workspace}
-              onClick={() => confirm({ scenario: s.id, type: "seed" })}
+              onClick={() => setPending(s.id)}
               size="sm"
               variant="outline"
             >
@@ -182,24 +120,15 @@ export function DeveloperSettings() {
         </pre>
       )}
 
-      {/* Confirmation dialog */}
-      <AlertDialog onOpenChange={(o) => !o && setPending(null)} open={pending !== null}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{dialogTitle}</AlertDialogTitle>
-            <AlertDialogDescription>{dialogDescription}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
-              onClick={() => void handleConfirm()}
-            >
-              Confirm
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        confirmLabel="Confirm"
+        description={`The current database will be wiped and replaced with the “${pending ?? ""}” seed data. This cannot be undone.`}
+        onConfirm={() => void handleConfirm()}
+        onOpenChange={(o) => !o && setPending(null)}
+        open={pending !== null}
+        title={`Seed with “${pending ?? ""}” data?`}
+        variant="destructive"
+      />
     </div>
   );
 }

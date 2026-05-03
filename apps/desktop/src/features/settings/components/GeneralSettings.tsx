@@ -1,10 +1,14 @@
-// GeneralSettings — about, preferences (theme, editor, calendar), and feedback.
+// GeneralSettings — about, preferences (theme, editor, calendar), feedback,
+// and the destructive "Delete All Data" action.
 
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Bug, Check, CheckCircle, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { CalendarDayCount, CalendarDensity } from "@/features/calendar/utils/calendarUtils";
+import { deleteAllData } from "@/lib/data/deleteAllData";
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
@@ -16,6 +20,7 @@ import { useListSettings } from "@/shared/context/ListSettingsContext";
 import type { ListDensity } from "@/shared/context/ListSettingsContext";
 import type { ThemeMode } from "@/shared/context/ThemeContext";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useUpdate } from "@/shared/context/UpdateContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
@@ -124,6 +129,26 @@ export function GeneralSettings() {
     setDensity: setCalendarDensity,
   } = useCalendarSettings();
   const { density: listDensity, setDensity: setListDensity } = useListSettings();
+  const { showNotice } = useUndoDelete();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDeleteAll() {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await deleteAllData();
+      setDeleteOpen(false);
+      showNotice("All data deleted.", 1500);
+      // Reload the WebView so every context (workspace, theme, calendar,
+      // editor, list, app settings) re-reads from the now-empty stores.
+      // Brief delay so the toast is visible before tear-down.
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (e) {
+      log.error("deleteAllData failed", e);
+      setDeleting(false);
+    }
+  }
 
   return (
     <div className="max-w-lg">
@@ -409,6 +434,42 @@ export function GeneralSettings() {
           <CopyEmailRow />
         </div>
       </SettingsSection>
+
+      {/* ── Danger Zone ────────────────────────────────────────────────── */}
+      <section className="mt-12 border-t border-destructive/30 pt-6">
+        <h2 className="mb-4 text-base font-semibold text-destructive">Danger Zone</h2>
+        <div className="rounded-lg border border-destructive/30 bg-card p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Delete All Data</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Permanently deletes all pages, folders, tags, and settings on this device. This
+                cannot be undone.
+              </p>
+            </div>
+            <Button
+              disabled={deleting}
+              onClick={() => setDeleteOpen(true)}
+              size="sm"
+              variant="destructive"
+            >
+              Delete All Data
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <ConfirmDialog
+        busy={deleting}
+        cancelLabel="Cancel"
+        confirmLabel="Delete Everything"
+        description="This will permanently delete all pages, folders, tags, and settings on this device. Your data is stored locally and cannot be recovered after deletion."
+        onConfirm={() => void handleDeleteAll()}
+        onOpenChange={setDeleteOpen}
+        open={deleteOpen}
+        title="Delete all Pikos data?"
+        variant="destructive"
+      />
     </div>
   );
 }

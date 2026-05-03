@@ -5,7 +5,7 @@ import { ThreePanelLayout } from "@/features/layout";
 import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
 import { SettingsPage } from "@/features/settings";
-import { UndoToast } from "@/shared/components/UndoToast";
+import { Toast } from "@/shared/components/Toast";
 import { UpdateDialog } from "@/shared/components/UpdateDialog";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
 import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
@@ -118,7 +118,7 @@ function AppShell() {
   const updater = useUpdate();
   const { consumePendingNavigation } = useWorkspace();
   const ui = useUI();
-  const { handleUndoDelete, handleUndoDismiss, undoItems } = useUndoDelete();
+  const { handleToastDismiss, toastItems } = useUndoDelete();
 
   // One-shot: navigate to tutorial welcome page after first workspace creation.
   const didConsumeRef = useRef<boolean | null>(null);
@@ -136,11 +136,10 @@ function AppShell() {
       <SettingsPage />
       <QuickAddDialog />
       <SearchPalette />
-      <UndoToast
+      <Toast
         duration={UNDO_TOAST_DURATION_MS}
-        items={undoItems}
-        onDismiss={handleUndoDismiss}
-        onUndo={handleUndoDelete}
+        items={toastItems}
+        onDismiss={handleToastDismiss}
       />
       <UpdateDialog updater={updater} />
     </>
