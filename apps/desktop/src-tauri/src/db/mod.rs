@@ -80,8 +80,25 @@ fn walk_tiptap_node(node: &serde_json::Value, parts: &mut Vec<String>) {
 
 /// Open (or create) a SQLite workspace at the given path and run migrations.
 /// Called by WorkspaceContext when the user opens or creates a workspace.
+///
+/// Idempotent: if a pool is already initialised, returns Ok without
+/// reconnecting, re-running migrations, or rebuilding the FTS index. The
+/// frontend's mount effect fires twice in dev under React.StrictMode, which
+/// otherwise triggered duplicate "DB connected" logging and double work.
+/// The duplicate-call path emits a WARN so future regressions stay visible
+/// without polluting the steady-state log.
 #[tauri::command]
 pub async fn connect_db(path: String, state: tauri::State<'_, DbState>) -> Result<(), String> {
+    {
+        let guard = state.0.lock().await;
+        if guard.is_some() {
+            log::warn!(
+                "connect_db invoked twice — pool already initialised, skipping reconnect"
+            );
+            return Ok(());
+        }
+    }
+
     // Ensure the parent directory exists (e.g. ~/Library/Application Support/app.pikos.desktop/)
     if let Some(parent) = std::path::Path::new(&path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
