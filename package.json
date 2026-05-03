@@ -1,5 +1,5 @@
 {
-  "name": "pkos",
+  "name": "pikos",
   "private": true,
   "license": "BUSL-1.1",
   "type": "module",
@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "turbo dev",
     "dev:desktop": "pnpm --filter @pikos/desktop tauri dev",
-    "dev:marketing": "pnpm --filter @pkos/marketing dev",
+    "dev:marketing": "pnpm --filter @pikos/marketing dev",
     "build": "turbo build",
     "test": "turbo test",
     "prepare": "husky",

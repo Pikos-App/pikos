@@ -88,7 +88,7 @@ pub fn run() {
         // Global default is the dep level — drops sqlx::query DEBUG flood.
         .level(dep_level)
         // Our Rust crate and JS-side logs (target="webview") follow app_level.
-        .level_for("pkos_lib", app_level)
+        .level_for("pikos_lib", app_level)
         .level_for("webview", app_level)
         // Panic hook target — always surface panics.
         .level_for("panic", log::LevelFilter::Error)
