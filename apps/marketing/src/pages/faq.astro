@@ -56,7 +56,9 @@ const faqs = [
   },
   {
     q: "Can I import from another app?",
-    a: "Yes. Pikos reads Obsidian vaults directly, and CSV exports from Todoist and TickTick are auto-detected. Step-by-step guides for each are at /import.",
+    a: "Yes. Pikos reads Obsidian vaults directly, and CSV exports from Todoist and TickTick are auto-detected. Step-by-step guides cover each one.",
+    href: "/import",
+    linkLabel: "Read the import guides",
   },
   {
     q: "Will there be mobile apps?",
@@ -101,10 +103,15 @@ const faqJsonLd = {
     </p>
 
     <div class="mt-12 divide-y divide-neutral-200 dark:divide-neutral-800">
-      {faqs.map(({ q, a }) => (
+      {faqs.map(({ q, a, href, linkLabel }) => (
         <div class="py-6">
           <h2 class="font-semibold text-neutral-900 dark:text-neutral-50">{q}</h2>
           <p class="mt-2 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">{a}</p>
+          {href && (
+            <a href={href} class="mt-2 inline-block text-sm font-medium text-primary-500 transition-colors hover:underline dark:text-primary-400">
+              {linkLabel ?? "Read more"} &rarr;
+            </a>
+          )}
         </div>
       ))}
     </div>
