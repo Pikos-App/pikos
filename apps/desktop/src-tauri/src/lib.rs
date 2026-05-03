@@ -6,6 +6,7 @@ use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, SubmenuBui
 use tauri::{Manager, WindowEvent};
 
 mod db;
+mod logging;
 mod markdown;
 mod notifications;
 mod window_state;
@@ -38,70 +39,15 @@ use notifications::scheduler::{
     update_notification_settings, NotificationSettingsState, SchedulerRuntimeState,
 };
 
-// Logs the panic message + location to the structured log file via the `log`
-// facade. tauri-plugin-log captures it and rotates with the rest of the app
-// log. Strips backtraces — RUST_BACKTRACE traces can contain absolute paths
-// from the build host, which we never want shipped in user logs.
-fn install_panic_hook() {
-    std::panic::set_hook(Box::new(|info| {
-        let payload = info.payload();
-        let msg = payload
-            .downcast_ref::<&str>()
-            .copied()
-            .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
-            .unwrap_or("(no message)");
-        let location = info
-            .location()
-            .map(|l| format!("{}:{}", l.file(), l.line()))
-            .unwrap_or_else(|| "(unknown location)".into());
-        log::error!(target: "panic", "panicked at {location}: {msg}");
-    }));
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    install_panic_hook();
-
-    // Verbose mode: PIKOS_LOG_VERBOSE=1 unmutes dependency crates (sqlx,
-    // tao, wry, …) that otherwise log every query / event at DEBUG. Use
-    // when debugging the DB layer or window plumbing; default is minimal.
-    let verbose = std::env::var("PIKOS_LOG_VERBOSE").is_ok();
-
-    let app_level = if cfg!(debug_assertions) || verbose {
-        log::LevelFilter::Debug
-    } else {
-        log::LevelFilter::Info
-    };
-    let dep_level = if verbose {
-        log::LevelFilter::Debug
-    } else {
-        log::LevelFilter::Warn
-    };
-
-    let log_plugin = tauri_plugin_log::Builder::new()
-        .targets([
-            tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
-            tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                file_name: Some("pikos".into()),
-            }),
-        ])
-        // Global default is the dep level — drops sqlx::query DEBUG flood.
-        .level(dep_level)
-        // Our Rust crate and JS-side logs (target="webview") follow app_level.
-        .level_for("pikos_lib", app_level)
-        .level_for("webview", app_level)
-        // Panic hook target — always surface panics.
-        .level_for("panic", log::LevelFilter::Error)
-        .max_file_size(2 * 1024 * 1024) // 2 MB per file
-        .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
-        .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseUtc)
-        .build();
+    logging::install_panic_hook();
 
     tauri::Builder::default()
         .manage(DbState::new())
         .manage(NotificationSettingsState::new())
         .manage(SchedulerRuntimeState::new())
-        .plugin(log_plugin)
+        .plugin(logging::build_plugin())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
