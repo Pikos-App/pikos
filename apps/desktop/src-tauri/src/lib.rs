@@ -144,7 +144,14 @@ pub fn run() {
             let app_menu = SubmenuBuilder::new(handle, "Pikos")
                 .about(Some(
                     AboutMetadataBuilder::new()
+                        .name(Some("Pikos"))
+                        .version(Some(env!("CARGO_PKG_VERSION")))
+                        .short_version(Some(env!("PIKOS_GIT_COMMIT")))
+                        .authors(Some(vec!["Alex King".into()]))
+                        .copyright(Some("© 2026 Alex King"))
+                        .license(Some("BUSL-1.1"))
                         .website(Some("https://pikos.app"))
+                        .website_label(Some("pikos.app"))
                         .comments(Some("Notes, tasks, and calendar — local-first"))
                         .build(),
                 ))

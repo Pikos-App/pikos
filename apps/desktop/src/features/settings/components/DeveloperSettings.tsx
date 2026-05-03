@@ -1,12 +1,18 @@
-// DeveloperSettings — seed scripts for development. Dev-only tooling.
+// DeveloperSettings — seed scripts and diagnostics for development.
 // The user-facing "Delete All Data" action lives in General settings.
 
+import { appLogDir, join } from "@tauri-apps/api/path";
+import { openPath } from "@tauri-apps/plugin-opener";
+import { FileText } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { createLogger } from "@/shared/logger";
+
+const logger = createLogger("DeveloperSettings");
 
 type SeedScenario =
   | "tutorial"
@@ -80,6 +86,15 @@ export function DeveloperSettings() {
     await handleSeed(scenario);
   }
 
+  async function handleOpenLogs() {
+    try {
+      const path = await join(await appLogDir(), "pikos.log");
+      await openPath(path);
+    } catch (err) {
+      logger.warn("open logs failed", err);
+    }
+  }
+
   return (
     <div className="max-w-lg">
       <h2 className="mb-1 text-base font-semibold">Developer Tools</h2>
@@ -119,6 +134,20 @@ export function DeveloperSettings() {
           {log}
         </pre>
       )}
+
+      {/* Diagnostics */}
+      <div className="mt-8 rounded-lg border border-border bg-card">
+        <div className="flex items-center justify-between gap-4 p-4">
+          <div>
+            <p className="text-sm font-medium">Logs</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Useful for filing bug reports.</p>
+          </div>
+          <Button onClick={() => void handleOpenLogs()} size="sm" variant="outline">
+            <FileText className="h-3.5 w-3.5" />
+            View
+          </Button>
+        </div>
+      </div>
 
       <ConfirmDialog
         confirmLabel="Confirm"

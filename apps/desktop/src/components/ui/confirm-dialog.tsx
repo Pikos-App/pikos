@@ -14,7 +14,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { cn } from "@/lib/utils";
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -56,10 +55,6 @@ export function ConfirmDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
-            className={cn(
-              variant === "destructive" &&
-                "text-destructive-foreground bg-destructive hover:bg-destructive/90"
-            )}
             disabled={busy}
             onClick={(e) => {
               // preventDefault stops Radix's auto-close so the dialog stays
@@ -68,6 +63,7 @@ export function ConfirmDialog({
               if (busy) return;
               onConfirm();
             }}
+            variant={variant}
           >
             {confirmLabel}
           </AlertDialogAction>
