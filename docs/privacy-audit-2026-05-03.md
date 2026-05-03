@@ -333,17 +333,111 @@ Status: documented; no code change in this pass.
 
 ### Recommendations queued as follow-ups
 
-1. **Update opt-out preference.** Settings toggle to disable auto-update
-   checks; default on. Distinct from the existing `skippedVersion` (which
-   only mutes the prompt, not the check).
-2. **Bound global error message length.** `logger.ts` should truncate
-   `event.error.message` and `event.reason` before logging, to cap PII
-   surface from third-party errors.
-3. **Strip build-host paths from panic locations.** Add
-   `--remap-path-prefix` to the release Rust profile so panicked
-   `file:line` strings don't include the maintainer's home directory.
-4. **Move the "preview before send" requirement** into `logger.ts` as a
-   visible policy constraint, so any future log-send UI inherits it.
-5. **Privacy policy copy.** Disclose GitHub Releases as the update host;
-   describe the pikos.app handoff via system browser; reaffirm zero
-   telemetry, zero analytics, zero crash reporting.
+Each item below is sized so a future session can pick it up without
+re-doing the investigation. Files cited are pinned to the commit at the
+top of this audit; line numbers may drift.
+
+#### 1. Genuine update opt-out (S, ~1 hr)
+
+**Why:** Today the `check()` call in `useAutoUpdater.ts:51` fires on every
+launch. `skippedVersion` only suppresses the *prompt* — the network round
+trip to GitHub still happens, exposing IP + User-Agent. Privacy-conscious
+users have no escape short of an air-gapped network.
+
+**Where:**
+- `apps/desktop/src/shared/context/AppSettingsContext.tsx` — add
+  `autoUpdateEnabled: boolean` (default `true`), keyed
+  `pikos:autoUpdateEnabled`. Mirror the `skippedVersion` plumbing.
+- `apps/desktop/src/shared/hooks/useAutoUpdater.ts:43-51` — guard `doCheck()`
+  with `if (!autoUpdateEnabled) return;` *before* the dynamic import.
+- `apps/desktop/src/features/settings/components/GeneralSettings.tsx` —
+  add a toggle in the "About" section (next to the "Checking for
+  updates…" status), label "Check for updates automatically".
+
+**Acceptance:** with the toggle off, `useAutoUpdater` never imports
+`@tauri-apps/plugin-updater` and no network request is issued on launch
+(verify in Tauri devtools network tab). Manual re-check button stays
+functional regardless of the toggle.
+
+#### 2. Bound global error message length (S, ~30 min)
+
+**Why:** `logger.ts:140-146` passes the full `event.error` /
+`event.reason` to `formatError()`. Path scrubbing applies but if a
+third-party library throws an Error whose `.message` contains user input
+(e.g. a JSON parser citing the bad input), it lands in `pikos.log`
+unbounded.
+
+**Where:**
+- `apps/desktop/src/shared/logger.ts:68-81` — add a length cap to
+  `formatError()`. After scrubbing, truncate to ~200 chars with an
+  ellipsis if longer. Apply to both `e.message` and `e.stack`.
+
+**Acceptance:** unit test for `formatError()` confirming a 1 KB error
+message is truncated. No callsite-level changes needed; the cap applies
+everywhere via the shared formatter.
+
+#### 3. Strip build-host paths from panic locations (XS, ~10 min)
+
+**Why:** `lib.rs:55` formats `info.location()` which Rust resolves to the
+absolute source path encoded at compile time. Without `--remap-path-prefix`,
+release builds compiled on a maintainer workstation embed e.g.
+`/Users/aking/dev/pikos/...` strings into every panic log.
+
+**Where:**
+- `apps/desktop/src-tauri/Cargo.toml` — add to `[profile.release]`:
+
+  ```
+  [profile.release]
+  rustflags = ["--remap-path-prefix", "/Users/=", "--remap-path-prefix", "/home/="]
+  ```
+
+  Or use the more portable `RUSTFLAGS` env var in the release script
+  (`scripts/release.sh`).
+
+**Acceptance:** `cargo build --release` followed by `strings target/release/pikos | grep -c '/Users/'` returns 0.
+
+#### 4. Lock in the "preview before send" requirement (XS, ~10 min)
+
+**Why:** No log-send feature exists today. We don't want a future session
+to add one without realising the audit forbids automated submission.
+
+**Where:**
+- `apps/desktop/src/shared/logger.ts:1-56` — append to the policy comment:
+
+  > **If a log-send feature is ever added, it MUST display the full log
+  > and any auto-bundled metadata (app/OS version, etc.) in a scrollable
+  > preview with explicit Send / Cancel before transmission. No
+  > background submission. No silent metadata. See
+  > `docs/privacy-audit-2026-05-03.md` §"Log sending".**
+
+**Acceptance:** comment in place. No code change.
+
+#### 5. Privacy policy copy (M, ~2 hr — content + review)
+
+**Why:** Public launch needs a privacy notice. The audit gives us the
+factual disclosures.
+
+**Where:** marketing/legal repo or wherever the policy lives. Owner is
+likely outside the desktop codebase.
+
+**Content:**
+- "Pikos stores all your data locally on your device. We have no servers
+  that store your notes, tasks, or any other content."
+- "Pikos checks for software updates by requesting a JSON manifest from
+  GitHub Releases (`github.com`). This unavoidably exposes your IP
+  address and User-Agent to GitHub. We do not run or have access to
+  GitHub's logs. See [GitHub's privacy notice]."
+- "When you click links inside Pikos (Website, FAQ, Release Notes,
+  Report a Bug), the app passes the URL to your system browser. Pikos
+  itself does not load these pages."
+- "Pikos writes diagnostic logs to a rotating file on your device
+  (capped at 2 MB, oldest content overwritten). Logs never leave your
+  device unless you manually attach them to a bug report email. Pikos
+  does not run analytics, crash reporting, telemetry, or A/B testing of
+  any kind."
+- "You can permanently delete every byte Pikos has stored about you
+  (database, assets, logs, preferences) via Settings → General → Danger
+  Zone → Delete All Data."
+
+**Acceptance:** copy approved by Alex; published before the public
+launch announcement.
