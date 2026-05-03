@@ -58,12 +58,14 @@ controller for that endpoint:
 - **Privacy policy:** disclose that update checks hit `github.com` and link
   to GitHub's privacy notice. Mention IP + User-Agent are observable to
   GitHub.
-- **Optional opt-out:** consider a Settings toggle to disable auto-update
-  checks for users who object. Today the only escape is `import.meta.env.DEV`
-  (line 45) which short-circuits in dev builds — production users always
-  check on launch. A `pikos:autoUpdateEnabled` preference, default true,
-  would let privacy-conscious users opt out without forking. Not in scope
-  for this pass.
+- **Opt-out:** the only update-related preference today is
+  `pikos:skippedVersion` (`AppSettingsContext.tsx:66`) — and it only
+  suppresses the *prompt* for one specific version. The network check
+  itself still fires on every launch, so it does not solve the privacy
+  concern (IP + UA are still exposed to GitHub even after a user "skips"
+  an update). A genuine global opt-out (`pikos:autoUpdateEnabled`,
+  default true, gating the `check()` call in `useAutoUpdater.ts:51`)
+  remains a follow-up.
 - **No infrastructure change required** — update host is GitHub.
 
 Status: documented; no code change in this pass.
@@ -318,9 +320,12 @@ Status: documented; no code change in this pass.
 ## Summary of fixes applied in this pass
 
 - **Lifted "Delete All Data" from Developer Tools to General → Danger
-  Zone.** Behaviour: clears SQLite tables (existing `reset_db`), removes all
-  `pikos:*` localStorage keys, and clears the `workspaces.json`
-  tauri-plugin-store. Window reloads after a 1.2 s confirmation toast.
+  Zone.** Behaviour: a new Rust command `wipe_app_data` drops the DB pool,
+  recursively removes `app_data_dir` (SQLite DB + WAL + SHM, workspace
+  assets, backups, `workspaces.json`) and `app_log_dir` (the rotating
+  `pikos.log`). The frontend then clears `pikos:*` localStorage keys and
+  calls `relaunch()` for a hard process restart. The app boots as if newly
+  installed.
 - **Generalised the toast surface** (`Toast.tsx`) so non-reversible notices
   no longer co-opt the "undo" wording.
 - **Added `ConfirmDialog`** wrapper to deduplicate destructive AlertDialog
@@ -329,7 +334,8 @@ Status: documented; no code change in this pass.
 ### Recommendations queued as follow-ups
 
 1. **Update opt-out preference.** Settings toggle to disable auto-update
-   checks; default on.
+   checks; default on. Distinct from the existing `skippedVersion` (which
+   only mutes the prompt, not the check).
 2. **Bound global error message length.** `logger.ts` should truncate
    `event.error.message` and `event.reason` before logging, to cap PII
    surface from third-party errors.
@@ -341,7 +347,3 @@ Status: documented; no code change in this pass.
 5. **Privacy policy copy.** Disclose GitHub Releases as the update host;
    describe the pikos.app handoff via system browser; reaffirm zero
    telemetry, zero analytics, zero crash reporting.
-6. **Asset cleanup on Delete All Data.** `reset_db` clears DB rows but does
-   not delete files in the workspace `assets/` directory. Files become
-   orphans after Delete All Data. Either extend the helper to recursively
-   remove the assets folder or call this out in the helper text.

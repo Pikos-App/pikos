@@ -136,14 +136,12 @@ export function GeneralSettings() {
   async function handleDeleteAll() {
     if (deleting) return;
     setDeleting(true);
+    setDeleteOpen(false);
+    showNotice("All data deleted. Relaunching…", 5000);
+    // Brief pause so the toast is visible before relaunch tears down the WebView.
+    await new Promise((r) => setTimeout(r, 800));
     try {
       await deleteAllData();
-      setDeleteOpen(false);
-      showNotice("All data deleted.", 1500);
-      // Reload the WebView so every context (workspace, theme, calendar,
-      // editor, list, app settings) re-reads from the now-empty stores.
-      // Brief delay so the toast is visible before tear-down.
-      setTimeout(() => window.location.reload(), 1200);
     } catch (e) {
       log.error("deleteAllData failed", e);
       setDeleting(false);

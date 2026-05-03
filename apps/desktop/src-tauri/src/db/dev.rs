@@ -251,6 +251,43 @@ pub async fn reset_db(state: tauri::State<'_, DbState>) -> Result<(), String> {
     Ok(())
 }
 
+/// User-facing "Delete All Data": wipes the entire on-disk footprint of the
+/// app — SQLite files (DB, WAL, SHM), workspace assets, backups, the
+/// tauri-plugin-store registry, and the rotating log directory. The frontend
+/// is expected to call `relaunch()` immediately after this resolves so the
+/// app starts fresh as if newly installed.
+#[tauri::command]
+pub async fn wipe_app_data(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DbState>,
+) -> Result<(), String> {
+    log::info!("wipe_app_data: dropping DB pool and removing on-disk state");
+
+    // Drop the DB pool first so SQLite file handles release before we remove
+    // the file. On Unix unlink would succeed regardless, but Windows is strict.
+    *state.0.lock().await = None;
+
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app_data_dir: {e}"))?;
+    if app_data.exists() {
+        std::fs::remove_dir_all(&app_data)
+            .map_err(|e| format!("remove app_data_dir: {}", e.kind()))?;
+    }
+
+    // Best-effort: tauri-plugin-log may still hold the current log file open.
+    // The directory removal can fail on Windows; on Unix it succeeds and the
+    // open handle continues writing to the now-unlinked inode until relaunch.
+    if let Ok(app_log) = app.path().app_log_dir() {
+        if app_log.exists() {
+            let _ = std::fs::remove_dir_all(&app_log);
+        }
+    }
+
+    Ok(())
+}
+
 /// Export all user data as a JSON file to ~/Downloads/.
 /// Includes folders, pages (excluding soft-deleted), schedules, recurrence rules,
 /// and focus sessions. Page content is included as both ProseMirror JSON and plain text.
