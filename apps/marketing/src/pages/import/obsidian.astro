@@ -1,0 +1,137 @@
+---
+import Base from "../../layouts/Base.astro";
+import Footer from "../../components/Footer.astro";
+
+const title = "Import from Obsidian to Pikos";
+const description = "Move an Obsidian vault into Pikos. Frontmatter, wikilinks, callouts, and image attachments all come across.";
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/import" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Import
+    </a>
+
+    <article>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Import from Obsidian</h1>
+      <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">A 3-step migration for Obsidian vaults.</p>
+
+      <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+
+        <p>
+          Pikos reads an Obsidian vault directly from disk. There's no export step to run on the Obsidian side — point Pikos at the vault folder and it does the rest.
+        </p>
+
+        <h2>1. Open the importer</h2>
+
+        <p>
+          In Pikos, press <code>Cmd+,</code> to open Settings, then click the <strong>Data</strong> tab. The Import section is at the top.
+        </p>
+
+        <h2>2. Pick your vault folder</h2>
+
+        <p>
+          Click <strong>Select Folder</strong> next to "Markdown" and choose your vault directory — the same folder you'd open in Obsidian. Pikos walks every <code>.md</code> file recursively, so subfolders are included automatically.
+        </p>
+
+        <p>
+          Your vault stays where it is. Pikos copies the contents into its own database; nothing is moved or modified on disk.
+        </p>
+
+        <h2>3. Review the preview</h2>
+
+        <p>
+          Before any data is written, Pikos shows a preview: how many pages, which folders, what got skipped, and any warnings. If you see something you don't want imported, cancel and adjust the vault — or proceed and clean up after.
+        </p>
+
+        <p>
+          The preview also has a <strong>Skip completed</strong> toggle. If you used Obsidian Tasks or a frontmatter <code>status: done</code> field for completed work, you can leave the archive behind and import only the live pages.
+        </p>
+
+        <h2>What comes across</h2>
+
+        <ul>
+          <li><strong>Frontmatter</strong> — <code>tags</code>, <code>status</code>, <code>priority</code>, <code>scheduled</code>/<code>due</code>, <code>created</code>, <code>modified</code>, plus the Obsidian Linter aliases (<code>date created</code>, <code>date modified</code>) all map to the matching Pikos fields.</li>
+          <li><strong>Folder structure</strong> — preserved. Nested paths flatten with a <code>/</code> separator (so <code>Projects/Work/Q3</code> becomes a folder named "Projects / Work / Q3").</li>
+          <li><strong>Wikilinks</strong> — <code>[[Page Name]]</code> stays as text. Pikos uses a different linking model, so they don't auto-resolve, but nothing is lost.</li>
+          <li><strong>Image embeds</strong> — both <code>![[image.png]]</code> and <code>![alt](path.png)</code> are copied into Pikos's asset store and rewritten to local paths.</li>
+          <li><strong>Callouts</strong> — <code>&gt; [!note] Title</code> becomes a styled blockquote with the type as a bold label.</li>
+          <li><strong>Tasks</strong> — checkbox items (<code>- [ ]</code> and <code>- [x]</code>) keep their checked state.</li>
+          <li><strong>Tables, code blocks, headings, lists, formatting</strong> — all preserved through the rich-text editor.</li>
+        </ul>
+
+        <h2>What doesn't come across</h2>
+
+        <ul>
+          <li><strong>Plugins</strong> — Dataview queries, Templater, Excalidraw drawings, etc. don't have a Pikos equivalent. The importer flags these as warnings so you know what was left as text.</li>
+          <li><strong>Mermaid diagrams</strong> — preserved as code blocks; they don't render.</li>
+          <li><strong>Graph view, canvas, and link backreferences</strong> — Pikos isn't a knowledge graph tool. If that's the workflow you came for, this isn't the right move.</li>
+        </ul>
+
+        <h2>If something goes sideways</h2>
+
+        <p>
+          Pikos snapshots its database before every import. If the result isn't what you wanted, every imported page is tagged with the import batch, and the Settings &rarr; Data &rarr; "Undo last import" button removes them in one click.
+        </p>
+
+        <p>
+          Ready to try? <a href="/download">Download Pikos</a> — the import flow is in the Data tab the first time you open Settings.
+        </p>
+
+      </div>
+    </article>
+
+  </main>
+
+  <Footer current="/import/obsidian" />
+</Base>
+
+<style>
+
+  .prose :global(h2) {
+    padding-top: 1rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--color-neutral-900);
+  }
+  :global(html.dark) .prose :global(h2) {
+    color: var(--color-neutral-100);
+  }
+
+  .prose :global(p) {
+    margin-top: 1.5rem;
+  }
+
+  .prose :global(ul) {
+    margin-top: 1rem;
+    padding-left: 1.25rem;
+    list-style-type: disc;
+  }
+
+  .prose :global(li) {
+    margin-top: 0.375rem;
+  }
+
+  .prose :global(a) {
+    color: var(--color-primary-500);
+  }
+  :global(html.dark) .prose :global(a) {
+    color: var(--color-primary-400);
+  }
+  .prose :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  .prose :global(code) {
+    border-radius: 0.25rem;
+    background-color: var(--color-neutral-150);
+    padding: 0.125rem 0.375rem;
+    font-size: 0.875rem;
+  }
+  :global(html.dark) .prose :global(code) {
+    background-color: var(--color-neutral-800);
+  }
+</style>

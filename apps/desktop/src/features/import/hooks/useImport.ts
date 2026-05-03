@@ -225,6 +225,19 @@ interface VaultReadResult {
 }
 
 async function readVaultFiles(dirPath: string): Promise<VaultReadResult> {
+  // Test-mode escape hatch: e2e injects a vault as { path, files } so this
+  // helper doesn't need a real Tauri fs runtime to walk the directory.
+  if (import.meta.env["VITE_TEST_MODE"] === "true") {
+    const injected = (
+      window as unknown as {
+        __PIKOS_TEST_VAULT__?: { path: string; files: VaultFile[] };
+      }
+    ).__PIKOS_TEST_VAULT__;
+    if (injected && injected.path === dirPath) {
+      return { files: injected.files, skipped: [] };
+    }
+  }
+
   const files: VaultFile[] = [];
   let excalidrawCount = 0;
   let otherCount = 0;

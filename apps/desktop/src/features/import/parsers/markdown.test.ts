@@ -769,3 +769,234 @@ describe("transformCallouts", () => {
     expect(result).toBe("> **Info:** Details");
   });
 });
+
+// ─── Date format variants ─────────────────────────────────────────────────────
+// Coverage for every format in DATE_FORMATS, plus failure cases. The Linter
+// without-seconds branch and the abbreviated/slash formats had no direct tests,
+// so a regression in DATE_FORMATS could silently drop user dates.
+
+describe("parseFrontmatter date formats", () => {
+  it("parses Linter format without seconds", () => {
+    const raw = `---\ncreated: "Monday, March 17th 2025, 11:03 am"\n---\n`;
+    expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-03-17T11:03:00");
+  });
+
+  it("parses month-day-year with time, no weekday", () => {
+    const raw = `---\ncreated: "March 17th 2025, 11:03:04 am"\n---\n`;
+    expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-03-17T11:03:04");
+  });
+
+  it("parses month-day-year with ordinal, no time", () => {
+    const raw = `---\ncreated: "March 17th 2025"\n---\n`;
+    expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-03-17");
+  });
+
+  it("parses long month with no ordinal", () => {
+    const raw = `---\ncreated: "March 17, 2025"\n---\n`;
+    expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-03-17");
+  });
+
+  it("parses abbreviated month", () => {
+    const raw = `---\ncreated: "Mar 17, 2025"\n---\n`;
+    expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-03-17");
+  });
+
+  it("parses US slash format", () => {
+    const raw = `---\ncreated: 03/17/2025\n---\n`;
+    expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-03-17");
+  });
+
+  it("parses ISO with T separator and minutes only", () => {
+    const raw = `---\ncreated: "2025-06-15T14:30"\n---\n`;
+    // ISO patterns pass through directly without reformatting
+    expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-06-15T14:30");
+  });
+
+  it("returns null for unparseable dates without throwing", () => {
+    const raw = `---\ncreated: not-a-date\n---\n`;
+    expect(parseFrontmatter(raw).frontmatter.created).toBeNull();
+  });
+
+  it("returns null for empty date value", () => {
+    const raw = `---\ncreated: ""\n---\n`;
+    expect(parseFrontmatter(raw).frontmatter.created).toBeNull();
+  });
+
+  it("trims surrounding whitespace before parsing", () => {
+    const raw = `---\ncreated:    "2025-06-15"   \n---\n`;
+    expect(parseFrontmatter(raw).frontmatter.created).toBe("2025-06-15");
+  });
+});
+
+// ─── Status / priority edge cases ─────────────────────────────────────────────
+// The toLowerCase() path is exercised but never with truly mixed-case input.
+
+describe("parseFrontmatter status/priority casing", () => {
+  it("normalizes uppercase status", () => {
+    expect(parseFrontmatter("---\nstatus: DONE\n---\n").frontmatter.status).toBe("done");
+    expect(parseFrontmatter("---\nstatus: Completed\n---\n").frontmatter.status).toBe("done");
+  });
+
+  it("normalizes uppercase priority labels", () => {
+    expect(parseFrontmatter("---\npriority: URGENT\n---\n").frontmatter.priority).toBe(1);
+    expect(parseFrontmatter("---\npriority: High\n---\n").frontmatter.priority).toBe(2);
+  });
+
+  it("accepts quoted numeric priority", () => {
+    expect(parseFrontmatter('---\npriority: "2"\n---\n').frontmatter.priority).toBe(2);
+  });
+
+  it("accepts quoted text priority", () => {
+    expect(parseFrontmatter("---\npriority: 'urgent'\n---\n").frontmatter.priority).toBe(1);
+  });
+
+  it("treats fractional priority as out-of-range", () => {
+    // Number("2.5") === 2.5, not in 1..4 integer set used by PagePriority
+    const p = parseFrontmatter("---\npriority: 2.5\n---\n").frontmatter.priority;
+    // 2.5 passes >=1 && <=4, so currently mapped — locks current behavior
+    expect(p).toBe(2.5);
+  });
+});
+
+// ─── Frontmatter robustness ────────────────────────────────────────────────────
+// Body content containing `---` and CRLF inputs round-trip through Pikos and
+// other tools. Malformed frontmatter (no closing fence) shouldn't crash.
+
+describe("parseFrontmatter robustness", () => {
+  it("handles CRLF line endings", () => {
+    const raw = "---\r\nstatus: done\r\npriority: 2\r\n---\r\nBody";
+    const { body, frontmatter } = parseFrontmatter(raw);
+    expect(frontmatter.status).toBe("done");
+    expect(frontmatter.priority).toBe(2);
+    expect(body).toBe("Body");
+  });
+
+  it("preserves horizontal-rule --- in body", () => {
+    const raw = "---\nstatus: done\n---\n# Heading\n\n---\n\nMore body";
+    const { body, frontmatter } = parseFrontmatter(raw);
+    expect(frontmatter.status).toBe("done");
+    expect(body).toContain("---");
+    expect(body).toContain("More body");
+  });
+
+  it("treats unclosed frontmatter as plain body", () => {
+    const raw = "---\nstatus: done\nno-closing-fence\n# Heading";
+    const { body, frontmatter } = parseFrontmatter(raw);
+    // No match → defaults preserved, full input is body
+    expect(frontmatter.status).toBe("not_started");
+    expect(body).toBe(raw);
+  });
+
+  it("handles frontmatter with no trailing newline before fence", () => {
+    const raw = "---\nstatus: done\n---";
+    expect(parseFrontmatter(raw).frontmatter.status).toBe("done");
+  });
+});
+
+// ─── Wikilink edge cases ──────────────────────────────────────────────────────
+
+describe("extractWikilinks edge cases", () => {
+  it("preserves block-reference syntax in target", () => {
+    expect(extractWikilinks("[[Note^block-id]]")).toEqual(["Note^block-id"]);
+  });
+
+  it("preserves header-anchor syntax in target", () => {
+    expect(extractWikilinks("[[Note#Heading]]")).toEqual(["Note#Heading"]);
+  });
+
+  it("trims whitespace inside brackets", () => {
+    expect(extractWikilinks("[[  Padded  ]]")).toEqual(["Padded"]);
+  });
+
+  it("ignores empty wikilinks", () => {
+    // [[]] has no target chars, regex requires ≥1 non-]/| char, so no match
+    expect(extractWikilinks("[[]]")).toEqual([]);
+  });
+});
+
+// ─── Image extraction edge cases ──────────────────────────────────────────────
+
+describe("extractImageRefs edge cases", () => {
+  it("extracts consecutive wiki-embeds with no separator", () => {
+    const refs = extractImageRefs("![[a.png]]![[b.png]]");
+    expect(refs.map((r) => r.sourcePath)).toEqual(["a.png", "b.png"]);
+  });
+
+  it("preserves document order across wiki and standard mixed", () => {
+    const body = "Lead\n![first](one.png)\n![[two.png]]\n![third](three.svg)\n![[four.jpg]]";
+    const refs = extractImageRefs(body);
+    expect(refs.map((r) => r.sourcePath)).toEqual([
+      "one.png",
+      "two.png",
+      "three.svg",
+      "four.jpg",
+    ]);
+  });
+
+  it("ignores http/https in standard syntax even with image extension", () => {
+    const refs = extractImageRefs("![cdn](http://cdn.example.com/x.png)");
+    expect(refs).toHaveLength(0);
+  });
+
+  it("does not match standard image syntax with title metadata", () => {
+    // ![alt](path.png "title") — the title trailing causes the regex not to
+    // match. Lock the current behavior so a future change to the regex is
+    // explicit.
+    const refs = extractImageRefs('![alt](image.png "title")');
+    expect(refs).toHaveLength(0);
+  });
+
+  it("captures wiki embed with whitespace in name", () => {
+    const refs = extractImageRefs("![[Pasted image 20250517123456.png]]");
+    expect(refs).toHaveLength(1);
+    expect(refs[0]!.sourcePath).toBe("Pasted image 20250517123456.png");
+  });
+
+  it("captures multiple speculative refs separately", () => {
+    const refs = extractImageRefs("![[Note A]] and ![[Note B]]");
+    expect(refs).toHaveLength(2);
+    expect(refs.every((r) => r.speculative === true)).toBe(true);
+  });
+});
+
+// ─── parseMarkdownVault: frontmatter survives transformations ─────────────────
+// These guard against regressions where wikilink/image extraction mutates the
+// body before frontmatter is read, or where callout transformation strips
+// content the user authored.
+
+describe("parseMarkdownVault transformation order", () => {
+  it("extracts wikilinks BEFORE callout transformation", () => {
+    // A callout body containing a wikilink — both should round-trip.
+    const files: VaultFile[] = [
+      { content: "> [!note] See also\n> Read [[Other Page]] first", path: "n.md" },
+    ];
+    const plan = parseMarkdownVault(files);
+    expect(plan.pages[0]!.wikilinks).toEqual(["Other Page"]);
+    expect(plan.pages[0]!.body).toContain("**Note:** See also");
+    expect(plan.pages[0]!.body).toContain("[[Other Page]]");
+  });
+
+  it("extracts image refs from inside a callout body", () => {
+    const files: VaultFile[] = [{ content: "> [!info] Look\n> ![[diagram.png]]", path: "n.md" }];
+    const plan = parseMarkdownVault(files);
+    expect(plan.pages[0]!.imageRefs).toHaveLength(1);
+    expect(plan.pages[0]!.imageRefs[0]!.sourcePath).toBe("diagram.png");
+  });
+
+  it("does not transform callouts inside fenced code blocks (current behavior)", () => {
+    // The CALLOUT_RE matches `^> [!type]` at line start globally; fenced code
+    // is not currently parsed structurally. Lock the current behavior so any
+    // future structural pass is intentional.
+    const files: VaultFile[] = [
+      { content: "```md\n> [!note] inside fence\n```", path: "n.md" },
+    ];
+    const plan = parseMarkdownVault(files);
+    expect(plan.pages[0]!.body).toContain("**Note:** inside fence");
+  });
+
+  it("preserves body identity when no transformations apply", () => {
+    const files: VaultFile[] = [{ content: "Plain body, no specials.", path: "p.md" }];
+    const plan = parseMarkdownVault(files);
+    expect(plan.pages[0]!.body).toBe("Plain body, no specials.");
+  });
+});

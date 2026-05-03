@@ -1,0 +1,144 @@
+---
+import Base from "../../layouts/Base.astro";
+import Footer from "../../components/Footer.astro";
+
+const title = "Import from TickTick to Pikos";
+const description = "Move your TickTick lists into Pikos. Tasks, lists, statuses, priorities, dates, and reminders all come across via the CSV backup.";
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/import" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Import
+    </a>
+
+    <article>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Import from TickTick</h1>
+      <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">One CSV backup, one click in Pikos.</p>
+
+      <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+
+        <p>
+          TickTick has a single Backup feature that exports every list as one CSV file. Pikos auto-detects the format — including the metadata preamble TickTick adds at the top — and maps everything in place.
+        </p>
+
+        <h2>1. Export from TickTick</h2>
+
+        <p>
+          Open TickTick on the web, click your avatar, and choose <strong>Settings &rarr; Backup</strong>. Click <strong>Backup</strong> and TickTick downloads a CSV containing all your lists and tasks.
+        </p>
+
+        <p>
+          The mobile and desktop apps don't expose this option — use the web app for the export.
+        </p>
+
+        <h2>2. Import in Pikos</h2>
+
+        <p>
+          Open Settings (<code>Cmd+,</code>), go to the <strong>Data</strong> tab, and click <strong>Select File</strong> next to "CSV". Pick the backup file you just downloaded.
+        </p>
+
+        <p>
+          Pikos reads the metadata header, recognizes the TickTick format, and routes you to the column mapping screen with sensible defaults pre-filled. Review them and click through.
+        </p>
+
+        <h2>3. Preview, then commit</h2>
+
+        <p>
+          The preview shows every page that will be created, grouped by the list it came from. Skipped or unsupported items show up as warnings with the source row noted, so nothing disappears silently.
+        </p>
+
+        <p>
+          Hit <strong>Import</strong> and you're done.
+        </p>
+
+        <h2>What comes across</h2>
+
+        <ul>
+          <li><strong>Tasks</strong> — each becomes a Pikos page. Notes attached to tasks are kept as the page body.</li>
+          <li><strong>Lists</strong> — TickTick's "List Name" maps to a Pikos folder. (TickTick exports a "Folder Name" column too, but it's empty in practice — the importer uses List Name instead, which is the field that actually holds your organization.)</li>
+          <li><strong>Status</strong> — TickTick's status codes (0 active, 1 completed, 2 archived, -1 completed recurring) all map to Pikos's not-started or done states. Nothing is dropped.</li>
+          <li><strong>Priority</strong> — TickTick's 0 (none) / 1 (low) / 3 (medium) / 5 (high) maps to Pikos's None / Low / Medium / High respectively.</li>
+          <li><strong>Dates</strong> — start date, due date, and creation/completion timestamps preserve their original values, including timezone.</li>
+          <li><strong>Reminders</strong> — TickTick stores reminder offsets as ISO 8601 durations (<code>-PT15M</code>, <code>-P1D</code>). Pikos parses these into per-page reminder offsets.</li>
+          <li><strong>Tags</strong> — kept as Pikos tags.</li>
+          <li><strong>Sub-tasks</strong> — parent / child relationships preserved.</li>
+        </ul>
+
+        <h2>What doesn't come across</h2>
+
+        <ul>
+          <li><strong>Kanban columns</strong> — TickTick lets you arrange tasks in Kanban-style columns within a list. Pikos doesn't have a Kanban view, so column position is dropped.</li>
+          <li><strong>Habit tracker</strong> — TickTick's habits are a separate data type and aren't part of the CSV export.</li>
+          <li><strong>Smart Lists and filters</strong> — these are query definitions, not data. Pikos has its own filtering, but the saved views don't carry over.</li>
+          <li><strong>Pomodoro history</strong> — not exported.</li>
+          <li><strong>Attachments</strong> — TickTick stores attachments on its servers and they aren't included in the CSV. The text content of each task is preserved.</li>
+        </ul>
+
+        <h2>If something goes sideways</h2>
+
+        <p>
+          Pikos snapshots the database before the import, every imported page is tagged with the import batch, and Settings &rarr; Data &rarr; "Undo last import" removes them in one click. Run the import, see what landed, and adjust if needed.
+        </p>
+
+        <p>
+          Ready to try? <a href="/download">Download Pikos</a> — the CSV importer is in the Data tab the first time you open Settings.
+        </p>
+
+      </div>
+    </article>
+
+  </main>
+
+  <Footer current="/import/ticktick" />
+</Base>
+
+<style>
+
+  .prose :global(h2) {
+    padding-top: 1rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--color-neutral-900);
+  }
+  :global(html.dark) .prose :global(h2) {
+    color: var(--color-neutral-100);
+  }
+
+  .prose :global(p) {
+    margin-top: 1.5rem;
+  }
+
+  .prose :global(ul) {
+    margin-top: 1rem;
+    padding-left: 1.25rem;
+    list-style-type: disc;
+  }
+
+  .prose :global(li) {
+    margin-top: 0.375rem;
+  }
+
+  .prose :global(a) {
+    color: var(--color-primary-500);
+  }
+  :global(html.dark) .prose :global(a) {
+    color: var(--color-primary-400);
+  }
+  .prose :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  .prose :global(code) {
+    border-radius: 0.25rem;
+    background-color: var(--color-neutral-150);
+    padding: 0.125rem 0.375rem;
+    font-size: 0.875rem;
+  }
+  :global(html.dark) .prose :global(code) {
+    background-color: var(--color-neutral-800);
+  }
+</style>

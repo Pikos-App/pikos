@@ -1,0 +1,64 @@
+---
+import Base from "../../layouts/Base.astro";
+import Footer from "../../components/Footer.astro";
+
+const title = "Import to Pikos - Obsidian, Todoist, TickTick";
+const description = "Move your notes and tasks into Pikos. Step-by-step guides for Obsidian vaults, Todoist exports, and TickTick backups.";
+
+const guides = [
+  {
+    href: "/import/obsidian",
+    name: "Obsidian",
+    summary: "Point Pikos at your vault folder. Markdown, frontmatter, wikilinks, and image attachments come across.",
+  },
+  {
+    href: "/import/todoist",
+    name: "Todoist",
+    summary: "Export each project as CSV from Todoist's web app, then import the file. Tasks, due dates, priorities, and tags survive.",
+  },
+  {
+    href: "/import/ticktick",
+    name: "TickTick",
+    summary: "Use TickTick's Backup feature to download a CSV. Pikos auto-detects the format and maps lists, statuses, and reminders.",
+  },
+];
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Bring your stuff with you</h1>
+    <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+      Switching apps is annoying. Pikos imports from the formats most note and task apps already export. Pick the one you're coming from.
+    </p>
+
+    <div class="mt-12 space-y-4">
+      {guides.map((g) => (
+        <a href={g.href} class="block rounded-lg border border-neutral-100 bg-white px-6 py-5 transition-colors hover:border-primary-400/30 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-primary-500/40">
+          <h2 class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">{g.name}</h2>
+          <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{g.summary}</p>
+        </a>
+      ))}
+    </div>
+
+    <div class="mt-12 rounded-lg border border-neutral-100 bg-neutral-50 px-6 py-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <h2 class="text-base font-semibold text-neutral-900 dark:text-neutral-50">Coming from somewhere else?</h2>
+      <p class="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+        If your app exports to plain Markdown or generic CSV, the same paths work. Pikos's CSV importer asks you to map columns the first time it sees an unknown format.
+      </p>
+      <p class="mt-3 text-sm text-neutral-500 dark:text-neutral-400">
+        If nothing fits, <a href="/feedback" class="text-primary-500 hover:underline dark:text-primary-400">tell us</a> what you're moving from.
+      </p>
+    </div>
+
+  </main>
+
+  <Footer current="/import" />
+</Base>
+

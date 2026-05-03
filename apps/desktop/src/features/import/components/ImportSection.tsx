@@ -21,16 +21,34 @@ export function ImportSection({
   state,
 }: ImportSectionProps) {
   async function handleMarkdownImport() {
-    const selected = await openDialog({
-      directory: true,
-      multiple: false,
-      title: "Select Markdown / Obsidian Vault folder",
-    });
+    // Test-mode escape hatch: skip the native dialog and use a path injected
+    // by the e2e harness. The matching readVaultFiles hook returns prebuilt
+    // VaultFile content for that path.
+    const testPath =
+      import.meta.env["VITE_TEST_MODE"] === "true"
+        ? (window as unknown as { __PIKOS_TEST_VAULT__?: { path: string } }).__PIKOS_TEST_VAULT__
+            ?.path
+        : null;
+    const selected =
+      testPath ??
+      (await openDialog({
+        directory: true,
+        multiple: false,
+        title: "Select Markdown / Obsidian Vault folder",
+      }));
     if (!selected) return;
     await parseMarkdownDir(selected);
   }
 
   async function handleCSVImport() {
+    const testCsv =
+      import.meta.env["VITE_TEST_MODE"] === "true"
+        ? (window as unknown as { __PIKOS_TEST_CSV__?: string }).__PIKOS_TEST_CSV__
+        : undefined;
+    if (testCsv !== undefined) {
+      parseCSVFile(testCsv);
+      return;
+    }
     const selected = await openDialog({
       filters: [{ extensions: ["csv"], name: "CSV" }],
       multiple: false,
