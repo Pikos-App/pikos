@@ -2,11 +2,21 @@
 // and the destructive "Delete All Data" action.
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Bug, Check, CheckCircle, Copy, ExternalLink, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  Bug,
+  Check,
+  CheckCircle,
+  Copy,
+  ExternalLink,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Switch } from "@/components/ui/switch";
 import type { CalendarDayCount, CalendarDensity } from "@/features/calendar/utils/calendarUtils";
 import { deleteAllData } from "@/lib/data/deleteAllData";
 import { cn } from "@/lib/utils";
@@ -38,8 +48,10 @@ function SettingsSection({
 }) {
   return (
     <section className="mb-8">
-      <h2 className="mb-1 text-base font-semibold">{title}</h2>
-      {description && <p className="mb-4 text-sm text-muted-foreground">{description}</p>}
+      <div className="mb-4">
+        <h2 className="text-base font-semibold">{title}</h2>
+        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+      </div>
       {children}
     </section>
   );
@@ -119,7 +131,14 @@ const LIST_DENSITY_OPTIONS: { id: ListDensity; label: string }[] = [
 export function GeneralSettings() {
   const updater = useUpdate();
   const { folders } = useWorkspace();
-  const { defaultFolderId, setDefaultFolderId, setWeekStart, weekStart } = useAppSettings();
+  const {
+    autoUpdateEnabled,
+    defaultFolderId,
+    setAutoUpdateEnabled,
+    setDefaultFolderId,
+    setWeekStart,
+    weekStart,
+  } = useAppSettings();
   const { mode, setTheme } = useTheme();
   const { lineWidth, setLineWidth } = useEditorSettings();
   const {
@@ -153,30 +172,45 @@ export function GeneralSettings() {
       {/* ── About ──────────────────────────────────────────────────────── */}
       <SettingsSection title="About">
         <div className="rounded-lg border border-border bg-card px-4">
-          <div className="flex items-center justify-between border-b border-border py-3">
-            <div>
+          <div className="flex items-start justify-between gap-4 border-b border-border py-3">
+            <div className="min-w-0">
               <p className="text-sm font-medium">Pikos</p>
               <p className="text-xs text-muted-foreground">
                 Version {__APP_VERSION__}
                 {import.meta.env.DEV && " — dev"}
               </p>
+              {updater.status.state === "checking" ? (
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">Checking for updates…</p>
+                </div>
+              ) : updater.status.state === "up-to-date" ? (
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                  <p className="text-xs text-muted-foreground">You’re on the latest version</p>
+                </div>
+              ) : updater.status.state === "error" ? (
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                  <p className="text-xs text-destructive">Update check failed. Try again.</p>
+                </div>
+              ) : null}
             </div>
           </div>
-          {(updater.status.state === "checking" || updater.status.state === "up-to-date") && (
-            <div className="flex items-center gap-2 border-b border-border py-3">
-              {updater.status.state === "checking" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              ) : (
-                <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-              )}
-              <p className="text-sm text-muted-foreground">
-                {updater.status.state === "checking"
-                  ? "Checking for updates…"
-                  : "You\u2019re on the latest version"}
-              </p>
+          <div className="flex items-center justify-between gap-3 border-b border-border py-3">
+            <p className="text-sm font-medium">Check for updates automatically</p>
+            <div className="flex items-center gap-3">
+              <button
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={updater.status.state === "checking"}
+                onClick={() => updater.checkForUpdates()}
+              >
+                Check now
+              </button>
+              <Switch checked={autoUpdateEnabled} onCheckedChange={setAutoUpdateEnabled} />
             </div>
-          )}
-          <div className="flex items-center gap-4 py-3">
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
             <button
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
               onClick={() => void openUrl("https://pikos.app")}
@@ -437,7 +471,7 @@ export function GeneralSettings() {
       <section className="mt-12 border-t border-destructive/30 pt-6">
         <h2 className="mb-4 text-base font-semibold text-destructive">Danger Zone</h2>
         <div className="rounded-lg border border-destructive/30 bg-card p-4">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">Delete All Data</p>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -451,7 +485,8 @@ export function GeneralSettings() {
               size="sm"
               variant="destructive"
             >
-              Delete All Data
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
             </Button>
           </div>
         </div>

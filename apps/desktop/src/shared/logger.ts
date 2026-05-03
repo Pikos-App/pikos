@@ -65,16 +65,26 @@ function scrubPaths(s: string): string {
   return s.replace(HOME_PATH_RE, "~");
 }
 
-function formatError(e: unknown): string {
+// Per-field cap for formatError output. Keeps a single runaway third-party
+// error (e.g. a JSON parser quoting the bad input) from dumping unbounded
+// user-derived bytes into pikos.log via the global handlers in
+// installGlobalErrorHandlers().
+const MAX_FIELD_CHARS = 200;
+
+function truncate(s: string, max = MAX_FIELD_CHARS): string {
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+export function formatError(e: unknown): string {
   if (e instanceof Error) {
     const name = e.name || "Error";
-    const message = scrubPaths(e.message ?? "");
-    const stack = e.stack ? scrubPaths(e.stack) : "";
+    const message = truncate(scrubPaths(e.message ?? ""));
+    const stack = e.stack ? truncate(scrubPaths(e.stack)) : "";
     return stack ? `${name}: ${message}\n${stack}` : `${name}: ${message}`;
   }
-  if (typeof e === "string") return scrubPaths(e);
+  if (typeof e === "string") return truncate(scrubPaths(e));
   try {
-    return scrubPaths(JSON.stringify(e));
+    return truncate(scrubPaths(JSON.stringify(e)));
   } catch {
     return "(unserializable)";
   }

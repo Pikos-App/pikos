@@ -72,6 +72,26 @@ describe("defaultFolderId", () => {
 
 // ─── Notification settings ──────────────────────────────────────────────────
 
+describe("autoUpdateEnabled", () => {
+  it("defaults to true", () => {
+    const { result } = setup();
+    expect(result.current.autoUpdateEnabled).toBe(true);
+  });
+
+  it("can be toggled off and persists", () => {
+    const { result } = setup();
+    act(() => result.current.setAutoUpdateEnabled(false));
+    expect(result.current.autoUpdateEnabled).toBe(false);
+    expect(JSON.parse(localStorage.getItem("pikos:autoUpdateEnabled")!)).toBe(false);
+  });
+
+  it("reads persisted value on mount", () => {
+    localStorage.setItem("pikos:autoUpdateEnabled", "false");
+    const { result } = setup();
+    expect(result.current.autoUpdateEnabled).toBe(false);
+  });
+});
+
 describe("notificationsEnabled", () => {
   it("defaults to true", () => {
     const { result } = setup();

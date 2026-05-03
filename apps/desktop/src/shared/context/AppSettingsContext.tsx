@@ -28,6 +28,9 @@ export interface AppSettingsValue {
   /** Version string the user chose to skip (e.g. "1.2.0"). null = no skip. */
   skippedVersion: string | null;
   setSkippedVersion: (v: string | null) => void;
+  /** Run the auto-updater check on launch. Default: true. Manual re-check works regardless. */
+  autoUpdateEnabled: boolean;
+  setAutoUpdateEnabled: (v: boolean) => void;
   /** Daily summary — fire once per day with today + overdue counts. Default: true. */
   overdueAlerts: boolean;
   setOverdueAlerts: (v: boolean) => void;
@@ -66,6 +69,10 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [skippedVersion, setSkippedVersion] = useLocalStorage<string | null>(
     "pikos:skippedVersion",
     null
+  );
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useLocalStorage<boolean>(
+    "pikos:autoUpdateEnabled",
+    true
   );
   const [overdueAlerts, setOverdueAlerts] = useLocalStorage<boolean>("pikos:overdueAlerts", true);
   const [summaryTime, setSummaryTime] = useLocalStorage<string>("pikos:summaryTime", "07:00");
@@ -111,6 +118,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   ]);
 
   const value: AppSettingsValue = {
+    autoUpdateEnabled,
     defaultFolderId,
     defaultReminderMinutes,
     notificationsEnabled,
@@ -118,6 +126,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     quietHoursEnabled,
     quietHoursEnd,
     quietHoursStart,
+    setAutoUpdateEnabled,
     setDefaultFolderId,
     setDefaultReminderMinutes,
     setNotificationsEnabled,

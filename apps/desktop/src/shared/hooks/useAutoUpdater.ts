@@ -37,10 +37,10 @@ export interface AutoUpdater {
 
 export function useAutoUpdater(): AutoUpdater {
   const autoChecked = useRef(false);
-  const { setSkippedVersion, skippedVersion } = useAppSettings();
+  const { autoUpdateEnabled, setSkippedVersion, skippedVersion } = useAppSettings();
   const [status, setStatus] = useState<UpdateStatus>({ state: "idle" });
 
-  async function doCheck() {
+  async function doCheck({ ignoreSkip = false } = {}) {
     if (import.meta.env["VITE_TEST_MODE"] === "true") return;
     if (import.meta.env.DEV) return;
 
@@ -56,7 +56,7 @@ export function useAutoUpdater(): AutoUpdater {
         return;
       }
 
-      if (skippedVersion === update.version) {
+      if (!ignoreSkip && skippedVersion === update.version) {
         log.info(`Update available (${update.version}) but version skipped by user`);
         setStatus({ state: "idle" });
         return;
@@ -104,15 +104,18 @@ export function useAutoUpdater(): AutoUpdater {
     }
   }
 
-  // Auto-check once on mount.
+  // Auto-check once on mount. Skipped when the user has disabled auto-update —
+  // in that case `@tauri-apps/plugin-updater` is never imported and no request
+  // is issued. Manual `checkForUpdates()` ignores this gate.
   useEffect(() => {
     if (autoChecked.current) return;
     autoChecked.current = true;
+    if (!autoUpdateEnabled) return;
     void doCheck();
   }, []);
 
   function checkForUpdates() {
-    void doCheck();
+    void doCheck({ ignoreSkip: true });
   }
 
   function skipVersion() {
