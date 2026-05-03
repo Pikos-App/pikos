@@ -925,12 +925,7 @@ describe("extractImageRefs edge cases", () => {
   it("preserves document order across wiki and standard mixed", () => {
     const body = "Lead\n![first](one.png)\n![[two.png]]\n![third](three.svg)\n![[four.jpg]]";
     const refs = extractImageRefs(body);
-    expect(refs.map((r) => r.sourcePath)).toEqual([
-      "one.png",
-      "two.png",
-      "three.svg",
-      "four.jpg",
-    ]);
+    expect(refs.map((r) => r.sourcePath)).toEqual(["one.png", "two.png", "three.svg", "four.jpg"]);
   });
 
   it("ignores http/https in standard syntax even with image extension", () => {
@@ -987,9 +982,7 @@ describe("parseMarkdownVault transformation order", () => {
     // The CALLOUT_RE matches `^> [!type]` at line start globally; fenced code
     // is not currently parsed structurally. Lock the current behavior so any
     // future structural pass is intentional.
-    const files: VaultFile[] = [
-      { content: "```md\n> [!note] inside fence\n```", path: "n.md" },
-    ];
+    const files: VaultFile[] = [{ content: "```md\n> [!note] inside fence\n```", path: "n.md" }];
     const plan = parseMarkdownVault(files);
     expect(plan.pages[0]!.body).toContain("**Note:** inside fence");
   });
