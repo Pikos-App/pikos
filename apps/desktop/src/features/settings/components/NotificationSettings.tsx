@@ -1,6 +1,6 @@
 // NotificationSettings — global on/off, default lead time, overdue alerts, quiet hours.
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -55,8 +55,13 @@ export function NotificationSettings() {
     summaryTime,
   } = useAppSettings();
 
-  // Permission state
+  // Permission state. `permissionError` becomes truthy when the OS-level
+  // request itself fails (Tauri command throws) — distinct from "denied",
+  // which is a successful response with `granted=false`. The denied case
+  // falls through to the existing "blocked" banner; this state covers the
+  // throw path that previously left the UI silent.
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+  const [permissionError, setPermissionError] = useState(false);
 
   useEffect(() => {
     void checkPermission();
@@ -84,10 +89,10 @@ export function NotificationSettings() {
       const granted = await invoke<boolean>("request_notification_permission");
       log.info(`Permission request: ${granted ? "granted" : "denied"}`);
       setPermissionGranted(granted);
+      setPermissionError(false);
     } catch (e) {
-      // Surface so we don't silently leave the user thinking notifications
-      // are on. Connects to backlog item #18.
       log.error("requestPermission failed", e instanceof Error ? e.name : "unknown");
+      setPermissionError(true);
     }
   }
 
@@ -112,6 +117,35 @@ export function NotificationSettings() {
           Desktop reminders for scheduled pages. Notifications are fully local — nothing leaves your
           device.
         </p>
+
+        {/* Permission request failed (Tauri command threw) */}
+        {permissionError && (
+          <div className="mb-4 flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-foreground">
+                Couldn't request notification permission
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Pikos asked your system for permission and the request failed. Try again, or grant
+                permission manually in System Settings → Notifications → Pikos.
+              </p>
+              <button
+                className="mt-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+                onClick={() => void handleRequestPermission()}
+              >
+                Try again
+              </button>
+            </div>
+            <button
+              aria-label="Dismiss"
+              className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => setPermissionError(false)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Permission blocked warning */}
         {permissionGranted === false && (
