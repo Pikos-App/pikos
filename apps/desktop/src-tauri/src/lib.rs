@@ -87,6 +87,9 @@ pub fn run() {
                 .id("settings")
                 .accelerator("CmdOrCtrl+,")
                 .build(handle)?;
+            let check_updates = MenuItemBuilder::new("Check for Updates…")
+                .id("check_updates")
+                .build(handle)?;
             let app_menu = SubmenuBuilder::new(handle, "Pikos")
                 .about(Some(
                     AboutMetadataBuilder::new()
@@ -101,6 +104,8 @@ pub fn run() {
                         .comments(Some("Notes, tasks, and calendar — local-first"))
                         .build(),
                 ))
+                .separator()
+                .item(&check_updates)
                 .separator()
                 .item(&settings)
                 .separator()
@@ -199,7 +204,7 @@ pub fn run() {
                     let _ = tauri_plugin_opener::open_url(&url, None::<&str>);
                 }
                 "new_page" | "close_page" | "settings"
-                | "toggle_sidebar" | "toggle_calendar" => {
+                | "toggle_sidebar" | "toggle_calendar" | "check_updates" => {
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.eval(
                             format!("window.__onMenuEvent && window.__onMenuEvent('{}')", id)

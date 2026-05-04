@@ -39,11 +39,14 @@ function useTrackPageOpened() {
 /** Handle native menu events via global callback invoked from Tauri eval(). */
 function useMenuEvents() {
   const ui = useUI();
+  const updater = useUpdate();
   const { setRightPanel, setSidebarCollapsed } = ui;
   const stateRef = useRef({ rightPanel: ui.rightPanel });
+  const updaterRef = useRef(updater);
 
   useEffect(() => {
     stateRef.current = { rightPanel: ui.rightPanel };
+    updaterRef.current = updater;
   });
 
   useEffect(() => {
@@ -66,6 +69,9 @@ function useMenuEvents() {
           setRightPanel(current === "calendar" ? "editor" : "calendar");
           break;
         }
+        case "check_updates":
+          updaterRef.current.checkForUpdates();
+          break;
       }
     };
     return () => {
