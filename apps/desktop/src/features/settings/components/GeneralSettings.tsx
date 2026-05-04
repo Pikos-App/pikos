@@ -1,7 +1,9 @@
 // GeneralSettings — about, preferences (theme, editor, calendar), feedback,
 // and the destructive "Delete All Data" action.
 
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
+import { appLogDir } from "@tauri-apps/api/path";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import {
   AlertCircle,
   Bug,
@@ -9,6 +11,8 @@ import {
   CheckCircle,
   Copy,
   ExternalLink,
+  FileText,
+  FolderOpen,
   Loader2,
   Trash2,
 } from "lucide-react";
@@ -151,6 +155,31 @@ export function GeneralSettings() {
   const { showNotice } = useUndoDelete();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [logsCopied, setLogsCopied] = useState(false);
+
+  async function handleOpenLogFolder() {
+    try {
+      await openPath(await appLogDir());
+    } catch (err) {
+      log.warn("open log folder failed", err);
+    }
+  }
+
+  async function handleCopyLogs() {
+    try {
+      const contents = await invoke<string>("read_recent_logs");
+      if (!contents) {
+        showNotice("No logs yet — nothing to copy.", 3000);
+        return;
+      }
+      await navigator.clipboard.writeText(contents);
+      setLogsCopied(true);
+      setTimeout(() => setLogsCopied(false), 1500);
+    } catch (err) {
+      log.warn("copy logs failed", err);
+      showNotice("Couldn't copy logs.", 3000);
+    }
+  }
 
   async function handleDeleteAll() {
     if (deleting) return;
@@ -464,6 +493,42 @@ export function GeneralSettings() {
             </button>
           </div>
           <CopyEmailRow />
+
+          <div className="flex items-center justify-between border-t border-border py-3">
+            <div>
+              <p className="text-sm font-medium">Open log folder</p>
+              <p className="text-xs text-muted-foreground">
+                Reveal the local log directory so you can attach files to a bug report.
+              </p>
+            </div>
+            <button
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+              onClick={() => void handleOpenLogFolder()}
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              Open
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border py-3">
+            <div>
+              <p className="text-sm font-medium">Copy recent logs</p>
+              <p className="text-xs text-muted-foreground">
+                Copies the last 50 KB of pikos.log to your clipboard.
+              </p>
+            </div>
+            <button
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+              onClick={() => void handleCopyLogs()}
+            >
+              {logsCopied ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <FileText className="h-3.5 w-3.5" />
+              )}
+              {logsCopied ? "Copied" : "Copy"}
+            </button>
+          </div>
         </div>
       </SettingsSection>
 

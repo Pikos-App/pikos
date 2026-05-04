@@ -14,7 +14,7 @@ mod window_state;
 use db::{
     connect_db, DbState,
     assets::{init_assets_dir, save_asset, save_asset_bytes},
-    dev::{backdate_page, backup_db, backup_db_before_import, export_csv, export_json, export_markdown, get_usage_stats, reset_db, wipe_app_data},
+    dev::{backdate_page, backup_db, backup_db_before_import, export_csv, export_json, export_markdown, get_usage_stats, read_recent_logs, reset_db, wipe_app_data},
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders,
         restore_folder, soft_delete_folder, update_folder,
@@ -274,6 +274,7 @@ pub fn run() {
             export_json,
             export_markdown,
             get_usage_stats,
+            read_recent_logs,
             reset_db,
             wipe_app_data,
         ])
