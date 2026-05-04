@@ -128,7 +128,9 @@ pub async fn connect_db(path: String, state: tauri::State<'_, DbState>) -> Resul
     backfill_content_text(&pool).await?;
 
     // Prune notification log entries older than 30 days to prevent unbounded growth.
-    crate::notifications::scheduler::prune_notification_log(&pool).await?;
+    crate::notifications::scheduler::prune_notification_log(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Rebuild FTS5 index from the pages content table.
     // For external-content FTS5 tables (content='pages'), the index is not

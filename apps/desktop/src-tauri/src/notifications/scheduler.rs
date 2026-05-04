@@ -135,9 +135,11 @@ pub async fn run(app: AppHandle) {
     log::info!("Notification scheduler started");
 
     // Request notification permission on startup. On macOS this triggers
-    // the OS permission dialog if not yet determined.
-    if let Err(e) = app.notification().request_permission() {
-        log::warn!("Notification permission request failed: {e}");
+    // the OS permission dialog if not yet determined. Foreign error from
+    // tauri-plugin-notification can include OS-level strings — log only
+    // the operation, not the message.
+    if app.notification().request_permission().is_err() {
+        log::warn!("notification_permission_request_failed");
     }
 
     loop {
@@ -150,9 +152,38 @@ pub async fn run(app: AppHandle) {
 
         if let Err(e) = check_and_fire(&app).await {
             // Tick failure is recoverable — next tick retries. Surface as
-            // warn so a recurring underlying issue is visible in the log.
-            log::warn!("Scheduler tick failed: {e}");
+            // warn so a recurring underlying issue is visible. Pass the
+            // sqlx error class only — the Display output can echo SQL
+            // fragments and parameter values back into the log.
+            log::warn!("scheduler_tick_failed kind={}", classify_sqlx(&e));
         }
+    }
+}
+
+/// Stable, content-free label for an `sqlx::Error`. Use at log sites instead
+/// of `e.to_string()` — the Display impl can echo SQL fragments and parameter
+/// values which may include user-derived data (titles, tags, search input).
+fn classify_sqlx(e: &sqlx::Error) -> &'static str {
+    use sqlx::Error::*;
+    match e {
+        Configuration(_) => "configuration",
+        Database(_) => "database",
+        Io(_) => "io",
+        Tls(_) => "tls",
+        Protocol(_) => "protocol",
+        RowNotFound => "row_not_found",
+        TypeNotFound { .. } => "type_not_found",
+        ColumnIndexOutOfBounds { .. } => "column_index_out_of_bounds",
+        ColumnNotFound(_) => "column_not_found",
+        ColumnDecode { .. } => "column_decode",
+        Encode(_) => "encode",
+        Decode(_) => "decode",
+        AnyDriverError(_) => "any_driver",
+        PoolTimedOut => "pool_timed_out",
+        PoolClosed => "pool_closed",
+        WorkerCrashed => "worker_crashed",
+        Migrate(_) => "migrate",
+        _ => "other",
     }
 }
 
@@ -212,7 +243,11 @@ fn should_fire_daily_summary(
 }
 
 /// Query for due reminders and fire OS notifications.
-async fn check_and_fire(app: &AppHandle) -> Result<(), String> {
+///
+/// Internal scheduler fns return `sqlx::Error` directly (not `String`) so the
+/// run-loop log site can use `classify_sqlx` to log a stable error class
+/// without echoing parameter values back through the sqlx Display impl.
+async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
     let settings = {
         let state = app.state::<NotificationSettingsState>();
         let guard = state.0.lock().await;
@@ -277,7 +312,7 @@ async fn fire_explicit_reminders(
     pool: &SqlitePool,
     window_start: &str,
     now_ts: &str,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     let due: Vec<DueReminder> = sqlx::query_as(
         "SELECT ps.id AS schedule_id, ps.page_id, p.title,
                 ps.scheduled_start, pr.minutes_before
@@ -300,8 +335,7 @@ async fn fire_explicit_reminders(
     .bind(window_start)
     .bind(now_ts)
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     for row in due {
         fire_reminder(app, pool, &row).await?;
@@ -318,7 +352,7 @@ async fn fire_default_reminders(
     settings: &NotificationSettings,
     window_start: &str,
     now_ts: &str,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     let minutes = settings.default_minutes_before;
 
     let due: Vec<DueReminder> = sqlx::query_as(
@@ -346,8 +380,7 @@ async fn fire_default_reminders(
     .bind(window_start)
     .bind(now_ts)
     .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     for row in due {
         fire_reminder(app, pool, &row).await?;
@@ -370,7 +403,7 @@ async fn fire_daily_summary(
     app: &AppHandle,
     pool: &SqlitePool,
     now: &chrono::DateTime<chrono::Local>,
-) -> Result<bool, String> {
+) -> Result<bool, sqlx::Error> {
     let today = now.format("%Y-%m-%d").to_string();
 
     // Persistent dedup across restarts.
@@ -383,8 +416,7 @@ async fn fire_daily_summary(
     )
     .bind(&today)
     .fetch_one(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     if already_fired.0 > 0 {
         return Ok(false);
@@ -410,8 +442,7 @@ async fn fire_daily_summary(
     )
     .bind(&today)
     .fetch_one(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
     let today_count = today_row.0;
 
     // Overdue count — timed events only, in the last 24h.
@@ -431,8 +462,7 @@ async fn fire_daily_summary(
     .bind(&stale_cutoff)
     .bind(&recent_cutoff)
     .fetch_one(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
     let overdue_count = overdue_row.0;
 
     // Insert marker row (local time, consistent with date(fired_at)=today above).
@@ -444,8 +474,7 @@ async fn fire_daily_summary(
     .bind(&log_id)
     .bind(&now_ts)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     if today_count == 0 && overdue_count == 0 {
         return Ok(false);
@@ -546,7 +575,7 @@ async fn fire_reminder(
     app: &AppHandle,
     pool: &SqlitePool,
     row: &DueReminder,
-) -> Result<(), String> {
+) -> Result<(), sqlx::Error> {
     let lead = format_lead_time(row.minutes_before);
     let time_str = format_time_from_iso(&row.scheduled_start);
     let body = if time_str.is_empty() {
@@ -570,24 +599,30 @@ async fn fire_reminder(
     .bind(&row.schedule_id)
     .bind(&fired_at)
     .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     deliver(app, &row.title, &body);
+
+    // Reminder actually fired — meaningful audit anchor at INFO. Empty
+    // ticks are silent (most ticks find nothing).
+    log::info!(
+        "notification_fired type=reminder page_id={} schedule_id={}",
+        row.page_id,
+        row.schedule_id
+    );
 
     Ok(())
 }
 
 /// Prune notification_log entries older than 30 days.
-pub async fn prune_notification_log(pool: &SqlitePool) -> Result<(), String> {
+pub async fn prune_notification_log(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let cutoff = (chrono::Local::now() - chrono::Duration::days(30))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
     sqlx::query("DELETE FROM notification_log WHERE datetime(fired_at) < datetime(?)")
         .bind(&cutoff)
         .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     Ok(())
 }
 
@@ -612,6 +647,19 @@ mod tests {
 
     fn local_at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> chrono::DateTime<chrono::Local> {
         chrono::Local.with_ymd_and_hms(y, mo, d, h, mi, 0).unwrap()
+    }
+
+    // ─── classify_sqlx ───────────────────────────────────────────────────
+
+    #[test]
+    fn classify_sqlx_returns_stable_label_without_message() {
+        // Variants we'll realistically see in the scheduler. The point is
+        // to confirm the label is content-free — no Display formatting, no
+        // user-provided strings can leak through this helper.
+        assert_eq!(classify_sqlx(&sqlx::Error::RowNotFound), "row_not_found");
+        assert_eq!(classify_sqlx(&sqlx::Error::PoolTimedOut), "pool_timed_out");
+        assert_eq!(classify_sqlx(&sqlx::Error::PoolClosed), "pool_closed");
+        assert_eq!(classify_sqlx(&sqlx::Error::WorkerCrashed), "worker_crashed");
     }
 
     // ─── is_quiet_hours ──────────────────────────────────────────────────

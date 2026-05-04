@@ -250,8 +250,8 @@ pub async fn reset_db(state: tauri::State<'_, DbState>) -> Result<(), String> {
         .rows_affected();
 
     log::info!(
-        "reset_db: deleted {pages} pages, {folders} folders, {schedules} schedules, \
-         {rules} recurrence rules, {sessions} focus sessions"
+        "reset_db pages={pages} folders={folders} schedules={schedules} \
+         rules={rules} sessions={sessions}"
     );
     Ok(())
 }
@@ -266,7 +266,7 @@ pub async fn wipe_app_data(
     app: tauri::AppHandle,
     state: tauri::State<'_, DbState>,
 ) -> Result<(), String> {
-    log::info!("wipe_app_data: dropping DB pool and removing on-disk state");
+    log::info!("wipe_app_data action=drop_pool_remove_disk");
 
     // Drop the DB pool first so SQLite file handles release before we remove
     // the file. On Unix unlink would succeed regardless, but Windows is strict.
@@ -387,7 +387,7 @@ pub async fn export_json(state: tauri::State<'_, DbState>) -> Result<String, Str
     std::fs::write(&dest, json_str).map_err(|e| e.to_string())?;
 
     log::info!(
-        "export_json: {pages_len} pages, {folders_len} folders → {}",
+        "export_json pages={pages_len} folders={folders_len} dest={}",
         dest.replacen(&home, "~", 1)
     );
     Ok(dest)
@@ -410,7 +410,7 @@ pub async fn backup_db(state: tauri::State<'_, DbState>) -> Result<String, Strin
         .await
         .map_err(|e| e.to_string())?;
 
-    log::info!("backup_db: wrote to {}", dest.replacen(&home, "~", 1));
+    log::info!("backup_db dest={}", dest.replacen(&home, "~", 1));
     Ok(dest)
 }
 
@@ -550,7 +550,7 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
 
                     if let Err(e) = std::fs::copy(source, &dest) {
                         // abs_path is a user asset path — log only the io::ErrorKind, not the path.
-                        log::warn!("export_markdown: failed to copy asset ({})", e.kind());
+                        log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
                         continue;
                     }
                     copied_assets.insert(abs_path.to_string(), relative);
@@ -637,7 +637,7 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> Result<String,
     }
 
     log::info!(
-        "export_markdown: {} pages, {} assets → {}",
+        "export_markdown pages={} assets={} dest={}",
         pages.len(),
         copied_assets.len(),
         base_dir.replacen(&home, "~", 1)
@@ -744,7 +744,7 @@ pub async fn export_csv(state: tauri::State<'_, DbState>) -> Result<String, Stri
     std::fs::write(&dest, out).map_err(|e| e.to_string())?;
 
     log::info!(
-        "export_csv: {} pages → {}",
+        "export_csv pages={} dest={}",
         pages.len(),
         dest.replacen(&home, "~", 1)
     );
