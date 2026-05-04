@@ -55,6 +55,11 @@ pub struct UsageStats {
 }
 
 /// Rich usage stats for the Settings > Data panel. All queries are local — no telemetry.
+//
+// TODO: Dashboard stats fan out into ~14 sequential queries on every nav/focus
+// event that opens Settings. Consider consolidating into one CTE-based query
+// or memoising per session. Tracked separately from logging refinement —
+// touching the SQL belongs in its own task.
 #[tauri::command]
 pub async fn get_usage_stats(state: tauri::State<'_, DbState>) -> Result<UsageStats, String> {
     let pool = state.get_pool().await?;

@@ -170,7 +170,9 @@ async fn backfill_content_text(pool: &SqlitePool) -> Result<(), String> {
     }
 
     if backfilled > 0 {
-        log::info!("Backfilled content_text for {backfilled} pages");
+        // Operational detail; runs at most once per workspace lifetime.
+        // Demoted from INFO so a healthy boot stays at the lifecycle anchor only.
+        log::debug!("backfill_content_text count={backfilled}");
     }
     Ok(())
 }
