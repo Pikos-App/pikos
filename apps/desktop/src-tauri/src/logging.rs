@@ -39,9 +39,9 @@
 //! - WARN  — fallback taken, unexpected state, recoverable.
 //! - INFO  — lifecycle anchors and destructive actions only.
 //! - DEBUG — diagnostic detail useful in dev. Quiet enough to leave on
-//!           while working.
+//!   while working.
 //! - TRACE — per-query SQL, per-tick polls, hot-path reads. Off by
-//!           default, opt in via `RUST_LOG`.
+//!   default, opt in via `RUST_LOG`.
 //!
 //! ─── Structured fields ─────────────────────────────────────────────────
 //!
