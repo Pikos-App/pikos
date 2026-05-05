@@ -29,6 +29,9 @@ playwright-report/
 test-results/
 recordings/
 
+# Calendar layout screenshots (regen via pnpm --filter @pikos/desktop screenshot:calendar)
+.screenshots/
+
 # Claude Code
 .claude/
 
