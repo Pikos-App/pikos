@@ -55,6 +55,7 @@ const GROUPS: ShortcutGroup[] = [
       { combo: "Mod+W", label: "Close page" },
       { combo: "Mod+K", label: "Search" },
       { combo: "Mod+,", label: "Settings" },
+      { combo: "Mod+/", label: "Keyboard shortcuts" },
       { combo: "Mod+\\", label: "Toggle sidebar" },
       { combo: "Mod+Shift+C", label: "Toggle calendar / editor" },
       { combo: "Mod+Backspace", label: "Delete page" },

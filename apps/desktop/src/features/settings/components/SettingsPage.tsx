@@ -13,7 +13,7 @@ import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 import { DataSettings } from "./DataSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { NotificationSettings } from "./NotificationSettings";
-import { SettingsNav, type SettingsSection } from "./SettingsNav";
+import { SettingsNav } from "./SettingsNav";
 import { ShortcutsSettings } from "./ShortcutsSettings";
 import type { UsageStatsData } from "./UsageStats";
 
@@ -30,20 +30,17 @@ function readLeftPanelWidth(): number {
   }
 }
 
-// Persist active settings tab across open/close cycles so import/undo
-// workflows return to the Data tab instead of resetting to General.
-let lastSection: SettingsSection = "general";
-
 export function SettingsPage() {
-  const { setActiveViewId, setSettingsOpen, settingsOpen } = useUI();
+  const {
+    setActiveViewId,
+    setSettingsOpen,
+    setSettingsSection,
+    settingsOpen,
+    settingsSection: section,
+  } = useUI();
   const { clearLastImport, lastImportResult, undoLastImport, workspace } = useWorkspace();
   const isFullscreen = useIsFullscreen();
   const [sidebarWidth] = useState(readLeftPanelWidth);
-  const [section, setSectionState] = useState<SettingsSection>(lastSection);
-  const setSection = (s: SettingsSection) => {
-    lastSection = s;
-    setSectionState(s);
-  };
   const [usageStats, setUsageStats] = useState<UsageStatsData | null>(null);
   const {
     applyCSVMapping,
@@ -105,7 +102,7 @@ export function SettingsPage() {
       <SettingsNav
         active={section}
         onClose={() => setSettingsOpen(false)}
-        onNavigate={setSection}
+        onNavigate={setSettingsSection}
         width={sidebarWidth}
       />
 

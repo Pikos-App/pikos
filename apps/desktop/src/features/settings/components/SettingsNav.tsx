@@ -5,8 +5,9 @@ import { Bell, Code2, Database, Keyboard, Settings, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
+import type { SettingsSection } from "@/shared/context/UIContext";
 
-export type SettingsSection = "general" | "notifications" | "data" | "shortcuts" | "developer";
+export type { SettingsSection };
 
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
   { icon: Settings, id: "general", label: "General" },

@@ -170,11 +170,16 @@ pub fn run() {
             let help_docs = MenuItemBuilder::new("Pikos FAQ")
                 .id("help_docs")
                 .build(handle)?;
+            let help_shortcuts = MenuItemBuilder::new("Keyboard Shortcuts")
+                .id("keyboard_shortcuts")
+                .accelerator("CmdOrCtrl+/")
+                .build(handle)?;
             let help_bug = MenuItemBuilder::new("Report a Bug…")
                 .id("help_bug")
                 .build(handle)?;
             let help_menu = SubmenuBuilder::new(handle, "Help")
                 .item(&help_docs)
+                .item(&help_shortcuts)
                 .separator()
                 .item(&help_bug)
                 .build()?;
@@ -204,7 +209,8 @@ pub fn run() {
                     let _ = tauri_plugin_opener::open_url(&url, None::<&str>);
                 }
                 "new_page" | "close_page" | "settings"
-                | "toggle_sidebar" | "toggle_calendar" | "check_updates" => {
+                | "toggle_sidebar" | "toggle_calendar" | "check_updates"
+                | "keyboard_shortcuts" => {
                     if let Some(window) = app.get_webview_window("main") {
                         let _ = window.eval(
                             format!("window.__onMenuEvent && window.__onMenuEvent('{}')", id)

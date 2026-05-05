@@ -72,6 +72,10 @@ function useMenuEvents() {
         case "check_updates":
           updaterRef.current.checkForUpdates();
           break;
+        case "keyboard_shortcuts":
+          ui.setSettingsSection("shortcuts");
+          ui.setSettingsOpen(true);
+          break;
       }
     };
     return () => {
@@ -80,13 +84,24 @@ function useMenuEvents() {
   }, [setSidebarCollapsed, setRightPanel]);
 }
 
-/** ⌘, opens settings, ⌘1-9 switches to folder by index. */
+/** ⌘, opens settings, ⌘? opens settings → shortcuts, ⌘1-9 switches to folder by index. */
 function useGlobalShortcuts() {
-  const { setActivePage, setActiveViewId, setSettingsOpen, settingsOpen } = useUI();
+  const { setActivePage, setActiveViewId, setSettingsOpen, setSettingsSection, settingsOpen } =
+    useUI();
   const { folders } = useWorkspace();
 
   useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), { allowInInputs: true });
   useKeyboardShortcut("Mod+W", () => setActivePage(null), { allowInInputs: true });
+  // Cmd+/ — macOS reserves Cmd+? for the Help menu's search field, so we use
+  // Cmd+/ (the standard for shortcut overlays — Linear, Notion, Slack).
+  useKeyboardShortcut(
+    "Mod+/",
+    () => {
+      setSettingsSection("shortcuts");
+      setSettingsOpen(true);
+    },
+    { allowInInputs: true }
+  );
 
   // ⌘1-9 — switch to folder by index (1-based).
   // Use the Keyboard registry directly to register all 9 bindings in one effect,

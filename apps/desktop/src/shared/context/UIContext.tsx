@@ -16,6 +16,8 @@ import { computeRangeSelection } from "./selectionUtils";
 /** 'today' | 'inbox' | folderId (UUID string) */
 export type ActiveViewId = "today" | "inbox" | (string & NonNullable<unknown>);
 export type DialogId = "quick-add" | "search" | null;
+/** Settings overlay sections. Kept here so external triggers (menu / shortcuts) can deep-link. */
+export type SettingsSection = "general" | "notifications" | "data" | "shortcuts" | "developer";
 
 export interface UIContextValue {
   /** ID of the currently selected page. Derive the full Page via useActivePage(). */
@@ -47,6 +49,9 @@ export interface UIContextValue {
   /** Settings overlay open state. */
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
+  /** Active section inside the settings overlay. Persists across open/close. */
+  settingsSection: SettingsSection;
+  setSettingsSection: (section: SettingsSection) => void;
   /** Which sort dropdown is open ('folder-sort' | 'page-sort' | null). Shared to ensure mutual exclusion. */
   openSortMenu: string | null;
   setOpenSortMenu: (id: string | null) => void;
@@ -133,6 +138,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
   const [pageListDrawerOpen, setPageListDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [openSortMenu, setOpenSortMenu] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState<string | null>(null);
   const [sortModes, setSortModes] = useLocalStorage<Record<string, SortMode>>(
@@ -300,9 +306,11 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setRightPanel,
     setSelectionAnchorId,
     setSettingsOpen,
+    setSettingsSection,
     setSidebarCollapsed,
     setSortMode,
     settingsOpen,
+    settingsSection,
     sidebarCollapsed,
     togglePageSelection,
   };
