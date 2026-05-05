@@ -35,6 +35,7 @@ import {
   mapHourToY,
   mapYToDate,
   mapYToHour,
+  MAX_VISIBLE_CASCADE_DEPTH,
   normalizeEndInput,
   OVERFLOW_MIN_WIDTH_PX,
   remapBlocksForCollapse,
@@ -859,9 +860,11 @@ describe("collapseUnderWidth", () => {
     leftPct: number,
     widthPct: number,
     top = 0,
-    height = 60
+    height = 60,
+    cascadeDepth = 0
   ): import("./calendarUtils").CalendarBlock {
     return {
+      cascadeDepth,
       endDate: new Date(),
       height,
       isCompact: false,
@@ -891,7 +894,7 @@ describe("collapseUnderWidth", () => {
   it("pill anchors at rightmost collapsed slot, expanded to PILL_MIN_WIDTH_PX", () => {
     // Column 200 → min pill = (64/200)*100 = 32%. Slot is at 86/14 (only
     // 28px wide), expand left so the pill has a readable 32% width and
-    // stays right-anchored.
+    // stays right-anchored. Pill is chip-shaped — anchored at slotHost.top.
     const blocks = [
       makeBlock("wide", 0, 60),
       makeBlock("n1", 60, 13, 100),
@@ -915,19 +918,19 @@ describe("collapseUnderWidth", () => {
     expect(pill?.leftPct).toBe(50);
   });
 
-  it("pill height is COMPACT_BLOCK_HEIGHT (chip-sized)", () => {
+  it("pill height tracks the chipHeight argument so it scales with density", () => {
     const blocks = [makeBlock("n1", 50, 20, 100, 40), makeBlock("n2", 70, 20, 200, 60)];
-    const { pill } = collapseUnderWidth(blocks, 100);
-    expect(pill?.height).toBe(COMPACT_BLOCK_HEIGHT);
+    // Compact: hourHeight=40 → compactBlockHeight=10, but the floor kicks in.
+    expect(collapseUnderWidth(blocks, 100, 10).pill?.height).toBe(14);
+    // Normal: hourHeight=64 → compactBlockHeight=16.
+    expect(collapseUnderWidth(blocks, 100, 16).pill?.height).toBe(16);
+    // Spacious: hourHeight=88 → compactBlockHeight=22.
+    expect(collapseUnderWidth(blocks, 100, 22).pill?.height).toBe(22);
   });
 
-  it("pill top tracks the rightmost-cascaded slot's top", () => {
-    const blocks = [
-      makeBlock("n1", 50, 20, 100, 40),
-      makeBlock("n2", 70, 20, 200, 60), // rightmost (highest leftPct)
-    ];
-    const { pill } = collapseUnderWidth(blocks, 100);
-    expect(pill?.top).toBe(200);
+  it("pill height defaults to COMPACT_BLOCK_HEIGHT when no chipHeight is passed", () => {
+    const blocks = [makeBlock("n1", 50, 20, 100, 40), makeBlock("n2", 70, 20, 200, 60)];
+    expect(collapseUnderWidth(blocks, 100).pill?.height).toBe(COMPACT_BLOCK_HEIGHT);
   });
 
   it("uses OVERFLOW_MIN_WIDTH_PX as the threshold", () => {
@@ -951,6 +954,40 @@ describe("collapseUnderWidth", () => {
     const seen = new Set<string>([...visible.map((b) => b.page.id), ...(pill?.pageIds ?? [])]);
     expect(seen.size).toBe(blocks.length);
     for (const b of blocks) expect(seen.has(b.page.id)).toBe(true);
+  });
+
+  it("depth past MAX_VISIBLE_CASCADE_DEPTH collapses even on wide columns", () => {
+    // One block per cascade depth, all 90 px wide (well above
+    // OVERFLOW_MIN_WIDTH_PX) so width never gates collapse — only depth.
+    const blocks = [
+      makeBlock("h", 0, 30, 0, 60, 0),
+      ...Array.from({ length: MAX_VISIBLE_CASCADE_DEPTH }, (_, i) =>
+        makeBlock(`v${i + 1}`, (i + 1) * 12, 30, (i + 1) * 50, 60, i + 1)
+      ),
+      makeBlock("over1", 60, 30, 400, 60, MAX_VISIBLE_CASCADE_DEPTH + 1),
+      makeBlock("over2", 72, 30, 450, 60, MAX_VISIBLE_CASCADE_DEPTH + 2),
+    ];
+    const { pill, visible } = collapseUnderWidth(blocks, 300);
+    const expectedVisible = [
+      "h",
+      ...Array.from({ length: MAX_VISIBLE_CASCADE_DEPTH }, (_, i) => `v${i + 1}`),
+    ];
+    expect(visible.map((b) => b.page.id)).toEqual(expectedVisible);
+    expect(pill?.pageIds).toEqual(["over1", "over2"]);
+  });
+
+  it("depth ≤ MAX_VISIBLE_CASCADE_DEPTH stays visible regardless of column width", () => {
+    // Blocks at every depth ≤ MAX in a narrow column. Width would normally
+    // collapse them, but the test confirms depth alone doesn't push them out.
+    // (Width rule still composes — both rules can fire independently.)
+    const blocks = [
+      makeBlock("h", 0, 50, 0, 60, 0),
+      ...Array.from({ length: MAX_VISIBLE_CASCADE_DEPTH }, (_, i) =>
+        makeBlock(`v${i + 1}`, 50, 50, (i + 1) * 50, 60, i + 1)
+      ),
+    ];
+    const { pill, visible } = collapseUnderWidth(blocks, 100);
+    expect(visible.length + (pill?.pageIds.length ?? 0)).toBe(blocks.length);
   });
 });
 
@@ -1024,7 +1061,7 @@ describe("buildDayBlocks", () => {
     expect(lefts).toEqual([0, 50]);
   });
 
-  it("three close-top events → host 50%, second guest 50%, third cascades inside right half", () => {
+  it("three close-top events → host 50%, second guest 50%, third folds via cascadeDepth", () => {
     const pages = [
       makePage({
         id: "a",
@@ -1051,10 +1088,8 @@ describe("buildDayBlocks", () => {
     expect(byId["a"]!.widthPct).toBe(50);
     expect(byId["b"]!.leftPct).toBe(50);
     expect(byId["b"]!.widthPct).toBe(50);
-    // c is at cascade depth 1 inside the right 50%: relativeOffset =
-    // CASCADE_OFFSET_PCT, leftPct = 50 + CASCADE_OFFSET_PCT/2.
-    expect(byId["c"]!.leftPct).toBe(50 + CASCADE_OFFSET_PCT / 2);
-    expect(byId["c"]!.widthPct).toBe(50 - CASCADE_OFFSET_PCT / 2);
+    // c past second slot → marked for the pill, not cascaded inside the 50%.
+    expect(byId["c"]!.cascadeDepth).toBeGreaterThan(MAX_VISIBLE_CASCADE_DEPTH);
   });
 
   it("three overlapping events with spread-out tops → cascade depth 0/1/2", () => {
@@ -1090,7 +1125,7 @@ describe("buildDayBlocks", () => {
     expect(c.widthPct).toBe(100 - 2 * CASCADE_OFFSET_PCT);
   });
 
-  it("very deep pile of close-top events → host 50%, rest cascade inside right half", () => {
+  it("very deep pile of close-top events → host 50%, second 50%, rest fold via cascadeDepth", () => {
     const pages = Array.from({ length: 6 }, (_, i) =>
       makePage({
         id: `p${i}`,
@@ -1101,16 +1136,18 @@ describe("buildDayBlocks", () => {
     );
     const blocks = buildDayBlocks(pages, day);
     const byId = Object.fromEntries(blocks.map((b) => [b.page.id, b]));
-    // p0 = host on the left half.
+    // p0 = host on the left half, depth 0.
     expect(byId["p0"]!.leftPct).toBe(0);
     expect(byId["p0"]!.widthPct).toBe(50);
-    // p1..p5 cascade inside the right 50% with half-scaled offset.
-    for (let i = 1; i < 6; i++) {
-      const cascadeDepth = i - 1;
-      const relativeOffset = Math.min(cascadeDepth * CASCADE_OFFSET_PCT, 60);
-      const expectedLeft = 50 + relativeOffset / 2;
-      expect(byId[`p${i}`]!.leftPct).toBe(expectedLeft);
-      expect(byId[`p${i}`]!.widthPct).toBe(100 - expectedLeft);
+    expect(byId["p0"]!.cascadeDepth).toBe(0);
+    // p1 = next-most-prominent guest on the full right half, depth 1.
+    expect(byId["p1"]!.leftPct).toBe(50);
+    expect(byId["p1"]!.widthPct).toBe(50);
+    expect(byId["p1"]!.cascadeDepth).toBe(1);
+    // p2..p5 marked past MAX_VISIBLE_CASCADE_DEPTH so collapseUnderWidth folds
+    // them into the pill rather than stacking visual clutter inside the 50%.
+    for (let i = 2; i < 6; i++) {
+      expect(byId[`p${i}`]!.cascadeDepth).toBeGreaterThan(MAX_VISIBLE_CASCADE_DEPTH);
     }
   });
 
@@ -1299,13 +1336,12 @@ describe("buildDayBlocks", () => {
     // Solo is its own cluster — full width, independent of the later pile.
     expect(byId["solo"]!.leftPct).toBe(0);
     expect(byId["solo"]!.widthPct).toBe(100);
-    // The pile has close tops → host 50%, second guest 50%, third cascades.
+    // The pile has close tops → host 50%, second guest 50%, third folds.
     expect(byId["p1"]!.leftPct).toBe(0);
     expect(byId["p1"]!.widthPct).toBe(50);
     expect(byId["p2"]!.leftPct).toBe(50);
     expect(byId["p2"]!.widthPct).toBe(50);
-    expect(byId["p3"]!.leftPct).toBe(50 + CASCADE_OFFSET_PCT / 2);
-    expect(byId["p3"]!.widthPct).toBe(50 - CASCADE_OFFSET_PCT / 2);
+    expect(byId["p3"]!.cascadeDepth).toBeGreaterThan(MAX_VISIBLE_CASCADE_DEPTH);
   });
 
   it("third event doesn't fall back to col 0 when col 1 is still alive (cascade visibility)", () => {
@@ -2041,6 +2077,7 @@ describe("remapBlocksForCollapse", () => {
 
   function block(top: number, height: number, id: string) {
     return {
+      cascadeDepth: 0,
       endDate: new Date(),
       height,
       isCompact: true,
@@ -2078,6 +2115,7 @@ describe("remapBlocksForCollapse — boundary cases", () => {
 
   function block(top: number, height: number, id: string) {
     return {
+      cascadeDepth: 0,
       endDate: new Date(),
       height,
       isCompact: true,

@@ -164,7 +164,11 @@ export function DayColumn({
     return () => ro.disconnect();
   }, []);
 
-  const { pill, visible: visibleBlocks } = collapseUnderWidth(blocks, columnWidth);
+  const { pill, visible: visibleBlocks } = collapseUnderWidth(
+    blocks,
+    columnWidth,
+    metrics.compactBlockHeight
+  );
   const pagesById = new Map(pages.map((p) => [p.id, p]));
 
   // Draft ghost block — visible while dragging to set duration before page creation.

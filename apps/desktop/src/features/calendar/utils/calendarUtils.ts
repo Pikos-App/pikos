@@ -902,6 +902,12 @@ export interface CalendarBlock {
   leftPct: number;
   /** Horizontal extent as percent of the day column's width (0..100). */
   widthPct: number;
+  /**
+   * Cascade column index (0 = host, 1 = first cascade, …). Drives depth-based
+   * collapse in `collapseUnderWidth` — beyond `MAX_VISIBLE_CASCADE_DEPTH` a
+   * block folds into the "+N more" pill regardless of its rendered width.
+   */
+  cascadeDepth: number;
   /** True when this block is a continuation from the previous day (event started before this day). */
   isContinuationBefore?: boolean;
   /** True when this event extends past the end of this day's grid. */
@@ -928,6 +934,17 @@ export const COMPACT_MODE_WIDTH_PX = 100;
  * right edge instead of letting their titles truncate to a single letter.
  */
 export const OVERFLOW_MIN_WIDTH_PX = 60;
+
+/**
+ * Maximum cascade depth that stays visible. The host (depth 0) plus this many
+ * cascaded guests render normally; anything deeper folds into the "+N more"
+ * pill regardless of column width. Depth-based collapse fires before the
+ * width rule so dense days look the same in narrow (7-day-with-sidebar) and
+ * wide (1-day or sidebar-hidden) layouts — the user always sees host + 1
+ * cascade and a pill, never a thicket of 3+-deep cascading slivers where
+ * each cascading title bleeds into the next.
+ */
+export const MAX_VISIBLE_CASCADE_DEPTH = 1;
 
 /**
  * Data the overflow pill needs — separate from CalendarBlock so the pill
@@ -959,41 +976,53 @@ export interface OverflowPill {
  */
 export function collapseUnderWidth(
   blocks: CalendarBlock[],
-  columnWidth: number
+  columnWidth: number,
+  chipHeight: number = COMPACT_BLOCK_HEIGHT
 ): { visible: CalendarBlock[]; pill: OverflowPill | null } {
   if (columnWidth <= 0) return { pill: null, visible: blocks };
-  const underWidth: CalendarBlock[] = [];
+  const collapsed: CalendarBlock[] = [];
   const visible: CalendarBlock[] = [];
   for (const b of blocks) {
     const renderedWidth = (b.widthPct / 100) * columnWidth;
-    if (renderedWidth < OVERFLOW_MIN_WIDTH_PX) {
-      underWidth.push(b);
+    const tooDeep = b.cascadeDepth > MAX_VISIBLE_CASCADE_DEPTH;
+    const tooNarrow = renderedWidth < OVERFLOW_MIN_WIDTH_PX;
+    if (tooDeep || tooNarrow) {
+      collapsed.push(b);
     } else {
       visible.push(b);
     }
   }
-  if (underWidth.length === 0) return { pill: null, visible };
+  if (collapsed.length === 0) return { pill: null, visible };
 
-  // Horizontal position: take the slot of the rightmost-cascaded under-width
+  // Horizontal position: take the slot of the rightmost-cascaded collapsed
   // event. If that slot is too narrow to render "+N more" legibly, expand
   // the pill leftward to a minimum readable width.
-  const slotHost = underWidth.reduce(
+  const slotHost = collapsed.reduce(
     (best, b) => (b.leftPct > best.leftPct ? b : best),
-    underWidth[0]!
+    collapsed[0]!
   );
   const minPillPct = Math.min(50, (PILL_MIN_WIDTH_PX / columnWidth) * 100);
   const widthPct = Math.max(slotHost.widthPct, minPillPct);
   const leftPct = Math.min(slotHost.leftPct, 100 - widthPct);
 
+  // Pill is chip-shaped (a "+N more" indicator, not a full block replacement).
+  // Height tracks the current density's quarter-hour slot so it scales with
+  // hourHeight — a hair smaller in compact, a hair taller in spacious — but
+  // never falls below the legible-text floor.
+  const height = Math.max(chipHeight, MIN_PILL_HEIGHT_PX);
+
   const pill: OverflowPill = {
-    height: COMPACT_BLOCK_HEIGHT,
+    height,
     leftPct,
-    pageIds: underWidth.map((b) => b.page.id),
+    pageIds: collapsed.map((b) => b.page.id),
     top: slotHost.top,
     widthPct,
   };
   return { pill, visible };
 }
+
+/** Floor on the pill's chip height — below this, "+N more" wraps or clips. */
+const MIN_PILL_HEIGHT_PX = 14;
 
 /** Minimum pixel width for the pill — ensures "+N more" stays legible even
  * when the rightmost-cascaded slot is very narrow. */
@@ -1102,31 +1131,37 @@ export function buildDayBlocks(
       let leftPct: number;
       let widthPct: number;
 
-      if (component.length > 1) {
-        // Close-top events (titles would clash if cascaded shoulder-to-shoulder).
-        // Host takes the left half; the rest cascade inside the right half so
-        // each subsequent guest still gets readable width — beats an N-way
-        // equal split that crushes every chip down to a single letter when
-        // N >= 3 in a narrow column.
+      // Cascade depth is always the cluster's sweep-line column. Close-top
+      // membership only changes LAYOUT (50/50 split instead of cascade) — it
+      // does NOT promote a close-top sub-component to lower depth. Without
+      // this, a close-top pair sitting at cluster columns 2+3 would render
+      // as host-50%/guest-50% with depth 0/1 and stay visible past the
+      // MAX_VISIBLE_CASCADE_DEPTH cap that fires for the surrounding cluster.
+      const cascadeDepth = assignments[i]!;
+
+      // Close-top split only applies when the sub-component owns the cluster
+      // host (depth 0). A mid-cluster close-top pair (e.g. Peer/Stakeholder
+      // sitting at cluster cols 1–2 alongside a separate Workshop host at
+      // col 0) would otherwise paint at leftPct=0/widthPct=50 and visually
+      // collide with the actual cluster host. Mid-cluster close-top falls
+      // back to normal cascade — the cluster host already takes leftPct=0.
+      const splitsClusterHost =
+        component.length > 1 && component.some((idx) => assignments[idx]! === 0);
+
+      if (splitsClusterHost) {
         const subCol = component.indexOf(i);
         if (subCol === 0) {
           leftPct = 0;
           widthPct = 50;
         } else {
-          // The (subCol-1)-th cascade step inside the right 50% — half-scaled
-          // offset so the visible indent matches a normal cascade in a full
-          // column. Capped at CASCADE_MAX_LEFT_PCT before scaling.
-          const cascadeDepth = subCol - 1;
-          const relativeOffset = Math.min(cascadeDepth * CASCADE_OFFSET_PCT, CASCADE_MAX_LEFT_PCT);
-          leftPct = 50 + relativeOffset / 2;
-          widthPct = 100 - leftPct;
+          leftPct = 50;
+          widthPct = 50;
         }
       } else {
         // Cascade at the event's sweep-line column. leftPct grows with depth;
         // widthPct fills the remaining column width so the deepest guest still
         // stretches to the right edge.
-        const column = assignments[i]!;
-        leftPct = Math.min(column * CASCADE_OFFSET_PCT, CASCADE_MAX_LEFT_PCT);
+        leftPct = Math.min(cascadeDepth * CASCADE_OFFSET_PCT, CASCADE_MAX_LEFT_PCT);
         widthPct = 100 - leftPct;
       }
 
@@ -1139,6 +1174,7 @@ export function buildDayBlocks(
       if (leftPct + widthPct > 100) widthPct = 100 - leftPct;
 
       blocks.push({
+        cascadeDepth,
         endDate: raw.endDate,
         height: raw.height,
         isCompact: raw.isCompact,
