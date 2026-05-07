@@ -1,10 +1,10 @@
 // E2E coverage for the recurring-page UX flows.
 //
 // Walks the same paths a user would: create-with-recurrence in QuickAdd, add
-// recurrence later via the page editor's byline, the calendar's
-// PageBlockPopover gating when no date is set, completing a head occurrence
-// (clone + advance), skipping a virtual occurrence, and removing the rule
-// entirely. Runs against MockStorageAdapter (VITE_TEST_MODE=true).
+// recurrence later via the page editor's byline, add recurrence via the
+// calendar's PageBlockPopover, completing a head occurrence (clone + advance),
+// skipping a virtual occurrence, and removing the rule entirely. Runs against
+// MockStorageAdapter (VITE_TEST_MODE=true).
 
 import type { Page } from "@playwright/test";
 
@@ -57,10 +57,10 @@ appTest("add recurrence later via the page editor byline @tier2", async ({ app }
 
 // ─── Add recurrence later via the calendar popover ─────────────────────────
 //
-// PageBlockPopover gates the recurrence chip on a scheduled date — without
-// one, the chip is disabled with a "Set a date first" hint (regression guard
-// against the silent-no-op the handler used to fall through to). Once the
-// page has a date, the chip is enabled and creating a rule succeeds.
+// PageBlockPopover only ever opens for pages that have a scheduledStart
+// (calendar blocks require it), so the recurrence chip is always reachable
+// here. Verifies that opening the popover on a scheduled page and picking a
+// preset attaches the rule.
 
 appTest("calendar popover lets users add recurrence to a scheduled page @tier2", async ({
   app,
@@ -81,13 +81,8 @@ appTest("calendar popover lets users add recurrence to a scheduled page @tier2",
   await chip.click();
 
   // The PageBlockPopover's metadata row hosts the "Repeats" recurrence chip.
-  // With no rule yet, aria-label is "Set recurrence" (RecurrencePopover line
-  // 377). With a date set, the chip is enabled — clicking opens the popover.
-  const recurrenceChip = app.getByRole("button", { name: "Set recurrence" });
-  await expect(recurrenceChip).toBeVisible();
-  await expect(recurrenceChip).toBeEnabled();
-
-  await recurrenceChip.click();
+  // With no rule yet, aria-label is "Set recurrence" — click to open.
+  await app.getByRole("button", { name: "Set recurrence" }).click();
   await app.getByRole("button", { name: /^Daily/ }).click();
 
   // The chip's accessible name flips to "Recurrence: every day" once a rule
