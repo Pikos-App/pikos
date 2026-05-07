@@ -196,6 +196,63 @@ describe("expandRecurrenceForRange", () => {
     expect(occurrences[0]!.priority).toBe(2);
     expect(occurrences[0]!.tags).toEqual(["work", "review"]);
   });
+
+  it("biweekly INTERVAL=2 skips alternate weeks", () => {
+    // Anchor Mon Mar 2; INTERVAL=2 should yield Mar 2, Mar 16, Mar 30, …
+    const page = makePage();
+    const rule = makeRule({ rrule: "FREQ=WEEKLY;BYDAY=MO;INTERVAL=2" });
+
+    const rangeStart = new Date(2026, 2, 2);
+    const rangeEnd = new Date(2026, 3, 13); // through Apr 12 (5+ weeks)
+
+    const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
+
+    expect(occurrences.map((o) => o.originalDate)).toEqual([
+      "2026-03-02",
+      "2026-03-16",
+      "2026-03-30",
+    ]);
+  });
+
+  it("returns empty when range is entirely after UNTIL", () => {
+    const page = makePage();
+    const rule = makeRule({
+      // UNTIL is 2026-03-09 end-of-day UTC: only Mar 2 and Mar 9 are valid.
+      rrule: "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309T235959Z",
+    });
+
+    // Range entirely past UNTIL.
+    const rangeStart = new Date(2026, 2, 16);
+    const rangeEnd = new Date(2026, 2, 30);
+
+    const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
+    expect(occurrences).toHaveLength(0);
+  });
+
+  it("expansion is bounded by COUNT — no occurrences past the Nth", () => {
+    const page = makePage();
+    const rule = makeRule({ rrule: "FREQ=WEEKLY;BYDAY=MO;COUNT=2" });
+
+    // Range covers 4 Mondays — only the first 2 should expand.
+    const rangeStart = new Date(2026, 2, 2);
+    const rangeEnd = new Date(2026, 2, 30);
+
+    const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
+    expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-09"]);
+  });
+
+  it("does not generate occurrences before the rule's scheduledStart", () => {
+    const page = makePage();
+    const rule = makeRule(); // anchored on Mon Mar 2
+
+    // Range starts a week BEFORE the anchor. rrule.js shouldn't produce dates
+    // before DTSTART.
+    const rangeStart = new Date(2026, 1, 23); // Feb 23
+    const rangeEnd = new Date(2026, 2, 9); // Mar 9 (exclusive)
+
+    const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
+    expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02"]);
+  });
 });
 
 // ─── nextOccurrenceAfter ──────────────────────────────────────────────────
@@ -259,6 +316,29 @@ describe("nextOccurrenceAfter", () => {
     );
 
     expect(result).toBeNull();
+  });
+
+  it("returns null when COUNT has been exhausted", () => {
+    // COUNT=2: only Mar 2 and Mar 9 exist. afterDate = Mar 9 → no more.
+    const result = nextOccurrenceAfter(
+      "FREQ=WEEKLY;BYDAY=MO;COUNT=2",
+      "2026-03-02T09:00:00",
+      new Date(2026, 2, 9, 23, 59) // Monday Mar 9 end of day
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("returns next within COUNT bound when not yet exhausted", () => {
+    // COUNT=3: Mar 2, Mar 9, Mar 16. afterDate = Mar 5 → next is Mar 9.
+    const result = nextOccurrenceAfter(
+      "FREQ=WEEKLY;BYDAY=MO;COUNT=3",
+      "2026-03-02T09:00:00",
+      new Date(2026, 2, 5)
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.scheduledStart).toContain("2026-03-09");
   });
 
   it("completing same day returns next week, not same day", () => {

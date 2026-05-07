@@ -1481,4 +1481,80 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.tags).toEqual(["alpha", "beta", "gamma"]);
     });
   });
+
+  // ─── 14. Recurring + time range (timed event with end) ────────────────────
+
+  describe("recurring with time range", () => {
+    it("every monday from 9am to 11am → recurring with start+end+duration", () => {
+      const r = parseInput("standup every monday from 9am to 11am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toContain("2026-03-16");
+      expect(r.input.scheduledStart).toContain("09:00");
+      expect(r.input.scheduledEnd).toContain("11:00");
+      expect(r.input.durationMinutes).toBe(120);
+      expect(r.rrule).toContain("BYDAY=MO");
+    });
+
+    it("every weekday 9am-5pm bounded for 2 weeks → bounded with duration", () => {
+      const r = parseInput("work every weekday 9am-5pm for 2 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toContain("09:00");
+      expect(r.input.scheduledEnd).toContain("17:00");
+      expect(r.rrule).toContain("BYDAY=MO,TU,WE,TH,FR");
+      expect(r.rrule).toContain("UNTIL=");
+    });
+  });
+
+  // ─── 15. Edge cases: midnight times, zero/negative bounds, bare digits ─
+
+  describe("time edge cases", () => {
+    it("at 12am (midnight) → 00:00 next day if past, today if future", () => {
+      // NOW = 2026-03-15 12:00 (noon). 12am = 00:00 → today's 00:00 is in past
+      // → tomorrow.
+      const r = parseInput("late job at 12am", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toContain("00:00");
+      expect(r.input.scheduledStart).toContain("2026-03-16");
+    });
+
+    it("at 11:59pm preserves minutes", () => {
+      const r = parseInput("late note at 11:59pm", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toContain("23:59");
+    });
+  });
+
+  describe("recurring edge cases", () => {
+    it("'every 1 week' → infinite with INTERVAL=1 (effectively weekly)", () => {
+      const r = parseInput("sync every 1 week", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      // INTERVAL=1 may be omitted by the rrule serializer (default), but the
+      // emitted rule must round-trip cleanly.
+      const rule = RRule.fromString("RRULE:" + r.rrule);
+      expect(rule).toBeDefined();
+    });
+
+    it("'every monday for 1 week' → bounded with one Monday in the window", () => {
+      const r = parseInput("standup every monday for 1 week", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.rrule).toContain("UNTIL=");
+      const rule = RRule.fromString(`DTSTART:20260316T000000Z\nRRULE:${r.rrule}`);
+      expect(rule.all().length).toBe(1);
+    });
+
+    it("'every monday 1 time' → COUNT=1 (single occurrence)", () => {
+      const r = parseInput("kickoff every monday 1 times", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("COUNT=1");
+    });
+  });
 });

@@ -266,3 +266,171 @@ appTest("QuickAdd manual priority override survives further typing @tier2", asyn
   await app.waitForTimeout(400);
   await expect(dialog.getByRole("button", { name: "Priority: High" })).toBeVisible();
 });
+
+// ─── Manual rrule chip survives continued NLP typing ───────────────────────
+//
+// User picks a recurrence preset before typing — subsequent NLP re-parses
+// (which would otherwise infer a different rrule) must not overwrite the
+// chip. Mirrors the priority-manual guard but exercises the rrule path.
+
+appTest("QuickAdd manual rrule override survives further typing @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  const input = app.getByPlaceholder(/what's on your mind/i);
+
+  // Type a date so the recurrence preset has an anchor (presets show
+  // weekday/day-of-month detail tied to anchorDate).
+  await input.fill("review tomorrow");
+  await app.waitForTimeout(400);
+
+  // Open the recurrence popover and pick "Daily" preset.
+  await dialog.getByRole("button", { name: "Set recurrence" }).click();
+  await app.getByRole("button", { name: /^Daily/ }).click();
+  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible();
+
+  // Keep typing with conflicting recurrence NLP (would normally infer WEEKLY).
+  await input.fill("review tomorrow every monday");
+  await app.waitForTimeout(400);
+  // Manual chip wins — still daily, not weekly-on-Monday.
+  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible();
+});
+
+// ─── Recurrence chip alone (no NLP) creates a recurring page ───────────────
+//
+// User can set recurrence purely via the chip, without typing any cadence
+// in the title — the chip falls back to today's date. Guards the
+// "rrule && !dateValue → setDateValue(localToday())" branch in QuickAdd.
+
+appTest("QuickAdd recurrence chip without NLP creates recurring page @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  await app.getByPlaceholder(/what's on your mind/i).fill("standup");
+
+  // No date typed yet — recurrence preset still selectable; date defaults to today.
+  await dialog.getByRole("button", { name: "Set recurrence" }).click();
+  await app.getByRole("button", { name: /^Daily/ }).click();
+  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible();
+
+  // Submit — page should be created with a recurrence rule. Press Enter on
+  // the input to commit.
+  await app.getByPlaceholder(/what's on your mind/i).press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // One page named "standup".
+  const pages = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
+  await expect(pages).toHaveCount(1);
+
+  // Open it and verify the byline shows recurrence in the icon-only chip's
+  // accessible name.
+  await pages.first().click();
+  await expect(app.getByRole("button", { name: /recurrence: every day/i })).toBeVisible();
+});
+
+// ─── Stop repeating clears the rule via the byline popover ─────────────────
+
+appTest("byline 'Stop repeating' clears the recurrence rule @tier2", async ({ app }) => {
+  // Seed a recurring page via NLP.
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+  await app.getByPlaceholder(/what's on your mind/i).fill("standup every monday at 9am");
+  await expect(
+    dialog.getByRole("button", { name: /recurrence: every week on Monday/i })
+  ).toBeVisible({ timeout: 2000 });
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Open the page.
+  const listItem = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
+  await expect(listItem).toBeVisible();
+  await listItem.click();
+
+  // Byline shows the recurrence chip; click to open the popover.
+  const byline = app.getByRole("button", { name: /recurrence: every week on Monday/i });
+  await expect(byline).toBeVisible();
+  await byline.click();
+
+  // Click "Stop repeating" — popover closes, chip drops back to "Set recurrence".
+  await app.getByRole("button", { name: "Stop repeating" }).click();
+
+  // The icon-only chip now shows the unset state via tooltip "Set recurrence".
+  await expect(app.getByRole("button", { name: "Set recurrence" })).toBeVisible();
+});
+
+// ─── Add recurrence to an existing page via the byline popover ─────────────
+//
+// User creates a one-off page, then wants to make it recurring. Opening the
+// byline RecurrencePopover and picking a preset should attach a rule to the
+// page (and anchor to today if no date is set).
+
+appTest("add recurrence to a page from the byline @tier2", async ({ app }) => {
+  // Create a single page (no recurrence) via Quick Add.
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+  await app.getByPlaceholder(/what's on your mind/i).fill("workout tomorrow");
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Open the page.
+  const listItem = app.locator("[data-page-list-item]").filter({ hasText: "workout" });
+  await listItem.click();
+
+  // The recurrence chip in the byline starts in the unset state.
+  const setChip = app.getByRole("button", { name: "Set recurrence" });
+  await expect(setChip).toBeVisible();
+  await setChip.click();
+
+  // Pick "Daily" preset — preset row label starts with "Daily".
+  await app.getByRole("button", { name: /^Daily/ }).click();
+
+  // Chip flips to the active state with a Recurrence: aria-label.
+  await expect(app.getByRole("button", { name: /recurrence: every day/i })).toBeVisible();
+});
+
+// ─── Completing a recurring head advances it (and clones the prior occurrence) ─
+//
+// Toggling status on a recurring page triggers `completeRecurringPage`, which
+// clones the current occurrence as `done` and advances the head's
+// scheduledStart to the next occurrence. The list should still surface a
+// non-done "standup" head, plus a `done` clone in the completed section.
+
+appTest("completing a recurring page advances head and clones a done copy @tier2", async ({
+  app,
+}) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+  await app.getByPlaceholder(/what's on your mind/i).fill("standup every day");
+  await expect(dialog.getByRole("button", { name: /recurrence: every day/i })).toBeVisible({
+    timeout: 2000,
+  });
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // The recurring head appears in the active list (status = not_started).
+  const standup = app.locator("[data-page-list-item]").filter({ hasText: "standup" });
+  await expect(standup).toHaveCount(1);
+
+  // Toggle complete via the head's checkbox.
+  await standup.first().getByRole("checkbox", { name: "Mark done" }).click();
+
+  // The head re-appears as still-open in the active list — advanced, not gone.
+  // (A non-recurring page would leave the active list.)
+  await expect(standup.filter({ has: app.getByRole("checkbox", { name: "Mark done" }) })).toHaveCount(
+    1
+  );
+
+  // The completed section now contains a done clone.
+  const completedToggle = app.getByRole("button", { name: /Completed/ });
+  await completedToggle.click();
+  // After expansion, both the head (open) and the clone (done) carry the same
+  // title — total "standup" rows should be ≥ 2.
+  await expect(standup).toHaveCount(2);
+  // One of them is checked (the clone).
+  await expect(standup.getByRole("checkbox", { name: "Mark not done" })).toHaveCount(1);
+});

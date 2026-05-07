@@ -230,12 +230,13 @@ export function MetadataHeader({
       return;
     }
     // No existing rule. If the page has no date yet, anchor to today so the
-    // first occurrence is concrete; scheduleOnce updates the page state
-    // optimistically so the date chip fills in immediately.
+    // first occurrence is concrete. Await scheduleOnce so the rule's anchor
+    // and the head's scheduledStart commit together — otherwise a failed
+    // scheduleOnce leaves a rule referencing a date the head doesn't carry.
     let anchorStart = page.scheduledStart;
     if (!anchorStart) {
       anchorStart = localToday();
-      void scheduleOnce(page.id, anchorStart);
+      await scheduleOnce(page.id, anchorStart);
     }
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     await createRecurrence({
