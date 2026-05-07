@@ -261,6 +261,31 @@ describe("nextOccurrenceAfter", () => {
     expect(result).toBeNull();
   });
 
+  it("returns null when COUNT is exhausted", () => {
+    // FREQ=DAILY;COUNT=1 produces exactly one occurrence (the DTSTART itself).
+    // After completing it, asking for the next one must return null so the
+    // caller (completeRecurringPage) marks the head done instead of advancing.
+    const result = nextOccurrenceAfter(
+      "FREQ=DAILY;COUNT=1",
+      "2026-03-02T09:00:00",
+      new Date(2026, 2, 2) // same day as DTSTART
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("returns the final occurrence when COUNT > 1 and we ask after the second-to-last", () => {
+    // FREQ=DAILY;COUNT=3 → Mar 2, 3, 4. afterDate = Mar 3 → expect Mar 4.
+    const result = nextOccurrenceAfter(
+      "FREQ=DAILY;COUNT=3",
+      "2026-03-02T09:00:00",
+      new Date(2026, 2, 3)
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.scheduledStart).toContain("2026-03-04");
+  });
+
   it("completing same day returns next week, not same day", () => {
     // Rule: every Monday. Completing on Monday March 2 at 8am (before 9am event).
     // Should return March 9, not March 2 again.
