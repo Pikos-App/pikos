@@ -318,12 +318,25 @@ describe("nextOccurrenceAfter", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null when COUNT has been exhausted", () => {
+  it("returns null when COUNT has been exhausted (weekly BYDAY)", () => {
     // COUNT=2: only Mar 2 and Mar 9 exist. afterDate = Mar 9 → no more.
     const result = nextOccurrenceAfter(
       "FREQ=WEEKLY;BYDAY=MO;COUNT=2",
       "2026-03-02T09:00:00",
       new Date(2026, 2, 9, 23, 59) // Monday Mar 9 end of day
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null when COUNT is exhausted (daily, single occurrence)", () => {
+    // FREQ=DAILY;COUNT=1 produces exactly one occurrence (the DTSTART itself).
+    // After completing it, asking for the next one must return null so the
+    // caller (completeRecurringPage) marks the head done instead of advancing.
+    const result = nextOccurrenceAfter(
+      "FREQ=DAILY;COUNT=1",
+      "2026-03-02T09:00:00",
+      new Date(2026, 2, 2) // same day as DTSTART
     );
 
     expect(result).toBeNull();
@@ -339,6 +352,18 @@ describe("nextOccurrenceAfter", () => {
 
     expect(result).not.toBeNull();
     expect(result!.scheduledStart).toContain("2026-03-09");
+  });
+
+  it("returns the final occurrence when COUNT > 1 and we ask after the second-to-last", () => {
+    // FREQ=DAILY;COUNT=3 → Mar 2, 3, 4. afterDate = Mar 3 → expect Mar 4.
+    const result = nextOccurrenceAfter(
+      "FREQ=DAILY;COUNT=3",
+      "2026-03-02T09:00:00",
+      new Date(2026, 2, 3)
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.scheduledStart).toContain("2026-03-04");
   });
 
   it("completing same day returns next week, not same day", () => {
