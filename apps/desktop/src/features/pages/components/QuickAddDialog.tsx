@@ -279,7 +279,11 @@ export function QuickAddDialog() {
         : priorityValue;
 
     // Use parsed.title (tokens already stripped by parser) as the page title.
-    const title = parsed?.title || inputValue.trim();
+    // When the parser strips everything (input was only tokens, e.g. "tomorrow"
+    // or "#work !high"), title is empty and the page shows as "Untitled" —
+    // we deliberately do NOT fall back to inputValue, which would persist the
+    // raw tokens as a misleading title.
+    const title = parsed?.title ?? "";
 
     // Fresh NLP tags from re-parse + manual additions.
     const finalTags = [...new Set([...(parsed?.tags ?? []), ...manualTags])];

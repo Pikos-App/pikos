@@ -392,6 +392,185 @@ appTest("add recurrence to a page from the byline @tier2", async ({ app }) => {
   await expect(app.getByRole("button", { name: /recurrence: every day/i })).toBeVisible();
 });
 
+// ─── Empty input shakes (validation feedback) ─────────────────────────────
+
+appTest("empty Quick Add input shakes on submit @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  const input = app.getByPlaceholder(/what's on your mind/i);
+  await expect(input).toBeFocused();
+
+  // Press Enter without typing anything — dialog should NOT close, input shakes.
+  await app.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+  await expect(input).toBeFocused();
+
+  // Whitespace-only also rejected.
+  await input.fill("   ");
+  await app.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+});
+
+// ─── Token-only input creates an Untitled page (no raw-token leakage) ────
+//
+// Regression guard: the parser strips tokens, leaving title="". The dialog
+// must not fall back to inputValue (which still holds the raw tokens) —
+// otherwise pages get titled "tomorrow", "#work", "!high" etc.
+
+appTest("token-only Quick Add input creates an Untitled page @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  // Input is just a date — parser strips it, leaving an empty title.
+  await app.getByPlaceholder(/what's on your mind/i).fill("tomorrow");
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // The page should appear as "Untitled", NOT as "tomorrow".
+  const untitled = app.locator("[data-page-list-item]").filter({ hasText: "Untitled" });
+  await expect(untitled).toBeVisible();
+  // Negative: no list item literally titled "tomorrow".
+  const literalTomorrow = app
+    .locator("[data-page-list-item]")
+    .filter({ hasText: /^tomorrow$/i });
+  await expect(literalTomorrow).toHaveCount(0);
+});
+
+// ─── Cmd+Enter batch submit adds page and resets the form ──────────────────
+
+appTest("Cmd+Enter adds page in batch and clears the input @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  const input = app.getByPlaceholder(/what's on your mind/i);
+  await input.fill("first batch task");
+  await app.keyboard.press(mod("Mod+Enter"));
+
+  // Dialog stays open; brief confirmation appears.
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(/first batch task/)).toBeVisible();
+
+  // Wait for the addedFeedback to clear (1s timeout in source) and the input
+  // to remount.
+  await expect(app.getByPlaceholder(/what's on your mind/i)).toBeVisible({ timeout: 2000 });
+
+  // Type and submit a second item.
+  const input2 = app.getByPlaceholder(/what's on your mind/i);
+  await input2.fill("second batch task");
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Both pages exist.
+  await expect(
+    app.locator("[data-page-list-item]").filter({ hasText: "first batch task" })
+  ).toBeVisible();
+  await expect(
+    app.locator("[data-page-list-item]").filter({ hasText: "second batch task" })
+  ).toBeVisible();
+});
+
+// ─── Numeric priority shortcut (!1 → urgent chip) ──────────────────────────
+
+appTest("!1 numeric priority maps to Urgent chip @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  await app.getByPlaceholder(/what's on your mind/i).fill("blocker !1");
+  // !1 maps via parser to "urgent", QuickAddDialog maps to numeric priority 1.
+  await expect(dialog.getByRole("button", { name: "Priority: Urgent" })).toBeVisible({
+    timeout: 2000,
+  });
+
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Page appears in the list with the priority retained — no raw "!1" in title.
+  const item = app.locator("[data-page-list-item]").filter({ hasText: "blocker" });
+  await expect(item).toBeVisible();
+  await expect(item).not.toContainText("!1");
+});
+
+// ─── 'today' keyword schedules for today ───────────────────────────────────
+
+appTest("bare 'today' schedules the page for today @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  await app.getByPlaceholder(/what's on your mind/i).fill("lunch today");
+  // Date chip flips from "Set schedule" → a Scheduled: <date> chip with
+  // today's label (UI may display "Today" or e.g. "Mar 15"; both are fine).
+  await expect(dialog.getByRole("button", { name: /^Scheduled:/ })).toBeVisible({ timeout: 2000 });
+
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  await expect(app.locator("[data-page-list-item]").filter({ hasText: "lunch" })).toBeVisible();
+});
+
+// ─── ~inbox routes to Inbox folder ─────────────────────────────────────────
+//
+// Special-case: when the user explicitly types ~inbox (and Inbox isn't a
+// real folder name), the parser stashes "inbox" as folderQuery and the
+// dialog routes it to folderId=null (Inbox is the implicit null-folder
+// view).
+
+appTest("~inbox folder query routes to Inbox @tier2", async ({ app }) => {
+  // Create a real folder so the default folder isn't Inbox.
+  await app
+    .getByRole("toolbar", { name: "Folder actions" })
+    .getByRole("button", { name: "New Folder" })
+    .click();
+  await app.keyboard.press(mod("Mod+a"));
+  await app.keyboard.type("Notes");
+  await app.keyboard.press("Enter");
+
+  // Active folder is now "Notes". A new Quick Add inherits Notes as default.
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Folder: Notes" })).toBeVisible();
+
+  // Type ~inbox to redirect — chip should flip to Inbox.
+  await app.getByPlaceholder(/what's on your mind/i).fill("dump ~inbox");
+  await expect(dialog.getByRole("button", { name: "Folder: Inbox" })).toBeVisible({
+    timeout: 2000,
+  });
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  // Page lands in Inbox, not Notes. Navigate to Inbox to confirm.
+  await app.getByRole("button", { name: /^Inbox/ }).click();
+  await expect(app.locator("[data-page-list-item]").filter({ hasText: "dump" })).toBeVisible();
+});
+
+// ─── Manual date override survives further NLP typing ──────────────────────
+
+appTest("QuickAdd manual date override survives further typing @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+
+  const input = app.getByPlaceholder(/what's on your mind/i);
+  await input.fill("review tomorrow");
+  await expect(dialog.getByRole("button", { name: /Scheduled:/ })).toBeVisible({ timeout: 2000 });
+
+  // Open the date chip and clear the date manually.
+  await dialog.getByRole("button", { name: /Scheduled:/ }).click();
+  await app.getByRole("button", { name: /^Clear/ }).click();
+  await expect(dialog.getByRole("button", { name: "Set schedule" })).toBeVisible();
+
+  // Type more text including a date — chip should NOT auto-fill (manual override).
+  await input.fill("review tomorrow next week");
+  await app.waitForTimeout(400);
+  await expect(dialog.getByRole("button", { name: "Set schedule" })).toBeVisible();
+});
+
 // ─── Completing a recurring head advances it (and clones the prior occurrence) ─
 //
 // Toggling status on a recurring page triggers `completeRecurringPage`, which

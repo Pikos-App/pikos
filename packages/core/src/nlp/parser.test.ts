@@ -1528,6 +1528,149 @@ describe("NL Page Creation Parser", () => {
     });
   });
 
+  // ─── 16. Token regex boundaries (\w only — no hyphens/unicode) ───────────
+
+  describe("tag and folder regex boundaries", () => {
+    it("hyphenated tag captures only the word-char prefix", () => {
+      // Regex is /#(\w+)/ — \w matches [A-Za-z0-9_], not hyphens. Anything
+      // after the hyphen stays in the title.
+      const r = parseInput("review #multi-word", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["multi"]);
+      expect(r.input.title).toContain("-word");
+    });
+
+    it("tag with digits is accepted", () => {
+      const r = parseInput("plan #q4 #2025", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["q4", "2025"]);
+      expect(r.input.title).toBe("plan");
+    });
+
+    it("tag with underscores is accepted", () => {
+      const r = parseInput("note #snake_case", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["snake_case"]);
+    });
+
+    it("parser does NOT dedupe duplicate tag names — caller's responsibility", () => {
+      const r = parseInput("note #work #work", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["work", "work"]);
+    });
+
+    it("hyphenated folder captures only the word-char prefix", () => {
+      const r = parseInput("page ~side-project", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.folderQuery).toBe("side");
+      expect(r.input.title).toContain("-project");
+    });
+
+    it("'~inbox' is preserved as folderQuery — case-insensitive routing in caller", () => {
+      const r = parseInput("dump ~Inbox", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      // Parser preserves casing; QuickAddDialog lowercases for the Inbox check.
+      expect(r.input.folderQuery).toBe("Inbox");
+      expect(r.input.title).toBe("dump");
+    });
+  });
+
+  // ─── 17. Title remains empty when all input is tokens ────────────────────
+
+  describe("empty-title cases (caller falls back to 'Untitled')", () => {
+    it("only a date → empty title", () => {
+      const r = parseInput("tomorrow", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("");
+      expect(r.input.scheduledStart).toBe("2026-03-16");
+    });
+
+    it("only a time → empty title", () => {
+      const r = parseInput("at 3pm", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("");
+      expect(r.input.scheduledStart).toContain("15:00");
+    });
+
+    it("only a duration → empty title (no schedule)", () => {
+      const r = parseInput("for 2h", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("");
+      expect(r.input.durationMinutes).toBe(120);
+    });
+
+    it("only tokens (priority + folder) → empty title", () => {
+      const r = parseInput("!high ~Projects", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("");
+      expect(r.input.priority).toBe("high");
+      expect(r.input.folderQuery).toBe("Projects");
+    });
+  });
+
+  // ─── 18. Priority casing variations ──────────────────────────────────────
+
+  describe("priority case-insensitivity", () => {
+    it("'!URGENT' uppercase → urgent", () => {
+      const r = parseInput("blocker !URGENT", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("urgent");
+    });
+
+    it("'!Medium' mixed-case → medium", () => {
+      const r = parseInput("review !Medium", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("medium");
+    });
+  });
+
+  // ─── 19. Composition: full NLP combo ────────────────────────────────────
+
+  describe("full NLP composition", () => {
+    it("date + time + duration + priority + tags + folder all together", () => {
+      const r = parseInput(
+        "team review tomorrow at 2pm for 90m !high #design #ux ~Engineering",
+        NOW
+      );
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("team review");
+      expect(r.input.scheduledStart).toContain("2026-03-16");
+      expect(r.input.scheduledStart).toContain("14:00");
+      expect(r.input.scheduledEnd).toContain("15:30");
+      expect(r.input.durationMinutes).toBe(90);
+      expect(r.input.priority).toBe("high");
+      expect(r.input.tags).toEqual(["design", "ux"]);
+      expect(r.input.folderQuery).toBe("Engineering");
+    });
+
+    it("token order independence: same combo, scrambled order", () => {
+      const r = parseInput(
+        "#design ~Engineering team review !high tomorrow #ux at 2pm for 90m",
+        NOW
+      );
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("team review");
+      expect(r.input.priority).toBe("high");
+      expect(r.input.tags).toEqual(["design", "ux"]);
+      expect(r.input.folderQuery).toBe("Engineering");
+      expect(r.input.durationMinutes).toBe(90);
+    });
+  });
+
   describe("recurring edge cases", () => {
     it("'every 1 week' → infinite with INTERVAL=1 (effectively weekly)", () => {
       const r = parseInput("sync every 1 week", NOW);
