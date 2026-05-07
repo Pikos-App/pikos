@@ -2,12 +2,7 @@
 // rrule occurrences into the rendered page list. Covers head-deduplication,
 // override exclusion, multi-rule expansion, and the empty-rules short-circuit.
 
-import type {
-  PageRecurrenceRule,
-  PageSchedule,
-  PageSummary,
-  VirtualOccurrence,
-} from "@pikos/core";
+import type { PageRecurrenceRule, PageSchedule, PageSummary, VirtualOccurrence } from "@pikos/core";
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -84,9 +79,7 @@ describe("useRecurrenceExpansion", () => {
 
     // No async fetches needed since listSchedulesRange returns []
     await waitFor(() => {
-      const virtual = result.current.filter(
-        (p): p is VirtualOccurrence => "isVirtual" in p
-      );
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       expect(virtual).toHaveLength(1);
       expect(virtual[0]?.scheduledStart).toBe("2026-03-09T09:00:00");
     });
@@ -110,9 +103,7 @@ describe("useRecurrenceExpansion", () => {
     );
 
     await waitFor(() => {
-      const virtual = result.current.filter(
-        (p): p is VirtualOccurrence => "isVirtual" in p
-      );
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       // No virtual for Mar 9 — that slot is the real head block.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
       // Real head still present.
@@ -148,9 +139,7 @@ describe("useRecurrenceExpansion", () => {
     );
 
     await waitFor(() => {
-      const virtual = result.current.filter(
-        (p): p is VirtualOccurrence => "isVirtual" in p
-      );
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       // No virtual on Mar 9 — there's a materialised override row for it.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
     });
@@ -183,9 +172,7 @@ describe("useRecurrenceExpansion", () => {
     );
 
     await waitFor(() => {
-      const virtual = result.current.filter(
-        (p): p is VirtualOccurrence => "isVirtual" in p
-      );
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       expect(virtual).toHaveLength(2);
       expect(virtual.find((v) => v.ruleId === "rule-A")?.scheduledStart).toBe(
         "2026-03-09T09:00:00"

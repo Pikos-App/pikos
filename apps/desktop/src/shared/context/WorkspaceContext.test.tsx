@@ -925,9 +925,9 @@ describe("skipOccurrence", () => {
       undo = await hook.result.current.skipOccurrence(ruleId, "2026-03-09");
     });
 
-    expect(hook.result.current.recurrenceRules.find((r) => r.id === ruleId)?.rruleExdates).toEqual(
-      ["2026-03-09"]
-    );
+    expect(hook.result.current.recurrenceRules.find((r) => r.id === ruleId)?.rruleExdates).toEqual([
+      "2026-03-09",
+    ]);
 
     await act(async () => {
       undo();
@@ -960,9 +960,10 @@ describe("skipOccurrence", () => {
       await hook.result.current.skipOccurrence(ruleId, "2026-03-09");
     });
 
-    expect(hook.result.current.recurrenceRules.find((r) => r.id === ruleId)?.rruleExdates).toEqual(
-      ["2026-03-02", "2026-03-09"]
-    );
+    expect(hook.result.current.recurrenceRules.find((r) => r.id === ruleId)?.rruleExdates).toEqual([
+      "2026-03-02",
+      "2026-03-09",
+    ]);
   });
 
   it("rejects when the rule does not exist", async () => {
