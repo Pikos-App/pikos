@@ -728,6 +728,254 @@ describe("mergePages", () => {
 
 // ─── Initial load excludes completed ────────────────────────────────────────
 
+// ─── Recurrence rules ─────────────────────────────────────────────────────────
+//
+// Covers the workspace-level recurrence flows: createRecurrence /
+// updateRecurrence / deleteRecurrence keep the in-memory rule list in sync,
+// completeRecurringPage clones the head and advances its scheduledStart,
+// and skipOccurrence persists exdates with an undo function. These flows
+// are the hot path for the calendar's virtual-occurrence rendering, so a
+// regression here would silently break recurring pages on the calendar.
+
+describe("createRecurrence", () => {
+  it("adds the rule to recurrenceRules state", async () => {
+    const { hook, page } = await setup();
+
+    await act(async () => {
+      await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2026-03-02T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+
+    const rules = hook.result.current.recurrenceRules;
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.pageId).toBe(page.id);
+    expect(rules[0]?.rrule).toBe("FREQ=WEEKLY;BYDAY=MO");
+    expect(rules[0]?.rruleExdates).toEqual([]);
+  });
+});
+
+describe("updateRecurrence", () => {
+  it("replaces the rrule but keeps existing exdates", async () => {
+    const { hook, page } = await setup();
+
+    let ruleId!: string;
+    await act(async () => {
+      const rule = await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2026-03-02T09:00:00",
+        timezone: "America/New_York",
+      });
+      ruleId = rule.id;
+    });
+
+    await act(async () => {
+      await hook.result.current.updateRecurrence(ruleId, {
+        rruleExdates: ["2026-03-09"],
+      });
+    });
+
+    await act(async () => {
+      await hook.result.current.updateRecurrence(ruleId, { rrule: "FREQ=DAILY" });
+    });
+
+    const rule = hook.result.current.recurrenceRules.find((r) => r.id === ruleId);
+    expect(rule?.rrule).toBe("FREQ=DAILY");
+    // Exdates carry over even when the cadence shape changes — semantically
+    // they may no longer match, but it's the user's responsibility to clear
+    // them, not ours to discard them silently.
+    expect(rule?.rruleExdates).toEqual(["2026-03-09"]);
+  });
+});
+
+describe("deleteRecurrence", () => {
+  it("removes the rule from state", async () => {
+    const { hook, page } = await setup();
+
+    let ruleId!: string;
+    await act(async () => {
+      const rule = await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2026-03-02",
+        timezone: "America/New_York",
+      });
+      ruleId = rule.id;
+    });
+
+    expect(hook.result.current.recurrenceRules).toHaveLength(1);
+
+    await act(async () => {
+      await hook.result.current.deleteRecurrence(ruleId);
+    });
+
+    expect(hook.result.current.recurrenceRules).toHaveLength(0);
+  });
+});
+
+describe("completeRecurringPage", () => {
+  async function seedRecurringPage(scheduledStart: string, rrule: string) {
+    const { hook, page } = await setup();
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, scheduledStart);
+    });
+    await act(async () => {
+      await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule,
+        scheduledStart,
+        timezone: "America/New_York",
+      });
+    });
+    return { hook, page };
+  }
+
+  it("creates a done clone, advances head's scheduledStart, and exdates the completed date", async () => {
+    // Use a far-future Monday so today never overtakes headDate, regardless of
+    // when the suite runs. completeRecurringPage's afterDate is max(today,
+    // headDate) — anchoring in the future keeps it equal to headDate.
+    const { hook, page } = await seedRecurringPage(
+      "2099-01-05T09:00:00", // Monday Jan 5, 2099
+      "FREQ=WEEKLY;BYDAY=MO"
+    );
+
+    await act(async () => {
+      await hook.result.current.completeRecurringPage(page.id);
+    });
+
+    const head = hook.result.current.pages.find((p) => p.id === page.id);
+    expect(head?.status).toBe("not_started");
+    expect(head?.scheduledStart).toBe("2099-01-12T09:00:00");
+
+    // A done clone for the original date appears alongside the head.
+    const clones = hook.result.current.pages.filter(
+      (p) => p.title === page.title && p.id !== page.id
+    );
+    expect(clones).toHaveLength(1);
+    expect(clones[0]?.status).toBe("done");
+    expect(clones[0]?.scheduledStart).toBe("2099-01-05T09:00:00");
+
+    // The original date is in exdates so the calendar's virtual expansion
+    // won't render a phantom occurrence on top of the done clone.
+    const rule = hook.result.current.recurrenceRules.find((r) => r.pageId === page.id);
+    expect(rule?.rruleExdates).toContain("2099-01-05");
+  });
+
+  it("when head is overdue, skips missed occurrences and advances to the next future date", async () => {
+    // Anchor far in the past — the user has been ignoring this recurring
+    // page for months. Completing should jump to the next future occurrence,
+    // not the next-after-the-base-date one.
+    const { hook, page } = await seedRecurringPage("1999-01-04T09:00:00", "FREQ=DAILY");
+
+    await act(async () => {
+      await hook.result.current.completeRecurringPage(page.id);
+    });
+
+    const head = hook.result.current.pages.find((p) => p.id === page.id);
+    // Should land on a date strictly in the future, not a 1999 date.
+    expect(head?.scheduledStart).toBeTruthy();
+    const advancedDate = head!.scheduledStart!.slice(0, 10);
+    expect(advancedDate > new Date().toISOString().slice(0, 10)).toBe(true);
+  });
+
+  it("marks head done when the rule has no further occurrences (COUNT exhausted)", async () => {
+    const { hook, page } = await seedRecurringPage("2099-01-05T09:00:00", "FREQ=DAILY;COUNT=1");
+
+    await act(async () => {
+      await hook.result.current.completeRecurringPage(page.id);
+    });
+
+    const head = hook.result.current.pages.find((p) => p.id === page.id);
+    expect(head?.status).toBe("done");
+    expect(head?.completedAt).toBeTruthy();
+  });
+
+  it("rejects when the page has no recurrence rule", async () => {
+    const { hook, page } = await setup();
+
+    await expect(
+      act(async () => {
+        await hook.result.current.completeRecurringPage(page.id);
+      })
+    ).rejects.toThrow(/No recurrence rule/);
+  });
+});
+
+describe("skipOccurrence", () => {
+  it("adds the date to exdates and returns an undo that restores it", async () => {
+    const { hook, page } = await setup();
+
+    let ruleId!: string;
+    await act(async () => {
+      const rule = await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2026-03-02T09:00:00",
+        timezone: "America/New_York",
+      });
+      ruleId = rule.id;
+    });
+
+    let undo!: () => void;
+    await act(async () => {
+      undo = await hook.result.current.skipOccurrence(ruleId, "2026-03-09");
+    });
+
+    expect(hook.result.current.recurrenceRules.find((r) => r.id === ruleId)?.rruleExdates).toEqual(
+      ["2026-03-09"]
+    );
+
+    await act(async () => {
+      undo();
+      // skipOccurrence's undo path is fire-and-forget — give the
+      // adapter promise a microtask to settle so React can flush.
+      await Promise.resolve();
+    });
+
+    expect(hook.result.current.recurrenceRules.find((r) => r.id === ruleId)?.rruleExdates).toEqual(
+      []
+    );
+  });
+
+  it("appends to existing exdates rather than replacing them", async () => {
+    const { hook, page } = await setup();
+
+    let ruleId!: string;
+    await act(async () => {
+      const rule = await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        rruleExdates: ["2026-03-02"],
+        scheduledStart: "2026-03-02T09:00:00",
+        timezone: "America/New_York",
+      });
+      ruleId = rule.id;
+    });
+
+    await act(async () => {
+      await hook.result.current.skipOccurrence(ruleId, "2026-03-09");
+    });
+
+    expect(hook.result.current.recurrenceRules.find((r) => r.id === ruleId)?.rruleExdates).toEqual(
+      ["2026-03-02", "2026-03-09"]
+    );
+  });
+
+  it("rejects when the rule does not exist", async () => {
+    const { hook } = await setup();
+
+    await expect(
+      act(async () => {
+        await hook.result.current.skipOccurrence("nonexistent", "2026-03-09");
+      })
+    ).rejects.toThrow(/Recurrence rule not found/);
+  });
+});
+
 describe("initial load", () => {
   it("filters listPages to status=not_started", async () => {
     const spy = vi.spyOn(MockStorageAdapter.prototype, "listPages");

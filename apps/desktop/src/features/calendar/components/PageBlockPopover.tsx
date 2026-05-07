@@ -128,6 +128,8 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
       await updateRecurrence(existing.id, { rrule });
       return;
     }
+    // The popover is disabled until a date is set (see RecurrencePopover
+    // disabled prop below), so this path requires page.scheduledStart.
     if (!page.scheduledStart) return;
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     await createRecurrence({
@@ -210,6 +212,8 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
           <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Repeats</span>
           <RecurrencePopover
             anchorDate={page.scheduledStart ?? null}
+            disabled={!page.scheduledStart}
+            disabledHint="Set a date first"
             onChange={(rrule) => void handleRecurrenceChange(rrule)}
             rrule={recurrenceRule?.rrule ?? null}
           />
