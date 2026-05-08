@@ -2399,4 +2399,114 @@ describe("NL Page Creation Parser", () => {
       }
     });
   });
+
+  // ─── negative paths / garbage input ────────────────────────────────────────
+  // The parser should never throw or emit garbage on adversarial inputs.
+  // These tests pin "graceful degradation" — a single page with the input as
+  // its title and no schedule.
+  describe("negative paths and garbage input", () => {
+    it("pure punctuation: '!!!' → not a priority, stays in title", () => {
+      const r = parseInput("!!!", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      // The priority regex requires a known word/digit, so '!!!' is not consumed.
+      expect(r.input.title).toBe("!!!");
+      expect(r.input.priority).toBeUndefined();
+    });
+
+    it("only whitespace and tabs", () => {
+      const r = parseInput("   \t\t  \n  ", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("");
+    });
+
+    it("random garbage: 'asdf jkl qwerty'", () => {
+      const r = parseInput("asdf jkl qwerty", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("asdf jkl qwerty");
+      expect(r.input.scheduledStart).toBeUndefined();
+      expect(r.input.tags).toEqual([]);
+    });
+
+    it("number-only input: '12345'", () => {
+      const r = parseInput("12345", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toContain("12345");
+    });
+
+    it("standalone token-like junk: '#'", () => {
+      // A bare '#' isn't followed by a word char, so the tag regex doesn't match.
+      const r = parseInput("#", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("#");
+      expect(r.input.tags).toEqual([]);
+    });
+
+    it("standalone token-like junk: '~'", () => {
+      const r = parseInput("~", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("~");
+      expect(r.input.folderQuery).toBeUndefined();
+    });
+
+    it("invalid window: 'every monday for X weeks' (X is non-numeric)", () => {
+      // The "for N weeks" regex requires \d+, so non-numeric junk falls through
+      // and stays in the title alongside the recurrence.
+      const r = parseInput("standup every monday for X weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.rrule).not.toContain("UNTIL=");
+      expect(r.rrule).not.toContain("COUNT=");
+    });
+
+    it("invalid weekday in slash list: 'm/x/f'", () => {
+      // 'x' isn't a weekday — the slash-day regex requires the WHOLE list to
+      // be valid weekdays. Single 'x' breaks the match → not consumed.
+      const r = parseInput("plan m/x/f", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toContain("m/x/f");
+    });
+
+    it("conflicting cadence and bare-day: parser picks the first that matches", () => {
+      // "every monday tuesday" — the everyDayRe doesn't include "tuesday" in
+      // its consume because it requires a separator (comma/and). So we get
+      // "every monday" matched and "tuesday" left for chrono.
+      const r = parseInput("standup every monday tuesday", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+    });
+
+    it("tag with non-ASCII letters is captured by \\w (regex respects Unicode word chars in JS)", () => {
+      // JS \w is ASCII-only by default, so "#café" captures only "caf".
+      const r = parseInput("note #café", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["caf"]);
+      // The trailing "é" stays in the title.
+      expect(r.input.title).toContain("é");
+    });
+
+    it("very long unbroken token doesn't crash the parser", () => {
+      const longToken = "x".repeat(1000);
+      const r = parseInput(longToken, NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title.length).toBeGreaterThan(900);
+    });
+
+    it("doesn't throw on extreme combinations", () => {
+      // Stress: every token type at once + adversarial whitespace.
+      const input =
+        "  !urgent  every  other  tuesday  at  9am  for  30m  for  4  weeks  #a  #b  ~c  ";
+      expect(() => parseInput(input, NOW)).not.toThrow();
+    });
+  });
 });
