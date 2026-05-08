@@ -2723,4 +2723,285 @@ describe("NL Page Creation Parser", () => {
       expect(() => parseInput(input, NOW)).not.toThrow();
     });
   });
+
+  // ─── scenario coverage matrix ──────────────────────────────────────────────
+  // One representative test per top-level scenario the parser must handle for
+  // production. Each test pins the contract the rest of the app relies on:
+  // result.type, scheduledStart shape (date-only / datetime / undefined), and
+  // metadata fields (tags / folder / priority).
+  describe("scenario matrix — relative dates", () => {
+    it("'tomorrow' → date-only, single", () => {
+      const r = parseInput("call tomorrow", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16");
+      expect(r.input.scheduledEnd).toBeUndefined();
+    });
+
+    it("'in 3 days' → date-only, 3 days from NOW", () => {
+      const r = parseInput("review in 3 days", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-18");
+    });
+
+    it("'next monday at 2pm' → datetime, next Monday at 14:00", () => {
+      const r = parseInput("meeting next monday at 2pm", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16T14:00:00");
+    });
+
+    it("'tonight' → today at 20:00 (casual time-of-day mapping)", () => {
+      const r = parseInput("dinner tonight", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-15T20:00:00");
+    });
+  });
+
+  describe("scenario matrix — absolute dates", () => {
+    it("'march 20' → bare month + day, date-only", () => {
+      const r = parseInput("file taxes march 20", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-20");
+    });
+
+    it("'march 20 at 3pm' → datetime", () => {
+      const r = parseInput("appt march 20 at 3pm", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-20T15:00:00");
+    });
+
+    it("'@march 5' anchor-prefix syntax", () => {
+      const r = parseInput("dentist @march 5", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      // March 5 has passed; chrono with forwardDate rolls to next year.
+      expect(r.input.scheduledStart).toBe("2027-03-05");
+    });
+
+    it("'4/15' slash date is parsed by chrono", () => {
+      const r = parseInput("appt 4/15 at 10am", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-04-15T10:00:00");
+    });
+  });
+
+  describe("scenario matrix — N pages (finite recurrence)", () => {
+    it("'m/w/f at 3pm' → 3 separate pages, each with the same shape", () => {
+      const r = parseInput("gym m/w/f at 3pm", NOW);
+      expect(r.type).toBe("finite");
+      if (r.type !== "finite") return;
+      expect(r.count).toBe(3);
+      expect(r.inputs).toHaveLength(3);
+      for (const inp of r.inputs) {
+        expect(inp.title).toBe("gym");
+        expect(inp.scheduledStart).toMatch(/T15:00:00$/);
+      }
+    });
+
+    it("'weekdays at 9am 5 times' → 5 pages on consecutive weekdays", () => {
+      const r = parseInput("standup weekdays at 9am 5 times", NOW);
+      expect(r.type).toBe("finite");
+      if (r.type !== "finite") return;
+      expect(r.count).toBe(5);
+      for (const inp of r.inputs) {
+        expect(inp.scheduledStart).toMatch(/T09:00:00$/);
+      }
+    });
+  });
+
+  describe("scenario matrix — recurring schedules", () => {
+    it("'every monday' → recurring with no window", () => {
+      const r = parseInput("standup every monday", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.rrule).not.toContain("UNTIL=");
+      expect(r.rrule).not.toContain("COUNT=");
+    });
+
+    it("'every monday for 4 weeks' → bounded recurring with UNTIL", () => {
+      const r = parseInput("standup every monday for 4 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("UNTIL=");
+    });
+
+    it("'daily' → FREQ=DAILY", () => {
+      const r = parseInput("vitamin daily", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=DAILY");
+    });
+
+    it("'every other tuesday morning' → INTERVAL=2 BYDAY=TU + 09:00", () => {
+      const r = parseInput("standup every other tuesday morning", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("INTERVAL=2");
+      expect(r.rrule).toContain("BYDAY=TU");
+      expect(r.input.scheduledStart).toBe("2026-03-17T09:00:00");
+    });
+  });
+
+  describe("scenario matrix — non-scheduled", () => {
+    it("plain text → single page, no schedule, no tags/folder/priority", () => {
+      const r = parseInput("buy groceries", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("buy groceries");
+      expect(r.input.scheduledStart).toBeUndefined();
+      expect(r.input.scheduledEnd).toBeUndefined();
+      expect(r.input.tags).toEqual([]);
+      expect(r.input.folderQuery).toBeUndefined();
+      expect(r.input.priority).toBeUndefined();
+    });
+
+    it("title-only with metadata (still non-scheduled)", () => {
+      const r = parseInput("buy groceries #shopping ~Personal !low", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("buy groceries");
+      expect(r.input.scheduledStart).toBeUndefined();
+      expect(r.input.tags).toEqual(["shopping"]);
+      expect(r.input.folderQuery).toBe("Personal");
+      expect(r.input.priority).toBe("low");
+    });
+  });
+
+  describe("scenario matrix — tags / priority / folder mix", () => {
+    it("all three present, scrambled order", () => {
+      const r = parseInput("!high #work #urgent ~Engineering team sync", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("team sync");
+      expect(r.input.tags).toEqual(["work", "urgent"]);
+      expect(r.input.folderQuery).toBe("Engineering");
+      expect(r.input.priority).toBe("high");
+    });
+
+    it("tags accumulate (multi-value)", () => {
+      const r = parseInput("note #a #b #c", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["a", "b", "c"]);
+    });
+
+    it("priority: last wins", () => {
+      const r = parseInput("task !urgent !low", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("low");
+    });
+
+    it("folder: last wins", () => {
+      const r = parseInput("task ~A ~B", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.folderQuery).toBe("B");
+    });
+
+    it("priority and folder can both be cleared by re-typing: latest semantic", () => {
+      // !0 explicitly clears priority. There's no equivalent for folder, but
+      // last-wins on folder ensures the user's most-recent ~Folder choice
+      // takes effect.
+      const r = parseInput("task !urgent !0 ~A ~B", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBeNull();
+      expect(r.input.folderQuery).toBe("B");
+    });
+  });
+
+  describe("scenario matrix — schema/UI mapping contract", () => {
+    // These tests pin the shape the editor + page-list components depend on.
+    // If any of these break, the UI mapping has shifted and downstream
+    // components may render incorrectly.
+
+    it("ParsedInput.title is always a string (never undefined)", () => {
+      const inputs = ["", "   ", "buy groceries", "#tag #only", "tomorrow"];
+      for (const s of inputs) {
+        const r = parseInput(s, NOW);
+        if (r.type === "single") expect(typeof r.input.title).toBe("string");
+        else if (r.type === "recurring") expect(typeof r.input.title).toBe("string");
+        else for (const inp of r.inputs) expect(typeof inp.title).toBe("string");
+      }
+    });
+
+    it("scheduledStart shape: 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS' or undefined", () => {
+      const all = [
+        parseInput("buy groceries", NOW),
+        parseInput("tomorrow", NOW),
+        parseInput("tomorrow at 3pm", NOW),
+        parseInput("every monday morning", NOW),
+      ];
+      for (const r of all) {
+        const start =
+          r.type === "single"
+            ? r.input.scheduledStart
+            : r.type === "recurring"
+              ? r.input.scheduledStart
+              : r.inputs[0]?.scheduledStart;
+        if (start === undefined) continue;
+        expect(start).toMatch(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$/);
+      }
+    });
+
+    it("rrule (when present) is parseable by the rrule library", async () => {
+      const { RRule } = await import("rrule");
+      const cases = [
+        "standup every monday",
+        "standup every other tuesday",
+        "gym every weekday morning",
+        "review every friday at 3pm for 4 weeks",
+      ];
+      for (const s of cases) {
+        const r = parseInput(s, NOW);
+        if (r.type !== "recurring") continue;
+        expect(() => RRule.fromString("RRULE:" + r.rrule)).not.toThrow();
+      }
+    });
+
+    it("priority is one of: 'urgent' | 'high' | 'medium' | 'low' | null | undefined", () => {
+      const cases = ["task", "task !1", "task !urgent", "task !0", "task !5"];
+      for (const s of cases) {
+        const r = parseInput(s, NOW);
+        if (r.type !== "single") continue;
+        const p = r.input.priority;
+        expect(
+          p === undefined || p === null || ["urgent", "high", "medium", "low"].includes(p)
+        ).toBe(true);
+      }
+    });
+
+    it("tags is always an array", () => {
+      const cases = ["task", "task #a", "task #a #b", "#a #b #c"];
+      for (const s of cases) {
+        const r = parseInput(s, NOW);
+        if (r.type !== "single") continue;
+        expect(Array.isArray(r.input.tags)).toBe(true);
+      }
+    });
+
+    it("scheduledEnd is only ever set when scheduledStart is also set", () => {
+      const cases = [
+        "buy groceries",
+        "meeting 3pm to 5pm",
+        "vacation April 18-25",
+        "every weekday 9am to 5pm",
+      ];
+      for (const s of cases) {
+        const r = parseInput(s, NOW);
+        const inp = r.type === "single" ? r.input : r.type === "recurring" ? r.input : r.inputs[0];
+        if (!inp) continue;
+        if (inp.scheduledEnd) expect(inp.scheduledStart).toBeDefined();
+      }
+    });
+  });
 });
