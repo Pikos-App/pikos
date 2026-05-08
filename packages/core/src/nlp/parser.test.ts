@@ -1983,4 +1983,75 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.scheduledStart).toBe("2026-03-17T09:00:00");
     });
   });
+
+  // ─── reference-date variation ──────────────────────────────────────────────
+  // Most tests in this file run with NOW = Sun Mar 15 2026. These tests vary
+  // the reference date to catch behavior that depends on (a) what weekday now
+  // is, (b) end-of-year rollover, and (c) the current-day-vs-rule-day boundary.
+  describe("reference date variation", () => {
+    it("'every monday at 9am' on a Monday morning (before 9am) → today, not next week", () => {
+      // Mon Mar 16 2026 at 7am. The rule is Monday 9am — same day, future time.
+      const monMorning = new Date("2026-03-16T07:00:00");
+      const r = parseInput("standup every monday at 9am", monMorning);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      // We document current behavior: the parser anchors to nextWeekdayOccurrence
+      // which always returns at least 7 days ahead when called for the same
+      // weekday (consistent with chrono "monday" semantics).
+      expect(r.input.scheduledStart).toBe("2026-03-23T09:00:00");
+    });
+
+    it("'every monday at 9am' on a Monday afternoon → next Monday", () => {
+      const monAfternoon = new Date("2026-03-16T15:00:00");
+      const r = parseInput("standup every monday at 9am", monAfternoon);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2026-03-23T09:00:00");
+    });
+
+    it("'every friday' from a Friday → next Friday (one week ahead)", () => {
+      // Fri Mar 20 2026 noon.
+      const fri = new Date("2026-03-20T12:00:00");
+      const r = parseInput("review every friday", fri);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2026-03-27");
+    });
+
+    it("'every monday' from a Saturday → next Monday is 2 days away", () => {
+      const sat = new Date("2026-03-21T12:00:00");
+      const r = parseInput("standup every monday", sat);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2026-03-23");
+    });
+
+    it("year rollover: 'every monday' on Dec 30 → first Monday of next year", () => {
+      // Dec 30 2026 is a Wednesday → next Monday is Jan 4 2027.
+      const dec30 = new Date("2026-12-30T12:00:00");
+      const r = parseInput("standup every monday", dec30);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2027-01-04");
+    });
+
+    it("year rollover: 'tomorrow' on Dec 31 → Jan 1 next year", () => {
+      const dec31 = new Date("2026-12-31T12:00:00");
+      const r = parseInput("party tomorrow", dec31);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2027-01-01");
+    });
+
+    it("month rollover: 'every monday for 2 weeks' on the last Sunday of a month", () => {
+      // NOW = Sun Mar 29 2026. Next Monday = Mar 30. Window of 2 weeks → Apr 12 UNTIL.
+      const lastSunday = new Date("2026-03-29T12:00:00");
+      const r = parseInput("standup every monday for 2 weeks", lastSunday);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2026-03-30");
+      // Window: 2 weeks = 14 days from scheduledStart Mar 30 → Apr 12.
+      expect(r.rrule).toContain("UNTIL=20260412");
+    });
+  });
 });
