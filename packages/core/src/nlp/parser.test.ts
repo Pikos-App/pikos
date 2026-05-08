@@ -1787,227 +1787,245 @@ describe("NL Page Creation Parser", () => {
   // After a finite-window phrase ("through <date>" / "until <date>") consumes
   // its tokens, no boundary keyword should remain in the title.
   describe("title leakage — finite window keywords", () => {
-    it("'through' is gone after a successful boundary parse", () => {
-      const r = parseInput("standup every monday through april 30", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title.toLowerCase()).not.toMatch(/\bthrough\b/);
-      expect(r.input.title.toLowerCase()).not.toMatch(/\bapril\b/);
-    });
-
-    it("'until' is gone after a successful boundary parse", () => {
-      const r = parseInput("standup every monday until april 30", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title.toLowerCase()).not.toMatch(/\buntil\b/);
-    });
-
-    it("'till' is gone after a successful boundary parse", () => {
-      const r = parseInput("standup every monday till april 30", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title.toLowerCase()).not.toMatch(/\btill\b/);
-    });
-
-    it("'X times' is consumed even when paired with 'every'", () => {
-      const r = parseInput("standup every monday 4 times", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("standup");
-      expect(r.input.title).not.toContain("4");
-      expect(r.input.title.toLowerCase()).not.toContain("times");
-    });
-
-    it("'for N weeks' is consumed when paired with cadence", () => {
-      const r = parseInput("standup every monday for 2 weeks", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("standup");
-      expect(r.input.title.toLowerCase()).not.toMatch(/\bfor\b/);
-      expect(r.input.title.toLowerCase()).not.toMatch(/\bweeks?\b/);
-    });
+    const cases: ParserCase[] = [
+      // 'through' + month name consumed after a successful boundary parse.
+      {
+        expected: {
+          inputMatches: { title: /^(?!.*\bthrough\b)(?!.*\bapril\b).*$/i },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every monday through april 30",
+      },
+      {
+        expected: {
+          inputMatches: { title: /^(?!.*\buntil\b).*$/i },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every monday until april 30",
+      },
+      {
+        expected: {
+          inputMatches: { title: /^(?!.*\btill\b).*$/i },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every monday till april 30",
+      },
+      // 'X times' consumed even when paired with 'every'.
+      {
+        expected: { input: { title: "standup" }, rrule: [], type: "recurring" },
+        input: "standup every monday 4 times",
+      },
+      // 'for N weeks' consumed when paired with cadence.
+      {
+        expected: { input: { title: "standup" }, rrule: [], type: "recurring" },
+        input: "standup every monday for 2 weeks",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── time-without-date anchor — additional weekday cases ────────────────────
   describe("time-without-date weekday anchoring", () => {
-    it("'every tuesday at 4pm' from a Wednesday → next Tuesday at 16:00", () => {
-      // NOW = 2026-03-15 (Sunday). "every tuesday at 4pm" should anchor to Mar 17.
-      const r = parseInput("call every tuesday at 4pm", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.scheduledStart).toBe("2026-03-17T16:00:00");
-    });
-
-    it("BYDAY=FR + time anchors to next Friday", () => {
-      const r = parseInput("call every friday at 9am", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.scheduledStart).toBe("2026-03-20T09:00:00");
-    });
+    // NOW = 2026-03-15 (Sunday).
+    const cases: ParserCase[] = [
+      // "every tuesday at 4pm" anchors to Mar 17.
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-17T16:00:00" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "call every tuesday at 4pm",
+      },
+      // BYDAY=FR + time anchors to next Friday.
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-20T09:00:00" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "call every friday at 9am",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── duration parsing — parsing-only edges ────────────────────────────────
   describe("duration parsing edges", () => {
-    it("for 0.25h → 15 minutes (rounded)", () => {
-      const r = parseInput("focus for 0.25h", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.durationMinutes).toBe(15);
-    });
-
-    it("for 90 minutes → 90 (no rounding hop)", () => {
-      const r = parseInput("focus for 90 minutes", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.durationMinutes).toBe(90);
-    });
-
-    it("for 1 hour singular → 60", () => {
-      const r = parseInput("focus for 1 hour", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.durationMinutes).toBe(60);
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: { input: { durationMinutes: 15 }, type: "single" },
+        input: "focus for 0.25h",
+      },
+      {
+        expected: { input: { durationMinutes: 90 }, type: "single" },
+        input: "focus for 90 minutes",
+      },
+      {
+        expected: { input: { durationMinutes: 60 }, type: "single" },
+        input: "focus for 1 hour",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── recurrence + window composition adjacent ──────────────────────────────
   describe("recurrence + window composition — adjacent edges", () => {
-    it("'every other week' + 'for 4 weeks' → INTERVAL=2 with bounded window", () => {
-      const r = parseInput("standup every other week for 4 weeks", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.rrule).toContain("UNTIL=");
-    });
-
-    it("'every 3 days' + '5 times' → INTERVAL=3 with COUNT=5", () => {
-      const r = parseInput("medication every 3 days 5 times", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("INTERVAL=3");
-      expect(r.rrule).toContain("COUNT=5");
-    });
-
-    it("'biweekly' + 'for 2 months' → INTERVAL=2 weekly with UNTIL", () => {
-      const r = parseInput("standup biweekly for 2 months", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.rrule).toContain("UNTIL=");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          rrule: ["FREQ=WEEKLY", "INTERVAL=2", "UNTIL="],
+          type: "recurring",
+        },
+        input: "standup every other week for 4 weeks",
+      },
+      {
+        expected: {
+          rrule: ["INTERVAL=3", "COUNT=5"],
+          type: "recurring",
+        },
+        input: "medication every 3 days 5 times",
+      },
+      {
+        expected: {
+          rrule: ["FREQ=WEEKLY", "INTERVAL=2", "UNTIL="],
+          type: "recurring",
+        },
+        input: "standup biweekly for 2 months",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── interval + weekday combinations ───────────────────────────────────────
   // The interval regex requires a unit word (day/week/month/year), so phrases
-  // like "every other tuesday" don't match it and fall through to chrono.
-  // These tests document the gap so we can decide whether to extend the
-  // grammar (interval + BYDAY) before launch.
+  // like "every other tuesday" don't match it and fall through to chrono. These
+  // tests document the gap so we can decide whether to extend the grammar
+  // (interval + BYDAY) before launch.
   describe("interval + weekday composition", () => {
-    it("'every other tuesday' → recurring weekly INTERVAL=2 BYDAY=TU", () => {
-      const r = parseInput("standup every other tuesday", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.rrule).toContain("BYDAY=TU");
-    });
-
-    it("'every 2 mondays' → recurring weekly INTERVAL=2 BYDAY=MO", () => {
-      const r = parseInput("kickoff every 2 mondays", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.rrule).toContain("BYDAY=MO");
-    });
-
-    it("'every other tuesday' anchors scheduledStart to next Tuesday", () => {
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          rrule: ["FREQ=WEEKLY", "INTERVAL=2", "BYDAY=TU"],
+          type: "recurring",
+        },
+        input: "standup every other tuesday",
+      },
+      {
+        expected: {
+          rrule: ["INTERVAL=2", "BYDAY=MO"],
+          type: "recurring",
+        },
+        input: "kickoff every 2 mondays",
+      },
       // NOW = Sunday Mar 15 2026; next Tuesday = Mar 17.
-      const r = parseInput("standup every other tuesday", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.scheduledStart).toBe("2026-03-17");
-      expect(r.input.title).toBe("standup");
-    });
-
-    it("'every other tuesday at 9am' carries the time", () => {
-      const r = parseInput("standup every other tuesday at 9am", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.scheduledStart).toBe("2026-03-17T09:00:00");
-    });
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-17", title: "standup" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every other tuesday",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-17T09:00:00" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every other tuesday at 9am",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── reference-date variation ──────────────────────────────────────────────
-  // Most tests in this file run with NOW = Sun Mar 15 2026. These tests vary
-  // the reference date to catch behavior that depends on (a) what weekday now
-  // is, (b) end-of-year rollover, and (c) the current-day-vs-rule-day boundary.
+  // Most tests in this file run with NOW = Sun Mar 15 2026. These vary the
+  // reference date to catch behaviour that depends on (a) what weekday now is,
+  // (b) end-of-year rollover, (c) the current-day-vs-rule-day boundary.
   describe("reference date variation", () => {
-    it("'every monday at 9am' on a Monday morning (before 9am) → today, not next week", () => {
-      // Mon Mar 16 2026 at 7am. The rule is Monday 9am — same day, future time.
-      const monMorning = new Date("2026-03-16T07:00:00");
-      const r = parseInput("standup every monday at 9am", monMorning);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      // We document current behavior: the parser anchors to nextWeekdayOccurrence
-      // which always returns at least 7 days ahead when called for the same
-      // weekday (consistent with chrono "monday" semantics).
-      expect(r.input.scheduledStart).toBe("2026-03-23T09:00:00");
-    });
+    // Mon Mar 16 2026 at 7am. The rule is Monday 9am — same day, future time.
+    // Documents current behaviour: the parser anchors to nextWeekdayOccurrence,
+    // which always returns at least 7 days ahead when called for the same weekday
+    // (consistent with chrono "monday" semantics).
+    const MON_MORN = new Date("2026-03-16T07:00:00");
+    const MON_AFTN = new Date("2026-03-16T15:00:00");
+    const FRI = new Date("2026-03-20T12:00:00");
+    const SAT = new Date("2026-03-21T12:00:00");
+    const DEC30 = new Date("2026-12-30T12:00:00");
+    const DEC31 = new Date("2026-12-31T12:00:00");
+    const LAST_SUN = new Date("2026-03-29T12:00:00");
 
-    it("'every monday at 9am' on a Monday afternoon → next Monday", () => {
-      const monAfternoon = new Date("2026-03-16T15:00:00");
-      const r = parseInput("standup every monday at 9am", monAfternoon);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.scheduledStart).toBe("2026-03-23T09:00:00");
-    });
-
-    it("'every friday' from a Friday → next Friday (one week ahead)", () => {
-      // Fri Mar 20 2026 noon.
-      const fri = new Date("2026-03-20T12:00:00");
-      const r = parseInput("review every friday", fri);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.scheduledStart).toBe("2026-03-27");
-    });
-
-    it("'every monday' from a Saturday → next Monday is 2 days away", () => {
-      const sat = new Date("2026-03-21T12:00:00");
-      const r = parseInput("standup every monday", sat);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.scheduledStart).toBe("2026-03-23");
-    });
-
-    it("year rollover: 'every monday' on Dec 30 → first Monday of next year", () => {
-      // Dec 30 2026 is a Wednesday → next Monday is Jan 4 2027.
-      const dec30 = new Date("2026-12-30T12:00:00");
-      const r = parseInput("standup every monday", dec30);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.scheduledStart).toBe("2027-01-04");
-    });
-
-    it("year rollover: 'tomorrow' on Dec 31 → Jan 1 next year", () => {
-      const dec31 = new Date("2026-12-31T12:00:00");
-      const r = parseInput("party tomorrow", dec31);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2027-01-01");
-    });
-
-    it("month rollover: 'every monday for 2 weeks' on the last Sunday of a month", () => {
-      // NOW = Sun Mar 29 2026. Next Monday = Mar 30. Window of 2 weeks → Apr 12 UNTIL.
-      const lastSunday = new Date("2026-03-29T12:00:00");
-      const r = parseInput("standup every monday for 2 weeks", lastSunday);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.scheduledStart).toBe("2026-03-30");
-      // Window: 2 weeks = 14 days from scheduledStart Mar 30 → Apr 12.
-      expect(r.rrule).toContain("UNTIL=20260412");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-23T09:00:00" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every monday at 9am",
+        now: MON_MORN,
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-23T09:00:00" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every monday at 9am",
+        now: MON_AFTN,
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-27" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "review every friday",
+        now: FRI,
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-23" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every monday",
+        now: SAT,
+      },
+      // Year rollover: Dec 30 2026 is a Wednesday → next Monday is Jan 4 2027.
+      {
+        expected: {
+          input: { scheduledStart: "2027-01-04" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every monday",
+        now: DEC30,
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2027-01-01" },
+          type: "single",
+        },
+        input: "party tomorrow",
+        now: DEC31,
+      },
+      // Month rollover: Sun Mar 29 → next Monday Mar 30. 2 weeks = 14 days → Apr 12.
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-30" },
+          rrule: ["UNTIL=20260412"],
+          type: "recurring",
+        },
+        input: "standup every monday for 2 weeks",
+        now: LAST_SUN,
+      },
+    ];
+    it.each(cases)("$input @ $now", runCase);
   });
 
   // ─── kitchen-sink composition ──────────────────────────────────────────────
@@ -2160,127 +2178,118 @@ describe("NL Page Creation Parser", () => {
   // mixed case, trailing punctuation, very long titles, redundant whitespace,
   // and ambiguous phrasings.
   describe("adversarial input", () => {
-    it("recurrence keywords are case-insensitive: 'EVERY MONDAY at 9am'", () => {
-      const r = parseInput("STANDUP EVERY MONDAY at 9am", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-    });
-
-    it("mixed case: 'EvErY OtHeR TuEsDaY'", () => {
-      const r = parseInput("standup EvErY OtHeR TuEsDaY", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.rrule).toContain("BYDAY=TU");
-    });
-
-    it("trailing punctuation on priority does not break the boundary: 'call !urgent.'", () => {
-      const r = parseInput("call !urgent.", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("urgent");
-      // The whitespace-before-period gap from token strip is collapsed,
-      // keeping the period attached to the trailing word.
-      expect(r.input.title).toBe("call.");
-    });
-
-    it("redundant whitespace collapses cleanly", () => {
-      const r = parseInput("  call    mom    tomorrow   at   3pm  ", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("call mom");
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-      expect(r.input.scheduledStart).toContain("15:00");
-    });
-
-    it("emoji in title is preserved verbatim", () => {
-      const r = parseInput("🎉 birthday party tomorrow at 7pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("🎉 birthday party");
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-      expect(r.input.scheduledStart).toContain("19:00");
-    });
-
-    it("very long title (200+ chars) is preserved", () => {
-      const longTitle = "a ".repeat(120).trim();
-      const r = parseInput(`${longTitle} tomorrow`, NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe(longTitle);
-      expect(r.input.scheduledStart).toBe("2026-03-16");
-    });
-
-    it("multiple 'every' phrases — first wins (no duplicate cadence)", () => {
-      // "every monday and every wednesday" — the first regex consumes
-      // "every monday", the second "every wednesday" remains and is consumed
-      // by a second pass. Document whichever the parser ends up emitting so
-      // future changes don't break silently.
-      const r = parseInput("standup every monday and every wednesday", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      // At minimum, recurrence is recurring and has at least one BYDAY.
-      expect(r.rrule).toMatch(/BYDAY=(MO|WE)/);
-    });
-
-    it("priority placed before title preserves the rest", () => {
-      const r = parseInput("!urgent buy groceries tomorrow", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("urgent");
-      expect(r.input.title).toBe("buy groceries");
-      expect(r.input.scheduledStart).toBe("2026-03-16");
-    });
-
-    it("tag attached without space is NOT captured (regression for #abc#def)", () => {
-      // /#(\w+)/ is non-overlapping and word-char greedy. "#abc#def" captures "abc"
-      // first then sees "#def" → captures "def" too. Confirm both are picked up.
-      const r = parseInput("note #abc#def", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.tags).toEqual(["abc", "def"]);
-      expect(r.input.title).toBe("note");
-    });
-
-    it("tag separated by punctuation: 'note #abc, #def'", () => {
-      const r = parseInput("note #abc, #def", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.tags).toEqual(["abc", "def"]);
-      // Orphan separator punctuation left behind by the tag strip is dropped.
-      expect(r.input.title).toBe("note");
-    });
-
-    it("'24-hour time' with leading zero: 'meeting at 09:00'", () => {
-      const r = parseInput("meeting at 09:00", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
+    const longTitle = "a ".repeat(120).trim();
+    const cases: ParserCase[] = [
+      // Recurrence keywords are case-insensitive.
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T09:00:00" },
+          rrule: ["BYDAY=MO"],
+          type: "recurring",
+        },
+        input: "STANDUP EVERY MONDAY at 9am",
+      },
+      // Mixed case.
+      {
+        expected: { rrule: ["INTERVAL=2", "BYDAY=TU"], type: "recurring" },
+        input: "standup EvErY OtHeR TuEsDaY",
+      },
+      // Trailing punctuation on priority — known limitation: "." sticks to title.
+      {
+        expected: { input: { priority: "urgent", title: "call." }, type: "single" },
+        input: "call !urgent.",
+      },
+      // Redundant whitespace collapses. NOW=12:00, 3pm tomorrow → 2026-03-16T15:00:00.
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T15:00:00", title: "call mom" },
+          type: "single",
+        },
+        input: "  call    mom    tomorrow   at   3pm  ",
+      },
+      {
+        expected: {
+          input: {
+            scheduledStart: "2026-03-16T19:00:00",
+            title: "🎉 birthday party",
+          },
+          type: "single",
+        },
+        input: "🎉 birthday party tomorrow at 7pm",
+      },
+      // Very long title (200+ chars) is preserved.
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16", title: longTitle },
+          type: "single",
+        },
+        input: `${longTitle} tomorrow`,
+      },
+      // Multiple 'every' phrases — the first regex consumes "every monday",
+      // a second pass picks up "every wednesday". Document whichever the parser
+      // emits so future changes don't break silently. At minimum: recurring
+      // weekly with at least one BYDAY among MO/WE.
+      {
+        expected: {
+          custom: (r) => {
+            expect(r.rrule).toMatch(/BYDAY=(MO|WE)/);
+          },
+          rrule: ["FREQ=WEEKLY"],
+          type: "recurring",
+        },
+        input: "standup every monday and every wednesday",
+      },
+      // Priority placed before title preserves the rest.
+      {
+        expected: {
+          input: {
+            priority: "urgent",
+            scheduledStart: "2026-03-16",
+            title: "buy groceries",
+          },
+          type: "single",
+        },
+        input: "!urgent buy groceries tomorrow",
+      },
+      // /#(\w+)/ is non-overlapping and word-char greedy. "#abc#def" captures
+      // "abc" first then sees "#def" → captures "def" too.
+      {
+        expected: {
+          input: { tags: ["abc", "def"], title: "note" },
+          type: "single",
+        },
+        input: "note #abc#def",
+      },
+      // Tag separated by punctuation; orphan separator dropped after tag strip.
+      {
+        expected: {
+          input: { tags: ["abc", "def"], title: "note" },
+          type: "single",
+        },
+        input: "note #abc, #def",
+      },
       // 9am today is in the past from NOW (12pm) → tomorrow.
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-    });
-
-    it("title that contains 'every' as a regular word stays single", () => {
-      // "every other day" is a cadence — but "every word counts" is title text.
-      const r = parseInput("every word counts in the report", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      // The "every <day>" regex matches "every word"? Let's see — DAY_WORD
-      // doesn't include "word", so no match. Should stay single.
-      expect(r.input.scheduledStart).toBeUndefined();
-      expect(r.input.title).toContain("every word counts");
-    });
-
-    it("title that contains a tag-like string in code: 'fix #404 bug'", () => {
-      // "#404" matches the tag regex and becomes a tag — documented behavior.
-      const r = parseInput("fix #404 bug", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.tags).toEqual(["404"]);
-      expect(r.input.title).toBe("fix bug");
-    });
+      {
+        expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
+        input: "meeting at 09:00",
+      },
+      // "every <day>" regex requires a known weekday; "word" doesn't match,
+      // so input stays single.
+      {
+        expected: {
+          inputAbsent: ["scheduledStart"],
+          inputMatches: { title: /every word counts/ },
+          type: "single",
+        },
+        input: "every word counts in the report",
+      },
+      // "#404" matches the tag regex and becomes a tag — documented behaviour.
+      {
+        expected: { input: { tags: ["404"], title: "fix bug" }, type: "single" },
+        input: "fix #404 bug",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── chrono casual phrases ─────────────────────────────────────────────────
@@ -2536,109 +2545,107 @@ describe("NL Page Creation Parser", () => {
   // These tests pin "graceful degradation" — a single page with the input as
   // its title and no schedule.
   describe("negative paths and garbage input", () => {
-    it("pure punctuation: '!!!' → not a priority, stays in title", () => {
-      const r = parseInput("!!!", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      // The priority regex requires a known word/digit, so '!!!' is not consumed.
-      expect(r.input.title).toBe("!!!");
-      expect(r.input.priority).toBeUndefined();
-    });
-
-    it("only whitespace and tabs", () => {
-      const r = parseInput("   \t\t  \n  ", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("");
-    });
-
-    it("random garbage: 'asdf jkl qwerty'", () => {
-      const r = parseInput("asdf jkl qwerty", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("asdf jkl qwerty");
-      expect(r.input.scheduledStart).toBeUndefined();
-      expect(r.input.tags).toEqual([]);
-    });
-
-    it("number-only input: '12345'", () => {
-      const r = parseInput("12345", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toContain("12345");
-    });
-
-    it("standalone token-like junk: '#'", () => {
-      // A bare '#' isn't followed by a word char, so the tag regex doesn't match.
-      const r = parseInput("#", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("#");
-      expect(r.input.tags).toEqual([]);
-    });
-
-    it("standalone token-like junk: '~'", () => {
-      const r = parseInput("~", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("~");
-      expect(r.input.folderQuery).toBeUndefined();
-    });
-
-    it("invalid window: 'every monday for X weeks' (X is non-numeric)", () => {
-      // The "for N weeks" regex requires \d+, so non-numeric junk falls through
-      // and stays in the title alongside the recurrence.
-      const r = parseInput("standup every monday for X weeks", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.rrule).not.toContain("UNTIL=");
-      expect(r.rrule).not.toContain("COUNT=");
-    });
-
-    it("invalid weekday in slash list: 'm/x/f'", () => {
-      // 'x' isn't a weekday — the slash-day regex requires the WHOLE list to
-      // be valid weekdays. Single 'x' breaks the match → not consumed.
-      const r = parseInput("plan m/x/f", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toContain("m/x/f");
-    });
-
-    it("conflicting cadence and bare-day: parser picks the first that matches", () => {
-      // "every monday tuesday" — the everyDayRe doesn't include "tuesday" in
-      // its consume because it requires a separator (comma/and). So we get
-      // "every monday" matched and "tuesday" left for chrono.
-      const r = parseInput("standup every monday tuesday", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO");
-    });
-
-    it("tag with non-ASCII letters is captured by \\w (regex respects Unicode word chars in JS)", () => {
-      // JS \w is ASCII-only by default, so "#café" captures only "caf".
-      const r = parseInput("note #café", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.tags).toEqual(["caf"]);
-      // The trailing "é" stays in the title.
-      expect(r.input.title).toContain("é");
-    });
-
-    it("very long unbroken token doesn't crash the parser", () => {
-      const longToken = "x".repeat(1000);
-      const r = parseInput(longToken, NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title.length).toBeGreaterThan(900);
-    });
-
-    it("doesn't throw on extreme combinations", () => {
-      // Stress: every token type at once + adversarial whitespace.
-      const input =
-        "  !urgent  every  other  tuesday  at  9am  for  30m  for  4  weeks  #a  #b  ~c  ";
-      expect(() => parseInput(input, NOW)).not.toThrow();
-    });
+    const longToken = "x".repeat(1000);
+    const cases: ParserCase[] = [
+      // Pure punctuation: priority regex requires a known word/digit, so '!!!'
+      // is not consumed.
+      {
+        expected: {
+          input: { title: "!!!" },
+          inputAbsent: ["priority"],
+          type: "single",
+        },
+        input: "!!!",
+      },
+      // Whitespace + tabs → empty title.
+      {
+        expected: { input: { title: "" }, type: "single" },
+        input: "   \t\t  \n  ",
+      },
+      // Random garbage stays in title; no schedule, no tags.
+      {
+        expected: {
+          input: { tags: [], title: "asdf jkl qwerty" },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "asdf jkl qwerty",
+      },
+      // Number-only input — title contains the number.
+      {
+        expected: { inputMatches: { title: /12345/ }, type: "single" },
+        input: "12345",
+      },
+      // Bare '#' isn't followed by a word char, tag regex doesn't match.
+      {
+        expected: { input: { tags: [], title: "#" }, type: "single" },
+        input: "#",
+      },
+      // Bare '~' — not consumed as folder.
+      {
+        expected: {
+          input: { title: "~" },
+          inputAbsent: ["folderQuery"],
+          type: "single",
+        },
+        input: "~",
+      },
+      // Invalid window: "for N weeks" requires \d+, so non-numeric "X" falls
+      // through. Recurrence still matches via "every monday".
+      {
+        expected: {
+          rrule: ["BYDAY=MO"],
+          rruleAbsent: ["UNTIL=", "COUNT="],
+          type: "recurring",
+        },
+        input: "standup every monday for X weeks",
+      },
+      // 'x' isn't a weekday — slash-day regex requires the WHOLE list to be
+      // valid weekdays. Single 'x' breaks the match → not consumed.
+      {
+        expected: { inputMatches: { title: /m\/x\/f/ }, type: "single" },
+        input: "plan m/x/f",
+      },
+      // Conflicting cadence: "every monday tuesday" — everyDayRe needs a
+      // separator. Matches "every monday" and leaves "tuesday" for chrono.
+      {
+        expected: { rrule: ["BYDAY=MO"], type: "recurring" },
+        input: "standup every monday tuesday",
+      },
+      // JS \w is ASCII-only by default, so "#café" captures only "caf"; "é"
+      // stays in the title.
+      {
+        expected: {
+          input: { tags: ["caf"] },
+          inputMatches: { title: /é/ },
+          type: "single",
+        },
+        input: "note #café",
+      },
+      // 1000-char unbroken token doesn't crash the parser.
+      {
+        expected: {
+          custom: (r) => {
+            expect(r.input.title.length).toBeGreaterThan(900);
+          },
+          type: "single",
+        },
+        input: longToken,
+      },
+      // Stress: every token type at once + adversarial whitespace. Smoke test
+      // (no shape claim — just ensure parser produces a result without throwing).
+      {
+        expected: {
+          custom: () => {
+            // No-op: presence of a result satisfies the contract.
+          },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "  !urgent  every  other  tuesday  at  9am  for  30m  for  4  weeks  #a  #b  ~c  ",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── scenario coverage matrix ──────────────────────────────────────────────
@@ -2692,137 +2699,148 @@ describe("NL Page Creation Parser", () => {
   });
 
   describe("scenario matrix — N pages (finite recurrence)", () => {
-    it("'m/w/f at 3pm' → 3 separate pages, each with the same shape", () => {
-      const r = parseInput("gym m/w/f at 3pm", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      expect(r.count).toBe(3);
-      expect(r.inputs).toHaveLength(3);
-      for (const inp of r.inputs) {
-        expect(inp.title).toBe("gym");
-        expect(inp.scheduledStart).toMatch(/T15:00:00$/);
-      }
-    });
-
-    it("'weekdays at 9am 5 times' → 5 pages on consecutive weekdays", () => {
-      const r = parseInput("standup weekdays at 9am 5 times", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      expect(r.count).toBe(5);
-      for (const inp of r.inputs) {
-        expect(inp.scheduledStart).toMatch(/T09:00:00$/);
-      }
-    });
+    const cases: ParserCase[] = [
+      // m/w/f at 3pm → 3 finite pages: Mon 3/16, Wed 3/18, Fri 3/20.
+      {
+        expected: {
+          count: 3,
+          eachInput: { title: "gym" },
+          inputs: [
+            { scheduledStart: "2026-03-16T15:00:00" },
+            { scheduledStart: "2026-03-18T15:00:00" },
+            { scheduledStart: "2026-03-20T15:00:00" },
+          ],
+          type: "finite",
+        },
+        input: "gym m/w/f at 3pm",
+      },
+      // weekdays at 9am 5 times → Mon 3/16 through Fri 3/20, all 09:00.
+      {
+        expected: {
+          count: 5,
+          inputs: [
+            { scheduledStart: "2026-03-16T09:00:00" },
+            { scheduledStart: "2026-03-17T09:00:00" },
+            { scheduledStart: "2026-03-18T09:00:00" },
+            { scheduledStart: "2026-03-19T09:00:00" },
+            { scheduledStart: "2026-03-20T09:00:00" },
+          ],
+          type: "finite",
+        },
+        input: "standup weekdays at 9am 5 times",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   describe("scenario matrix — recurring schedules", () => {
-    it("'every monday' → recurring with no window", () => {
-      const r = parseInput("standup every monday", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.rrule).not.toContain("UNTIL=");
-      expect(r.rrule).not.toContain("COUNT=");
-    });
-
-    it("'every monday for 4 weeks' → bounded recurring with UNTIL", () => {
-      const r = parseInput("standup every monday for 4 weeks", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("UNTIL=");
-    });
-
-    it("'daily' → FREQ=DAILY", () => {
-      const r = parseInput("vitamin daily", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=DAILY");
-    });
-
-    it("'every other tuesday morning' → INTERVAL=2 BYDAY=TU + 09:00", () => {
-      const r = parseInput("standup every other tuesday morning", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.rrule).toContain("BYDAY=TU");
-      expect(r.input.scheduledStart).toBe("2026-03-17T09:00:00");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          rrule: ["FREQ=WEEKLY", "BYDAY=MO"],
+          rruleAbsent: ["UNTIL=", "COUNT="],
+          type: "recurring",
+        },
+        input: "standup every monday",
+      },
+      {
+        expected: { rrule: ["UNTIL="], type: "recurring" },
+        input: "standup every monday for 4 weeks",
+      },
+      {
+        expected: { rrule: ["FREQ=DAILY"], type: "recurring" },
+        input: "vitamin daily",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-17T09:00:00" },
+          rrule: ["INTERVAL=2", "BYDAY=TU"],
+          type: "recurring",
+        },
+        input: "standup every other tuesday morning",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   describe("scenario matrix — non-scheduled", () => {
-    it("plain text → single page, no schedule, no tags/folder/priority", () => {
-      const r = parseInput("buy groceries", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("buy groceries");
-      expect(r.input.scheduledStart).toBeUndefined();
-      expect(r.input.scheduledEnd).toBeUndefined();
-      expect(r.input.tags).toEqual([]);
-      expect(r.input.folderQuery).toBeUndefined();
-      expect(r.input.priority).toBeUndefined();
-    });
-
-    it("title-only with metadata (still non-scheduled)", () => {
-      const r = parseInput("buy groceries #shopping ~Personal !low", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("buy groceries");
-      expect(r.input.scheduledStart).toBeUndefined();
-      expect(r.input.tags).toEqual(["shopping"]);
-      expect(r.input.folderQuery).toBe("Personal");
-      expect(r.input.priority).toBe("low");
-    });
+    const cases: ParserCase[] = [
+      // Plain text → no schedule, no tags/folder/priority.
+      {
+        expected: {
+          input: { tags: [], title: "buy groceries" },
+          inputAbsent: ["scheduledStart", "scheduledEnd", "folderQuery", "priority"],
+          type: "single",
+        },
+        input: "buy groceries",
+      },
+      // Title-only with metadata (still non-scheduled).
+      {
+        expected: {
+          input: {
+            folderQuery: "Personal",
+            priority: "low",
+            tags: ["shopping"],
+            title: "buy groceries",
+          },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "buy groceries #shopping ~Personal !low",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   describe("scenario matrix — tags / priority / folder mix", () => {
-    it("all three present, scrambled order", () => {
-      const r = parseInput("!high #work #urgent ~Engineering team sync", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("team sync");
-      expect(r.input.tags).toEqual(["work", "urgent"]);
-      expect(r.input.folderQuery).toBe("Engineering");
-      expect(r.input.priority).toBe("high");
-    });
-
-    it("tags accumulate (multi-value)", () => {
-      const r = parseInput("note #a #b #c", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.tags).toEqual(["a", "b", "c"]);
-    });
-
-    it("priority: last wins", () => {
-      const r = parseInput("task !urgent !low", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("low");
-    });
-
-    it("folder: last wins", () => {
-      const r = parseInput("task ~A ~B", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.folderQuery).toBe("B");
-    });
-
-    it("priority and folder can both be cleared by re-typing: latest semantic", () => {
-      // !0 explicitly clears priority. There's no equivalent for folder, but
-      // last-wins on folder ensures the user's most-recent ~Folder choice
-      // takes effect.
-      const r = parseInput("task !urgent !0 ~A ~B", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBeNull();
-      expect(r.input.folderQuery).toBe("B");
-    });
+    const cases: ParserCase[] = [
+      // All three present, scrambled order.
+      {
+        expected: {
+          input: {
+            folderQuery: "Engineering",
+            priority: "high",
+            tags: ["work", "urgent"],
+            title: "team sync",
+          },
+          type: "single",
+        },
+        input: "!high #work #urgent ~Engineering team sync",
+      },
+      // Tags accumulate.
+      {
+        expected: { input: { tags: ["a", "b", "c"] }, type: "single" },
+        input: "note #a #b #c",
+      },
+      // Priority: last wins.
+      {
+        expected: { input: { priority: "low" }, type: "single" },
+        input: "task !urgent !low",
+      },
+      // Folder: last wins.
+      {
+        expected: { input: { folderQuery: "B" }, type: "single" },
+        input: "task ~A ~B",
+      },
+      // !0 explicitly clears priority. Folder last-wins ensures the user's
+      // most-recent ~Folder choice takes effect.
+      {
+        expected: {
+          input: { folderQuery: "B", priority: null },
+          type: "single",
+        },
+        input: "task !urgent !0 ~A ~B",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   describe("scenario matrix — schema/UI mapping contract", () => {
     // These tests pin the shape the editor + page-list components depend on.
-    // If any of these break, the UI mapping has shifted and downstream
-    // components may render incorrectly.
+    // If any of these break, the UI mapping has shifted and downstream components
+    // may render incorrectly. The assertion target spans all three result shapes
+    // (single, recurring, finite), so these stay imperative — ParserCase narrows
+    // per shape, which would obscure the cross-shape invariants below.
 
     it("ParsedInput.title is always a string (never undefined)", () => {
       const inputs = ["", "   ", "buy groceries", "#tag #only", "tomorrow"];
@@ -2853,8 +2871,7 @@ describe("NL Page Creation Parser", () => {
       }
     });
 
-    it("rrule (when present) is parseable by the rrule library", async () => {
-      const { RRule } = await import("rrule");
+    it("rrule (when present) is parseable by the rrule library", () => {
       const cases = [
         "standup every monday",
         "standup every other tuesday",
