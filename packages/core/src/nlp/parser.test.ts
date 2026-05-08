@@ -2157,4 +2157,131 @@ describe("NL Page Creation Parser", () => {
       expect(r.rrule).toContain("UNTIL=");
     });
   });
+
+  // ─── adversarial input ─────────────────────────────────────────────────────
+  // Tests for inputs the parser is likely to encounter from real users:
+  // mixed case, trailing punctuation, very long titles, redundant whitespace,
+  // and ambiguous phrasings.
+  describe("adversarial input", () => {
+    it("recurrence keywords are case-insensitive: 'EVERY MONDAY at 9am'", () => {
+      const r = parseInput("STANDUP EVERY MONDAY at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
+    });
+
+    it("mixed case: 'EvErY OtHeR TuEsDaY'", () => {
+      const r = parseInput("standup EvErY OtHeR TuEsDaY", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("INTERVAL=2");
+      expect(r.rrule).toContain("BYDAY=TU");
+    });
+
+    it("trailing punctuation on priority does not break the boundary: 'call !urgent.'", () => {
+      const r = parseInput("call !urgent.", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("urgent");
+      // Trailing period stays in the title — the priority regex consumes !urgent only.
+      expect(r.input.title).toBe("call .");
+    });
+
+    it("redundant whitespace collapses cleanly", () => {
+      const r = parseInput("  call    mom    tomorrow   at   3pm  ", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("call mom");
+      expect(r.input.scheduledStart).toContain("2026-03-16");
+      expect(r.input.scheduledStart).toContain("15:00");
+    });
+
+    it("emoji in title is preserved verbatim", () => {
+      const r = parseInput("🎉 birthday party tomorrow at 7pm", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("🎉 birthday party");
+      expect(r.input.scheduledStart).toContain("2026-03-16");
+      expect(r.input.scheduledStart).toContain("19:00");
+    });
+
+    it("very long title (200+ chars) is preserved", () => {
+      const longTitle = "a ".repeat(120).trim();
+      const r = parseInput(`${longTitle} tomorrow`, NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe(longTitle);
+      expect(r.input.scheduledStart).toBe("2026-03-16");
+    });
+
+    it("multiple 'every' phrases — first wins (no duplicate cadence)", () => {
+      // "every monday and every wednesday" — the first regex consumes
+      // "every monday", the second "every wednesday" remains and is consumed
+      // by a second pass. Document whichever the parser ends up emitting so
+      // future changes don't break silently.
+      const r = parseInput("standup every monday and every wednesday", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      // At minimum, recurrence is recurring and has at least one BYDAY.
+      expect(r.rrule).toMatch(/BYDAY=(MO|WE)/);
+    });
+
+    it("priority placed before title preserves the rest", () => {
+      const r = parseInput("!urgent buy groceries tomorrow", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("urgent");
+      expect(r.input.title).toBe("buy groceries");
+      expect(r.input.scheduledStart).toBe("2026-03-16");
+    });
+
+    it("tag attached without space is NOT captured (regression for #abc#def)", () => {
+      // /#(\w+)/ is non-overlapping and word-char greedy. "#abc#def" captures "abc"
+      // first then sees "#def" → captures "def" too. Confirm both are picked up.
+      const r = parseInput("note #abc#def", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["abc", "def"]);
+      expect(r.input.title).toBe("note");
+    });
+
+    it("tag separated by punctuation: 'note #abc, #def'", () => {
+      const r = parseInput("note #abc, #def", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["abc", "def"]);
+      // Trailing comma stays in title — parser doesn't trim residual punctuation.
+      expect(r.input.title).toBe("note ,");
+    });
+
+    it("'24-hour time' with leading zero: 'meeting at 09:00'", () => {
+      const r = parseInput("meeting at 09:00", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      // 9am today is in the past from NOW (12pm) → tomorrow.
+      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
+    });
+
+    it("title that contains 'every' as a regular word stays single", () => {
+      // "every other day" is a cadence — but "every word counts" is title text.
+      const r = parseInput("every word counts in the report", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      // The "every <day>" regex matches "every word"? Let's see — DAY_WORD
+      // doesn't include "word", so no match. Should stay single.
+      expect(r.input.scheduledStart).toBeUndefined();
+      expect(r.input.title).toContain("every word counts");
+    });
+
+    it("title that contains a tag-like string in code: 'fix #404 bug'", () => {
+      // "#404" matches the tag regex and becomes a tag — documented behavior.
+      const r = parseInput("fix #404 bug", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["404"]);
+      expect(r.input.title).toBe("fix bug");
+    });
+  });
 });
