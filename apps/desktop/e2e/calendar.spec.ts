@@ -459,6 +459,76 @@ appTest("dragging the top-boundary handle moves the band's hour @tier2", async (
   await expect(app.getByRole("button", { name: /^Collapse 12 AM to (?!6 AM)\d/ })).toBeVisible();
 });
 
+// ─── Timed event: create via grid click + drag to reschedule across days ────
+//
+// All-day creation is well covered above. The TIMED grid surface needs its
+// own coverage: a regression that broke timed-grid mousedown wiring would
+// silently fall through to the all-day branch, and a regression in
+// scheduleOnce(start, end) for timed drops would shrink or relocate the chip.
+
+appTest(
+  "create timed event via grid click then drag to a different day @tier2",
+  async ({ app }) => {
+    await openCalendarMode(app);
+    const calendar = calendarRegion(app);
+
+    // Expand the top band so the timed grid covers [0, 24) — easier to land
+    // a click that creates an event in the visible range.
+    await app.getByRole("button", { name: "Expand 12 AM to 6 AM" }).click();
+    await app.locator('[aria-label="Time grid"]').evaluate((el) => {
+      el.scrollTop = 0;
+    });
+
+    // Click into the timed grid below the SECOND-to-last all-day column
+    // (we want at least one column to the right for the drag target).
+    const cols = app.locator('[aria-label^="All-day events,"]');
+    const colCount = await cols.count();
+    if (colCount < 2) return; // narrow layout — skip
+    const sourceAllDay = cols.nth(colCount - 2);
+    const targetAllDay = cols.nth(colCount - 1);
+
+    const sourceBox = await sourceAllDay.boundingBox();
+    const targetBox = await targetAllDay.boundingBox();
+    if (!sourceBox || !targetBox) throw new Error("column box missing");
+
+    const sourceClickX = sourceBox.x + sourceBox.width / 2;
+    const sourceClickY = sourceBox.y + sourceBox.height + 24; // ~30 px into timed grid
+    await app.mouse.click(sourceClickX, sourceClickY);
+
+    // Popover auto-opens; type a title.
+    const titleInput = app.getByPlaceholder("Untitled");
+    await expect(titleInput).toBeFocused();
+    await titleInput.fill("standup");
+    await app.keyboard.press("Enter");
+
+    // The chip is rendered in the timed grid for the source day.
+    const chips = calendar.getByRole("button", { name: "standup" });
+    await expect(chips).toHaveCount(1);
+    const chipBeforeBox = await chips.first().boundingBox();
+    if (!chipBeforeBox) throw new Error("chip missing after create");
+
+    // Drag the chip horizontally to the next day's column (same Y so the
+    // hour stays roughly constant). Cross the dnd-kit activation distance
+    // before moving onto the target.
+    const fromX = chipBeforeBox.x + chipBeforeBox.width / 2;
+    const fromY = chipBeforeBox.y + chipBeforeBox.height / 2;
+    const toX = targetBox.x + targetBox.width / 2;
+
+    await app.mouse.move(fromX, fromY);
+    await app.mouse.down();
+    await app.mouse.move(fromX + 16, fromY, { steps: 4 });
+    await app.mouse.move(toX, fromY, { steps: 10 });
+    await app.mouse.up();
+
+    // Still one chip — moved, not duplicated. The new bounding box is
+    // shifted right by approximately one column width.
+    await expect(chips).toHaveCount(1);
+    const chipAfterBox = await chips.first().boundingBox();
+    if (!chipAfterBox) throw new Error("chip missing after drag");
+    expect(chipAfterBox.x).toBeGreaterThan(chipBeforeBox.x);
+  }
+);
+
 appTest("events in a collapsed band render as a clickable +N more pill @tier2", async ({ app }) => {
   await openCalendarMode(app);
   const calendar = calendarRegion(app);
