@@ -1700,4 +1700,242 @@ describe("NL Page Creation Parser", () => {
       expect(r.rrule).toContain("COUNT=1");
     });
   });
+
+  // ─── multi-day all-day range — adjacent failure modes ───────────────────────
+  // The "Month day-day" / "Month day through day" rewrite has tests for the
+  // happy paths and the cross-year case. The cases below cover the edges that
+  // historically broke before the rewrite landed: hyphen with single-digit
+  // days, ordinals, abbreviated months, range plus metadata tokens, degenerate
+  // same-day ranges, and reversed ranges (end ≤ start ⇒ no scheduledEnd).
+  describe("multi-day all-day ranges — adjacent edges", () => {
+    it("single-digit hyphen range: 'trip Apr 5-9' → Apr 5 → Apr 9", () => {
+      const r = parseInput("trip Apr 5-9", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-04-05");
+      expect(r.input.scheduledEnd).toBe("2026-04-09");
+    });
+
+    it("abbreviated month + hyphen range: 'trip Sep 1-7' → Sep 1 → Sep 7", () => {
+      const r = parseInput("trip Sep 1-7", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-09-01");
+      expect(r.input.scheduledEnd).toBe("2026-09-07");
+    });
+
+    it("ordinals on both ends: 'travel May 2nd through 10th' → May 2 → May 10", () => {
+      // The rewrite regex captures ordinal suffixes so the span resolves cleanly.
+      const r = parseInput("travel May 2nd through 10th", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-05-02");
+      expect(r.input.scheduledEnd).toBe("2026-05-10");
+    });
+
+    it("ordinal + abbreviated month: 'trip Apr 18th thru Apr 25th'", () => {
+      const r = parseInput("trip Apr 18th thru Apr 25th", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBe("2026-04-25");
+    });
+
+    it("reversed range: 'vacation April 25 to April 18' → forward-rolls end into next year", () => {
+      // chrono is configured with forwardDate: true. When the second date is
+      // earlier in the calendar than the first, it advances to the next year
+      // so the range is still chronologically valid. Documented here so a
+      // future change to forwardDate doesn't break silently.
+      const r = parseInput("vacation April 25 to April 18", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-04-25");
+      expect(r.input.scheduledEnd).toBe("2027-04-18");
+    });
+
+    it("degenerate same-day: 'trip April 18 to April 18' → no scheduledEnd", () => {
+      const r = parseInput("trip April 18 to April 18", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBeUndefined();
+    });
+
+    it("range with tag: 'trip April 18-25 #vacation'", () => {
+      const r = parseInput("trip April 18-25 #vacation", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("trip");
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBe("2026-04-25");
+      expect(r.input.tags).toEqual(["vacation"]);
+    });
+
+    it("range with priority: 'trip April 18-25 !urgent'", () => {
+      const r = parseInput("trip April 18-25 !urgent", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("trip");
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBe("2026-04-25");
+      expect(r.input.priority).toBe("urgent");
+    });
+
+    it("range with folder: 'trip April 18 to April 25 ~Travel'", () => {
+      const r = parseInput("trip April 18 to April 25 ~Travel", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("trip");
+      expect(r.input.folderQuery).toBe("Travel");
+      expect(r.input.scheduledStart).toBe("2026-04-18");
+      expect(r.input.scheduledEnd).toBe("2026-04-25");
+    });
+
+    it("date-range parses but 'from' currently leaks into title (known limitation)", () => {
+      // chrono consumes "May 2 to May 10" but leaves the leading "from" word
+      // intact. Documented here so a future fix doesn't break silently — this
+      // assertion will start failing once the leakage is plugged.
+      const r = parseInput("travel from May 2 to May 10", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-05-02");
+      expect(r.input.scheduledEnd).toBe("2026-05-10");
+      // KNOWN LIMITATION — "from" leaks into the title. See parser.ts §0/§7.
+      expect(r.input.title).toBe("travel from");
+    });
+
+    it("through+single-digit on second month: 'May 2 through Jun 5'", () => {
+      const r = parseInput("trip May 2 through Jun 5", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-05-02");
+      expect(r.input.scheduledEnd).toBe("2026-06-05");
+    });
+
+    it("hyphen range without preceding month is not a span: 'trip 18-25'", () => {
+      // No month → the rewrite regex doesn't apply. "18-25" is not a date in
+      // chrono's grammar; it stays in the title (or chrono produces a fallback
+      // we explicitly do NOT depend on). The span fields must not be set.
+      const r = parseInput("trip 18-25", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledEnd).toBeUndefined();
+    });
+  });
+
+  // ─── token leakage — adjacent failure modes ────────────────────────────────
+  // After a finite-window phrase ("through <date>" / "until <date>") consumes
+  // its tokens, no boundary keyword should remain in the title.
+  describe("title leakage — finite window keywords", () => {
+    it("'through' is gone after a successful boundary parse", () => {
+      const r = parseInput("standup every monday through april 30", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title.toLowerCase()).not.toMatch(/\bthrough\b/);
+      expect(r.input.title.toLowerCase()).not.toMatch(/\bapril\b/);
+    });
+
+    it("'until' is gone after a successful boundary parse", () => {
+      const r = parseInput("standup every monday until april 30", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title.toLowerCase()).not.toMatch(/\buntil\b/);
+    });
+
+    it("'till' is gone after a successful boundary parse", () => {
+      const r = parseInput("standup every monday till april 30", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title.toLowerCase()).not.toMatch(/\btill\b/);
+    });
+
+    it("'X times' is consumed even when paired with 'every'", () => {
+      const r = parseInput("standup every monday 4 times", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title).toBe("standup");
+      expect(r.input.title).not.toContain("4");
+      expect(r.input.title.toLowerCase()).not.toContain("times");
+    });
+
+    it("'for N weeks' is consumed when paired with cadence", () => {
+      const r = parseInput("standup every monday for 2 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.title).toBe("standup");
+      expect(r.input.title.toLowerCase()).not.toMatch(/\bfor\b/);
+      expect(r.input.title.toLowerCase()).not.toMatch(/\bweeks?\b/);
+    });
+  });
+
+  // ─── time-without-date anchor — additional weekday cases ────────────────────
+  describe("time-without-date weekday anchoring", () => {
+    it("'every tuesday at 4pm' from a Wednesday → next Tuesday at 16:00", () => {
+      // NOW = 2026-03-15 (Sunday). "every tuesday at 4pm" should anchor to Mar 17.
+      const r = parseInput("call every tuesday at 4pm", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2026-03-17T16:00:00");
+    });
+
+    it("BYDAY=FR + time anchors to next Friday", () => {
+      const r = parseInput("call every friday at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2026-03-20T09:00:00");
+    });
+  });
+
+  // ─── duration parsing — parsing-only edges ────────────────────────────────
+  describe("duration parsing edges", () => {
+    it("for 0.25h → 15 minutes (rounded)", () => {
+      const r = parseInput("focus for 0.25h", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.durationMinutes).toBe(15);
+    });
+
+    it("for 90 minutes → 90 (no rounding hop)", () => {
+      const r = parseInput("focus for 90 minutes", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.durationMinutes).toBe(90);
+    });
+
+    it("for 1 hour singular → 60", () => {
+      const r = parseInput("focus for 1 hour", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.durationMinutes).toBe(60);
+    });
+  });
+
+  // ─── recurrence + window composition adjacent ──────────────────────────────
+  describe("recurrence + window composition — adjacent edges", () => {
+    it("'every other week' + 'for 4 weeks' → INTERVAL=2 with bounded window", () => {
+      const r = parseInput("standup every other week for 4 weeks", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("INTERVAL=2");
+      expect(r.rrule).toContain("UNTIL=");
+    });
+
+    it("'every 3 days' + '5 times' → INTERVAL=3 with COUNT=5", () => {
+      const r = parseInput("medication every 3 days 5 times", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("INTERVAL=3");
+      expect(r.rrule).toContain("COUNT=5");
+    });
+
+    it("'biweekly' + 'for 2 months' → INTERVAL=2 weekly with UNTIL", () => {
+      const r = parseInput("standup biweekly for 2 months", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("INTERVAL=2");
+      expect(r.rrule).toContain("UNTIL=");
+    });
+  });
 });
