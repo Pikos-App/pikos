@@ -1976,101 +1976,143 @@ describe("NL Page Creation Parser", () => {
   // is unit-tested in isolation. These tests stress how they interact when the
   // user types a single dense phrase. Catching e.g. "rrule emitted but tag
   // dropped" or "title had stranded fragments" requires the whole-input view.
+  // Kitchen-sink: dense phrases that exercise every token type. Inline
+  // snapshots lock the entire ParseResult so any drift surfaces as a diff.
+  // To intentionally update: `pnpm --filter @pikos/core exec vitest run -u`.
   describe("kitchen-sink composition", () => {
     it("bounded weekly + time range + tags + folder + priority", () => {
-      const r = parseInput(
-        "team sync every monday from 9am to 10am for 6 weeks #work #standup ~Engineering !high",
-        NOW
-      );
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("team sync");
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-      expect(r.input.scheduledEnd).toBe("2026-03-16T10:00:00");
-      expect(r.input.durationMinutes).toBe(60);
-      expect(r.input.tags).toEqual(["work", "standup"]);
-      expect(r.input.folderQuery).toBe("Engineering");
-      expect(r.input.priority).toBe("high");
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.rrule).toContain("UNTIL=");
+      expect(
+        parseInput(
+          "team sync every monday from 9am to 10am for 6 weeks #work #standup ~Engineering !high",
+          NOW
+        )
+      ).toMatchInlineSnapshot(`
+        {
+          "input": {
+            "durationMinutes": 60,
+            "folderQuery": "Engineering",
+            "priority": "high",
+            "scheduledEnd": "2026-03-16T10:00:00",
+            "scheduledStart": "2026-03-16T09:00:00",
+            "tags": [
+              "work",
+              "standup",
+            ],
+            "title": "team sync",
+          },
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260426T235959Z",
+          "type": "recurring",
+        }
+      `);
     });
 
     it("multi-day BYDAY + COUNT + duration + metadata", () => {
-      const r = parseInput(
-        "gym every tuesday and thursday at 6pm for 45m 12 times #health ~Fitness !2",
-        NOW
-      );
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("gym");
-      expect(r.input.scheduledStart).toBe("2026-03-17T18:00:00");
-      expect(r.input.durationMinutes).toBe(45);
-      expect(r.input.scheduledEnd).toBe("2026-03-17T18:45:00");
-      expect(r.input.tags).toEqual(["health"]);
-      expect(r.input.folderQuery).toBe("Fitness");
-      expect(r.input.priority).toBe("high"); // !2 = high
-      expect(r.rrule).toContain("BYDAY=TU,TH");
-      expect(r.rrule).toContain("COUNT=12");
+      expect(
+        parseInput(
+          "gym every tuesday and thursday at 6pm for 45m 12 times #health ~Fitness !2",
+          NOW
+        )
+      ).toMatchInlineSnapshot(`
+        {
+          "input": {
+            "durationMinutes": 45,
+            "folderQuery": "Fitness",
+            "priority": "high",
+            "scheduledEnd": "2026-03-17T18:45:00",
+            "scheduledStart": "2026-03-17T18:00:00",
+            "tags": [
+              "health",
+            ],
+            "title": "gym",
+          },
+          "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;COUNT=12",
+          "type": "recurring",
+        }
+      `);
     });
 
     it("interval + weekday + bounded window + time + metadata", () => {
-      const r = parseInput(
-        "1:1 every other tuesday at 3pm for 30m for 8 weeks #work ~Reports !urgent",
-        NOW
-      );
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("1:1");
-      expect(r.input.scheduledStart).toBe("2026-03-17T15:00:00");
-      expect(r.input.durationMinutes).toBe(30);
-      expect(r.input.scheduledEnd).toBe("2026-03-17T15:30:00");
-      expect(r.input.priority).toBe("urgent");
-      expect(r.input.folderQuery).toBe("Reports");
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.rrule).toContain("BYDAY=TU");
-      expect(r.rrule).toContain("UNTIL=");
+      expect(
+        parseInput("1:1 every other tuesday at 3pm for 30m for 8 weeks #work ~Reports !urgent", NOW)
+      ).toMatchInlineSnapshot(`
+        {
+          "input": {
+            "durationMinutes": 30,
+            "folderQuery": "Reports",
+            "priority": "urgent",
+            "scheduledEnd": "2026-03-17T15:30:00",
+            "scheduledStart": "2026-03-17T15:00:00",
+            "tags": [
+              "work",
+            ],
+            "title": "1:1",
+          },
+          "rrule": "FREQ=WEEKLY;BYDAY=TU;INTERVAL=2;UNTIL=20260511T235959Z",
+          "type": "recurring",
+        }
+      `);
     });
 
     it("multi-day all-day range + tags + priority + folder", () => {
-      const r = parseInput("vacation April 18-25 #pto ~Travel !low", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("vacation");
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBe("2026-04-25");
-      expect(r.input.tags).toEqual(["pto"]);
-      expect(r.input.folderQuery).toBe("Travel");
-      expect(r.input.priority).toBe("low");
+      expect(parseInput("vacation April 18-25 #pto ~Travel !low", NOW)).toMatchInlineSnapshot(`
+        {
+          "input": {
+            "folderQuery": "Travel",
+            "priority": "low",
+            "scheduledEnd": "2026-04-25",
+            "scheduledStart": "2026-04-18",
+            "tags": [
+              "pto",
+            ],
+            "title": "vacation",
+          },
+          "type": "single",
+        }
+      `);
     });
 
     it("scrambled token order — same dense phrase, different order", () => {
-      const r = parseInput(
-        "!high #work team sync ~Engineering every monday from 9am to 10am for 6 weeks",
-        NOW
-      );
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("team sync");
-      expect(r.input.priority).toBe("high");
-      expect(r.input.tags).toEqual(["work"]);
-      expect(r.input.folderQuery).toBe("Engineering");
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-      expect(r.input.scheduledEnd).toBe("2026-03-16T10:00:00");
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.rrule).toContain("UNTIL=");
+      expect(
+        parseInput(
+          "!high #work team sync ~Engineering every monday from 9am to 10am for 6 weeks",
+          NOW
+        )
+      ).toMatchInlineSnapshot(`
+        {
+          "input": {
+            "durationMinutes": 60,
+            "folderQuery": "Engineering",
+            "priority": "high",
+            "scheduledEnd": "2026-03-16T10:00:00",
+            "scheduledStart": "2026-03-16T09:00:00",
+            "tags": [
+              "work",
+            ],
+            "title": "team sync",
+          },
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260426T235959Z",
+          "type": "recurring",
+        }
+      `);
     });
 
     it("plural-day form + bounded + time + duration", () => {
-      const r = parseInput("standup mondays at 9am for 30m for 4 weeks #work", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("standup");
-      expect(r.input.tags).toEqual(["work"]);
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-      expect(r.input.durationMinutes).toBe(30);
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.rrule).toContain("UNTIL=");
+      expect(parseInput("standup mondays at 9am for 30m for 4 weeks #work", NOW))
+        .toMatchInlineSnapshot(`
+        {
+          "input": {
+            "durationMinutes": 30,
+            "scheduledEnd": "2026-03-16T09:30:00",
+            "scheduledStart": "2026-03-16T09:00:00",
+            "tags": [
+              "work",
+            ],
+            "title": "standup",
+          },
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260412T235959Z",
+          "type": "recurring",
+        }
+      `);
     });
   });
 
