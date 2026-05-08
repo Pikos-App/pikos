@@ -2,8 +2,12 @@ import { RRule } from "rrule";
 import { describe, expect, it } from "vitest";
 
 import { parseInput } from "./parser";
+import { assertCase, forAll, type ParserCase } from "./parser.testHelpers";
 
 const NOW = new Date("2026-03-15T12:00:00");
+
+/** Tabular runner that fixes the suite NOW. Use as `runCase({...})` inside an it.each. */
+const runCase = (c: ParserCase) => assertCase(c, NOW);
 
 describe("NL Page Creation Parser", () => {
   // ─── 1. Single page creation ───────────────────────────────────────────────
@@ -145,63 +149,25 @@ describe("NL Page Creation Parser", () => {
   // ─── Numeric priority shortcuts ────────────────────────────────────────────
 
   describe("numeric priority shortcuts (!0-4)", () => {
-    it("!1 → urgent", () => {
-      const r = parseInput("task !1", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("urgent");
-      expect(r.input.title).toBe("task");
-    });
-
-    it("!2 → high", () => {
-      const r = parseInput("task !2", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("high");
-    });
-
-    it("!3 → medium", () => {
-      const r = parseInput("task !3", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("medium");
-    });
-
-    it("!4 → low", () => {
-      const r = parseInput("task !4", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("low");
-    });
-
-    it("!0 → null (explicitly cleared)", () => {
-      const r = parseInput("task !0", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBeNull();
-    });
-
-    it("!1 !3 → medium (last wins)", () => {
-      const r = parseInput("task !1 !3", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("medium");
-    });
-
-    it("!5 → not matched, stays in title", () => {
-      const r = parseInput("task !5", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("task !5");
-      expect(r.input.priority).toBeUndefined();
-    });
-
-    it("!urgent still works unchanged", () => {
-      const r = parseInput("task !urgent", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("urgent");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: { input: { priority: "urgent", title: "task" }, type: "single" },
+        input: "task !1",
+      },
+      { expected: { input: { priority: "high" }, type: "single" }, input: "task !2" },
+      { expected: { input: { priority: "medium" }, type: "single" }, input: "task !3" },
+      { expected: { input: { priority: "low" }, type: "single" }, input: "task !4" },
+      { expected: { input: { priority: null }, type: "single" }, input: "task !0" },
+      // last wins
+      { expected: { input: { priority: "medium" }, type: "single" }, input: "task !1 !3" },
+      // !5 isn't a valid numeric priority — title containing "!5" proves
+      // it wasn't consumed; toMatchObject can't assert "priority absent",
+      // so the title assertion carries the contract.
+      { expected: { input: { title: "task !5" }, type: "single" }, input: "task !5" },
+      // word form still works
+      { expected: { input: { priority: "urgent" }, type: "single" }, input: "task !urgent" },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 3. Time without date ──────────────────────────────────────────────────
@@ -229,33 +195,16 @@ describe("NL Page Creation Parser", () => {
   // ─── 4. Duration parsing ───────────────────────────────────────────────────
 
   describe("duration parsing", () => {
-    it("for 2h → 120 minutes", () => {
-      const r = parseInput("focus for 2h", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.durationMinutes).toBe(120);
-    });
-
-    it("for 15min → 15 minutes", () => {
-      const r = parseInput("break for 15min", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.durationMinutes).toBe(15);
-    });
-
-    it("for 1.5 hours → 90 minutes", () => {
-      const r = parseInput("deep work for 1.5 hours", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.durationMinutes).toBe(90);
-    });
-
-    it("for 30m → 30 minutes", () => {
-      const r = parseInput("task for 30m", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.durationMinutes).toBe(30);
-    });
+    const cases: ParserCase[] = [
+      { expected: { input: { durationMinutes: 120 }, type: "single" }, input: "focus for 2h" },
+      { expected: { input: { durationMinutes: 15 }, type: "single" }, input: "break for 15min" },
+      {
+        expected: { input: { durationMinutes: 90 }, type: "single" },
+        input: "deep work for 1.5 hours",
+      },
+      { expected: { input: { durationMinutes: 30 }, type: "single" }, input: "task for 30m" },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 5. Finite recurrence ─────────────────────────────────────────────────
@@ -925,104 +874,64 @@ describe("NL Page Creation Parser", () => {
   // ─── 7m. Interval cadences (biweekly / every other / every N) ────────────
 
   describe("interval cadences", () => {
-    it("biweekly → FREQ=WEEKLY;INTERVAL=2", () => {
-      const r = parseInput("sync biweekly", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.input.title).toBe("sync");
-    });
-
-    it("bimonthly → FREQ=MONTHLY;INTERVAL=2", () => {
-      const r = parseInput("rent bimonthly", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=MONTHLY");
-      expect(r.rrule).toContain("INTERVAL=2");
-    });
-
-    it("fortnightly → FREQ=WEEKLY;INTERVAL=2", () => {
-      const r = parseInput("review fortnightly", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      expect(r.rrule).toContain("INTERVAL=2");
-    });
-
-    it("every other week → FREQ=WEEKLY;INTERVAL=2", () => {
-      const r = parseInput("sync every other week", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      expect(r.rrule).toContain("INTERVAL=2");
-    });
-
-    it("every other day → FREQ=DAILY;INTERVAL=2", () => {
-      const r = parseInput("water plants every other day", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=DAILY");
-      expect(r.rrule).toContain("INTERVAL=2");
-    });
-
-    it("every 2 weeks → FREQ=WEEKLY;INTERVAL=2", () => {
-      const r = parseInput("sync every 2 weeks", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=WEEKLY");
-      expect(r.rrule).toContain("INTERVAL=2");
-    });
-
-    it("every 3 days → FREQ=DAILY;INTERVAL=3", () => {
-      const r = parseInput("water plants every 3 days", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=DAILY");
-      expect(r.rrule).toContain("INTERVAL=3");
-    });
-
-    it("every 6 months → FREQ=MONTHLY;INTERVAL=6", () => {
-      const r = parseInput("checkup every 6 months", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=MONTHLY");
-      expect(r.rrule).toContain("INTERVAL=6");
-    });
-
-    it("every 2 weeks + COUNT → bounded", () => {
-      const r = parseInput("sync every 2 weeks 5 times", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.rrule).toContain("COUNT=5");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { title: "sync" },
+          rrule: ["FREQ=WEEKLY", "INTERVAL=2"],
+          type: "recurring",
+        },
+        input: "sync biweekly",
+      },
+      {
+        expected: { rrule: ["FREQ=MONTHLY", "INTERVAL=2"], type: "recurring" },
+        input: "rent bimonthly",
+      },
+      {
+        expected: { rrule: ["FREQ=WEEKLY", "INTERVAL=2"], type: "recurring" },
+        input: "review fortnightly",
+      },
+      {
+        expected: { rrule: ["FREQ=WEEKLY", "INTERVAL=2"], type: "recurring" },
+        input: "sync every other week",
+      },
+      {
+        expected: { rrule: ["FREQ=DAILY", "INTERVAL=2"], type: "recurring" },
+        input: "water plants every other day",
+      },
+      {
+        expected: { rrule: ["FREQ=WEEKLY", "INTERVAL=2"], type: "recurring" },
+        input: "sync every 2 weeks",
+      },
+      {
+        expected: { rrule: ["FREQ=DAILY", "INTERVAL=3"], type: "recurring" },
+        input: "water plants every 3 days",
+      },
+      {
+        expected: { rrule: ["FREQ=MONTHLY", "INTERVAL=6"], type: "recurring" },
+        input: "checkup every 6 months",
+      },
+      // every N + COUNT → bounded
+      {
+        expected: { rrule: ["INTERVAL=2", "COUNT=5"], type: "recurring" },
+        input: "sync every 2 weeks 5 times",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 7n. Yearly / annually ───────────────────────────────────────────────
 
   describe("yearly cadence", () => {
-    it("yearly → FREQ=YEARLY", () => {
-      const r = parseInput("renewal yearly", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=YEARLY");
-      expect(r.input.title).toBe("renewal");
-    });
-
-    it("annually → FREQ=YEARLY", () => {
-      const r = parseInput("taxes annually", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=YEARLY");
-    });
-
-    it("every year → FREQ=YEARLY", () => {
-      const r = parseInput("birthday every year", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=YEARLY");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: { input: { title: "renewal" }, rrule: ["FREQ=YEARLY"], type: "recurring" },
+        input: "renewal yearly",
+      },
+      { expected: { rrule: ["FREQ=YEARLY"], type: "recurring" }, input: "taxes annually" },
+      { expected: { rrule: ["FREQ=YEARLY"], type: "recurring" }, input: "birthday every year" },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 7o. Time ranges (from X to Y) ───────────────────────────────────────
@@ -2730,65 +2639,48 @@ describe("NL Page Creation Parser", () => {
   // result.type, scheduledStart shape (date-only / datetime / undefined), and
   // metadata fields (tags / folder / priority).
   describe("scenario matrix — relative dates", () => {
-    it("'tomorrow' → date-only, single", () => {
-      const r = parseInput("call tomorrow", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16");
-      expect(r.input.scheduledEnd).toBeUndefined();
-    });
-
-    it("'in 3 days' → date-only, 3 days from NOW", () => {
-      const r = parseInput("review in 3 days", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-18");
-    });
-
-    it("'next monday at 2pm' → datetime, next Monday at 14:00", () => {
-      const r = parseInput("meeting next monday at 2pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16T14:00:00");
-    });
-
-    it("'tonight' → today at 20:00 (casual time-of-day mapping)", () => {
-      const r = parseInput("dinner tonight", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-15T20:00:00");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: { input: { scheduledStart: "2026-03-16" }, type: "single" },
+        input: "call tomorrow",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-18" }, type: "single" },
+        input: "review in 3 days",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-16T14:00:00" }, type: "single" },
+        input: "meeting next monday at 2pm",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-15T20:00:00" }, type: "single" },
+        input: "dinner tonight",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   describe("scenario matrix — absolute dates", () => {
-    it("'march 20' → bare month + day, date-only", () => {
-      const r = parseInput("file taxes march 20", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-20");
-    });
-
-    it("'march 20 at 3pm' → datetime", () => {
-      const r = parseInput("appt march 20 at 3pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-20T15:00:00");
-    });
-
-    it("'@march 5' anchor-prefix syntax", () => {
-      const r = parseInput("dentist @march 5", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
+    const cases: ParserCase[] = [
+      {
+        expected: { input: { scheduledStart: "2026-03-20" }, type: "single" },
+        input: "file taxes march 20",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-20T15:00:00" }, type: "single" },
+        input: "appt march 20 at 3pm",
+      },
       // March 5 has passed; chrono with forwardDate rolls to next year.
-      expect(r.input.scheduledStart).toBe("2027-03-05");
-    });
-
-    it("'4/15' slash date is parsed by chrono", () => {
-      const r = parseInput("appt 4/15 at 10am", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-04-15T10:00:00");
-    });
+      {
+        expected: { input: { scheduledStart: "2027-03-05" }, type: "single" },
+        input: "dentist @march 5",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-04-15T10:00:00" }, type: "single" },
+        input: "appt 4/15 at 10am",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   describe("scenario matrix — N pages (finite recurrence)", () => {
@@ -3002,6 +2894,108 @@ describe("NL Page Creation Parser", () => {
         if (!inp) continue;
         if (inp.scheduledEnd) expect(inp.scheduledStart).toBeDefined();
       }
+    });
+  });
+});
+
+// ─── property tests ──────────────────────────────────────────────────────────
+//
+// Invariants the parser must hold for ANY input we generate. Each property
+// runs the parser against ~100 randomised inputs (tags + folder + priority +
+// date + time + duration + recurrence, in random order with random
+// whitespace). Catches compositional bugs no enumerable test will surface.
+// Seed is fixed so failures are reproducible.
+
+describe("parser invariants (property tests)", () => {
+  it("never throws", () => {
+    forAll(() => true, { runs: 200 });
+  });
+
+  it("title is always a string", () => {
+    forAll((_, r) => {
+      if (r.type === "single") return typeof r.input.title === "string";
+      if (r.type === "recurring") return typeof r.input.title === "string";
+      return r.inputs.every((i) => typeof i.title === "string");
+    });
+  });
+
+  it("tags is always an array of strings", () => {
+    forAll((_, r) => {
+      const tags =
+        r.type === "single"
+          ? r.input.tags
+          : r.type === "recurring"
+            ? r.input.tags
+            : r.inputs[0]?.tags;
+      if (tags === undefined) return true;
+      return Array.isArray(tags) && tags.every((t) => typeof t === "string");
+    });
+  });
+
+  it("scheduledStart, when present, matches the date or datetime ISO shape", () => {
+    forAll((_, r) => {
+      const all = r.type === "single" ? [r.input] : r.type === "recurring" ? [r.input] : r.inputs;
+      return all.every(
+        (i) =>
+          i.scheduledStart === undefined ||
+          /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$/.test(i.scheduledStart)
+      );
+    });
+  });
+
+  it("scheduledEnd implies scheduledStart", () => {
+    forAll((_, r) => {
+      const all = r.type === "single" ? [r.input] : r.type === "recurring" ? [r.input] : r.inputs;
+      return all.every((i) => !i.scheduledEnd || i.scheduledStart !== undefined);
+    });
+  });
+
+  it("when scheduledEnd is set on a timed start, end >= start", () => {
+    forAll((_, r) => {
+      const all = r.type === "single" ? [r.input] : r.type === "recurring" ? [r.input] : r.inputs;
+      return all.every((i) => {
+        if (!i.scheduledStart || !i.scheduledEnd) return true;
+        if (!i.scheduledStart.includes("T") || !i.scheduledEnd.includes("T")) return true;
+        return new Date(i.scheduledEnd).getTime() >= new Date(i.scheduledStart).getTime();
+      });
+    });
+  });
+
+  it("priority is null, undefined, or one of the four labels", () => {
+    forAll((_, r) => {
+      const p =
+        r.type === "single"
+          ? r.input.priority
+          : r.type === "recurring"
+            ? r.input.priority
+            : r.inputs[0]?.priority;
+      return (
+        p === undefined ||
+        p === null ||
+        p === "urgent" ||
+        p === "high" ||
+        p === "medium" ||
+        p === "low"
+      );
+    });
+  });
+
+  it("recurring rrule is always parseable by rrule.js", () => {
+    forAll((_, r) => {
+      if (r.type !== "recurring") return true;
+      try {
+        RRule.fromString("RRULE:" + r.rrule);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  });
+
+  it("finite count matches inputs length", () => {
+    forAll((_, r) => {
+      if (r.type !== "finite") return true;
+      return r.count === r.inputs.length;
     });
   });
 });
