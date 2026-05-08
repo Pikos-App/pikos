@@ -160,10 +160,10 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     return " ";
   });
 
-  // --- 2. Folder: ~word ---
+  // --- 2. Folder: ~word (last wins, mirrors priority semantics) ---
   let folderQuery: string | undefined;
   text = text.replace(/~(\w+)/g, (_, folder: string) => {
-    if (folderQuery === undefined) folderQuery = folder;
+    folderQuery = folder;
     return " ";
   });
 
