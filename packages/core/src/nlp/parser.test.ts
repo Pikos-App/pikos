@@ -1637,113 +1637,117 @@ describe("NL Page Creation Parser", () => {
   // days, ordinals, abbreviated months, range plus metadata tokens, degenerate
   // same-day ranges, and reversed ranges (end ≤ start ⇒ no scheduledEnd).
   describe("multi-day all-day ranges — adjacent edges", () => {
-    it("single-digit hyphen range: 'trip Apr 5-9' → Apr 5 → Apr 9", () => {
-      const r = parseInput("trip Apr 5-9", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-04-05");
-      expect(r.input.scheduledEnd).toBe("2026-04-09");
-    });
-
-    it("abbreviated month + hyphen range: 'trip Sep 1-7' → Sep 1 → Sep 7", () => {
-      const r = parseInput("trip Sep 1-7", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-09-01");
-      expect(r.input.scheduledEnd).toBe("2026-09-07");
-    });
-
-    it("ordinals on both ends: 'travel May 2nd through 10th' → May 2 → May 10", () => {
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { scheduledEnd: "2026-04-09", scheduledStart: "2026-04-05" },
+          type: "single",
+        },
+        input: "trip Apr 5-9",
+      },
+      {
+        expected: {
+          input: { scheduledEnd: "2026-09-07", scheduledStart: "2026-09-01" },
+          type: "single",
+        },
+        input: "trip Sep 1-7",
+      },
       // The rewrite regex captures ordinal suffixes so the span resolves cleanly.
-      const r = parseInput("travel May 2nd through 10th", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-05-02");
-      expect(r.input.scheduledEnd).toBe("2026-05-10");
-    });
-
-    it("ordinal + abbreviated month: 'trip Apr 18th thru Apr 25th'", () => {
-      const r = parseInput("trip Apr 18th thru Apr 25th", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBe("2026-04-25");
-    });
-
-    it("reversed range: 'vacation April 25 to April 18' → forward-rolls end into next year", () => {
+      {
+        expected: {
+          input: { scheduledEnd: "2026-05-10", scheduledStart: "2026-05-02" },
+          type: "single",
+        },
+        input: "travel May 2nd through 10th",
+      },
+      {
+        expected: {
+          input: { scheduledEnd: "2026-04-25", scheduledStart: "2026-04-18" },
+          type: "single",
+        },
+        input: "trip Apr 18th thru Apr 25th",
+      },
       // chrono is configured with forwardDate: true. When the second date is
-      // earlier in the calendar than the first, it advances to the next year
-      // so the range is still chronologically valid. Documented here so a
-      // future change to forwardDate doesn't break silently.
-      const r = parseInput("vacation April 25 to April 18", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-04-25");
-      expect(r.input.scheduledEnd).toBe("2027-04-18");
-    });
+      // earlier in the calendar than the first, it advances to the next year so
+      // the range is still chronologically valid. Pinned so a future change to
+      // forwardDate doesn't break silently.
+      {
+        expected: {
+          input: { scheduledEnd: "2027-04-18", scheduledStart: "2026-04-25" },
+          type: "single",
+        },
+        input: "vacation April 25 to April 18",
+      },
+      {
+        expected: {
+          input: {
+            scheduledEnd: "2026-04-25",
+            scheduledStart: "2026-04-18",
+            tags: ["vacation"],
+            title: "trip",
+          },
+          type: "single",
+        },
+        input: "trip April 18-25 #vacation",
+      },
+      {
+        expected: {
+          input: {
+            priority: "urgent",
+            scheduledEnd: "2026-04-25",
+            scheduledStart: "2026-04-18",
+            title: "trip",
+          },
+          type: "single",
+        },
+        input: "trip April 18-25 !urgent",
+      },
+      {
+        expected: {
+          input: {
+            folderQuery: "Travel",
+            scheduledEnd: "2026-04-25",
+            scheduledStart: "2026-04-18",
+            title: "trip",
+          },
+          type: "single",
+        },
+        input: "trip April 18 to April 25 ~Travel",
+      },
+      {
+        expected: {
+          input: {
+            scheduledEnd: "2026-05-10",
+            scheduledStart: "2026-05-02",
+            title: "travel",
+          },
+          type: "single",
+        },
+        input: "travel from May 2 to May 10",
+      },
+      // Chrono consumes "tomorrow" but not the leading "from" — verify the strip
+      // extension covers single-date phrasing too, not just spans.
+      {
+        expected: { input: { title: "call" }, type: "single" },
+        input: "call from tomorrow",
+      },
+      {
+        expected: {
+          input: { scheduledEnd: "2026-06-05", scheduledStart: "2026-05-02" },
+          type: "single",
+        },
+        input: "trip May 2 through Jun 5",
+      },
+    ];
+    it.each(cases)("$input", runCase);
 
+    // toBeUndefined cases stay imperative — toMatchObject can't assert key absence.
     it("degenerate same-day: 'trip April 18 to April 18' → no scheduledEnd", () => {
       const r = parseInput("trip April 18 to April 18", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       expect(r.input.scheduledStart).toBe("2026-04-18");
       expect(r.input.scheduledEnd).toBeUndefined();
-    });
-
-    it("range with tag: 'trip April 18-25 #vacation'", () => {
-      const r = parseInput("trip April 18-25 #vacation", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("trip");
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBe("2026-04-25");
-      expect(r.input.tags).toEqual(["vacation"]);
-    });
-
-    it("range with priority: 'trip April 18-25 !urgent'", () => {
-      const r = parseInput("trip April 18-25 !urgent", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("trip");
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBe("2026-04-25");
-      expect(r.input.priority).toBe("urgent");
-    });
-
-    it("range with folder: 'trip April 18 to April 25 ~Travel'", () => {
-      const r = parseInput("trip April 18 to April 25 ~Travel", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("trip");
-      expect(r.input.folderQuery).toBe("Travel");
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBe("2026-04-25");
-    });
-
-    it("'from' prefix is stripped from title for spans: 'travel from May 2 to May 10'", () => {
-      const r = parseInput("travel from May 2 to May 10", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-05-02");
-      expect(r.input.scheduledEnd).toBe("2026-05-10");
-      expect(r.input.title).toBe("travel");
-    });
-
-    it("'from' is also stripped for non-span 'from <date>' phrases", () => {
-      // Chrono consumes "tomorrow" but not the leading "from" — verify the
-      // strip extension covers single-date phrasing too, not just spans.
-      const r = parseInput("call from tomorrow", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("call");
-    });
-
-    it("through+single-digit on second month: 'May 2 through Jun 5'", () => {
-      const r = parseInput("trip May 2 through Jun 5", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-05-02");
-      expect(r.input.scheduledEnd).toBe("2026-06-05");
     });
 
     it("hyphen range without preceding month is not a span: 'trip 18-25'", () => {
