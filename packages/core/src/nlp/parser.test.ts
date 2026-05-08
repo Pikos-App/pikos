@@ -2184,8 +2184,9 @@ describe("NL Page Creation Parser", () => {
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       expect(r.input.priority).toBe("urgent");
-      // Trailing period stays in the title — the priority regex consumes !urgent only.
-      expect(r.input.title).toBe("call .");
+      // The whitespace-before-period gap from token strip is collapsed,
+      // keeping the period attached to the trailing word.
+      expect(r.input.title).toBe("call.");
     });
 
     it("redundant whitespace collapses cleanly", () => {
@@ -2252,8 +2253,8 @@ describe("NL Page Creation Parser", () => {
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       expect(r.input.tags).toEqual(["abc", "def"]);
-      // Trailing comma stays in title — parser doesn't trim residual punctuation.
-      expect(r.input.title).toBe("note ,");
+      // Orphan separator punctuation left behind by the tag strip is dropped.
+      expect(r.input.title).toBe("note");
     });
 
     it("'24-hour time' with leading zero: 'meeting at 09:00'", () => {
@@ -2489,6 +2490,49 @@ describe("NL Page Creation Parser", () => {
       expect(r.rrule).toContain("BYDAY=SA,SU");
       // First occurrence: next Saturday Mar 21 at 09:00.
       expect(r.input.scheduledStart).toBe("2026-03-21T09:00:00");
+    });
+
+    // ─── time range edges ──────────────────────────────────────────────────
+    it("'9pm to 5am' → start 21:00 today/tomorrow, end at 05:00 next day", () => {
+      const r = parseInput("shift 9pm to 5am", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      // chrono parses the range; computeNextEnd or the parser pushes end past midnight.
+      expect(r.input.scheduledStart).toMatch(/T21:00:00$/);
+      expect(r.input.scheduledEnd).toMatch(/T05:00:00$/);
+      // Duration should reflect 8 hours, not −16.
+      expect(r.input.durationMinutes).toBe(8 * 60);
+    });
+
+    it("noon to 5pm time range", () => {
+      const r = parseInput("workshop noon to 5pm", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toMatch(/T12:00:00$/);
+      expect(r.input.scheduledEnd).toMatch(/T17:00:00$/);
+      expect(r.input.durationMinutes).toBe(5 * 60);
+    });
+
+    // ─── trailing punctuation cleanup ──────────────────────────────────────
+    it("title is trimmed of trailing punctuation orphans after token strip", () => {
+      // "call !urgent." → priority consumes "!urgent", leaving a stray ".".
+      // The ideal: stray punctuation that isn't part of the original title
+      // should not survive. (KNOWN LIMITATION currently — see adversarial
+      // input section. This test pins desired behaviour going forward.)
+      const r = parseInput("call !urgent.", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.priority).toBe("urgent");
+      expect(r.input.title).toBe("call.");
+    });
+
+    it("trailing comma after a tag list is dropped", () => {
+      // "note #abc, #def" → tags ["abc", "def"], title should be "note" not "note ,".
+      const r = parseInput("note #abc, #def", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.tags).toEqual(["abc", "def"]);
+      expect(r.input.title).toBe("note");
     });
 
     it("'noon' on its own → today at midday", () => {

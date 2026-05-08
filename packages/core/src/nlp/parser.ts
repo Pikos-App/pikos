@@ -573,7 +573,22 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   }
 
   // --- 9. Title: remaining text ---
-  const title = text.replace(/\s+/g, " ").trim();
+  // Collapse runs of whitespace, then clean up punctuation orphans left
+  // behind when inline tokens (#tag, !urgent, ~folder) were stripped:
+  //   - sentence punct (".", "!", "?") at end-of-string keeps the punctuation
+  //     but drops the whitespace gap before it: "call ." → "call.";
+  //   - separator punct (",", ";", ":") at end-of-string is dropped entirely
+  //     since it was acting as a token separator: "note ," → "note";
+  //   - mid-string separator punct surrounded by whitespace is dropped too:
+  //     "x , y" → "x y" (handles tag-list commas left over after strip).
+  // Mid-word punctuation like "!5" stays — only whitespace-isolated orphans
+  // are touched.
+  const title = text
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.!?])(?=\s|$)/g, "$1")
+    .replace(/\s+[,;:]+(?=\s|$)/g, "")
+    .replace(/^[\s,;:]+/, "")
+    .trim();
 
   // Build base ParsedInput
   const baseInput: ParsedInput = {
@@ -595,16 +610,23 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       }
     } else if (chronoEnd && hasTime) {
       // Time range ("3pm to 5pm") — apply end-time to the same date as start.
+      // For ranges that cross midnight (e.g. "9pm to 5am"), the naive
+      // same-day end is before the start; push it to the next day so the
+      // duration is positive and the event reads correctly.
       const startDate = new Date(scheduledStart);
       if (!isNaN(startDate.getTime())) {
-        const endDate = set(startDate, {
+        let endDate = set(startDate, {
           hours: chronoEnd.getHours(),
           milliseconds: 0,
           minutes: chronoEnd.getMinutes(),
           seconds: 0,
         });
+        let derivedMinutes = differenceInMinutes(endDate, startDate);
+        if (derivedMinutes < 0) {
+          endDate = addDays(endDate, 1);
+          derivedMinutes += 24 * 60;
+        }
         baseInput.scheduledEnd = formatLocalISO(endDate);
-        const derivedMinutes = differenceInMinutes(endDate, startDate);
         if (derivedMinutes > 0) {
           baseInput.durationMinutes = derivedMinutes;
         }
