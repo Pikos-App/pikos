@@ -2448,6 +2448,49 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
     });
 
+    // ─── recurring + casual time-of-day ────────────────────────────────────
+    it("'every monday morning' → recurring BYDAY=MO at 09:00", () => {
+      const r = parseInput("standup every monday morning", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
+    });
+
+    it("'every weekday morning' → BYDAY=MO,TU,WE,TH,FR at 09:00", () => {
+      const r = parseInput("standup every weekday morning", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO,TU,WE,TH,FR");
+      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
+    });
+
+    it("'every monday afternoon' → BYDAY=MO at 15:00", () => {
+      const r = parseInput("review every monday afternoon", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=MO");
+      expect(r.input.scheduledStart).toBe("2026-03-16T15:00:00");
+    });
+
+    it("'every other tuesday evening' → INTERVAL=2 BYDAY=TU at 18:00", () => {
+      const r = parseInput("dinner every other tuesday evening", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("INTERVAL=2");
+      expect(r.rrule).toContain("BYDAY=TU");
+      expect(r.input.scheduledStart).toBe("2026-03-17T18:00:00");
+    });
+
+    it("'every weekend morning' → BYDAY=SA,SU at 09:00", () => {
+      const r = parseInput("brunch every weekend morning", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("BYDAY=SA,SU");
+      // First occurrence: next Saturday Mar 21 at 09:00.
+      expect(r.input.scheduledStart).toBe("2026-03-21T09:00:00");
+    });
+
     it("'noon' on its own → today at midday", () => {
       const r = parseInput("call mom at noon", NOW);
       expect(r.type).toBe("single");
