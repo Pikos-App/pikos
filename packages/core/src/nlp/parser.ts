@@ -109,7 +109,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // the implied hour has already passed in `ref`; chrono can't make that call
   // because it doesn't know our productivity defaults.
   const PREFIX_DAY =
-    "(?:today|tomorrow|this|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)";
+    "(?:today|tomorrow|this|weekday|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)";
   text = text.replace(
     new RegExp(`\\b(${PREFIX_DAY})\\s+(morning|afternoon|evening|night)\\b`, "gi"),
     (_, prefix: string, period: string) => {
