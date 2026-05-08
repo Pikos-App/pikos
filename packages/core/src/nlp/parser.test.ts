@@ -1943,4 +1943,44 @@ describe("NL Page Creation Parser", () => {
       expect(r.rrule).toContain("UNTIL=");
     });
   });
+
+  // ─── interval + weekday combinations ───────────────────────────────────────
+  // The interval regex requires a unit word (day/week/month/year), so phrases
+  // like "every other tuesday" don't match it and fall through to chrono.
+  // These tests document the gap so we can decide whether to extend the
+  // grammar (interval + BYDAY) before launch.
+  describe("interval + weekday composition", () => {
+    it("'every other tuesday' → recurring weekly INTERVAL=2 BYDAY=TU", () => {
+      const r = parseInput("standup every other tuesday", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("FREQ=WEEKLY");
+      expect(r.rrule).toContain("INTERVAL=2");
+      expect(r.rrule).toContain("BYDAY=TU");
+    });
+
+    it("'every 2 mondays' → recurring weekly INTERVAL=2 BYDAY=MO", () => {
+      const r = parseInput("kickoff every 2 mondays", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.rrule).toContain("INTERVAL=2");
+      expect(r.rrule).toContain("BYDAY=MO");
+    });
+
+    it("'every other tuesday' anchors scheduledStart to next Tuesday", () => {
+      // NOW = Sunday Mar 15 2026; next Tuesday = Mar 17.
+      const r = parseInput("standup every other tuesday", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2026-03-17");
+      expect(r.input.title).toBe("standup");
+    });
+
+    it("'every other tuesday at 9am' carries the time", () => {
+      const r = parseInput("standup every other tuesday at 9am", NOW);
+      expect(r.type).toBe("recurring");
+      if (r.type !== "recurring") return;
+      expect(r.input.scheduledStart).toBe("2026-03-17T09:00:00");
+    });
+  });
 });

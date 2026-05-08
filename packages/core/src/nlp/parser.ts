@@ -223,6 +223,21 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     }
   );
 
+  // "every other <weekday>" / "every N <weekday>(s)" — interval cadence
+  // anchored to a specific weekday. Emits FREQ=WEEKLY;INTERVAL=N;BYDAY=...
+  // Must run before the bare "every <weekday>" regex so "every other tuesday"
+  // doesn't fall through and lose the interval.
+  text = text.replace(
+    /\bevery\s+(other|\d+)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?\b/gi,
+    (_, intervalStr: string, weekday: string) => {
+      const interval = intervalStr.toLowerCase() === "other" ? 2 : parseInt(intervalStr, 10);
+      const day = DAY_MAP[weekday.toLowerCase()];
+      if (!day) return " ";
+      recurrenceSpec = { byday: [day], freq: RRule.WEEKLY, interval, kind: "infinite" };
+      return " ";
+    }
+  );
+
   // "every <day>" or "every weekday/weekend/day/week/month/year" — handles
   // comma, "and", and Oxford comma separators:
   //   "every monday and wednesday", "every mon, wed, and fri"
