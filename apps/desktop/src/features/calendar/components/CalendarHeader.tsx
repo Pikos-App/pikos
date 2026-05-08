@@ -41,7 +41,11 @@ export function CalendarHeader({
 
   return (
     <>
-      <h2 aria-live="polite" className="type-ui flex-1 pl-1 text-foreground">
+      <h2
+        aria-label="Visible week"
+        aria-live="polite"
+        className="type-ui flex-1 pl-1 text-foreground"
+      >
         {weekLabel}
       </h2>
       <Tooltip>
