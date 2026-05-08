@@ -264,3 +264,127 @@ appTest(
     await expect(list.filter({ hasText: "research notes" })).not.toBeVisible();
   }
 );
+
+// ─── Multi-select drag → calendar schedules N pages ─────────────────────────
+//
+// useThreePanelDnD has dedicated multi-page drop logic (single-page drop
+// preserves duration; multi-page drop staggers timed events or applies
+// all-day to all). This test exercises the all-day branch — three pages
+// dropped onto the same day end up with three chips on that day.
+
+appTest(
+  "multi-select drag of 3 pages onto an all-day column schedules all 3 @tier2",
+  async ({ app }) => {
+    await quickAdd(app, "alpha task");
+    await quickAdd(app, "beta task");
+    await quickAdd(app, "gamma task");
+
+    const list = app.locator("[data-page-list-item]");
+    const alpha = list.filter({ hasText: "alpha task" });
+    const beta = list.filter({ hasText: "beta task" });
+    const gamma = list.filter({ hasText: "gamma task" });
+
+    // Switch to calendar mode via keyboard — clicking the toggle button
+    // would mousedown outside the page list and clear selection later.
+    await app.keyboard.press(mod("Mod+Shift+c"));
+    await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+
+    // Cmd+Click each page to multi-select without activating — plain click
+    // would route through openPage and force the right panel back to editor,
+    // collapsing the calendar.
+    await alpha.click({ modifiers: ["Meta"] });
+    await beta.click({ modifiers: ["Meta"] });
+    await gamma.click({ modifiers: ["Meta"] });
+    await expect(alpha).toHaveAttribute("data-selected", "true");
+    await expect(beta).toHaveAttribute("data-selected", "true");
+    await expect(gamma).toHaveAttribute("data-selected", "true");
+
+    // Calendar must still be open after the selection.
+    await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+
+    // Drop target — the rightmost-visible all-day column so the drop date
+    // stays inside the current week.
+    const cols = app.locator('[aria-label^="All-day events,"]');
+    const targetCol = cols.last();
+    const targetBox = await targetCol.boundingBox();
+    if (!targetBox) throw new Error("target column missing");
+
+    // Start the drag from one of the selected items (alpha) — dnd-kit
+    // associates the drag activation with the originating sortable.
+    const startBox = await alpha.boundingBox();
+    if (!startBox) throw new Error("source item missing");
+    const startX = startBox.x + startBox.width / 2;
+    const startY = startBox.y + startBox.height / 2;
+    const targetX = targetBox.x + targetBox.width / 2;
+    const targetY = targetBox.y + targetBox.height / 2;
+
+    await app.mouse.move(startX, startY);
+    await app.mouse.down();
+    await app.mouse.move(startX + 16, startY, { steps: 4 });
+    await app.mouse.move(targetX, targetY, { steps: 10 });
+    await app.mouse.up();
+
+    // All three pages now have chips on the calendar.
+    const calendar = app.getByRole("region", { name: "Week calendar" });
+    await expect(calendar.getByRole("button", { name: "alpha task" })).toHaveCount(1);
+    await expect(calendar.getByRole("button", { name: "beta task" })).toHaveCount(1);
+    await expect(calendar.getByRole("button", { name: "gamma task" })).toHaveCount(1);
+  }
+);
+
+// ─── Drag page from list onto a sidebar folder → page moves ─────────────────
+//
+// useThreePanelDnD's `at === "page" && ot === "folder"` branch handles
+// drag-to-folder moves. Pages.spec.ts covers the context-menu path; this
+// test covers the DnD path. A regression in the folder droppable wiring
+// would silently leave the page in its current folder.
+
+appTest(
+  "drag a page from list onto a sidebar folder moves it @tier2",
+  async ({ app }) => {
+    // Seed: a folder + a page in Inbox.
+    await app
+      .getByRole("toolbar", { name: "Folder actions" })
+      .getByRole("button", { name: "New Folder" })
+      .click();
+    await app.keyboard.press(mod("Mod+a"));
+    await app.keyboard.type("Archive");
+    await app.keyboard.press("Enter");
+
+    await app.getByRole("button", { name: /^Inbox/ }).click();
+    await quickAdd(app, "movable doc");
+
+    const item = app.locator("[data-page-list-item]").filter({ hasText: "movable doc" });
+    await expect(item).toBeVisible();
+    const itemBox = await item.boundingBox();
+    if (!itemBox) throw new Error("page item missing");
+
+    // The folder droppable target — sidebar folder buttons receive page
+    // drops via useThreePanelDnD. The Archive folder lives in the sidebar.
+    const sidebar = app.getByRole("group", { name: "Views and folders" });
+    const folder = sidebar.getByRole("button", { name: "Archive", exact: true });
+    const folderBox = await folder.boundingBox();
+    if (!folderBox) throw new Error("folder missing");
+
+    // dnd-kit activation: nudge ≥8 px before moving onto the target.
+    const startX = itemBox.x + itemBox.width / 2;
+    const startY = itemBox.y + itemBox.height / 2;
+    const folderX = folderBox.x + folderBox.width / 2;
+    const folderY = folderBox.y + folderBox.height / 2;
+
+    await app.mouse.move(startX, startY);
+    await app.mouse.down();
+    await app.mouse.move(startX + 16, startY, { steps: 4 });
+    await app.mouse.move(folderX, folderY, { steps: 10 });
+    await app.mouse.up();
+
+    // Inbox no longer shows the page.
+    await expect(item).not.toBeVisible();
+
+    // Archive folder shows it.
+    await folder.click();
+    await expect(
+      app.locator("[data-page-list-item]").filter({ hasText: "movable doc" })
+    ).toBeVisible();
+  }
+);
