@@ -11,7 +11,15 @@ import type { Page } from "@playwright/test";
 import { expect, mod, test as appTest } from "./fixtures";
 
 async function openCalendarMode(app: Page) {
-  await app.keyboard.press(mod("Mod+Shift+c"));
+  // Click the right-panel header's "Calendar view" button rather than firing
+  // Mod+Shift+C — the keypress can be dropped if the keyboard registry hasn't
+  // mounted yet (e.g. immediately after page.reload()). The button is part
+  // of the layout shell, so its visibility doubles as a "shell ready" signal.
+  const calendarBtn = app.getByRole("button", { name: "Calendar view" });
+  await calendarBtn.waitFor({ state: "visible" });
+  if ((await calendarBtn.getAttribute("aria-pressed")) !== "true") {
+    await calendarBtn.click();
+  }
   await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
 }
 
@@ -31,16 +39,19 @@ function calendarRegion(app: Page) {
 // auto-anchors to today so the rule has a concrete first occurrence.
 
 appTest("add recurrence later via the page editor byline @tier2", async ({ app }) => {
-  // Create a plain page (no schedule, no recurrence).
+  // Create a plain page (no schedule, no recurrence). Avoid words like
+  // "weekly" / "daily" / "monthly" in the title — the QuickAdd parser strips
+  // them as recurrence keywords, so "Weekly review" would land as "review"
+  // with a FREQ=WEEKLY rule attached, defeating the no-recurrence premise.
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
-  await app.getByPlaceholder(/what's on your mind/i).fill("Weekly review");
+  await app.getByPlaceholder(/what's on your mind/i).fill("Team retro");
   await app.keyboard.press("Enter");
   await expect(dialog).not.toBeVisible();
 
   // Open the page in the editor.
-  const listItem = app.locator("[data-page-list-item]").filter({ hasText: "Weekly review" });
+  const listItem = app.locator("[data-page-list-item]").filter({ hasText: "Team retro" });
   await listItem.click();
 
   // The byline's recurrence chip is icon-only; before a rule is attached the
@@ -145,13 +156,15 @@ appTest("completing a head page creates a done clone and advances head @tier2", 
 appTest("daily recurring page renders virtual occurrences on the calendar @tier2", async ({
   app,
 }) => {
-  // Seed a daily recurring page anchored to today. QuickAdd's recurring path
-  // sets the head's scheduledStart to today, then the calendar's
-  // useRecurrenceExpansion fills in the rest of the week as virtual blocks.
+  // Seed a daily recurring page with an explicit time so the head lands in
+  // the timed grid. All-day rules expand correctly too, but the parser
+  // strips so many words from the title (daily, morning, weekly, etc.) that
+  // an all-day input is hard to keep stable; using a timed input + time
+  // keeps the parsed title legible.
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
-  await app.getByPlaceholder(/what's on your mind/i).fill("daily walk every day");
+  await app.getByPlaceholder(/what's on your mind/i).fill("standup every day at 9am");
   await expect(
     dialog.getByRole("button", { name: /Recurrence: every day/i })
   ).toBeVisible({ timeout: 2000 });
@@ -165,14 +178,12 @@ appTest("daily recurring page renders virtual occurrences on the calendar @tier2
   // The exact count depends on which day of the week the test runs on, but
   // there should always be at least 2 (head + at least one future virtual,
   // since "today" is rarely Sunday at the very end of the week view).
-  const chips = calendar.getByRole("button", { name: /^daily walk/i });
+  // Wait for at least one Recurring icon (virtual) before counting — it
+  // proves expansion has finished and avoids racing the post-submit render.
+  await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5_000 });
+  const chips = calendar.getByRole("button", { name: /^standup/i });
   const count = await chips.count();
   expect(count).toBeGreaterThanOrEqual(2);
-
-  // Virtual chips render the Repeat2 icon with aria-label="Recurring" inside
-  // the button. The head renders a TaskCheckbox instead. So at least one
-  // "Recurring" descendant must exist somewhere in the calendar.
-  await expect(calendar.getByLabel("Recurring").first()).toBeVisible();
 });
 
 // ─── Drag-virtual → materialised page; head completion skips it ───────────

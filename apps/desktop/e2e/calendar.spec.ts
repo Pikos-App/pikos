@@ -9,7 +9,15 @@ import type { Page } from "@playwright/test";
 import { expect, mod, test as appTest } from "./fixtures";
 
 async function openCalendarMode(app: Page) {
-  await app.keyboard.press(mod("Mod+Shift+c"));
+  // Click the right-panel header's "Calendar view" button rather than firing
+  // Mod+Shift+C — the keypress can be dropped if the keyboard registry hasn't
+  // mounted yet (e.g. immediately after page.reload()). The button is part
+  // of the layout shell, so its visibility doubles as a "shell ready" signal.
+  const calendarBtn = app.getByRole("button", { name: "Calendar view" });
+  await calendarBtn.waitFor({ state: "visible" });
+  if ((await calendarBtn.getAttribute("aria-pressed")) !== "true") {
+    await calendarBtn.click();
+  }
   await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
 }
 

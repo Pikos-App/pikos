@@ -6,7 +6,7 @@ import type { SearchResult } from "@pikos/core";
 import { FileText, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { useUI } from "@/shared/context/UIContext";
@@ -309,6 +309,12 @@ export function SearchPalette() {
         className="top-[15%] translate-y-0 gap-0 border-border/60 bg-card p-0 shadow-2xl sm:max-w-[540px]"
         showCloseButton={false}
       >
+        {/* Radix Dialog requires a title + description for screen readers
+            even on a command-palette UI; sr-only keeps both invisible. */}
+        <DialogTitle className="sr-only">Search pages</DialogTitle>
+        <DialogDescription className="sr-only">
+          Search across all pages and folders. Use arrow keys to navigate results, Enter to open.
+        </DialogDescription>
         {/* Search input */}
         <div className="flex items-center gap-2 border-b border-border/40 px-4 py-3">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground/50" />

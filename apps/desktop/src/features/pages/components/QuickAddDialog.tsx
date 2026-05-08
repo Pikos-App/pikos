@@ -9,7 +9,7 @@ import type { Folder, PagePriority, PageUpdate, ParseResult } from "@pikos/core"
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { FolderChip } from "@/features/pages/components/FolderChip";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { TagsPopover } from "@/features/pages/components/TagsPopover";
@@ -385,6 +385,13 @@ export function QuickAddDialog() {
         className="top-[22%] translate-y-0 gap-0 border-border/60 bg-card p-0 shadow-2xl sm:max-w-[540px]"
         showCloseButton={false}
       >
+        {/* Radix requires a title + description for screen readers; sr-only
+            keeps the input-first surface visually clean. */}
+        <DialogTitle className="sr-only">Quick add</DialogTitle>
+        <DialogDescription className="sr-only">
+          Type a title with optional date, time, tags, folder, and recurrence shortcuts. Enter
+          commits, Cmd+Enter commits and stays open for the next page.
+        </DialogDescription>
         <div className="px-4 pt-4 pb-3">
           {addedFeedback !== null ? (
             <p className="animate-in truncate text-base text-muted-foreground fade-in-0">

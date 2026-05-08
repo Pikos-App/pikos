@@ -7,7 +7,7 @@
 import { format } from "date-fns";
 import { ChevronRight } from "lucide-react";
 
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 
 function formatDateLabel(yyyymmdd: string): string {
@@ -84,10 +84,10 @@ export function RecurringCompleteDialog() {
       <DialogContent className="sm:max-w-[420px]" showCloseButton={false}>
         <DialogTitle>Mark complete</DialogTitle>
         {pending ? (
-          <p className="type-ui-sm text-muted-foreground">
+          <DialogDescription className="type-ui-sm text-muted-foreground">
             You missed {missedCount} day{missedCount === 1 ? "" : "s"} —{" "}
             <MissedDaysSummary dates={pending.missedDates} />. What should happen?
-          </p>
+          </DialogDescription>
         ) : null}
 
         <div className="flex flex-col gap-1.5 pt-1">
