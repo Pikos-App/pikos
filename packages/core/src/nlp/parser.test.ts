@@ -155,34 +155,27 @@ describe("NL Page Creation Parser", () => {
   // ─── 2. Priority & folder edge cases ───────────────────────────────────────
 
   describe("priority and folder edge cases", () => {
-    it("last priority wins", () => {
-      const r = parseInput("task !urgent !low", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("low");
-    });
-
-    it("last folder wins (consistent with priority's last-wins semantics)", () => {
-      const r = parseInput("task ~Projects ~Archive", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.folderQuery).toBe("Archive");
-    });
-
-    it("last folder wins across three folders", () => {
-      const r = parseInput("task ~A ~B ~C", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.folderQuery).toBe("C");
-    });
-
-    it("only a priority token → empty title", () => {
-      const r = parseInput("!high", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("");
-      expect(r.input.priority).toBe("high");
-    });
+    const cases: ParserCase[] = [
+      // Last-wins for priority and folder.
+      {
+        expected: { input: { priority: "low" }, type: "single" },
+        input: "task !urgent !low",
+      },
+      {
+        expected: { input: { folderQuery: "Archive" }, type: "single" },
+        input: "task ~Projects ~Archive",
+      },
+      {
+        expected: { input: { folderQuery: "C" }, type: "single" },
+        input: "task ~A ~B ~C",
+      },
+      // Bare priority token → empty title.
+      {
+        expected: { input: { priority: "high", title: "" }, type: "single" },
+        input: "!high",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── Numeric priority shortcuts ────────────────────────────────────────────
@@ -212,23 +205,20 @@ describe("NL Page Creation Parser", () => {
   // ─── 3. Time without date ──────────────────────────────────────────────────
 
   describe("time without date", () => {
-    it("future time → today", () => {
-      // now = 12:00, 2pm is future
-      const r = parseInput("meeting 2pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("2026-03-15");
-      expect(r.input.scheduledStart).toContain("14:00");
-    });
-
-    it("past time → tomorrow", () => {
-      // now = 12:00, 8am is past
-      const r = parseInput("meeting 8am", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-      expect(r.input.scheduledStart).toContain("08:00");
-    });
+    // NOW = 12:00.
+    const cases: ParserCase[] = [
+      // 2pm is future → today.
+      {
+        expected: { input: { scheduledStart: "2026-03-15T14:00:00" }, type: "single" },
+        input: "meeting 2pm",
+      },
+      // 8am is past → tomorrow.
+      {
+        expected: { input: { scheduledStart: "2026-03-16T08:00:00" }, type: "single" },
+        input: "meeting 8am",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 4. Duration parsing ───────────────────────────────────────────────────
@@ -249,97 +239,124 @@ describe("NL Page Creation Parser", () => {
   // ─── 5. Finite recurrence ─────────────────────────────────────────────────
 
   describe("finite recurrence", () => {
-    it("m/w/f at 3pm for 45m → 3 pages (Mon 3/16, Wed 3/18, Fri 3/20)", () => {
-      const r = parseInput("run m/w/f at 3pm for 45m", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      expect(r.count).toBe(3);
-      expect(r.inputs).toHaveLength(3);
-      expect(r.inputs[0]!.scheduledStart).toContain("2026-03-16");
-      expect(r.inputs[0]!.scheduledStart).toContain("15:00");
-      expect(r.inputs[1]!.scheduledStart).toContain("2026-03-18");
-      expect(r.inputs[2]!.scheduledStart).toContain("2026-03-20");
-      expect(r.inputs[0]!.durationMinutes).toBe(45);
-    });
-
-    it("m/w/f for 1h through march 31 → Mon/Wed/Fri from 3/16 through 3/31", () => {
-      const r = parseInput("gym m/w/f for 1h through march 31", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      // Expected: 3/16, 3/18, 3/20, 3/23, 3/25, 3/27, 3/30 = 7 pages
-      expect(r.count).toBe(7);
-      expect(r.inputs).toHaveLength(7);
-      const starts = r.inputs.map((i) => i.scheduledStart);
-      expect(starts[0]).toContain("2026-03-16");
-      expect(starts[6]).toContain("2026-03-30");
-    });
-
-    it("weekdays at 9am 3 times → next 3 weekdays", () => {
-      const r = parseInput("review sprint weekdays at 9am 3 times", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      expect(r.count).toBe(3);
-      expect(r.inputs[0]!.scheduledStart).toContain("2026-03-16"); // Mon
-      expect(r.inputs[1]!.scheduledStart).toContain("2026-03-17"); // Tue
-      expect(r.inputs[2]!.scheduledStart).toContain("2026-03-18"); // Wed
-    });
-
-    it("bare weekdays → next 5 weekdays (Mon–Fri)", () => {
-      const r = parseInput("standup weekdays", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      expect(r.count).toBe(5);
-      expect(r.inputs[0]!.scheduledStart).toContain("2026-03-16");
-      expect(r.inputs[4]!.scheduledStart).toContain("2026-03-20");
-    });
-
-    it("t/th/f slash syntax — t maps to Tuesday", () => {
-      const r = parseInput("run t/th/f at 3pm", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      expect(r.count).toBe(3);
-      // Tue 3/17, Thu 3/19, Fri 3/20
-      expect(r.inputs[0]!.scheduledStart).toContain("2026-03-17");
-      expect(r.inputs[1]!.scheduledStart).toContain("2026-03-19");
-      expect(r.inputs[2]!.scheduledStart).toContain("2026-03-20");
-    });
-
-    it("through date excludes days after boundary", () => {
-      // Through Thursday March 19 — Mon 3/16 and Wed 3/18, NOT Fri 3/20
-      const r = parseInput("task m/w/f through march 19", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      expect(r.count).toBe(2);
-      expect(r.inputs[0]!.scheduledStart).toContain("2026-03-16");
-      expect(r.inputs[1]!.scheduledStart).toContain("2026-03-18");
-    });
-
-    it("scheduledEnd computes correctly on expanded finite pages", () => {
-      const r = parseInput("run m/w/f at 3pm for 1.5 hours", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      for (const inp of r.inputs) {
-        expect(inp.durationMinutes).toBe(90);
-        expect(inp.scheduledEnd).toBeDefined();
-        expect(inp.scheduledEnd).toContain("16:30");
-      }
-    });
+    const cases: ParserCase[] = [
+      // m/w/f at 3pm for 45m → 3 pages (Mon 3/16, Wed 3/18, Fri 3/20).
+      {
+        expected: {
+          count: 3,
+          inputs: [
+            { durationMinutes: 45, scheduledStart: "2026-03-16T15:00:00" },
+            { scheduledStart: "2026-03-18T15:00:00" },
+            { scheduledStart: "2026-03-20T15:00:00" },
+          ],
+          type: "finite",
+        },
+        input: "run m/w/f at 3pm for 45m",
+      },
+      // m/w/f for 1h through march 31: 3/16, 3/18, 3/20, 3/23, 3/25, 3/27, 3/30 = 7.
+      {
+        expected: {
+          count: 7,
+          inputs: [
+            { scheduledStart: "2026-03-16" },
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { scheduledStart: "2026-03-30" },
+          ],
+          type: "finite",
+        },
+        input: "gym m/w/f for 1h through march 31",
+      },
+      // weekdays at 9am 3 times → next 3 weekdays.
+      {
+        expected: {
+          count: 3,
+          inputs: [
+            { scheduledStart: "2026-03-16T09:00:00" }, // Mon
+            { scheduledStart: "2026-03-17T09:00:00" }, // Tue
+            { scheduledStart: "2026-03-18T09:00:00" }, // Wed
+          ],
+          type: "finite",
+        },
+        input: "review sprint weekdays at 9am 3 times",
+      },
+      // Bare weekdays → next 5 weekdays (Mon–Fri).
+      {
+        expected: {
+          count: 5,
+          inputs: [
+            { scheduledStart: "2026-03-16" },
+            undefined,
+            undefined,
+            undefined,
+            { scheduledStart: "2026-03-20" },
+          ],
+          type: "finite",
+        },
+        input: "standup weekdays",
+      },
+      // t/th/f slash syntax — t maps to Tuesday: Tue 3/17, Thu 3/19, Fri 3/20.
+      {
+        expected: {
+          count: 3,
+          inputs: [
+            { scheduledStart: "2026-03-17T15:00:00" },
+            { scheduledStart: "2026-03-19T15:00:00" },
+            { scheduledStart: "2026-03-20T15:00:00" },
+          ],
+          type: "finite",
+        },
+        input: "run t/th/f at 3pm",
+      },
+      // Through Thursday March 19 → Mon 3/16 and Wed 3/18, NOT Fri 3/20.
+      {
+        expected: {
+          count: 2,
+          inputs: [{ scheduledStart: "2026-03-16" }, { scheduledStart: "2026-03-18" }],
+          type: "finite",
+        },
+        input: "task m/w/f through march 19",
+      },
+      // scheduledEnd computes correctly on expanded finite pages.
+      {
+        expected: {
+          count: 3,
+          custom: (r) => {
+            for (const inp of r.inputs) {
+              expect(inp.scheduledEnd).toBeDefined();
+              expect(inp.scheduledEnd).toContain("16:30");
+            }
+          },
+          eachInput: { durationMinutes: 90 },
+          type: "finite",
+        },
+        input: "run m/w/f at 3pm for 1.5 hours",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 6. Finite recurrence — shared properties ─────────────────────────────
 
   describe("finite recurrence shared properties", () => {
-    it("all pages share tags, folder, duration, title", () => {
-      const r = parseInput("run m/w/f at 3pm for 45m #fitness ~Health", NOW);
-      expect(r.type).toBe("finite");
-      if (r.type !== "finite") return;
-      for (const inp of r.inputs) {
-        expect(inp.title).toBe("run");
-        expect(inp.tags).toEqual(["fitness"]);
-        expect(inp.folderQuery).toBe("Health");
-        expect(inp.durationMinutes).toBe(45);
-      }
-    });
+    it.each<ParserCase>([
+      {
+        expected: {
+          count: 3,
+          eachInput: {
+            durationMinutes: 45,
+            folderQuery: "Health",
+            tags: ["fitness"],
+            title: "run",
+          },
+          type: "finite",
+        },
+        input: "run m/w/f at 3pm for 45m #fitness ~Health",
+      },
+    ])("$input", runCase);
   });
 
   // ─── 7. Infinite recurrence ───────────────────────────────────────────────
@@ -428,12 +445,10 @@ describe("NL Page Creation Parser", () => {
   // ─── 7b. Recurring — word order variations ────────────────────────────────
 
   describe("recurring word order variations", () => {
-    // All of these should produce the same result: recurring WEEKLY;BYDAY=MO
-    // with scheduledStart on next Monday at 9am.
-    const EXPECTED_DATE = "2026-03-16";
-    const EXPECTED_TIME = "09:00";
-
-    const variations = [
+    // All variations should produce the same result: recurring WEEKLY;BYDAY=MO
+    // with scheduledStart on next Monday at 9am. Title "standup" survives in
+    // whatever case the parser preserves; case-insensitive match accepts all.
+    const cases: ParserCase[] = [
       "standup every monday at 9am",
       "standup at 9am every monday",
       "every monday standup at 9am",
@@ -441,161 +456,173 @@ describe("NL Page Creation Parser", () => {
       "standup every mon at 9am",
       "standup every Monday at 9am",
       "STANDUP EVERY MONDAY AT 9AM",
-    ];
-
-    for (const input of variations) {
-      it(`"${input}" → recurring WEEKLY BYDAY=MO`, () => {
-        const r = parseInput(input, NOW);
-        expect(r.type).toBe("recurring");
-        if (r.type !== "recurring") return;
-        expect(r.rrule).toContain("FREQ=WEEKLY");
-        expect(r.rrule).toContain("BYDAY=MO");
-        expect(r.input.scheduledStart).toContain(EXPECTED_DATE);
-        expect(r.input.scheduledStart).toContain(EXPECTED_TIME);
-        expect(r.input.title.toLowerCase()).toBe("standup");
-      });
-    }
+    ].map((input) => ({
+      expected: {
+        input: { scheduledStart: "2026-03-16T09:00:00" },
+        inputMatches: { title: /^standup$/i },
+        rrule: ["FREQ=WEEKLY", "BYDAY=MO"],
+        type: "recurring",
+      },
+      input,
+    }));
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 7c. Recurring — "and" separator ─────────────────────────────────────
 
   describe("recurring with 'and' separator", () => {
-    it("every tuesday and thursday at 6pm", () => {
-      const r = parseInput("gym every tuesday and thursday at 6pm", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=TU,TH");
-      expect(r.input.title).toBe("gym");
-    });
-
-    it("every tue and thu (abbreviated)", () => {
-      const r = parseInput("gym every tue and thu at 6pm", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=TU,TH");
-    });
-
-    it("every mon, wed, and fri (Oxford comma)", () => {
-      const r = parseInput("standup every mon, wed, and fri at 9am", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO,WE,FR");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { title: "gym" },
+          rrule: ["BYDAY=TU,TH"],
+          type: "recurring",
+        },
+        input: "gym every tuesday and thursday at 6pm",
+      },
+      {
+        expected: { rrule: ["BYDAY=TU,TH"], type: "recurring" },
+        input: "gym every tue and thu at 6pm",
+      },
+      // Oxford comma.
+      {
+        expected: { rrule: ["BYDAY=MO,WE,FR"], type: "recurring" },
+        input: "standup every mon, wed, and fri at 9am",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 7d. Recurring — plural day names ────────────────────────────────────
 
   describe("recurring via plural day names", () => {
-    it("standup mondays at 9am → recurring BYDAY=MO", () => {
-      const r = parseInput("standup mondays at 9am", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.input.scheduledStart).toContain("09:00");
-    });
-
-    it("gym tuesdays and thursdays at 6pm → BYDAY=TU,TH", () => {
-      const r = parseInput("gym tuesdays and thursdays at 6pm", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=TU,TH");
-    });
-
-    it("standup on mondays at 9am → recurring (on + plural)", () => {
-      const r = parseInput("standup on mondays at 9am", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO");
-    });
-
-    it("plural fridays without time → all-day recurring", () => {
-      const r = parseInput("review fridays", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=FR");
-      expect(r.input.scheduledStart).toBe("2026-03-20"); // next Friday
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T09:00:00" },
+          rrule: ["BYDAY=MO"],
+          type: "recurring",
+        },
+        input: "standup mondays at 9am",
+      },
+      {
+        expected: { rrule: ["BYDAY=TU,TH"], type: "recurring" },
+        input: "gym tuesdays and thursdays at 6pm",
+      },
+      // "on" + plural.
+      {
+        expected: { rrule: ["BYDAY=MO"], type: "recurring" },
+        input: "standup on mondays at 9am",
+      },
+      // Plural without time → all-day recurring (next Friday = 2026-03-20).
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-20" },
+          rrule: ["BYDAY=FR"],
+          type: "recurring",
+        },
+        input: "review fridays",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 7e. Recurring — duration preserved ──────────────────────────────────
 
   describe("recurring with duration", () => {
-    it("standup every monday at 9am for 30m → recurring with duration", () => {
-      const r = parseInput("standup every monday at 9am for 30m", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.durationMinutes).toBe(30);
-      expect(r.input.scheduledEnd).toContain("09:30");
-    });
-
-    it("daily standup at 9am for 15m → FREQ=DAILY with duration", () => {
-      const r = parseInput("daily standup at 9am for 15m", new Date("2026-03-16T08:00:00"));
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=DAILY");
-      expect(r.input.durationMinutes).toBe(15);
-    });
+    const TUE_MORN = new Date("2026-03-16T08:00:00");
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: {
+            durationMinutes: 30,
+            scheduledEnd: "2026-03-16T09:30:00",
+          },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every monday at 9am for 30m",
+      },
+      // NOW = Mon 2026-03-16 08:00; 9am future → today.
+      {
+        expected: {
+          input: { durationMinutes: 15 },
+          rrule: ["FREQ=DAILY"],
+          type: "recurring",
+        },
+        input: "daily standup at 9am for 15m",
+        now: TUE_MORN,
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 7f. Recurring — metadata preserved ──────────────────────────────────
 
   describe("recurring with metadata", () => {
-    it("preserves tags, priority, folder on recurring page", () => {
-      const r = parseInput("standup every monday at 9am #work !high ~Engineering", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.tags).toEqual(["work"]);
-      expect(r.input.priority).toBe("high");
-      expect(r.input.folderQuery).toBe("Engineering");
-      expect(r.input.title).toBe("standup");
-    });
+    it.each<ParserCase>([
+      {
+        expected: {
+          input: {
+            folderQuery: "Engineering",
+            priority: "high",
+            tags: ["work"],
+            title: "standup",
+          },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "standup every monday at 9am #work !high ~Engineering",
+      },
+    ])("$input", runCase);
   });
 
   // ─── 7g. Recurring — title cleanliness ───────────────────────────────────
 
   describe("recurring title cleanliness", () => {
-    it("daily standup every monday → title 'daily standup'", () => {
-      const r = parseInput("daily standup every monday at 9am", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("daily standup");
-    });
-
-    it("team sync every friday → title 'team sync'", () => {
-      const r = parseInput("team sync every friday at 4pm", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("team sync");
-    });
-
-    it("every monday standup → title 'standup'", () => {
-      const r = parseInput("every monday standup", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.input.title).toBe("standup");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { title: "daily standup" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "daily standup every monday at 9am",
+      },
+      {
+        expected: {
+          input: { title: "team sync" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "team sync every friday at 4pm",
+      },
+      {
+        expected: {
+          input: { title: "standup" },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "every monday standup",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 7h. Bare day names should NOT recur ─────────────────────────────────
 
   describe("bare day names stay single (not recurring)", () => {
-    it("standup monday at 9am → single, not recurring", () => {
-      const r = parseInput("standup monday at 9am", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-      expect(r.input.scheduledStart).toContain("09:00");
-    });
-
-    it("call next monday → single", () => {
-      const r = parseInput("call next monday", NOW);
-      expect(r.type).toBe("single");
-    });
-
-    it("meeting on monday → single (singular 'on monday')", () => {
-      const r = parseInput("meeting on monday at 2pm", NOW);
-      expect(r.type).toBe("single");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
+        input: "standup monday at 9am",
+      },
+      // Smoke test: just the type contract.
+      { expected: { type: "single" }, input: "call next monday" },
+      // Singular "on monday".
+      { expected: { type: "single" }, input: "meeting on monday at 2pm" },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 7i. Bounded recurrence (every X + window) ───────────────────────────

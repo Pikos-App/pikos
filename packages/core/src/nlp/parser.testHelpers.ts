@@ -53,6 +53,8 @@ export type Expectation =
       count: number;
       /** Asserts every page in `inputs` matches this shape (title, time, etc.). */
       eachInput?: Partial<ParsedInput>;
+      /** Per-index assertions; sparse — element at index N is matched against inputs[N]. */
+      inputs?: (Partial<ParsedInput> | undefined)[];
       custom?: (r: Extract<ParseResult, { type: "finite" }>) => void;
     };
 
@@ -105,6 +107,12 @@ export function assertCase(c: ParserCase, defaultNow: Date): void {
     expect(r.inputs).toHaveLength(c.expected.count);
     if (c.expected.eachInput) {
       for (const inp of r.inputs) expect(inp).toMatchObject(c.expected.eachInput);
+    }
+    if (c.expected.inputs) {
+      for (let i = 0; i < c.expected.inputs.length; i++) {
+        const expectedInp = c.expected.inputs[i];
+        if (expectedInp) expect(r.inputs[i]).toMatchObject(expectedInp);
+      }
     }
     c.expected.custom?.(r);
   }
