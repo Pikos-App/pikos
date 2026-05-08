@@ -10,15 +10,30 @@
 //      to catch compositional bugs no enumerable test will surface (random
 //      orderings, overlong inputs, weird whitespace).
 
+import { RRule } from "rrule";
 import { expect } from "vitest";
 
+import type { ParsedInput, ParseResult } from "./parser";
 import { parseInput } from "./parser";
-import type { ParsedInput } from "./parser";
 
 // ─── runCases — table-driven ─────────────────────────────────────────────────
 
+/** Keys that must be undefined or absent on the parsed input. */
+type InputAbsent = readonly (keyof ParsedInput)[];
+
+/** Regex patterns each field must match — used when the value floats (date or
+ * time depends on chrono's reference handling, so exact-equality isn't safe). */
+type InputMatches = Partial<Record<keyof ParsedInput, RegExp>>;
+
 export type Expectation =
-  | { type: "single"; input: Partial<ParsedInput> }
+  | {
+      type: "single";
+      input?: Partial<ParsedInput>;
+      inputAbsent?: InputAbsent;
+      inputMatches?: InputMatches;
+      /** Escape hatch: arbitrary assertion run after the type check. */
+      custom?: (r: Extract<ParseResult, { type: "single" }>) => void;
+    }
   | {
       type: "recurring";
       /** Substrings the rrule must contain (e.g. ["BYDAY=MO", "INTERVAL=2"]). */
@@ -27,12 +42,20 @@ export type Expectation =
       rruleAbsent?: string[];
       /** Optional partial assertion on baseInput (title, scheduledStart, etc.). */
       input?: Partial<ParsedInput>;
+      inputAbsent?: InputAbsent;
+      inputMatches?: InputMatches;
+      /** RRULE expansion check: count occurrences from a synthetic DTSTART. */
+      expansion?: { dtstart: string; count: number };
+      custom?: (r: Extract<ParseResult, { type: "recurring" }>) => void;
     }
   | {
       type: "finite";
       count: number;
       /** Asserts every page in `inputs` matches this shape (title, time, etc.). */
       eachInput?: Partial<ParsedInput>;
+      /** Per-index assertions; sparse — element at index N is matched against inputs[N]. */
+      inputs?: (Partial<ParsedInput> | undefined)[];
+      custom?: (r: Extract<ParseResult, { type: "finite" }>) => void;
     };
 
 export interface ParserCase {
@@ -53,7 +76,10 @@ export function assertCase(c: ParserCase, defaultNow: Date): void {
   expect(r.type, `parsing "${c.input}"`).toBe(c.expected.type);
 
   if (c.expected.type === "single" && r.type === "single") {
-    expect(r.input).toMatchObject(c.expected.input);
+    if (c.expected.input) expect(r.input).toMatchObject(c.expected.input);
+    assertInputAbsent(r.input, c.expected.inputAbsent, c.input);
+    assertInputMatches(r.input, c.expected.inputMatches, c.input);
+    c.expected.custom?.(r);
     return;
   }
 
@@ -65,6 +91,14 @@ export function assertCase(c: ParserCase, defaultNow: Date): void {
       expect(r.rrule, `rrule for "${c.input}"`).not.toContain(fragment);
     }
     if (c.expected.input) expect(r.input).toMatchObject(c.expected.input);
+    assertInputAbsent(r.input, c.expected.inputAbsent, c.input);
+    assertInputMatches(r.input, c.expected.inputMatches, c.input);
+    if (c.expected.expansion) {
+      const { count, dtstart } = c.expected.expansion;
+      const rule = RRule.fromString(`DTSTART:${dtstart}\nRRULE:${r.rrule}`);
+      expect(rule.all().length, `expansion for "${c.input}"`).toBe(count);
+    }
+    c.expected.custom?.(r);
     return;
   }
 
@@ -74,6 +108,37 @@ export function assertCase(c: ParserCase, defaultNow: Date): void {
     if (c.expected.eachInput) {
       for (const inp of r.inputs) expect(inp).toMatchObject(c.expected.eachInput);
     }
+    if (c.expected.inputs) {
+      for (let i = 0; i < c.expected.inputs.length; i++) {
+        const expectedInp = c.expected.inputs[i];
+        if (expectedInp) expect(r.inputs[i]).toMatchObject(expectedInp);
+      }
+    }
+    c.expected.custom?.(r);
+  }
+}
+
+function assertInputAbsent(
+  input: ParsedInput,
+  keys: InputAbsent | undefined,
+  inputStr: string
+): void {
+  for (const key of keys ?? []) {
+    expect(input[key], `${String(key)} should be absent for "${inputStr}"`).toBeUndefined();
+  }
+}
+
+function assertInputMatches(
+  input: ParsedInput,
+  matches: InputMatches | undefined,
+  inputStr: string
+): void {
+  if (!matches) return;
+  for (const [key, pattern] of Object.entries(matches) as [keyof ParsedInput, RegExp][]) {
+    const value = input[key];
+    expect(typeof value === "string" ? value : String(value), `${key} for "${inputStr}"`).toMatch(
+      pattern
+    );
   }
 }
 
