@@ -71,20 +71,63 @@ describe("NL Page Creation Parser", () => {
   // ─── 1. Single page creation ───────────────────────────────────────────────
 
   describe("single page creation", () => {
-    it("full NL: title, date, time, duration, tag, folder", () => {
-      const r = parseInput("team meeting @tomorrow at 2pm for 1h #work ~Projects", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("team meeting");
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-      expect(r.input.scheduledStart).toContain("14:00");
-      expect(r.input.durationMinutes).toBe(60);
-      expect(r.input.scheduledEnd).toContain("2026-03-16");
-      expect(r.input.scheduledEnd).toContain("15:00");
-      expect(r.input.tags).toEqual(["work"]);
-      expect(r.input.folderQuery).toBe("Projects");
-    });
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: {
+            durationMinutes: 60,
+            folderQuery: "Projects",
+            scheduledEnd: "2026-03-16T15:00:00",
+            scheduledStart: "2026-03-16T14:00:00",
+            tags: ["work"],
+            title: "team meeting",
+          },
+          type: "single",
+        },
+        input: "team meeting @tomorrow at 2pm for 1h #work ~Projects",
+      },
+      { expected: { input: { title: "" }, type: "single" }, input: "" },
+      { expected: { input: { title: "" }, type: "single" }, input: "   " },
+      {
+        expected: {
+          input: {
+            priority: "high",
+            tags: ["design", "ux"],
+            title: "brainstorm",
+          },
+          type: "single",
+        },
+        input: "brainstorm !high #design #ux",
+      },
+      // NOW = Sunday 2026-03-15, @monday → next Monday = 2026-03-16.
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T09:00:00", title: "standup" },
+          type: "single",
+        },
+        input: "standup @monday 9am",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-15" }, type: "single" },
+        input: "lunch @today",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-20T15:30:00" }, type: "single" },
+        input: "call @march20 at 3:30pm",
+      },
+      // NOW=12:00, 15:30 is future → today.
+      {
+        expected: { input: { scheduledStart: "2026-03-15T15:30:00" }, type: "single" },
+        input: "meeting at 3:30pm",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-15T14:00:00" }, type: "single" },
+        input: "meeting 14:00",
+      },
+    ];
+    it.each(cases)("$input", runCase);
 
+    // Imperative: cases asserting absence of fields or branching on chrono behaviour.
     it("plain text — no tokens", () => {
       const r = parseInput("quick note", NOW);
       expect(r.type).toBe("single");
@@ -92,68 +135,6 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.title).toBe("quick note");
       expect(r.input.scheduledStart).toBeUndefined();
       expect(r.input.tags).toEqual([]);
-    });
-
-    it("empty string", () => {
-      const r = parseInput("", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("");
-    });
-
-    it("whitespace-only", () => {
-      const r = parseInput("   ", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("");
-    });
-
-    it("priority and multiple tags", () => {
-      const r = parseInput("brainstorm !high #design #ux", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("brainstorm");
-      expect(r.input.priority).toBe("high");
-      expect(r.input.tags).toEqual(["design", "ux"]);
-    });
-
-    it("@monday → next Monday (bare day = date, not recurrence)", () => {
-      // now is Sunday 2026-03-15, next Monday = 2026-03-16
-      const r = parseInput("standup @monday 9am", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("standup");
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-      expect(r.input.scheduledStart).toContain("09:00");
-    });
-
-    it("@today — date-only, no time", () => {
-      const r = parseInput("lunch @today", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-15");
-    });
-
-    it("@march20 at 3:30pm", () => {
-      const r = parseInput("call @march20 at 3:30pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("2026-03-20");
-      expect(r.input.scheduledStart).toContain("15:30");
-    });
-
-    it("at keyword with standalone time", () => {
-      const r = parseInput("meeting at 3:30pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("15:30");
-    });
-
-    it("24-hour time format", () => {
-      const r = parseInput("meeting 14:00", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("14:00");
     });
 
     it("@march5 — no space between month and day", () => {
