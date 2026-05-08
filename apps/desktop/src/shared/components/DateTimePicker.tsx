@@ -635,7 +635,7 @@ export function DateTimePicker({
         </button>
       </PopoverTrigger>
 
-      <PopoverContent aria-label="Schedule picker" align="start" className="w-[380px] p-0">
+      <PopoverContent align="start" aria-label="Schedule picker" className="w-[380px] p-0">
         <div className="p-3">
           {/* Quick picks */}
           <div className="flex w-full items-start justify-between">
