@@ -1010,35 +1010,99 @@ describe("NL Page Creation Parser", () => {
   // timed to avoid ambiguous semantics).
 
   describe("multi-day all-day ranges", () => {
-    it("'vacation April 18-25' → Apr 18 → Apr 25, date-only", () => {
-      const r = parseInput("vacation April 18-25", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("vacation");
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBe("2026-04-25");
-    });
-
-    it("'vacation from April 18 to April 25' → Apr 18 → Apr 25", () => {
-      const r = parseInput("vacation from April 18 to April 25", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBe("2026-04-25");
-    });
-
-    it("'offsite April 18 to April 20' → Apr 18 → Apr 20", () => {
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: {
+            scheduledEnd: "2026-04-25",
+            scheduledStart: "2026-04-18",
+            title: "vacation",
+          },
+          type: "single",
+        },
+        input: "vacation April 18-25",
+      },
+      {
+        expected: {
+          input: { scheduledEnd: "2026-04-25", scheduledStart: "2026-04-18" },
+          type: "single",
+        },
+        input: "vacation from April 18 to April 25",
+      },
       // "to" joins a date range; chrono returns both dates with day-certainty.
-      // "through" / "thru" between "<Month> <day>" pairs is normalized to "to"
-      // at the top of parseInput so spans parse identically — see the dedicated
-      // "'<Month> <day> through ...'" cases below.
-      const r = parseInput("offsite April 18 to April 20", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBe("2026-04-20");
-    });
+      // "through" / "thru" between "<Month> <day>" pairs is normalized to "to" at
+      // the top of parseInput so spans parse identically — see the "<Month> <day>
+      // through ..." cases below.
+      {
+        expected: {
+          input: { scheduledEnd: "2026-04-20", scheduledStart: "2026-04-18" },
+          type: "single",
+        },
+        input: "offsite April 18 to April 20",
+      },
+      // NOW=12:00, 3pm is future → today (2026-03-15). Time range stays single-day.
+      {
+        expected: {
+          input: {
+            scheduledEnd: "2026-03-15T17:00:00",
+            scheduledStart: "2026-03-15T15:00:00",
+          },
+          type: "single",
+        },
+        input: "meeting 3pm to 5pm",
+      },
+      // "<Month> <day> through <day>" gets normalized to "... to ..." up front;
+      // without this, chrono reads "2 through 10" as a time range (2am–10am) and
+      // produces a 2am timed event tomorrow instead of the span the user typed.
+      {
+        expected: {
+          input: {
+            scheduledEnd: "2026-05-10",
+            scheduledStart: "2026-05-02",
+            title: "travel",
+          },
+          type: "single",
+        },
+        input: "travel May 2 through 10",
+      },
+      {
+        expected: {
+          input: { scheduledEnd: "2026-05-10", scheduledStart: "2026-05-02" },
+          type: "single",
+        },
+        input: "travel May 2 thru 10",
+      },
+      {
+        expected: {
+          input: { scheduledEnd: "2026-04-25", scheduledStart: "2026-04-18" },
+          type: "single",
+        },
+        input: "trip April 18 through April 25",
+      },
+      // Cross-year span.
+      {
+        expected: {
+          input: { scheduledEnd: "2027-01-03", scheduledStart: "2026-12-28" },
+          type: "single",
+        },
+        input: "trip Dec 28 through Jan 3",
+      },
+      // Regression: cadence + "through" stays a bounded-recurrence window — the
+      // rewrite only fires when a "<Month> <day>" literal sits immediately before
+      // "through", which isn't the case here.
+      {
+        expected: { rrule: ["FREQ=DAILY", "UNTIL=202606"], type: "recurring" },
+        input: "practice piano through june",
+      },
+      {
+        expected: { rrule: ["BYDAY=MO", "UNTIL=2026043"], type: "recurring" },
+        input: "standup every monday through april 30",
+      },
+    ];
+    it.each(cases)("$input", runCase);
 
+    // Single bare date (no range) → no scheduledEnd. toMatchObject can't
+    // distinguish "missing key" from "key === undefined", so this stays imperative.
     it("single bare date (no range) → no scheduledEnd", () => {
       const r = parseInput("vacation April 18", NOW);
       expect(r.type).toBe("single");
@@ -1047,80 +1111,18 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.scheduledEnd).toBeUndefined();
     });
 
+    // Mixed-shape: date-range + time has conservative semantics — start gets the
+    // time, end (if present) collapses to the same day. The conditional check
+    // doesn't fit ParserCase, so this stays imperative.
     it("date range with time → treated as single-day timed (range ignored)", () => {
-      // Intentionally conservative: mixed semantics are too error-prone.
       const r = parseInput("trip April 18-20 at 3pm", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       expect(r.input.scheduledStart).toContain("2026-04-18");
       expect(r.input.scheduledStart).toContain("15:00");
-      // End, if present, should be on the same day (from time range), never Apr 20.
       if (r.input.scheduledEnd) {
         expect(r.input.scheduledEnd).toContain("2026-04-18");
       }
-    });
-
-    it("time range on same day still works (unaffected)", () => {
-      const r = parseInput("meeting 3pm to 5pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("15:00");
-      expect(r.input.scheduledEnd).toContain("17:00");
-    });
-
-    // "<Month> <day> through <day>" gets normalized to "... to ..." up front;
-    // without this, chrono reads "2 through 10" as a time range (2am–10am) and
-    // the result is a 2am timed event tomorrow instead of the span the user typed.
-    it("'travel May 2 through 10' → May 2 → May 10 span", () => {
-      const r = parseInput("travel May 2 through 10", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("travel");
-      expect(r.input.scheduledStart).toBe("2026-05-02");
-      expect(r.input.scheduledEnd).toBe("2026-05-10");
-    });
-
-    it("'travel May 2 thru 10' → same span via 'thru' alias", () => {
-      const r = parseInput("travel May 2 thru 10", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-05-02");
-      expect(r.input.scheduledEnd).toBe("2026-05-10");
-    });
-
-    it("'trip April 18 through April 25' → span, not recurring window", () => {
-      const r = parseInput("trip April 18 through April 25", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBe("2026-04-25");
-    });
-
-    it("'trip Dec 28 through Jan 3' → cross-year span", () => {
-      const r = parseInput("trip Dec 28 through Jan 3", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-12-28");
-      expect(r.input.scheduledEnd).toBe("2027-01-03");
-    });
-
-    // Regression: cadence + "through" stays a bounded-recurrence window —
-    // the rewrite only fires when a "<Month> <day>" literal sits immediately
-    // before "through", which isn't the case here.
-    it("regression: 'practice piano through june' still a daily window", () => {
-      const r = parseInput("practice piano through june", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("FREQ=DAILY");
-      expect(r.rrule).toContain("UNTIL=202606");
-    });
-
-    it("regression: 'standup every monday through april 30' stays bounded", () => {
-      const r = parseInput("standup every monday through april 30", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.rrule).toContain("UNTIL=2026043");
     });
   });
 
