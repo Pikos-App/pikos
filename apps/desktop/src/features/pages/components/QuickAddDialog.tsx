@@ -5,7 +5,7 @@
 // title and all metadata from the full input.
 
 import { localToday, parseInput } from "@pikos/core";
-import type { Folder, PagePriority, PageUpdate, ParseResult } from "@pikos/core";
+import type { PagePriority, PageUpdate, ParseResult } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { FolderChip } from "@/features/pages/components/FolderChip";
 import { PriorityDropdown } from "@/features/pages/components/PriorityDropdown";
 import { TagsPopover } from "@/features/pages/components/TagsPopover";
+import { fuzzyMatchFolder } from "@/features/pages/utils/fuzzyMatchFolder";
 import { cn } from "@/lib/utils";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
@@ -21,19 +22,6 @@ import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-
-// ── Folder fuzzy match ────────────────────────────────────────────────────────
-
-function fuzzyMatchFolder(query: string, folders: Folder[]): Folder | null {
-  if (!query) return null;
-  const normalizedQuery = query.toLowerCase();
-  return (
-    folders.find((folder) => folder.name.toLowerCase() === normalizedQuery) ??
-    folders.find((folder) => folder.name.toLowerCase().startsWith(normalizedQuery)) ??
-    folders.find((folder) => folder.name.toLowerCase().includes(normalizedQuery)) ??
-    null
-  );
-}
 
 // ── BylineSeparator ───────────────────────────────────────────────────────────
 
