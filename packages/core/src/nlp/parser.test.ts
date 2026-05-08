@@ -119,11 +119,18 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.priority).toBe("low");
     });
 
-    it("first folder wins", () => {
+    it("last folder wins (consistent with priority's last-wins semantics)", () => {
       const r = parseInput("task ~Projects ~Archive", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
-      expect(r.input.folderQuery).toBe("Projects");
+      expect(r.input.folderQuery).toBe("Archive");
+    });
+
+    it("last folder wins across three folders", () => {
+      const r = parseInput("task ~A ~B ~C", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.folderQuery).toBe("C");
     });
 
     it("only a priority token → empty title", () => {
