@@ -1791,17 +1791,22 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.scheduledEnd).toBe("2026-04-25");
     });
 
-    it("date-range parses but 'from' currently leaks into title (known limitation)", () => {
-      // chrono consumes "May 2 to May 10" but leaves the leading "from" word
-      // intact. Documented here so a future fix doesn't break silently — this
-      // assertion will start failing once the leakage is plugged.
+    it("'from' prefix is stripped from title for spans: 'travel from May 2 to May 10'", () => {
       const r = parseInput("travel from May 2 to May 10", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       expect(r.input.scheduledStart).toBe("2026-05-02");
       expect(r.input.scheduledEnd).toBe("2026-05-10");
-      // KNOWN LIMITATION — "from" leaks into the title. See parser.ts §0/§7.
-      expect(r.input.title).toBe("travel from");
+      expect(r.input.title).toBe("travel");
+    });
+
+    it("'from' is also stripped for non-span 'from <date>' phrases", () => {
+      // Chrono consumes "tomorrow" but not the leading "from" — verify the
+      // strip extension covers single-date phrasing too, not just spans.
+      const r = parseInput("call from tomorrow", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("call");
     });
 
     it("through+single-digit on second month: 'May 2 through Jun 5'", () => {
