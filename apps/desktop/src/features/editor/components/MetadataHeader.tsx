@@ -14,6 +14,7 @@ import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
+import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
@@ -161,7 +162,6 @@ export function MetadataHeader({
 }: MetadataHeaderProps) {
   const {
     clearPageError,
-    completeRecurringPage,
     createRecurrence,
     deleteRecurrence,
     flushPage,
@@ -173,6 +173,7 @@ export function MetadataHeader({
     updatePage,
     updateRecurrence,
   } = useWorkspace();
+  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
   const { lineWidth } = useEditorSettings();
   const { flashPageBlock, setReferenceDate, setRightPanel } = useUI();
   const allTagNames = tags.map((t) => t.name);
@@ -187,9 +188,10 @@ export function MetadataHeader({
   }
 
   function handleStatusChange(status: PageStatus) {
-    // Recurring pages use the clone-and-advance flow on completion
+    // Recurring pages route through the gap-resolution dialog. The dialog
+    // fast-paths when there's no gap between head and today.
     if (status === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      void completeRecurringPage(page.id);
+      requestRecurringComplete(page.id);
       return;
     }
     updatePage(page.id, {

@@ -1,9 +1,14 @@
-// VirtualPageBlockPopover — read-only metadata popover for virtual rrule occurrences.
-// Shows page metadata without editing. Actions: open page, skip this occurrence.
+// VirtualPageBlockPopover — metadata popover for virtual rrule occurrences.
+// Shows page metadata; the only inline edit is the Date row, which opens a
+// date/time picker. Picking a new value materialises a page_schedules
+// override row keyed by (ruleId, originalDate) — the head's denorm is
+// untouched. Other actions: open page, skip this occurrence.
 
 import type { VirtualOccurrence } from "@pikos/core";
 import { CalendarX, ExternalLink } from "lucide-react";
 
+import { normalizeEndInput } from "@/features/calendar/utils/calendarUtils";
+import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { PRIORITY_LABELS } from "@/shared/constants/priorities";
@@ -18,8 +23,35 @@ interface VirtualPageBlockPopoverProps {
 }
 
 export function VirtualPageBlockPopover({ onClose, onSkip, page }: VirtualPageBlockPopoverProps) {
-  const { folders, recurrenceRules } = useWorkspace();
+  const { folders, recurrenceRules, rescheduleVirtualOccurrence } = useWorkspace();
   const { openPage } = useUI();
+
+  // Picking a new start materialises a page_schedules override at the new
+  // time. The virtual disappears (excluded by originalDate match) and the
+  // override renders as a normal block. Close the popover so the user sees
+  // the result instead of a popover anchored to a chip that's about to move.
+  function handleDateChange(iso: string | null) {
+    if (!iso) return; // clearing a virtual's date isn't meaningful — use Skip instead
+    void rescheduleVirtualOccurrence(
+      page.ruleId,
+      page.originalDate,
+      iso,
+      page.scheduledEnd ?? undefined
+    );
+    onClose?.();
+  }
+
+  function handleEndChange(endIso: string | null) {
+    if (!page.scheduledStart) return;
+    const next = normalizeEndInput(page.scheduledStart, endIso);
+    void rescheduleVirtualOccurrence(
+      page.ruleId,
+      page.originalDate,
+      page.scheduledStart,
+      next ?? undefined
+    );
+    onClose?.();
+  }
 
   useKeyboardScope("modal");
   useKeyboardShortcut("Mod+Backspace", () => onSkip(), { scope: "modal" });
@@ -43,7 +75,13 @@ export function VirtualPageBlockPopover({ onClose, onSkip, page }: VirtualPageBl
 
         <div className="flex items-center gap-3">
           <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Date</span>
-          <span className="text-sm text-muted-foreground">{page.scheduledStart}</span>
+          <DateTimePicker
+            endValue={page.scheduledEnd ?? null}
+            isDone={page.status === "done"}
+            onChange={handleDateChange}
+            onEndChange={handleEndChange}
+            value={page.scheduledStart ?? null}
+          />
         </div>
 
         {page.priority > 0 && (

@@ -17,6 +17,7 @@ import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
+import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
@@ -31,7 +32,6 @@ interface PageBlockPopoverProps {
 export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: PageBlockPopoverProps) {
   const {
     clearSchedule,
-    completeRecurringPage,
     createRecurrence,
     deleteRecurrence,
     folders,
@@ -40,6 +40,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
     updatePage,
     updateRecurrence,
   } = useWorkspace();
+  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
   const { openPage } = useUI();
 
   useKeyboardScope("modal");
@@ -64,7 +65,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   function handleStatusToggle() {
     const newStatus: PageStatus = isDone ? "not_started" : "done";
     if (newStatus === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      void completeRecurringPage(page.id);
+      requestRecurringComplete(page.id);
       return;
     }
     updatePage(page.id, {

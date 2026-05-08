@@ -111,6 +111,41 @@ describe("useRecurrenceExpansion", () => {
     });
   });
 
+  it("hides virtuals on or before the head's date so virtuals visibly track when the head moves", async () => {
+    // Daily anchor at Mar 2 (Mon). Head currently sits at Mar 11 (Wed) —
+    // the user moved it forward via drag. The visible week is Mar 9–15.
+    // Without the "<= headDate" filter, virtuals for Mar 9 and Mar 10
+    // would appear (the rule still emits them and they're not exdate'd),
+    // resurrecting dates that visually predate the head.
+    const head = makePage({ scheduledStart: "2026-03-11T09:00:00" });
+    const rule = makeRule({
+      rrule: "FREQ=DAILY",
+      scheduledEnd: "2026-03-02T10:00:00",
+      scheduledStart: "2026-03-02T09:00:00",
+    });
+    const days = weekDays(new Date(2026, 2, 9)); // Mar 9–15
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days,
+        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        pages: [head],
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+      // Mar 9, 10, 11 — none of these should appear as virtuals.
+      // Mar 11 is excluded as headDate; Mar 9–10 are excluded as <= headDate.
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-10"))).toBeUndefined();
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-11"))).toBeUndefined();
+      // Mar 12+ should still appear.
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-12"))).toBeDefined();
+    });
+  });
+
   it("excludes dates with materialised override schedules", async () => {
     const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
     const rule = makeRule();

@@ -18,6 +18,7 @@ import type {
 } from "@pikos/core";
 import {
   computeNextEnd,
+  missedOccurrencesBetween,
   MockStorageAdapter,
   nextOccurrenceAfter,
   parseLocalISO,
@@ -31,6 +32,7 @@ import type {
 } from "@pikos/core";
 import { appDataDir } from "@tauri-apps/api/path";
 import { load } from "@tauri-apps/plugin-store";
+import { startOfDay } from "date-fns";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
@@ -56,6 +58,13 @@ interface EventPayloadMap {
 }
 
 type AnyHandler = (payload: unknown) => void;
+
+/**
+ * How `completeRecurringPage` handles missed occurrences when the head is
+ * overdue (today > head's scheduledStart). See completeRecurringPage's JSDoc
+ * for what each policy does.
+ */
+export type MissedOccurrencePolicy = "advance" | "skip";
 
 // ─── Context shape ────────────────────────────────────────────────────────────
 
@@ -119,8 +128,24 @@ export interface WorkspaceContextValue {
   deleteRecurrence: (ruleId: string) => Promise<void>;
   /** List all materialised schedule rows in a date range (for rrule override filtering). */
   listSchedulesRange: (start: string, end: string) => Promise<import("@pikos/core").PageSchedule[]>;
-  /** Complete a recurring page: clone as done, advance head to next occurrence. */
-  completeRecurringPage: (pageId: string) => Promise<void>;
+  /** Materialise a virtual rrule occurrence as an independent real page. Clones head's content/metadata, schedules the clone at the new time, exdates the original date so the virtual disappears. */
+  rescheduleVirtualOccurrence: (
+    ruleId: string,
+    originalDate: string,
+    start: string,
+    end?: string
+  ) => Promise<void>;
+  /**
+   * Complete a recurring page: clone as done, advance head to next occurrence.
+   * The `missedPolicy` controls behaviour when there's a gap between the head's
+   * date and today (head is overdue):
+   *   - `advance` (default): one rrule step from head — past virtuals stay on
+   *     the calendar so the user can address each individually.
+   *   - `skip`: exdate every missed occurrence between head and today, then
+   *     advance to today/the next non-excluded date — past calendar reads clean.
+   * No gap → `advance` is the only sensible choice and the dialog is skipped.
+   */
+  completeRecurringPage: (pageId: string, missedPolicy?: MissedOccurrencePolicy) => Promise<void>;
   /** Skip a single occurrence of a recurring page (add date to exdates). Returns an undo function. */
   skipOccurrence: (ruleId: string, date: string) => Promise<() => void>;
   /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
@@ -676,12 +701,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   async function scheduleOnce(pageId: string, start: string, end?: string): Promise<void> {
     const snapshot = pages.find((p) => p.id === pageId);
-    // Optimistic update
+    // Recurring head: capture the rule snapshot so we can shift the rule's
+    // anchor in lockstep with the head's denorm. Without this, dragging the
+    // head from Mon to Wed leaves rule.scheduledStart pointed at Mon — the
+    // calendar then keeps emitting Mon-based virtuals (and any past dates
+    // before the new head linger), making the series feel detached from the
+    // user's most recent action.
+    const ruleSnapshot = recurrenceRules.find((r) => r.pageId === pageId);
+
+    // Optimistic update — pages + (if recurring) rule anchor.
     setPages((prev) =>
       prev.map((p) =>
         p.id === pageId ? { ...p, scheduledEnd: end ?? null, scheduledStart: start } : p
       )
     );
+    if (ruleSnapshot) {
+      setRecurrenceRules((prev) =>
+        prev.map((r) =>
+          r.id === ruleSnapshot.id
+            ? {
+                ...r,
+                scheduledStart: start,
+                ...(end !== undefined ? { scheduledEnd: end } : {}),
+              }
+            : r
+        )
+      );
+    }
+
     return enqueue(pageId, async () => {
       try {
         const schedules = await adapter.listPageSchedules(pageId);
@@ -700,9 +747,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             timezone: tz,
           });
         }
+        if (ruleSnapshot) {
+          await adapter.updateRecurrenceRule(ruleSnapshot.id, {
+            scheduledStart: start,
+            ...(end !== undefined ? { scheduledEnd: end } : {}),
+          });
+        }
       } catch (e) {
         if (snapshot) {
           setPages((prev) => prev.map((p) => (p.id === pageId ? snapshot : p)));
+        }
+        if (ruleSnapshot) {
+          setRecurrenceRules((prev) =>
+            prev.map((r) => (r.id === ruleSnapshot.id ? ruleSnapshot : r))
+          );
         }
         setPageErrors((prev) =>
           new Map(prev).set(pageId, e instanceof Error ? e.message : String(e))
@@ -757,48 +815,130 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setRecurrenceRules((prev) => prev.filter((r) => r.id !== ruleId));
   }
 
+  // Drag-to-reschedule (or popover Date pick) on a virtual rrule occurrence.
+  // Materialise the occurrence as an independent real page: clone the head's
+  // content + metadata, schedule the clone at the new time, and add the
+  // original date to the head's rruleExdates so the virtual disappears.
+  //
+  // The clone is a normal page — has its own id, status, can be moved,
+  // completed, deleted, etc. The head and rule are untouched, so the next
+  // virtual still appears at the next non-excluded rrule occurrence.
+  //
+  // The previous "page_schedules override row" approach was discarded
+  // because synthetic override blocks couldn't seamlessly inherit page
+  // functionality (drag would duplicate, checkbox would advance the head).
+  async function rescheduleVirtualOccurrence(
+    ruleId: string,
+    originalDate: string,
+    start: string,
+    end?: string
+  ): Promise<void> {
+    const rule = recurrenceRules.find((r) => r.id === ruleId);
+    if (!rule) throw new Error(`No recurrence rule for id: ${ruleId}`);
+    const headPage = await adapter.getPage(rule.pageId);
+    if (!headPage) throw new Error(`Head page not found: ${rule.pageId}`);
+
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const clone = await adapter.createPage({
+      content: headPage.content,
+      contentText: headPage.contentText ?? "",
+      folderId: headPage.folderId,
+      priority: headPage.priority,
+      status: "not_started",
+      tags: headPage.tags,
+      title: headPage.title,
+      ...(headPage.subtitle != null ? { subtitle: headPage.subtitle } : {}),
+    });
+    await adapter.createPageSchedule({
+      pageId: clone.id,
+      scheduledStart: start,
+      timezone: tz,
+      ...(end !== undefined && { scheduledEnd: end }),
+    });
+
+    const updatedExdates = [...rule.rruleExdates, originalDate];
+    await adapter.updateRecurrenceRule(ruleId, { rruleExdates: updatedExdates });
+
+    // Local state sync: the clone needs its denorm scheduledStart/end on
+    // the summary the calendar reads, since toPageSummary alone won't pick
+    // up the schedule we just inserted.
+    const cloneSummary: PageSummary = {
+      ...toPageSummary(clone),
+      scheduledEnd: end ?? null,
+      scheduledStart: start,
+    };
+    setPages((prev) => [...prev, cloneSummary]);
+    setRecurrenceRules((prev) =>
+      prev.map((r) => (r.id === ruleId ? { ...r, rruleExdates: updatedExdates } : r))
+    );
+  }
+
   function listSchedulesRange(start: string, end: string) {
     return adapter.listPageSchedulesRange(start, end);
   }
 
-  async function completeRecurringPage(pageId: string): Promise<void> {
+  async function completeRecurringPage(
+    pageId: string,
+    missedPolicy: MissedOccurrencePolicy = "advance"
+  ): Promise<void> {
     const rule = recurrenceRules.find((r) => r.pageId === pageId);
     if (!rule) throw new Error(`No recurrence rule for page ${pageId}`);
 
-    // Advance past whichever is later: today or the current occurrence.
-    // - If head is overdue (scheduledStart in the past): use today → skips missed occurrences.
-    // - If head is future (completing early): use scheduledStart → ensures we advance past it.
     const head = pages.find((p) => p.id === pageId);
     const headDate = head?.scheduledStart ? parseLocalISO(head.scheduledStart) : new Date();
-    const afterDate = headDate > new Date() ? headDate : new Date();
-    const next = nextOccurrenceAfter(rule.rrule, rule.scheduledStart, afterDate);
+    const todayStart = startOfDay(new Date());
+    const completedDate = head?.scheduledStart?.slice(0, 10);
+
+    // Compute the missed-occurrence gap (rrule occurrences strictly between
+    // the head and today, not already in exdates). Only relevant for skip —
+    // advance leaves them alone so they keep showing on the calendar for the
+    // user to address one at a time.
+    const gapDates =
+      missedPolicy === "skip" && todayStart > headDate
+        ? missedOccurrencesBetween(
+            rule.rrule,
+            rule.scheduledStart,
+            headDate,
+            todayStart,
+            rule.rruleExdates
+          )
+        : [];
+
+    // afterDate per policy. advance = one rrule step past head; skip jumps
+    // to today (or stays at headDate if head is in the future).
+    const afterDate =
+      missedPolicy === "advance" ? headDate : todayStart > headDate ? todayStart : headDate;
+
+    // Exdates the advance-computation should respect: existing + head's date
+    // (clone occupies it) + every gap date (skip removes them).
+    const exdatesForAdvance = [
+      ...rule.rruleExdates,
+      ...(completedDate ? [completedDate] : []),
+      ...gapDates,
+    ];
+    const next = nextOccurrenceAfter(rule.rrule, rule.scheduledStart, afterDate, exdatesForAdvance);
     const nextEnd =
       next && rule.scheduledEnd ? computeNextEnd(rule.scheduledEnd, next.scheduledStart) : null;
 
-    // Add the completed date to exdates so the virtual expansion won't generate
-    // a duplicate for this date (the clone now occupies it as a real page).
-    const completedDate = head?.scheduledStart?.slice(0, 10);
-    const updatedExdates = completedDate
-      ? [...rule.rruleExdates, completedDate]
-      : rule.rruleExdates;
+    // Persisted exdates: head's date + all gap dates. Skip adds the gap so
+    // the rule's expansion stops emitting those days; advance only adds head.
+    const persistedExdates = completedDate
+      ? [...rule.rruleExdates, completedDate, ...gapDates]
+      : [...rule.rruleExdates, ...gapDates];
 
-    // Persist both changes to DB
     const [result] = await Promise.all([
       adapter.completeRecurringPage({
         nextScheduledEnd: nextEnd,
         nextScheduledStart: next?.scheduledStart ?? null,
         pageId,
       }),
-      completedDate
-        ? adapter.updateRecurrenceRule(rule.id, { rruleExdates: updatedExdates })
+      completedDate || gapDates.length > 0
+        ? adapter.updateRecurrenceRule(rule.id, { rruleExdates: persistedExdates })
         : Promise.resolve(null),
     ]);
 
-    // Batch all state updates together so React renders them atomically.
-    // Clone renders on the calendar as a done block (independent page).
-    // Exdate prevents the virtual expansion from generating a duplicate.
     setRecurrenceRules((prev) =>
-      prev.map((r) => (r.id === rule.id ? { ...r, rruleExdates: updatedExdates } : r))
+      prev.map((r) => (r.id === rule.id ? { ...r, rruleExdates: persistedExdates } : r))
     );
     setPages((prev) => {
       const updated = prev.map((p) => (p.id === pageId ? result.head : p));
@@ -1093,6 +1233,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     reload,
     reorderFolders,
     reorderPages,
+    rescheduleVirtualOccurrence,
     resetAndSeed,
     restoreFolder,
     restorePage,

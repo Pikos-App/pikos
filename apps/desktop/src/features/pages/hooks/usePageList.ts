@@ -3,6 +3,7 @@ import { nowLocalISO } from "@pikos/core";
 import { useState } from "react";
 
 import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
+import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -13,7 +14,8 @@ import { useCompletedPages } from "./useCompletedPages";
 export const UNDO_TOAST_DURATION_MS = 8000;
 
 export function usePageList() {
-  const { completeRecurringPage, folders, pages, recurrenceRules, updatePage } = useWorkspace();
+  const { folders, pages, recurrenceRules, updatePage } = useWorkspace();
+  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
   const { activeViewId, getSortMode, openPage, setActivePage } = useUI();
   const { hiddenIds, requestDeletePage } = useUndoDelete();
   const activePage = useActivePage();
@@ -50,9 +52,11 @@ export function usePageList() {
 
   function handleToggleStatus(pageId: string, currentStatus: PageStatus) {
     const isDone = currentStatus === "done";
-    // Recurring pages use the clone-and-advance flow on completion
+    // Recurring pages route through the gap-resolution dialog (which fast-
+    // paths to advance when there's no gap). Non-recurring or un-completing
+    // a done page just flips status directly.
     if (!isDone && recurrenceRules.some((r) => r.pageId === pageId)) {
-      void completeRecurringPage(pageId);
+      requestRecurringComplete(pageId);
       return;
     }
     updatePage(pageId, {

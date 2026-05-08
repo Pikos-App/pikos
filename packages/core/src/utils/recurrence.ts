@@ -171,7 +171,14 @@ function fromFakeUtc(d: Date): Date {
 export function nextOccurrenceAfter(
   rruleStr: string,
   scheduledStart: string,
-  afterDate: Date
+  afterDate: Date,
+  /**
+   * Dates (YYYY-MM-DD) excluded from the rule. Caller should pass
+   * `rule.rruleExdates`; without it, the function may return an occurrence
+   * that has already been skipped or materialised, which advances the head
+   * onto a date the user has already taken out of the series.
+   */
+  exdates: readonly string[] = []
 ): { scheduledStart: string; scheduledEnd: string | null } | null {
   const baseStart = parseLocalISO(scheduledStart);
   const isAllDay = !scheduledStart.includes("T");
@@ -182,26 +189,73 @@ export function nextOccurrenceAfter(
     dtstart: dtstartUtc,
   });
 
-  // Find the first occurrence strictly after afterDate's entire day.
-  const afterUtc = toFakeUtc(endOfDay(afterDate));
-  const next = rrule.after(afterUtc, false);
-
-  if (!next) return null;
-
-  const nextLocal = fromFakeUtc(next);
-
-  if (isAllDay) {
-    return { scheduledEnd: null, scheduledStart: formatDateOnly(nextLocal) };
+  const exdateSet = new Set(exdates);
+  // Iterate forward through occurrences, skipping exdates. Cap at a few
+  // hundred steps to bound pathological inputs (e.g. an exdate-list that
+  // covers every future occurrence) — rrule's `after(strict=false)` returns
+  // the next occurrence past the seed date.
+  let cursor = toFakeUtc(endOfDay(afterDate));
+  for (let i = 0; i < 500; i++) {
+    const next = rrule.after(cursor, false);
+    if (!next) return null;
+    const nextLocal = fromFakeUtc(next);
+    const dateStr = formatDateOnly(nextLocal);
+    if (exdateSet.has(dateStr)) {
+      // Move past this excluded occurrence and try the next one.
+      cursor = next;
+      continue;
+    }
+    if (isAllDay) {
+      return { scheduledEnd: null, scheduledStart: dateStr };
+    }
+    // Preserve the wall-clock time from the base start on the new date.
+    const adjusted = set(nextLocal, {
+      hours: getHours(baseStart),
+      milliseconds: 0,
+      minutes: getMinutes(baseStart),
+      seconds: getSeconds(baseStart),
+    });
+    return { scheduledEnd: null, scheduledStart: formatLocalISO(adjusted) };
   }
+  return null;
+}
 
-  // Preserve the wall-clock time from the base start on the new date
-  const adjusted = set(nextLocal, {
-    hours: getHours(baseStart),
-    milliseconds: 0,
-    minutes: getMinutes(baseStart),
-    seconds: getSeconds(baseStart),
+/**
+ * Returns YYYY-MM-DD strings for every rrule occurrence strictly after `after`
+ * and strictly before `before`, skipping any in `exdates`. Used to compute the
+ * "gap" of missed days between a recurring page's previous anchor and today.
+ *
+ * The cap (500 iterations) bounds pathological inputs (e.g. a multi-year
+ * gap on FREQ=DAILY with an exdate-heavy rule).
+ */
+export function missedOccurrencesBetween(
+  rruleStr: string,
+  scheduledStart: string,
+  after: Date,
+  before: Date,
+  exdates: readonly string[] = []
+): string[] {
+  if (before <= after) return [];
+  const baseStart = parseLocalISO(scheduledStart);
+  const dtstartUtc = toFakeUtc(baseStart);
+  const rrule = new RRule({
+    ...RRule.parseString(rruleStr),
+    dtstart: dtstartUtc,
   });
-  return { scheduledEnd: null, scheduledStart: formatLocalISO(adjusted) };
+  const exdateSet = new Set(exdates);
+  const beforeUtc = toFakeUtc(before);
+
+  const results: string[] = [];
+  let cursor = toFakeUtc(after); // strictly-after by passing inc=false to .after()
+  for (let i = 0; i < 500; i++) {
+    const next = rrule.after(cursor, false);
+    if (!next) break;
+    if (next >= beforeUtc) break;
+    const dateStr = formatDateOnly(fromFakeUtc(next));
+    if (!exdateSet.has(dateStr)) results.push(dateStr);
+    cursor = next;
+  }
+  return results;
 }
 
 /**

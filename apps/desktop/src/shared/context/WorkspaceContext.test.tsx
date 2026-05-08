@@ -7,6 +7,7 @@
 import type { Page } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import { act, renderHook } from "@testing-library/react";
+import { format } from "date-fns";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -380,6 +381,52 @@ describe("reorderPages — optimistic", () => {
 });
 
 // ─── clearSchedule ────────────────────────────────────────────────────────────
+
+describe("scheduleOnce on a recurring head", () => {
+  // When the head moves (drag/edit), the rule's anchor must follow so
+  // virtual expansion stops emitting past dates. Without anchor sync, the
+  // rrule keeps generating from the original DTSTART and stale virtuals
+  // linger between the old and new head positions.
+
+  it("updates the rule's scheduledStart in lockstep with the head's denorm", async () => {
+    const { hook, page } = await setup();
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, "2099-01-05T09:00:00");
+    });
+    let ruleId!: string;
+    await act(async () => {
+      const rule = await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+      ruleId = rule.id;
+    });
+
+    // Drag the head forward to Wed (2099-01-07) — go through the public
+    // scheduleOnce entry point, the same path CalendarView's drag handler uses.
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, "2099-01-07T10:00:00");
+    });
+
+    const head = hook.result.current.pages.find((p) => p.id === page.id);
+    const rule = hook.result.current.recurrenceRules.find((r) => r.id === ruleId);
+    expect(head?.scheduledStart).toBe("2099-01-07T10:00:00");
+    expect(rule?.scheduledStart).toBe("2099-01-07T10:00:00");
+  });
+
+  it("non-recurring page: scheduleOnce does not touch any rule (no-op safety)", async () => {
+    const { hook, page } = await setup();
+    const updateRuleSpy = vi.spyOn(MockStorageAdapter.prototype, "updateRecurrenceRule");
+
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, "2099-01-07T10:00:00");
+    });
+
+    expect(updateRuleSpy).not.toHaveBeenCalled();
+  });
+});
 
 describe("clearSchedule", () => {
   it("clears scheduledStart in React state before the DB round-trip completes", async () => {
@@ -792,6 +839,210 @@ describe("updateRecurrence", () => {
   });
 });
 
+describe("rescheduleVirtualOccurrence", () => {
+  // Materialising a virtual occurrence creates an independent real page (a
+  // clone of the head) at the new time and exdates the original date so the
+  // virtual disappears. The clone is a regular page — own status, can be
+  // moved/completed/deleted independently of the head and series.
+  //
+  // The pre-fix bug: head and virtual share an id, so calling
+  // scheduleOnce(headId, ...) on a virtual drag moved the head and left a
+  // phantom virtual at its original anchor.
+
+  async function seedRecurring(headTitle = "Standup"): Promise<{
+    hook: ReturnType<typeof renderHook<ReturnType<typeof useWorkspace>, unknown>>;
+    page: Page;
+    ruleId: string;
+  }> {
+    const { hook } = await setup();
+    let page!: Page;
+    await act(async () => {
+      page = await hook.result.current.createPage({ title: headTitle });
+    });
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, "2099-01-05T09:00:00");
+    });
+    let ruleId!: string;
+    await act(async () => {
+      const rule = await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+      ruleId = rule.id;
+    });
+    return { hook, page, ruleId };
+  }
+
+  it("creates an independent clone page at the new time with the head's metadata", async () => {
+    const { hook, page, ruleId } = await seedRecurring("Weekly Standup");
+    const createSpy = vi.spyOn(MockStorageAdapter.prototype, "createPage");
+
+    await act(async () => {
+      await hook.result.current.rescheduleVirtualOccurrence(
+        ruleId,
+        "2099-01-12",
+        "2099-01-12T14:00:00",
+        "2099-01-12T15:00:00"
+      );
+    });
+
+    // adapter.createPage called for the clone — copies title and metadata,
+    // status reset to not_started.
+    expect(createSpy).toHaveBeenCalledOnce();
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        folderId: null,
+        priority: 0,
+        status: "not_started",
+        title: "Weekly Standup",
+      })
+    );
+
+    // The clone is a NEW page (different id from the head) and shows in pages
+    // with the override scheduledStart/end.
+    const clones = hook.result.current.pages.filter(
+      (p) => p.id !== page.id && p.title === "Weekly Standup"
+    );
+    expect(clones).toHaveLength(1);
+    expect(clones[0]?.scheduledStart).toBe("2099-01-12T14:00:00");
+    expect(clones[0]?.scheduledEnd).toBe("2099-01-12T15:00:00");
+  });
+
+  it("leaves the head's scheduledStart untouched", async () => {
+    const { hook, page, ruleId } = await seedRecurring();
+
+    await act(async () => {
+      await hook.result.current.rescheduleVirtualOccurrence(
+        ruleId,
+        "2099-01-12",
+        "2099-01-12T14:00:00"
+      );
+    });
+
+    const head = hook.result.current.pages.find((p) => p.id === page.id);
+    expect(head?.scheduledStart).toBe("2099-01-05T09:00:00");
+  });
+
+  it("adds the original date to the rule's exdates so the virtual disappears", async () => {
+    const { hook, ruleId } = await seedRecurring();
+
+    await act(async () => {
+      await hook.result.current.rescheduleVirtualOccurrence(
+        ruleId,
+        "2099-01-12",
+        "2099-01-12T14:00:00"
+      );
+    });
+
+    const rule = hook.result.current.recurrenceRules.find((r) => r.id === ruleId);
+    expect(rule?.rruleExdates).toContain("2099-01-12");
+  });
+
+  it("rejects when the rule does not exist", async () => {
+    const { hook } = await setup();
+
+    await expect(
+      act(async () => {
+        await hook.result.current.rescheduleVirtualOccurrence(
+          "no-such-rule",
+          "2099-01-12",
+          "2099-01-12T14:00:00"
+        );
+      })
+    ).rejects.toThrow(/No recurrence rule/);
+  });
+
+  it("completing the head after a materialisation skips the materialised date and advances to the next non-excluded occurrence", async () => {
+    // Materialising a virtual at originalDate D adds D to exdates. Without
+    // exdate-aware advance, completing the head (anchor=Jan 5) would jump
+    // to Jan 12 — but Jan 12 was just materialised. The head should skip it
+    // and land on Jan 19.
+    const { hook, page, ruleId } = await seedRecurring();
+
+    await act(async () => {
+      await hook.result.current.rescheduleVirtualOccurrence(
+        ruleId,
+        "2099-01-12",
+        "2099-01-12T14:00:00"
+      );
+    });
+
+    await act(async () => {
+      await hook.result.current.completeRecurringPage(page.id);
+    });
+
+    const head = hook.result.current.pages.find((p) => p.id === page.id);
+    // Jan 5 (head) → completed (in exdates). Jan 12 → materialised (in exdates).
+    // Next Monday is Jan 19.
+    expect(head?.scheduledStart).toBe("2099-01-19T09:00:00");
+  });
+
+  it("a second materialisation of the same virtual creates another independent page (no upsert)", async () => {
+    // Once originalDate is in exdates, the virtual no longer exists, so this
+    // path is normally unreachable from the UI. But the call itself must not
+    // throw or behave strangely — confirms the operation is repeatable as
+    // independent clones.
+    const { hook, page, ruleId } = await seedRecurring();
+
+    await act(async () => {
+      await hook.result.current.rescheduleVirtualOccurrence(
+        ruleId,
+        "2099-01-12",
+        "2099-01-12T14:00:00"
+      );
+    });
+    await act(async () => {
+      await hook.result.current.rescheduleVirtualOccurrence(
+        ruleId,
+        "2099-01-19",
+        "2099-01-19T16:00:00"
+      );
+    });
+
+    const clones = hook.result.current.pages.filter(
+      (p) => p.id !== page.id && p.title === page.title
+    );
+    expect(clones).toHaveLength(2);
+
+    const rule = hook.result.current.recurrenceRules.find((r) => r.id === ruleId);
+    expect(rule?.rruleExdates).toEqual(expect.arrayContaining(["2099-01-12", "2099-01-19"]));
+  });
+});
+
+describe("deleting a recurring head removes virtuals", () => {
+  // Deleting the head doesn't cascade-delete the rule from local React state,
+  // but useRecurrenceExpansion guards on `pages.find` — once the head is out
+  // of pages, the rule has no template and produces no virtual occurrences.
+
+  it("removes the head from pages so virtual expansion produces nothing", async () => {
+    const { hook, page } = await setup();
+    await act(async () => {
+      await hook.result.current.scheduleOnce(page.id, "2099-01-05T09:00:00");
+    });
+    await act(async () => {
+      await hook.result.current.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+
+    expect(hook.result.current.pages.find((p) => p.id === page.id)).toBeDefined();
+
+    await act(async () => {
+      await hook.result.current.deletePage(page.id);
+    });
+
+    expect(hook.result.current.pages.find((p) => p.id === page.id)).toBeUndefined();
+    // Sanity: the rule survives in local state (matches existing semantics —
+    // useRecurrenceExpansion guards on missing page, not on rule presence).
+    expect(hook.result.current.recurrenceRules.find((r) => r.pageId === page.id)).toBeDefined();
+  });
+});
+
 describe("deleteRecurrence", () => {
   it("removes the rule from state", async () => {
     const { hook, page } = await setup();
@@ -865,10 +1116,10 @@ describe("completeRecurringPage", () => {
     expect(rule?.rruleExdates).toContain("2099-01-05");
   });
 
-  it("when head is overdue, skips missed occurrences and advances to the next future date", async () => {
-    // Anchor far in the past — the user has been ignoring this recurring
-    // page for months. Completing should jump to the next future occurrence,
-    // not the next-after-the-base-date one.
+  it("with policy=advance, head is overdue advances one rrule step from the head's anchor (not to today)", async () => {
+    // Default policy is "advance" — the gap-resolution dialog lets the user
+    // pick between this and "skip" when the head is overdue. advance never
+    // jumps to today; it always moves one rrule step from the head's anchor.
     const { hook, page } = await seedRecurringPage("1999-01-04T09:00:00", "FREQ=DAILY");
 
     await act(async () => {
@@ -876,10 +1127,31 @@ describe("completeRecurringPage", () => {
     });
 
     const head = hook.result.current.pages.find((p) => p.id === page.id);
-    // Should land on a date strictly in the future, not a 1999 date.
+    expect(head?.scheduledStart).toBe("1999-01-05T09:00:00");
+  });
+
+  it("with policy=skip, head is overdue jumps to today and exdates the gap", async () => {
+    const { hook, page } = await seedRecurringPage("1999-01-04T09:00:00", "FREQ=DAILY");
+
+    await act(async () => {
+      await hook.result.current.completeRecurringPage(page.id, "skip");
+    });
+
+    const head = hook.result.current.pages.find((p) => p.id === page.id);
     expect(head?.scheduledStart).toBeTruthy();
     const advancedDate = head!.scheduledStart!.slice(0, 10);
-    expect(advancedDate > new Date().toISOString().slice(0, 10)).toBe(true);
+    // Compare local-vs-local: nextOccurrenceAfter formats in local time, while
+    // toISOString().slice(0,10) returns UTC. In timezones west of UTC during
+    // late-evening hours the UTC date has already rolled forward, making
+    // advancedDate === todayUtc and the strict-greater assertion flake.
+    const todayLocal = format(new Date(), "yyyy-MM-dd");
+    expect(advancedDate >= todayLocal).toBe(true);
+
+    // The gap (1999-01-05 onward to today) should be exdated en masse.
+    const rule = hook.result.current.recurrenceRules.find((r) => r.pageId === page.id);
+    expect(rule?.rruleExdates.length).toBeGreaterThan(2); // head + many gap days
+    expect(rule?.rruleExdates).toContain("1999-01-04"); // head completion
+    expect(rule?.rruleExdates).toContain("1999-01-05"); // a gap date
   });
 
   it("marks head done when the rule has no further occurrences (COUNT exhausted)", async () => {

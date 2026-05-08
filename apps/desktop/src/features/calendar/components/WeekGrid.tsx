@@ -45,7 +45,9 @@ interface WeekGridProps {
   onCreateAllDay: (start: Date, end?: Date) => Promise<void> | void;
   onCreatePage: (day: Date, start: Date, end?: Date) => Promise<void> | void;
   onPageDoubleClick: (pageId: string) => void;
-  onReschedule: (pageId: string, start: string, end?: string) => void;
+  /** When `originalDate` is set, the dragged block is a virtual rrule occurrence
+   * — caller should materialise an override instead of mutating the head schedule. */
+  onReschedule: (pageId: string, start: string, end?: string, originalDate?: string) => void;
   pages: PageSummary[];
 }
 
@@ -64,6 +66,8 @@ interface DragRefState {
   block: CalendarBlock;
   grabOffsetY: number;
   folderColor: string | undefined;
+  /** Set when dragging a virtual rrule occurrence — keys the override. */
+  originalDate?: string;
 }
 
 // ─── Resize state ─────────────────────────────────────────────────────────────
@@ -72,6 +76,8 @@ interface ResizeRefState {
   pageId: string;
   block: CalendarBlock;
   dayIndex: number;
+  /** Set when resizing a virtual rrule occurrence — keys the override. */
+  originalDate?: string;
 }
 
 /** Prevent text selection and lock cursor during pointer-driven drag/resize gestures. */
@@ -212,6 +218,8 @@ export function WeekGrid({
   interface AllDayDragRefState {
     pageId: string;
     folderColor: string | undefined;
+    /** Set when dragging a virtual rrule occurrence — keys the override. */
+    originalDate?: string;
   }
 
   const allDayDragRef = useRef<AllDayDragRefState | null>(null);
@@ -345,6 +353,7 @@ export function WeekGrid({
     clientY,
     dayIndex,
     folderColor,
+    originalDate,
     pageId,
   }: BlockDragStartInfo) {
     const scrollEl = scrollRef.current;
@@ -356,7 +365,13 @@ export function WeekGrid({
     const grabOffsetY = cursorYInGrid - block.top;
 
     disableSelect("dragging-grab");
-    dragRef.current = { block, folderColor, grabOffsetY, pageId };
+    dragRef.current = {
+      block,
+      folderColor,
+      grabOffsetY,
+      pageId,
+      ...(originalDate && { originalDate }),
+    };
     const initialTop = snapYCollapse(Math.max(0, block.top), geometry);
     dragGhostPositionRef.current = { dayIndex, top: initialTop };
     timedAllDayTargetDayIndexRef.current = null;
@@ -446,7 +461,13 @@ export function WeekGrid({
       const scrollElUp = scrollRef.current;
       if (scrollElUp && lastClientY < scrollElUp.getBoundingClientRect().top) {
         const allDayTarget = days[ghostPos.dayIndex];
-        if (allDayTarget) onReschedule(state.pageId, format(allDayTarget, "yyyy-MM-dd"), undefined);
+        if (allDayTarget)
+          onReschedule(
+            state.pageId,
+            format(allDayTarget, "yyyy-MM-dd"),
+            undefined,
+            state.originalDate
+          );
         return;
       }
 
@@ -463,7 +484,7 @@ export function WeekGrid({
       const durationMs = state.block.endDate.getTime() - state.block.startDate.getTime();
       const newEnd = durationMs > 0 ? fmt(new Date(newStart.getTime() + durationMs)) : undefined;
 
-      onReschedule(state.pageId, fmt(newStart), newEnd);
+      onReschedule(state.pageId, fmt(newStart), newEnd, state.originalDate);
     }
 
     window.addEventListener("mousemove", onMove);
@@ -472,12 +493,12 @@ export function WeekGrid({
 
   // ── Resize handlers ────────────────────────────────────────────────────────
 
-  function handleBlockResizeStart({ block, dayIndex, pageId }: BlockResizeStartInfo) {
+  function handleBlockResizeStart({ block, dayIndex, originalDate, pageId }: BlockResizeStartInfo) {
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
 
     disableSelect("dragging-resize");
-    resizeRef.current = { block, dayIndex, pageId };
+    resizeRef.current = { block, dayIndex, pageId, ...(originalDate && { originalDate }) };
     const initialBottom = block.top + block.height;
     resizeGhostBottomRef.current = initialBottom;
     setResizeRenderState({ bottom: initialBottom, dayIndex, pageId });
@@ -523,7 +544,7 @@ export function WeekGrid({
 
       const newEnd = mapYToDate(ghostBottom, targetDay, geometry);
       const fmt = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm:ss");
-      onReschedule(state.pageId, fmt(state.block.startDate), fmt(newEnd));
+      onReschedule(state.pageId, fmt(state.block.startDate), fmt(newEnd), state.originalDate);
     }
 
     window.addEventListener("mousemove", onMove);
@@ -534,13 +555,15 @@ export function WeekGrid({
 
   function handleAllDayChipDragStart({
     folderColor,
+    originalDate,
     pageId,
   }: {
     folderColor: string | undefined;
     pageId: string;
+    originalDate?: string;
   }) {
     disableSelect("dragging-grab");
-    allDayDragRef.current = { folderColor, pageId };
+    allDayDragRef.current = { folderColor, pageId, ...(originalDate && { originalDate }) };
     allDayGhostPositionRef.current = null;
     allDayHoverColumnRef.current = null;
     setAllDayDraggingPageId(pageId);
@@ -632,9 +655,11 @@ export function WeekGrid({
         if (!targetDay) return;
         const startStr = format(targetDay, "yyyy-MM-dd");
         // Preserve a multi-day span: a 4-day event dragged stays 4 days long.
+        // Note: virtuals share the head's id so the lookup still works for span
+        // computation, even though the rescheduling will materialise an override.
         const page = pages.find((p) => p.id === state.pageId);
         const endStr = shiftAllDayEnd(page?.scheduledStart, page?.scheduledEnd, targetDay);
-        onReschedule(state.pageId, startStr, endStr);
+        onReschedule(state.pageId, startStr, endStr, state.originalDate);
         return;
       }
 
@@ -643,7 +668,12 @@ export function WeekGrid({
       const targetDay = days[ghostPos.dayIndex];
       if (!targetDay) return;
       const newStart = mapYToDate(ghostPos.top, targetDay, geometry);
-      onReschedule(state.pageId, format(newStart, "yyyy-MM-dd'T'HH:mm:ss"), undefined);
+      onReschedule(
+        state.pageId,
+        format(newStart, "yyyy-MM-dd'T'HH:mm:ss"),
+        undefined,
+        state.originalDate
+      );
     }
 
     window.addEventListener("mousemove", onMove);
@@ -667,12 +697,14 @@ export function WeekGrid({
 
   function handleAllDayEdgeResizeStart({
     edge,
+    originalDate,
     pageId,
   }: {
     clientX: number;
     clientY: number;
     edge: "start" | "end";
     pageId: string;
+    originalDate?: string;
   }) {
     const page = pages.find((p) => p.id === pageId);
     if (!page?.scheduledStart) return;
@@ -709,7 +741,7 @@ export function WeekGrid({
       setAllDayEdgeResizePreview(null);
       if (!final) return;
       const endArg = final.startDate === final.endDate ? undefined : final.endDate;
-      onReschedule(final.pageId, final.startDate, endArg);
+      onReschedule(final.pageId, final.startDate, endArg, originalDate);
     }
 
     window.addEventListener("mousemove", onMove);

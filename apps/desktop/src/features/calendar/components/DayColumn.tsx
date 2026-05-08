@@ -53,12 +53,16 @@ export interface BlockDragStartInfo {
   dayIndex: number;
   clientY: number;
   folderColor: string | undefined;
+  /** Set when the dragged block is a virtual rrule occurrence — keys the override. */
+  originalDate?: string;
 }
 
 export interface BlockResizeStartInfo {
   pageId: string;
   block: CalendarBlock;
   dayIndex: number;
+  /** Set when the resized block is a virtual rrule occurrence — keys the override. */
+  originalDate?: string;
 }
 
 export interface DragGhost {
@@ -456,16 +460,24 @@ export function DayColumn({
               onAutoOpenConsumed={onAutoOpenConsumed}
               onDoubleClick={onPageDoubleClick}
               onDragStart={(_clientX, clientY) => {
+                const virtual = block.page as { originalDate?: string };
                 onBlockDragStart({
                   block,
                   clientY,
                   dayIndex,
                   folderColor,
                   pageId: block.page.id,
+                  ...(virtual.originalDate && { originalDate: virtual.originalDate }),
                 });
               }}
               onResizeStart={() => {
-                onBlockResizeStart({ block, dayIndex, pageId: block.page.id });
+                const virtual = block.page as { originalDate?: string };
+                onBlockResizeStart({
+                  block,
+                  dayIndex,
+                  pageId: block.page.id,
+                  ...(virtual.originalDate && { originalDate: virtual.originalDate }),
+                });
               }}
               {...(resizeHeight !== undefined ? { resizeHeight } : {})}
             />

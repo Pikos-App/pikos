@@ -3,7 +3,8 @@
 //
 // Virtual occurrences are merged with real pages so the calendar can render
 // them identically. The hook fetches materialised schedule overrides for the
-// range and excludes those dates from expansion.
+// range and excludes those dates from expansion (legacy: kept for any
+// page_schedules rows tagged with ruleId from older builds).
 
 import type { PageRecurrenceRule, PageSchedule, PageSummary } from "@pikos/core";
 import { expandRecurrenceForRange, formatDateOnly } from "@pikos/core";
@@ -74,10 +75,16 @@ export function useRecurrenceExpansion({
 
     const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd, ruleSchedules);
 
-    // Exclude virtual for the head's current scheduledStart — the head renders as a real block.
+    // Exclude any virtual on or before the head's current date. The head's
+    // own date is excluded so the real head block isn't double-rendered;
+    // virtuals before the head are excluded so the series visibly tracks
+    // the head when the user moves it forward (drag, edit, completion
+    // advance). Without this, moving the head from Mon to Wed would
+    // resurrect Mon's virtual the next render, since the rule's expansion
+    // still emits Mon and only the head's exact date was being filtered.
     const headDate = page.scheduledStart?.slice(0, 10);
     for (const occ of occurrences) {
-      if (headDate && occ.originalDate === headDate) continue;
+      if (headDate && occ.originalDate <= headDate) continue;
       allVirtual.push(occ);
     }
   }

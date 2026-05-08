@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { RecurringCompleteDialog } from "@/features/calendar/components/RecurringCompleteDialog";
 import { ThreePanelLayout } from "@/features/layout";
 import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
@@ -11,6 +12,7 @@ import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
 import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
 import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
 import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
+import { RecurringCompleteDialogProvider } from "@/shared/context/RecurringCompleteDialogContext";
 import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
 import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";
@@ -186,9 +188,12 @@ export default function App() {
                   <CalendarSettingsProvider>
                     <ListSettingsProvider>
                       <UndoDeleteProvider>
-                        <TooltipProvider delayDuration={400}>
-                          <WorkspaceGate />
-                        </TooltipProvider>
+                        <RecurringCompleteDialogProvider>
+                          <TooltipProvider delayDuration={400}>
+                            <WorkspaceGate />
+                            <RecurringCompleteDialog />
+                          </TooltipProvider>
+                        </RecurringCompleteDialogProvider>
                       </UndoDeleteProvider>
                     </ListSettingsProvider>
                   </CalendarSettingsProvider>

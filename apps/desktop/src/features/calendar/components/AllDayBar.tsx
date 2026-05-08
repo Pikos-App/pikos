@@ -25,12 +25,19 @@ export interface AllDayBarProps {
   folderColor: string | undefined;
   onAutoOpenConsumed?: () => void;
   onDoubleClick: (pageId: string) => void;
-  onDragStart: (info: { folderColor: string | undefined; pageId: string }) => void;
+  onDragStart: (info: {
+    folderColor: string | undefined;
+    pageId: string;
+    /** Set when dragging a virtual rrule occurrence — keys the override. */
+    originalDate?: string;
+  }) => void;
   onEdgeResizeStart?: (info: {
     clientX: number;
     clientY: number;
     edge: "start" | "end";
     pageId: string;
+    /** Set when resizing a virtual rrule occurrence — keys the override. */
+    originalDate?: string;
   }) => void;
   /** Absolute-positioning style (left/top/width) computed by the parent so
    * the bar stays ignorant of column-count math. */
@@ -81,12 +88,17 @@ export function AllDayBar({
     // Prevent native text selection — the bar's content is mostly text and
     // dragging across it would otherwise highlight it.
     e.preventDefault();
+    const virtual = page as { originalDate?: string };
     beginDragThreshold(e.clientX, e.clientY, {
       onCrossed: () => {
         suppressPendingClick();
         setPopoverOpen(false);
         markDragging();
-        onDragStart({ folderColor, pageId: page.id });
+        onDragStart({
+          folderColor,
+          pageId: page.id,
+          ...(virtual.originalDate && { originalDate: virtual.originalDate }),
+        });
       },
     });
   }
@@ -105,7 +117,14 @@ export function AllDayBar({
       setPopoverOpen(false);
       suppressPendingClick();
       markDragging();
-      onEdgeResizeStart?.({ clientX: e.clientX, clientY: e.clientY, edge, pageId: page.id });
+      const virtual = page as { originalDate?: string };
+      onEdgeResizeStart?.({
+        clientX: e.clientX,
+        clientY: e.clientY,
+        edge,
+        pageId: page.id,
+        ...(virtual.originalDate && { originalDate: virtual.originalDate }),
+      });
     };
   }
 

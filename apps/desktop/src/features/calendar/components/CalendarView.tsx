@@ -36,6 +36,7 @@ export function CalendarView() {
     mergePages,
     pages,
     recurrenceRules,
+    rescheduleVirtualOccurrence,
     scheduleOnce,
     storage,
   } = useWorkspace();
@@ -132,8 +133,19 @@ export function CalendarView() {
     setAutoOpenPageId(page.id);
   }
 
-  // Drag-to-reschedule or resize: update the schedule in place.
-  function handleReschedule(pageId: string, start: string, end?: string) {
+  // Drag-to-reschedule or resize. When `originalDate` is set, the dragged block
+  // is a virtual rrule occurrence (which shares the head's id) — calling
+  // scheduleOnce here would corrupt the head's denorm. Materialise an
+  // independent clone at the new time and exdate the original date, so the
+  // head and rule stay intact while the moved occurrence becomes a regular
+  // page (with its own status, drag, delete, etc.).
+  function handleReschedule(pageId: string, start: string, end?: string, originalDate?: string) {
+    if (originalDate) {
+      const rule = recurrenceRules.find((r) => r.pageId === pageId);
+      if (!rule) return;
+      void rescheduleVirtualOccurrence(rule.id, originalDate, start, end);
+      return;
+    }
     void scheduleOnce(pageId, start, end);
   }
 

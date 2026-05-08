@@ -32,7 +32,11 @@ interface AllDaySectionProps {
   draggingPageId: string | null;
   height: number;
   onAutoOpenConsumed: () => void;
-  onChipDragStart: (info: { folderColor: string | undefined; pageId: string }) => void;
+  onChipDragStart: (info: {
+    folderColor: string | undefined;
+    pageId: string;
+    originalDate?: string;
+  }) => void;
   /** Mousedown on empty all-day cells — WeekGrid decides click-vs-drag at mouseup. */
   onCreateDragStart: (info: { clientX: number; clientY: number; dayIndex: number }) => void;
   onEdgeResizeStart: (info: {
@@ -40,6 +44,7 @@ interface AllDaySectionProps {
     clientY: number;
     edge: "start" | "end";
     pageId: string;
+    originalDate?: string;
   }) => void;
   onPageDoubleClick: (pageId: string) => void;
   onResizeStart: (e: React.MouseEvent) => void;

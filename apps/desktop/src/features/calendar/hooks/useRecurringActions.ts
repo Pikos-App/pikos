@@ -5,6 +5,7 @@
 import type { PageStatus, PageSummary, VirtualOccurrence } from "@pikos/core";
 import { nowLocalISO } from "@pikos/core";
 
+import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
@@ -18,12 +19,8 @@ interface UseRecurringActionsResult {
 }
 
 export function useRecurringActions(page: PageSummary): UseRecurringActionsResult {
-  const {
-    completeRecurringPage,
-    recurrenceRules,
-    skipOccurrence: skipOccurrenceFn,
-    updatePage,
-  } = useWorkspace();
+  const { recurrenceRules, skipOccurrence: skipOccurrenceFn, updatePage } = useWorkspace();
+  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
   const { requestUndoableAction } = useUndoDelete();
 
   const isRecurring = "isVirtual" in page && (page as { isVirtual?: boolean }).isVirtual === true;
@@ -32,7 +29,10 @@ export function useRecurringActions(page: PageSummary): UseRecurringActionsResul
   function toggleStatus() {
     const newStatus: PageStatus = isDone ? "not_started" : "done";
     if (newStatus === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      void completeRecurringPage(page.id);
+      // Routes through the gap-resolution dialog. If today > head's
+      // scheduledStart there are missed days that need a policy decision;
+      // otherwise the request resolves immediately to advance.
+      requestRecurringComplete(page.id);
       return;
     }
     updatePage(page.id, {

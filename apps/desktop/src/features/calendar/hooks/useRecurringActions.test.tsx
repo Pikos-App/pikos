@@ -13,6 +13,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { RecurringCompleteDialogProvider } from "@/shared/context/RecurringCompleteDialogContext";
 import { UIProvider } from "@/shared/context/UIContext";
 import { UndoDeleteProvider, useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace, WorkspaceProvider } from "@/shared/context/WorkspaceContext";
@@ -25,7 +26,9 @@ function wrapper({ children }: { children: ReactNode }) {
   return (
     <WorkspaceProvider>
       <UIProvider>
-        <UndoDeleteProvider>{children}</UndoDeleteProvider>
+        <UndoDeleteProvider>
+          <RecurringCompleteDialogProvider>{children}</RecurringCompleteDialogProvider>
+        </UndoDeleteProvider>
       </UIProvider>
     </WorkspaceProvider>
   );

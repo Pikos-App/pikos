@@ -18,6 +18,7 @@ export {
   buildRrule,
   computeNextEnd,
   expandRecurrenceForRange,
+  missedOccurrencesBetween,
   nextOccurrenceAfter,
   parseRrule,
   rruleToLabel,
