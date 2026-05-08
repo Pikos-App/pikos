@@ -455,9 +455,14 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       scheduledStart = formatDateOnly(parsed);
     }
 
-    // Remove matched text from the string
+    // Remove matched text from the string. chrono doesn't include a leading
+    // "from " in its match for "from <date> to <date>" spans, so extend the
+    // strip backward to swallow it — otherwise "from" leaks into the title.
+    let consumeStart = result.index;
+    const fromPrefix = text.substring(0, result.index).match(/\bfrom\s+$/i);
+    if (fromPrefix) consumeStart -= fromPrefix[0].length;
     text =
-      text.substring(0, result.index) + " " + text.substring(result.index + result.text.length);
+      text.substring(0, consumeStart) + " " + text.substring(result.index + result.text.length);
   }
 
   // When "every week" is used (FREQ=WEEKLY, no BYDAY) and chrono parsed a weekday,
