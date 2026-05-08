@@ -2262,213 +2262,196 @@ describe("NL Page Creation Parser", () => {
   // that real users are most likely to type so we know if a chrono upgrade
   // changes their semantics.
   describe("chrono casual phrases", () => {
-    it("'tomorrow morning' → tomorrow at 09:00", () => {
-      const r = parseInput("call tomorrow morning", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("call");
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-    });
-
-    it("'tomorrow afternoon' → tomorrow at 15:00", () => {
-      const r = parseInput("call tomorrow afternoon", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16T15:00:00");
-    });
-
-    it("'tomorrow evening' → tomorrow at 18:00", () => {
-      const r = parseInput("call tomorrow evening", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16T18:00:00");
-    });
-
-    it("'tomorrow night' → tomorrow at 20:00", () => {
-      const r = parseInput("call tomorrow night", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16T20:00:00");
-    });
-
-    it("'tonight' → today at 20:00 (NOW = noon)", () => {
-      const r = parseInput("call tonight", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-15T20:00:00");
-    });
-
-    it("'this morning' → today at 09:00 if future, tomorrow at 09:00 if past", () => {
-      // NOW = 12:00, so 9am has passed — should roll to tomorrow.
-      const r = parseInput("call this morning", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-    });
-
-    it("'this afternoon' → today at 15:00 (NOW = noon, future)", () => {
-      const r = parseInput("call this afternoon", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-15T15:00:00");
-    });
-
-    it("'this evening' → today at 18:00", () => {
-      const r = parseInput("dinner this evening", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-15T18:00:00");
-      expect(r.input.title).toBe("dinner");
-    });
-
-    it("'monday morning' → next Monday at 09:00", () => {
-      const r = parseInput("standup monday morning", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("standup");
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-    });
-
-    it("'friday evening' → next Friday at 18:00", () => {
-      const r = parseInput("dinner friday evening", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-20T18:00:00");
-    });
-
-    it("'today afternoon' → today at 15:00 (NOW = 12pm, future)", () => {
-      const r = parseInput("call today afternoon", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-15T15:00:00");
-    });
-
-    it("'today morning' from after-9am → tomorrow at 09:00", () => {
-      const r = parseInput("call today morning", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      // NOW = 12:00, 9am has passed → roll to tomorrow.
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-    });
-
-    it("'tonight' from late night (after 8pm) → tomorrow 20:00", () => {
-      // 9pm Mar 15 is past 8pm → tomorrow.
-      const lateNow = new Date("2026-03-15T21:00:00");
-      const r = parseInput("call tonight", lateNow);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16T20:00:00");
-    });
-
-    // ─── day qualifiers (this/next/last) ───────────────────────────────────
-    // chrono parses "next monday" forward by default; "this <weekday>" should
-    // pick the same calendar week's weekday (today if applicable), and
-    // "last <weekday>" should pick the previous week's occurrence.
-    it("'next monday' → next Monday (chrono default behaviour)", () => {
-      const r = parseInput("call next monday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16");
-    });
-
-    it("'this monday' → upcoming Monday in current week (Mon Mar 16)", () => {
-      const r = parseInput("call this monday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16");
-    });
-
-    it("'this friday' from Sunday → upcoming Friday (Mar 20)", () => {
-      const r = parseInput("review this friday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-20");
-    });
-
-    it("'this sunday' from Sunday → today (Mar 15)", () => {
-      const r = parseInput("note this sunday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-15");
-    });
-
-    it("'last monday' → previous Monday (Mar 9)", () => {
-      const r = parseInput("retro last monday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-09");
-    });
-
-    it("'last friday' from Sunday → previous Friday (Mar 13)", () => {
-      const r = parseInput("retro last friday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-13");
-    });
-
-    it("'last sunday' from Sunday → previous Sunday (Mar 8)", () => {
-      const r = parseInput("note last sunday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-08");
-    });
-
-    it("'this monday morning' composes with casual time-of-day", () => {
-      const r = parseInput("standup this monday morning", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-    });
-
-    // ─── recurring + casual time-of-day ────────────────────────────────────
-    it("'every monday morning' → recurring BYDAY=MO at 09:00", () => {
-      const r = parseInput("standup every monday morning", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-    });
-
-    it("'every weekday morning' → BYDAY=MO,TU,WE,TH,FR at 09:00", () => {
-      const r = parseInput("standup every weekday morning", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO,TU,WE,TH,FR");
-      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
-    });
-
-    it("'every monday afternoon' → BYDAY=MO at 15:00", () => {
-      const r = parseInput("review every monday afternoon", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO");
-      expect(r.input.scheduledStart).toBe("2026-03-16T15:00:00");
-    });
-
-    it("'every other tuesday evening' → INTERVAL=2 BYDAY=TU at 18:00", () => {
-      const r = parseInput("dinner every other tuesday evening", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("INTERVAL=2");
-      expect(r.rrule).toContain("BYDAY=TU");
-      expect(r.input.scheduledStart).toBe("2026-03-17T18:00:00");
-    });
-
-    it("'every weekend morning' → BYDAY=SA,SU at 09:00", () => {
-      const r = parseInput("brunch every weekend morning", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=SA,SU");
+    const LATE = new Date("2026-03-15T21:00:00");
+    const cases: ParserCase[] = [
+      // ─── tomorrow + time-of-day ────────────────────────────────────────────
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T09:00:00", title: "call" },
+          type: "single",
+        },
+        input: "call tomorrow morning",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-16T15:00:00" }, type: "single" },
+        input: "call tomorrow afternoon",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-16T18:00:00" }, type: "single" },
+        input: "call tomorrow evening",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-16T20:00:00" }, type: "single" },
+        input: "call tomorrow night",
+      },
+      // ─── today / tonight ───────────────────────────────────────────────────
+      {
+        expected: { input: { scheduledStart: "2026-03-15T20:00:00" }, type: "single" },
+        input: "call tonight",
+      },
+      // NOW=12:00, "this morning" 9am has passed → rolls to tomorrow.
+      {
+        expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
+        input: "call this morning",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-15T15:00:00" }, type: "single" },
+        input: "call this afternoon",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-15T18:00:00", title: "dinner" },
+          type: "single",
+        },
+        input: "dinner this evening",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-15T15:00:00" }, type: "single" },
+        input: "call today afternoon",
+      },
+      // 9am has passed → tomorrow.
+      {
+        expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
+        input: "call today morning",
+      },
+      // 9pm > 8pm → tonight rolls to tomorrow.
+      {
+        expected: { input: { scheduledStart: "2026-03-16T20:00:00" }, type: "single" },
+        input: "call tonight",
+        now: LATE,
+      },
+      // ─── weekday + time-of-day ─────────────────────────────────────────────
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T09:00:00", title: "standup" },
+          type: "single",
+        },
+        input: "standup monday morning",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-20T18:00:00" }, type: "single" },
+        input: "dinner friday evening",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
+        input: "standup this monday morning",
+      },
+      // ─── day qualifiers (this/next/last) ───────────────────────────────────
+      // chrono parses "next monday" forward by default; "this <weekday>" picks
+      // the same calendar week's weekday (today if applicable); "last <weekday>"
+      // picks the previous week's occurrence.
+      {
+        expected: { input: { scheduledStart: "2026-03-16" }, type: "single" },
+        input: "call next monday",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-16" }, type: "single" },
+        input: "call this monday",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-20" }, type: "single" },
+        input: "review this friday",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-15" }, type: "single" },
+        input: "note this sunday",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-09" }, type: "single" },
+        input: "retro last monday",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-13" }, type: "single" },
+        input: "retro last friday",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-08" }, type: "single" },
+        input: "note last sunday",
+      },
+      // ─── recurring + casual time-of-day ────────────────────────────────────
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T09:00:00" },
+          rrule: ["BYDAY=MO"],
+          type: "recurring",
+        },
+        input: "standup every monday morning",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T09:00:00" },
+          rrule: ["BYDAY=MO,TU,WE,TH,FR"],
+          type: "recurring",
+        },
+        input: "standup every weekday morning",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T15:00:00" },
+          rrule: ["BYDAY=MO"],
+          type: "recurring",
+        },
+        input: "review every monday afternoon",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-17T18:00:00" },
+          rrule: ["INTERVAL=2", "BYDAY=TU"],
+          type: "recurring",
+        },
+        input: "dinner every other tuesday evening",
+      },
       // First occurrence: next Saturday Mar 21 at 09:00.
-      expect(r.input.scheduledStart).toBe("2026-03-21T09:00:00");
-    });
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-21T09:00:00" },
+          rrule: ["BYDAY=SA,SU"],
+          type: "recurring",
+        },
+        input: "brunch every weekend morning",
+      },
+      // ─── trailing punctuation cleanup ──────────────────────────────────────
+      // "call !urgent." → priority consumes "!urgent", leaving a stray ".".
+      // The trailing "." currently survives — known limitation pinned for
+      // future cleanup. See adversarial input section.
+      {
+        expected: { input: { priority: "urgent", title: "call." }, type: "single" },
+        input: "call !urgent.",
+      },
+      // "note #abc, #def" → tags ["abc","def"], title "note" not "note ,".
+      {
+        expected: { input: { tags: ["abc", "def"], title: "note" }, type: "single" },
+        input: "note #abc, #def",
+      },
+      // ─── relative phrases ──────────────────────────────────────────────────
+      {
+        expected: { input: { scheduledStart: "2026-03-18" }, type: "single" },
+        input: "review in 3 days",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-29" }, type: "single" },
+        input: "retro in 2 weeks",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-20" }, type: "single" },
+        input: "call next friday",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-15T13:00:00" }, type: "single" },
+        input: "call in 1 hour",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-20T15:00:00" }, type: "single" },
+        input: "review friday at 3pm",
+      },
+    ];
+    it.each(cases)("$input", runCase);
 
-    // ─── time range edges ──────────────────────────────────────────────────
+    // ─── regex-anchored cases (date-or-time fuzz that ParserCase can't express) ──
     it("'9pm to 5am' → start 21:00 today/tomorrow, end at 05:00 next day", () => {
       const r = parseInput("shift 9pm to 5am", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
-      // chrono parses the range; computeNextEnd or the parser pushes end past midnight.
       expect(r.input.scheduledStart).toMatch(/T21:00:00$/);
       expect(r.input.scheduledEnd).toMatch(/T05:00:00$/);
       // Duration should reflect 8 hours, not −16.
@@ -2482,28 +2465,6 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.scheduledStart).toMatch(/T12:00:00$/);
       expect(r.input.scheduledEnd).toMatch(/T17:00:00$/);
       expect(r.input.durationMinutes).toBe(5 * 60);
-    });
-
-    // ─── trailing punctuation cleanup ──────────────────────────────────────
-    it("title is trimmed of trailing punctuation orphans after token strip", () => {
-      // "call !urgent." → priority consumes "!urgent", leaving a stray ".".
-      // The ideal: stray punctuation that isn't part of the original title
-      // should not survive. (KNOWN LIMITATION currently — see adversarial
-      // input section. This test pins desired behaviour going forward.)
-      const r = parseInput("call !urgent.", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.priority).toBe("urgent");
-      expect(r.input.title).toBe("call.");
-    });
-
-    it("trailing comma after a tag list is dropped", () => {
-      // "note #abc, #def" → tags ["abc", "def"], title should be "note" not "note ,".
-      const r = parseInput("note #abc, #def", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.tags).toEqual(["abc", "def"]);
-      expect(r.input.title).toBe("note");
     });
 
     it("'noon' on its own → today at midday", () => {
@@ -2523,48 +2484,12 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.scheduledStart).toMatch(/T00:00:00$/);
     });
 
-    it("'in 3 days' — relative day phrase", () => {
-      const r = parseInput("review in 3 days", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-18");
-    });
-
-    it("'in 2 weeks' — relative week phrase", () => {
-      const r = parseInput("retro in 2 weeks", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-29");
-    });
-
     it("'next week' — chrono picks next Monday/Sunday-ish (not asserted strictly)", () => {
       const r = parseInput("review next week", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       // Pin only that something forward of NOW was parsed.
       expect(r.input.scheduledStart).toMatch(/^2026-03-(2[0-9]|1[6-9])/);
-    });
-
-    it("'next friday' multi-word phrase", () => {
-      const r = parseInput("call next friday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      // NOW = Sun Mar 15. "next friday" = Fri Mar 20 (chrono semantics).
-      expect(r.input.scheduledStart).toBe("2026-03-20");
-    });
-
-    it("'in 1 hour' — relative hour phrase resolves to a timed value", () => {
-      const r = parseInput("call in 1 hour", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-15T13:00:00");
-    });
-
-    it("'friday at 3pm' — bare day + time", () => {
-      const r = parseInput("review friday at 3pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-20T15:00:00");
     });
 
     it("'5p' — short pm form", () => {
