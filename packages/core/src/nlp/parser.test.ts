@@ -2388,6 +2388,66 @@ describe("NL Page Creation Parser", () => {
       expect(r.input.scheduledStart).toBe("2026-03-16T20:00:00");
     });
 
+    // ─── day qualifiers (this/next/last) ───────────────────────────────────
+    // chrono parses "next monday" forward by default; "this <weekday>" should
+    // pick the same calendar week's weekday (today if applicable), and
+    // "last <weekday>" should pick the previous week's occurrence.
+    it("'next monday' → next Monday (chrono default behaviour)", () => {
+      const r = parseInput("call next monday", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16");
+    });
+
+    it("'this monday' → upcoming Monday in current week (Mon Mar 16)", () => {
+      const r = parseInput("call this monday", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16");
+    });
+
+    it("'this friday' from Sunday → upcoming Friday (Mar 20)", () => {
+      const r = parseInput("review this friday", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-20");
+    });
+
+    it("'this sunday' from Sunday → today (Mar 15)", () => {
+      const r = parseInput("note this sunday", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-15");
+    });
+
+    it("'last monday' → previous Monday (Mar 9)", () => {
+      const r = parseInput("retro last monday", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-09");
+    });
+
+    it("'last friday' from Sunday → previous Friday (Mar 13)", () => {
+      const r = parseInput("retro last friday", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-13");
+    });
+
+    it("'last sunday' from Sunday → previous Sunday (Mar 8)", () => {
+      const r = parseInput("note last sunday", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-08");
+    });
+
+    it("'this monday morning' composes with casual time-of-day", () => {
+      const r = parseInput("standup this monday morning", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
+    });
+
     it("'noon' on its own → today at midday", () => {
       const r = parseInput("call mom at noon", NOW);
       expect(r.type).toBe("single");

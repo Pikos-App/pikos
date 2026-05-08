@@ -122,6 +122,25 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     }
   );
 
+  // --- -0.5. "last <weekday>" → concrete past date ───────────────────────────
+  // chrono is invoked with forwardDate: true, which forces parsing into the
+  // future. That's correct for "monday" / "next monday" but wrong for
+  // "last monday", which becomes "next monday" without intervention. Resolve
+  // the previous occurrence ourselves and substitute a concrete date string.
+  text = text.replace(
+    /\blast\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
+    (_, weekday: string) => {
+      const day = DAY_MAP[weekday.toLowerCase()];
+      if (!day) return _;
+      const targetJsDay = RRULE_TO_JS_DAY[day.weekday]!;
+      const current = ref.getDay();
+      let daysBack = current - targetJsDay;
+      if (daysBack <= 0) daysBack += 7;
+      const target = addDays(ref, -daysBack);
+      return formatDateOnly(target);
+    }
+  );
+
   // --- 0. Normalize "<Month> <day> through/thru [<Month>] <day>" to "... to ...".
   // chrono handles "May 2 to 10" as a date range but mis-parses "May 2 through 10"
   // as the time range 2–10 (am). The window parser below consumes "through <word>"
