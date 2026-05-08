@@ -124,32 +124,32 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-15T14:00:00" }, type: "single" },
         input: "meeting 14:00",
       },
-    ];
-    it.each(cases)("$input", runCase);
-
-    // Imperative: cases asserting absence of fields or branching on chrono behaviour.
-    it("plain text — no tokens", () => {
-      const r = parseInput("quick note", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("quick note");
-      expect(r.input.scheduledStart).toBeUndefined();
-      expect(r.input.tags).toEqual([]);
-    });
-
-    it("@march5 — no space between month and day", () => {
-      const r = parseInput("call @march5", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
+      // Plain text → no schedule, no tags. Title carries the full input.
+      {
+        expected: {
+          input: { tags: [], title: "quick note" },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "quick note",
+      },
       // chrono-node may or may not parse "march5" without a space.
       // Known limitation: prefer "@march 5" or "@mar 5".
-      const hasParsedDate = r.input.scheduledStart !== undefined;
-      if (hasParsedDate) {
-        expect(r.input.scheduledStart).toContain("03-05");
-      } else {
-        expect(r.input.title).toContain("march5");
-      }
-    });
+      {
+        expected: {
+          custom: (r) => {
+            if (r.input.scheduledStart !== undefined) {
+              expect(r.input.scheduledStart).toContain("03-05");
+            } else {
+              expect(r.input.title).toContain("march5");
+            }
+          },
+          type: "single",
+        },
+        input: "call @march5",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 2. Priority & folder edge cases ───────────────────────────────────────
@@ -605,8 +605,7 @@ describe("NL Page Creation Parser", () => {
   // expanded virtually — NOT N independent pages.
 
   describe("bounded recurrence — every X + window", () => {
-    // Pure ParserCase rows — no rrule expansion check.
-    const pureCases: ParserCase[] = [
+    const cases: ParserCase[] = [
       // Regression: ~folder must not turn the bounded recurring page into a finite list.
       {
         expected: {
@@ -641,95 +640,87 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: [], rruleAbsent: ["DTSTART"], type: "recurring" },
         input: "every monday for 4 weeks",
       },
-    ];
-    it.each(pureCases)("$input", runCase);
-
-    // Expansion-count rows: also assert RRule.fromString(...).all().length.
-    interface ExpansionCase {
-      input: string;
-      title?: string;
-      scheduledStart?: string;
-      rruleContains?: string[];
-      rruleAbsent?: string[];
-      /** DTSTART line passed to RRule.fromString (e.g. "20260316T150000Z"). */
-      dtstart: string;
-      /** Expected occurrences from rule.all().length. */
-      count: number;
-    }
-    const expansionCases: ExpansionCase[] = [
+      // Expansion-count rows.
       {
-        count: 10,
-        dtstart: "20260316T150000Z",
+        expected: {
+          expansion: { count: 10, dtstart: "20260316T150000Z" },
+          input: { scheduledStart: "2026-03-16T15:00:00", title: "run" },
+          rrule: ["FREQ=WEEKLY", "BYDAY=MO", "UNTIL="],
+          rruleAbsent: ["COUNT="],
+          type: "recurring",
+        },
         input: "run every monday at 3pm for 10 weeks",
-        rruleAbsent: ["COUNT="],
-        rruleContains: ["FREQ=WEEKLY", "BYDAY=MO", "UNTIL="],
-        scheduledStart: "2026-03-16T15:00:00",
-        title: "run",
       },
       {
-        count: 2,
-        dtstart: "20260316T000000Z",
+        expected: {
+          expansion: { count: 2, dtstart: "20260316T000000Z" },
+          input: { scheduledStart: "2026-03-16" },
+          rrule: ["BYDAY=MO", "UNTIL="],
+          type: "recurring",
+        },
         input: "every monday for 2 weeks",
-        rruleContains: ["BYDAY=MO", "UNTIL="],
-        scheduledStart: "2026-03-16",
       },
+      // 7am with NOW=12:00 → tomorrow (3/16); 5-day window ends 3/20.
       {
-        // 7am with NOW=12:00 → tomorrow (3/16); 5-day window ends 3/20.
-        count: 5,
-        dtstart: "20260316T070000Z",
+        expected: {
+          expansion: { count: 5, dtstart: "20260316T070000Z" },
+          input: { scheduledStart: "2026-03-16T07:00:00" },
+          rrule: ["FREQ=DAILY", "UNTIL="],
+          type: "recurring",
+        },
         input: "water plant every day at 7am for 5 days",
-        rruleContains: ["FREQ=DAILY", "UNTIL="],
-        scheduledStart: "2026-03-16T07:00:00",
       },
+      // dtstart = today (2026-03-15). UNTIL ≈ +89 days ≈ June 11.
+      // Monthly from 3/15: 3/15, 4/15, 5/15, 6/15 — but UNTIL < 6/15 → 3 occurrences.
       {
-        // dtstart = today (2026-03-15). UNTIL ≈ +89 days ≈ June 11.
-        // Monthly from 3/15: 3/15, 4/15, 5/15, 6/15 — but UNTIL < 6/15 → 3 occurrences.
-        count: 3,
-        dtstart: "20260315T000000Z",
+        expected: {
+          expansion: { count: 3, dtstart: "20260315T000000Z" },
+          rrule: ["FREQ=MONTHLY", "UNTIL="],
+          type: "recurring",
+        },
         input: "pay rent every month for 3 months",
-        rruleContains: ["FREQ=MONTHLY", "UNTIL="],
       },
+      // Mondays on/before Apr 30: 3/16, 3/23, 3/30, 4/6, 4/13, 4/20, 4/27 = 7.
       {
-        // Mondays on/before Apr 30: 3/16, 3/23, 3/30, 4/6, 4/13, 4/20, 4/27 = 7.
-        count: 7,
-        dtstart: "20260316T000000Z",
+        expected: {
+          expansion: { count: 7, dtstart: "20260316T000000Z" },
+          rrule: ["UNTIL=2026043", "BYDAY=MO"],
+          type: "recurring",
+        },
         input: "standup every monday through april 30",
-        rruleContains: ["UNTIL=2026043", "BYDAY=MO"],
       },
+      // From 3/15, scheduledStart = Tue 3/17 18:00. 2 weeks window through 3/30.
+      // Occurrences: 3/17, 3/19, 3/24, 3/26 = 4.
       {
-        // From 3/15, scheduledStart = Tue 3/17 18:00. 2 weeks window through 3/30.
-        // Occurrences: 3/17, 3/19, 3/24, 3/26 = 4.
-        count: 4,
-        dtstart: "20260317T180000Z",
+        expected: {
+          expansion: { count: 4, dtstart: "20260317T180000Z" },
+          rrule: ["BYDAY=TU,TH", "UNTIL="],
+          type: "recurring",
+        },
         input: "gym every tuesday and thursday at 6pm for 2 weeks",
-        rruleContains: ["BYDAY=TU,TH", "UNTIL="],
       },
       {
-        count: 10,
-        dtstart: "20260316T090000Z",
+        expected: {
+          expansion: { count: 10, dtstart: "20260316T090000Z" },
+          rrule: ["BYDAY=MO,TU,WE,TH,FR", "UNTIL="],
+          type: "recurring",
+        },
         input: "standup every weekday at 9am for 2 weeks",
-        rruleContains: ["BYDAY=MO,TU,WE,TH,FR", "UNTIL="],
+      },
+      // Round-trip parseable: RRULE alone (no DTSTART) survives RRule.fromString.
+      {
+        expected: {
+          custom: (r) => {
+            const rule = RRule.fromString("RRULE:" + r.rrule);
+            expect(rule).toBeDefined();
+          },
+          rrule: [],
+          type: "recurring",
+        },
+        input: "every monday for 10 weeks",
       },
     ];
-    it.each(expansionCases)("$input → expands to $count", (c) => {
-      const r = parseInput(c.input, NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      if (c.title !== undefined) expect(r.input.title).toBe(c.title);
-      if (c.scheduledStart !== undefined) expect(r.input.scheduledStart).toBe(c.scheduledStart);
-      for (const f of c.rruleContains ?? []) expect(r.rrule).toContain(f);
-      for (const f of c.rruleAbsent ?? []) expect(r.rrule).not.toContain(f);
-      const rule = RRule.fromString(`DTSTART:${c.dtstart}\nRRULE:${r.rrule}`);
-      expect(rule.all().length).toBe(c.count);
-    });
-
-    it("bounded recurrence RRULE is round-trip parseable", () => {
-      const r = parseInput("every monday for 10 weeks", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      const rule = RRule.fromString("RRULE:" + r.rrule);
-      expect(rule).toBeDefined();
-    });
+    it.each(cases)("$input", runCase);
   });
 
   // ─── 7j. Composition: every + slash / plural days ────────────────────────
@@ -1079,32 +1070,31 @@ describe("NL Page Creation Parser", () => {
         expected: { rrule: ["BYDAY=MO", "UNTIL=2026043"], type: "recurring" },
         input: "standup every monday through april 30",
       },
+      // Single bare date (no range) → no scheduledEnd.
+      {
+        expected: {
+          input: { scheduledStart: "2026-04-18" },
+          inputAbsent: ["scheduledEnd"],
+          type: "single",
+        },
+        input: "vacation April 18",
+      },
+      // Date-range + time has conservative semantics: start gets the time, and
+      // end (if present) collapses to the same day. Conditional end check.
+      {
+        expected: {
+          custom: (r) => {
+            if (r.input.scheduledEnd) {
+              expect(r.input.scheduledEnd).toContain("2026-04-18");
+            }
+          },
+          inputMatches: { scheduledStart: /^2026-04-18T15:00:00/ },
+          type: "single",
+        },
+        input: "trip April 18-20 at 3pm",
+      },
     ];
     it.each(cases)("$input", runCase);
-
-    // Single bare date (no range) → no scheduledEnd. toMatchObject can't
-    // distinguish "missing key" from "key === undefined", so this stays imperative.
-    it("single bare date (no range) → no scheduledEnd", () => {
-      const r = parseInput("vacation April 18", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBeUndefined();
-    });
-
-    // Mixed-shape: date-range + time has conservative semantics — start gets the
-    // time, end (if present) collapses to the same day. The conditional check
-    // doesn't fit ParserCase, so this stays imperative.
-    it("date range with time → treated as single-day timed (range ignored)", () => {
-      const r = parseInput("trip April 18-20 at 3pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("2026-04-18");
-      expect(r.input.scheduledStart).toContain("15:00");
-      if (r.input.scheduledEnd) {
-        expect(r.input.scheduledEnd).toContain("2026-04-18");
-      }
-    });
   });
 
   // ─── 8. RRULE validation ──────────────────────────────────────────────────
@@ -1302,28 +1292,28 @@ describe("NL Page Creation Parser", () => {
         expected: { count: 3, type: "finite" },
         input: "run m/w/f at 3pm",
       },
+      // Bare month alone: chrono resolves with forwardDate. Only assert presence
+      // of scheduledStart (exact value depends on chrono version).
+      {
+        expected: {
+          input: { title: "plan trip" },
+          inputMatches: { scheduledStart: /\d{4}-\d{2}-\d{2}/ },
+          type: "single",
+        },
+        input: "plan trip march",
+      },
+      // "may" in "may day celebration" is ambiguous enough that chrono skips it.
+      // No false positive — safe/correct behaviour.
+      {
+        expected: {
+          input: { title: "may day celebration" },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "may day celebration",
+      },
     ];
     it.each(cases)("$input", runCase);
-
-    // The two cases below assert presence/absence of scheduledStart — semantics
-    // toMatchObject can't express, so they stay imperative.
-    it("bare month alone: 'march' → accepted (chrono resolves with forwardDate)", () => {
-      const r = parseInput("plan trip march", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("plan trip");
-      expect(r.input.scheduledStart).toBeDefined();
-    });
-
-    it("bare month in compound phrase: 'may' NOT parsed (known limitation)", () => {
-      // "may" in "may day celebration" is ambiguous enough that chrono skips it.
-      // No false positive — safe/correct behavior.
-      const r = parseInput("may day celebration", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBeUndefined();
-      expect(r.input.title).toBe("may day celebration");
-    });
   });
 
   // ─── 13. Edge cases from test strategy ──────────────────────────────────────
@@ -1719,27 +1709,23 @@ describe("NL Page Creation Parser", () => {
         },
         input: "trip May 2 through Jun 5",
       },
+      // Degenerate same-day: no scheduledEnd.
+      {
+        expected: {
+          input: { scheduledStart: "2026-04-18" },
+          inputAbsent: ["scheduledEnd"],
+          type: "single",
+        },
+        input: "trip April 18 to April 18",
+      },
+      // No month → the rewrite regex doesn't apply. "18-25" is not a date in
+      // chrono's grammar; the span fields must not be set.
+      {
+        expected: { inputAbsent: ["scheduledEnd"], type: "single" },
+        input: "trip 18-25",
+      },
     ];
     it.each(cases)("$input", runCase);
-
-    // toBeUndefined cases stay imperative — toMatchObject can't assert key absence.
-    it("degenerate same-day: 'trip April 18 to April 18' → no scheduledEnd", () => {
-      const r = parseInput("trip April 18 to April 18", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-04-18");
-      expect(r.input.scheduledEnd).toBeUndefined();
-    });
-
-    it("hyphen range without preceding month is not a span: 'trip 18-25'", () => {
-      // No month → the rewrite regex doesn't apply. "18-25" is not a date in
-      // chrono's grammar; it stays in the title (or chrono produces a fallback
-      // we explicitly do NOT depend on). The span fields must not be set.
-      const r = parseInput("trip 18-25", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledEnd).toBeUndefined();
-    });
   });
 
   // ─── token leakage — adjacent failure modes ────────────────────────────────
@@ -2429,63 +2415,65 @@ describe("NL Page Creation Parser", () => {
         expected: { input: { scheduledStart: "2026-03-20T15:00:00" }, type: "single" },
         input: "review friday at 3pm",
       },
-    ];
-    it.each(cases)("$input", runCase);
-
-    // ─── regex-anchored cases (date-or-time fuzz that ParserCase can't express) ──
-    it("'9pm to 5am' → start 21:00 today/tomorrow, end at 05:00 next day", () => {
-      const r = parseInput("shift 9pm to 5am", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toMatch(/T21:00:00$/);
-      expect(r.input.scheduledEnd).toMatch(/T05:00:00$/);
-      // Duration should reflect 8 hours, not −16.
-      expect(r.input.durationMinutes).toBe(8 * 60);
-    });
-
-    it("noon to 5pm time range", () => {
-      const r = parseInput("workshop noon to 5pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toMatch(/T12:00:00$/);
-      expect(r.input.scheduledEnd).toMatch(/T17:00:00$/);
-      expect(r.input.durationMinutes).toBe(5 * 60);
-    });
-
-    it("'noon' on its own → today at midday", () => {
-      const r = parseInput("call mom at noon", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
+      // ─── floating date/time cases — assertion patterns use inputMatches ────
+      // 9pm to 5am — start 21:00 today/tomorrow, end at 05:00 next day. Duration
+      // should reflect 8 hours, not −16.
+      {
+        expected: {
+          input: { durationMinutes: 8 * 60 },
+          inputMatches: { scheduledEnd: /T05:00:00$/, scheduledStart: /T21:00:00$/ },
+          type: "single",
+        },
+        input: "shift 9pm to 5am",
+      },
+      {
+        expected: {
+          input: { durationMinutes: 5 * 60 },
+          inputMatches: { scheduledEnd: /T17:00:00$/, scheduledStart: /T12:00:00$/ },
+          type: "single",
+        },
+        input: "workshop noon to 5pm",
+      },
       // NOW is 12:00 — chrono returns 12:00; if the parser uses <= ref, it
       // shifts to tomorrow. Pin only the time component.
-      expect(r.input.scheduledStart).toMatch(/^2026-03-1[56]T12:00:00$/);
-    });
-
-    it("'midnight' on its own → past noon NOW → tomorrow midnight", () => {
-      const r = parseInput("alarm at midnight", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
+      {
+        expected: {
+          inputMatches: { scheduledStart: /^2026-03-1[56]T12:00:00$/ },
+          type: "single",
+        },
+        input: "call mom at noon",
+      },
       // chrono returns 00:00 today; <= ref shifts to tomorrow.
-      expect(r.input.scheduledStart).toMatch(/T00:00:00$/);
-    });
-
-    it("'next week' — chrono picks next Monday/Sunday-ish (not asserted strictly)", () => {
-      const r = parseInput("review next week", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
+      {
+        expected: {
+          inputMatches: { scheduledStart: /T00:00:00$/ },
+          type: "single",
+        },
+        input: "alarm at midnight",
+      },
       // Pin only that something forward of NOW was parsed.
-      expect(r.input.scheduledStart).toMatch(/^2026-03-(2[0-9]|1[6-9])/);
-    });
-
-    it("'5p' — short pm form", () => {
-      const r = parseInput("meeting at 5p", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      // "5p" is sometimes parsed by chrono as 5pm. Pin only the hour.
-      if (r.input.scheduledStart) {
-        expect(r.input.scheduledStart).toMatch(/T1[57]:00:00/);
-      }
-    });
+      {
+        expected: {
+          inputMatches: { scheduledStart: /^2026-03-(2[0-9]|1[6-9])/ },
+          type: "single",
+        },
+        input: "review next week",
+      },
+      // "5p" is sometimes parsed by chrono as 5pm. Pin only the hour, and only
+      // when chrono actually produced a date.
+      {
+        expected: {
+          custom: (r) => {
+            if (r.input.scheduledStart) {
+              expect(r.input.scheduledStart).toMatch(/T1[57]:00:00/);
+            }
+          },
+          type: "single",
+        },
+        input: "meeting at 5p",
+      },
+    ];
+    it.each(cases)("$input", runCase);
   });
 
   // ─── negative paths / garbage input ────────────────────────────────────────
