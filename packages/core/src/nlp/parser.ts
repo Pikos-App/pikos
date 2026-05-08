@@ -86,6 +86,42 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
   let text = raw;
 
+  // --- -1. Casual time-of-day mapping ───────────────────────────────────────
+  // chrono sets a meridiem for "morning" / "afternoon" / "evening" / "night"
+  // but not hour-certainty, so the parser's hasTime branch (which gates on
+  // isCertain) skips them. Pre-rewrite to explicit clock times so chrono
+  // reports certain hours and the parser produces a timed event. Times are
+  // chosen for productivity defaults: morning=9am, afternoon=3pm, evening=6pm,
+  // night=8pm. "tonight" maps to today 8pm.
+  const CASUAL_TIME_OF_DAY: Record<string, { time: string; hour: number }> = {
+    afternoon: { hour: 15, time: "3pm" },
+    evening: { hour: 18, time: "6pm" },
+    morning: { hour: 9, time: "9am" },
+    night: { hour: 20, time: "8pm" },
+  };
+  // "tonight" → "today at 8pm" if still future, else "tomorrow at 8pm" so a
+  // late-night quick-add doesn't schedule into the past.
+  text = text.replace(/\btonight\b/gi, () => {
+    return ref.getHours() < 20 ? "today at 8pm" : "tomorrow at 8pm";
+  });
+  // "<prefix> <period>" → "<prefix> at <time>" where prefix ∈ {today, tomorrow,
+  // this, <weekday>}. For "this" / "today" the parser shifts to tomorrow when
+  // the implied hour has already passed in `ref`; chrono can't make that call
+  // because it doesn't know our productivity defaults.
+  const PREFIX_DAY =
+    "(?:today|tomorrow|this|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)";
+  text = text.replace(
+    new RegExp(`\\b(${PREFIX_DAY})\\s+(morning|afternoon|evening|night)\\b`, "gi"),
+    (_, prefix: string, period: string) => {
+      const cfg = CASUAL_TIME_OF_DAY[period.toLowerCase()]!;
+      const p = prefix.toLowerCase();
+      if (p === "this" || p === "today") {
+        return ref.getHours() < cfg.hour ? `today at ${cfg.time}` : `tomorrow at ${cfg.time}`;
+      }
+      return `${prefix} at ${cfg.time}`;
+    }
+  );
+
   // --- 0. Normalize "<Month> <day> through/thru [<Month>] <day>" to "... to ...".
   // chrono handles "May 2 to 10" as a date range but mis-parses "May 2 through 10"
   // as the time range 2–10 (am). The window parser below consumes "through <word>"

@@ -2290,31 +2290,102 @@ describe("NL Page Creation Parser", () => {
   // that real users are most likely to type so we know if a chrono upgrade
   // changes their semantics.
   describe("chrono casual phrases", () => {
-    it("'tomorrow morning' — date only (chrono's casual meridiem isn't 'certain')", () => {
-      // KNOWN LIMITATION — the parser only sets a time when chrono reports
-      // hour/minute as certain. "morning" / "night" / "evening" set the
-      // meridiem but not hour-certainty, so the result is date-only.
-      // Documented here so future fixes (e.g. mapping morning → 9am) don't
-      // break silently.
+    it("'tomorrow morning' → tomorrow at 09:00", () => {
       const r = parseInput("call tomorrow morning", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       expect(r.input.title).toBe("call");
-      expect(r.input.scheduledStart).toBe("2026-03-16");
+      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
     });
 
-    it("'tomorrow night' — date only (same casual-meridiem limitation)", () => {
+    it("'tomorrow afternoon' → tomorrow at 15:00", () => {
+      const r = parseInput("call tomorrow afternoon", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16T15:00:00");
+    });
+
+    it("'tomorrow evening' → tomorrow at 18:00", () => {
+      const r = parseInput("call tomorrow evening", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16T18:00:00");
+    });
+
+    it("'tomorrow night' → tomorrow at 20:00", () => {
       const r = parseInput("call tomorrow night", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-16");
+      expect(r.input.scheduledStart).toBe("2026-03-16T20:00:00");
     });
 
-    it("'tonight' — date only (KNOWN LIMITATION: no implicit evening time)", () => {
+    it("'tonight' → today at 20:00 (NOW = noon)", () => {
       const r = parseInput("call tonight", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBe("2026-03-15");
+      expect(r.input.scheduledStart).toBe("2026-03-15T20:00:00");
+    });
+
+    it("'this morning' → today at 09:00 if future, tomorrow at 09:00 if past", () => {
+      // NOW = 12:00, so 9am has passed — should roll to tomorrow.
+      const r = parseInput("call this morning", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
+    });
+
+    it("'this afternoon' → today at 15:00 (NOW = noon, future)", () => {
+      const r = parseInput("call this afternoon", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-15T15:00:00");
+    });
+
+    it("'this evening' → today at 18:00", () => {
+      const r = parseInput("dinner this evening", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-15T18:00:00");
+      expect(r.input.title).toBe("dinner");
+    });
+
+    it("'monday morning' → next Monday at 09:00", () => {
+      const r = parseInput("standup monday morning", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.title).toBe("standup");
+      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
+    });
+
+    it("'friday evening' → next Friday at 18:00", () => {
+      const r = parseInput("dinner friday evening", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-20T18:00:00");
+    });
+
+    it("'today afternoon' → today at 15:00 (NOW = 12pm, future)", () => {
+      const r = parseInput("call today afternoon", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-15T15:00:00");
+    });
+
+    it("'today morning' from after-9am → tomorrow at 09:00", () => {
+      const r = parseInput("call today morning", NOW);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      // NOW = 12:00, 9am has passed → roll to tomorrow.
+      expect(r.input.scheduledStart).toBe("2026-03-16T09:00:00");
+    });
+
+    it("'tonight' from late night (after 8pm) → tomorrow 20:00", () => {
+      // 9pm Mar 15 is past 8pm → tomorrow.
+      const lateNow = new Date("2026-03-15T21:00:00");
+      const r = parseInput("call tonight", lateNow);
+      expect(r.type).toBe("single");
+      if (r.type !== "single") return;
+      expect(r.input.scheduledStart).toBe("2026-03-16T20:00:00");
     });
 
     it("'noon' on its own → today at midday", () => {
@@ -2369,17 +2440,6 @@ describe("NL Page Creation Parser", () => {
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       expect(r.input.scheduledStart).toBe("2026-03-15T13:00:00");
-    });
-
-    it("'this evening' — chrono does not parse this phrase (no schedule set)", () => {
-      // KNOWN LIMITATION — chrono treats "this evening" as a non-date phrase
-      // when no concrete time follows. Result is a single page with no
-      // scheduledStart and "this evening" left in the title.
-      const r = parseInput("dinner this evening", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toBeUndefined();
-      expect(r.input.title).toContain("dinner");
     });
 
     it("'friday at 3pm' — bare day + time", () => {
