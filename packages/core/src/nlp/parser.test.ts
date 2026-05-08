@@ -1,3 +1,61 @@
+// ─── NAVIGATION ───────────────────────────────────────────────────────────
+//
+// Tests are grouped roughly by RESULT SHAPE (single / finite / recurring)
+// with cross-cutting concerns at the bottom. New cases should live in the
+// section that matches their primary contract — if you find yourself unsure,
+// "scenario matrix" near the bottom holds one canonical case per shape.
+//
+// RESULT SHAPE — single (no schedule, title + metadata only)
+//   • single page creation
+//   • priority and folder edge cases
+//   • numeric priority shortcuts (!0-4)              ← table
+//   • empty-title cases
+//   • priority case-insensitivity
+//   • multi-tag ordering stability
+//   • tag and folder regex boundaries
+//
+// RESULT SHAPE — single (date-only, datetime, or date range)
+//   • time without date
+//   • duration parsing / duration parsing edges      ← table
+//   • bare date parsing (no @ prefix)
+//   • time ranges / time edge cases
+//   • multi-day all-day ranges + adjacent edges
+//   • for disambiguation (with/without recurrence)
+//   • chrono casual phrases (tomorrow morning, tonight, this/last weekday)
+//
+// RESULT SHAPE — finite (N concrete pages from m/w/f, weekdays, …)
+//   • finite recurrence + shared properties
+//
+// RESULT SHAPE — recurring (FREQ + optional BYDAY/INTERVAL/COUNT/UNTIL)
+//   • infinite recurrence
+//   • recurring word order / 'and' separator / plural day names
+//   • recurring with duration / metadata / time range
+//   • recurring title cleanliness
+//   • bare day names stay single                     ← regression
+//   • bounded recurrence — every X + window
+//   • every + day-list composition
+//   • default daily when window present
+//   • until / till as window boundary
+//   • interval cadences (biweekly, every other, every N)  ← table
+//   • interval + weekday composition (every other tuesday)
+//   • yearly cadence                                  ← table
+//   • monthly / weekly / daily keyword cadence
+//   • recurrence + window composition — adjacent edges
+//   • recurring edge cases
+//   • RRULE validation                                ← rrule round-trip
+//
+// CROSS-CUTTING
+//   • token stripping and title cleanliness
+//   • title leakage — finite window keywords
+//   • time-without-date weekday anchoring
+//   • reference date variation                        ← year/month rollover
+//   • kitchen-sink composition                        ← inline snapshots
+//   • adversarial input                               ← case, punct, emoji
+//   • negative paths and garbage input                ← never throw
+//   • full NLP composition
+//   • scenario matrix (one canonical per shape)       ← table
+//   • parser invariants (property tests)              ← end of file
+
 import { RRule } from "rrule";
 import { describe, expect, it } from "vitest";
 
