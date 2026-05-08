@@ -1238,134 +1238,108 @@ describe("NL Page Creation Parser", () => {
   // ─── 12. bare date parsing (no @ prefix) ──────────────────────────────────
 
   describe("bare date parsing (no @ prefix)", () => {
-    it("bare 'tomorrow' is accepted", () => {
-      const r = parseInput("team meeting tomorrow at 2pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("team meeting");
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-      expect(r.input.scheduledStart).toContain("14:00");
-    });
-
-    it("bare 'today' is accepted", () => {
-      const r = parseInput("lunch today", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("lunch");
-      expect(r.input.scheduledStart).toContain("2026-03-15");
-    });
-
-    it("bare full day name at start", () => {
+    const cases: ParserCase[] = [
+      // Bare temporal keywords / day-name positions.
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T14:00:00", title: "team meeting" },
+          type: "single",
+        },
+        input: "team meeting tomorrow at 2pm",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-15", title: "lunch" }, type: "single" },
+        input: "lunch today",
+      },
       // "monday" at start: chrono picks it up as first result; subsequent "9am" is a
-      // separate result and not merged (parser uses chronoResults[0] only).
-      // Test without a trailing time to cleanly verify day-at-start parsing.
-      const r = parseInput("monday standup", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("standup");
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-    });
+      // separate result and not merged (parser uses chronoResults[0] only). Tested
+      // without trailing time to cleanly verify day-at-start parsing.
+      {
+        expected: { input: { scheduledStart: "2026-03-16", title: "standup" }, type: "single" },
+        input: "monday standup",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-16", title: "standup" }, type: "single" },
+        input: "standup monday",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16", title: "team meeting" },
+          type: "single",
+        },
+        input: "team monday meeting",
+      },
+      // Multi-word relative phrases.
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-20T15:00:00", title: "review" },
+          type: "single",
+        },
+        input: "review next friday at 3pm",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-18", title: "sync" }, type: "single" },
+        input: "sync this wednesday",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-18", title: "deadline" }, type: "single" },
+        input: "deadline in 3 days",
+      },
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-20T15:30:00", title: "call" },
+          type: "single",
+        },
+        input: "call march 20 at 3:30pm",
+      },
+      // Bare time only — NOW=12:00, so 2pm is future → today.
+      {
+        expected: { input: { scheduledStart: "2026-03-15T14:00:00" }, type: "single" },
+        input: "meeting 2pm",
+      },
+      // @ prefix still works (regression check).
+      {
+        expected: {
+          input: { scheduledStart: "2026-03-16T14:00:00", title: "meeting" },
+          type: "single",
+        },
+        input: "meeting @tomorrow at 2pm",
+      },
+      {
+        expected: { input: { scheduledStart: "2026-03-16T09:00:00" }, type: "single" },
+        input: "standup @monday 9am",
+      },
+      // Bare day name consumed by 'every' before chrono sees it → recurring.
+      {
+        expected: { rrule: ["BYDAY=MO"], type: "recurring" },
+        input: "standup every monday",
+      },
+      // Slash syntax consumed before chrono sees it → finite (m/w/f from Sun 3/15: 3/16, 3/18, 3/20).
+      {
+        expected: { count: 3, type: "finite" },
+        input: "run m/w/f at 3pm",
+      },
+    ];
+    it.each(cases)("$input", runCase);
 
-    it("bare full day name at end", () => {
-      const r = parseInput("standup monday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("standup");
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-    });
-
-    it("bare full day name in the middle", () => {
-      const r = parseInput("team monday meeting", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("team meeting");
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-    });
-
-    it("'next friday' multi-word phrase", () => {
-      const r = parseInput("review next friday at 3pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("review");
-      expect(r.input.scheduledStart).toContain("15:00");
-    });
-
-    it("'this wednesday' multi-word phrase", () => {
-      const r = parseInput("sync this wednesday", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("sync");
-      expect(r.input.scheduledStart).toContain("2026-03-18");
-    });
-
-    it("'in 3 days' relative phrase", () => {
-      const r = parseInput("deadline in 3 days", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("deadline");
-      expect(r.input.scheduledStart).toContain("2026-03-18");
-    });
-
-    it("bare month + day: 'march 20'", () => {
-      const r = parseInput("call march 20 at 3:30pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("call");
-      expect(r.input.scheduledStart).toContain("2026-03-20");
-      expect(r.input.scheduledStart).toContain("15:30");
-    });
-
-    it("bare month alone: 'march' → accepted as March 1st", () => {
+    // The two cases below assert presence/absence of scheduledStart — semantics
+    // toMatchObject can't express, so they stay imperative.
+    it("bare month alone: 'march' → accepted (chrono resolves with forwardDate)", () => {
       const r = parseInput("plan trip march", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       expect(r.input.title).toBe("plan trip");
       expect(r.input.scheduledStart).toBeDefined();
-      // chrono with forwardDate should resolve to next March 1
     });
 
     it("bare month in compound phrase: 'may' NOT parsed (known limitation)", () => {
       // "may" in "may day celebration" is ambiguous enough that chrono skips it.
-      // This is the safe/correct behavior — no false positive here.
+      // No false positive — safe/correct behavior.
       const r = parseInput("may day celebration", NOW);
       expect(r.type).toBe("single");
       if (r.type !== "single") return;
       expect(r.input.scheduledStart).toBeUndefined();
       expect(r.input.title).toBe("may day celebration");
-    });
-
-    it("bare time '2pm' still works", () => {
-      const r = parseInput("meeting 2pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("14:00");
-    });
-
-    it("@tomorrow still works", () => {
-      const r = parseInput("meeting @tomorrow at 2pm", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.title).toBe("meeting");
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-    });
-
-    it("@monday still works", () => {
-      const r = parseInput("standup @monday 9am", NOW);
-      expect(r.type).toBe("single");
-      if (r.type !== "single") return;
-      expect(r.input.scheduledStart).toContain("2026-03-16");
-    });
-
-    it("bare day name consumed by 'every' before chrono sees it", () => {
-      const r = parseInput("standup every monday", NOW);
-      expect(r.type).toBe("recurring");
-      if (r.type !== "recurring") return;
-      expect(r.rrule).toContain("BYDAY=MO");
-    });
-
-    it("slash syntax consumed before chrono sees it", () => {
-      const r = parseInput("run m/w/f at 3pm", NOW);
-      expect(r.type).toBe("finite");
     });
   });
 
