@@ -313,3 +313,36 @@ appTest("table toolbar deletes table @tier2", async ({ app }) => {
 
   await expect(editor.locator("table")).not.toBeVisible();
 });
+
+// ─── Link insertion via the bubble toolbar ─────────────────────────────────
+//
+// The format bubble toolbar appears once the user has selected text. Its
+// Link button (aria-label="Link") opens the LinkPopover, which exposes a
+// URL input that commits on Enter and wraps the selection in <a href>.
+
+appTest("bubble toolbar inserts a link around the selection @tier2", async ({ app }) => {
+  await quickAdd(app, "link insert test");
+  const editor = await openEditorForPage(app, "link insert test");
+
+  // Type some text and select the last word ("Pikos") so the bubble toolbar
+  // has something to wrap. Five Shift+ArrowLeft keys cover the 5-char word.
+  await app.keyboard.type("Visit Pikos");
+  for (let i = 0; i < 5; i++) await app.keyboard.press("Shift+ArrowLeft");
+
+  // Bubble toolbar mounts on selection. Click the Link button — it blurs
+  // the editor (so the selection is preserved in editor state) and surfaces
+  // the LinkPopover input.
+  const bubble = app.locator(".bubble-toolbar");
+  await expect(bubble).toBeVisible();
+  await bubble.getByRole("button", { name: "Link" }).click();
+
+  // Fill the URL input and commit with Enter.
+  const urlInput = app.locator(".link-popover-input");
+  await expect(urlInput).toBeVisible();
+  await urlInput.fill("https://pikos.app");
+  await app.keyboard.press("Enter");
+
+  // The selected word now lives inside an anchor with the typed href.
+  const link = editor.locator('a[href="https://pikos.app"]');
+  await expect(link).toHaveText("Pikos");
+});
