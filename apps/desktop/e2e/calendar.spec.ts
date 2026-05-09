@@ -569,3 +569,33 @@ appTest("events in a collapsed band render as a clickable +N more pill @tier2", 
   await pill.first().click();
   await expect(app.getByRole("button", { name: /Early bird/ }).first()).toBeVisible();
 });
+
+// ─── "Jump to current week" button mirrors the `t` keyboard shortcut ───────
+//
+// Counterpart to keyboard.spec.ts's `t` test. The button is disabled while
+// the visible week IS the current week, and re-enables once the user pages
+// away — clicking it returns to the current week.
+
+appTest("Jump to current week button returns to today's week @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+  const heading = app.getByRole("heading", { name: "Visible week" });
+  const initialLabel = await heading.textContent();
+
+  // The button is disabled on the current week — that's the "already here"
+  // affordance that signals state without needing a separate label.
+  const todayBtn = app.getByRole("button", { name: "Jump to current week" });
+  await expect(todayBtn).toBeDisabled();
+
+  // Page two weeks forward. Heading changes; button enables.
+  const nextWeek = app.locator('button[aria-label="Next week"]');
+  await nextWeek.click();
+  await nextWeek.click();
+  const movedLabel = await heading.textContent();
+  expect(movedLabel).not.toBe(initialLabel);
+  await expect(todayBtn).toBeEnabled();
+
+  // Click the button — heading snaps back to the original week.
+  await todayBtn.click();
+  await expect(heading).toHaveText(initialLabel ?? "");
+  await expect(todayBtn).toBeDisabled();
+});
