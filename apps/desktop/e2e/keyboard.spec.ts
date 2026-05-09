@@ -5,7 +5,7 @@
 // t-jumps-to-today, Cmd+,) without a single click. A regression here means
 // the keyboard layer dropped a binding or focus management broke.
 
-import { expect, mod, test as appTest } from "./fixtures";
+import { expect, mod, quickAdd, test as appTest } from "./fixtures";
 
 // ─── Full golden path: create → search → edit → revisit ─────────────────────
 //
@@ -121,6 +121,34 @@ appTest("settings opens via Cmd+, and Escape returns control @tier2", async ({ a
   await expect(app.getByRole("dialog", { name: "Quick add" })).toBeVisible();
   await app.keyboard.press("Escape");
   await expect(app.getByRole("dialog", { name: "Quick add" })).not.toBeVisible();
+});
+
+// ─── Cmd+Z undoes the most recent delete ───────────────────────────────────
+//
+// The undo toast carries a button that triggers `undoFn`; users can also
+// hit Cmd+Z to fire the same action without reaching for the mouse. The
+// binding is gated on `allowInInputs:false`, so editor undo (Tiptap) keeps
+// working unchanged.
+
+appTest("Cmd+Z undoes the most recent page delete @tier2", async ({ app }) => {
+  await quickAdd(app, "trash this");
+
+  const item = app.locator("[data-page-list-item]").filter({ hasText: "trash this" });
+  await expect(item).toBeVisible();
+
+  // Right-click → Delete. Page disappears, toast appears.
+  await item.click({ button: "right" });
+  await app.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(item).not.toBeVisible();
+  await expect(app.getByRole("alert", { name: /trash this/ })).toBeVisible();
+
+  // Cmd+Z while focus is in the page list (no editor/input focus): the
+  // toast's undo action fires, page is restored, toast clears.
+  await app.locator("body").click({ position: { x: 0, y: 0 } });
+  await app.keyboard.press(mod("Mod+z"));
+
+  await expect(item).toBeVisible();
+  await expect(app.getByRole("alert", { name: /trash this/ })).not.toBeVisible();
 });
 
 // ─── Mod+1 switches to first folder by index ────────────────────────────────

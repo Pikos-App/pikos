@@ -13,6 +13,7 @@ import { createContext, type ReactNode, useContext, useRef, useState } from "rea
 import type { ToastItem } from "@/shared/components/Toast";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 export interface UndoDeleteContextValue {
   /** Request a deferred delete — hides the page immediately, commits after the toast expires. */
@@ -186,6 +187,19 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
       { id, label, ...(durationMs !== undefined ? { duration: durationMs } : {}) },
     ]);
   }
+
+  // Cmd+Z — fire the most recent undoable toast's action. Skipped while the
+  // user is in a text input or contentEditable so the editor's native undo
+  // (Tiptap history) keeps working unchanged.
+  useKeyboardShortcut("Mod+z", () => {
+    for (let i = toastItems.length - 1; i >= 0; i--) {
+      const toast = toastItems[i];
+      if (toast?.action) {
+        toast.action.onClick();
+        return;
+      }
+    }
+  });
 
   const value: UndoDeleteContextValue = {
     handleToastDismiss,
