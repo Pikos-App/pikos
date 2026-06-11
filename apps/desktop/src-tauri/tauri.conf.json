@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Pikos",
+  "version": "0.2.5",
+  "identifier": "app.pikos.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Pikos",
+        "width": 1480,
+        "height": 920,
+        "minWidth": 560,
+        "minHeight": 480,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob: asset: https://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+      "devCsp": "default-src 'self'; img-src 'self' data: blob: asset: https://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:* http://localhost:*; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+      "capabilities": ["default"],
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**"]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBRTE4N0ZFOTFFMzgwMzkKUldRNWdPT1Ivb2ZobXNBUlFJSEFzZm5iUEoxV1lkVGxPQ1B0SUZybXhtYk1OVXBuUE50NjVYRWEK",
+      "endpoints": [
+        "https://github.com/pikos-app/pikos/releases/latest/download/latest.json"
+      ]
+    },
+    "deep-link": {
+      "mobile": [],
+      "desktop": {
+        "schemes": ["pikos"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "category": "Productivity",
+    "shortDescription": "Notes, tasks, and calendar — local-first",
+    "longDescription": "Pikos combines notes, tasks, and a calendar into one local-first app. Your data stays on your device — no account required, no cloud sync by default."
+  }
+}

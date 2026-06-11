@@ -1,0 +1,131 @@
+---
+import "../styles/global.css";
+import Nav from "../components/Nav.astro";
+
+interface Props {
+  title: string;
+  description?: string;
+  /** JSON-LD structured data — pass a raw object, it will be serialized */
+  jsonLd?: Record<string, unknown>;
+  /** Override og:type (defaults to "website") */
+  ogType?: string;
+  /** article:published_time for blog posts */
+  publishedTime?: string;
+  /** Override the default OG image path (e.g. "/blog/my-post-og.png") */
+  ogImagePath?: string;
+  /** Hide the default nav — page provides its own */
+  hideNav?: boolean;
+}
+
+const {
+  title,
+  description = "Your notes, tasks, and calendar in one app. Everything stored on your device. No sign-up required. Free to download.",
+  jsonLd,
+  ogType = "website",
+  publishedTime,
+  ogImagePath = "/og.png",
+  hideNav = false,
+} = Astro.props;
+
+// Derive current path for nav highlighting
+const currentPath = "/" + Astro.url.pathname.replace(/^\/|\/$/g, "").split("/")[0];
+
+const ogImage = new URL(ogImagePath, Astro.site);
+
+// Default structured data — WebSite + SoftwareApplication
+const defaultJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "name": "Pikos",
+      "url": "https://pikos.app",
+      "description": "Notes, tasks, and calendar in one on-device desktop app.",
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Pikos",
+      "applicationCategory": "ProductivityApplication",
+      "operatingSystem": "macOS",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+      },
+      "description": "Notes, tasks, and calendar in one app. Everything stored on your device. No sign-up required.",
+      "url": "https://pikos.app",
+    },
+  ],
+};
+
+const structuredData = jsonLd ?? defaultJsonLd;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <!-- Set dark class before first paint to prevent flash -->
+    <script is:inline>
+      const stored = localStorage.getItem("theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (stored === "dark" || (!stored && prefersDark)) {
+        document.documentElement.classList.add("dark");
+      }
+      // Add after theme is set so transitions don't fire on initial load
+      document.documentElement.classList.add("theme-ready");
+    </script>
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={Astro.url} />
+    <meta name="theme-color" content="#f8f8f6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161613" media="(prefers-color-scheme: dark)" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content={ogType} />
+    <meta property="og:site_name" content="Pikos" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:url" content={Astro.url} />
+    {publishedTime && <meta property="article:published_time" content={publishedTime} />}
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <!-- Inter — marketing site only; the desktop app uses SF Pro -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon/pikos-symbol.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon/favicon-180.png" />
+    <link rel="shortcut icon" href="/favicon/favicon.ico" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="alternate" type="application/rss+xml" title="Pikos Blog" href="/rss.xml" />
+
+    <!-- Structured data for search engines and AI -->
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+
+    <!-- Analytics — privacy-focused, no cookies, no personal data -->
+    <script defer src="https://cloud.umami.is/script.js" data-website-id="8a780ae1-ed60-46f7-99e8-d76463e6f9d8"></script>
+  </head>
+  <body class="relative min-h-dvh overflow-x-clip bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-900 dark:text-neutral-100">
+    <!-- Ambient amber warmth — top-right of document. Nav renders on top; its transparent background lets the glow bleed through the header area. -->
+    <div
+      aria-hidden="true"
+      class="pointer-events-none absolute -top-24 -right-40 h-[1000px] w-[1000px] bg-[radial-gradient(circle_at_top_right,rgba(199,143,58,0.18),transparent_65%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(232,164,76,0.14),transparent_65%)]"
+    ></div>
+
+    {!hideNav && <Nav current={currentPath === "/" ? "/" : currentPath} />}
+    <slot />
+  </body>
+</html>

@@ -1,0 +1,47 @@
+.DS_Store
+node_modules
+coverage
+package-lock.json
+build
+apps/desktop/dist
+packages/pikos-bridge/dist
+.svelte-kit
+package
+.turbo
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Rust build artifacts
+src-tauri/target/
+/target
+**/*.rs.bk
+*.pdb
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Playwright
+playwright-report/
+blob-report/
+all-blob-reports/
+test-results/
+recordings/
+
+# Calendar layout screenshots (regen via pnpm --filter @pikos/desktop screenshot:calendar)
+.screenshots/
+
+# Claude Code
+.claude/
+
+# Agent workspace (private — not for public repo)
+.agent/
+CLAUDE.md
+
+# OS generated files
+Thumbs.db

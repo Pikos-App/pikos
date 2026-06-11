@@ -1,0 +1,33 @@
+name: Feature Request
+description: Suggest something you'd like to see in Pikos
+labels: ["feature request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests help shape what gets built next. You can also report bugs or send feedback at [pikos.app/feedback](https://pikos.app/feedback).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation where you wished this feature existed.
+      placeholder: "e.g., I have recurring tasks every weekday but no way to set that up without creating each one manually."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like?
+      description: Describe your ideal solution. Be as specific or as vague as you want.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've tried
+      description: Any workarounds you're using today, or other apps that handle this well.
+    validations:
+      required: false

@@ -1,0 +1,597 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./features/editor/editor.css";
+
+/* Suppress hover styles during keyboard navigation so the hovered item doesn't stay lit */
+[data-keyboard-nav] * {
+  pointer-events: none;
+}
+
+/* Lock cursor during drag/resize gestures — overrides all child element cursor rules */
+html.dragging-grab,
+html.dragging-grab * {
+  cursor: grabbing !important;
+}
+html.dragging-resize,
+html.dragging-resize * {
+  cursor: row-resize !important;
+}
+/* Kill CSS transitions during drag/resize to prevent animation jank */
+html.dragging-grab *,
+html.dragging-resize * {
+  transition-duration: 0s !important;
+}
+
+/* Task checkbox hover — needs plain CSS to override inline border-color from priority props */
+.task-checkbox:not([aria-checked="true"]):hover {
+  border-color: color-mix(in srgb, var(--foreground) 60%, transparent) !important;
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+.animate-shake {
+  animation: shake 0.3s ease;
+}
+
+/* One-shot ring flash — used to locate a page block after jumping from
+   elsewhere in the app ("View in calendar"). */
+@keyframes highlight-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent);
+  }
+  20%,
+  60% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 65%, transparent);
+  }
+}
+.animate-highlight-flash {
+  animation: highlight-flash 1.6s ease-out;
+}
+
+/* All buttons should use pointer cursor by default */
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   PRIMITIVE COLOR SCALES
+   Static values — available as Tailwind utilities (e.g. bg-primary-500).
+   Do NOT use primitives directly in components — use semantic tokens instead.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ─── Brand — terracotta. Identity only (app icon, About screen).
+         Never on interactive UI — that's primary-*. ─── */
+  --color-brand-50: #f9ebe7;
+  --color-brand-100: #f0cec5;
+  --color-brand-200: #e3a798;
+  --color-brand-300: #d18270;
+  --color-brand-400: #c06a58;
+  --color-brand-500: #a65544;
+  --color-brand-600: #8b4537;
+  --color-brand-700: #6e372c;
+  --color-brand-800: #4d2720;
+  --color-brand-900: #2a1612;
+
+  /* ─── Primary — teal. Active, link, current, primary action. ─── */
+  --color-primary-50: #e6faf4;
+  --color-primary-100: #b3f0de;
+  --color-primary-200: #80e6c8;
+  --color-primary-300: #4ddcb2;
+  --color-primary-400: #2dd4a8;
+  --color-primary-500: #1aae8a;
+  --color-primary-600: #14896c;
+  --color-primary-700: #0e644e;
+  --color-primary-800: #083f30;
+  --color-primary-900: #041f18;
+
+  /* ─── Neutral — warm gray, NOT blue-gray ─── */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f8f8f6;
+  --color-neutral-100: #f0efed;
+  --color-neutral-150: #e6e5e2;
+  --color-neutral-200: #d5d4d0;
+  --color-neutral-300: #b5b4af;
+  --color-neutral-400: #908f8a;
+  --color-neutral-500: #6e6d69;
+  --color-neutral-600: #53524f;
+  --color-neutral-700: #3a3a37;
+  --color-neutral-800: #272724;
+  --color-neutral-850: #1e1e1b;
+  --color-neutral-900: #161613;
+  --color-neutral-950: #0f0f0d;
+
+  /* ─── Warning — amber, for soft attention (due-soon, notice). ─── */
+  --color-warning-400: #e8a44c;
+  --color-warning-500: #c78f3a;
+  --color-warning-600: #8f6526;
+
+  /* ─── Danger — red, for urgent / destructive / overdue. ─── */
+  --color-danger-400: #f87171;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+
+  /* ─── Status colors (match Tailwind defaults — intentional).
+         Used as user-assignable category colors, NOT semantic status. ─── */
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-yellow-400: #fbbf24;
+  --color-yellow-500: #f59e0b;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-green-400: #34d399;
+  --color-green-500: #10b981;
+  --color-purple-400: #a78bfa;
+  --color-purple-500: #8b5cf6;
+  --color-pink-400: #f472b6;
+  --color-pink-500: #ec4899;
+
+  /* ─── Folder / category palette (fixed set, user-assignable) ─── */
+  --color-folder-red: #e5534b;
+  --color-folder-orange: #e09b4a;
+  --color-folder-yellow: #c4a143;
+  --color-folder-green: #57a872;
+  --color-folder-teal: #3dbda7;
+  --color-folder-blue: #539bf5;
+  --color-folder-purple: #9b8ae8;
+  --color-folder-pink: #db6c9e;
+
+  /* ─── Typography ─── */
+  --font-sans: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --font-display: -apple-system, "SF Pro Display", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, monospace;
+
+  /* ─── Border Radius ─── */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SEMANTIC TOKENS — Light Theme
+   What colors *mean*, not what they *are*. Use these in components.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── Identity ─── */
+  /* Terracotta. Identity-only — never on interactive UI. */
+  --brand-identity: var(--color-brand-500);
+
+  /* ─── Surfaces ─── */
+  --surface-primary: #ffffff;
+  --surface-secondary: #fbfbf9;
+  --surface-tertiary: #f6f6f4;
+  --surface-elevated: #ffffff;
+  --surface-inset: #eae9e6;
+  --surface-hover: #f0efed;
+  --surface-active: #e6e5e2;
+  --surface-selected: color-mix(in srgb, #2dd4a8 10%, transparent);
+  --surface-nav-selected: #ebeae7;
+
+  /* ─── Text ─── */
+  --text-primary: #161613;
+  --text-secondary: #5a5955;
+  --text-tertiary: #767571;
+  --text-disabled: #8e8d88;
+  --text-inverse: #ffffff;
+  --text-brand: #14896c;
+  --text-link: #1aae8a;
+
+  /* ─── Borders ─── */
+  --border-primary: #d5d4d0;
+  --border-secondary: #e6e5e2;
+  --border-subtle: #f0efed;
+  --border-focus: #2dd4a8;
+
+  /* ─── Interactive ─── */
+  --interactive-primary: #1aae8a;
+  --interactive-primary-hover: #14896c;
+  --interactive-secondary: #f0efed;
+  --interactive-secondary-hover: #e6e5e2;
+
+  /* ─── Status ─── */
+  --status-overdue: #ef4444;
+  --status-due-soon: #d4850f;
+  --status-open: #3b82f6;
+  --status-done: #10b981;
+
+  /* ─── Shadows (theme-aware — used via var(), not Tailwind utilities) ─── */
+  --shadow-app-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-app-md: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-app-lg: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-app-popover: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--border-primary);
+
+  /* ─── Transitions (used via var()) ─── */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* ─── Letter spacing ─── */
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.03em;
+
+  /* ─── Type scale (CSS font shorthand — use via font: var(--text-*)) ─── */
+  --text-display: 500 24px/1.3 var(--font-display);
+  --text-heading-lg: 500 18px/1.4 var(--font-sans);
+  --text-heading-sm: 500 15px/1.4 var(--font-sans);
+  --text-body: 400 14px/1.6 var(--font-sans);
+  --text-body-sm: 400 13px/1.5 var(--font-sans);
+  --text-ui: 500 13px/1.3 var(--font-sans);
+  --text-ui-sm: 500 11px/1.3 var(--font-sans);
+  --text-mono: 400 12px/1.5 var(--font-mono);
+
+  /* ─── shadcn/ui backward-compatible aliases ─── */
+  --background: var(--surface-primary);
+  --foreground: var(--text-primary);
+  --card: var(--surface-elevated);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--interactive-primary);
+  --primary-foreground: var(--text-inverse);
+  --secondary: var(--interactive-secondary);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface-inset);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--surface-hover);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--status-overdue);
+  --border: var(--border-primary);
+  --input: var(--border-primary);
+  --ring: var(--border-focus);
+  --chart-1: #e5534b;
+  --chart-2: #1aae8a;
+  --chart-3: #539bf5;
+  --chart-4: #d4850f;
+  --chart-5: #9b8ae8;
+  --sidebar: var(--surface-tertiary);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--interactive-primary);
+  --sidebar-primary-foreground: var(--text-inverse);
+  --sidebar-accent: var(--surface-hover);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-secondary);
+  --sidebar-ring: var(--border-focus);
+  --titlebar: #f6f6f4;
+  --titlebar-border: rgba(0, 0, 0, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SEMANTIC TOKENS — Dark Theme
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.dark {
+  /* ─── Identity ─── */
+  --brand-identity: var(--color-brand-400);
+
+  /* ─── Surfaces ─── */
+  --surface-primary: #161613;
+  --surface-secondary: #141412;
+  --surface-tertiary: #121210;
+  --surface-elevated: #1c1c19;
+  --surface-inset: #0f0f0d;
+  --surface-hover: #272724;
+  --surface-active: #3a3a37;
+  --surface-selected: color-mix(in srgb, #2dd4a8 12%, transparent);
+  --surface-nav-selected: #2f2f2c;
+
+  /* ─── Text ─── */
+  --text-primary: #f0efed;
+  --text-secondary: #b0afaa;
+  --text-tertiary: #999893;
+  --text-disabled: #8e8d88;
+  --text-inverse: #161613;
+  --text-brand: #2dd4a8;
+  --text-link: #2dd4a8;
+
+  /* ─── Borders ─── */
+  --border-primary: #3a3a37;
+  --border-secondary: #272724;
+  --border-subtle: #1e1e1b;
+  --border-focus: #2dd4a8;
+
+  /* ─── Interactive ─── */
+  --interactive-primary: #2dd4a8;
+  --interactive-primary-hover: #4ddcb2;
+  --interactive-secondary: #272724;
+  --interactive-secondary-hover: #3a3a37;
+
+  /* ─── Status ─── */
+  --status-overdue: #f87171;
+  --status-due-soon: #f59e42;
+  --status-open: #60a5fa;
+  --status-done: #34d399;
+
+  /* ─── Shadows ─── */
+  --shadow-app-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-app-md: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-app-lg: 0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-app-popover: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-primary);
+
+  /* ─── Chart colors ─── */
+  --chart-1: #f87171;
+  --chart-2: #2dd4a8;
+  --chart-3: #60a5fa;
+  --chart-4: #f59e42;
+  --chart-5: #a78bfa;
+
+  /* ─── Titlebar ─── */
+  --titlebar: #121210;
+  --titlebar-border: rgba(255, 255, 255, 0.07);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TAILWIND INTEGRATION
+   Maps CSS custom properties to Tailwind utilities (responsive to theme).
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@theme inline {
+  /* ── Semantic surface tokens ── */
+  --color-surface-primary: var(--surface-primary);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-tertiary: var(--surface-tertiary);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-surface-selected: var(--surface-selected);
+  --color-surface-nav-selected: var(--surface-nav-selected);
+
+  /* ── Semantic text tokens ── */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-disabled: var(--text-disabled);
+  --color-text-inverse: var(--text-inverse);
+  --color-text-brand: var(--text-brand);
+  --color-text-link: var(--text-link);
+
+  /* ── Semantic border tokens ── */
+  --color-border-primary: var(--border-primary);
+  --color-border-secondary: var(--border-secondary);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-focus: var(--border-focus);
+
+  /* ── Semantic interactive tokens ── */
+  --color-interactive-primary: var(--interactive-primary);
+  --color-interactive-primary-hover: var(--interactive-primary-hover);
+  --color-interactive-secondary: var(--interactive-secondary);
+  --color-interactive-secondary-hover: var(--interactive-secondary-hover);
+
+  /* ── Semantic status tokens ── */
+  --color-status-overdue: var(--status-overdue);
+  --color-status-due-soon: var(--status-due-soon);
+  --color-status-open: var(--status-open);
+  --color-status-done: var(--status-done);
+
+  /* ── Short aliases (avoid double text- prefix) ── */
+  --color-subtle: var(--text-tertiary);
+  --color-faint: var(--text-disabled);
+
+  /* ── shadcn/ui backward-compatible aliases ── */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-titlebar: var(--titlebar);
+  --color-titlebar-border: var(--titlebar-border);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   BASE STYLES
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  html {
+    /* Dense app feel — 13px base like Linear */
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground;
+    font-feature-settings:
+      "kern" 1,
+      "liga" 1;
+  }
+
+  /* Prevent text selection on UI chrome (not editor content) */
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  label {
+    user-select: none;
+  }
+
+  /* Headings use tighter tracking */
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: var(--tracking-tight);
+    font-weight: 600;
+  }
+
+  /* Hide scrollbars — rely on macOS/iOS overlay scrollbars */
+  * {
+    scrollbar-width: none; /* Firefox */
+  }
+  ::-webkit-scrollbar {
+    display: none; /* Chrome / Safari / Tauri */
+  }
+
+  /* Primary-tinted text selection */
+  ::selection {
+    background: color-mix(in srgb, var(--color-primary-400) 25%, transparent);
+  }
+
+  /* Reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TYPE SCALE UTILITIES
+   Maps the --text-* design tokens to utility classes. Individual properties
+   (not font shorthand) so they compose with Tailwind overrides.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  /* Display & headings — used in editor, always include line-height */
+  .type-display {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: var(--tracking-tight);
+  }
+  .type-heading-lg {
+    font-size: 18px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: var(--tracking-tight);
+  }
+  .type-heading-sm {
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  /* Body — size + weight only. Use leading-relaxed (1.6) for paragraphs,
+     leading-snug (1.375) for single-line UI contexts like list items. */
+  .type-body {
+    font-size: 14px;
+    font-weight: 400;
+  }
+  .type-body-sm {
+    font-size: 13px;
+    font-weight: 400;
+  }
+
+  /* UI — size + weight only. Compact by default (no forced line-height). */
+  .type-ui {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .type-ui-sm {
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .type-mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+}
+
+/* Event block — mode-aware folder-color backgrounds for calendar chips.
+   --event-color is set inline via chipFolderStyle(). Higher opacity than a
+   typical chip so cascaded events fully cover their host underneath, leaving
+   only the left-edge indent of the host visible (Google-Calendar-style).
+   The left-edge border is full saturation (folder accent); only the left
+   side has a border so stacked blocks stay clean — no surround frame. */
+[style*="--event-color"] {
+  background: color-mix(in srgb, var(--event-color) 20%, var(--background));
+  border-left-color: var(--event-color);
+}
+.dark [style*="--event-color"] {
+  background: color-mix(in srgb, var(--event-color) 24%, var(--background));
+}
+
+/* Cross-segment hover linkage — when one half of a split cross-midnight
+   event is hovered, both segments share the dimmed look. PageBlock toggles
+   this class via document.querySelectorAll on every [data-cal-page-id]. */
+.cal-segment-hover {
+  opacity: 0.8;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Event silhouette — a 1px outline derived from the page background so
+   every event has a clear edge regardless of its neighbour's fill. The
+   color-mix biases slightly toward the border token so the outline is
+   visible against the colored fill but doesn't compete with it. Outlines
+   sit outside the border-box and don't affect layout. */
+[data-cal-page-id] {
+  outline: 1px solid color-mix(in srgb, var(--background) 50%, var(--border) 50%);
+}
+
+/* Theme transition — applied briefly during theme switches to avoid jarring flash */
+html.theme-transitioning,
+html.theme-transitioning * {
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    border-color 200ms ease !important;
+}

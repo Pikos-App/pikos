@@ -1,0 +1,128 @@
+---
+import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
+
+const title = "FAQ - Pikos";
+const description = "Common questions about Pikos, the free app that combines notes, tasks, and calendar, on your device, not in the cloud.";
+
+const faqs = [
+  {
+    q: "What is Pikos?",
+    a: "A desktop app that puts notes, tasks, and a calendar in one window. Everything stored locally on your device. No account, no cloud, no subscription.",
+  },
+  {
+    q: "Is Pikos free?",
+    a: "The desktop app is a free download with no trial period and no feature limits. A Mac App Store version (with iCloud sync) and an iPhone app are planned, each a one-time purchase. No subscription.",
+  },
+  {
+    q: "What platforms does it run on?",
+    a: "macOS and Linux today. It runs as a real native app, not a wrapped browser tab, so it stays fast and out of your way.",
+  },
+  {
+    q: "Does it work offline?",
+    a: "Your notes, tasks, and calendar all work fully offline. The app does check for new versions by default, and you can turn that off in Settings.",
+  },
+  {
+    q: "Where is my data stored?",
+    a: "As a single file on your drive. You own it. You can back it up, copy it, or export it anytime. Pikos doesn't send your data anywhere on its own. Any network features the app gains later will be opt-in and off by default. Nothing leaves your device unless you turn it on.",
+  },
+  {
+    q: "Can it replace Obsidian?",
+    a: "Depends on your workflow. If you mostly write and link notes, Obsidian is purpose-built for that. If you also need task management and a calendar without plugins, Pikos does all three natively.",
+  },
+  {
+    q: "Can it replace TickTick or Todoist?",
+    a: "For personal task management with notes, yes. Pikos has priorities, statuses, folders, scheduling, and a calendar view. It doesn't have team features or cross-platform sync yet.",
+  },
+  {
+    q: "Does it have a calendar?",
+    a: "Yes. A week calendar built into the app. Drag tasks onto it to schedule them, click a slot to create a new event, and see your week alongside your notes.",
+  },
+  {
+    q: "Does Pikos collect any data?",
+    a: "No telemetry, no analytics inside the app, no personal data. The only default network request is an update check, and you can disable it in Settings.",
+  },
+  {
+    q: "Can I see how the app works under the hood?",
+    a: "Yes. The complete code is published on GitHub. Anyone can read it and verify what the app actually does. You're free to read and run it, but can't redistribute it commercially.",
+    href: "/blog/the-code-is-public",
+    linkLabel: "Read why the code is public",
+  },
+  {
+    q: "How do I back up my data?",
+    a: "Copy the data file, or use the built-in export. Since it lives on your drive, Time Machine and any backup tool automatically include it.",
+  },
+  {
+    q: "Does it support Markdown?",
+    a: "The editor is rich text, not plain Markdown files. But you can paste Markdown and it converts automatically. Headings, lists, checkboxes, code blocks, all supported.",
+  },
+  {
+    q: "Can I import from another app?",
+    a: "Yes. Pikos reads Obsidian vaults directly, and CSV exports from Todoist and TickTick are auto-detected. Step-by-step guides cover each one.",
+    href: "/import",
+    linkLabel: "Read the import guides",
+  },
+  {
+    q: "Will there be mobile apps?",
+    a: "An iPhone app is planned. Desktop comes first.",
+  },
+  {
+    q: "Will there be sync?",
+    a: "iCloud sync is planned for the Mac App Store version (one-time purchase). The free download stays on your device only. The iPhone app will be a separate one-time purchase. Sync uses Apple's infrastructure. Your data won't touch Pikos servers.",
+  },
+  {
+    q: "What makes it different?",
+    a: "Most apps specialize. Obsidian does notes. TickTick does tasks. Fantastical does calendar. Pikos combines all three in one native app. On your device, free, no account, data you own. One app instead of three.",
+  },
+];
+
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": faqs.map(({ q, a }) => ({
+    "@type": "Question",
+    "name": q,
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": a,
+    },
+  })),
+};
+---
+
+<Base title={title} description={description} jsonLd={faqJsonLd}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Questions</h1>
+    <p class="mt-3 text-base text-neutral-500 dark:text-neutral-400">
+      Straight answers, no fluff.
+    </p>
+
+    <div class="mt-12 divide-y divide-neutral-200 dark:divide-neutral-800">
+      {faqs.map(({ q, a, href, linkLabel }) => (
+        <div class="py-6">
+          <h2 class="font-semibold text-neutral-900 dark:text-neutral-50">{q}</h2>
+          <p class="mt-2 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">{a}</p>
+          {href && (
+            <a href={href} class="mt-2 inline-block text-sm font-medium text-primary-500 transition-colors hover:underline dark:text-primary-400">
+              {linkLabel ?? "Read more"} &rarr;
+            </a>
+          )}
+        </div>
+      ))}
+    </div>
+
+  </main>
+
+  <Footer current="/faq" />
+</Base>
+
+<style>
+
+  </style>

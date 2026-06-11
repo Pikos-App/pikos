@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Feedback
+    url: https://pikos.app/feedback
+    about: Report a bug or send feedback
+  - name: General Feedback
+    url: mailto:hello@pikos.app?subject=Pikos%20Feedback
+    about: Send feedback directly via email

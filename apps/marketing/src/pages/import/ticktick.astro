@@ -1,0 +1,148 @@
+---
+import Base from "../../layouts/Base.astro";
+import Footer from "../../components/Footer.astro";
+
+const title = "Import from TickTick to Pikos";
+const description = "Move your TickTick lists into Pikos. Tasks, lists, statuses, priorities, dates, reminders, sub-tasks, and recurring rules all come across via the CSV backup.";
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/import" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Import
+    </a>
+
+    <article>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Import from TickTick</h1>
+      <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">One CSV backup, one click in Pikos.</p>
+
+      <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+
+        <p>
+          TickTick has a single Backup feature that exports every list as one CSV file. Pikos auto-detects the format, including the metadata preamble TickTick adds at the top, and maps everything in place.
+        </p>
+
+        <h2>1. Export from TickTick</h2>
+
+        <p>
+          Open TickTick on the web, click your avatar, and choose <strong>Settings &rarr; Backup</strong>. Click <strong>Backup</strong> and TickTick downloads a CSV containing all your lists and tasks.
+        </p>
+
+        <p>
+          The mobile and desktop apps don't expose this option. Use the web app for the export.
+        </p>
+
+        <h2>2. Import in Pikos</h2>
+
+        <p>
+          Open Settings (<code>Cmd+,</code>), go to the <strong>Data</strong> tab, and click <strong>Select File</strong> next to "CSV". Pick the backup file you just downloaded.
+        </p>
+
+        <p>
+          Pikos reads the metadata header, recognizes the TickTick format, and routes you to a column mapping screen with sensible defaults pre-filled. The mapping shows sample values from your file next to each column so you can sanity-check what's going where.
+        </p>
+
+        <h2>3. Preview, then commit</h2>
+
+        <p>
+          The preview shows every page that will be created, grouped by the list it came from. Skipped columns are listed with a short explanation (e.g. "Kanban column order — no equivalent in Pikos"), so nothing disappears silently. A <strong>Skip completed</strong> toggle lets you leave finished tasks behind if you only want to bring across active work.
+        </p>
+
+        <p>
+          Hit <strong>Import</strong> and you're done.
+        </p>
+
+        <h2>What comes across</h2>
+
+        <ul>
+          <li><strong>Tasks</strong> — each becomes a Pikos page. Notes attached to tasks are kept as the page body.</li>
+          <li><strong>Lists</strong> — TickTick's "List Name" maps to a Pikos folder. (TickTick exports a "Folder Name" column too, but it's empty in practice, so the importer uses List Name instead.)</li>
+          <li><strong>Status</strong> — TickTick's codes (0 active, 1 completed, 2 archived, -1 completed recurring) map to Pikos's not-started or done states.</li>
+          <li><strong>Priority</strong> — TickTick's 0 / 1 / 3 / 5 maps to Pikos's None / Low / Medium / High respectively.</li>
+          <li><strong>Dates and times</strong> — start date, due date, and timestamps are preserved. TickTick's "Is All Day" flag is honored, so all-day events land in the calendar's all-day row (not as a midnight-to-midnight timed block). Multi-day all-day events keep their full span.</li>
+          <li><strong>Recurring rules</strong> — daily, weekly, monthly, and yearly repeats come across as proper recurrence rules in Pikos. The next occurrence is the head; the calendar projects future occurrences automatically. For a recurring task with completed history, each completed occurrence imports as its own done page; the active head imports separately with the rule attached.</li>
+          <li><strong>Reminders</strong> — TickTick stores reminder offsets as ISO 8601 durations (e.g. <code>-PT15M</code> for 15 minutes before, <code>-P1D</code> for a day before). Pikos parses each into a per-page reminder.</li>
+          <li><strong>Tags</strong> — kept as Pikos tags.</li>
+          <li><strong>Sub-tasks</strong> — parent/child relationships are reconstructed using TickTick's <code>taskId</code> and <code>parentId</code> columns.</li>
+          <li><strong>Emoji in list names</strong> — kept as-is. If you used emoji prefixes like "🏃 Breaks" or "💼 Work", those carry over into the folder name.</li>
+        </ul>
+
+        <h2>What doesn't come across</h2>
+
+        <ul>
+          <li><strong>List colors and icons</strong> — TickTick's CSV doesn't include visual metadata for lists. Re-pick a color in Pikos after import. Emoji baked into list names do come across.</li>
+          <li><strong>Kanban columns</strong> — TickTick lets you arrange tasks in Kanban-style columns within a list. Pikos doesn't have a Kanban view, so column position is dropped.</li>
+          <li><strong>"Repeat after completion" semantics</strong> — TickTick supports two recurrence modes (fixed schedule and after-completion). The rule itself comes across, but Pikos currently treats all imported rules as fixed-schedule. After-completion mode is on the roadmap.</li>
+          <li><strong>Habit tracker</strong> — TickTick's habits are a separate data type and aren't part of the CSV export.</li>
+          <li><strong>Smart Lists and filters</strong> — these are query definitions, not data. Pikos has its own filtering, but the saved views don't carry over.</li>
+          <li><strong>Pomodoro history</strong> — not exported by TickTick.</li>
+          <li><strong>Attachments</strong> — TickTick stores attachments on its servers and they aren't included in the CSV. The text content of each task is preserved.</li>
+        </ul>
+
+        <h2>If something goes sideways</h2>
+
+        <p>
+          Pikos snapshots the database before the import, every imported page is tagged with the import batch, and Settings &rarr; Data &rarr; "Undo last import" removes them in one click. Run the import, see what landed, and adjust if needed.
+        </p>
+
+        <p>
+          Ready to try? <a href="/download">Download Pikos</a>. The CSV importer is in the Data tab the first time you open Settings.
+        </p>
+
+      </div>
+    </article>
+
+  </main>
+
+  <Footer current="/import/ticktick" />
+</Base>
+
+<style>
+
+  .prose :global(h2) {
+    padding-top: 1rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--color-neutral-900);
+  }
+  :global(html.dark) .prose :global(h2) {
+    color: var(--color-neutral-100);
+  }
+
+  .prose :global(p) {
+    margin-top: 1.5rem;
+  }
+
+  .prose :global(ul) {
+    margin-top: 1rem;
+    padding-left: 1.25rem;
+    list-style-type: disc;
+  }
+
+  .prose :global(li) {
+    margin-top: 0.375rem;
+  }
+
+  .prose :global(a) {
+    color: var(--color-primary-500);
+  }
+  :global(html.dark) .prose :global(a) {
+    color: var(--color-primary-400);
+  }
+  .prose :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  .prose :global(code) {
+    border-radius: 0.25rem;
+    background-color: var(--color-neutral-150);
+    padding: 0.125rem 0.375rem;
+    font-size: 0.875rem;
+  }
+  :global(html.dark) .prose :global(code) {
+    background-color: var(--color-neutral-800);
+  }
+</style>

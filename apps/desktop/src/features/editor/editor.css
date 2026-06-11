@@ -1,0 +1,627 @@
+/* Tiptap editor styles — scoped to .editor-content */
+
+.editor-content {
+  outline: none;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  caret-color: var(--interactive-primary);
+  cursor: text;
+}
+
+/* ─── Headings ─────────────────────────────────────────────────────────────── */
+
+.editor-content h1 {
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin-top: 24px;
+  margin-bottom: 8px;
+  letter-spacing: var(--tracking-tight);
+}
+
+.editor-content h1:first-child {
+  margin-top: 0;
+}
+
+.editor-content h2 {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-top: 24px;
+  margin-bottom: 8px;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+.editor-content h3 {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-top: 24px;
+  margin-bottom: 8px;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+/* ─── Paragraphs ───────────────────────────────────────────────────────────── */
+
+.editor-content p {
+  margin-top: 0;
+  margin-bottom: 0.35em;
+  white-space: pre-wrap;
+}
+
+.editor-content h1,
+.editor-content h2,
+.editor-content h3 {
+  white-space: pre-wrap;
+}
+
+.editor-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* ─── Lists ────────────────────────────────────────────────────────────────── */
+
+.editor-content ul {
+  list-style-type: disc;
+  padding-left: 24px;
+  margin-top: 0.25em;
+  margin-bottom: 0.5em;
+  color: var(--text-tertiary);
+}
+
+.editor-content ul > li {
+  color: var(--text-primary);
+}
+
+.editor-content ul:not([data-type="taskList"]) > li {
+  list-style: none;
+  position: relative;
+}
+
+.editor-content ul:not([data-type="taskList"]) > li::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 0.65em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.editor-content ol {
+  list-style-type: decimal;
+  padding-left: 24px;
+  margin-top: 0.25em;
+  margin-bottom: 0.5em;
+}
+
+.editor-content li {
+  margin-bottom: 0.15em;
+}
+
+.editor-content li p {
+  margin-bottom: 0.1em;
+}
+
+/* ─── Task list ────────────────────────────────────────────────────────────── */
+
+.editor-content ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.editor-content ul[data-type="taskList"] li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  margin-bottom: 0;
+}
+
+.editor-content ul[data-type="taskList"] li p {
+  margin-bottom: 0;
+}
+
+.editor-content ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  /* Optical alignment: nudge the checkbox down to sit on the text baseline */
+  translate: 0 0.15em;
+  line-height: 1;
+}
+
+/* Hide native checkbox — render a custom one via appearance:none */
+.editor-content ul[data-type="taskList"] li > label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  display: block;
+  flex-shrink: 0;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+  position: relative;
+}
+
+.editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:hover {
+  border-color: color-mix(in srgb, var(--foreground) 60%, transparent);
+}
+
+.editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--interactive-primary);
+  outline-offset: 1px;
+}
+
+.editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
+  background: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+  border-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+}
+
+/* Checkmark drawn with a pseudo-element */
+.editor-content ul[data-type="taskList"] li > label input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 5.5 L4.5 8 L8 3' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 10px no-repeat;
+}
+
+.editor-content ul[data-type="taskList"] li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-content ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-disabled);
+}
+
+/* Nested task lists */
+.editor-content ul[data-type="taskList"] ul[data-type="taskList"] {
+  margin-top: 0.25em;
+  padding-left: 1.5em;
+}
+
+/* ─── Blockquote ───────────────────────────────────────────────────────────── */
+
+.editor-content blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1em;
+  margin-left: 0;
+  margin-right: 0;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  color: var(--muted-foreground);
+}
+
+/* ─── Code ─────────────────────────────────────────────────────────────────── */
+
+.editor-content code {
+  background: var(--muted);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+}
+
+.editor-content pre {
+  background: var(--muted);
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  overflow-x: auto;
+}
+
+.editor-content pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ─── Tables ──────────────────────────────────────────────────────────────── */
+
+.editor-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+  overflow: hidden;
+}
+
+.editor-content th,
+.editor-content td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  min-width: 80px;
+  vertical-align: top;
+  position: relative;
+}
+
+.editor-content th {
+  background: var(--muted);
+  font-weight: 500;
+  text-align: left;
+}
+
+.editor-content td > p,
+.editor-content th > p {
+  margin: 0;
+}
+
+/* Selected cell highlight */
+.editor-content .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--interactive-primary) 10%, transparent);
+  pointer-events: none;
+}
+
+/* ─── Images ──────────────────────────────────────────────────────────────── */
+
+.editor-content .pikos-image-wrapper {
+  margin: 0.75em 0;
+  line-height: 0;
+}
+
+.editor-content .pikos-image-wrapper img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+.editor-content .pikos-image-selected img {
+  outline: 2px solid var(--interactive-primary);
+  outline-offset: 2px;
+}
+
+/* ─── Horizontal rule ──────────────────────────────────────────────────────── */
+
+.editor-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5em 0;
+}
+
+/* ─── Links ────────────────────────────────────────────────────────────────── */
+
+.editor-content .editor-link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: text;
+}
+
+.editor-content .editor-link:hover {
+  opacity: 0.8;
+}
+
+/* ─── Inline formatting ────────────────────────────────────────────────────── */
+
+.editor-content strong {
+  font-weight: 600;
+}
+
+.editor-content s {
+  opacity: 0.6;
+}
+
+/* ─── Placeholder ──────────────────────────────────────────────────────────── */
+
+.editor-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--text-disabled);
+  pointer-events: none;
+  height: 0;
+}
+
+/* ─── WebKit empty-block caret/marker workaround ──────────────────────────── */
+/* Tauri's macOS WKWebView fails to paint the caret (and the <ol> list marker)
+   when an empty paragraph's only inline content is <br class="ProseMirror-
+   trailingBreak">. Inject a zero-width space via ::before so the line box has
+   real in-flow content — WebKit then takes its normal paint path.
+   Why ::before, not ::after: <br> forces a line break, so ::after content
+   lands on a NEW line, doubling the block height and breaking up/down arrow
+   navigation. ::before sits before the <br>, on the same (only) line.
+   Why :not(:first-child) on the top-level rule: the placeholder uses ::before
+   on first-child empty paragraphs (state A) — we mustn't clobber it. State A
+   doesn't need this workaround anyway (placeholder content is in the line
+   box visually even though floated). The li > p selector doesn't need the
+   exclusion because no placeholder rule targets that case. */
+.editor-content p:not(:first-child):has(> br.ProseMirror-trailingBreak:only-child)::before,
+.editor-content li > p:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: "\200B";
+}
+
+/* ─── Find-in-page highlights ─────────────────────────────────────────────── */
+
+.find-match {
+  background: oklch(0.75 0.15 85 / 0.3);
+  border-radius: 2px;
+}
+
+.find-match-active {
+  background: oklch(0.75 0.15 85 / 0.55);
+  box-shadow: 0 0 0 1px oklch(0.75 0.15 85 / 0.7);
+}
+
+/* ─── Selection ────────────────────────────────────────────────────────────── */
+
+.editor-content ::selection {
+  background: color-mix(in srgb, var(--interactive-primary) 15%, transparent);
+}
+
+/* ─── Focus ring for the editor container ──────────────────────────────────── */
+
+.ProseMirror-focused {
+  outline: none;
+}
+
+/* ─── Bubble format toolbar ────────────────────────────────────────────────── */
+
+.bubble-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 6px -1px oklch(0 0 0 / 0.3),
+    0 2px 4px -1px oklch(0 0 0 / 0.2);
+  padding: 3px 4px;
+}
+
+.bubble-toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 3px;
+}
+
+.bubble-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.bubble-toolbar-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.bubble-toolbar-btn.is-active {
+  background: var(--surface-active);
+  color: var(--text-secondary);
+}
+
+.bubble-toolbar-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ─── Link popover ─────────────────────────────────────────────────────────── */
+
+.link-popover {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 6px -1px oklch(0 0 0 / 0.3),
+    0 2px 4px -1px oklch(0 0 0 / 0.2);
+  padding: 4px 6px;
+  animation: link-popover-in 120ms ease-out;
+}
+
+@keyframes link-popover-in {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.link-popover-url {
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.3;
+  padding: 4px 6px;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.link-popover-url:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-popover-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.link-popover-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+}
+
+.link-popover-btn:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.link-popover-btn-primary {
+  color: var(--primary);
+}
+
+.link-popover-btn-primary:hover {
+  color: var(--primary);
+}
+
+.link-popover-input {
+  flex: 1;
+  min-width: 200px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.3;
+  outline: none;
+  padding: 5px 8px;
+}
+
+.link-popover-input:focus {
+  border-color: var(--primary);
+}
+
+.link-popover-input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
+/* ─── Slash command menu ───────────────────────────────────────────────────── */
+
+/* Reset tippy defaults for our theme */
+.tippy-box[data-theme="slash-menu"] {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.tippy-box[data-theme="slash-menu"] > .tippy-content {
+  padding: 0;
+}
+
+.slash-menu {
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 6px -1px oklch(0 0 0 / 0.3),
+    0 2px 4px -1px oklch(0 0 0 / 0.2);
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  width: 260px;
+}
+
+.slash-menu-empty {
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 6px -1px oklch(0 0 0 / 0.3),
+    0 2px 4px -1px oklch(0 0 0 / 0.2);
+  color: var(--muted-foreground);
+  font-size: 13px;
+  padding: 12px 14px;
+  width: 260px;
+}
+
+.slash-menu-item {
+  align-items: center;
+  background-color: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--foreground);
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 6px 8px;
+  text-align: left;
+  transition: background-color var(--transition-fast);
+  width: 100%;
+}
+
+.slash-menu-item:hover,
+.slash-menu-item[data-selected="true"] {
+  background-color: var(--accent);
+}
+
+.slash-menu-item-icon {
+  align-items: center;
+  background: var(--muted);
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  display: flex;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.slash-menu-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.slash-menu-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.slash-menu-item-description {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.3;
+}

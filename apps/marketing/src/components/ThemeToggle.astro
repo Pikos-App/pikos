@@ -1,0 +1,40 @@
+<button
+  id="theme-toggle"
+  aria-label="Toggle dark mode"
+  class="cursor-pointer rounded-lg p-2 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+>
+  <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+  </svg>
+  <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="hidden">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+  </svg>
+</button>
+
+<script>
+  const toggle = document.getElementById("theme-toggle");
+  const iconMoon = document.getElementById("icon-moon");
+  const iconSun = document.getElementById("icon-sun");
+  if (toggle && iconMoon && iconSun) {
+    const html = document.documentElement;
+
+    const applyTheme = (dark: boolean) => {
+      html.classList.toggle("dark", dark);
+      iconMoon.classList.toggle("hidden", dark);
+      iconSun.classList.toggle("hidden", !dark);
+    };
+
+    toggle.addEventListener("click", () => {
+      const dark = !html.classList.contains("dark");
+      localStorage.setItem("theme", dark ? "dark" : "light");
+      applyTheme(dark);
+    });
+
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+      if (!localStorage.getItem("theme")) applyTheme(e.matches);
+    });
+
+    applyTheme(html.classList.contains("dark"));
+  }
+</script>

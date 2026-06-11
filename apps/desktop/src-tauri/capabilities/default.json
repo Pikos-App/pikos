@@ -1,0 +1,48 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "_comment": "fs scope is split: writes/remove are constrained to $APPDATA/** (DB, assets, logs); reads are allowed under $HOME/** so vault/CSV imports can pick files anywhere the user has data. Each permission carries its own narrow scope rather than a single broad fs:scope, so a future read permission can't accidentally widen write access. Do not collapse these back into a single $HOME/** scope.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "$APPLOG" }, { "path": "$APPLOG/**" }]
+    },
+    "store:allow-load",
+    "store:allow-set",
+    "store:allow-get",
+    "store:allow-save",
+    "store:allow-clear",
+    "dialog:default",
+    "fs:default",
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [{ "path": "$APPDATA/**" }]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "$APPDATA/**" }]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "$HOME/**" }]
+    },
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": [{ "path": "$HOME/**" }]
+    },
+    "core:window:allow-set-decorations",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "process:allow-restart",
+    "updater:default",
+    "notification:default",
+    "deep-link:default",
+    "log:default"
+  ]
+}

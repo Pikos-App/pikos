@@ -1,0 +1,72 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The more detail you provide, the faster it gets fixed.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe what went wrong.
+      placeholder: "e.g., The app crashed when I tried to drag a task to the calendar."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can this be reliably triggered?
+      placeholder: |
+        1. Open a note with a task
+        2. Drag it to the calendar panel
+        3. Drop it on a date
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: "e.g., The task should appear on that date in the calendar."
+    validations:
+      required: false
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Found in Settings → About
+      placeholder: "e.g., 0.4.2"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "e.g., macOS 14.4, Ubuntu 24.04"
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, screen recordings, error messages, or other context.
+    validations:
+      required: false

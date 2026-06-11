@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: 10.30.3
+
+jobs:
+  # ── Validation ─────────────────────────────────────────────────────────────
+  # verify + e2e + rust live in _validate.yml so release.yml can reuse them.
+  validate:
+    uses: ./.github/workflows/_validate.yml
+
+  # ── Build ──────────────────────────────────────────────────────────────────
+  # Smoke-build the frontend, check bundle size, and run perf tests (warn-only).
+  # This is NOT the release build — release.yml does the real Tauri matrix build.
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    # Perf tests need Playwright; run in the official image so browsers + system
+    # deps are pre-baked (no cold-download hang — see _validate.yml e2e). The
+    # image tag MUST track @playwright/test; the guard step fails loudly on drift.
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Assert Playwright matches the container image
+        run: |
+          PKG=$(pnpm --filter @pikos/desktop exec playwright --version | awk '{print $NF}')
+          if [ "$PKG" != "1.58.2" ]; then
+            echo "::error::@playwright/test is $PKG but the container is pinned to v1.58.2-noble. Update container.image to v$PKG-noble (and this assert) in ci.yml and _validate.yml."
+            exit 1
+          fi
+
+      - name: Build all packages
+        run: VITE_TEST_MODE=true pnpm turbo build
+
+      - name: Verify dist output exists
+        run: test -d apps/desktop/dist && echo "✓ dist built"
+
+      - name: Bundle size check
+        run: pnpm --filter @pikos/desktop check:bundle
+
+      - name: Perf tests (prod build, warn only)
+        env:
+          PERF_WARN_ONLY: "true"
+        run: pnpm --filter @pikos/desktop exec playwright test --config playwright.perf.config.ts

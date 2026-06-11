@@ -1,0 +1,232 @@
+import { useDndMonitor, useDroppable } from "@dnd-kit/core";
+import { SortableContext } from "@dnd-kit/sortable";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { ArrowUpDown, CalendarDays, FolderPlus, Hash, Inbox, Plus, Text } from "lucide-react";
+import { useRef, useState } from "react";
+import type React from "react";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IconToolbar } from "@/shared/components/IconToolbar";
+import { InsertionLine } from "@/shared/components/InsertionLine";
+import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
+import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useUI } from "@/shared/context/UIContext";
+import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
+
+import { useFolderList } from "../hooks/useFolderList";
+import type { FolderSortOrder } from "../hooks/useFolderList";
+import { FolderItem } from "./FolderItem";
+import { SmartViewEntry } from "./SmartViewEntry";
+
+export function FolderList() {
+  const scrollElementRef = useRef<HTMLDivElement | null>(null);
+  const {
+    activeViewId,
+    folders,
+    handleColorChange,
+    handleCreateFolder,
+    handleDeleteRequest,
+    handleRenameCommit,
+    inboxCount,
+    pageCountByFolder,
+    renamingId,
+    setActiveViewId,
+    setRenamingId,
+    setSortOrder,
+    sortOrder,
+    todayCount,
+  } = useFolderList();
+  const { openSortMenu, setOpenSortMenu } = useUI();
+  const { density } = useListSettings();
+  const folderRowHeight = density === "compact" ? 28 : density === "spacious" ? 38 : 32;
+
+  const SORT_OPTIONS: { value: FolderSortOrder; label: string; icon: React.ReactNode }[] = [
+    { icon: <ArrowUpDown size={13} />, label: "Manual", value: "manual" },
+    { icon: <Text size={13} />, label: "Alphabetical", value: "alphabetical" },
+    { icon: <Hash size={13} />, label: "Page count", value: "page-count" },
+  ];
+
+  const folderIds = folders.map((f) => f.id);
+  const insertBeforeId = useInsertionLine(folderIds);
+
+  const { setNodeRef: inboxDropRef } = useDroppable({
+    data: { folderId: null, type: "folder" },
+    id: "inbox-drop",
+  });
+  const { setNodeRef: todayDropRef } = useDroppable({
+    data: { type: "view-today" },
+    id: "today-drop",
+  });
+  const [isPageOverInbox, setIsPageOverInbox] = useState(false);
+  const [isPageOverToday, setIsPageOverToday] = useState(false);
+  useDndMonitor({
+    onDragCancel() {
+      setIsPageOverInbox(false);
+      setIsPageOverToday(false);
+    },
+    onDragEnd() {
+      setIsPageOverInbox(false);
+      setIsPageOverToday(false);
+    },
+    onDragOver({ active, over }) {
+      const isPage = active.data.current?.["type"] === "page";
+      setIsPageOverInbox(isPage && over?.id === "inbox-drop");
+      setIsPageOverToday(isPage && over?.id === "today-drop");
+    },
+  });
+
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual + React Compiler known issue
+  const virtualizer = useVirtualizer({
+    count: folders.length,
+    estimateSize: () => folderRowHeight,
+    getItemKey: (index) => folders[index]?.id ?? String(index),
+    getScrollElement: () => scrollElementRef.current,
+    overscan: 10,
+  });
+
+  return (
+    <div aria-label="Views and folders" className="flex h-full flex-col" role="group">
+      {/* Sticky smart views + folders header */}
+      <div className="flex shrink-0 flex-col gap-0.5 px-1 pt-2">
+        <SmartViewEntry
+          badge={todayCount}
+          dragRef={todayDropRef}
+          icon={<CalendarDays size={16} />}
+          id="nav-today"
+          isActive={activeViewId === "today"}
+          isDragOver={isPageOverToday}
+          label="Today"
+          onSelect={() => setActiveViewId("today")}
+        />
+        <SmartViewEntry
+          badge={inboxCount}
+          dragRef={inboxDropRef}
+          icon={<Inbox size={16} />}
+          id="nav-inbox"
+          isActive={activeViewId === "inbox"}
+          isDragOver={isPageOverInbox}
+          label="Inbox"
+          onSelect={() => setActiveViewId("inbox")}
+        />
+
+        <div className="mt-4 mb-1 flex items-center justify-between pr-1 pl-2">
+          <span className="type-ui-sm tracking-wide text-subtle uppercase">Folders</span>
+          <IconToolbar
+            aria-label="Folder actions"
+            className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+          >
+            <DropdownMenu
+              onOpenChange={(open) => setOpenSortMenu(open ? "folder-sort" : null)}
+              open={openSortMenu === "folder-sort"}
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      aria-label="Sort folders"
+                      className="rounded p-1 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary"
+                      tabIndex={-1}
+                    >
+                      <ArrowUpDown size={13} />
+                    </button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="right">Sort folders</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end" className="w-40">
+                {SORT_OPTIONS.map((opt) => (
+                  <DropdownMenuItem
+                    className="gap-2"
+                    data-active={sortOrder === opt.value}
+                    key={opt.value}
+                    onSelect={() => setSortOrder(opt.value)}
+                  >
+                    {opt.icon}
+                    {opt.label}
+                    {sortOrder === opt.value && <span className="ml-auto text-primary">✓</span>}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <TooltipIconButton
+              icon={<Plus size={15} />}
+              label="New Folder"
+              onClick={() => void handleCreateFolder()}
+              side="right"
+              tabIndex={-1}
+            />
+          </IconToolbar>
+        </div>
+      </div>
+
+      {/* Scrollable folder list */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2" ref={scrollElementRef}>
+        <SortableContext items={folderIds} strategy={() => null}>
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              position: "relative",
+              width: "100%",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const folder = folders[virtualItem.index];
+              if (!folder) return null;
+              return (
+                <div
+                  data-index={virtualItem.index}
+                  key={virtualItem.key}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    left: 0,
+                    position: "absolute",
+                    top: 0,
+                    transform: `translateY(${virtualItem.start}px)`,
+                    width: "100%",
+                  }}
+                >
+                  <div className="relative">
+                    {insertBeforeId === folder.id && (
+                      <div className="absolute top-0 right-0 left-0 z-10 -translate-y-1/2">
+                        <InsertionLine />
+                      </div>
+                    )}
+                    <FolderItem
+                      folder={folder}
+                      isActive={activeViewId === folder.id}
+                      isRenaming={renamingId === folder.id}
+                      onColorChange={(color) => handleColorChange(folder.id, color)}
+                      onDelete={() => handleDeleteRequest(folder)}
+                      onRenameCancel={() => setRenamingId(null)}
+                      onRenameCommit={(name) => handleRenameCommit(folder.id, name)}
+                      onRenameStart={() => setRenamingId(folder.id)}
+                      onSelect={() => setActiveViewId(folder.id)}
+                      pageCount={pageCountByFolder[folder.id] ?? 0}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {insertBeforeId === null && <InsertionLine />}
+        </SortableContext>
+
+        {folders.length === 0 && (
+          <button
+            className="type-body-sm mx-2 mt-1 flex w-[calc(100%-16px)] items-center gap-2 rounded-md px-2 py-2 text-left text-subtle hover:bg-surface-hover hover:text-foreground"
+            onClick={() => void handleCreateFolder()}
+          >
+            <FolderPlus size={14} strokeWidth={1.5} />
+            Create a folder
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

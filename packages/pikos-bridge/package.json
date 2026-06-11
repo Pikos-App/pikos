@@ -1,0 +1,19 @@
+{
+  "name": "@pikos/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "license": "BUSL-1.1",
+  "type": "module",
+  "description": "Pure-logic bridge (parser + recurrence) exposed to the Rust CLI as a one-shot node subprocess.",
+  "scripts": {
+    "build": "esbuild src/bridge.ts --bundle --platform=node --format=esm --outfile=dist/bridge.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pikos/core": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "~5.9.3"
+  }
+}

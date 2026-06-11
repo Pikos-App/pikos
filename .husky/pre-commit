@@ -1,0 +1,2 @@
+pnpm verify
+pnpm audit:source

@@ -1,0 +1,124 @@
+---
+import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Base title="Release Notes - Pikos" description="What's new in Pikos. A running log of features, fixes, and improvements.">
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <!-- Back to home -->
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Release Notes</h1>
+    <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">What ships in each release.</p>
+
+    <div class="mt-12 space-y-16">
+
+      <!-- ── 0.3.0 ─────────────────────────────────────────────────────── -->
+      <article>
+        <div class="flex items-center gap-3">
+          <h2 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-50">0.3.0</h2>
+          <span class="rounded-full bg-warning-400/15 px-2.5 py-0.5 text-xs font-medium text-warning-600 dark:bg-warning-500/20 dark:text-warning-400">Desktop Preview</span>
+        </div>
+        <time class="mt-1 block text-sm text-neutral-400 dark:text-neutral-500" datetime="2026-06-10">June 10, 2026</time>
+
+        <div class="mt-6 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+
+          <p>
+            The first public release of Pikos for macOS. Notes, tasks, and calendar in one app, stored on your device. iCloud sync between Macs and an iPhone app are coming. Until then, Pikos runs on a single device and your data never leaves it.
+          </p>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Editor</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li>Rich text with bold, italic, underline, strikethrough, and inline code</li>
+            <li>Headings, bullet and ordered lists, task checklists, code blocks, blockquotes, tables, images, and horizontal rules</li>
+            <li>Slash menu: type <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">/</code> to insert any block with fuzzy search</li>
+            <li>Floating format toolbar on selection</li>
+            <li>Add links, auto-link on paste, click any link to edit it</li>
+            <li>Find in page with match highlighting and navigation</li>
+            <li>Paste Markdown and it converts to rich text</li>
+            <li>Tab to indent nested lists; smart quotes and dashes</li>
+            <li>Autosave as you type</li>
+          </ul>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Pages &amp; Organization</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li>Quick Add reads a single line of plain English: priority, due date, recurrence, tags, and folder all parsed from how you'd write it</li>
+            <li>Optional one-line subtitle on every page, shown in the page list and on calendar blocks</li>
+            <li>Status (Open / Done) and a four-level priority system (Urgent, High, Medium, Low)</li>
+            <li>Tags with inline creation, autocomplete, and search</li>
+            <li>Folders with custom colors</li>
+            <li>Smart views: Today (scheduled or overdue) and Inbox (unfoldered pages), with badge counts in the sidebar</li>
+            <li>Sort by manual order, date, title, or priority, remembered per view</li>
+            <li>Drag and drop to reorder within a view or move between folders</li>
+            <li>Soft delete with undo; every view has its own Completed section</li>
+          </ul>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Calendar &amp; Scheduling</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li>Week view with all-day band, timed grid, and a live "now" indicator</li>
+            <li>Click and drag to create a block, drag to reschedule, drag edges to resize</li>
+            <li>Inline date and time picker that keeps duration when you move things</li>
+            <li>Recurring schedules (daily, weekly, monthly, yearly, or custom) set from the page popover or Quick Add</li>
+            <li>Future occurrences appear on the calendar; reschedule one without touching the rest</li>
+            <li>Completing an overdue recurring page asks whether to skip the missed days or step through them one at a time</li>
+            <li>Reminders with configurable lead time, fired as native desktop notifications</li>
+            <li>Keyboard navigation across weeks; <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">T</code> jumps to today</li>
+          </ul>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Search</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li>Search palette over titles and content. Title matches rank above content matches</li>
+            <li>Result previews show the matching text with your query highlighted</li>
+            <li>Results show priority, date, and tags inline</li>
+          </ul>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Layout &amp; Navigation</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li>Three-panel layout: sidebar, page list, and editor or calendar. Each resizable, widths remembered</li>
+            <li>Toggle between editor and calendar without leaving the active page</li>
+            <li>Full keyboard navigation, with shortcuts for every primary action</li>
+            <li>Right-click menus on pages and folders</li>
+            <li>Open Pikos with a <code class="rounded bg-neutral-100 px-1.5 py-0.5 text-sm dark:bg-neutral-800">pikos://</code> link to jump to a page, Today, Inbox, or open Quick Add pre-filled</li>
+            <li>First launch starts with a working tutorial, not an empty screen</li>
+          </ul>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Import &amp; Export</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li>Import an Obsidian vault. Markdown files with YAML frontmatter become pages, and your folder structure carries over</li>
+            <li>CSV import with a step to map columns to fields</li>
+            <li>Export as a SQLite backup, a Markdown folder, or CSV: open formats you can read without Pikos</li>
+          </ul>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Your device. Your data.</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li>Everything stored on your device. Nothing leaves it.</li>
+            <li>No account, no sign-up, no tracking.</li>
+            <li>The only outbound request is the update check on launch. You can turn it off.</li>
+          </ul>
+
+          <h3 class="pt-2 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Appearance &amp; Platform</h3>
+          <ul class="list-disc space-y-1.5 pl-5">
+            <li>Light, dark, and (on macOS) system theme modes</li>
+            <li>Native macOS app menu and window chrome; remembers window size and position between launches</li>
+            <li>Full keyboard-shortcut reference in Settings</li>
+            <li>Built-in updater with a manual "Check for Updates" in the app menu</li>
+          </ul>
+
+        </div>
+      </article>
+
+    </div>
+
+  </main>
+
+  <Footer current="/release-notes" />
+</Base>
+
+<style>
+
+  </style>

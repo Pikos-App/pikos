@@ -1,0 +1,47 @@
+---
+import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Base title="Page not found - Pikos" description="The page you're looking for doesn't exist.">
+
+  <main class="mx-auto flex max-w-6xl flex-col items-center justify-center px-8 text-center" id="not-found">
+
+    <!-- Empty page illustration -->
+    <div class="mb-6 select-none" aria-hidden="true">
+      <svg width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g transform="translate(30, 0)">
+          <rect x="0" y="0" width="140" height="160" rx="8"
+            class="fill-white stroke-neutral-200 dark:fill-neutral-900 dark:stroke-neutral-700" stroke-width="2" />
+          <path d="M112 0 L140 0 L140 28 Z" class="fill-neutral-100 dark:fill-neutral-800" />
+          <path d="M112 0 L112 28 L140 28" class="stroke-neutral-200 dark:stroke-neutral-700" stroke-width="2" fill="none" />
+          <rect x="18" y="22" width="70" height="8" rx="4" class="fill-neutral-200 dark:fill-neutral-700" />
+          <rect x="18" y="50" width="12" height="12" rx="3" class="fill-transparent stroke-neutral-200 dark:stroke-neutral-700" stroke-width="1.5" />
+          <rect x="38" y="52" width="72" height="6" rx="3" class="fill-neutral-100 dark:fill-neutral-800" />
+          <rect x="18" y="74" width="12" height="12" rx="3" class="fill-transparent stroke-neutral-200 dark:stroke-neutral-700" stroke-width="1.5" />
+          <rect x="38" y="76" width="56" height="6" rx="3" class="fill-neutral-100 dark:fill-neutral-800" />
+          <rect x="18" y="98" width="12" height="12" rx="3" class="fill-transparent stroke-neutral-200 dark:stroke-neutral-700" stroke-width="1.5" />
+          <rect x="38" y="100" width="64" height="6" rx="3" class="fill-neutral-100 dark:fill-neutral-800" />
+          <line x1="50" y1="132" x2="90" y2="132" class="stroke-neutral-200 dark:stroke-neutral-700" stroke-width="2" stroke-linecap="round" />
+        </g>
+      </svg>
+    </div>
+
+    <h1 class="text-2xl font-semibold text-neutral-900 dark:text-neutral-100">Page not found</h1>
+
+    <p class="mt-2 max-w-sm text-base text-neutral-500 dark:text-neutral-400">
+      This page doesn't exist. It might have been moved or deleted.
+      <a href="/" class="text-primary-500 hover:underline">Back to home</a>.
+    </p>
+
+  </main>
+
+  <Footer />
+
+</Base>
+
+<style>
+  #not-found {
+    min-height: calc(100dvh - 180px);
+  }
+</style>

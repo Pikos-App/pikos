@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "useDefineForClassFields": true,
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@pikos/core": ["../../packages/core/src/index.ts"],
+      "@pikos/core/*": ["../../packages/core/src/*"]
+    }
+  },
+  "include": ["src"]
+}

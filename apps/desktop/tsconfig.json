@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@pikos/core": ["../../packages/core/src/index.ts"],
+      "@pikos/core/*": ["../../packages/core/src/*"]
+    }
+  },
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.e2e.json" }
+  ]
+}

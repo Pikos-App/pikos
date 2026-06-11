@@ -1,0 +1,27 @@
+{
+  "name": "@pikos/core",
+  "version": "0.1.0",
+  "license": "BUSL-1.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.0",
+    "jsdom": "^28.1.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "chrono-node": "^2.9.0",
+    "date-fns": "^4.1.0",
+    "rrule": "^2.8.1"
+  }
+}

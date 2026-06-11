@@ -1,0 +1,31 @@
+---
+interface Props {
+  /** Current page path — used to omit self-links */
+  current?: string;
+  /** Override default class on footer element */
+  class?: string;
+}
+const { current = "/", class: className = "mt-24 mb-12" } = Astro.props;
+
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/download", label: "Download" },
+  { href: "/backer", label: "Back Pikos" },
+  { href: "/import", label: "Import" },
+  { href: "/blog", label: "Blog" },
+  { href: "/release-notes", label: "Release Notes" },
+  { href: "https://github.com/Pikos-App/pikos", label: "Source" },
+  { href: "/feedback", label: "Feedback" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+];
+---
+
+<footer class={className}>
+  <div class="mx-auto flex max-w-xl flex-wrap items-center justify-center gap-x-6 gap-y-2 px-6 text-sm text-neutral-400 dark:text-neutral-500">
+    {links.filter((l) => l.href !== current).map((l) => (
+      <a href={l.href} class="transition-colors hover:text-primary-500 dark:hover:text-primary-400">{l.label}</a>
+    ))}
+    <span>Pikos by <a href="https://alexking.dev" class="text-primary-500 hover:underline">Alex King</a></span>
+  </div>
+</footer>

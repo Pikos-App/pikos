@@ -1,0 +1,228 @@
+name: Validate
+
+# Reusable validation gate shared by CI (on PR/main push) and Release (on tag).
+# Three parallel jobs: verify (typecheck/lint/unit), e2e (Playwright tier1+tier2),
+# rust (fmt/check/clippy/test). Warn-only audit steps stay here so release runs
+# emit the same signals CI does.
+
+on:
+  workflow_call:
+
+env:
+  PNPM_VERSION: 10.30.3
+  NODE_VERSION: 24
+
+jobs:
+  # Static checks (typecheck + lint + prettier + depcruise) + security audits.
+  # Unit tests are NOT run here — they run once in the parallel `coverage` job
+  # (same desktop+core suite, with thresholds). Splitting tests out lets the two
+  # halves run concurrently instead of stacking ~2.7min + ~2min in one job.
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify (typecheck + lint + prettier + depcruise)
+        env:
+          SKIP_UNIT_TESTS: "1"
+        run: pnpm verify
+
+      - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
+        run: pnpm audit:source
+
+      # Dep vulnerability gate — non-blocking for one cycle, then promote.
+      - name: pnpm audit (high)
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
+
+  # The single unit-test pass: desktop + core with per-directory coverage
+  # thresholds. Runs in parallel with `verify`.
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Unit tests + coverage (desktop + core, per-directory thresholds)
+        run: pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
+
+      - name: Upload coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage
+          path: |
+            apps/desktop/coverage/
+            packages/core/coverage/
+          retention-days: 7
+
+  e2e:
+    name: E2E Tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    # Run in the official Playwright image: browsers + system deps are pre-baked,
+    # so there is no `playwright install` download to stall. (A cold download hung
+    # for 30min+ frozen at "100%" once an unrelated lockfile bump busted the
+    # browser cache — the download completed but extraction/post-install wedged.)
+    # The image tag MUST track @playwright/test — bump both together; the guard
+    # step below fails loudly if they drift.
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    # Shard the 150+ tests across parallel runners. fail-fast: false so one red
+    # shard doesn't cancel the others — a single run surfaces failures from every
+    # shard. Tune the shard count by editing this list (the denominator below is
+    # derived from it via strategy.job-total).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Assert Playwright matches the container image
+        run: |
+          PKG=$(pnpm --filter @pikos/desktop exec playwright --version | awk '{print $NF}')
+          if [ "$PKG" != "1.58.2" ]; then
+            echo "::error::@playwright/test is $PKG but the container is pinned to v1.58.2-noble. Update container.image to v$PKG-noble (and this assert) in ci.yml and _validate.yml."
+            exit 1
+          fi
+
+      # --max-failures=1 stops this shard at its first failure (after the config's
+      # retries) instead of grinding through the rest — sibling shards still run,
+      # so we lose no cross-shard signal but skip the wasted minutes on a red shard.
+      - name: E2E tests (Playwright)
+        run: pnpm --filter @pikos/desktop exec playwright test --project=tier1 --project=tier2 --shard=${{ matrix.shard }}/${{ strategy.job-total }} --max-failures=1
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: apps/desktop/blob-report/
+          retention-days: 7
+
+  # Merge the per-shard blob reports into a single HTML report. Runs even when a
+  # shard fails (so the report covers the failures) but never masks them — the
+  # e2e job's own conclusion is what gates the run.
+  e2e-report:
+    name: E2E Report
+    if: ${{ !cancelled() }}
+    needs: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v6
+        with:
+          path: apps/desktop/all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge into HTML report
+        run: pnpm --filter @pikos/desktop exec playwright merge-reports --reporter html ./all-blob-reports
+
+      - name: Upload HTML report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report
+          path: apps/desktop/playwright-report/
+          retention-days: 7
+
+  rust:
+    name: Rust Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+
+      - name: Cargo fmt --check
+        run: cargo fmt --check
+
+      - name: Cargo check (zero warnings)
+        env:
+          RUSTFLAGS: "-D warnings"
+        run: cargo check
+
+      - name: Cargo clippy (zero warnings)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Cargo test
+        run: cargo test --all --quiet
+
+      # cargo-audit gate — non-blocking for one cycle, then promote to blocking.
+      # Cached binary so we don't reinstall every run.
+      - name: Cache cargo-audit
+        id: cache-cargo-audit
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-${{ runner.os }}-v1
+
+      - name: Install cargo-audit
+        if: steps.cache-cargo-audit.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --locked
+
+      - name: Cargo audit
+        continue-on-error: true
+        run: cargo audit

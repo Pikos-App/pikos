@@ -1,0 +1,90 @@
+---
+import Base from "../../layouts/Base.astro";
+import Footer from "../../components/Footer.astro";
+
+const title = "Import to Pikos";
+const description = "Move your notes and tasks into Pikos from Obsidian, TickTick, Todoist, or any Markdown vault or CSV export.";
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Bring your stuff with you</h1>
+    <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+      Switching apps is annoying. Pikos imports from the formats most note and task apps already export. Here's what works today.
+    </p>
+
+    <!-- Markdown -->
+    <section class="mt-12">
+      <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Markdown vaults</h2>
+      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        Point Pikos at a folder of <code class="rounded bg-neutral-100 px-1 py-0.5 text-xs dark:bg-neutral-800">.md</code> files. Folder structure is preserved. YAML frontmatter at the top of each file (tags, dates, status) is read and applied. Wikilinks and image attachments come across.
+      </p>
+      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        Tested with Obsidian vaults. Should work with any tool that writes plain Markdown.
+      </p>
+      <p class="mt-3 text-sm">
+        <a href="/import/obsidian" class="font-medium text-primary-500 hover:underline dark:text-primary-400">Step-by-step walkthrough &rarr;</a>
+      </p>
+    </section>
+
+    <!-- TickTick -->
+    <section class="mt-10">
+      <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">TickTick CSV</h2>
+      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        Use TickTick's "Backup data" feature to download a CSV. Pikos auto-detects the format and brings across lists, task titles, descriptions, statuses, priorities, tags, scheduled times, reminders, and recurring rules.
+      </p>
+      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        All-day events stay all-day. Multi-day events keep their span. Subtasks reconnect to their parents.
+      </p>
+      <p class="mt-3 text-sm">
+        <a href="/import/ticktick" class="font-medium text-primary-500 hover:underline dark:text-primary-400">Step-by-step walkthrough &rarr;</a>
+      </p>
+    </section>
+
+    <!-- Todoist -->
+    <section class="mt-10">
+      <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Todoist CSV</h2>
+      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        Export each Todoist project as CSV from the web app. Task titles, descriptions, priorities, tags, and scheduled dates come across.
+      </p>
+      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        Recurring rules don't yet transfer. Todoist stores them as natural language ("every monday") rather than as a structured rule, so each task imports with its next due date only. Recurrence support for Todoist is on the roadmap.
+      </p>
+      <p class="mt-3 text-sm">
+        <a href="/import/todoist" class="font-medium text-primary-500 hover:underline dark:text-primary-400">Step-by-step walkthrough &rarr;</a>
+      </p>
+    </section>
+
+    <!-- Generic CSV -->
+    <section class="mt-10">
+      <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">Any other CSV</h2>
+      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        If your app exports to CSV, Pikos will read it. The first time it sees an unknown format, you map each column to a Pikos field (title, body, date, status, etc.) in a side-by-side preview. The mapping is just for that import. Change a column, change the result.
+      </p>
+    </section>
+
+    <!-- CTA -->
+    <div class="mt-16 rounded-lg border border-neutral-200 bg-neutral-50 px-6 py-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <h2 class="text-base font-semibold text-neutral-900 dark:text-neutral-50">Coming from somewhere else?</h2>
+      <p class="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        Pikos is built by one person. I can't realistically test every export format, but I want imports to work well for the tools people actually use.
+      </p>
+      <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        If you're moving from a tool not listed here, email a sample export to <span class="font-medium text-primary-500 dark:text-primary-400">hello@pikos.app</span> and I'll add first-class support.
+      </p>
+      <p class="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+        <strong class="font-medium text-neutral-900 dark:text-neutral-50">Anonymize first.</strong> Replace task titles and notes with placeholder text. I only need the column structure and a few representative rows, not your actual data. Dates, priorities, and tags can stay as-is.
+      </p>
+    </div>
+
+  </main>
+
+  <Footer current="/import" />
+</Base>

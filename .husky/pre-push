@@ -1,0 +1,15 @@
+# Rust lint + tests — too slow for pre-commit (~15s), fine for pre-push
+if command -v cargo &>/dev/null && [ -f apps/desktop/src-tauri/Cargo.toml ]; then
+  echo "Running cargo clippy..."
+  (cd apps/desktop/src-tauri && cargo clippy --quiet -- -D warnings) || exit 1
+  printf '\033[0;32m✓\033[0m Rust clippy\n'
+
+  echo "Running cargo test..."
+  (cd apps/desktop/src-tauri && cargo test --quiet) || exit 1
+  printf '\033[0;32m✓\033[0m Rust tests\n'
+fi
+
+# Tier 1 E2E smoke — skip when SKIP_E2E is set. Tier 2 + perf run in CI.
+if [ -z "$SKIP_E2E" ]; then
+  pnpm --filter @pikos/desktop test:e2e --project tier1 -x
+fi

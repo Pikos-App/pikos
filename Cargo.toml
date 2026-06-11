@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+# Excluded because Tauri's build system links against system libraries (GTK on
+# Linux, WebKit headers) that a plain `cargo check` on the workspace does not
+# provision; keep it standalone so workspace checks stay toolchain-agnostic.
+exclude = ["apps/desktop/src-tauri"]

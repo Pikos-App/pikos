@@ -1,0 +1,407 @@
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import type { Folder, PagePriority, PageSummary } from "@pikos/core";
+import { isAllDayIso, isDone, isOpen, parseLocalISO } from "@pikos/core";
+import type React from "react";
+
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { cn } from "@/lib/utils";
+import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useUI } from "@/shared/context/UIContext";
+import { useInlineRename } from "@/shared/hooks/useInlineRename";
+import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
+import { formatDateRange } from "@/shared/utils/formatDateRange";
+
+/** Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p. */
+function formatTime(date: Date): string {
+  const hours = date.getHours() % 12 || 12;
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  const period = date.getHours() >= 12 ? "p" : "a";
+  return `${hours}:${minutes}${period}`;
+}
+
+function isDueSoon(iso: string): boolean {
+  const date = parseLocalISO(iso);
+  const now = new Date();
+  const threeDaysOut = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 23, 59, 59);
+  return date > now && date <= threeDaysOut;
+}
+
+function formatDate(iso: string): { label: string; isPast: boolean; tooltip: string } {
+  const isAllDay = isAllDayIso(iso);
+  const date = parseLocalISO(iso);
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrowMidnight = new Date(todayMidnight.getTime() + 86400000);
+  const isPast = isAllDay ? date < todayMidnight : date < now;
+  const isToday = date >= todayMidnight && date < tomorrowMidnight;
+
+  const tooltip = isAllDay
+    ? date.toLocaleDateString("en-US", {
+        day: "numeric",
+        month: "long",
+        weekday: "long",
+        year: "numeric",
+      })
+    : date.toLocaleString("en-US", {
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        month: "long",
+        weekday: "long",
+        year: "numeric",
+      });
+
+  // Timed events today always show the time (past ones in red, upcoming as muted).
+  // This keeps them visually distinct from any all-day event on the same date.
+  if (!isAllDay && isToday) {
+    return { isPast, label: formatTime(date), tooltip };
+  }
+
+  const dateLabel = date.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+  });
+
+  // Timed non-today: show date only; time is available on hover via tooltip
+  const label = dateLabel;
+  return { isPast, label, tooltip };
+}
+
+function formatRelativeTime(iso: string): { label: string; isPast: boolean; tooltip: string } {
+  const isAllDay = isAllDayIso(iso);
+  const tooltipDate = parseLocalISO(iso);
+  const tooltip = isAllDay
+    ? tooltipDate.toLocaleDateString("en-US", {
+        day: "numeric",
+        month: "long",
+        weekday: "long",
+        year: "numeric",
+      })
+    : tooltipDate.toLocaleString("en-US", {
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        month: "long",
+        weekday: "long",
+        year: "numeric",
+      });
+
+  if (isAllDay) {
+    const date = parseLocalISO(iso);
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((date.getTime() - todayMidnight.getTime()) / 86400000);
+    if (diffDays === 0) return { isPast: false, label: "today", tooltip };
+    if (diffDays < 0) return { isPast: true, label: `${Math.abs(diffDays)}d`, tooltip };
+    return { isPast: false, label: `${diffDays}d`, tooltip };
+  }
+
+  const date = parseLocalISO(iso);
+  const diffMs = date.getTime() - Date.now();
+  const isPast = diffMs < 0;
+  const abs = Math.abs(diffMs);
+  const absMins = Math.round(abs / 60000);
+
+  // Within the hour → relative only (already time-informative)
+  if (absMins < 60)
+    return { isPast: isPast && absMins > 0, label: absMins === 0 ? "now" : `${absMins}m`, tooltip };
+  const absHours = Math.round(abs / 3600000);
+  // Within the day → relative only
+  if (absHours < 24) return { isPast, label: `${absHours}hr`, tooltip };
+  const days = Math.round(abs / 86400000);
+  return { isPast, label: `${days}d`, tooltip };
+}
+
+interface PageListItemProps {
+  page: PageSummary;
+  isActive: boolean;
+  isSelected: boolean;
+  isRenaming: boolean;
+  folders: Folder[];
+  onClearDate?: () => void;
+  onSelect: (e: React.MouseEvent) => void;
+  onRenameStart: () => void;
+  onRenameChange?: (title: string) => void;
+  onRenameCommit: (title: string) => void;
+  onRenameCancel: () => void;
+  onDelete: () => void;
+  onMoveToFolder: (folderId: string | null) => void;
+  onToggleStatus: () => void;
+  onPriorityChange: (priority: PagePriority) => void;
+  showRelative?: boolean;
+  onToggleDateFormat?: () => void;
+}
+
+export function PageListItem({
+  folders,
+  isActive,
+  isRenaming,
+  isSelected,
+  onClearDate,
+  onDelete,
+  onMoveToFolder,
+  onPriorityChange: _onPriorityChange,
+  onRenameCancel,
+  onRenameChange: _onRenameChange,
+  onRenameCommit,
+  onRenameStart,
+  onSelect,
+  onToggleDateFormat,
+  onToggleStatus,
+  page,
+  showRelative = false,
+}: PageListItemProps) {
+  const { attributes, isDragging, listeners, setNodeRef, transform } = useSortable({
+    data: { type: "page" },
+    disabled: isRenaming,
+    id: page.id,
+    transition: null,
+  });
+  const { contextMenuContentProps, inputRef, prepareRenameFromMenu } = useInlineRename(isRenaming);
+  const { openPage } = useUI();
+  const { density } = useListSettings();
+  const showSubtitle = density !== "compact" && Boolean(page.subtitle);
+
+  useMinuteTick();
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- @dnd-kit/sortable injects role="button" + tabIndex via {...attributes}; ESLint can't see through the spread. Proper listbox/option pattern deferred to the post-launch a11y backlog. */}
+        <div
+          aria-current={isActive ? "true" : undefined}
+          aria-label={page.title || "Untitled"}
+          data-active={isActive ? "true" : undefined}
+          data-page-id={page.id}
+          data-page-list-item
+          ref={setNodeRef}
+          style={{
+            opacity: isDragging ? 0 : 1,
+            transform: CSS.Transform.toString(transform),
+          }}
+          {...attributes}
+          {...listeners}
+          className={cn(
+            "flex cursor-pointer items-start border-b border-l-2 border-border px-3 transition-[background-color] duration-[120ms] ease-out outline-none select-none",
+            density === "compact"
+              ? "gap-2 py-2.5"
+              : density === "spacious"
+                ? "gap-3 py-4"
+                : "gap-3 py-3",
+            isActive
+              ? "border-l-interactive-primary bg-surface-selected text-accent-foreground"
+              : isSelected
+                ? "border-l-transparent bg-surface-selected/50 text-accent-foreground"
+                : "border-l-transparent hover:bg-surface-hover"
+          )}
+          data-page-item
+          data-selected={isSelected ? "true" : undefined}
+          onClick={isRenaming ? undefined : onSelect}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            onRenameStart();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !isRenaming) {
+              e.preventDefault();
+              openPage(page.id);
+              // Defer focus to let the editor mount/update
+              requestAnimationFrame(() => {
+                const editor = document.querySelector<HTMLElement>(".editor-content");
+                editor?.focus();
+              });
+            }
+          }}
+          // Strip dnd-kit's injected role="button". The row contains nested
+          // interactive children (checkbox, date-toggle, context menu); leaving
+          // role="button" trips axe's nested-interactive at runtime. The row
+          // is still keyboard-reachable via tabIndex (also from {...attributes})
+          // and labeled via aria-label; the parent's onKeyDown handles
+          // Enter/Space. Proper listbox/option modeling lands with the post-launch a11y refactor.
+          role={undefined}
+          tabIndex={isActive ? 0 : -1}
+        >
+          {/* Checkbox — border color encodes priority when not done */}
+          <TaskCheckbox
+            borderColor={
+              isOpen(page)
+                ? page.priority === 1
+                  ? "var(--color-status-overdue)"
+                  : page.priority === 2
+                    ? "var(--color-status-due-soon)"
+                    : undefined
+                : undefined
+            }
+            checked={isDone(page)}
+            className="mt-px"
+            onChange={() => onToggleStatus()}
+          />
+
+          {/* Content */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <span
+                  className={cn(
+                    "type-body block leading-none font-medium outline-none",
+                    isRenaming
+                      ? "cursor-text overflow-hidden whitespace-nowrap caret-foreground"
+                      : "truncate",
+                    isDone(page) && !isRenaming && "text-muted-foreground"
+                  )}
+                  contentEditable={isRenaming}
+                  key={isRenaming ? "editing" : "display"}
+                  onBlur={
+                    isRenaming
+                      ? (e) => {
+                          const trimmed = e.currentTarget.textContent?.trim() ?? "";
+                          if (trimmed) onRenameCommit(trimmed);
+                          else onRenameCancel();
+                        }
+                      : undefined
+                  }
+                  onClick={isRenaming ? (e) => e.stopPropagation() : undefined}
+                  onKeyDown={
+                    isRenaming
+                      ? (e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            onRenameCancel();
+                          }
+                        }
+                      : undefined
+                  }
+                  onPaste={
+                    isRenaming
+                      ? (e) => {
+                          e.preventDefault();
+                          const text = e.clipboardData.getData("text/plain").replace(/\n/g, " ");
+                          document.execCommand("insertText", false, text);
+                        }
+                      : undefined
+                  }
+                  ref={inputRef as React.RefObject<HTMLSpanElement>}
+                  role={isRenaming ? "textbox" : undefined}
+                  suppressContentEditableWarning
+                >
+                  {page.title || "Untitled"}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {page.scheduledStart &&
+                  (() => {
+                    const isCompleted = isDone(page);
+                    // Multi-day all-day span: show the explicit range ("May 2 – 10").
+                    // Falls back to single-date formatting for timed events or
+                    // when end is missing/equal to start.
+                    const isAllDaySpan =
+                      isAllDayIso(page.scheduledStart) &&
+                      typeof page.scheduledEnd === "string" &&
+                      isAllDayIso(page.scheduledEnd) &&
+                      page.scheduledEnd > page.scheduledStart;
+                    const { isPast, label, tooltip } = isAllDaySpan
+                      ? (() => {
+                          const d = formatDate(page.scheduledStart);
+                          return {
+                            isPast: d.isPast,
+                            label: formatDateRange(page.scheduledStart, page.scheduledEnd),
+                            tooltip: `${d.tooltip} – ${parseLocalISO(
+                              page.scheduledEnd!
+                            ).toLocaleDateString("en-US", {
+                              day: "numeric",
+                              month: "long",
+                              weekday: "long",
+                              year: "numeric",
+                            })}`,
+                          };
+                        })()
+                      : !isCompleted && showRelative
+                        ? formatRelativeTime(page.scheduledStart)
+                        : formatDate(page.scheduledStart);
+                    const dueSoon = !isCompleted && !isPast && isDueSoon(page.scheduledStart);
+                    return (
+                      <button
+                        aria-label={`Toggle date format: ${label}`}
+                        className={cn(
+                          "type-ui-sm shrink-0 cursor-pointer hover:opacity-80",
+                          isPast && !isCompleted
+                            ? "text-status-overdue"
+                            : dueSoon
+                              ? "text-status-due-soon"
+                              : "text-subtle"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleDateFormat?.();
+                        }}
+                        tabIndex={-1}
+                        title={tooltip}
+                        type="button"
+                      >
+                        {label}
+                      </button>
+                    );
+                  })()}
+              </div>
+            </div>
+            {showSubtitle && (
+              <p className="type-body-sm mt-0.5 truncate text-subtle">{page.subtitle}</p>
+            )}
+          </div>
+        </div>
+      </ContextMenuTrigger>
+
+      <ContextMenuContent {...contextMenuContentProps}>
+        <ContextMenuItem onSelect={() => prepareRenameFromMenu(onRenameStart)}>
+          Rename
+        </ContextMenuItem>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>Move to Folder</ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuItem
+              className={cn(page.folderId === null && "font-medium")}
+              onSelect={() => onMoveToFolder(null)}
+            >
+              Inbox
+            </ContextMenuItem>
+            {folders.map((folder) => (
+              <ContextMenuItem
+                className={cn(page.folderId === folder.id && "font-medium")}
+                key={folder.id}
+                onSelect={() => onMoveToFolder(folder.id)}
+              >
+                <span
+                  className="mr-2 h-2 w-2 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)",
+                  }}
+                />
+                {folder.name}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        {page.scheduledStart && onClearDate && (
+          <ContextMenuItem onSelect={onClearDate}>Clear Date</ContextMenuItem>
+        )}
+        <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>
+          Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}

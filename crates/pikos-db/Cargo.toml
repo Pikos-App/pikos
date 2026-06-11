@@ -1,0 +1,24 @@
+[package]
+name = "pikos-db"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+description = "Pikos local SQLite data layer — schema, migrations, and writer. Tauri-free; shared by the desktop app and the CLI."
+
+[dependencies]
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+thiserror = "2"
+
+[features]
+# Re-exports test_pool + insert_test_* helpers so downstream crates (the desktop
+# app's tests) share a single migration tree + fixture set instead of carrying
+# their own copy. Enable via `pikos-db = { ..., features = ["test-support"] }`
+# in dev-dependencies — never in regular dependencies.
+test-support = []
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

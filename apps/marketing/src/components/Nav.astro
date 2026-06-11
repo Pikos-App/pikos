@@ -1,0 +1,123 @@
+---
+import ThemeToggle from "./ThemeToggle.astro";
+
+interface Props {
+  /** Current page path — used to highlight active link */
+  current?: string;
+}
+const { current = "/" } = Astro.props;
+
+const links = [
+  { href: "/blog", label: "Blog" },
+  { href: "/release-notes", label: "Release Notes" },
+];
+---
+
+<nav class="relative mx-auto flex max-w-6xl items-center justify-between px-8 py-5">
+  <a
+    href="/"
+    class="flex items-center gap-2 text-base font-semibold text-neutral-900 transition-opacity hover:opacity-80 dark:text-neutral-50"
+  >
+    <svg viewBox="0 0 200 200" width="22" height="22" aria-hidden="true" class="shrink-0 text-brand-500 dark:text-brand-400">
+      <rect x="90" y="36" width="80" height="108" rx="9" fill="none" stroke="currentColor" stroke-width="12" opacity="0.6" />
+      <rect x="60" y="54" width="80" height="108" rx="9" fill="none" stroke="currentColor" stroke-width="12" opacity="0.9" />
+      <rect x="30" y="72" width="80" height="108" rx="9" fill="currentColor" />
+    </svg>
+    Pikos
+  </a>
+
+  <div class="flex items-center gap-4 md:gap-6">
+    <!-- Desktop links -->
+    <div class="hidden items-center gap-6 md:flex">
+      {links.map((l) => (
+        <a
+          href={l.href}
+          class:list={[
+            "text-sm transition-colors",
+            current === l.href
+              ? "font-medium text-neutral-900 dark:text-neutral-50"
+              : "text-neutral-400 hover:text-neutral-900 dark:text-neutral-500 dark:hover:text-neutral-50",
+          ]}
+        >
+          {l.label}
+        </a>
+      ))}
+    </div>
+
+    <ThemeToggle />
+
+    <!-- Desktop CTA -->
+    <a
+      href="/download"
+      class="hidden rounded-lg bg-brand-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-600 md:inline-block dark:bg-brand-400 dark:hover:bg-brand-500"
+    >
+      Download
+    </a>
+
+    <!-- Mobile menu toggle -->
+    <button
+      id="nav-toggle"
+      type="button"
+      aria-label="Open menu"
+      aria-expanded="false"
+      aria-controls="nav-menu"
+      class="cursor-pointer rounded-lg p-2 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 md:hidden dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-50"
+    >
+      <svg id="nav-icon-open" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+      <svg id="nav-icon-close" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="hidden"><path d="M18 6 6 18M6 6l12 12" /></svg>
+    </button>
+  </div>
+
+  <!-- Mobile menu panel -->
+  <div
+    id="nav-menu"
+    class="absolute inset-x-0 top-full z-50 hidden flex-col gap-1 border-b border-neutral-200 bg-neutral-50 px-8 py-4 shadow-lg md:hidden dark:border-neutral-800 dark:bg-neutral-900"
+  >
+    {links.map((l) => (
+      <a
+        href={l.href}
+        class:list={[
+          "rounded-lg px-2 py-2 text-base transition-colors",
+          current === l.href
+            ? "font-medium text-neutral-900 dark:text-neutral-50"
+            : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50",
+        ]}
+      >
+        {l.label}
+      </a>
+    ))}
+    <a
+      href="/download"
+      class="mt-2 rounded-lg bg-brand-500 px-4 py-2 text-center text-base font-medium text-white transition-colors hover:bg-brand-600 dark:bg-brand-400 dark:hover:bg-brand-500"
+    >
+      Download
+    </a>
+  </div>
+</nav>
+
+<script>
+  const toggle = document.getElementById("nav-toggle");
+  const menu = document.getElementById("nav-menu");
+  const iconOpen = document.getElementById("nav-icon-open");
+  const iconClose = document.getElementById("nav-icon-close");
+
+  if (toggle && menu && iconOpen && iconClose) {
+    const setOpen = (open: boolean) => {
+      menu.classList.toggle("hidden", !open);
+      menu.classList.toggle("flex", open);
+      iconOpen.classList.toggle("hidden", open);
+      iconClose.classList.toggle("hidden", !open);
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    };
+
+    toggle.addEventListener("click", () => {
+      setOpen(menu.classList.contains("hidden"));
+    });
+
+    // Collapse when resizing up to the desktop breakpoint so state can't get stuck.
+    window.matchMedia("(min-width: 768px)").addEventListener("change", (e) => {
+      if (e.matches) setOpen(false);
+    });
+  }
+</script>

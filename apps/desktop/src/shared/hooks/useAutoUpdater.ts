@@ -1,0 +1,145 @@
+import { useEffect, useRef, useState } from "react";
+
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
+import { createLogger } from "@/shared/logger";
+
+const log = createLogger("AutoUpdater");
+
+interface UpdateInfo {
+  version: string;
+  body: string;
+  date: string | undefined;
+}
+
+type UpdateStatus =
+  | { state: "idle" }
+  | { state: "checking" }
+  | { state: "available"; update: UpdateInfo }
+  | { state: "downloading" }
+  | { state: "up-to-date" }
+  | { state: "error"; message: string; scope: "check" | "install" };
+
+export interface AutoUpdater {
+  status: UpdateStatus;
+  /** Manually trigger an update check. */
+  checkForUpdates: () => void;
+  /** Skip the currently available version (won't prompt again). */
+  skipVersion: () => void;
+  /** Dismiss the dialog without skipping — will prompt again next launch. */
+  dismiss: () => void;
+  /** Download and install the available update, then restart. */
+  installUpdate: () => void;
+}
+
+export function useAutoUpdater(): AutoUpdater {
+  const autoChecked = useRef(false);
+  const { autoUpdateEnabled, setSkippedVersion, skippedVersion } = useAppSettings();
+  const [status, setStatus] = useState<UpdateStatus>({ state: "idle" });
+
+  async function doCheck({ ignoreSkip = false } = {}) {
+    if (import.meta.env["VITE_TEST_MODE"] === "true") return;
+    if (import.meta.env.DEV) return;
+
+    log.info("Checking for updates");
+    setStatus({ state: "checking" });
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      // Without a timeout a stalled request hangs check() forever and the UI
+      // spins with no path to the error state. 10s is generous for a ~1KB
+      // manifest fetch. Don't add a timeout to doInstall's check(): the plugin
+      // carries it onto the Update and applies it to the download request,
+      // which would abort slow (legitimate) update downloads.
+      const update = await check({ timeout: 10_000 });
+
+      if (!update) {
+        log.info("Up to date");
+        setStatus({ state: "up-to-date" });
+        return;
+      }
+
+      if (!ignoreSkip && skippedVersion === update.version) {
+        log.info(`Update available (${update.version}) but version skipped by user`);
+        setStatus({ state: "idle" });
+        return;
+      }
+
+      log.info(`Update available: ${update.version}`);
+      setStatus({
+        state: "available",
+        update: {
+          body: update.body ?? "",
+          date: update.date,
+          version: update.version,
+        },
+      });
+    } catch (e: unknown) {
+      // Updater errors can include URLs from the GitHub Releases response,
+      // so we log only the class and show a generic user-facing message.
+      log.error("Update check failed", e instanceof Error ? e.name : "unknown");
+      setStatus({
+        message: "Couldn't check for updates. Check your network connection and try again.",
+        scope: "check",
+        state: "error",
+      });
+    }
+  }
+
+  async function doInstall() {
+    if (status.state !== "available") return;
+
+    const targetVersion = status.update.version;
+    log.info(`Installing update ${targetVersion}`);
+    setStatus({ state: "downloading" });
+
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check();
+      if (!update) {
+        setStatus({ state: "up-to-date" });
+        return;
+      }
+      await update.downloadAndInstall();
+      log.info(`Update ${targetVersion} installed, relaunching`);
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      await relaunch();
+    } catch (e: unknown) {
+      log.error("Update install failed", e instanceof Error ? e.name : "unknown");
+      setStatus({
+        message: "Couldn't install the update. Try again, or download the latest from pikos.app.",
+        scope: "install",
+        state: "error",
+      });
+    }
+  }
+
+  // Auto-check once on mount. Skipped when the user has disabled auto-update —
+  // in that case `@tauri-apps/plugin-updater` is never imported and no request
+  // is issued. Manual `checkForUpdates()` ignores this gate.
+  useEffect(() => {
+    if (autoChecked.current) return;
+    autoChecked.current = true;
+    if (!autoUpdateEnabled) return;
+    void doCheck();
+  }, []);
+
+  function checkForUpdates() {
+    void doCheck({ ignoreSkip: true });
+  }
+
+  function skipVersion() {
+    if (status.state === "available") {
+      setSkippedVersion(status.update.version);
+    }
+    setStatus({ state: "idle" });
+  }
+
+  function dismiss() {
+    setStatus({ state: "idle" });
+  }
+
+  function installUpdate() {
+    void doInstall();
+  }
+
+  return { checkForUpdates, dismiss, installUpdate, skipVersion, status };
+}

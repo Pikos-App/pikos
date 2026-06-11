@@ -1,0 +1,116 @@
+---
+import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Base title="Back Pikos" description="Support Pikos development. $29 today. Free Mac App Store and iPhone downloads when they ship.">
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <!-- Back to home -->
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Back Pikos</h1>
+    <p class="mt-3 text-base leading-relaxed text-neutral-500 dark:text-neutral-400">
+      $29 today. When the iPhone app and Mac App Store version are ready, you'll get both free. No further payment, ever.
+    </p>
+
+    <!-- CTA -->
+    <div class="mt-8">
+      <a
+        href="https://pikos.lemonsqueezy.com/checkout/buy/c6e6d7a4-0465-4fcb-aa58-8d646173a62e?discount=0"
+        data-umami-event="backer-purchase"
+        class="inline-flex items-center rounded-lg bg-brand-500 dark:bg-brand-400 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-brand-600 dark:hover:bg-brand-500"
+      >
+        Back Pikos · $29
+      </a>
+    </div>
+
+    <!-- The promise -->
+    <div class="mt-16 space-y-6 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+
+      <h2 class="text-xl font-semibold text-neutral-900 dark:text-neutral-50">What you're backing</h2>
+
+      <p>
+        I'm building Pikos solo, part-time. The desktop app works and you can <a href="/download" class="text-primary-500 hover:underline">use it free today</a>. The iPhone app and the Mac App Store version are still in development.
+      </p>
+
+      <p>
+        Back the project now and you lock in both paid apps free the day each one ships. No extra payment. You're covered either way: a full refund within 14 days, and a full refund if I'm ever unable to deliver them. <a href="#refund" class="text-primary-500 hover:underline">See the refund policy</a>.
+      </p>
+
+    </div>
+
+    <!-- What backers get -->
+    <div class="mt-16 space-y-6 text-sm text-neutral-500 dark:text-neutral-400">
+
+      <h2 class="text-lg font-semibold text-neutral-900 dark:text-neutral-50">What backers get</h2>
+
+      <ul class="ml-1 space-y-3">
+        <li class="flex items-start gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-warning-500" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <span class="text-base text-neutral-600 dark:text-neutral-300">The Mac App Store version when it ships</span>
+        </li>
+        <li class="flex items-start gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-warning-500" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <span class="text-base text-neutral-600 dark:text-neutral-300">The iPhone app when it ships</span>
+        </li>
+        <li class="flex items-start gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-warning-500" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <span class="text-base text-neutral-600 dark:text-neutral-300">iCloud sync across both apps</span>
+        </li>
+        <li class="flex items-start gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-warning-500" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <span class="text-base text-neutral-600 dark:text-neutral-300">No further payment, ever</span>
+        </li>
+      </ul>
+
+    </div>
+
+    <!-- FAQ-style sections -->
+    <div class="mt-16 space-y-8 text-sm text-neutral-500 dark:text-neutral-400">
+
+      <div id="refund" class="scroll-mt-8">
+        <h2 class="font-medium text-neutral-700 dark:text-neutral-300">Refund policy</h2>
+        <p class="mt-1">
+          Changed your mind within 14 days of backing? Email <a href="mailto:hello@pikos.app" class="text-primary-500 hover:underline">hello@pikos.app</a> and I'll refund you in full, no questions asked.
+        </p>
+        <p class="mt-2">
+          After 14 days you're still covered if I don't deliver: if I drop the iPhone app or the Mac App Store version, or abandon the project, every backer gets a full refund, no matter how much time has passed.
+        </p>
+      </div>
+
+      <div>
+        <h2 class="font-medium text-neutral-700 dark:text-neutral-300">What if it takes longer than expected?</h2>
+        <p class="mt-1">
+          I'll send honest updates. If a long delay changes your mind, email me. I'd rather refund a backer than hold money for something they no longer want.
+        </p>
+      </div>
+
+      <div>
+        <h2 class="font-medium text-neutral-700 dark:text-neutral-300">Do backers get exclusive features?</h2>
+        <p class="mt-1">
+          No. Everyone gets the same app. Backing is support, not access to a different tier. The free desktop app stays free and full-featured.
+        </p>
+      </div>
+
+      <div>
+        <h2 class="font-medium text-neutral-700 dark:text-neutral-300">How do I get the apps when they ship?</h2>
+        <p class="mt-1">
+          You'll receive App Store promo codes via email. One for the Mac App Store version, one for the iPhone app. Redeem them and the apps are yours.
+        </p>
+      </div>
+
+    </div>
+
+  </main>
+
+  <Footer current="/backer" />
+</Base>
+
+<style>
+
+  </style>

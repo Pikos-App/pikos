@@ -1,0 +1,65 @@
+---
+import BlogPost from "../../layouts/BlogPost.astro";
+---
+
+<BlogPost
+  title="The Code Is Public"
+  description="The Pikos codebase is now source-available. What you can do with it, how it's licensed, and why it matters for trust."
+  date="2026-06-10"
+>
+
+  <p>
+    Today I'm making the Pikos codebase publicly available. You can read every line of code that runs on your machine, build the app from source, and verify for yourself that it does what I say it does.
+  </p>
+
+  <h2>Why</h2>
+
+  <p>
+    Pikos makes a specific promise: your content stays on your device. No accounts, no telemetry, no analytics inside the app. That's a strong claim, and there's no reason you should take my word for it.
+  </p>
+
+  <p>
+    A public codebase makes the claim auditable. You can read the Rust backend and see exactly where it makes network calls (the updater, and that's it). You can search the TypeScript frontend and confirm there are no tracking scripts. Even if you don't personally read the code, the fact that <em>anyone</em> can is the point.
+  </p>
+
+  <h2>Source-available, not open source</h2>
+
+  <p>
+    I'm being precise about the label. The code is publicly readable, but commercial redistribution is not permitted. This is source-available under a restrictive license, not an open source project in the OSI sense.
+  </p>
+
+  <p>
+    I'm not claiming open source goodwill while restricting usage. The code is public for a specific reason: transparency and trust. If you want to inspect, audit, or build the app for personal use, you can. If you want to fork it and sell it, you can't.
+  </p>
+
+  <h2>What you can do</h2>
+
+  <ul>
+    <li>Read the code and understand how Pikos works</li>
+    <li>Audit the privacy claims: verify that no data leaves your device</li>
+    <li>Build from source and run a version you compiled yourself</li>
+    <li>Report bugs and suggest improvements via GitHub Issues</li>
+    <li>Reference the code in technical discussions or blog posts</li>
+  </ul>
+
+  <h2>What the codebase looks like</h2>
+
+  <p>
+    Pikos is a Tauri 2 app: a Rust backend with a React + TypeScript frontend. The data layer is SQLite with full-text search (FTS5). There's no server component, no API layer, no cloud anything. The entire stack runs on your machine.
+  </p>
+
+  <p>
+    The repository is a monorepo: <code>apps/desktop</code> is the Tauri app, <code>packages/core</code> is the shared TypeScript library (types, utilities, storage interface), and <code>apps/marketing</code> is this website.
+  </p>
+
+  <h2>Trust through transparency</h2>
+
+  <p>
+    Privacy claims from closed-source apps are marketing copy. You're trusting the company, not the code. That trust can break at any point: a new feature, a quiet SDK addition, an acquisition. You'd never know.
+  </p>
+
+  <p>
+    With a public codebase, the privacy promise is verifiable. If I ever added tracking or phoned home, it would be visible in the diff. That constraint is the point. It keeps me honest, and it should give you confidence that the app respects your data. Not because I said so, but because you can check.
+  </p>
+
+</BlogPost>

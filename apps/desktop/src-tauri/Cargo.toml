@@ -1,0 +1,64 @@
+[package]
+name = "pikos"
+version = "0.2.5"
+description = "Pikos — notes, tasks, and calendar"
+authors = ["Alex King"]
+license = "BUSL-1.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "pikos_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-store = "2"
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-deep-link = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
+pikos-db = { path = "../../../crates/pikos-db" }
+notify = "6"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+tokio = { version = "1", features = ["sync"] }
+tauri-plugin-log = "2"
+log = "0.4"
+thiserror = "2"
+
+# Single-instance is needed on Linux/Windows so deep-link URLs activated
+# while the app is already running route to the existing instance instead
+# of spawning a new one. macOS handles this natively via NSApplication.
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+
+# macOS foreground notifications. tauri-plugin-notification delivers via the
+# deprecated NSUserNotification API, which macOS suppresses while the app is
+# frontmost. We deliver through the modern UserNotifications framework instead
+# (see notifications/macos.rs) so reminders show even while editing.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", features = ["exception"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSError", "NSBundle"] }
+objc2-user-notifications = "0.3"
+block2 = "0.6"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+# Pull in pikos-db's test_pool + insert_test_* fixtures so the desktop tests
+# share the same migration tree as production — no parallel migrations dir.
+pikos-db = { path = "../../../crates/pikos-db", features = ["test-support"] }
+

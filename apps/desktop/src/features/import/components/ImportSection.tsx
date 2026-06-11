@@ -1,0 +1,149 @@
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { ExternalLink, FileSpreadsheet, FolderOpen, Loader2 } from "lucide-react";
+
+import type { ImportState } from "../hooks/useImport";
+
+interface ImportSectionProps {
+  state: ImportState;
+  parseMarkdownDir: (dirPath: string) => Promise<void>;
+  parseCSVFile: (content: string) => void;
+  reset: () => void;
+}
+
+export function ImportSection({
+  parseCSVFile,
+  parseMarkdownDir,
+  reset,
+  state,
+}: ImportSectionProps) {
+  async function handleMarkdownImport() {
+    // Test-mode escape hatch: skip the native dialog and use a path injected
+    // by the e2e harness. The matching readVaultFiles hook returns prebuilt
+    // VaultFile content for that path.
+    const testPath =
+      import.meta.env["VITE_TEST_MODE"] === "true"
+        ? (window as unknown as { __PIKOS_TEST_VAULT__?: { path: string } }).__PIKOS_TEST_VAULT__
+            ?.path
+        : null;
+    const selected =
+      testPath ??
+      (await openDialog({
+        directory: true,
+        multiple: false,
+        title: "Select Markdown / Obsidian Vault folder",
+      }));
+    if (!selected) return;
+    await parseMarkdownDir(selected);
+  }
+
+  async function handleCSVImport() {
+    const testCsv =
+      import.meta.env["VITE_TEST_MODE"] === "true"
+        ? (window as unknown as { __PIKOS_TEST_CSV__?: string }).__PIKOS_TEST_CSV__
+        : undefined;
+    if (testCsv !== undefined) {
+      parseCSVFile(testCsv);
+      return;
+    }
+    const selected = await openDialog({
+      filters: [{ extensions: ["csv"], name: "CSV" }],
+      multiple: false,
+      title: "Select CSV export file",
+    });
+    if (!selected) return;
+    const content = await readTextFile(selected);
+    parseCSVFile(content);
+  }
+
+  return (
+    <>
+      <ImportSupportNote />
+      <div className="rounded-lg border border-border bg-card px-4">
+        <div className="flex items-center justify-between gap-6 border-b border-border py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Markdown</p>
+            <p className="text-xs text-muted-foreground">
+              Import .md files with YAML frontmatter. Folder structure is preserved.
+            </p>
+          </div>
+          <button
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+            disabled={state.step !== "idle" && state.step !== "done" && state.step !== "error"}
+            onClick={() => void handleMarkdownImport()}
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            Select Folder
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-6 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">CSV</p>
+            <p className="text-xs text-muted-foreground">
+              Import tasks from a CSV export. Format is auto-detected from headers.
+            </p>
+          </div>
+          <button
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+            disabled={state.step !== "idle" && state.step !== "done" && state.step !== "error"}
+            onClick={() => void handleCSVImport()}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Select File
+          </button>
+        </div>
+      </div>
+
+      <ImportStatusBar onReset={reset} state={state} />
+    </>
+  );
+}
+
+function ImportSupportNote() {
+  return (
+    <button
+      className="mb-3 flex w-full items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+      onClick={() => void openUrl("https://pikos.app/import")}
+    >
+      <span>Supported tools and how each import works</span>
+      <ExternalLink className="h-3 w-3 shrink-0" />
+    </button>
+  );
+}
+
+function ImportStatusBar({ onReset, state }: { state: ImportState; onReset: () => void }) {
+  if (state.step === "parsing") {
+    return (
+      <div
+        aria-live="polite"
+        className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"
+        role="status"
+      >
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Reading files...
+      </div>
+    );
+  }
+
+  if (state.step === "error") {
+    return (
+      <div
+        aria-live="assertive"
+        className="mt-2 flex items-center justify-between rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2"
+        role="alert"
+      >
+        <p className="text-sm text-red-700 dark:text-red-400">{state.message}</p>
+        <button
+          className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          onClick={onReset}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}
