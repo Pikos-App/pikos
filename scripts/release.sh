@@ -25,12 +25,6 @@ if [ -z "$NOTES_CONTENT" ]; then
   exit 1
 fi
 
-echo "Release notes:"
-echo "───────────────────────────────────"
-grep -v '^<!--' "$RELEASE_NOTES" | grep -v '^$' | head -20
-echo "───────────────────────────────────"
-echo ""
-
 # Read current version from tauri.conf.json
 CURRENT=$(grep -o '"version": "[^"]*"' "$TAURI_CONF" | head -1 | cut -d'"' -f4)
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
@@ -54,11 +48,24 @@ if ! grep -q ">${NEW}<" "$MARKETING_NOTES"; then
   exit 1
 fi
 
+# ── Release-notes sign-off ───────────────────────────────────────────────────
+# Tagging triggers the publish pipeline and is irreversible, so require an
+# explicit human review of BOTH notes surfaces before proceeding.
 echo "Bumping $CURRENT → $NEW"
 echo ""
-read -rp "Continue? [y/N] " CONFIRM
+echo "In-app + GitHub notes (RELEASE_NOTES.md):"
+echo "───────────────────────────────────"
+grep -v '^<!--' "$RELEASE_NOTES" | grep -v '^$'
+echo "───────────────────────────────────"
+echo ""
+echo "Website changelog (release-notes.astro entry for ${NEW}):"
+echo "───────────────────────────────────"
+grep -A 12 ">${NEW}<" "$MARKETING_NOTES" || true
+echo "───────────────────────────────────"
+echo ""
+read -rp "Release notes reviewed and correct on both surfaces? Sign off to tag ${TAG} [y/N] " CONFIRM
 if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
-  echo "Aborted."
+  echo "Aborted — no sign-off."
   exit 0
 fi
 
