@@ -50,6 +50,15 @@ use notifications::scheduler::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // WebKitGTK's DMABUF renderer paints a blank/white window on several Linux
+    // GPU/driver stacks. Disabling it forces the stable render path.
+    // Set before any GTK/webview init. Respect an existing override so
+    // users can re-enable it if their stack works.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     logging::install_panic_hook();
 
     // `mut` is needed under cfg(linux/windows) to chain the single-instance

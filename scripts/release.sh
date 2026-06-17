@@ -15,6 +15,7 @@ TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
 DESKTOP_PKG="$ROOT/apps/desktop/package.json"
 CARGO_TOML="$ROOT/apps/desktop/src-tauri/Cargo.toml"
 RELEASE_NOTES="$ROOT/RELEASE_NOTES.md"
+MARKETING_NOTES="$ROOT/apps/marketing/src/pages/release-notes.astro"
 
 # Validate release notes — strip HTML comments and whitespace, must have content
 NOTES_CONTENT=$(sed 's/<!--.*-->//g' "$RELEASE_NOTES" | tr -d '[:space:]')
@@ -23,12 +24,6 @@ if [ -z "$NOTES_CONTENT" ]; then
   echo "Write release notes before running a release."
   exit 1
 fi
-
-echo "Release notes:"
-echo "───────────────────────────────────"
-grep -v '^<!--' "$RELEASE_NOTES" | grep -v '^$' | head -20
-echo "───────────────────────────────────"
-echo ""
 
 # Read current version from tauri.conf.json
 CURRENT=$(grep -o '"version": "[^"]*"' "$TAURI_CONF" | head -1 | cut -d'"' -f4)
@@ -43,18 +38,43 @@ esac
 NEW="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${NEW}"
 
+# The website changelog must already carry an entry for this version. It's
+# hand-authored (styled HTML, user-facing voice — not auto-generated from the
+# terse RELEASE_NOTES.md) and ships in the same commit as the version bump so
+# the site updates the moment the release is cut.
+if ! grep -q ">${NEW}<" "$MARKETING_NOTES"; then
+  echo "Error: $MARKETING_NOTES has no entry for ${NEW}."
+  echo "Add the release-notes <article> (version + release date + notes) before releasing."
+  exit 1
+fi
+
+# ── Release-notes sign-off ───────────────────────────────────────────────────
+# Tagging triggers the publish pipeline and is irreversible, so require an
+# explicit human review of BOTH notes surfaces before proceeding.
 echo "Bumping $CURRENT → $NEW"
 echo ""
-read -rp "Continue? [y/N] " CONFIRM
+echo "In-app + GitHub notes (RELEASE_NOTES.md):"
+echo "───────────────────────────────────"
+grep -v '^<!--' "$RELEASE_NOTES" | grep -v '^$'
+echo "───────────────────────────────────"
+echo ""
+echo "Website changelog (release-notes.astro entry for ${NEW}):"
+echo "───────────────────────────────────"
+grep -A 12 ">${NEW}<" "$MARKETING_NOTES" || true
+echo "───────────────────────────────────"
+echo ""
+read -rp "Release notes reviewed and correct on both surfaces? Sign off to tag ${TAG} [y/N] " CONFIRM
 if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
-  echo "Aborted."
+  echo "Aborted — no sign-off."
   exit 0
 fi
 
-# Check for uncommitted changes. RELEASE_NOTES.md is exempt: notes are written
-# right before cutting and get committed by the version-bump commit below, so
-# requiring a separate notes commit (plus its own green CI run) adds nothing.
-if ! git diff --quiet -- . ':(exclude)RELEASE_NOTES.md' || ! git diff --cached --quiet -- . ':(exclude)RELEASE_NOTES.md'; then
+# Check for uncommitted changes. RELEASE_NOTES.md and the marketing
+# release-notes page are exempt: both are written right before cutting and get
+# committed by the version-bump commit below, so requiring a separate commit
+# (plus its own green CI run) adds nothing.
+if ! git diff --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro' \
+  || ! git diff --cached --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro'; then
   echo "Error: uncommitted changes. Commit or stash first."
   exit 1
 fi
@@ -84,8 +104,9 @@ fi
 # Update Cargo.lock
 (cd "$ROOT/apps/desktop/src-tauri" && cargo generate-lockfile 2>/dev/null || true)
 
-# Commit and tag (include release notes so the workflow can read them)
-git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$RELEASE_NOTES"
+# Commit and tag (include release notes so the workflow can read them, and the
+# website changelog so the marketing site ships the entry with the release).
+git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$RELEASE_NOTES" "$MARKETING_NOTES"
 git commit $HOOK_FLAG -m "release: v${NEW}"
 git tag "$TAG"
 
@@ -97,7 +118,11 @@ cat > "$RELEASE_NOTES" << 'RESET'
 <!-- After release, this file is automatically reset. -->
 RESET
 git add "$RELEASE_NOTES"
-git commit $HOOK_FLAG -m "chore: reset release notes"
+# [skip ci] — the release push is two trivial commits (version bump + this
+# reset). GitHub evaluates skip-ci against the push HEAD (this commit), so it
+# skips CI for the whole push. Neither commit needs validation: the tag build
+# validates the released code, and CI on `main` re-runs on the next real commit.
+git commit $HOOK_FLAG -m "chore: reset release notes [skip ci]"
 
 echo ""
 echo "Created tag $TAG"
