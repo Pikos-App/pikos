@@ -719,3 +719,136 @@ describe("buildRrule", () => {
     }
   });
 });
+
+// ─── Timezone-independence matrix ──────────────────────────────────────────
+//
+// The engine stores naive wall-clock and must expand identically regardless of
+// the runner's timezone — sync feeds it zoned data, so any TZ-dependence is
+// silent corruption. Default runner TZ is pinned to UTC; this re-runs expansion
+// under four zones (one with DST, one half-hour offset, one DST-free) and
+// asserts the wall-clock never shifts. Cases use times that exist in every
+// zone; a non-existent spring-forward instant is out of scope.
+
+const TZ_MATRIX = ["UTC", "America/Los_Angeles", "Asia/Kolkata", "America/Phoenix"] as const;
+
+function withTz<T>(tz: string, fn: () => T): T {
+  const prev = process.env["TZ"];
+  process.env["TZ"] = tz;
+  try {
+    return fn();
+  } finally {
+    process.env["TZ"] = prev;
+  }
+}
+
+// 2026-03-08 is the US spring-forward Sunday; 2026-11-01 is the fall-back Sunday.
+const MATRIX_CASES: { name: string; run: () => unknown }[] = [
+  {
+    name: "weekly timed Sunday 09:00 spanning the spring-forward day",
+    run: () =>
+      expandRecurrenceForRange(
+        makeRule({
+          rrule: "FREQ=WEEKLY;BYDAY=SU",
+          scheduledEnd: "2026-03-01T10:00:00",
+          scheduledStart: "2026-03-01T09:00:00",
+        }),
+        makePage(),
+        new Date(2026, 2, 1),
+        new Date(2026, 2, 22)
+      ).map((o) => [o.originalDate, o.scheduledStart, o.scheduledEnd]),
+  },
+  {
+    name: "daily timed 09:00 spanning the fall-back day",
+    run: () =>
+      expandRecurrenceForRange(
+        makeRule({
+          rrule: "FREQ=DAILY",
+          scheduledEnd: "2026-10-30T09:45:00",
+          scheduledStart: "2026-10-30T09:00:00",
+        }),
+        makePage(),
+        new Date(2026, 9, 30),
+        new Date(2026, 10, 4)
+      ).map((o) => [o.originalDate, o.scheduledStart, o.scheduledEnd]),
+  },
+  {
+    name: "daily timed 00:30 (half-hour-offset stress for Kolkata)",
+    run: () =>
+      expandRecurrenceForRange(
+        makeRule({
+          rrule: "FREQ=DAILY",
+          scheduledEnd: "2026-03-06T01:15:00",
+          scheduledStart: "2026-03-06T00:30:00",
+        }),
+        makePage(),
+        new Date(2026, 2, 6),
+        new Date(2026, 2, 11)
+      ).map((o) => [o.originalDate, o.scheduledStart, o.scheduledEnd]),
+  },
+  {
+    name: "daily timed 23:30 (near-midnight, end wraps next day)",
+    run: () =>
+      expandRecurrenceForRange(
+        makeRule({
+          rrule: "FREQ=DAILY",
+          scheduledEnd: "2026-03-07T00:30:00",
+          scheduledStart: "2026-03-06T23:30:00",
+        }),
+        makePage(),
+        new Date(2026, 2, 6),
+        new Date(2026, 2, 10)
+      ).map((o) => [o.originalDate, o.scheduledStart, o.scheduledEnd]),
+  },
+  {
+    name: "all-day weekly Sunday spanning the spring-forward day",
+    run: () => {
+      const { scheduledEnd: _drop, ...base } = makeRule({
+        rrule: "FREQ=WEEKLY;BYDAY=SU",
+        scheduledStart: "2026-03-01",
+      });
+      return expandRecurrenceForRange(
+        base as PageRecurrenceRule,
+        makePage(),
+        new Date(2026, 2, 1),
+        new Date(2026, 2, 22)
+      ).map((o) => [o.originalDate, o.scheduledStart, o.scheduledEnd]);
+    },
+  },
+  {
+    name: "biweekly timed across a DST boundary",
+    run: () =>
+      expandRecurrenceForRange(
+        makeRule({
+          rrule: "FREQ=WEEKLY;BYDAY=SU;INTERVAL=2",
+          scheduledEnd: "2026-03-01T15:00:00",
+          scheduledStart: "2026-03-01T14:00:00",
+        }),
+        makePage(),
+        new Date(2026, 2, 1),
+        new Date(2026, 3, 13)
+      ).map((o) => [o.originalDate, o.scheduledStart, o.scheduledEnd]),
+  },
+  {
+    name: "nextOccurrenceAfter: weekly timed across spring-forward",
+    run: () =>
+      nextOccurrenceAfter("FREQ=WEEKLY;BYDAY=SU", "2026-03-01T09:00:00", new Date(2026, 2, 1)),
+  },
+  {
+    name: "nextOccurrenceAfter: all-day weekly across spring-forward",
+    run: () => nextOccurrenceAfter("FREQ=WEEKLY;BYDAY=SU", "2026-03-01", new Date(2026, 2, 1)),
+  },
+];
+
+describe("timezone-independence matrix", () => {
+  for (const c of MATRIX_CASES) {
+    it(`${c.name} — byte-identical wall-clock across all zones`, () => {
+      const baseline = withTz("UTC", c.run);
+      // Guard against a vacuous pass if expansion returns nothing.
+      expect(baseline).not.toEqual([]);
+      expect(baseline).not.toBeNull();
+      for (const tz of TZ_MATRIX) {
+        expect(withTz(tz, c.run), `zone ${tz} must match the UTC baseline`).toEqual(baseline);
+      }
+    });
+  }
+});

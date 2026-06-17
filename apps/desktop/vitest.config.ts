@@ -2,6 +2,10 @@ import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
+// Pin a deterministic timezone so wall-clock-sensitive logic expands identically
+// across machines and CI.
+process.env["TZ"] = "UTC";
+
 export default defineConfig({
   plugins: [
     react({

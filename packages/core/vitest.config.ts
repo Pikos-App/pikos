@@ -1,5 +1,9 @@
 import { defineConfig } from "vitest/config";
 
+// Pin a deterministic timezone so wall-clock-sensitive logic expands identically
+// across machines and CI.
+process.env["TZ"] = "UTC";
+
 export default defineConfig({
   test: {
     environment: "jsdom",
