@@ -15,6 +15,7 @@ TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
 DESKTOP_PKG="$ROOT/apps/desktop/package.json"
 CARGO_TOML="$ROOT/apps/desktop/src-tauri/Cargo.toml"
 RELEASE_NOTES="$ROOT/RELEASE_NOTES.md"
+MARKETING_NOTES="$ROOT/apps/marketing/src/pages/release-notes.astro"
 
 # Validate release notes — strip HTML comments and whitespace, must have content
 NOTES_CONTENT=$(sed 's/<!--.*-->//g' "$RELEASE_NOTES" | tr -d '[:space:]')
@@ -43,6 +44,16 @@ esac
 NEW="${MAJOR}.${MINOR}.${PATCH}"
 TAG="v${NEW}"
 
+# The website changelog must already carry an entry for this version. It's
+# hand-authored (styled HTML, user-facing voice — not auto-generated from the
+# terse RELEASE_NOTES.md) and ships in the same commit as the version bump so
+# the site updates the moment the release is cut.
+if ! grep -q ">${NEW}<" "$MARKETING_NOTES"; then
+  echo "Error: $MARKETING_NOTES has no entry for ${NEW}."
+  echo "Add the release-notes <article> (version + release date + notes) before releasing."
+  exit 1
+fi
+
 echo "Bumping $CURRENT → $NEW"
 echo ""
 read -rp "Continue? [y/N] " CONFIRM
@@ -51,10 +62,12 @@ if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
   exit 0
 fi
 
-# Check for uncommitted changes. RELEASE_NOTES.md is exempt: notes are written
-# right before cutting and get committed by the version-bump commit below, so
-# requiring a separate notes commit (plus its own green CI run) adds nothing.
-if ! git diff --quiet -- . ':(exclude)RELEASE_NOTES.md' || ! git diff --cached --quiet -- . ':(exclude)RELEASE_NOTES.md'; then
+# Check for uncommitted changes. RELEASE_NOTES.md and the marketing
+# release-notes page are exempt: both are written right before cutting and get
+# committed by the version-bump commit below, so requiring a separate commit
+# (plus its own green CI run) adds nothing.
+if ! git diff --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro' \
+  || ! git diff --cached --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro'; then
   echo "Error: uncommitted changes. Commit or stash first."
   exit 1
 fi
@@ -84,8 +97,9 @@ fi
 # Update Cargo.lock
 (cd "$ROOT/apps/desktop/src-tauri" && cargo generate-lockfile 2>/dev/null || true)
 
-# Commit and tag (include release notes so the workflow can read them)
-git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$RELEASE_NOTES"
+# Commit and tag (include release notes so the workflow can read them, and the
+# website changelog so the marketing site ships the entry with the release).
+git add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" "$ROOT/apps/desktop/src-tauri/Cargo.lock" "$RELEASE_NOTES" "$MARKETING_NOTES"
 git commit $HOOK_FLAG -m "release: v${NEW}"
 git tag "$TAG"
 
