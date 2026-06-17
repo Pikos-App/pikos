@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ReleaseNotes } from "@/shared/components/ReleaseNotes";
 import type { AutoUpdater } from "@/shared/hooks/useAutoUpdater";
 
 interface UpdateDialogProps {
@@ -31,8 +32,8 @@ export function UpdateDialog({ updater }: UpdateDialogProps) {
 
           {status.update.body && (
             <div className="max-h-48 overflow-y-auto rounded-md border border-border bg-muted/50 p-3 text-sm text-foreground">
-              <p className="mb-1 text-xs font-medium text-muted-foreground">What&apos;s new</p>
-              <div className="whitespace-pre-wrap">{status.update.body}</div>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">What&apos;s new</p>
+              <ReleaseNotes body={status.update.body} />
             </div>
           )}
 
