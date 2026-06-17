@@ -97,7 +97,11 @@ cat > "$RELEASE_NOTES" << 'RESET'
 <!-- After release, this file is automatically reset. -->
 RESET
 git add "$RELEASE_NOTES"
-git commit $HOOK_FLAG -m "chore: reset release notes"
+# [skip ci] — the release push is two trivial commits (version bump + this
+# reset). GitHub evaluates skip-ci against the push HEAD (this commit), so it
+# skips CI for the whole push. Neither commit needs validation: the tag build
+# validates the released code, and CI on `main` re-runs on the next real commit.
+git commit $HOOK_FLAG -m "chore: reset release notes [skip ci]"
 
 echo ""
 echo "Created tag $TAG"
