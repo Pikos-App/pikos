@@ -11,6 +11,7 @@ struct PageScheduleRow {
     page_id: String,
     scheduled_start: String,
     scheduled_end: Option<String>,
+    // IANA source zone; metadata only, not consumed by expansion.
     timezone: Option<String>,
     rule_id: Option<String>,
     original_date: Option<String>,
@@ -77,6 +78,7 @@ struct RecurrenceRuleRow {
     rrule_exdates: String, // JSON array
     scheduled_start: String,
     scheduled_end: Option<String>,
+    // IANA source zone; metadata only, not consumed by expansion.
     timezone: String,
     created_at: String,
 }

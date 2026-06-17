@@ -67,7 +67,7 @@ export interface PageSchedule {
   pageId: string;
   scheduledStart: string; // 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS' local wall-clock
   scheduledEnd?: string; // same format; null = single day or 1h default
-  timezone?: string; // IANA e.g. 'America/New_York'; required for timed events
+  timezone?: string; // IANA source zone; metadata only, not consumed by expansion
   ruleId?: string; // links override rows back to their PageRecurrenceRule
   originalDate?: string; // the virtual rrule date this row overrides ('YYYY-MM-DD')
   status: "not_started" | "done" | "skipped";
@@ -85,7 +85,7 @@ export interface PageRecurrenceRule {
   rruleExdates: string[]; // ISO date strings excluded from expansion
   scheduledStart: string; // base occurrence start (local wall-clock)
   scheduledEnd?: string; // base occurrence end; undefined = 1h default
-  timezone: string; // IANA timezone — required for DST-correct expansion
+  timezone: string; // IANA source zone; metadata only, not consumed by expansion
   createdAt: string; // ISO 8601
 }
 
