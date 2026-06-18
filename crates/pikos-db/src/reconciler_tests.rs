@@ -632,27 +632,41 @@ async fn every_recurrence_instant_is_wall_clock() {
     assert_eq!(ov.0, "2026-06-08T11:00:00");
 }
 
-/// The EXDATE-vs-removal split: a cancel-*occurrence* adds an EXDATE and leaves
-/// the series page intact; a whole-event *removal* is the lifecycle pass's job
-/// (S5) — this core must not touch it. Get these backwards and one skipped
-/// instance would delete the entire series page.
+/// The EXDATE-vs-removal split, the destructive ambiguity: a cancel-*occurrence*
+/// adds an EXDATE and leaves the series page intact; a whole-event *removal* takes
+/// the whole series page through the lifecycle rule. Get these backwards and one
+/// skipped instance would delete the entire series.
 #[tokio::test]
-async fn removal_is_left_for_the_lifecycle_pass() {
+async fn removal_takes_the_whole_series_not_one_occurrence() {
     let pool = setup().await;
     reconcile(&pool, &ctx(), &delta(vec![weekly_series()])).await.unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
 
-    let with_removal = SyncDelta {
-        upserts: vec![],
-        removals: vec![Removal { external_id: "/series.ics".into() }],
-        next_token: None,
-    };
-    reconcile(&pool, &ctx(), &with_removal).await.unwrap();
-
-    // Untouched: page, rule, and the sync link all survive a removal in core.
-    assert_eq!(page_count(&pool).await, 1);
-    assert_eq!(rule_count(&pool).await, 1);
+    // A cancel-occurrence only EXDATEs — the series page survives.
+    let cancel = UpsertItem::Occurrence(OccurrenceDelta {
+        ical_uid: "uid-series".into(),
+        series_ref: "uid-series".into(),
+        original_date: "2026-06-22T09:00:00".into(),
+        kind: OccurrenceKind::Cancel,
+    });
+    reconcile(&pool, &ctx(), &delta(vec![cancel])).await.unwrap();
+    assert_eq!(page_count(&pool).await, 1, "cancel-occurrence leaves the series intact");
     assert_eq!(sync_state(&pool, &page_id).await, "active");
+
+    // A whole-event removal of this bare series deletes the page outright.
+    reconcile(
+        &pool,
+        &ctx(),
+        &SyncDelta {
+            upserts: vec![],
+            removals: vec![Removal { external_id: "/series.ics".into() }],
+            next_token: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(page_count(&pool).await, 0, "removal takes the whole series page");
+    assert_eq!(rule_count(&pool).await, 0);
 }
 
 // ─── three field layers: mirror / seeded / user (S4) ──────────────────────────
@@ -1109,4 +1123,341 @@ async fn occurrence_modify_replaces_a_prior_override() {
         override_row(&pool, &page_id, "2026-06-08T09:00:00").await.unwrap().0,
         "2026-06-08T15:00:00"
     );
+}
+
+// ─── lifecycle: removals, ownership, teardown (S5) ────────────────────────────
+
+fn removal(external_id: &str) -> SyncDelta {
+    SyncDelta {
+        upserts: vec![],
+        removals: vec![Removal { external_id: external_id.into() }],
+        next_token: None,
+    }
+}
+
+/// Sync one bare single event and return its page_id — the starting point for the
+/// ownership tests, which then layer on whatever makes it owned.
+async fn synced_page(pool: &sqlx::SqlitePool, href: &str, uid: &str) -> String {
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![single(core(href, uid, "v1", "Event"), timed("2026-06-15T09:00:00", None, "UTC"))]),
+    )
+    .await
+    .unwrap();
+    sqlx::query_scalar("SELECT page_id FROM page_sync WHERE ical_uid = ?")
+        .bind(uid)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn mark_completed(pool: &sqlx::SqlitePool, page_id: &str) {
+    sqlx::query("UPDATE pages SET completed_at = ? WHERE id = ?")
+        .bind(now_iso())
+        .bind(page_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn add_user_tag(pool: &sqlx::SqlitePool, page_id: &str) {
+    sqlx::query(r#"UPDATE pages SET tags = '["work"]' WHERE id = ?"#)
+        .bind(page_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn add_user_reminder(pool: &sqlx::SqlitePool, page_id: &str) {
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at) VALUES (?, ?, 10, ?)",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(page_id)
+    .bind(now_iso())
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// Simulate the local-delete command path: soft-delete the page and tombstone its
+/// sync link (so the reconciler won't resurrect it).
+async fn tombstone(pool: &sqlx::SqlitePool, page_id: &str) {
+    sqlx::query("UPDATE pages SET deleted_at = ? WHERE id = ?")
+        .bind(now_iso())
+        .bind(page_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE page_sync SET sync_state = 'tombstoned' WHERE page_id = ?")
+        .bind(page_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn flag_external(pool: &sqlx::SqlitePool, folder_id: &str) {
+    sqlx::query("UPDATE folders SET is_external_calendar = 1 WHERE id = ?")
+        .bind(folder_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn page_exists(pool: &sqlx::SqlitePool, page_id: &str) -> bool {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    n == 1
+}
+
+async fn page_sync_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM page_sync")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn folder_count(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM folders")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn folder_is_external(pool: &sqlx::SqlitePool, folder_id: &str) -> bool {
+    let v: i64 = sqlx::query_scalar("SELECT is_external_calendar FROM folders WHERE id = ?")
+        .bind(folder_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    v == 1
+}
+
+async fn ical_uid_of(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String> {
+    sqlx::query_scalar("SELECT ical_uid FROM page_sync WHERE page_id = ?")
+        .bind(page_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap()
+}
+
+async fn deleted_at_of(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String> {
+    sqlx::query_scalar("SELECT deleted_at FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn removal_of_bare_mirror_hard_deletes() {
+    let pool = setup().await;
+    let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+
+    reconcile(&pool, &ctx(), &removal("/ev.ics")).await.unwrap();
+
+    assert!(!page_exists(&pool, &page_id).await, "a bare mirror just disappears");
+    assert_eq!(page_sync_count(&pool).await, 0, "FK cascade removes the link");
+}
+
+#[tokio::test]
+async fn removal_of_completed_page_detaches() {
+    let pool = setup().await;
+    let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+    mark_completed(&pool, &page_id).await;
+
+    reconcile(&pool, &ctx(), &removal("/ev.ics")).await.unwrap();
+
+    assert!(page_exists(&pool, &page_id).await, "completed = historical record, kept");
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+}
+
+#[tokio::test]
+async fn removal_of_user_modified_page_detaches() {
+    let pool = setup().await;
+    let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await;
+
+    reconcile(&pool, &ctx(), &removal("/ev.ics")).await.unwrap();
+
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+}
+
+#[tokio::test]
+async fn removal_with_user_tag_or_reminder_detaches() {
+    let pool = setup().await;
+    let tagged = synced_page(&pool, "/tag.ics", "uid-tag").await;
+    add_user_tag(&pool, &tagged).await;
+    let reminded = synced_page(&pool, "/rem.ics", "uid-rem").await;
+    add_user_reminder(&pool, &reminded).await;
+
+    reconcile(&pool, &ctx(), &removal("/tag.ics")).await.unwrap();
+    reconcile(&pool, &ctx(), &removal("/rem.ics")).await.unwrap();
+
+    assert_eq!(sync_state(&pool, &tagged).await, "detached", "user tag = owned");
+    assert_eq!(sync_state(&pool, &reminded).await, "detached", "user reminder = owned");
+}
+
+#[tokio::test]
+async fn last_opened_alone_is_not_owned() {
+    let pool = setup().await;
+    let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+    sqlx::query("UPDATE pages SET last_opened_at = ? WHERE id = ?")
+        .bind(now_iso())
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    reconcile(&pool, &ctx(), &removal("/ev.ics")).await.unwrap();
+
+    assert!(!page_exists(&pool, &page_id).await, "reading is not authoring — hard delete");
+}
+
+#[tokio::test]
+async fn removal_is_idempotent() {
+    let pool = setup().await;
+    let owned = synced_page(&pool, "/owned.ics", "uid-owned").await;
+    mark_completed(&pool, &owned).await;
+    let bare = synced_page(&pool, "/bare.ics", "uid-bare").await;
+
+    for _ in 0..2 {
+        reconcile(&pool, &ctx(), &removal("/owned.ics")).await.unwrap();
+        reconcile(&pool, &ctx(), &removal("/bare.ics")).await.unwrap();
+    }
+
+    assert_eq!(sync_state(&pool, &owned).await, "detached", "re-removal of detached is a no-op");
+    assert!(!page_exists(&pool, &bare).await);
+    assert_eq!(page_count(&pool).await, 1);
+}
+
+#[tokio::test]
+async fn tombstoned_external_id_skipped_on_upsert() {
+    let pool = setup().await;
+    let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+    tombstone(&pool, &page_id).await;
+
+    // Upstream sends an update for the same resource — must not resurrect it.
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(core("/ev.ics", "uid-1", "v2", "Resurrected"), timed("2026-06-15T09:00:00", None, "UTC"))]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(sync_state(&pool, &page_id).await, "tombstoned", "still hidden");
+    assert_eq!(page_title(&pool, &page_id).await, "Event", "no upsert applied");
+    assert!(deleted_at_of(&pool, &page_id).await.is_some(), "stays in trash");
+}
+
+#[tokio::test]
+async fn tombstoned_page_not_relinked_by_uid() {
+    let pool = setup().await;
+    let page_id = synced_page(&pool, "/old.ics", "uid-1").await;
+    tombstone(&pool, &page_id).await;
+
+    // Same UID returns under a new href: the tombstoned page must not be re-linked.
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(core("/new.ics", "uid-1", "v2", "Event"), timed("2026-06-15T09:00:00", None, "UTC"))]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(sync_state(&pool, &page_id).await, "tombstoned", "trashed page left alone");
+    assert_eq!(page_count(&pool).await, 2, "new href creates a fresh page, not a resurrect");
+}
+
+/// Teardown: owned pages detach and keep their dormant identity, bare mirrors are
+/// deleted, the folder is kept but de-flagged to a regular folder.
+#[tokio::test]
+async fn teardown_keeps_owned_deletes_bare_and_deflags_folder() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    let owned = synced_page(&pool, "/owned.ics", "uid-owned").await;
+    mark_completed(&pool, &owned).await;
+    let bare = synced_page(&pool, "/bare.ics", "uid-bare").await;
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+
+    assert_eq!(sync_state(&pool, &owned).await, "detached");
+    assert_eq!(ical_uid_of(&pool, &owned).await.as_deref(), Some("uid-owned"), "dormant identity kept");
+    assert!(!page_exists(&pool, &bare).await, "bare mirror deleted");
+    assert_eq!(folder_count(&pool).await, 1, "folder kept for the surviving owned page");
+    assert!(!folder_is_external(&pool, "f1").await, "becomes a regular folder");
+}
+
+#[tokio::test]
+async fn teardown_removes_an_empty_folder() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    synced_page(&pool, "/a.ics", "uid-a").await;
+    synced_page(&pool, "/b.ics", "uid-b").await;
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+
+    assert_eq!(page_count(&pool).await, 0, "all bare mirrors deleted");
+    assert_eq!(folder_count(&pool).await, 0, "nothing owned survived → folder removed");
+}
+
+#[tokio::test]
+async fn teardown_clears_tombstones_but_keeps_trashed_page() {
+    let pool = setup().await;
+    let owned = synced_page(&pool, "/owned.ics", "uid-owned").await;
+    mark_completed(&pool, &owned).await; // keeps the folder alive
+    let dead = synced_page(&pool, "/dead.ics", "uid-dead").await;
+    tombstone(&pool, &dead).await;
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+
+    assert!(ical_uid_of(&pool, &dead).await.is_none(), "tombstone link cleared for a fresh resync");
+    assert!(page_exists(&pool, &dead).await, "the page itself stays in trash");
+    assert!(deleted_at_of(&pool, &dead).await.is_some());
+}
+
+#[tokio::test]
+async fn teardown_is_idempotent() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    let owned = synced_page(&pool, "/owned.ics", "uid-owned").await;
+    mark_completed(&pool, &owned).await;
+    let bare = synced_page(&pool, "/bare.ics", "uid-bare").await;
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+
+    assert_eq!(sync_state(&pool, &owned).await, "detached");
+    assert!(!page_exists(&pool, &bare).await);
+    assert_eq!(folder_count(&pool).await, 1);
+}
+
+/// The unsync → resync round-trip: an owned page detaches on teardown, then a
+/// fresh sync re-links it in place (no duplicate) and reactivates it.
+#[tokio::test]
+async fn unsync_then_resync_relinks_in_place() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await;
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(core("/ev.ics", "uid-1", "v2", "Event"), timed("2026-06-15T09:00:00", None, "UTC"))]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(page_count(&pool).await, 1, "re-linked in place, no duplicate");
+    assert_eq!(sync_state(&pool, &page_id).await, "active", "reactivated");
+    assert_eq!(page_content_text(&pool, &page_id).await, "my notes", "user layer preserved");
 }

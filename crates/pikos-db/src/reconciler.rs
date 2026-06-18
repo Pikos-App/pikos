@@ -3,17 +3,21 @@
 //! pinned by the synthetic corpus in `reconciler_tests.rs`, which runs before
 //! any real provider exists.
 //!
-//! Out of scope here, handled by a later pass: removal/teardown lifecycle. The
-//! contract carries `removals`; this core leaves them untouched. The three field
-//! layers (locked mirror, seeded description, user layer) and per-instant
-//! timezone normalization live here.
+//! Covers the upsert path (three field layers — locked mirror, seeded
+//! description, user layer — plus per-instant timezone normalization) and the
+//! lifecycle path: a `SyncDelta` removal detaches an owned page or hard-deletes a
+//! bare mirror, and [`teardown_calendar`] applies the same own-vs-delete rule
+//! across a whole calendar when the user unsyncs it. The ownership decision
+//! always errs toward keeping.
 
 use chrono::{Days, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 
 use crate::error::AppResult;
 use crate::now_iso;
-use crate::sync_delta::{EventCore, EventUpsert, OccurrenceDelta, OccurrenceKind, SyncDelta, UpsertItem};
+use crate::sync_delta::{
+    EventCore, EventUpsert, OccurrenceDelta, OccurrenceKind, Removal, SyncDelta, UpsertItem,
+};
 
 /// All-day recurring events have no meaningful zone, but
 /// `page_recurrence_rules.timezone` is NOT NULL. Stamp this when the event
@@ -71,6 +75,11 @@ pub async fn reconcile(
         }
     }
 
+    // Whole-event removals last: detach if owned, else hard delete.
+    for removal in &delta.removals {
+        apply_removal(&mut tx, ctx, removal).await?;
+    }
+
     tx.commit().await?;
     Ok(outcome)
 }
@@ -82,8 +91,8 @@ async fn apply_event(
     ctx: &ReconcileContext,
     ev: &EventUpsert,
 ) -> AppResult<()> {
-    let existing = sqlx::query_as::<_, (String, String, Option<String>)>(
-        "SELECT id, page_id, etag FROM page_sync
+    let existing = sqlx::query_as::<_, (String, String, Option<String>, String)>(
+        "SELECT id, page_id, etag, sync_state FROM page_sync
          WHERE account_id = ? AND calendar_id = ? AND external_id = ?",
     )
     .bind(&ctx.account_id)
@@ -92,10 +101,16 @@ async fn apply_event(
     .fetch_optional(&mut **tx)
     .await?;
 
+    // User deleted this event locally — its link is tombstoned. Skip the upsert so
+    // the next sync can't resurrect it from trash; restoring it reactivates the row.
+    if matches!(&existing, Some((.., state)) if state == "tombstoned") {
+        return Ok(());
+    }
+
     let now = now_iso();
     let (mirror_location, mirror_attendees) = mirror_values(&ev.core);
 
-    let (page_id, is_new) = if let Some((page_sync_id, page_id, stored_etag)) = existing {
+    let (page_id, is_new) = if let Some((page_sync_id, page_id, stored_etag, _)) = existing {
         // Unchanged etag → skip every write, so the token-reject full re-sync
         // doesn't churn updated_at and refloat every synced page as "recent".
         if ev.core.etag.is_some() && stored_etag == ev.core.etag {
@@ -151,7 +166,8 @@ async fn find_relink(
 ) -> AppResult<Option<(String, String)>> {
     Ok(sqlx::query_as::<_, (String, String)>(
         "SELECT id, page_id FROM page_sync
-         WHERE account_id = ? AND calendar_id = ? AND ical_uid = ?",
+         WHERE account_id = ? AND calendar_id = ? AND ical_uid = ?
+           AND sync_state != 'tombstoned'",
     )
     .bind(&ctx.account_id)
     .bind(&ctx.calendar_id)
@@ -297,6 +313,163 @@ async fn apply_occurrence(
         }
     }
     Ok(None)
+}
+
+// ─── Lifecycle: removals + teardown ─────────────────────────────────────────────
+
+/// A whole event gone upstream → detach if the page is Pikos-owned, else hard
+/// delete the bare mirror. Tombstoned (locally deleted) and already-detached rows
+/// are left untouched, so re-running a removal converges. The destructive call
+/// errs toward keeping.
+async fn apply_removal(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    ctx: &ReconcileContext,
+    removal: &Removal,
+) -> AppResult<()> {
+    let row = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT id, page_id, sync_state FROM page_sync
+         WHERE account_id = ? AND calendar_id = ? AND external_id = ?",
+    )
+    .bind(&ctx.account_id)
+    .bind(&ctx.calendar_id)
+    .bind(&removal.external_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some((page_sync_id, page_id, state)) = row else {
+        return Ok(());
+    };
+    // tombstoned: user already trashed it; detached: already severed. Idempotent.
+    if state != "active" {
+        return Ok(());
+    }
+    if is_owned(tx, &page_id).await? {
+        detach_sync(tx, &page_sync_id).await?;
+    } else {
+        hard_delete_page(tx, &page_id).await?;
+    }
+    Ok(())
+}
+
+/// Tear down a calendar's live sync (the user unsynced or disconnected it). Same
+/// own-vs-delete rule as an upstream removal, applied across the whole calendar:
+/// owned pages detach and keep their dormant identity so a later resync re-links
+/// them in place; non-owned pages hard delete; tombstoned links are cleared so a
+/// fresh resync legitimately brings those events back (the page stays in trash).
+/// The folder survives — de-flagged to a regular folder — whenever a live page
+/// remains, and is removed only when nothing owned survived. Idempotent.
+pub async fn teardown_calendar(
+    pool: &sqlx::SqlitePool,
+    account_id: &str,
+    calendar_id: &str,
+    folder_id: &str,
+) -> AppResult<()> {
+    let mut tx = pool.begin().await?;
+
+    let rows = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT id, page_id, sync_state FROM page_sync
+         WHERE account_id = ? AND calendar_id = ?",
+    )
+    .bind(account_id)
+    .bind(calendar_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    for (page_sync_id, page_id, state) in rows {
+        match state.as_str() {
+            // Drop the dormant tombstone so a fresh resync recreates the event;
+            // the soft-deleted page stays in trash, recoverable.
+            "tombstoned" => {
+                sqlx::query("DELETE FROM page_sync WHERE id = ?")
+                    .bind(&page_sync_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            // Already severed by a prior upstream removal — keep its dormant identity.
+            "detached" => {}
+            _ => {
+                if is_owned(&mut tx, &page_id).await? {
+                    detach_sync(&mut tx, &page_sync_id).await?;
+                } else {
+                    hard_delete_page(&mut tx, &page_id).await?;
+                }
+            }
+        }
+    }
+
+    // Keep the folder if any live page survived (it just stops being a live sync
+    // folder); remove it only when nothing owned remained.
+    let survivors: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE folder_id = ? AND deleted_at IS NULL")
+            .bind(folder_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if survivors == 0 {
+        sqlx::query("DELETE FROM folders WHERE id = ?")
+            .bind(folder_id)
+            .execute(&mut *tx)
+            .await?;
+    } else {
+        sqlx::query("UPDATE folders SET is_external_calendar = 0 WHERE id = ?")
+            .bind(folder_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Pikos-owned = the user has invested in this page, so teardown keeps it. True if
+/// completed, the dirty bit is set, or it carries a field sync never writes (a user
+/// tag or reminder). The row checks belt-and-suspenders the dirty bit: those edits
+/// flow through the editor path that sets it, but reading the rows too keeps the
+/// predicate correct even if a future edit path forgets. `last_opened_at` is not a
+/// signal — reading an event is not authoring it.
+async fn is_owned(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+) -> AppResult<bool> {
+    let owned: bool = sqlx::query_scalar(
+        "SELECT p.completed_at IS NOT NULL
+              OR ps.user_modified
+              OR (p.tags <> '[]' AND p.tags <> '')
+              OR EXISTS (SELECT 1 FROM page_reminders pr WHERE pr.page_id = p.id)
+         FROM pages p JOIN page_sync ps ON ps.page_id = p.id
+         WHERE p.id = ?",
+    )
+    .bind(page_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(owned)
+}
+
+/// Sever the live sync link, keeping the page, its last-known schedule, and its
+/// dormant identity (`ical_uid` + provider/calendar hint) for a later resync
+/// re-link. Touches no `pages` field, so a detach never refloats the page as
+/// "recently edited".
+async fn detach_sync(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_sync_id: &str,
+) -> AppResult<()> {
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE id = ?")
+        .bind(page_sync_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+/// Destroy a non-owned synced page. The FK cascade removes its `page_sync` link,
+/// schedules, rules, reminders, and FTS row — nothing of the user's is lost
+/// because ownership was already checked.
+async fn hard_delete_page(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+) -> AppResult<()> {
+    sqlx::query("DELETE FROM pages WHERE id = ?")
+        .bind(page_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 // ─── Row writers ──────────────────────────────────────────────────────────────
