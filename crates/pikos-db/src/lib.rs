@@ -17,6 +17,7 @@ mod pool;
 pub mod reminders;
 pub mod schedules;
 pub mod search;
+pub mod sync;
 pub mod tags;
 pub mod tx;
 
@@ -30,4 +31,5 @@ pub use pool::{insert_test_folder, insert_test_page, test_pool, TestPage};
 pub use reminders::*;
 pub use schedules::*;
 pub use search::*;
+pub use sync::*;
 pub use tags::*;
