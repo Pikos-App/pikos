@@ -14,10 +14,12 @@ pub mod folders;
 pub mod notification_log;
 pub mod pages;
 mod pool;
+pub mod reconciler;
 pub mod reminders;
 pub mod schedules;
 pub mod search;
 pub mod sync;
+pub mod sync_delta;
 pub mod tags;
 pub mod tx;
 
@@ -28,8 +30,10 @@ pub use pages::*;
 pub use pool::{now_iso, now_local_iso, open_pool};
 #[cfg(any(test, feature = "test-support"))]
 pub use pool::{insert_test_folder, insert_test_page, test_pool, TestPage};
+pub use reconciler::*;
 pub use reminders::*;
 pub use schedules::*;
 pub use search::*;
 pub use sync::*;
+pub use sync_delta::*;
 pub use tags::*;
