@@ -3,12 +3,13 @@
 //! pinned by the synthetic corpus in `reconciler_tests.rs`, which runs before
 //! any real provider exists.
 //!
-//! Out of scope here, handled by later passes: content/mirror layering (seeded
-//! description, mirror columns), per-instant timezone normalization, and
-//! removal/teardown lifecycle. The contract carries `removals`; this core leaves
-//! them untouched.
+//! Out of scope here, handled by a later pass: removal/teardown lifecycle. The
+//! contract carries `removals`; this core leaves them untouched. The three field
+//! layers (locked mirror, seeded description, user layer) and per-instant
+//! timezone normalization live here.
 
-use chrono::{Days, NaiveDate};
+use chrono::{Days, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono_tz::Tz;
 
 use crate::error::AppResult;
 use crate::now_iso;
@@ -92,41 +93,52 @@ async fn apply_event(
     .await?;
 
     let now = now_iso();
+    let (mirror_location, mirror_attendees) = mirror_values(&ev.core);
 
-    let page_id = if let Some((page_sync_id, page_id, stored_etag)) = existing {
+    let (page_id, is_new) = if let Some((page_sync_id, page_id, stored_etag)) = existing {
         // Unchanged etag → skip every write, so the token-reject full re-sync
         // doesn't churn updated_at and refloat every synced page as "recent".
         if ev.core.etag.is_some() && stored_etag == ev.core.etag {
             return Ok(());
         }
         update_page_title(tx, &page_id, &ev.core.title, &now).await?;
-        sqlx::query("UPDATE page_sync SET etag = ?, sync_state = 'active', last_synced_at = ? WHERE id = ?")
-            .bind(&ev.core.etag)
-            .bind(&now)
-            .bind(&page_sync_id)
-            .execute(&mut **tx)
-            .await?;
-        page_id
+        sqlx::query(
+            "UPDATE page_sync SET etag = ?, sync_state = 'active', mirror_location = ?,
+             mirror_attendees = ?, last_synced_at = ? WHERE id = ?",
+        )
+        .bind(&ev.core.etag)
+        .bind(&mirror_location)
+        .bind(&mirror_attendees)
+        .bind(&now)
+        .bind(&page_sync_id)
+        .execute(&mut **tx)
+        .await?;
+        (page_id, false)
     } else if let Some((page_sync_id, page_id)) = find_relink(tx, ctx, &ev.core.ical_uid).await? {
         // Same UID, new/absent href → re-link this calendar's dormant page, no dup.
         sqlx::query(
-            "UPDATE page_sync SET external_id = ?, etag = ?, sync_state = 'active', last_synced_at = ? WHERE id = ?",
+            "UPDATE page_sync SET external_id = ?, etag = ?, sync_state = 'active',
+             mirror_location = ?, mirror_attendees = ?, last_synced_at = ? WHERE id = ?",
         )
         .bind(&ev.core.external_id)
         .bind(&ev.core.etag)
+        .bind(&mirror_location)
+        .bind(&mirror_attendees)
         .bind(&now)
         .bind(&page_sync_id)
         .execute(&mut **tx)
         .await?;
         update_page_title(tx, &page_id, &ev.core.title, &now).await?;
-        page_id
+        (page_id, false)
     } else {
         let page_id = insert_synced_page(tx, ctx, &ev.core.title, &now).await?;
-        insert_page_sync(tx, ctx, &page_id, &ev.core, &now).await?;
-        page_id
+        insert_page_sync(tx, ctx, &page_id, &ev.core, &mirror_location, &mirror_attendees, &now)
+            .await?;
+        (page_id, true)
     };
 
     write_schedule(tx, &page_id, ev, &now).await?;
+    apply_seeded_description(tx, &page_id, ev.core.description.as_deref(), is_new, &now).await?;
     Ok(())
 }
 
@@ -172,6 +184,9 @@ async fn write_schedule(
         let rule_id = uuid::Uuid::new_v4().to_string();
         let exdates_json = serde_json::to_string(&rec.exdates).unwrap_or_else(|_| "[]".to_string());
         let tz = ev.schedule.timezone.as_deref().unwrap_or(SENTINEL_TZ);
+        // Only UNTIL still carries a zone — dtstart/EXDATE/original_date arrive
+        // already wall-clock from the provider. Keep the whole rule on one basis.
+        let rrule = rewrite_until_to_wall_clock(&rec.rrule, tz);
         sqlx::query(
             "INSERT INTO page_recurrence_rules
              (id, page_id, rrule, rrule_exdates, scheduled_start, scheduled_end, timezone, created_at)
@@ -179,7 +194,7 @@ async fn write_schedule(
         )
         .bind(&rule_id)
         .bind(page_id)
-        .bind(&rec.rrule)
+        .bind(&rrule)
         .bind(&exdates_json)
         .bind(&ev.schedule.start)
         .bind(&base_end)
@@ -314,19 +329,22 @@ async fn insert_synced_page(
     Ok(id)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn insert_page_sync(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
     page_id: &str,
     core: &EventCore,
+    mirror_location: &Option<String>,
+    mirror_attendees: &Option<String>,
     now: &str,
 ) -> AppResult<()> {
     let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO page_sync
          (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, etag,
-          sync_state, user_modified, last_synced_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?)",
+          sync_state, user_modified, mirror_location, mirror_attendees, last_synced_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(page_id)
@@ -336,11 +354,24 @@ async fn insert_page_sync(
     .bind(&core.external_id)
     .bind(&core.ical_uid)
     .bind(&core.etag)
+    .bind(mirror_location)
+    .bind(mirror_attendees)
     .bind(now)
     .bind(now)
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+/// Calendar-owned read-only metadata → mirror columns. Empty attendees store NULL
+/// so "none" and "never synced" read alike.
+fn mirror_values(core: &EventCore) -> (Option<String>, Option<String>) {
+    let attendees = if core.attendees.is_empty() {
+        None
+    } else {
+        serde_json::to_string(&core.attendees).ok()
+    };
+    (core.location.clone(), attendees)
 }
 
 async fn update_page_title(
@@ -386,6 +417,190 @@ async fn insert_schedule_row(
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+// ─── Seeded description (description → body, conflict-aware) ─────────────────────
+
+/// Version of the `content_text` projection. Persisted with each
+/// `seeded_description_hash` so a projection change re-seeds pristine bodies
+/// instead of reading the whole synced corpus as "user edited". Bump on any change
+/// to `build_tiptap_doc` or `extract_text_from_tiptap`.
+const CONTENT_TEXT_PROJECTION_VERSION: i64 = 1;
+
+/// Seed the external description into the body, conflict-aware: (over)write only
+/// while the body is pristine, else park the withheld text in
+/// `pending_description`. Pristineness is the `content_text` hash, falling back to
+/// `user_modified` when the stored projection version is stale (the old hash can't
+/// be compared).
+async fn apply_seeded_description(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    description: Option<&str>,
+    is_new: bool,
+    now: &str,
+) -> AppResult<()> {
+    let Some(desc) = description.map(str::trim).filter(|d| !d.is_empty()) else {
+        // No upstream description — never blank out a body the user may own.
+        return Ok(());
+    };
+    let (content_json, projected_text) = project_description(desc);
+    let new_hash = fnv_hex(&projected_text);
+
+    if is_new {
+        write_seeded_body(tx, page_id, &content_json, &projected_text, &new_hash, now).await?;
+        return Ok(());
+    }
+
+    let (content_text, stored_hash, stored_version, user_modified) =
+        fetch_seed_state(tx, page_id).await?;
+
+    // Already matches upstream: clear any parked notice and re-stamp the hash.
+    if projected_text == content_text {
+        sqlx::query(
+            "UPDATE page_sync SET pending_description = NULL, seeded_description_hash = ?,
+             seeded_description_hash_version = ? WHERE page_id = ?",
+        )
+        .bind(&new_hash)
+        .bind(CONTENT_TEXT_PROJECTION_VERSION)
+        .bind(page_id)
+        .execute(&mut **tx)
+        .await?;
+        return Ok(());
+    }
+
+    let body_pristine = match (stored_hash.as_deref(), stored_version) {
+        (Some(h), Some(v)) if v == CONTENT_TEXT_PROJECTION_VERSION => fnv_hex(&content_text) == h,
+        // Stale projection version → old hash incomparable; trust the ownership flag.
+        (Some(_), _) => !user_modified,
+        (None, _) => content_text.is_empty() && !user_modified,
+    };
+
+    if body_pristine {
+        write_seeded_body(tx, page_id, &content_json, &projected_text, &new_hash, now).await?;
+    } else {
+        sqlx::query("UPDATE page_sync SET pending_description = ? WHERE page_id = ?")
+            .bind(&projected_text)
+            .bind(page_id)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+/// Read the body + seed bookkeeping needed to classify a description change.
+async fn fetch_seed_state(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+) -> AppResult<(String, Option<String>, Option<i64>, bool)> {
+    let row = sqlx::query_as::<_, (String, Option<String>, Option<i64>, bool)>(
+        "SELECT p.content_text, ps.seeded_description_hash, ps.seeded_description_hash_version,
+                ps.user_modified
+         FROM pages p JOIN page_sync ps ON ps.page_id = p.id
+         WHERE p.id = ?",
+    )
+    .bind(page_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(row)
+}
+
+/// Write the seed into the body and record its hash + version, clearing any
+/// parked notice.
+async fn write_seeded_body(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    content_json: &str,
+    content_text: &str,
+    hash: &str,
+    now: &str,
+) -> AppResult<()> {
+    sqlx::query("UPDATE pages SET content = ?, content_text = ?, updated_at = ? WHERE id = ?")
+        .bind(content_json)
+        .bind(content_text)
+        .bind(now)
+        .bind(page_id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(
+        "UPDATE page_sync SET seeded_description_hash = ?, seeded_description_hash_version = ?,
+         pending_description = NULL WHERE page_id = ?",
+    )
+    .bind(hash)
+    .bind(CONTENT_TEXT_PROJECTION_VERSION)
+    .bind(page_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Plain-text description → (Tiptap doc JSON, its `content_text` projection).
+/// Projects through the *same* extractor FTS uses so a pristine body hashes
+/// identically whether the editor or reconciler last wrote it — which is why the
+/// hash is over `content_text`, not the ProseMirror JSON.
+fn project_description(text: &str) -> (String, String) {
+    let doc = build_tiptap_doc(text);
+    let projected = crate::pool::extract_text_from_tiptap(&doc);
+    (doc, projected)
+}
+
+/// One paragraph per line — matches the doc the editor produces for pasted text.
+fn build_tiptap_doc(text: &str) -> String {
+    let content: Vec<serde_json::Value> = text
+        .split('\n')
+        .map(|line| {
+            if line.is_empty() {
+                serde_json::json!({ "type": "paragraph" })
+            } else {
+                serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
+            }
+        })
+        .collect();
+    serde_json::json!({ "type": "doc", "content": content }).to_string()
+}
+
+/// FNV-1a 64-bit hex — deterministic across builds (std `DefaultHasher` isn't)
+/// and dep-free. Change detection, not security.
+fn fnv_hex(s: &str) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in s.as_bytes() {
+        hash ^= *b as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// Rewrite a UTC `UNTIL=…Z` token inside a raw RRULE to source-zone wall-clock,
+/// leaving every other field intact. Expansion matches occurrences by wall-clock
+/// string, so a UTC UNTIL clips the final occurrence(s) on the wrong day for
+/// viewers outside the source zone. Surgical edit, not a parse round-trip (that
+/// drops BYSETPOS/BYMONTHDAY); floating/date-only UNTIL is already wall-clock.
+fn rewrite_until_to_wall_clock(rrule: &str, tz: &str) -> String {
+    let Ok(zone) = tz.parse::<Tz>() else {
+        return rrule.to_string(); // unknown zone: leave raw rather than panic
+    };
+    rrule
+        .split(';')
+        .map(|part| match part.split_once('=') {
+            Some((key, value)) if key.eq_ignore_ascii_case("UNTIL") => {
+                match until_utc_to_wall_clock(value, zone) {
+                    Some(local) => format!("{key}={local}"),
+                    None => part.to_string(),
+                }
+            }
+            _ => part.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+/// `20260315T100000Z` in `zone` → `20260315T060000` wall-clock, DST-correct per
+/// instant. `None` for anything that isn't a UTC date-time (floating/date-only/
+/// unparseable) — already wall-clock, so the caller leaves it as-is.
+fn until_utc_to_wall_clock(value: &str, zone: Tz) -> Option<String> {
+    let stamp = value.strip_suffix('Z')?;
+    let naive = NaiveDateTime::parse_from_str(stamp, "%Y%m%dT%H%M%S").ok()?;
+    let local = Utc.from_utc_datetime(&naive).with_timezone(&zone);
+    Some(local.format("%Y%m%dT%H%M%S").to_string())
 }
 
 /// Decrement a provider-native **exclusive** all-day end to Pikos's inclusive

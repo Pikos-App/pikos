@@ -74,6 +74,9 @@ pub struct PageSyncRow {
     pub mirror_location: Option<String>,
     /// JSON; calendar-owned metadata, rendered read-only.
     pub mirror_attendees: Option<String>,
+    /// Upstream description change withheld because the user edited the body.
+    /// NULL = nothing pending; non-NULL drives the editor's passive notice.
+    pub pending_description: Option<String>,
     pub last_synced_at: Option<String>,
     pub created_at: String,
 }

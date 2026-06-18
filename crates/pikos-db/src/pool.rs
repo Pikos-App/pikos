@@ -225,7 +225,7 @@ async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
 
 /// Recursively extract plain text from a Tiptap JSON document. Mirrors the
 /// TypeScript `extractText()` so FTS content_text stays in sync.
-fn extract_text_from_tiptap(content: &str) -> String {
+pub(crate) fn extract_text_from_tiptap(content: &str) -> String {
     if content.is_empty() || content == "{}" {
         return String::new();
     }
