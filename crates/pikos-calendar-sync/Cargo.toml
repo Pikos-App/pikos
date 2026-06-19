@@ -10,6 +10,18 @@ pikos-db = { path = "../pikos-db" }
 # rustls (no OpenSSL) keeps non-macOS builds system-lib-free.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 thiserror = "2"
+# CalDAV: namespace-aware multistatus parsing + base-URL/redirect resolution +
+# the keychain credential blob ({base_url, username, password}).
+quick-xml = "0.37"
+url = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# ICS parsing: the only crate that resolves VTIMEZONE→IANA and round-trips RRULE
+# losslessly (spike-verified 2026-06-15). Pre-1.0 → pin. chrono/chrono-tz back the
+# UTC→source-zone wall-clock normalization of EXDATE/RECURRENCE-ID instants.
+calcard = "0.3.5"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono-tz = "0.10"
 
 # OS-specific backend: apple-native on macOS, none elsewhere so a Linux `cargo
 # check` stays system-lib-free (no libdbus/secret-service).

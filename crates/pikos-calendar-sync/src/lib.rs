@@ -4,7 +4,9 @@
 //! Kept apart from `pikos-db` so its OS-specific, networked deps (`keyring`,
 //! `reqwest`) stay out of that crate's toolchain-agnostic workspace check.
 
+pub mod caldav;
 pub mod http;
 pub mod keychain;
 
+pub use caldav::{CaldavCredentials, CaldavError, CaldavProvider};
 pub use keychain::{Keychain, KeychainError};

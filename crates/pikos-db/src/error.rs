@@ -41,6 +41,9 @@ pub enum AppError {
     #[error("invalid: {0}")]
     Invalid(String),
 
+    #[error("network: {0}")]
+    Network(String),
+
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -57,6 +60,7 @@ impl AppError {
             AppError::Io(_) => "Io",
             AppError::Serde(_) => "Serde",
             AppError::Invalid(_) => "Invalid",
+            AppError::Network(_) => "Network",
             AppError::Internal(_) => "Internal",
         }
     }

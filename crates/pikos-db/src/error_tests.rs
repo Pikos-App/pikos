@@ -24,6 +24,14 @@ fn from_io_error() {
 }
 
 #[test]
+fn serializes_network_kind() {
+    let err = AppError::Network("connection refused".into());
+    let v = serde_json::to_value(&err).unwrap();
+    assert_eq!(v["kind"], "Network");
+    assert_eq!(v["message"], "network: connection refused");
+}
+
+#[test]
 fn from_serde_error() {
     let bad: Result<serde_json::Value, _> = serde_json::from_str("not json");
     let err: AppError = bad.unwrap_err().into();
