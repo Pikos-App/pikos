@@ -1,0 +1,23 @@
+[package]
+name = "pikos-calendar-sync"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+description = "Pikos external calendar sync — HTTP + OS-keychain plumbing and provider impls (CalDAV, Google) over pikos-db's SyncDelta/reconciler."
+
+[dependencies]
+pikos-db = { path = "../pikos-db" }
+# rustls (no OpenSSL) keeps non-macOS builds system-lib-free.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+thiserror = "2"
+
+# OS-specific backend: apple-native on macOS, none elsewhere so a Linux `cargo
+# check` stays system-lib-free (no libdbus/secret-service).
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6.3", features = ["apple-native"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+keyring = "3.6.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
