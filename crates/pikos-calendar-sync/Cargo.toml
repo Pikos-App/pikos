@@ -7,6 +7,9 @@ description = "Pikos external calendar sync — HTTP + OS-keychain plumbing and 
 
 [dependencies]
 pikos-db = { path = "../pikos-db" }
+# The engine writes the per-calendar cursor/timestamps back through the same pool
+# pikos-db owns; same version/features so the SqlitePool type unifies.
+sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }
 # rustls (no OpenSSL) keeps non-macOS builds system-lib-free.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 thiserror = "2"
@@ -33,3 +36,6 @@ keyring = "3.6.3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+# test-support re-exports test_pool + insert_test_* so the engine's Layer-3 tests
+# share pikos-db's migration tree + fixtures rather than carrying their own.
+pikos-db = { path = "../pikos-db", features = ["test-support"] }

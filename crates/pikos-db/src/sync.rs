@@ -38,6 +38,9 @@ pub struct SyncCalendarRow {
     /// CalDAV change tag (no-sync-collection fallback).
     pub ctag: Option<String>,
     pub last_full_sync_at: Option<String>,
+    /// Last poll that completed (incremental or full) — the engine stamps it for
+    /// the stale dot. `None` until the first sync.
+    pub last_synced_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

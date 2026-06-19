@@ -58,6 +58,29 @@ pub(crate) async fn sync_calendar<T: DavTransport>(
     })
 }
 
+/// Capture the collection's current sync-token via an empty-token
+/// `sync-collection` REPORT (RFC 6578 initial sync). We read **only** the
+/// trailing token — the response also carries the whole collection, but the
+/// preceding `calendar-query` backfill already reconciled those, so we discard
+/// the entries. This bootstraps the incremental cursor the time-bounded backfill
+/// can't supply. A server without `sync-collection` answers `403`/`405`/`501` →
+/// `None` (no cursor to capture; the engine keeps re-enumerating until the
+/// ctag-diff fallback lands).
+pub(crate) async fn current_sync_token<T: DavTransport>(
+    transport: &T,
+    calendar_url: &str,
+) -> Result<Option<SyncToken>, CaldavError> {
+    let resp = transport
+        .report(calendar_url, "0", &sync_collection_body(""))
+        .await?;
+    match resp.status {
+        207 => Ok(parse_report(&resp.body)?.sync_token.map(SyncToken)),
+        403 | 405 | 501 => Ok(None),
+        401 => Err(CaldavError::Unauthorized),
+        other => Err(CaldavError::UnexpectedStatus(other)),
+    }
+}
+
 /// Refetch one resource (CalDAV's `fetch_event`: a trivial single-href
 /// `calendar-multiget`). CalDAV never orphans a master, so this is only the
 /// generic single-resource refetch, never a series reconstruction.

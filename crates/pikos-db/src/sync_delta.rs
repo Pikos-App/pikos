@@ -162,4 +162,17 @@ pub trait CalendarProvider {
         calendar: &SyncCalendarRow,
         event_ref: &str,
     ) -> AppResult<EventUpsert>;
+
+    /// Capture the collection's current incremental cursor after a backfill that
+    /// carried none. A time-bounded backfill (CalDAV `calendar-query`) returns no
+    /// sync-token, so the engine calls this once afterwards to bootstrap the
+    /// cursor; an incremental [`sync`](Self::sync) already returns its own
+    /// `next_token` and never needs it. Returns `None` when the provider has no
+    /// separate cursor to fetch — Google's backfill already carries
+    /// `nextSyncToken`, and a server without `sync-collection` has none at all
+    /// (the engine then keeps re-enumerating until the ctag path lands).
+    async fn current_sync_token(
+        &self,
+        calendar: &SyncCalendarRow,
+    ) -> AppResult<Option<SyncToken>>;
 }
