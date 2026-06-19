@@ -6,7 +6,8 @@
   "packageManager": "pnpm@10.30.3",
   "scripts": {
     "dev": "turbo dev",
-    "dev:desktop": "pnpm --filter @pikos/desktop tauri dev",
+    "dev:desktop": "pnpm --filter @pikos/desktop tauri dev --config src-tauri/tauri.conf.dev.json",
+    "dev:desktop:prod-db": "pnpm --filter @pikos/desktop tauri dev",
     "dev:marketing": "pnpm --filter @pikos/marketing dev",
     "build": "turbo build",
     "test": "turbo test",
