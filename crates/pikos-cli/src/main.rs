@@ -141,6 +141,7 @@ fn classify(err: AppError) -> CliError {
         AppError::Db(_) => CliError::new("Db", "a database error occurred", 1),
         AppError::Io(_) => CliError::internal("an I/O error occurred"),
         AppError::Serde(_) => CliError::internal("a serialization error occurred"),
+        AppError::Network(m) => CliError::new("Network", m, 1),
         AppError::Internal(m) => CliError::internal(m),
     }
 }
