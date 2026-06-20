@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS sync_calendar (
   sync_token         TEXT,
   ctag               TEXT,
   last_full_sync_at  TEXT,
+  -- Freshness clock for the stale dot — unlike last_full_sync_at (full syncs only)
+  -- and updated_at (any edit).
+  last_synced_at     TEXT,
+  -- The enabled calendar's system folder. NULL while disabled; kept across a disable
+  -- that leaves owned survivors, so a re-enable re-flags the same folder in place.
+  folder_id          TEXT REFERENCES folders(id) ON DELETE SET NULL,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL,
   UNIQUE (account_id, calendar_id)
@@ -108,6 +114,12 @@ CREATE TABLE IF NOT EXISTS page_sync (
   seeded_description_hash_version INTEGER,        -- content_text projection version; lets a projection change re-seed rather than mis-classify
   mirror_location                 TEXT,           -- calendar-owned, rendered read-only
   mirror_attendees                TEXT,           -- JSON; calendar-owned, rendered read-only
+  -- Upstream description change withheld because the user already edited the body.
+  -- The reconciler parks the new (projected) text here instead of clobbering; drives
+  -- the editor's passive "calendar description changed" notice (rendered offline, no
+  -- re-fetch). NULL = nothing pending; cleared on silent refresh or when upstream
+  -- matches the body again.
+  pending_description             TEXT,
   last_synced_at                  TEXT,
   created_at                      TEXT NOT NULL
 );
