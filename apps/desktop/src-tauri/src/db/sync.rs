@@ -58,12 +58,12 @@ pub async fn list_sync_calendars(
 #[tauri::command]
 pub async fn toggle_sync_calendar(
     state: State<'_, DbState>,
-    calendar_id: String,
+    sync_calendar_id: String,
     enabled: bool,
     color: Option<String>,
 ) -> AppResult<SyncCalendar> {
     let pool = state.get_pool().await?;
-    toggle_sync_calendar_impl(&pool, &calendar_id, enabled, color.as_deref()).await
+    toggle_sync_calendar_impl(&pool, &sync_calendar_id, enabled, color.as_deref()).await
 }
 
 #[tauri::command]

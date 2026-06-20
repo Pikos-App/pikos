@@ -9,6 +9,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
+import { CalendarSyncSettings } from "./CalendarSyncSettings";
 import { DataSettings } from "./DataSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { NotificationSettings } from "./NotificationSettings";
@@ -142,6 +143,7 @@ export function SettingsPage() {
         <div className="flex-1 overflow-y-auto p-8">
           {section === "general" && <GeneralSettings />}
           {section === "notifications" && <NotificationSettings />}
+          {section === "calendar-sync" && <CalendarSyncSettings />}
           {section === "data" && (
             <DataSettings
               importState={importState}

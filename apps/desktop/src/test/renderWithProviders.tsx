@@ -9,8 +9,13 @@
 // throws "must be used within …") should keep their bespoke setup — the
 // failure-mode test is the one place where omitting a provider is the point.
 
-import { renderHook, type RenderHookOptions } from "@testing-library/react";
-import type { ReactNode } from "react";
+import {
+  render,
+  renderHook,
+  type RenderHookOptions,
+  type RenderOptions,
+} from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
 
 import { CalendarDnDProvider } from "@/shared/context/CalendarDnDContext";
 import { ImportProvider } from "@/shared/context/ImportContext";
@@ -46,4 +51,8 @@ export function renderHookWithProviders<Result, Props>(
   options?: Omit<RenderHookOptions<Props>, "wrapper">
 ) {
   return renderHook(callback, { ...options, wrapper: TestProviders });
+}
+
+export function renderWithProviders(ui: ReactElement, options?: Omit<RenderOptions, "wrapper">) {
+  return render(ui, { ...options, wrapper: TestProviders });
 }

@@ -319,11 +319,11 @@ export class TauriSQLiteAdapter implements StorageAdapter {
   }
 
   toggleSyncCalendar(
-    calendarId: string,
+    syncCalendarId: string,
     enabled: boolean,
     color: string | null
   ): Promise<SyncCalendar> {
-    return invoke<SyncCalendar>("toggle_sync_calendar", { calendarId, color, enabled });
+    return invoke<SyncCalendar>("toggle_sync_calendar", { color, enabled, syncCalendarId });
   }
 
   resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {

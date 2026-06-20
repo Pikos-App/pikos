@@ -156,14 +156,14 @@ pub async fn list_sync_calendars_impl(
 /// down.
 pub async fn toggle_sync_calendar_impl(
     pool: &sqlx::SqlitePool,
-    calendar_id: &str,
+    sync_calendar_id: &str,
     enabled: bool,
     color: Option<&str>,
 ) -> AppResult<SyncCalendar> {
     if enabled {
-        enable_sync_calendar(pool, calendar_id, color).await
+        enable_sync_calendar(pool, sync_calendar_id, color).await
     } else {
-        disable_sync_calendar(pool, calendar_id).await
+        disable_sync_calendar(pool, sync_calendar_id).await
     }
 }
 
@@ -172,10 +172,10 @@ pub async fn toggle_sync_calendar_impl(
 /// the engine's job on the next resync/poll.
 async fn enable_sync_calendar(
     pool: &sqlx::SqlitePool,
-    calendar_id: &str,
+    sync_calendar_id: &str,
     color: Option<&str>,
 ) -> AppResult<SyncCalendar> {
-    let cal = fetch_calendar(pool, calendar_id).await?;
+    let cal = fetch_calendar(pool, sync_calendar_id).await?;
     let now = now_iso();
     let mut tx = pool.begin().await?;
 
@@ -207,16 +207,16 @@ async fn enable_sync_calendar(
     .await?;
 
     tx.commit().await?;
-    fetch_calendar(pool, calendar_id).await
+    fetch_calendar(pool, sync_calendar_id).await
 }
 
 /// Tear the calendar down (detach owned pages / delete bare mirrors, remove or
 /// de-flag the folder) and clear the cursor so a later re-enable backfills fresh.
 async fn disable_sync_calendar(
     pool: &sqlx::SqlitePool,
-    calendar_id: &str,
+    sync_calendar_id: &str,
 ) -> AppResult<SyncCalendar> {
-    let cal = fetch_calendar(pool, calendar_id).await?;
+    let cal = fetch_calendar(pool, sync_calendar_id).await?;
     if let Some(folder_id) = &cal.folder_id {
         teardown_calendar(pool, &cal.account_id, &cal.calendar_id, folder_id).await?;
     }
@@ -238,7 +238,7 @@ async fn disable_sync_calendar(
     .bind(&cal.id)
     .execute(pool)
     .await?;
-    fetch_calendar(pool, calendar_id).await
+    fetch_calendar(pool, sync_calendar_id).await
 }
 
 // ─── internal ───────────────────────────────────────────────────────────────────

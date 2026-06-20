@@ -187,9 +187,10 @@ export interface StorageAdapter {
   /** Tear down the account's synced pages/folders and remove its keychain entry. */
   disconnectSyncAccount(accountId: string): Promise<void>;
   listSyncCalendars(accountId: string): Promise<SyncCalendar[]>;
-  /** Enable (materialize folder + colour) or disable (teardown) a calendar. */
+  /** Enable (materialize folder + colour) or disable (teardown) a calendar.
+   * `syncCalendarId` is the sync_calendar ROW id, not the provider calendarId. */
   toggleSyncCalendar(
-    calendarId: string,
+    syncCalendarId: string,
     enabled: boolean,
     color: string | null
   ): Promise<SyncCalendar>;

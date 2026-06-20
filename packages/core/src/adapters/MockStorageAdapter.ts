@@ -722,12 +722,12 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   toggleSyncCalendar(
-    calendarId: string,
+    syncCalendarId: string,
     enabled: boolean,
     color: string | null
   ): Promise<SyncCalendar> {
-    const cal = this.syncCalendars.get(calendarId);
-    if (!cal) return Promise.reject(new Error(`Sync calendar not found: ${calendarId}`));
+    const cal = this.syncCalendars.get(syncCalendarId);
+    if (!cal) return Promise.reject(new Error(`Sync calendar not found: ${syncCalendarId}`));
     let folderId = cal.folderId;
     if (enabled && !folderId) {
       const folder: Folder = {
@@ -747,7 +747,7 @@ export class MockStorageAdapter implements StorageAdapter {
       folderId = null;
     }
     const updated: SyncCalendar = { ...cal, color, enabled, folderId };
-    this.syncCalendars.set(calendarId, updated);
+    this.syncCalendars.set(syncCalendarId, updated);
     return Promise.resolve(updated);
   }
 

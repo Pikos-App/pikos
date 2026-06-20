@@ -13,7 +13,13 @@ import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 export type ActiveViewId = "today" | "inbox" | (string & NonNullable<unknown>);
 export type DialogId = "quick-add" | "search" | null;
 /** Settings overlay sections. Kept here so external triggers (menu / shortcuts) can deep-link. */
-export type SettingsSection = "general" | "notifications" | "data" | "shortcuts" | "developer";
+export type SettingsSection =
+  | "general"
+  | "notifications"
+  | "calendar-sync"
+  | "data"
+  | "shortcuts"
+  | "developer";
 
 export interface UIContextValue {
   /** ID of the currently selected page. Derive the full Page via useActivePage(). */
