@@ -54,6 +54,7 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
     folderId: null,
     id: overrides.id ?? crypto.randomUUID(),
     priority: 0,
+    scheduleLocked: false,
     sortOrder: 0,
     status: "not_started",
     tags: [],

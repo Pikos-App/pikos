@@ -120,11 +120,37 @@ pub async fn create_folder_impl(pool: &sqlx::SqlitePool, data: NewFolder) -> App
     fetch_folder(pool, &id).await
 }
 
+/// True when the folder is a system-managed external-calendar folder.
+async fn folder_is_external(pool: &sqlx::SqlitePool, id: &str) -> AppResult<bool> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ? AND is_external_calendar = 1)",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await?)
+}
+
+const EXTERNAL_FOLDER_LOCKED_MSG: &str =
+    "External calendar folders are system-managed — use the Calendar Sync settings to disconnect.";
+
 pub async fn update_folder_impl(
     pool: &sqlx::SqlitePool,
     id: String,
     updates: FolderUpdate,
 ) -> AppResult<Folder> {
+    // Placement lock: an external-calendar folder can't be reparented out of its
+    // area, and nothing can be nested under one. Name/color stay editable (recolor
+    // is a supported per-calendar action). The reconciler/enable path sets the
+    // system flag via raw SQL and bypasses this command.
+    if let Some(serde_json::Value::String(new_parent)) = &updates.parent_id {
+        if folder_is_external(pool, new_parent).await? {
+            return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));
+        }
+    }
+    if updates.parent_id.is_some() && folder_is_external(pool, &id).await? {
+        return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));
+    }
+
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE folders SET ");
     let mut fields = builder.separated(", ");
     let mut has_updates = false;
@@ -175,6 +201,9 @@ pub async fn update_folder_impl(
 }
 
 pub async fn delete_folder_impl(pool: &sqlx::SqlitePool, id: String) -> AppResult<()> {
+    if folder_is_external(pool, &id).await? {
+        return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));
+    }
     let now = now_iso();
 
     // Transaction wraps the soft-delete-pages + drop-folder pair. The ON
@@ -201,6 +230,9 @@ pub async fn delete_folder_impl(pool: &sqlx::SqlitePool, id: String) -> AppResul
 }
 
 pub async fn soft_delete_folder_impl(pool: &sqlx::SqlitePool, id: String) -> AppResult<()> {
+    if folder_is_external(pool, &id).await? {
+        return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));
+    }
     let now = now_iso();
 
     // Atomic with the cascading page soft-delete so the folder can't

@@ -36,6 +36,7 @@ struct PageRow {
     last_opened_at: Option<String>,
     created_at: String,
     updated_at: String,
+    schedule_locked: bool,
 }
 
 // ─── Output type (camelCase for TypeScript) ───────────────────────────────────
@@ -61,6 +62,9 @@ pub struct Page {
     pub last_opened_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// Derived (not a stored column): an active `page_sync` row owns this page's
+    /// schedule, so the calendar/editor render it read-only and non-draggable.
+    pub schedule_locked: bool,
 }
 
 impl From<PageRow> for Page {
@@ -90,6 +94,7 @@ impl From<PageRow> for Page {
             last_opened_at: row.last_opened_at,
             created_at: row.created_at,
             updated_at: row.updated_at,
+            schedule_locked: row.schedule_locked,
         }
     }
 }
@@ -114,6 +119,7 @@ struct PageSummaryRow {
     last_opened_at: Option<String>,
     created_at: String,
     updated_at: String,
+    schedule_locked: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -135,6 +141,8 @@ pub struct PageSummary {
     pub last_opened_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// Derived (not a stored column) — see `Page::schedule_locked`.
+    pub schedule_locked: bool,
 }
 
 impl From<PageSummaryRow> for PageSummary {
@@ -162,6 +170,7 @@ impl From<PageSummaryRow> for PageSummary {
             last_opened_at: row.last_opened_at,
             created_at: row.created_at,
             updated_at: row.updated_at,
+            schedule_locked: row.schedule_locked,
         }
     }
 }
@@ -170,6 +179,13 @@ const SUMMARY_COLUMNS: &str =
     "id, folder_id, title, subtitle, status, priority, tags, sort_order, \
      scheduled_start, scheduled_end, completed_at, links, \
      parent_id, last_opened_at, created_at, updated_at";
+
+/// Appended to every page-hydrating SELECT to populate the derived
+/// `schedule_locked` flag. Uses the unqualified `pages.id` so it works whether
+/// or not the query aliases the table.
+const SCHEDULE_LOCKED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
+     WHERE page_sync.page_id = pages.id AND page_sync.sync_state = 'active') \
+     AS schedule_locked";
 
 // ─── Input types ──────────────────────────────────────────────────────────────
 
@@ -301,7 +317,7 @@ async fn upsert_page_tags_tx(
 }
 
 async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Page> {
-    sqlx::query_as::<_, PageRow>("SELECT * FROM pages WHERE id = ?")
+    sqlx::query_as::<_, PageRow>(&format!("SELECT *{SCHEDULE_LOCKED_SELECT} FROM pages WHERE id = ?"))
         .bind(id)
         .fetch_optional(pool)
         .await?
@@ -333,6 +349,23 @@ async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> Ap
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResult<Page> {
+    // External-calendar folders are system-managed — only the reconciler (raw
+    // SQL, bypasses this command) seeds into them. Reject a user/CLI create that
+    // targets one, or the page lands trapped (the move guard then blocks it out).
+    if let Some(folder_id) = data.folder_id.as_deref() {
+        let target_external: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ? AND is_external_calendar = 1)",
+        )
+        .bind(folder_id)
+        .fetch_one(pool)
+        .await?;
+        if target_external {
+            return Err(AppError::Conflict(
+                "Pages cannot be created in an external calendar folder".to_string(),
+            ));
+        }
+    }
+
     let id = uuid::Uuid::new_v4().to_string();
     let now = now_iso();
     let created_at = data.created_at.as_deref().unwrap_or(&now);
@@ -385,6 +418,61 @@ pub async fn update_page_impl(
     id: String,
     updates: PageUpdate,
 ) -> AppResult<Page> {
+    // A synced page becomes user-owned the moment the user edits any authored
+    // field through this command path (the reconciler writes raw SQL and never
+    // calls here, so sync can't trip this). A lone `last_opened_at` write —
+    // opening the page — is explicitly NOT ownership, so it's excluded.
+    let marks_ownership = updates.title.is_some()
+        || updates.content.is_some()
+        || updates.content_text.is_some()
+        || updates.status.is_some()
+        || updates.priority.is_some()
+        || updates.tags.is_some()
+        || updates.sort_order.is_some()
+        || updates.links.is_some()
+        || updates.folder_id.is_some()
+        || updates.subtitle.is_some()
+        || updates.scheduled_start.is_some()
+        || updates.scheduled_end.is_some()
+        || updates.completed_at.is_some()
+        || updates.parent_id.is_some();
+
+    // Placement lock: external-calendar folders are system-managed. Reject moving
+    // a page into or out of one. The reconciler seeds pages into these folders via
+    // raw SQL (it never calls this command), so seeding is unaffected.
+    if let Some(ref folder_val) = updates.folder_id {
+        let current_external: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM pages p JOIN folders f ON f.id = p.folder_id \
+             WHERE p.id = ? AND f.is_external_calendar = 1)",
+        )
+        .bind(&id)
+        .fetch_one(pool)
+        .await?;
+        let target_external: bool = match folder_val {
+            serde_json::Value::String(target) => sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ? AND is_external_calendar = 1)",
+            )
+            .bind(target)
+            .fetch_one(pool)
+            .await?,
+            _ => false,
+        };
+        if current_external || target_external {
+            return Err(AppError::Conflict(
+                "Pages cannot be moved into or out of an external calendar folder".to_string(),
+            ));
+        }
+    }
+
+    // Locked mirror: title + schedule (start/end) are calendar-owned on a synced
+    // page. Body/meta/status/tags stay editable (and still set user_modified).
+    if updates.title.is_some()
+        || updates.scheduled_start.is_some()
+        || updates.scheduled_end.is_some()
+    {
+        crate::sync::ensure_page_schedule_unlocked(pool, &id).await?;
+    }
+
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE pages SET ");
     let mut fields = builder.separated(", ");
     let mut has_updates = false;
@@ -475,6 +563,14 @@ pub async fn update_page_impl(
     let mut tx = pool.begin().await?;
     builder.build().execute(&mut *tx).await?;
 
+    if marks_ownership {
+        // No page_sync row for native pages → no-op.
+        sqlx::query("UPDATE page_sync SET user_modified = 1 WHERE page_id = ? AND user_modified = 0")
+            .bind(&id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
     if let Some(tags) = updated_tags {
         upsert_page_tags_tx(&mut tx, &id, &tags).await?;
     }
@@ -484,6 +580,20 @@ pub async fn update_page_impl(
 }
 
 pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
+    // A synced page can't be truly deleted while its calendar is synced — it
+    // still exists upstream and the next poll would resurrect it (and an owned
+    // page would lose its content). Route it to soft-delete + tombstone instead:
+    // it leaves the UI, stays recoverable from trash, and sync is suppressed.
+    // (Sync's own non-owned-removal hard-deletes use raw SQL, not this command.)
+    let synced: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM page_sync WHERE page_id = ?)")
+            .bind(id)
+            .fetch_one(pool)
+            .await?;
+    if synced {
+        return soft_delete_page_impl(pool, id).await;
+    }
+
     sqlx::query("DELETE FROM pages WHERE id = ?")
         .bind(id)
         .execute(pool)
@@ -492,26 +602,44 @@ pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()
 }
 
 pub async fn soft_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
+    let now = now_iso();
+    let mut tx = pool.begin().await?;
     // Guard on deleted_at IS NULL (mirrors soft_delete_folder_impl) so a second
     // delete can't overwrite the original trash timestamp and reset the
     // auto-purge clock.
-    sqlx::query(
-        "UPDATE pages SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(now_iso())
-    .bind(now_iso())
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE pages SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+        .bind(&now)
+        .bind(&now)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    // Tombstone the sync link so the next poll doesn't resurrect a deleted synced
+    // page. No-op for native pages (no page_sync row).
+    sqlx::query("UPDATE page_sync SET sync_state = 'tombstoned' WHERE page_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
     Ok(())
 }
 
 pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
+    let now = now_iso();
+    let mut tx = pool.begin().await?;
     sqlx::query("UPDATE pages SET deleted_at = NULL, updated_at = ? WHERE id = ?")
-        .bind(now_iso())
+        .bind(&now)
         .bind(id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    // Resume syncing a restored page (only flips the tombstone this delete set;
+    // a detached page stays detached). No-op for native pages.
+    sqlx::query(
+        "UPDATE page_sync SET sync_state = 'active' WHERE page_id = ? AND sync_state = 'tombstoned'",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -530,7 +658,7 @@ pub async fn list_pages_impl(
     filter: Option<PageFilter>,
 ) -> AppResult<Vec<PageSummary>> {
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
-        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE deleted_at IS NULL"
+        "SELECT {SUMMARY_COLUMNS}{SCHEDULE_LOCKED_SELECT} FROM pages WHERE deleted_at IS NULL"
     ));
 
     if let Some(ref f) = filter {
@@ -598,7 +726,7 @@ pub async fn list_pages_impl(
 
 pub async fn list_pages_today_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<PageSummary>> {
     let query = format!(
-        "SELECT DISTINCT {cols} FROM pages
+        "SELECT DISTINCT {cols}{SCHEDULE_LOCKED_SELECT} FROM pages
          JOIN page_schedules ON page_schedules.page_id = pages.id
          WHERE pages.deleted_at IS NULL
            AND date(page_schedules.scheduled_start) <= date('now')
@@ -697,7 +825,7 @@ pub async fn set_pages_status_impl(
     // any FTS triggers have fired).
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
-        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE deleted_at IS NULL AND id IN ("
+        "SELECT {SUMMARY_COLUMNS}{SCHEDULE_LOCKED_SELECT} FROM pages WHERE deleted_at IS NULL AND id IN ("
     ));
     let mut separated = builder.separated(", ");
     for id in ids {
@@ -768,7 +896,7 @@ pub async fn list_completed_pages_impl(
     let total = count_query.fetch_one(pool).await?;
 
     let data_sql = format!(
-        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE {where_clause} \
+        "SELECT {SUMMARY_COLUMNS}{SCHEDULE_LOCKED_SELECT} FROM pages WHERE {where_clause} \
          ORDER BY completed_at DESC LIMIT ? OFFSET ?"
     );
     let mut data_query = sqlx::query_as::<_, PageSummaryRow>(&data_sql);
@@ -939,7 +1067,9 @@ async fn complete_recurring_page_once(
     // it as a visible "done" clone. The sort_order read also lives inside the tx
     // so two concurrent completions can't allocate the same value.
     let head =
-        sqlx::query_as::<_, PageRow>("SELECT * FROM pages WHERE id = ? AND deleted_at IS NULL")
+        sqlx::query_as::<_, PageRow>(&format!(
+            "SELECT *{SCHEDULE_LOCKED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
+        ))
             .bind(&data.page_id)
             .fetch_optional(&mut *tx)
             .await?
@@ -1003,7 +1133,7 @@ async fn complete_recurring_page_once(
     // 5. Fetch updated results (post-commit so any FTS triggers have fired)
     let clone_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
-        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE id = ?"
+        "SELECT {SUMMARY_COLUMNS}{SCHEDULE_LOCKED_SELECT} FROM pages WHERE id = ?"
     ))
     .bind(&clone_id)
     .fetch_one(pool)
@@ -1011,7 +1141,7 @@ async fn complete_recurring_page_once(
 
     let head_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
-        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE id = ?"
+        "SELECT {SUMMARY_COLUMNS}{SCHEDULE_LOCKED_SELECT} FROM pages WHERE id = ?"
     ))
     .bind(&data.page_id)
     .fetch_one(pool)
@@ -1060,6 +1190,9 @@ pub async fn reschedule_virtual_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: RescheduleVirtualInput,
 ) -> AppResult<RescheduleVirtualResult> {
+    // Rescheduling an occurrence rewrites the rule's schedule/exdates — locked on
+    // a synced series. Reject before the retry loop.
+    crate::schedules::ensure_rule_row_unlocked(pool, &data.rule_id).await?;
     // Read-then-write under WAL — retry on BUSY_SNAPSHOT like completion.
     crate::tx::retry_on_busy(|| reschedule_virtual_occurrence_once(pool, &data)).await
 }
@@ -1086,7 +1219,9 @@ async fn reschedule_virtual_occurrence_once(
     // Reject soft-deleted heads: rescheduling an occurrence of a trashed series
     // must not resurrect its content as a visible page.
     let head =
-        sqlx::query_as::<_, PageRow>("SELECT * FROM pages WHERE id = ? AND deleted_at IS NULL")
+        sqlx::query_as::<_, PageRow>(&format!(
+            "SELECT *{SCHEDULE_LOCKED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
+        ))
             .bind(&page_id)
             .fetch_optional(&mut *tx)
             .await?
@@ -1136,7 +1271,7 @@ async fn reschedule_virtual_occurrence_once(
     // Fetch post-commit so any FTS triggers have fired.
     let clone_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
-        "SELECT {SUMMARY_COLUMNS} FROM pages WHERE id = ?"
+        "SELECT {SUMMARY_COLUMNS}{SCHEDULE_LOCKED_SELECT} FROM pages WHERE id = ?"
     ))
     .bind(&clone_id)
     .fetch_one(pool)
@@ -1150,8 +1285,10 @@ async fn reschedule_virtual_occurrence_once(
 
 /// Fetch a single page by id (mirrors the app's get_page — no deleted_at filter).
 pub async fn get_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<Page>> {
-    let row = sqlx::query_as::<_, PageRow>("SELECT * FROM pages WHERE id = ?")
-        .bind(id)
+    let row = sqlx::query_as::<_, PageRow>(&format!(
+        "SELECT *{SCHEDULE_LOCKED_SELECT} FROM pages WHERE id = ?"
+    ))
+    .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(Page::from))

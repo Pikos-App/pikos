@@ -54,6 +54,7 @@ export interface Page {
   deletedAt?: string | null; // ISO 8601; NULL = not deleted, set = trashed
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
+  scheduleLocked: boolean; // derived: active page_sync row owns the schedule → render read-only
 }
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────

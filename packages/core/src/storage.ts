@@ -22,13 +22,18 @@ import type {
 // ─── Page input helpers ───────────────────────────────────────────────────────
 // sort_order excluded — backend assigns max+1 on create
 
-export type NewPage = Omit<Page, "id" | "createdAt" | "updatedAt" | "sortOrder"> & {
+// scheduleLocked is derived from sync state (active page_sync row), never an
+// input — so it's excluded from both write shapes.
+export type NewPage = Omit<
+  Page,
+  "id" | "createdAt" | "updatedAt" | "sortOrder" | "scheduleLocked"
+> & {
   /** Optional override for created_at (used during import to preserve original dates). */
   createdAt?: string;
   /** Optional override for updated_at (used during import to preserve original dates). */
   updatedAt?: string;
 };
-export type PageUpdate = Partial<Omit<Page, "id" | "createdAt" | "updatedAt">>;
+export type PageUpdate = Partial<Omit<Page, "id" | "createdAt" | "updatedAt" | "scheduleLocked">>;
 // isExternalCalendar is system-managed (set by the calendar-sync enable path),
 // never via createFolder/updateFolder — so it's excluded from both input shapes.
 export type NewFolder = Omit<

@@ -127,6 +127,7 @@ export class MockStorageAdapter implements StorageAdapter {
       contentText: data.contentText ?? deriveContentText(data.content),
       createdAt: now(),
       id: uuid(),
+      scheduleLocked: false,
       sortOrder: nextSortOrder([...this.pages.values()]),
       updatedAt: now(),
     };

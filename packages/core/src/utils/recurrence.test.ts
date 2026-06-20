@@ -23,6 +23,7 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
     priority: 0,
     scheduledEnd: null,
     scheduledStart: null,
+    scheduleLocked: false,
     sortOrder: 0,
     status: "not_started",
     tags: [],

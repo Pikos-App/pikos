@@ -86,6 +86,42 @@ pub struct PageSyncRow {
     pub created_at: String,
 }
 
+// ─── Schedule-lock predicate (shared by the page/schedule/recurrence writers) ──
+//
+// A read-only check, not a writer — it backs the locked-mirror guard so the same
+// invariant holds for every command-layer writer (UI and CLI alike). Sync's own
+// writes use raw SQL and bypass these guarded commands, so seeding is unaffected.
+
+/// User-facing message when a writer rejects an edit to a synced page's locked
+/// mirror (title / schedule / recurrence).
+pub(crate) const SYNCED_READONLY_MSG: &str =
+    "This event is synced from an external calendar — its title and schedule are read-only.";
+
+/// True when an active `page_sync` row owns this page (its schedule is locked).
+/// Detached/tombstoned pages are unlocked.
+pub(crate) async fn page_schedule_locked(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+) -> crate::error::AppResult<bool> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM page_sync WHERE page_id = ? AND sync_state = 'active')",
+    )
+    .bind(page_id)
+    .fetch_one(pool)
+    .await?)
+}
+
+/// Reject a locked-mirror edit on a synced page. No-op for native pages.
+pub(crate) async fn ensure_page_schedule_unlocked(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+) -> crate::error::AppResult<()> {
+    if page_schedule_locked(pool, page_id).await? {
+        return Err(crate::error::AppError::Conflict(SYNCED_READONLY_MSG.to_string()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "sync_tests.rs"]
 mod sync_tests;

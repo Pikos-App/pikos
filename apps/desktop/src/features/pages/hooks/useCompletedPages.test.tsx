@@ -38,6 +38,7 @@ function fixtureDonePage(overrides: {
     folderId: overrides.folderId ?? null,
     id: overrides.id,
     priority: 0,
+    scheduleLocked: false,
     sortOrder: 0,
     status: "done",
     tags: [],

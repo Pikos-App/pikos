@@ -398,6 +398,40 @@ pub async fn insert_test_folder(pool: &SqlitePool, id: &str, name: &str) -> AppR
     Ok(())
 }
 
+/// Links an existing test page to a synced calendar (a `page_sync` row), creating
+/// a shared throwaway `sync_account` on first use. `sync_state` ∈ active |
+/// detached | tombstoned. Lets schedule/folder/page guard tests mark a page synced.
+#[cfg(any(test, feature = "test-support"))]
+pub async fn insert_test_page_sync(
+    pool: &SqlitePool,
+    page_id: &str,
+    sync_state: &str,
+) -> AppResult<()> {
+    let now = now_iso();
+    sqlx::query(
+        "INSERT OR IGNORE INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('test-acct', 'caldav', 'Test', 'basic', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO page_sync
+         (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, sync_state, created_at)
+         VALUES (?, ?, 'test-acct', 'caldav', 'cal', ?, ?, ?, ?)",
+    )
+    .bind(format!("ps-{page_id}"))
+    .bind(page_id)
+    .bind(format!("href-{page_id}"))
+    .bind(format!("uid-{page_id}"))
+    .bind(sync_state)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "pool_tests.rs"]
 mod pool_tests;

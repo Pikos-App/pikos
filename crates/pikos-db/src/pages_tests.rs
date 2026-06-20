@@ -1342,3 +1342,382 @@ async fn reschedule_virtual_rejects_trashed_head_with_no_partial_writes() {
             .unwrap();
     assert_eq!(exdates_json, "[]", "exdate not written for a failed reschedule");
 }
+
+// ─── schedule_locked / user_modified / placement-lock ────────────────────────
+
+async fn mark_synced(pool: &sqlx::SqlitePool, page_id: &str, sync_state: &str) {
+    crate::pool::insert_test_page_sync(pool, page_id, sync_state)
+        .await
+        .unwrap();
+}
+
+async fn sync_state(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String> {
+    sqlx::query_scalar::<_, String>("SELECT sync_state FROM page_sync WHERE page_id = ?")
+        .bind(page_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap()
+}
+
+async fn page_exists(pool: &sqlx::SqlitePool, id: &str) -> bool {
+    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM pages WHERE id = ?)")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn user_modified(pool: &sqlx::SqlitePool, page_id: &str) -> bool {
+    sqlx::query_scalar::<_, bool>("SELECT user_modified FROM page_sync WHERE page_id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn schedule_locked_true_only_for_active_synced_pages() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("native", "Native")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("active", "Active")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("detached", "Detached")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("tombstoned", "Tombstoned")).await.unwrap();
+    mark_synced(&pool, "active", "active").await;
+    mark_synced(&pool, "detached", "detached").await;
+    mark_synced(&pool, "tombstoned", "tombstoned").await;
+
+    // get_page (full Page) and list_pages (PageSummary) must agree.
+    let locked = |id: &'static str| {
+        let pool = pool.clone();
+        async move { get_page(&pool, id).await.unwrap().unwrap().schedule_locked }
+    };
+    assert!(!locked("native").await, "native page is never locked");
+    assert!(locked("active").await, "active synced page is locked");
+    assert!(!locked("detached").await, "detached page unlocks");
+    assert!(!locked("tombstoned").await, "tombstoned page unlocks");
+
+    let summaries = list_pages_impl(&pool, None).await.unwrap();
+    let by_id = |id: &str| summaries.iter().find(|p| p.id == id).unwrap().schedule_locked;
+    assert!(by_id("active"), "PageSummary mirrors get_page for the active page");
+    assert!(!by_id("native"));
+}
+
+#[tokio::test]
+async fn editing_a_synced_page_marks_it_user_modified() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Event")).await.unwrap();
+    mark_synced(&pool, "p", "active").await;
+    assert!(!user_modified(&pool, "p").await, "starts clean");
+
+    update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            content: Some(r#"{"type":"doc"}"#.into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert!(user_modified(&pool, "p").await, "editing the body sets ownership");
+}
+
+#[tokio::test]
+async fn opening_a_synced_page_does_not_mark_it_user_modified() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Event")).await.unwrap();
+    mark_synced(&pool, "p", "active").await;
+
+    // A lone last_opened_at write is "open", not "author" — reading ≠ ownership.
+    update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            last_opened_at: Some(serde_json::json!("2026-06-20T10:00:00Z")),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert!(!user_modified(&pool, "p").await, "opening must not set ownership");
+}
+
+#[tokio::test]
+async fn updating_a_native_page_never_touches_page_sync() {
+    // No page_sync row exists — the user_modified write must be a harmless no-op.
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Native")).await.unwrap();
+    let updated = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate { title: Some("Renamed".into()), ..Default::default() },
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.title, "Renamed");
+    assert!(!updated.schedule_locked);
+}
+
+async fn flag_external(pool: &sqlx::SqlitePool, folder_id: &str) {
+    sqlx::query("UPDATE folders SET is_external_calendar = 1 WHERE id = ?")
+        .bind(folder_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn moving_a_page_into_an_external_folder_is_rejected() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "ext", "Synced").await.unwrap();
+    flag_external(&pool, "ext").await;
+    insert_test_page(&pool, TestPage::new("p", "Native")).await.unwrap();
+
+    let err = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate { folder_id: Some(serde_json::json!("ext")), ..Default::default() },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, AppError::Conflict(_)));
+}
+
+#[tokio::test]
+async fn moving_a_page_out_of_an_external_folder_is_rejected() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "ext", "Synced").await.unwrap();
+    crate::pool::insert_test_folder(&pool, "regular", "Regular").await.unwrap();
+    flag_external(&pool, "ext").await;
+    insert_test_page(
+        &pool,
+        TestPage { folder_id: Some("ext"), ..TestPage::new("p", "Synced event") },
+    )
+    .await
+    .unwrap();
+
+    // Move to a regular folder — rejected.
+    let to_regular = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate { folder_id: Some(serde_json::json!("regular")), ..Default::default() },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(to_regular, AppError::Conflict(_)));
+
+    // Move to inbox (folder_id = null) — also rejected (still leaving the folder).
+    let to_inbox = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate { folder_id: Some(serde_json::Value::Null), ..Default::default() },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(to_inbox, AppError::Conflict(_)));
+}
+
+#[tokio::test]
+async fn moving_a_page_between_regular_folders_is_allowed() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "a", "A").await.unwrap();
+    crate::pool::insert_test_folder(&pool, "b", "B").await.unwrap();
+    insert_test_page(
+        &pool,
+        TestPage { folder_id: Some("a"), ..TestPage::new("p", "Note") },
+    )
+    .await
+    .unwrap();
+
+    let moved = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate { folder_id: Some(serde_json::json!("b")), ..Default::default() },
+    )
+    .await
+    .unwrap();
+    assert_eq!(moved.folder_id.as_deref(), Some("b"));
+}
+
+// ─── title/schedule reject · create guard · sync-aware delete/restore ─────────
+
+#[tokio::test]
+async fn editing_title_or_schedule_of_a_synced_page_is_rejected() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Synced event")).await.unwrap();
+    mark_synced(&pool, "p", "active").await;
+
+    let title = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate { title: Some("Renamed".into()), ..Default::default() },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(title, AppError::Conflict(_)), "title is locked");
+
+    let start = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate { scheduled_start: Some(serde_json::json!("2026-07-01T09:00:00")), ..Default::default() },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(start, AppError::Conflict(_)), "schedule is locked");
+}
+
+#[tokio::test]
+async fn editing_body_or_status_of_a_synced_page_is_allowed() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Synced event")).await.unwrap();
+    mark_synced(&pool, "p", "active").await;
+
+    // Body + completion are user-layer / ownership actions, never locked.
+    update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            content: Some(r#"{"type":"doc"}"#.into()),
+            status: Some("done".into()),
+            completed_at: Some(serde_json::json!("2026-06-20T10:00:00")),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert!(user_modified(&pool, "p").await);
+}
+
+#[tokio::test]
+async fn detached_page_title_and_schedule_unlock() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Was synced")).await.unwrap();
+    mark_synced(&pool, "p", "detached").await;
+
+    // Detach unlocks the mirror — the page is now a normal local record.
+    let updated = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate { title: Some("Edited after detach".into()), ..Default::default() },
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.title, "Edited after detach");
+}
+
+#[tokio::test]
+async fn creating_a_page_in_an_external_folder_is_rejected() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "ext", "Synced").await.unwrap();
+    flag_external(&pool, "ext").await;
+
+    let err = create_page_impl(
+        &pool,
+        crate::NewPage {
+            folder_id: Some("ext".into()),
+            title: "Sneaky".into(),
+            subtitle: None,
+            content: "{}".into(),
+            content_text: None,
+            status: "not_started".into(),
+            priority: 0,
+            tags: vec![],
+            scheduled_start: None,
+            scheduled_end: None,
+            completed_at: None,
+            links: vec![],
+            parent_id: None,
+            last_opened_at: None,
+            created_at: None,
+            updated_at: None,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, AppError::Conflict(_)));
+}
+
+#[tokio::test]
+async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Synced event")).await.unwrap();
+    mark_synced(&pool, "p", "active").await;
+
+    // Hard-delete path (calendar block delete / CLI rm) must NOT cascade the row
+    // away — it would resurrect on the next poll. Soft-delete + tombstone instead.
+    delete_page_impl(&pool, "p").await.unwrap();
+    assert!(page_exists(&pool, "p").await, "row kept (recoverable from trash)");
+    assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("tombstoned"));
+
+    // Restore resumes syncing.
+    restore_page_impl(&pool, "p").await.unwrap();
+    assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("active"));
+}
+
+#[tokio::test]
+async fn deleting_a_native_page_still_hard_deletes() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Native")).await.unwrap();
+    delete_page_impl(&pool, "p").await.unwrap();
+    assert!(!page_exists(&pool, "p").await, "native page is hard-deleted");
+}
+
+#[tokio::test]
+async fn rescheduling_an_occurrence_of_a_synced_series_is_rejected() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Recurring synced")).await.unwrap();
+    let rule = crate::create_recurrence_rule_impl(
+        &pool,
+        crate::NewRecurrenceRule {
+            page_id: "p".into(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-07-06T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+    mark_synced(&pool, "p", "active").await;
+
+    // Dragging a virtual occurrence to a new time rewrites the rule's exdates —
+    // locked on a synced series.
+    let err = reschedule_virtual_occurrence_impl(
+        &pool,
+        RescheduleVirtualInput {
+            rule_id: rule.id,
+            original_date: "2026-07-13".into(),
+            scheduled_start: "2026-07-13T11:00:00".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, AppError::Conflict(_)));
+}
+
+#[tokio::test]
+async fn today_view_carries_schedule_locked() {
+    // list_pages_today builds its SELECT with per-column `pages.` prefixing, a
+    // different path than list_pages — confirm the derived flag is wired there too.
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Synced standup")).await.unwrap();
+    mark_synced(&pool, "p", "active").await;
+    // Schedule it for today via raw SQL — the command-layer writer is now locked.
+    let now = now_iso();
+    sqlx::query(
+        "INSERT INTO page_schedules
+         (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
+         VALUES ('s1', 'p', date('now'), NULL, 'UTC', NULL, NULL, 'not_started', ?)",
+    )
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let today = list_pages_today_impl(&pool).await.unwrap();
+    let p = today.iter().find(|p| p.id == "p").expect("synced page in Today");
+    assert!(p.schedule_locked, "Today view must carry schedule_locked");
+}

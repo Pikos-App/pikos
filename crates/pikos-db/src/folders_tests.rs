@@ -286,3 +286,69 @@ async fn reorder_folders_assigns_positional_indices() {
     assert_eq!(fetch_sort_order(&pool, &b.id).await, 1);
     assert_eq!(fetch_sort_order(&pool, &a.id).await, 2);
 }
+
+// ─── external-calendar folder ops are locked ──────────────────────────────────
+
+async fn external_folder(pool: &sqlx::SqlitePool, id: &str) {
+    insert_test_folder(pool, id, "Synced").await.unwrap();
+    sqlx::query("UPDATE folders SET is_external_calendar = 1 WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn external_folder_cannot_be_deleted() {
+    let pool = test_pool().await;
+    external_folder(&pool, "ext").await;
+    assert!(matches!(
+        delete_folder_impl(&pool, "ext".into()).await.unwrap_err(),
+        AppError::Conflict(_)
+    ));
+    assert!(matches!(
+        soft_delete_folder_impl(&pool, "ext".into()).await.unwrap_err(),
+        AppError::Conflict(_)
+    ));
+}
+
+#[tokio::test]
+async fn external_folder_cannot_be_reparented_and_cannot_be_a_parent() {
+    let pool = test_pool().await;
+    external_folder(&pool, "ext").await;
+    insert_test_folder(&pool, "user", "User").await.unwrap();
+
+    // Reparent the external folder → rejected.
+    let reparent = update_folder_impl(
+        &pool,
+        "ext".into(),
+        FolderUpdate { parent_id: Some(serde_json::json!("user")), ..Default::default() },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(reparent, AppError::Conflict(_)));
+
+    // Nest a user folder under the external folder → rejected.
+    let nest = update_folder_impl(
+        &pool,
+        "user".into(),
+        FolderUpdate { parent_id: Some(serde_json::json!("ext")), ..Default::default() },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(nest, AppError::Conflict(_)));
+}
+
+#[tokio::test]
+async fn external_folder_recolor_is_allowed() {
+    let pool = test_pool().await;
+    external_folder(&pool, "ext").await;
+    let updated = update_folder_impl(
+        &pool,
+        "ext".into(),
+        FolderUpdate { color: Some(serde_json::json!("#A6C8E8")), ..Default::default() },
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.color.as_deref(), Some("#A6C8E8"));
+}

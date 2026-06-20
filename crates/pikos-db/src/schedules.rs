@@ -257,12 +257,45 @@ async fn fetch_rule(pool: &sqlx::SqlitePool, id: &str) -> AppResult<PageRecurren
         .map(PageRecurrenceRule::from)
 }
 
+// ─── Locked-mirror guards ──────────────────────────────────────────────────────
+// A synced page's schedule + recurrence are calendar-owned. Reject command-layer
+// edits; the reconciler writes via raw SQL and bypasses these. (See
+// crate::sync::ensure_page_schedule_unlocked.)
+
+async fn ensure_schedule_row_unlocked(pool: &sqlx::SqlitePool, schedule_id: &str) -> AppResult<()> {
+    let page_id: Option<String> =
+        sqlx::query_scalar("SELECT page_id FROM page_schedules WHERE id = ?")
+            .bind(schedule_id)
+            .fetch_optional(pool)
+            .await?;
+    if let Some(pid) = page_id {
+        crate::sync::ensure_page_schedule_unlocked(pool, &pid).await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn ensure_rule_row_unlocked(
+    pool: &sqlx::SqlitePool,
+    rule_id: &str,
+) -> AppResult<()> {
+    let page_id: Option<String> =
+        sqlx::query_scalar("SELECT page_id FROM page_recurrence_rules WHERE id = ?")
+            .bind(rule_id)
+            .fetch_optional(pool)
+            .await?;
+    if let Some(pid) = page_id {
+        crate::sync::ensure_page_schedule_unlocked(pool, &pid).await?;
+    }
+    Ok(())
+}
+
 // ─── Schedule commands ────────────────────────────────────────────────────────
 
 pub async fn create_page_schedule_impl(
     pool: &sqlx::SqlitePool,
     data: NewPageSchedule,
 ) -> AppResult<PageSchedule> {
+    crate::sync::ensure_page_schedule_unlocked(pool, &data.page_id).await?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = now_iso();
 
@@ -297,6 +330,7 @@ pub async fn update_page_schedule_impl(
     id: String,
     updates: PageScheduleUpdate,
 ) -> AppResult<PageSchedule> {
+    ensure_schedule_row_unlocked(pool, &id).await?;
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE page_schedules SET ");
     let mut fields = builder.separated(", ");
     let mut has_updates = false;
@@ -360,6 +394,7 @@ pub async fn update_page_schedule_impl(
 }
 
 pub async fn delete_page_schedule_impl(pool: &sqlx::SqlitePool, id: String) -> AppResult<()> {
+    ensure_schedule_row_unlocked(pool, &id).await?;
     // Lookup + delete + denorm refresh in one tx so the denorm can't be
     // left pointing at the now-deleted row after a mid-flight crash.
     let mut tx = pool.begin().await?;
@@ -433,6 +468,7 @@ pub async fn create_recurrence_rule_impl(
     pool: &sqlx::SqlitePool,
     data: NewRecurrenceRule,
 ) -> AppResult<PageRecurrenceRule> {
+    crate::sync::ensure_page_schedule_unlocked(pool, &data.page_id).await?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = now_iso();
     let exdates_json =
@@ -462,6 +498,7 @@ pub async fn update_recurrence_rule_impl(
     id: String,
     updates: RecurrenceRuleUpdate,
 ) -> AppResult<PageRecurrenceRule> {
+    ensure_rule_row_unlocked(pool, &id).await?;
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE page_recurrence_rules SET ");
     let mut fields = builder.separated(", ");
     let mut has_updates = false;
@@ -549,6 +586,7 @@ pub async fn add_rule_exdates_impl(
     id: String,
     dates: Vec<String>,
 ) -> AppResult<PageRecurrenceRule> {
+    ensure_rule_row_unlocked(pool, &id).await?;
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
         merge_rule_exdates_tx(&mut tx, &id, &dates).await?;
@@ -566,6 +604,7 @@ pub async fn remove_rule_exdate_impl(
     id: String,
     date: String,
 ) -> AppResult<PageRecurrenceRule> {
+    ensure_rule_row_unlocked(pool, &id).await?;
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
         let current: String =
@@ -593,6 +632,7 @@ pub async fn remove_rule_exdate_impl(
 }
 
 pub async fn delete_recurrence_rule_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
+    ensure_rule_row_unlocked(pool, id).await?;
     // Cascades to page_schedules rows with rule_id = id
     sqlx::query("DELETE FROM page_recurrence_rules WHERE id = ?")
         .bind(id)
