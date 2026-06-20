@@ -2,6 +2,7 @@
 
 import type {
   FolderUpdate,
+  NewCaldavConnection,
   NewFolder,
   NewPage,
   NewPageReminder,
@@ -13,6 +14,8 @@ import type {
   StorageAdapter,
 } from "../storage";
 import type {
+  AccountWithCalendars,
+  CalendarSyncResult,
   CompletedPagesFilter,
   CompletedPagesResponse,
   CompleteRecurringInput,
@@ -29,6 +32,8 @@ import type {
   RescheduleVirtualResult,
   SearchResponse,
   SearchResult,
+  SyncAccount,
+  SyncCalendar,
 } from "../types";
 import { nowLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
@@ -93,6 +98,8 @@ export class MockStorageAdapter implements StorageAdapter {
   private reminders = new Map<string, PageReminder>();
   private softDeleted = new Set<string>();
   private softDeletedFolders = new Set<string>();
+  private syncAccounts = new Map<string, SyncAccount>();
+  private syncCalendars = new Map<string, SyncCalendar>();
 
   clear(): void {
     this.pages.clear();
@@ -102,6 +109,8 @@ export class MockStorageAdapter implements StorageAdapter {
     this.reminders.clear();
     this.softDeleted.clear();
     this.softDeletedFolders.clear();
+    this.syncAccounts.clear();
+    this.syncCalendars.clear();
   }
 
   // ─── Pages ──────────────────────────────────────────────────────────────────
@@ -307,6 +316,7 @@ export class MockStorageAdapter implements StorageAdapter {
       ...data,
       createdAt: now(),
       id: uuid(),
+      isExternalCalendar: false,
       sortOrder: nextSortOrder([...this.folders.values()]),
       updatedAt: now(),
     };
@@ -668,5 +678,96 @@ export class MockStorageAdapter implements StorageAdapter {
       delete updated.scheduledEnd;
     }
     this.pages.set(pageId, updated);
+  }
+
+  // ─── Calendar sync ────────────────────────────────────────────────────────────
+
+  connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars> {
+    const account: SyncAccount = {
+      authKind: "basic",
+      createdAt: now(),
+      displayName: data.displayName,
+      id: uuid(),
+      provider: "caldav",
+    };
+    this.syncAccounts.set(account.id, account);
+    // Canned discovery so test mode has calendars to toggle.
+    for (const name of ["Personal", "Work"]) {
+      const cal: SyncCalendar = {
+        accountId: account.id,
+        calendarId: `${name.toLowerCase()}-cal`,
+        color: null,
+        displayName: name,
+        enabled: false,
+        folderId: null,
+        id: uuid(),
+        lastSyncedAt: null,
+      };
+      this.syncCalendars.set(cal.id, cal);
+    }
+    return Promise.resolve({ ...account, calendars: this._calendarsFor(account.id) });
+  }
+
+  disconnectSyncAccount(accountId: string): Promise<void> {
+    for (const cal of this._calendarsFor(accountId)) {
+      if (cal.folderId) this.folders.delete(cal.folderId);
+      this.syncCalendars.delete(cal.id);
+    }
+    this.syncAccounts.delete(accountId);
+    return Promise.resolve();
+  }
+
+  listSyncCalendars(accountId: string): Promise<SyncCalendar[]> {
+    return Promise.resolve(this._calendarsFor(accountId));
+  }
+
+  toggleSyncCalendar(
+    calendarId: string,
+    enabled: boolean,
+    color: string | null
+  ): Promise<SyncCalendar> {
+    const cal = this.syncCalendars.get(calendarId);
+    if (!cal) return Promise.reject(new Error(`Sync calendar not found: ${calendarId}`));
+    let folderId = cal.folderId;
+    if (enabled && !folderId) {
+      const folder: Folder = {
+        createdAt: now(),
+        id: uuid(),
+        isExternalCalendar: true,
+        name: cal.displayName,
+        parentId: null,
+        sortOrder: nextSortOrder([...this.folders.values()]),
+        updatedAt: now(),
+        ...(color != null ? { color } : {}),
+      };
+      this.folders.set(folder.id, folder);
+      folderId = folder.id;
+    } else if (!enabled && folderId) {
+      this.folders.delete(folderId);
+      folderId = null;
+    }
+    const updated: SyncCalendar = { ...cal, color, enabled, folderId };
+    this.syncCalendars.set(calendarId, updated);
+    return Promise.resolve(updated);
+  }
+
+  resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
+    const results = this._calendarsFor(accountId)
+      .filter((c) => c.enabled)
+      .map((c) => ({ calendarId: c.calendarId, fullResync: false, status: "synced" as const }));
+    return Promise.resolve(results);
+  }
+
+  getSyncStatus(): Promise<AccountWithCalendars[]> {
+    return Promise.resolve(
+      [...this.syncAccounts.values()].map((a) => ({
+        ...a,
+        calendars: this._calendarsFor(a.id),
+      }))
+    );
+  }
+
+  private _calendarsFor(accountId: string): SyncCalendar[] {
+    return [...this.syncCalendars.values()].filter((c) => c.accountId === accountId);
   }
 }

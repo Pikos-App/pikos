@@ -41,6 +41,8 @@ pub struct SyncCalendarRow {
     /// Last poll that completed (incremental or full) — the engine stamps it for
     /// the stale dot. `None` until the first sync.
     pub last_synced_at: Option<String>,
+    /// The calendar's system folder; `None` while disabled.
+    pub folder_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

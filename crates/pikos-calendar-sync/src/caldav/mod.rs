@@ -35,6 +35,14 @@ impl CaldavProvider {
         Self { keychain }
     }
 
+    /// Validate credentials by discovering calendars directly from them, before any
+    /// account or keychain entry exists — proves the URL + password before anything
+    /// is persisted.
+    pub async fn discover_with(creds: &CaldavCredentials) -> AppResult<Vec<RemoteCalendar>> {
+        let transport = ReqwestDav::new(creds.username.clone(), creds.password.clone());
+        Ok(discovery::discover_calendars(&transport, &creds.base_url).await?)
+    }
+
     fn credentials(&self, account: &SyncAccountRow) -> AppResult<CaldavCredentials> {
         self.credentials_by_id(&account.id)
     }

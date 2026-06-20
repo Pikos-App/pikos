@@ -1,4 +1,6 @@
 import type {
+  AccountWithCalendars,
+  CalendarSyncResult,
   CompletedPagesFilter,
   CompletedPagesResponse,
   CompleteRecurringInput,
@@ -14,6 +16,7 @@ import type {
   RescheduleVirtualInput,
   RescheduleVirtualResult,
   SearchResponse,
+  SyncCalendar,
 } from "./types";
 
 // ─── Page input helpers ───────────────────────────────────────────────────────
@@ -26,8 +29,24 @@ export type NewPage = Omit<Page, "id" | "createdAt" | "updatedAt" | "sortOrder">
   updatedAt?: string;
 };
 export type PageUpdate = Partial<Omit<Page, "id" | "createdAt" | "updatedAt">>;
-export type NewFolder = Omit<Folder, "id" | "createdAt" | "updatedAt" | "sortOrder">;
-export type FolderUpdate = Partial<Omit<Folder, "id" | "createdAt" | "updatedAt">>;
+// isExternalCalendar is system-managed (set by the calendar-sync enable path),
+// never via createFolder/updateFolder — so it's excluded from both input shapes.
+export type NewFolder = Omit<
+  Folder,
+  "id" | "createdAt" | "updatedAt" | "sortOrder" | "isExternalCalendar"
+>;
+export type FolderUpdate = Partial<
+  Omit<Folder, "id" | "createdAt" | "updatedAt" | "isExternalCalendar">
+>;
+
+// ─── Calendar-sync input helpers ──────────────────────────────────────────────
+
+export interface NewCaldavConnection {
+  baseUrl: string; // autodiscovery starts here
+  username: string;
+  password: string; // app-specific password
+  displayName: string;
+}
 
 // ─── Schedule input helpers ───────────────────────────────────────────────────
 
@@ -160,4 +179,22 @@ export interface StorageAdapter {
   deletePageReminder(id: string): Promise<void>;
   /** Delete all reminders for a page (reset to global default). */
   deletePageReminders(pageId: string): Promise<void>;
+
+  // Calendar sync
+  /** Validate a CalDAV connection (autodiscovery), then persist the account +
+   * its discovered (disabled) calendars; credentials go to the OS keychain. */
+  connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars>;
+  /** Tear down the account's synced pages/folders and remove its keychain entry. */
+  disconnectSyncAccount(accountId: string): Promise<void>;
+  listSyncCalendars(accountId: string): Promise<SyncCalendar[]>;
+  /** Enable (materialize folder + colour) or disable (teardown) a calendar. */
+  toggleSyncCalendar(
+    calendarId: string,
+    enabled: boolean,
+    color: string | null
+  ): Promise<SyncCalendar>;
+  /** Poll every enabled calendar on the account; returns per-calendar outcomes. */
+  resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]>;
+  /** Account-centric status tree for the Calendar Sync panel. */
+  getSyncStatus(): Promise<AccountWithCalendars[]>;
 }

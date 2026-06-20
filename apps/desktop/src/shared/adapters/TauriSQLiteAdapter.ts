@@ -1,4 +1,6 @@
 import type {
+  AccountWithCalendars,
+  CalendarSyncResult,
   CompletedPagesFilter,
   CompletedPagesResponse,
   CompleteRecurringInput,
@@ -14,9 +16,11 @@ import type {
   RescheduleVirtualInput,
   RescheduleVirtualResult,
   SearchResponse,
+  SyncCalendar,
 } from "@pikos/core";
 import type {
   FolderUpdate,
+  NewCaldavConnection,
   NewFolder,
   NewPage,
   NewPageReminder,
@@ -100,6 +104,10 @@ const WRITE_COMMANDS = new Set([
   "create_page_reminder",
   "delete_page_reminder",
   "delete_page_reminders",
+  "connect_caldav_account",
+  "disconnect_sync_account",
+  "toggle_sync_calendar",
+  "resync_sync_account",
   "backdate_page",
   "reset_db",
   "wipe_app_data",
@@ -294,5 +302,35 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   deletePageReminders(pageId: string): Promise<void> {
     return invoke<void>("delete_page_reminders", { pageId });
+  }
+
+  // ─── Calendar sync ────────────────────────────────────────────────────────────
+
+  connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars> {
+    return invoke<AccountWithCalendars>("connect_caldav_account", { ...data });
+  }
+
+  disconnectSyncAccount(accountId: string): Promise<void> {
+    return invoke<void>("disconnect_sync_account", { accountId });
+  }
+
+  listSyncCalendars(accountId: string): Promise<SyncCalendar[]> {
+    return invoke<SyncCalendar[]>("list_sync_calendars", { accountId });
+  }
+
+  toggleSyncCalendar(
+    calendarId: string,
+    enabled: boolean,
+    color: string | null
+  ): Promise<SyncCalendar> {
+    return invoke<SyncCalendar>("toggle_sync_calendar", { calendarId, color, enabled });
+  }
+
+  resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
+    return invoke<CalendarSyncResult[]>("resync_sync_account", { accountId });
+  }
+
+  getSyncStatus(): Promise<AccountWithCalendars[]> {
+    return invoke<AccountWithCalendars[]>("get_sync_status");
   }
 }

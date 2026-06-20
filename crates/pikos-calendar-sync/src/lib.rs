@@ -5,10 +5,12 @@
 //! `reqwest`) stay out of that crate's toolchain-agnostic workspace check.
 
 pub mod caldav;
+pub mod commands;
 pub mod engine;
 pub mod http;
 pub mod keychain;
 
 pub use caldav::{CaldavCredentials, CaldavError, CaldavProvider};
+pub use commands::{connect_caldav, disconnect_account, resync_account, CalendarSyncResult};
 pub use engine::{sync_calendar, SyncOutcome};
 pub use keychain::{Keychain, KeychainError};

@@ -39,6 +39,10 @@ use db::{
     },
     search::search_pages,
     switch_workspace,
+    sync::{
+        connect_caldav_account, disconnect_sync_account, get_sync_status, list_sync_calendars,
+        resync_sync_account, toggle_sync_calendar,
+    },
     tags::search_tags,
     DbState,
 };
@@ -343,6 +347,13 @@ pub fn run() {
             search_pages,
             // Tags
             search_tags,
+            // Calendar sync
+            connect_caldav_account,
+            disconnect_sync_account,
+            list_sync_calendars,
+            toggle_sync_calendar,
+            resync_sync_account,
+            get_sync_status,
             // Notifications / reminders
             create_page_reminder,
             list_page_reminders,

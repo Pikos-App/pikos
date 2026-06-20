@@ -13,6 +13,7 @@ struct FolderRow {
     sort_order: i64,
     color: Option<String>,
     icon: Option<String>,
+    is_external_calendar: i64,
     created_at: String,
     updated_at: String,
 }
@@ -28,6 +29,8 @@ pub struct Folder {
     pub sort_order: i64,
     pub color: Option<String>,
     pub icon: Option<String>,
+    /// System-managed: drives the placement lock + separate sidebar area.
+    pub is_external_calendar: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -41,6 +44,7 @@ impl From<FolderRow> for Folder {
             sort_order: row.sort_order,
             color: row.color,
             icon: row.icon,
+            is_external_calendar: row.is_external_calendar != 0,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }

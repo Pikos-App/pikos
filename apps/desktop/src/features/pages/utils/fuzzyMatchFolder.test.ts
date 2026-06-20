@@ -7,6 +7,7 @@ function makeFolder(name: string, id: string = name.toLowerCase()): Folder {
   return {
     createdAt: "2026-01-01T00:00:00",
     id,
+    isExternalCalendar: false,
     name,
     parentId: null,
     sortOrder: 0,

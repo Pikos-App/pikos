@@ -19,6 +19,8 @@ export interface Folder {
   sortOrder: number; // manual position in the flat folder list
   color?: string;
   icon?: string;
+  // System-managed: drives the placement lock + separate sidebar area.
+  isExternalCalendar: boolean;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
 }
@@ -224,4 +226,37 @@ export interface CompletedPagesFilter {
 export interface CompletedPagesResponse {
   pages: PageSummary[];
   total: number; // total matching count (ignoring limit/offset)
+}
+
+// ─── Calendar sync ─────────────────────────────────────────────────────────────
+
+export interface SyncAccount {
+  id: string;
+  provider: string; // 'caldav' | 'google'
+  displayName: string; // email (Google) / server·username (CalDAV)
+  authKind: string; // 'basic' | 'oauth'
+  createdAt: string;
+}
+
+export interface SyncCalendar {
+  id: string;
+  accountId: string;
+  calendarId: string; // provider's calendar identifier
+  displayName: string;
+  color: string | null; // Pikos palette colour, not provider hex
+  enabled: boolean; // per-calendar opt-in
+  lastSyncedAt: string | null;
+  folderId: string | null; // the calendar's system folder, set while enabled
+}
+
+/** An account plus its calendars — the account-centric panel read (getSyncStatus). */
+export interface AccountWithCalendars extends SyncAccount {
+  calendars: SyncCalendar[];
+}
+
+/** One calendar's resync outcome (resyncSyncAccount). */
+export interface CalendarSyncResult {
+  calendarId: string;
+  status: "synced" | "offline" | "reconnectNeeded";
+  fullResync: boolean;
 }
