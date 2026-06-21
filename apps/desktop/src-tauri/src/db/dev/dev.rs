@@ -289,6 +289,243 @@ pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
     Ok(())
 }
 
+// ─── Mock calendar-sync seed (dev only) ──────────────────────────────────────
+// Populates the DB with synced external-calendar data exactly as a finished sync
+// would leave it — folders flagged `is_external_calendar`, pages linked by
+// `page_sync`, a cross-zone timed event, an all-day, a recurring series, and a
+// detached page — but with NO network or keychain. The reconciler is never run;
+// this writes the same rows it would. Lets the whole app be spot-checked /
+// manually QA'd against synced data on demand. Additive: re-running replaces only
+// its own mock account (cascades its calendars + page_sync links).
+
+// A doc node requires at least one block child (ProseMirror `block+`); an empty
+// content array crashes the editor on open. Match the app's EMPTY_TIPTAP_DOC.
+const EMPTY_DOC: &str = r#"{"type":"doc","content":[{"type":"paragraph"}]}"#;
+const MOCK_ACCOUNT_NAME: &str = "Mock Calendar (dev)";
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_synced_page(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    folder_id: &str,
+    account_id: &str,
+    calendar_id: &str,
+    title: &str,
+    scheduled_start: &str,
+    scheduled_end: Option<&str>,
+    timezone: Option<&str>,
+    sync_state: &str,
+    sort_order: i64,
+    now: &str,
+) -> AppResult<()> {
+    let page_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
+            sort_order, scheduled_start, scheduled_end, links, created_at, updated_at)
+         VALUES (?, ?, ?, ?, '', 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?)",
+    )
+    .bind(&page_id)
+    .bind(folder_id)
+    .bind(title)
+    .bind(EMPTY_DOC)
+    .bind(sort_order)
+    .bind(scheduled_start)
+    .bind(scheduled_end)
+    .bind(now)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO page_schedules (id, page_id, scheduled_start, scheduled_end, timezone, status, created_at)
+         VALUES (?, ?, ?, ?, ?, 'not_started', ?)",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&page_id)
+    .bind(scheduled_start)
+    .bind(scheduled_end)
+    .bind(timezone)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+
+    let ext = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO page_sync (id, page_id, account_id, provider, calendar_id, external_id,
+            ical_uid, sync_state, created_at)
+         VALUES (?, ?, ?, 'caldav', ?, ?, ?, ?, ?)",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&page_id)
+    .bind(account_id)
+    .bind(calendar_id)
+    .bind(&ext)
+    .bind(&ext)
+    .bind(sync_state)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_synced_recurring(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    folder_id: &str,
+    account_id: &str,
+    calendar_id: &str,
+    title: &str,
+    base_start: &str,
+    base_end: &str,
+    timezone: &str,
+    rrule: &str,
+    sort_order: i64,
+    now: &str,
+) -> AppResult<()> {
+    let page_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
+            sort_order, scheduled_start, scheduled_end, links, created_at, updated_at)
+         VALUES (?, ?, ?, ?, '', 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?)",
+    )
+    .bind(&page_id)
+    .bind(folder_id)
+    .bind(title)
+    .bind(EMPTY_DOC)
+    .bind(sort_order)
+    .bind(base_start)
+    .bind(base_end)
+    .bind(now)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules (id, page_id, rrule, rrule_exdates, scheduled_start,
+            scheduled_end, timezone, created_at)
+         VALUES (?, ?, ?, '[]', ?, ?, ?, ?)",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&page_id)
+    .bind(rrule)
+    .bind(base_start)
+    .bind(base_end)
+    .bind(timezone)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+
+    let ext = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO page_sync (id, page_id, account_id, provider, calendar_id, external_id,
+            ical_uid, sync_state, created_at)
+         VALUES (?, ?, ?, 'caldav', ?, ?, ?, 'active', ?)",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&page_id)
+    .bind(account_id)
+    .bind(calendar_id)
+    .bind(&ext)
+    .bind(&ext)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn dev_seed_synced_calendar(state: tauri::State<'_, DbState>) -> AppResult<()> {
+    let pool = state.get_pool().await?;
+    dev_seed_synced_calendar_impl(&pool).await
+}
+
+pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
+    let now = pikos_db::now_iso();
+    let today = chrono::Local::now().date_naive();
+    let day = |offset: i64| {
+        (today + chrono::Duration::days(offset))
+            .format("%Y-%m-%d")
+            .to_string()
+    };
+    let at = |offset: i64, hm: &str| format!("{}T{hm}:00", day(offset));
+
+    let mut tx = pool.begin().await?;
+
+    // Idempotent: drop a prior mock account (cascades its calendars + page_sync).
+    sqlx::query("DELETE FROM sync_account WHERE display_name = ?")
+        .bind(MOCK_ACCOUNT_NAME)
+        .execute(&mut *tx)
+        .await?;
+
+    let account_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES (?, 'caldav', ?, 'basic', ?, ?)",
+    )
+    .bind(&account_id)
+    .bind(MOCK_ACCOUNT_NAME)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *tx)
+    .await?;
+
+    // Two enabled calendars, each with its own external folder.
+    let mut folder_ids = Vec::new();
+    for (i, (name, color, cal_id)) in [
+        ("Personal (synced)", "#7c9cf0", "mock-personal"),
+        ("Work (synced)", "#f0a37c", "mock-work"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let folder_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO folders (id, name, sort_order, color, is_external_calendar, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 1, ?, ?)",
+        )
+        .bind(&folder_id)
+        .bind(name)
+        .bind(1000 + i as i64)
+        .bind(color)
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO sync_calendar (id, account_id, calendar_id, display_name, color, enabled,
+                folder_id, last_synced_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&account_id)
+        .bind(cal_id)
+        .bind(name)
+        .bind(color)
+        .bind(&folder_id)
+        .bind(&now)
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await?;
+        folder_ids.push((folder_id, cal_id));
+    }
+    let (personal, personal_cal) = &folder_ids[0];
+    let (work, work_cal) = &folder_ids[1];
+
+    // Personal: same-day timed (NY), cross-zone (LA), all-day, weekly recurring (London).
+    insert_synced_page(&mut tx, personal, &account_id, personal_cal, "Team standup", &at(0, "09:00"), Some(&at(0, "09:30")), Some("America/New_York"), "active", 0, &now).await?;
+    insert_synced_page(&mut tx, personal, &account_id, personal_cal, "Design review (LA team)", &at(0, "15:00"), Some(&at(0, "16:00")), Some("America/Los_Angeles"), "active", 1, &now).await?;
+    insert_synced_page(&mut tx, personal, &account_id, personal_cal, "Company offsite", &day(0), None, None, "active", 2, &now).await?;
+    insert_synced_recurring(&mut tx, personal, &account_id, personal_cal, "Weekly 1:1 (London)", &at(0, "14:00"), &at(0, "14:30"), "Europe/London", "FREQ=WEEKLY", 3, &now).await?;
+
+    // Work: cross-zone (Tokyo) + a detached page (sync severed → editable, broken-sync icon).
+    insert_synced_page(&mut tx, work, &account_id, work_cal, "Tokyo sync", &at(1, "08:00"), Some(&at(1, "08:30")), Some("Asia/Tokyo"), "active", 0, &now).await?;
+    insert_synced_page(&mut tx, work, &account_id, work_cal, "Old planning (detached)", &at(0, "17:00"), Some(&at(0, "17:30")), Some("America/New_York"), "detached", 1, &now).await?;
+
+    tx.commit().await?;
+    log::info!("dev_seed_synced_calendar: seeded mock account + 2 calendars + 6 pages");
+    Ok(())
+}
+
 /// User-facing "Delete All Data": wipes the entire on-disk footprint of the
 /// app — SQLite files (DB, WAL, SHM), workspace assets, backups, the
 /// tauri-plugin-store registry, and the rotating log directory. The frontend

@@ -110,13 +110,17 @@ export function PageListHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        <TooltipIconButton
-          icon={<Plus size={15} />}
-          label="New Page"
-          onClick={() => onOpenDialog("quick-add")}
-          shortcut="mod+n"
-          tabIndex={activeViewId === "today" ? 0 : -1}
-        />
+        {/* External-calendar folders are read-only mirrors — you can't add a
+            native page to one (placement lock), so no New Page affordance. */}
+        {!folders.find((f) => f.id === activeViewId)?.isExternalCalendar && (
+          <TooltipIconButton
+            icon={<Plus size={15} />}
+            label="New Page"
+            onClick={() => onOpenDialog("quick-add")}
+            shortcut="mod+n"
+            tabIndex={activeViewId === "today" ? 0 : -1}
+          />
+        )}
       </IconToolbar>
     </div>
   );

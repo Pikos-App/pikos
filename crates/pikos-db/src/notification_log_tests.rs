@@ -50,6 +50,26 @@ async fn insert_schedule(
     .unwrap();
 }
 
+async fn insert_schedule_tz(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    page_id: &str,
+    scheduled_start: &str,
+    timezone: &str,
+) {
+    sqlx::query(
+        "INSERT INTO page_schedules (id, page_id, scheduled_start, timezone, status, created_at)
+         VALUES (?, ?, ?, ?, 'not_started', '2026-05-01T00:00:00')",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(scheduled_start)
+    .bind(timezone)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 async fn insert_reminder(pool: &sqlx::SqlitePool, page_id: &str, minutes_before: i64) {
     sqlx::query(
         "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
@@ -161,6 +181,47 @@ async fn none_sentinel_reminder_never_fires() {
         .await
         .unwrap()
         .is_empty());
+}
+
+#[tokio::test]
+async fn floating_synced_oneoff_explicit_reminder_fires_on_native_path() {
+    // A synced one-off with NO timezone (floating CalDAV DTSTART) is device-local,
+    // so the native explicit path must still fire it — the synced path only
+    // handles zoned events. Regression guard for the over-broad synced exclusion.
+    let pool = test_pool().await;
+    insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await; // tz NULL
+    insert_reminder(&pool, "p1", 10).await;
+    crate::pool::insert_test_page_sync(&pool, "p1", "active")
+        .await
+        .unwrap();
+
+    let due = due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+        .await
+        .unwrap();
+    assert_eq!(due.len(), 1, "floating synced one-off should fire on native path");
+    assert_eq!(due[0].schedule_id, "s1");
+}
+
+#[tokio::test]
+async fn zoned_synced_oneoff_is_excluded_from_native_path() {
+    // A synced one-off WITH a timezone is absolute — it belongs on the synced
+    // (zone-aware) path, so the native explicit query must exclude it.
+    let pool = test_pool().await;
+    insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule_tz(&pool, "s1", "p1", "2026-05-25T09:10:00", "America/New_York").await;
+    insert_reminder(&pool, "p1", 10).await;
+    crate::pool::insert_test_page_sync(&pool, "p1", "active")
+        .await
+        .unwrap();
+
+    assert!(
+        due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
+            .await
+            .unwrap()
+            .is_empty(),
+        "zoned synced one-off must not fire on the native path"
+    );
 }
 
 // ─── due_default_reminders ───────────────────────────────────────────────────

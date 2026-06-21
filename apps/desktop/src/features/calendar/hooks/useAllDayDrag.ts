@@ -116,6 +116,10 @@ export function useAllDayDrag({
     pageId: string;
     originalDate?: string;
   }) {
+    const page = pages.find((p) => p.id === pageId);
+    // Synced events own a locked schedule — never draggable.
+    if (page?.scheduleLocked) return;
+
     disableSelect("dragging-grab");
     allDayDragRef.current = { folderColor, pageId, ...(originalDate && { originalDate }) };
     allDayGhostPositionRef.current = null;
@@ -124,7 +128,6 @@ export function useAllDayDrag({
 
     // Render the ghost DOM once up-front. Position updates during the drag
     // go through positionGhost() — ref-based, no React re-render per frame.
-    const page = pages.find((p) => p.id === pageId);
     setGhostContent({
       folderColor,
       height: metrics.compactBlockHeight,
@@ -257,6 +260,8 @@ export function useAllDayDrag({
   }) {
     const page = pages.find((p) => p.id === pageId);
     if (!page?.scheduledStart) return;
+    // Synced events own a locked schedule — never resizable.
+    if (page.scheduleLocked) return;
     const startStr = page.scheduledStart;
     const endStr = page.scheduledEnd ?? page.scheduledStart;
     const anchorStr = edge === "start" ? endStr : startStr;

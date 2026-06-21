@@ -296,7 +296,23 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
     fire_explicit_reminders(app, &pool, &window_start, &now_ts).await?;
     fire_default_reminders(app, &pool, &settings, &window_start, &now_ts).await?;
     fire_recurring_reminders(app, &pool, &settings, &window_start, &now_ts).await?;
+    fire_synced_reminders(app, &pool, now.to_utc()).await?;
 
+    Ok(())
+}
+
+/// Synced events are absolute — their reminders fire on the instant resolved
+/// from the source zone, not the device-local reading of the wall-clock. The
+/// naive `fire_*` paths above exclude active-synced pages; this covers them.
+async fn fire_synced_reminders(
+    app: &AppHandle,
+    pool: &SqlitePool,
+    now_utc: chrono::DateTime<chrono::Utc>,
+) -> Result<(), sqlx::Error> {
+    let due = pikos_db::due_synced_reminders(pool, now_utc).await?;
+    for row in due {
+        fire_reminder(app, pool, &row).await?;
+    }
     Ok(())
 }
 

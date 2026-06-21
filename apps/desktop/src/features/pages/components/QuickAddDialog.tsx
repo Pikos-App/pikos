@@ -83,9 +83,13 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const { activeViewId, dialogPrefill, openPage } = useUI();
   const { defaultFolderId: settingsDefaultFolder } = useAppSettings();
 
+  // External-calendar folders are placement-locked — a new native page can't land
+  // in one, so they're never a quick-add target (chip, NLP, or active-view default).
+  const creatableFolders = folders.filter((f) => !f.isExternalCalendar);
+
   // Active sidebar folder takes precedence, then settings default, then Inbox (null).
   const initialFolderId =
-    folders.find((folder) => folder.id === activeViewId)?.id ?? settingsDefaultFolder;
+    creatableFolders.find((folder) => folder.id === activeViewId)?.id ?? settingsDefaultFolder;
   const dateActiveToday = activeViewId === "today";
 
   const [inputValue, setInputValue] = useState(() => dialogPrefill ?? "");
@@ -202,7 +206,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
       if (!folderManual) {
         if (parsed.folderQuery) {
-          const match = fuzzyMatchFolder(parsed.folderQuery, folders);
+          const match = fuzzyMatchFolder(parsed.folderQuery, creatableFolders);
           setFolderValue(
             match ? match.id : parsed.folderQuery.toLowerCase() === "inbox" ? null : folderValue
           );
@@ -270,7 +274,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     // Folder: NLP folderQuery takes precedence over chip selection.
     let resolvedFolderId = folderValue;
     if (parsed?.folderQuery) {
-      const match = fuzzyMatchFolder(parsed.folderQuery, folders);
+      const match = fuzzyMatchFolder(parsed.folderQuery, creatableFolders);
       if (match) {
         resolvedFolderId = match.id;
       } else if (parsed.folderQuery.toLowerCase() === "inbox") {

@@ -381,7 +381,14 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   function renderVirtualRow(row: VirtualRow) {
     switch (row.type) {
       case "empty-state":
-        return <PageListEmptyState activeViewId={activeViewId} />;
+        return (
+          <PageListEmptyState
+            activeViewId={activeViewId}
+            isExternalCalendar={
+              folders.find((f) => f.id === activeViewId)?.isExternalCalendar ?? false
+            }
+          />
+        );
 
       case "section-header":
         return row.collapsible ? (

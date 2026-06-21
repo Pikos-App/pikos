@@ -8,11 +8,12 @@ import {
   localToday,
   nowLocalISO,
   parseLocalISO,
+  rruleToLabel,
   snapAnchorToRule,
   storageErrorUserMessage,
   toStorageError,
 } from "@pikos/core";
-import { AlertTriangle, CalendarDays } from "lucide-react";
+import { AlertTriangle, CalendarDays, CalendarOff, CalendarSync } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,6 +29,7 @@ import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUI } from "@/shared/context/UIContext";
+import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
 
 import { DateSchedulePopover } from "./DateSchedulePopover";
 
@@ -68,6 +70,14 @@ function Byline({
   const { recurrenceRules } = usePages();
   const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
 
+  // Synced events own a locked mirror: title (handled above), folder placement,
+  // schedule, and recurrence are read-only. Body + the rest of the byline
+  // (status, reminders, priority, tags) stay user-editable.
+  const locked = page.scheduleLocked;
+  const lockedSchedule = locked ? syncedScheduleLabel(page) : null;
+  const lockedRecurrenceLabel =
+    locked && recurrenceRule ? rruleToLabel(recurrenceRule.rrule) : null;
+
   return (
     <div className="type-ui-sm flex items-center gap-2 overflow-hidden pt-2 pb-4 text-subtle">
       <button
@@ -85,23 +95,47 @@ function Byline({
       </button>
 
       <BylineSeparator />
-      <FolderChip folders={folders} onChange={onFolderChange} value={page.folderId} />
+      {locked ? (
+        <span className="inline-flex min-w-0 items-center gap-1 text-subtle">
+          <CalendarSync aria-hidden="true" className="shrink-0" size={13} />
+          <span className="max-w-[140px] truncate">
+            {folders.find((f) => f.id === page.folderId)?.name ?? "Calendar"}
+          </span>
+        </span>
+      ) : (
+        <FolderChip folders={folders} onChange={onFolderChange} value={page.folderId} />
+      )}
 
       <BylineSeparator />
       <div className="inline-flex shrink-0 items-center gap-2">
-        <DateSchedulePopover page={page} />
+        {locked ? (
+          lockedSchedule && (
+            <span aria-label={`Scheduled: ${lockedSchedule}`}>{lockedSchedule}</span>
+          )
+        ) : (
+          <DateSchedulePopover page={page} />
+        )}
         {/* Reminders only apply to timed events — all-day schedules have no
             start time to fire "minutes before" against, so the scheduler
-            ignores them (see notifications/scheduler). Hide the bell to match. */}
-        {!!page.scheduledStart && isTimedIso(page.scheduledStart) && (
-          <ReminderDropdown pageId={page.id} />
+            ignores them (see notifications/scheduler). Hide the bell to match.
+            Reminders stay editable on synced ONE-OFF events (user-owned layer),
+            but a synced RECURRING series has no per-occurrence reminder path yet
+            (the head is pinned), so hide the bell rather than offer a dead one. */}
+        {!!page.scheduledStart &&
+          isTimedIso(page.scheduledStart) &&
+          !(locked && recurrenceRule) && <ReminderDropdown pageId={page.id} />}
+        {locked ? (
+          lockedRecurrenceLabel && (
+            <span className="truncate text-subtle">{lockedRecurrenceLabel}</span>
+          )
+        ) : (
+          <RecurrencePopover
+            anchorDate={page.scheduledStart ?? null}
+            onChange={onRecurrenceChange}
+            rrule={recurrenceRule?.rrule ?? null}
+            variant="icon"
+          />
         )}
-        <RecurrencePopover
-          anchorDate={page.scheduledStart ?? null}
-          onChange={onRecurrenceChange}
-          rrule={recurrenceRule?.rrule ?? null}
-          variant="icon"
-        />
         {onOpenInCalendar && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -171,6 +205,7 @@ export function MetadataHeader({
     deleteRecurrence,
     flushPage,
     folders,
+    maybeToggleSyncedOccurrence,
     pageErrors,
     recurrenceRules,
     scheduleOnce,
@@ -198,6 +233,8 @@ export function MetadataHeader({
   }
 
   function handleStatusChange(status: PageStatus) {
+    // Synced recurring → occurrence-based completion (S22), not native advance.
+    if (maybeToggleSyncedOccurrence(page, status)) return;
     // Recurring pages route through the gap-resolution dialog. The dialog
     // fast-paths when there's no gap between head and today.
     if (status === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
@@ -363,11 +400,26 @@ export function MetadataHeader({
     return () => window.removeEventListener("blur", handleBlur);
   }, [flushPage, page.id]);
 
+  // Synced provenance drives read-only title/schedule + the detached notice. A
+  // missing flag defaults safely to editable (native). Detached pages unlock
+  // (sync_state !== 'active'), so they're editable but flagged as disconnected.
+  const titleLocked = page.scheduleLocked;
+  const detached = page.syncState === "detached";
+  const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "the calendar";
+
   return (
     <div className="shrink-0">
       <div className={`mx-auto ${LINE_WIDTH_CLASS[lineWidth] ?? "max-w-[720px]"} px-8`}>
-        <div className="pt-12 pb-1">
-          {titleFocused ? (
+        {detached && (
+          <div className="mt-10 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-600/90 dark:text-amber-400/90">
+            <CalendarOff aria-hidden="true" className="shrink-0" size={14} />
+            <span className="type-ui-sm">
+              Disconnected from {calendarName} — this is now a regular page you can edit.
+            </span>
+          </div>
+        )}
+        <div className={detached ? "pt-2 pb-1" : "pt-12 pb-1"}>
+          {titleFocused && !titleLocked ? (
             <textarea
               aria-label="Page title"
               autoCapitalize="off"
@@ -395,18 +447,22 @@ export function MetadataHeader({
           ) : (
             <div
               aria-label="Page title"
-              className="type-display line-clamp-2 w-full cursor-text bg-transparent outline-none"
-              onClick={handleTitleFocus}
-              onFocus={handleTitleFocus}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleTitleFocus();
-                }
-              }}
+              className={`type-display line-clamp-2 w-full bg-transparent outline-none ${titleLocked ? "" : "cursor-text"}`}
+              onClick={titleLocked ? undefined : handleTitleFocus}
+              onFocus={titleLocked ? undefined : handleTitleFocus}
+              onKeyDown={
+                titleLocked
+                  ? undefined
+                  : (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleTitleFocus();
+                      }
+                    }
+              }
               ref={titleDivRef}
-              role="button"
-              tabIndex={0}
+              role={titleLocked ? undefined : "button"}
+              tabIndex={titleLocked ? undefined : 0}
             >
               {titleValue || <span className="text-faint">Untitled</span>}
             </div>

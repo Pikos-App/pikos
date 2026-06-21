@@ -52,6 +52,8 @@ export function useTimedResize({
   function handleBlockResizeStart({ block, dayIndex, originalDate, pageId }: BlockResizeStartInfo) {
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
+    // Synced events own a locked schedule — never resizable.
+    if (block.page.scheduleLocked) return;
 
     disableSelect("dragging-resize");
     resizeRef.current = { block, dayIndex, pageId, ...(originalDate && { originalDate }) };

@@ -5,6 +5,7 @@ import type {
   CompletedPagesResponse,
   CompleteRecurringInput,
   CompleteRecurringResult,
+  CompleteSyncedOccurrenceInput,
   Folder,
   Page,
   PageFilter,
@@ -17,6 +18,7 @@ import type {
   RescheduleVirtualResult,
   SearchResponse,
   SyncCalendar,
+  UncompleteSyncedOccurrenceInput,
 } from "./types";
 
 // ─── Page input helpers ───────────────────────────────────────────────────────
@@ -176,6 +178,11 @@ export interface StorageAdapter {
   /** Materialize a virtual occurrence at a new time: clone head + schedule the
    * clone + exdate the original date, in ONE transaction. */
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult>;
+  /** Complete one occurrence of a synced recurring series — done clone +
+   * user-owned completion map, no head advance. Returns the done clone. */
+  completeSyncedOccurrence(data: CompleteSyncedOccurrenceInput): Promise<PageSummary>;
+  /** Reverse a synced-occurrence completion (delete the clone, drop the date). */
+  uncompleteSyncedOccurrence(data: UncompleteSyncedOccurrenceInput): Promise<void>;
 
   // Reminders
   createPageReminder(data: NewPageReminder): Promise<PageReminder>;

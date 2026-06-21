@@ -101,6 +101,8 @@ export function useTimedDrag({
     const scrollEl = scrollRef.current;
     const columnsEl = dayColumnsRef.current;
     if (!scrollEl || !columnsEl) return;
+    // Synced events own a locked schedule — never draggable.
+    if (block.page.scheduleLocked) return;
 
     const scrollRect = scrollEl.getBoundingClientRect();
     const cursorYInGrid = clientY - scrollRect.top + scrollEl.scrollTop;

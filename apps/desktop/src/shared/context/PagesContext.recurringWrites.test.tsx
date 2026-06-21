@@ -174,6 +174,31 @@ describe("rescheduleVirtualOccurrence", () => {
   });
 });
 
+describe("synced recurring completion routing (S22)", () => {
+  // The native head-advance path is rejected by the backend for an active synced
+  // series. completeRecurringPage must detect a locked series and route to
+  // occurrence-based completion so NO entry point (incl. the gap dialog and bulk
+  // select, which both funnel here) can hit the Conflict.
+  it("routes an active synced series to occurrence completion, never the native path", async () => {
+    const { hook, pageId } = await setupRecurringPage();
+    const storage = hook.result.current.workspace.storage as MockStorageAdapter;
+    await act(async () => {
+      storage.markPageSynced(pageId, { state: "active", timezone: "Europe/London" });
+      await hook.result.current.workspace.reload();
+    });
+
+    const nativeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+    const syncedSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+    });
+
+    expect(syncedSpy).toHaveBeenCalledTimes(1);
+    expect(nativeSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe("skipOccurrence undo", () => {
   // The undo closure used to restore the exdate array captured at skip time —
   // erasing any exdate persisted inside the undo-toast window and resurrecting

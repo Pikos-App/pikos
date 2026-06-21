@@ -14,7 +14,7 @@ import { useCompletedPages } from "./useCompletedPages";
 export const UNDO_TOAST_DURATION_MS = 8000;
 
 export function usePageList() {
-  const { folders, pages, recurrenceRules, updatePage } = usePages();
+  const { folders, maybeToggleSyncedOccurrence, pages, recurrenceRules, updatePage } = usePages();
   const { request: requestRecurringComplete } = useRecurringCompleteDialog();
   const { activeViewId, getSortMode, openPage, setActivePage } = useUI();
   const { hiddenIds, requestDeletePage } = useUndoDelete();
@@ -52,6 +52,13 @@ export function usePageList() {
 
   function handleToggleStatus(pageId: string, currentStatus: PageStatus) {
     const isDone = currentStatus === "done";
+    const nextStatus: PageStatus = isDone ? "not_started" : "done";
+    // Synced recurring occurrences (and their done clones) route to occurrence-
+    // based completion, never the native head-advance/gap-dialog path. The page
+    // may be the active series (in `pages`) or a done clone (in completedPages).
+    const page =
+      pages.find((p) => p.id === pageId) ?? completed.completedPages.find((p) => p.id === pageId);
+    if (page && maybeToggleSyncedOccurrence(page, nextStatus)) return;
     // Recurring pages route through the gap-resolution dialog (which fast-
     // paths to advance when there's no gap). Non-recurring or un-completing
     // a done page just flips status directly.
@@ -61,7 +68,7 @@ export function usePageList() {
     }
     updatePage(pageId, {
       completedAt: isDone ? null : nowLocalISO(),
-      status: isDone ? "not_started" : "done",
+      status: nextStatus,
     });
   }
 

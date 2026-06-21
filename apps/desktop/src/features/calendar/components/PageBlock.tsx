@@ -4,6 +4,7 @@ import { Repeat2 } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -148,7 +149,12 @@ export function PageBlock({
   // boundary, not the real event end.
   const isSplitSegment = isContinuationBefore || isContinuationAfter;
   const isSegmentB = isContinuationBefore === true;
-  const resizeEnabled = !!onResizeStart && !isContinuationAfter && !isSegmentB;
+  // Synced events have a locked schedule. The drag/resize hooks already no-op,
+  // but the gesture *affordances* (grab cursor on mousedown-hold, the resize
+  // handle + row-resize cursor) must be suppressed here too — otherwise the
+  // cursor advertises a move/resize that can't happen.
+  const locked = page.scheduleLocked;
+  const resizeEnabled = !!onResizeStart && !isContinuationAfter && !isSegmentB && !locked;
 
   /**
    * Hover linkage across split segments. Both segments share `page.id`, so
@@ -174,6 +180,9 @@ export function PageBlock({
     e.stopPropagation();
     if (!onDragStart) return;
     if (isSegmentB) return;
+    // Locked (synced): don't begin the drag threshold — a click still opens the
+    // popover (onClick), but there's no grab cursor and no reschedule attempt.
+    if (locked) return;
     const { clientX: startX, clientY: startY } = e;
     beginDragThreshold(startX, startY, {
       bodyCursor: "dragging-grab",
@@ -251,6 +260,10 @@ export function PageBlock({
     />
   );
 
+  // Synced provenance: an active mirror dims-on-detach (never strikethrough —
+  // it's still a real page). The source/broken-sync glyph is SyncSourceIcon.
+  const isDetached = page.syncState === "detached";
+
   const resizeHandle = resizeEnabled ? (
     <div
       aria-hidden
@@ -271,6 +284,7 @@ export function PageBlock({
               "absolute select-none",
               CHIP_BASE_CLASSES,
               "flex items-center gap-1 rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs",
+              isDetached && !done && "opacity-70",
               done && "opacity-50",
               isHighlighted && "animate-highlight-flash",
               (isContinuationBefore || straddlesTopBand) && "rounded-tl-none rounded-tr-none",
@@ -299,6 +313,12 @@ export function PageBlock({
                 {page.title || "Untitled"}
               </span>
             )}
+            {showLabel && (
+              <SyncSourceIcon
+                className={cn("ml-auto", isMicro ? "h-2.5 w-2.5" : "h-3 w-3")}
+                syncState={page.syncState}
+              />
+            )}
             {resizeHandle}
           </button>
         ) : (
@@ -309,6 +329,7 @@ export function PageBlock({
               done
                 ? "opacity-50"
                 : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
+              isDetached && !done && "opacity-70",
               isHighlighted && "animate-highlight-flash",
               isResizing
                 ? "cursor-row-resize!"
@@ -336,6 +357,11 @@ export function PageBlock({
                 >
                   {page.title || "Untitled"}
                 </p>
+                {/* mt-1 (4px) added to the row's 2px top inset (py-0.5) = 6px,
+                    matching the 6px right inset (px-1.5) so the icon is evenly
+                    spaced from the top and right corner. Stays in flow so a long
+                    title reserves space and never runs under it. */}
+                <SyncSourceIcon className="mt-1 ml-auto h-3 w-3" syncState={page.syncState} />
               </div>
             )}
             {showTimeLabel && (

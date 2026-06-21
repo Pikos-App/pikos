@@ -1029,6 +1029,44 @@ describe("buildDayBlocks", () => {
     expect(b.isCompact).toBe(false);
   });
 
+  it("synced (locked) timed event renders absolute in the viewer zone; native floats", () => {
+    // A native 3pm event floats — positioned at 15:00. A synced 3pm Los_Angeles
+    // event is absolute: 15:00 PDT = 22:00 UTC, and the UTC test runner is the
+    // viewer zone, so it positions 7h later. The shift is gated on scheduleLocked.
+    const native = makePage({
+      id: "native",
+      scheduledStart: "2026-03-15T15:00:00",
+      timezone: "America/Los_Angeles",
+      title: "Native 3pm",
+    });
+    const synced = makePage({
+      id: "synced",
+      scheduledStart: "2026-03-15T15:00:00",
+      scheduleLocked: true,
+      timezone: "America/Los_Angeles",
+      title: "Synced 3pm PT",
+    });
+    const blocks = buildDayBlocks([native, synced], day);
+    const n = blocks.find((b) => b.page.id === "native")!;
+    const s = blocks.find((b) => b.page.id === "synced")!;
+    expect(n.top).toBe((15 - GRID_START_HOUR) * HOUR_HEIGHT);
+    expect(s.top).toBe((22 - GRID_START_HOUR) * HOUR_HEIGHT);
+    expect(s.startDate.getUTCHours()).toBe(22);
+  });
+
+  it("all-day synced event never shifts", () => {
+    const synced = makePage({
+      id: "allday",
+      scheduledStart: "2026-03-15",
+      scheduleLocked: true,
+      timezone: "Asia/Tokyo",
+      title: "All-day synced",
+    });
+    // All-day pages aren't timed blocks — buildDayBlocks excludes them, proving
+    // the date-only path is never routed through the zoned conversion.
+    expect(buildDayBlocks([synced], day)).toHaveLength(0);
+  });
+
   it("two overlapping events with far tops → cascade (host full width, guest indented)", () => {
     const pages = [
       makePage({

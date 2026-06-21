@@ -20,6 +20,9 @@ export function FolderChip({ folders, onChange, onClose, value }: FolderChipProp
   const [open, setOpen] = useState(false);
   const activeFolder = folders.find((folder) => folder.id === value) ?? null;
   const label = activeFolder?.name ?? "Inbox";
+  // External-calendar folders are system-managed and placement-locked — a native
+  // page can't be created or moved into one, so they never appear as choices.
+  const selectableFolders = folders.filter((f) => !f.isExternalCalendar);
 
   async function handleCreate(name: string) {
     const trimmed = name.trim();
@@ -32,7 +35,7 @@ export function FolderChip({ folders, onChange, onClose, value }: FolderChipProp
   return (
     <SearchablePopover
       onEnter={(q) => {
-        const exists = folders.find((f) => f.name.toLowerCase() === q.toLowerCase());
+        const exists = selectableFolders.find((f) => f.name.toLowerCase() === q.toLowerCase());
         if (exists) {
           onChange(exists.id);
           setOpen(false);
@@ -57,7 +60,7 @@ export function FolderChip({ folders, onChange, onClose, value }: FolderChipProp
       {({ close, query }) => {
         const normalizedQuery = query.trim().toLowerCase();
         const filteredFolders = normalizedQuery
-          ? folders
+          ? selectableFolders
               .filter((f) => f.name.toLowerCase().includes(normalizedQuery))
               .map((f) => {
                 const lower = f.name.toLowerCase();
@@ -67,10 +70,10 @@ export function FolderChip({ folders, onChange, onClose, value }: FolderChipProp
               })
               .sort((a, b) => a.rank - b.rank || a.folder.name.localeCompare(b.folder.name))
               .map((x) => x.folder)
-          : folders;
+          : selectableFolders;
         const canCreate =
           normalizedQuery.length > 0 &&
-          !folders.some((f) => f.name.toLowerCase() === normalizedQuery);
+          !selectableFolders.some((f) => f.name.toLowerCase() === normalizedQuery);
 
         return (
           <>

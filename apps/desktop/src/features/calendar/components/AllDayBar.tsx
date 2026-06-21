@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 
@@ -81,9 +82,14 @@ export function AllDayBar({
     onDoubleClick: () => onDoubleClick(page.id),
   });
 
+  // Synced events have a locked schedule — suppress the drag + edge-resize
+  // affordances (the hooks already no-op; this stops the cursor advertising them).
+  const locked = page.scheduleLocked;
+
   function handleMouseDown(e: React.MouseEvent) {
     if (e.button !== 0) return;
     e.stopPropagation();
+    if (locked) return;
     // Prevent native text selection — the bar's content is mostly text and
     // dragging across it would otherwise highlight it.
     e.preventDefault();
@@ -133,8 +139,8 @@ export function AllDayBar({
   // Edge handles only appear on a real (non-continuation) boundary, so a
   // multi-week event that crosses into this view has no left handle here —
   // extending across weeks goes through the popover's date picker.
-  const showLeftEdgeHandle = !continuesLeft && !!onEdgeResizeStart && !isRecurring;
-  const showRightEdgeHandle = !continuesRight && !!onEdgeResizeStart && !isRecurring;
+  const showLeftEdgeHandle = !continuesLeft && !!onEdgeResizeStart && !isRecurring && !locked;
+  const showRightEdgeHandle = !continuesRight && !!onEdgeResizeStart && !isRecurring && !locked;
 
   return (
     <Popover onOpenChange={handlePopoverOpenChange} open={popoverOpen}>
@@ -144,6 +150,7 @@ export function AllDayBar({
           className={cn(
             "pointer-events-auto absolute flex cursor-default! items-center gap-1",
             CHIP_BASE_CLASSES,
+            page.syncState === "detached" && !done && "opacity-70",
             done && "opacity-50",
             isBeingDragged && "opacity-40",
             continuesLeft && "rounded-tl-none rounded-bl-none",
@@ -170,6 +177,7 @@ export function AllDayBar({
           <span className="type-body-sm min-w-0 truncate text-left font-medium text-foreground">
             {page.title || "Untitled"}
           </span>
+          <SyncSourceIcon className="ml-auto h-3 w-3" syncState={page.syncState} />
           {showLeftEdgeHandle && (
             <span
               aria-hidden

@@ -49,6 +49,13 @@ pub async fn due_explicit_reminders(
            )
            AND datetime(ps.scheduled_start, '-' || pr.minutes_before || ' minutes')
                BETWEEN ? AND ?
+           AND (
+             ps.timezone IS NULL
+             OR NOT EXISTS (
+               SELECT 1 FROM page_sync sy
+               WHERE sy.page_id = ps.page_id AND sy.sync_state = 'active'
+             )
+           )
            AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
              WHERE nl.schedule_id = ps.id
@@ -88,6 +95,10 @@ pub async fn due_default_reminders(
            AND datetime(ps.scheduled_start, '-' || ? || ' minutes')
                BETWEEN ? AND ?
            AND NOT EXISTS (
+             SELECT 1 FROM page_sync sy
+             WHERE sy.page_id = ps.page_id AND sy.sync_state = 'active'
+           )
+           AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
              WHERE nl.schedule_id = ps.id
                AND nl.type = 'reminder'
@@ -99,6 +110,107 @@ pub async fn due_default_reminders(
     .bind(now_ts)
     .fetch_all(pool)
     .await
+}
+
+// ─── Synced (absolute-time) reminders ────────────────────────────────────────
+//
+// Synced events are absolute, not floating: their `scheduled_start` is a
+// source-zone wall-clock, so a reminder must fire on the absolute INSTANT, not
+// when the device-local wall-clock happens to read the same digits. The naive
+// `due_*` queries above interpret `scheduled_start` as device-local, so they
+// exclude active-synced pages and this path handles them instead.
+//
+// Only **explicit** (user-added) reminders apply — synced pages get no default
+// reminder (a user reminder is what marks the page owned). Synced *recurring*
+// events are out of scope here: the reconciler pins the head at the series base,
+// so there's no advancing head to fire per-occurrence off — excluded everywhere
+// (no wrong-time fire) until per-occurrence synced reminders land.
+//
+// SQLite can't resolve IANA zones, so the SQL is only a coarse ±15h prefilter
+// (covers every real zone offset) and the exact absolute-window check runs in
+// Rust via chrono-tz.
+
+#[derive(sqlx::FromRow)]
+struct SyncedReminderRow {
+    schedule_id: String,
+    page_id: String,
+    title: String,
+    scheduled_start: String,
+    minutes_before: i64,
+    timezone: String,
+}
+
+/// Source-zone wall-clock + lead time → the absolute UTC instant the reminder
+/// should fire. `None` only on an unparseable zone/timestamp or a wall-clock that
+/// doesn't exist in the zone (spring-forward gap, where `earliest()` is also
+/// None). For a fall-back-ambiguous wall-clock (the hour repeats), `earliest()`
+/// picks the first occurrence and fires once — `single()` would drop it entirely.
+fn synced_fire_instant(
+    wall_clock: &str,
+    timezone: &str,
+    minutes_before: i64,
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    use chrono::TimeZone;
+    let naive = chrono::NaiveDateTime::parse_from_str(wall_clock, "%Y-%m-%dT%H:%M:%S").ok()?;
+    let zone: chrono_tz::Tz = timezone.parse().ok()?;
+    let instant = zone.from_local_datetime(&naive).earliest()?.with_timezone(&chrono::Utc);
+    Some(instant - chrono::Duration::minutes(minutes_before))
+}
+
+/// Synced one-off events with explicit reminders whose absolute fire instant
+/// lands in `(now_utc - 60s, now_utc]`. All-day, done, recurring, and
+/// already-fired are excluded.
+pub async fn due_synced_reminders(
+    pool: &SqlitePool,
+    now_utc: chrono::DateTime<chrono::Utc>,
+) -> Result<Vec<DueReminder>, sqlx::Error> {
+    let lo = (now_utc - chrono::Duration::hours(15))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let hi = (now_utc + chrono::Duration::hours(15))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let rows: Vec<SyncedReminderRow> = sqlx::query_as(
+        "SELECT ps.id AS schedule_id, ps.page_id, p.title,
+                ps.scheduled_start, pr.minutes_before, ps.timezone
+         FROM page_schedules ps
+         JOIN pages p ON p.id = ps.page_id
+         JOIN page_reminders pr ON pr.page_id = ps.page_id
+         JOIN page_sync sy ON sy.page_id = ps.page_id AND sy.sync_state = 'active'
+         WHERE p.status != 'done'
+           AND p.deleted_at IS NULL
+           AND ps.status != 'done'
+           AND pr.minutes_before >= 0
+           AND ps.scheduled_start LIKE '%T%'
+           AND ps.timezone IS NOT NULL
+           AND ps.rule_id IS NULL
+           AND NOT EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = ps.page_id)
+           AND datetime(ps.scheduled_start, '-' || pr.minutes_before || ' minutes')
+               BETWEEN ? AND ?
+           AND NOT EXISTS (
+             SELECT 1 FROM notification_log nl
+             WHERE nl.schedule_id = ps.id AND nl.type = 'reminder'
+           )",
+    )
+    .bind(&lo)
+    .bind(&hi)
+    .fetch_all(pool)
+    .await?;
+
+    let window_lo = now_utc - chrono::Duration::seconds(60);
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let fire = synced_fire_instant(&row.scheduled_start, &row.timezone, row.minutes_before)?;
+            (fire > window_lo && fire <= now_utc).then_some(DueReminder {
+                schedule_id: row.schedule_id,
+                page_id: row.page_id,
+                title: row.title,
+                scheduled_start: row.scheduled_start,
+                minutes_before: row.minutes_before,
+            })
+        })
+        .collect())
 }
 
 // ─── Recurring head reminders ────────────────────────────────────────────────
@@ -142,6 +254,10 @@ pub async fn due_recurring_explicit_reminders(
                AND ps.scheduled_start = p.scheduled_start
            )
            AND NOT EXISTS (
+             SELECT 1 FROM page_sync sy
+             WHERE sy.page_id = p.id AND sy.sync_state = 'active'
+           )
+           AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
              WHERE nl.schedule_id = (p.id || '@' || p.scheduled_start || '#' || pr.minutes_before)
                AND nl.type = 'reminder'
@@ -178,6 +294,10 @@ pub async fn due_recurring_default_reminders(
              SELECT 1 FROM page_schedules ps
              WHERE ps.page_id = p.id AND ps.rule_id IS NOT NULL
                AND ps.scheduled_start = p.scheduled_start
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM page_sync sy
+             WHERE sy.page_id = p.id AND sy.sync_state = 'active'
            )
            AND NOT EXISTS (
              SELECT 1 FROM notification_log nl

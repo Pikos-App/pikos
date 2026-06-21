@@ -20,6 +20,7 @@ import type {
   CompletedPagesResponse,
   CompleteRecurringInput,
   CompleteRecurringResult,
+  CompleteSyncedOccurrenceInput,
   Folder,
   Page,
   PageFilter,
@@ -34,6 +35,7 @@ import type {
   SearchResult,
   SyncAccount,
   SyncCalendar,
+  UncompleteSyncedOccurrenceInput,
 } from "../types";
 import { nowLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
@@ -133,6 +135,28 @@ export class MockStorageAdapter implements StorageAdapter {
     };
     this.pages.set(page.id, page);
     return Promise.resolve(page);
+  }
+
+  /**
+   * Test/seed-only (NOT on `StorageAdapter`): stamp a page with the synced
+   * provenance a real `page_sync` row would derive — `scheduleLocked`,
+   * `syncState`, and the source `timezone`. Lets the synced-pages seed + Layer-4
+   * tests exercise the locked/zoned/detached treatment without a reconciler.
+   * `active` locks the schedule; `detached`/`tombstoned` leave it editable.
+   */
+  markPageSynced(
+    pageId: string,
+    opts: { timezone?: string; state?: "active" | "detached" | "tombstoned" } = {}
+  ): void {
+    const page = this.pages.get(pageId);
+    if (!page) return;
+    const state = opts.state ?? "active";
+    this.pages.set(pageId, {
+      ...page,
+      scheduleLocked: state === "active",
+      syncState: state,
+      timezone: opts.timezone ?? page.timezone ?? null,
+    });
   }
 
   updatePage(id: string, updates: PageUpdate): Promise<Page> {
@@ -607,6 +631,43 @@ export class MockStorageAdapter implements StorageAdapter {
     this.rules.set(data.ruleId, { ...rule, rruleExdates: ruleExdates });
 
     return Promise.resolve({ clone: toSummary(clone), ruleExdates });
+  }
+
+  completeSyncedOccurrence(data: CompleteSyncedOccurrenceInput): Promise<PageSummary> {
+    const head = this.pages.get(data.pageId);
+    if (!head) return Promise.reject(new Error(`Page not found: ${data.pageId}`));
+    const cloneId = uuid();
+    const timestamp = now();
+    const clone: Page = {
+      ...head,
+      completedAt: nowLocalISO(),
+      // The done clone is a durable NATIVE page — no sync provenance, never locked.
+      completedOccurrences: null,
+      createdAt: timestamp,
+      id: cloneId,
+      scheduledEnd: data.scheduledEnd ?? null,
+      scheduledStart: data.scheduledStart,
+      scheduleLocked: false,
+      sortOrder: nextSortOrder([...this.pages.values()]),
+      status: "done",
+      syncState: null,
+      updatedAt: timestamp,
+    };
+    this.pages.set(cloneId, clone);
+    const map = { ...(head.completedOccurrences ?? {}), [data.occurrenceDate]: cloneId };
+    this.pages.set(head.id, { ...head, completedOccurrences: map, updatedAt: timestamp });
+    return Promise.resolve(toSummary(clone));
+  }
+
+  uncompleteSyncedOccurrence(data: UncompleteSyncedOccurrenceInput): Promise<void> {
+    const head = this.pages.get(data.pageId);
+    if (!head?.completedOccurrences) return Promise.resolve();
+    const cloneId = head.completedOccurrences[data.occurrenceDate];
+    if (!cloneId) return Promise.resolve();
+    this.pages.delete(cloneId);
+    const { [data.occurrenceDate]: _removed, ...rest } = head.completedOccurrences;
+    this.pages.set(head.id, { ...head, completedOccurrences: rest, updatedAt: now() });
+    return Promise.resolve();
   }
 
   // ─── Reminders ──────────────────────────────────────────────────────────────

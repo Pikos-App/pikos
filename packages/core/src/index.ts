@@ -38,3 +38,4 @@ export type {
   VirtualOccurrence,
 } from "./utils/recurrence";
 export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";
+export { resolveSyncedInstant } from "./utils/syncedTime";

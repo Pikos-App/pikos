@@ -15,7 +15,12 @@ interface UseRecurringActionsResult {
 }
 
 export function useRecurringActions(page: PageSummary): UseRecurringActionsResult {
-  const { recurrenceRules, skipOccurrence: skipOccurrenceFn, updatePage } = usePages();
+  const {
+    maybeToggleSyncedOccurrence,
+    recurrenceRules,
+    skipOccurrence: skipOccurrenceFn,
+    updatePage,
+  } = usePages();
   const { request: requestRecurringComplete } = useRecurringCompleteDialog();
   const { requestUndoableAction } = useUndoDelete();
 
@@ -24,6 +29,9 @@ export function useRecurringActions(page: PageSummary): UseRecurringActionsResul
 
   function toggleStatus() {
     const newStatus: PageStatus = done ? "not_started" : "done";
+    // Synced recurring occurrences (and their done clones) route to occurrence-
+    // based completion, never the native head-advance path.
+    if (maybeToggleSyncedOccurrence(page, newStatus)) return;
     if (newStatus === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
       // Routes through the gap-resolution dialog. If today > head's
       // scheduledStart there are missed days that need a policy decision;

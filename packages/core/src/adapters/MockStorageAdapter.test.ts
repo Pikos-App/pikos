@@ -1239,3 +1239,63 @@ describe("schedule and rule updates", () => {
     ).rejects.toThrow("Recurrence rule not found: missing");
   });
 });
+
+describe("synced occurrence completion (S22)", () => {
+  it("records date → clone and produces a durable native done clone", async () => {
+    const series = await createTestPage({ title: "Weekly 1:1" });
+    adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
+
+    const clone = await adapter.completeSyncedOccurrence({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+      scheduledEnd: "2026-03-09T14:30:00",
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+
+    // The clone is done, scheduled at the occurrence, and NOT sync-locked.
+    expect(clone.status).toBe("done");
+    expect(clone.scheduledStart).toBe("2026-03-09T14:00:00");
+    expect(clone.scheduleLocked).toBe(false);
+    expect(clone.syncState).toBeNull();
+
+    // The series records the completion (date → clone id).
+    const updatedSeries = await adapter.getPage(series.id);
+    expect(updatedSeries?.completedOccurrences).toEqual({ "2026-03-09": clone.id });
+  });
+
+  it("uncomplete deletes the clone and drops the date", async () => {
+    const series = await createTestPage({ title: "Weekly 1:1" });
+    adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
+    const clone = await adapter.completeSyncedOccurrence({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+
+    await adapter.uncompleteSyncedOccurrence({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+    });
+
+    expect(await adapter.getPage(clone.id)).toBeNull();
+    const updatedSeries = await adapter.getPage(series.id);
+    expect(updatedSeries?.completedOccurrences).toEqual({});
+  });
+});
+
+describe("markPageSynced (test seam)", () => {
+  it("active locks the schedule; detached leaves it editable", async () => {
+    const active = await createTestPage();
+    adapter.markPageSynced(active.id, { state: "active", timezone: "Asia/Tokyo" });
+    const a = await adapter.getPage(active.id);
+    expect(a?.scheduleLocked).toBe(true);
+    expect(a?.syncState).toBe("active");
+    expect(a?.timezone).toBe("Asia/Tokyo");
+
+    const detached = await createTestPage();
+    adapter.markPageSynced(detached.id, { state: "detached" });
+    const d = await adapter.getPage(detached.id);
+    expect(d?.scheduleLocked).toBe(false);
+    expect(d?.syncState).toBe("detached");
+  });
+});

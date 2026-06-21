@@ -11,6 +11,8 @@ export type FolderSortOrder = "manual" | "alphabetical" | "page-count";
 
 export interface FolderListState {
   folders: Folder[];
+  /** System-managed synced-calendar folders — rendered in their own sidebar area. */
+  externalFolders: Folder[];
   pageCountByFolder: Record<string, number>;
   activeViewId: string;
   setActiveViewId: (id: string) => void;
@@ -63,6 +65,11 @@ export function useFolderList(): FolderListState {
           return (pageCountByFolder[b.id] ?? 0) - (pageCountByFolder[a.id] ?? 0);
         });
 
+  // External-calendar folders live in their own sidebar area, separate from the
+  // user's regular folders (and out of the reorder/drop sortable context).
+  const userFolders = sortedFolders.filter((f) => !f.isExternalCalendar);
+  const externalFolders = sortedFolders.filter((f) => f.isExternalCalendar);
+
   async function handleCreateFolder() {
     const folder = await createFolder({ name: "" });
     setRenamingId(folder.id);
@@ -86,7 +93,8 @@ export function useFolderList(): FolderListState {
 
   return {
     activeViewId,
-    folders: sortedFolders,
+    externalFolders,
+    folders: userFolders,
     handleColorChange,
     handleCreateFolder,
     handleDeleteRequest,

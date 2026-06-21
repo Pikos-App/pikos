@@ -5,6 +5,7 @@ import type {
   CompletedPagesResponse,
   CompleteRecurringInput,
   CompleteRecurringResult,
+  CompleteSyncedOccurrenceInput,
   Folder,
   Page,
   PageFilter,
@@ -17,6 +18,7 @@ import type {
   RescheduleVirtualResult,
   SearchResponse,
   SyncCalendar,
+  UncompleteSyncedOccurrenceInput,
 } from "@pikos/core";
 import type {
   FolderUpdate,
@@ -89,6 +91,8 @@ const WRITE_COMMANDS = new Set([
   "restore_page",
   "reorder_pages",
   "complete_recurring_page",
+  "complete_synced_occurrence",
+  "uncomplete_synced_occurrence",
   "create_folder",
   "update_folder",
   "delete_folder",
@@ -284,6 +288,14 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult> {
     return invoke<RescheduleVirtualResult>("reschedule_virtual_occurrence", { data });
+  }
+
+  completeSyncedOccurrence(data: CompleteSyncedOccurrenceInput): Promise<PageSummary> {
+    return invoke<PageSummary>("complete_synced_occurrence", { data });
+  }
+
+  uncompleteSyncedOccurrence(data: UncompleteSyncedOccurrenceInput): Promise<void> {
+    return invoke<void>("uncomplete_synced_occurrence", { data });
   }
 
   // ─── Reminders ──────────────────────────────────────────────────────────────

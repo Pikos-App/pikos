@@ -14,6 +14,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
+import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useListSettings } from "@/shared/context/ListSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -302,6 +303,7 @@ export function PageListItem({
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
+                <SyncSourceIcon className="h-3 w-3" syncState={page.syncState} />
                 {page.scheduledStart &&
                   (() => {
                     const isCompleted = isDone(page);

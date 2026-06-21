@@ -55,6 +55,15 @@ export interface Page {
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   scheduleLocked: boolean; // derived: active page_sync row owns the schedule → render read-only
+  // Derived sync provenance (null for native pages):
+  syncState?: "active" | "detached" | "tombstoned" | null; // page_sync.sync_state; 'detached' → broken-sync treatment
+  // Source/authoring IANA zone (from the schedule/rule). Consumed at render only
+  // for synced (locked) pages — they show absolute in the viewer's zone; native floats.
+  timezone?: string | null;
+  // User-owned completion map for a synced RECURRING series: occurrence-date
+  // (YYYY-MM-DD) → done-clone page id. Expansion hides completed occurrences; an
+  // uncomplete is routed by the clone id. Null/absent for native/non-recurring.
+  completedOccurrences?: Record<string, string> | null;
 }
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────
@@ -180,6 +189,24 @@ export interface CompleteRecurringResult {
   /** Post-merge exdates when `ruleId` was supplied — sync local rule state from
    * this, not from a locally computed array. */
   ruleExdates?: string[] | null;
+}
+
+/** Complete one occurrence of a synced recurring series (S22). Records a
+ * user-owned `date → done-clone` entry and inserts a done clone — never advances
+ * the reconciler-pinned head or touches the locked rule's EXDATEs. */
+export interface CompleteSyncedOccurrenceInput {
+  pageId: string;
+  /** Occurrence date being completed (YYYY-MM-DD) — the completion-map key. */
+  occurrenceDate: string;
+  /** The occurrence's start/end wall-clock — the done clone is scheduled here. */
+  scheduledStart: string;
+  scheduledEnd?: string;
+}
+
+/** Reverse a synced-occurrence completion: delete the clone, drop the date. */
+export interface UncompleteSyncedOccurrenceInput {
+  pageId: string;
+  occurrenceDate: string;
 }
 
 /** Input for materializing a virtual rrule occurrence at a new time. */

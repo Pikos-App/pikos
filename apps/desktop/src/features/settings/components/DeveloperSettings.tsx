@@ -20,7 +20,8 @@ type SeedScenario =
   | "notifications"
   | "calendar"
   | "calendar-colors"
-  | "calendar-edges";
+  | "calendar-edges"
+  | "synced";
 
 const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[] = [
   {
@@ -59,6 +60,12 @@ const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[]
       "Targeted regression fixtures across 4 weeks (cross-midnight, containment, density, color muting).",
     id: "calendar-edges",
     label: "Calendar edge cases",
+  },
+  {
+    description:
+      "Realistic data plus a mock external-calendar sync (no network): synced folders, a cross-zone event, all-day, a recurring series, and a detached page.",
+    id: "synced",
+    label: "Mock calendar sync",
   },
 ];
 

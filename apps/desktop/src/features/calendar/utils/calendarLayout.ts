@@ -6,6 +6,7 @@
 // readability by sitting in their own file.
 
 import type { PageSummary } from "@pikos/core";
+import { resolveSyncedInstant } from "@pikos/core";
 import { addDays, parseISO, startOfDay } from "date-fns";
 
 import { isAllDayPage } from "./allDayLayout";
@@ -276,8 +277,10 @@ export function buildDayBlocks(
     if (!page.scheduledStart) return false;
     if (isAllDayPage(page.scheduledStart)) return false;
     try {
-      const start = parseISO(page.scheduledStart);
-      const end = page.scheduledEnd ? parseISO(page.scheduledEnd) : start;
+      // Use the same instant resolution as positioning so a synced event shifted
+      // across midnight (e.g. 11pm PT → 2am ET) is filtered onto the day it renders.
+      const start = resolveBlockInstant(page, page.scheduledStart);
+      const end = page.scheduledEnd ? resolveBlockInstant(page, page.scheduledEnd) : start;
       return start < dayEnd && end > dayStart;
     } catch {
       return false;
@@ -524,15 +527,27 @@ interface RawBlock {
   top: number;
 }
 
+/**
+ * Parse a timed block's wall-clock string to its grid Date. Native pages float
+ * (parsed as-is). A synced (locked) event is absolute: resolve its source-zone
+ * wall-clock to the instant, which `timeToY` then reads in the viewer's zone — so
+ * a 3pm PT event positions at 6pm for an ET viewer. Detached pages unlock and
+ * float again, so the gate is `scheduleLocked`, not mere sync provenance.
+ */
+function resolveBlockInstant(page: PageSummary, iso: string): Date {
+  if (page.scheduleLocked && page.timezone) return resolveSyncedInstant(iso, page.timezone);
+  return parseISO(iso);
+}
+
 function buildRawBlock(
   page: PageSummary,
   dayStart: Date,
   dayEnd: Date,
   metrics: CalendarMetrics
 ): RawBlock {
-  const realStart = parseISO(page.scheduledStart!);
+  const realStart = resolveBlockInstant(page, page.scheduledStart!);
   const hasExplicitEnd = !!page.scheduledEnd;
-  const realEnd = hasExplicitEnd ? parseISO(page.scheduledEnd!) : realStart;
+  const realEnd = hasExplicitEnd ? resolveBlockInstant(page, page.scheduledEnd!) : realStart;
 
   const durationMinutes = hasExplicitEnd ? (realEnd.getTime() - realStart.getTime()) / 60_000 : 0;
 

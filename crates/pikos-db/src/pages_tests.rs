@@ -1721,3 +1721,124 @@ async fn today_view_carries_schedule_locked() {
     let p = today.iter().find(|p| p.id == "p").expect("synced page in Today");
     assert!(p.schedule_locked, "Today view must carry schedule_locked");
 }
+
+#[tokio::test]
+async fn complete_synced_occurrence_rejects_non_recurring() {
+    // Occurrence completion only applies to a recurring synced series. A synced
+    // ONE-OFF has no rule, so the writer must reject rather than mint a clone the
+    // expansion can never suppress (symmetric with the native head-advance guard).
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Synced one-off"))
+        .await
+        .unwrap();
+    mark_synced(&pool, "p", "active").await;
+
+    let err = complete_synced_occurrence_impl(
+        &pool,
+        CompleteSyncedOccurrenceInput {
+            page_id: "p".into(),
+            occurrence_date: "2026-06-01".into(),
+            scheduled_start: "2026-06-01T09:00:00".into(),
+            scheduled_end: None,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, AppError::Conflict(_)), "non-recurring synced page rejected");
+}
+
+/// Build an active synced recurring series ("head") for the occurrence tests.
+async fn synced_recurring_series(pool: &sqlx::SqlitePool) {
+    insert_test_page(
+        pool,
+        TestPage {
+            scheduled_start: Some("2026-06-01T09:00:00"),
+            scheduled_end: Some("2026-06-01T09:30:00"),
+            ..TestPage::new("head", "Weekly 1:1")
+        },
+    )
+    .await
+    .unwrap();
+    crate::create_recurrence_rule_impl(
+        pool,
+        crate::NewRecurrenceRule {
+            page_id: "head".into(),
+            rrule: "FREQ=WEEKLY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-06-01T09:00:00".into(),
+            scheduled_end: Some("2026-06-01T09:30:00".into()),
+            timezone: "Europe/London".into(),
+        },
+    )
+    .await
+    .unwrap();
+    mark_synced(pool, "head", "active").await;
+}
+
+#[tokio::test]
+async fn complete_synced_occurrence_inserts_clone_and_records_map() {
+    let pool = test_pool().await;
+    synced_recurring_series(&pool).await;
+
+    let clone = complete_synced_occurrence_impl(
+        &pool,
+        CompleteSyncedOccurrenceInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-06-08".into(),
+            scheduled_start: "2026-06-08T09:00:00".into(),
+            scheduled_end: Some("2026-06-08T09:30:00".into()),
+        },
+    )
+    .await
+    .unwrap();
+
+    // The clone is a durable native done page at the occurrence — no sync link.
+    assert_eq!(clone.status, "done");
+    assert_eq!(clone.scheduled_start.as_deref(), Some("2026-06-08T09:00:00"));
+    assert!(!clone.schedule_locked, "clone is native, not sync-locked");
+    assert!(clone.sync_state.is_none());
+
+    // The series records date → clone id; the reconciler-owned head is untouched.
+    let map: String =
+        sqlx::query_scalar("SELECT completed_occurrences FROM page_sync WHERE page_id = 'head'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(map.contains("2026-06-08"));
+    assert!(map.contains(&clone.id));
+}
+
+#[tokio::test]
+async fn uncomplete_synced_occurrence_deletes_clone_and_drops_date() {
+    let pool = test_pool().await;
+    synced_recurring_series(&pool).await;
+    let clone = complete_synced_occurrence_impl(
+        &pool,
+        CompleteSyncedOccurrenceInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-06-08".into(),
+            scheduled_start: "2026-06-08T09:00:00".into(),
+            scheduled_end: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    uncomplete_synced_occurrence_impl(
+        &pool,
+        UncompleteSyncedOccurrenceInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-06-08".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(!page_exists(&pool, &clone.id).await, "clone deleted");
+    let map: Option<String> =
+        sqlx::query_scalar("SELECT completed_occurrences FROM page_sync WHERE page_id = 'head'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(!map.unwrap_or_default().contains("2026-06-08"), "date dropped from map");
+}

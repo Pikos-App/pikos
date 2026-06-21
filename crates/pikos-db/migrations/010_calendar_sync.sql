@@ -120,6 +120,15 @@ CREATE TABLE IF NOT EXISTS page_sync (
   -- re-fetch). NULL = nothing pending; cleared on silent refresh or when upstream
   -- matches the body again.
   pending_description             TEXT,
+  -- Occurrence-based completion of a synced RECURRING series (S22). JSON map
+  -- `occurrence-date (YYYY-MM-DD) → done-clone page id`. USER-OWNED: the
+  -- reconciler never reads or writes it, so an upstream rewrite of the locked
+  -- rule can't disturb completions. The clone is a durable native page (no
+  -- page_sync link); expansion hides the completed occurrence. The head is never
+  -- advanced and the rule's EXDATEs are never touched (the reconciler pins the
+  -- head at the series base, so head-advance + EXDATE — native's model — would be
+  -- clobbered on the next sync). NULL/absent = nothing completed.
+  completed_occurrences           TEXT,
   last_synced_at                  TEXT,
   created_at                      TEXT NOT NULL
 );

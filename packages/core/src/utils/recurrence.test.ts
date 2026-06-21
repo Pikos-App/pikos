@@ -100,6 +100,47 @@ describe("expandRecurrenceForRange", () => {
     expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
   });
 
+  it("excludes dates completed on an active synced series (completedOccurrences)", () => {
+    // S22: an active synced recurring occurrence is hidden once completed — its
+    // done clone renders in its place. Expansion skips the completed date's
+    // virtual. Gated on scheduleLocked (active synced).
+    const page = makePage({
+      completedOccurrences: { "2026-03-09": "clone-1" },
+      scheduleLocked: true,
+    });
+    const rule = makeRule();
+
+    const rangeStart = new Date(2026, 2, 2);
+    const rangeEnd = new Date(2026, 2, 23);
+
+    const occurrences = expandRecurrenceForRange(rule, page, rangeStart, rangeEnd);
+
+    expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
+  });
+
+  it("ignores completedOccurrences once detached (scheduleLocked false)", () => {
+    // A detached series is native (EXDATE-driven) — a stale completion map must
+    // not keep suppressing occurrences, or they vanish with no live block.
+    const page = makePage({
+      completedOccurrences: { "2026-03-09": "clone-1" },
+      scheduleLocked: false,
+    });
+    const rule = makeRule();
+
+    const occurrences = expandRecurrenceForRange(
+      rule,
+      page,
+      new Date(2026, 2, 2),
+      new Date(2026, 2, 23)
+    );
+
+    expect(occurrences.map((o) => o.originalDate)).toEqual([
+      "2026-03-02",
+      "2026-03-09",
+      "2026-03-16",
+    ]);
+  });
+
   it("excludes dates with materialised override schedules", () => {
     const page = makePage();
     const rule = makeRule();

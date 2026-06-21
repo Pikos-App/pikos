@@ -30,7 +30,8 @@ type SeedScenario =
   | "notifications"
   | "calendar"
   | "calendar-colors"
-  | "calendar-edges";
+  | "calendar-edges"
+  | "synced";
 
 export interface WorkspaceContextValue {
   workspace: Workspace | null;
@@ -141,6 +142,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         } else if (import.meta.env.DEV && seedScenario === "calendar-edges") {
           const { seedCalendarEdgeCases } = await import("@/shared/seeds/calendarEdgeCases");
           await seedCalendarEdgeCases(adapter);
+        } else if (seedScenario === "synced") {
+          const { seedSyncedCalendar } = await import("@/shared/seeds/syncedCalendar");
+          await seedSyncedCalendar(adapter);
         }
         await dataLoaderRef.current();
         setWorkspace({
@@ -316,6 +320,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } else if (scenario === "calendar-edges") {
       const { seedCalendarEdgeCases } = await import("@/shared/seeds/calendarEdgeCases");
       await seedCalendarEdgeCases(adapter);
+    } else if (scenario === "synced") {
+      // Believable native data + a mock external-calendar sync on top, so the
+      // synced treatment can be spot-checked alongside normal pages. The mock
+      // adapter seeds synced rows directly; the real app routes through the
+      // dev Tauri command (no network/keychain).
+      const { seedRealistic } = await import("@/shared/seeds/realistic");
+      await seedRealistic(adapter);
+      if (import.meta.env["VITE_TEST_MODE"] === "true") {
+        const { seedSyncedCalendar } = await import("@/shared/seeds/syncedCalendar");
+        await seedSyncedCalendar(adapter);
+      } else {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("dev_seed_synced_calendar");
+      }
     }
     await dataLoaderRef.current();
   }

@@ -28,7 +28,7 @@ export interface CalendarSyncState {
 }
 
 export function useCalendarSync(): CalendarSyncState {
-  const { storage } = useWorkspace();
+  const { reload, storage } = useWorkspace();
   const [accounts, setAccounts] = useState<AccountWithCalendars[]>([]);
   const [results, setResults] = useState<ResultMap>({});
   const [loading, setLoading] = useState(true);
@@ -64,6 +64,9 @@ export function useCalendarSync(): CalendarSyncState {
     await storage.disconnectSyncAccount(accountId);
     setResults((prev) => prune(prev, rowIds));
     await refresh();
+    // Sidebar folders/pages live in PagesContext, not this hook — reload so the
+    // removed external folders disappear without a manual refresh.
+    await reload();
   }
 
   // Toggling clears any stale result for this calendar so its dot falls back to
@@ -74,12 +77,16 @@ export function useCalendarSync(): CalendarSyncState {
     await storage.toggleSyncCalendar(calendarRowId, enabled, color);
     setResults((prev) => prune(prev, [calendarRowId]));
     await refresh();
+    // Enabling creates the external folder; disabling removes/de-flags it —
+    // reload PagesContext so the sidebar reflects the change immediately.
+    await reload();
   }
 
   async function recolorCalendar(calendarRowId: string, enabled: boolean, color: string) {
     if (!storage) return;
     await storage.toggleSyncCalendar(calendarRowId, enabled, color);
     await refresh();
+    await reload();
   }
 
   async function resync(accountId: string) {

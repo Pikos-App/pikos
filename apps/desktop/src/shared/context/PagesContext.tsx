@@ -7,6 +7,7 @@
 import type {
   CompletedPagesFilter,
   CompletedPagesResponse,
+  CompleteSyncedOccurrenceInput,
   Folder,
   Page,
   PageRecurrenceRule,
@@ -15,14 +16,18 @@ import type {
   SearchResponse,
   StorageError,
   Tag,
+  VirtualOccurrence,
 } from "@pikos/core";
 import {
   alignWeeklyRuleToAnchor,
   computeNextEnd,
+  formatLocalISO,
   getLocalTimezone,
+  isTimedIso,
   missedOccurrencesBetween,
   nextOccurrenceAfter,
   parseLocalISO,
+  resolveSyncedInstant,
   toStorageError,
 } from "@pikos/core";
 import type {
@@ -118,6 +123,12 @@ export interface PagesContextValue {
   completeRecurringPage: (pageId: string, missedPolicy?: MissedOccurrencePolicy) => Promise<void>;
   /** Skip a single occurrence of a recurring page (add date to exdates). Returns an undo function. */
   skipOccurrence: (ruleId: string, date: string) => Promise<() => void>;
+  /**
+   * Routes a status toggle that belongs to a synced recurring series to
+   * occurrence-based completion (S22), bypassing the native head-advance path.
+   * Returns true when handled — the caller must not fall through.
+   */
+  maybeToggleSyncedOccurrence: (page: PageSummary, nextStatus: PageStatus) => boolean;
   /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
   listCompletedPages: (filter: CompletedPagesFilter) => Promise<CompletedPagesResponse>;
   /** Merge lazy-loaded pages (e.g. completed) into the pages array, deduplicating by ID. */
@@ -638,6 +649,12 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     pageId: string,
     missedPolicy: MissedOccurrencePolicy = "advance"
   ): Promise<void> {
+    // Backstop for synced series: the native head-advance path below is rejected
+    // by the backend for an active synced page (the reconciler owns the head).
+    // UI callers should branch via maybeToggleSyncedOccurrence first, but route
+    // here too so no entry point (incl. the gap dialog) can hit the Conflict.
+    const page = pagesRef.current.find((p) => p.id === pageId);
+    if (page && maybeToggleSyncedOccurrence(page, "done")) return;
     // Re-entrancy guard: the checkbox path is fire-and-forget and not disabled
     // in flight, and the backend mints one clone + one head-advance per call —
     // a re-entrant call (or, now that completion is queued, a SERIALIZED
@@ -769,6 +786,118 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     };
   }
 
+  // ─── Synced recurring occurrence completion (S22) ──────────────────────────
+  // Synced recurring series can't use the native head-advance path (the
+  // reconciler pins the head + owns the locked rule). Completion is user-owned
+  // per-occurrence state: a done clone + a `date → clone` map on the series.
+
+  async function completeSyncedOccurrence(input: CompleteSyncedOccurrenceInput): Promise<void> {
+    const clone = await adapter.completeSyncedOccurrence(input);
+    setPages((prev) => {
+      const withMap = prev.map((p) =>
+        p.id === input.pageId
+          ? {
+              ...p,
+              completedOccurrences: {
+                ...(p.completedOccurrences ?? {}),
+                [input.occurrenceDate]: clone.id,
+              },
+            }
+          : p
+      );
+      // Surface the done clone immediately (mirrors completeRecurringPage); the
+      // next range load reconciles it as a normal completed page.
+      return [...withMap, clone];
+    });
+  }
+
+  async function uncompleteSyncedOccurrence(
+    seriesId: string,
+    occurrenceDate: string
+  ): Promise<void> {
+    const series = pagesRef.current.find((p) => p.id === seriesId);
+    const cloneId = series?.completedOccurrences?.[occurrenceDate];
+    await adapter.uncompleteSyncedOccurrence({ occurrenceDate, pageId: seriesId });
+    setPages((prev) =>
+      prev
+        .filter((p) => p.id !== cloneId)
+        .map((p) => {
+          if (p.id !== seriesId || !p.completedOccurrences) return p;
+          const { [occurrenceDate]: _removed, ...rest } = p.completedOccurrences;
+          return { ...p, completedOccurrences: rest };
+        })
+    );
+  }
+
+  /**
+   * Find the synced series + date a done clone belongs to, or null. Scans the
+   * loaded series' completion maps — reliable because active synced series are
+   * always in `pages` (the loader fetches all active pages with no folder/range
+   * filter), and the done clone's series is active. Skips non-synced pages in O(1)
+   * each, so a native uncheck costs ~one property read per page.
+   */
+  function findSyncedOccurrenceClone(
+    cloneId: string
+  ): { seriesId: string; occurrenceDate: string } | null {
+    for (const p of pagesRef.current) {
+      const map = p.completedOccurrences;
+      if (!map) continue;
+      const date = Object.keys(map).find((d) => map[d] === cloneId);
+      if (date) return { occurrenceDate: date, seriesId: p.id };
+    }
+    return null;
+  }
+
+  /** The done clone is a NATIVE (floating) page. For a timed zoned occurrence,
+   * store its start as the viewer-local wall-clock so the clone floats at the
+   * same slot the absolute occurrence rendered (a 3pm PT event shown at 6pm ET
+   * keeps a 6pm clone). All-day / floating (no tz) keep the raw wall-clock. The
+   * map KEY stays the source-zone date — that's what expansion suppresses by. */
+  function cloneWallClock(wallClock: string, timezone: string | null | undefined): string {
+    if (timezone && isTimedIso(wallClock)) {
+      return formatLocalISO(resolveSyncedInstant(wallClock, timezone));
+    }
+    return wallClock;
+  }
+
+  /**
+   * Intercepts a status toggle that belongs to a synced recurring series and
+   * routes it to occurrence-based completion. Returns true ONLY when it actually
+   * handled the toggle (caller must then NOT fall through). Returns false for
+   * everything else — including a malformed synced row with no `scheduledStart`,
+   * so the native path runs and surfaces an error rather than silently swallowing
+   * the click. Two handled cases: checking an active synced occurrence (head or
+   * virtual) → complete it; unchecking its done clone → uncomplete + restore.
+   */
+  function maybeToggleSyncedOccurrence(page: PageSummary, nextStatus: PageStatus): boolean {
+    const isSyncedRecurring =
+      !!page.scheduleLocked && recurrenceRulesRef.current.some((r) => r.pageId === page.id);
+    if (isSyncedRecurring && nextStatus === "done" && page.scheduledStart) {
+      const occurrenceDate =
+        "originalDate" in page
+          ? (page as VirtualOccurrence).originalDate
+          : page.scheduledStart.slice(0, 10);
+      const cloneEnd = page.scheduledEnd
+        ? cloneWallClock(page.scheduledEnd, page.timezone)
+        : undefined;
+      void completeSyncedOccurrence({
+        occurrenceDate,
+        pageId: page.id,
+        scheduledStart: cloneWallClock(page.scheduledStart, page.timezone),
+        ...(cloneEnd ? { scheduledEnd: cloneEnd } : {}),
+      });
+      return true;
+    }
+    if (nextStatus === "not_started") {
+      const found = findSyncedOccurrenceClone(page.id);
+      if (found) {
+        void uncompleteSyncedOccurrence(found.seriesId, found.occurrenceDate);
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ─── Flush on window close ────────────────────────────────────────────────
   // Tauri's Rust side calls prevent_close() so we get a chance here to flush
   // any debounced writes, wait for all in-flight mutations, then destroy.
@@ -896,6 +1025,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     getPage,
     listCompletedPages,
     listSchedulesRange,
+    maybeToggleSyncedOccurrence,
     mergePages,
     pageErrors,
     pages,

@@ -107,3 +107,21 @@ pub async fn reschedule_virtual_occurrence(
     let pool = state.get_pool().await?;
     reschedule_virtual_occurrence_impl(&pool, data).await
 }
+
+#[tauri::command]
+pub async fn complete_synced_occurrence(
+    state: State<'_, DbState>,
+    data: CompleteSyncedOccurrenceInput,
+) -> AppResult<PageSummary> {
+    let pool = state.get_pool().await?;
+    complete_synced_occurrence_impl(&pool, data).await
+}
+
+#[tauri::command]
+pub async fn uncomplete_synced_occurrence(
+    state: State<'_, DbState>,
+    data: UncompleteSyncedOccurrenceInput,
+) -> AppResult<()> {
+    let pool = state.get_pool().await?;
+    uncomplete_synced_occurrence_impl(&pool, data).await
+}

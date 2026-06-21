@@ -16,8 +16,8 @@ use db::{
     assets::{init_assets_dir, save_asset, save_asset_bytes},
     connect_db,
     dev::{
-        backdate_page, backup_db, backup_db_before_import, export_csv, export_json,
-        export_markdown, get_usage_stats, reset_db, wipe_app_data,
+        backdate_page, backup_db, backup_db_before_import, dev_seed_synced_calendar, export_csv,
+        export_json, export_markdown, get_usage_stats, reset_db, wipe_app_data,
     },
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders, restore_folder,
@@ -27,9 +27,10 @@ use db::{
         create_page_reminder, delete_page_reminder, delete_page_reminders, list_page_reminders,
     },
     pages::{
-        complete_recurring_page, create_page, delete_page, get_page, list_completed_pages,
-        list_pages, list_pages_today, reorder_pages, reschedule_virtual_occurrence, restore_page,
-        set_pages_status, soft_delete_page, update_page,
+        complete_recurring_page, complete_synced_occurrence, create_page, delete_page, get_page,
+        list_completed_pages, list_pages, list_pages_today, reorder_pages,
+        reschedule_virtual_occurrence, restore_page, set_pages_status, soft_delete_page,
+        uncomplete_synced_occurrence, update_page,
     },
     schedules::{
         add_rule_exdates, create_page_schedule, create_recurrence_rule, delete_page_schedule,
@@ -319,6 +320,8 @@ pub fn run() {
             reorder_pages,
             set_pages_status,
             complete_recurring_page,
+            complete_synced_occurrence,
+            uncomplete_synced_occurrence,
             reschedule_virtual_occurrence,
             // Folders
             get_folder,
@@ -375,6 +378,7 @@ pub fn run() {
             export_markdown,
             get_usage_stats,
             reset_db,
+            dev_seed_synced_calendar,
             wipe_app_data,
         ])
         .run(tauri::generate_context!())

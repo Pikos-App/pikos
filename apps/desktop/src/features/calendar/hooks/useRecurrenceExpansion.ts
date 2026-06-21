@@ -51,11 +51,25 @@ export function useRecurrenceExpansion({
     });
   }, [startStr, endStr, ruleCount]);
 
-  if (recurrenceRules.length === 0) return pages;
+  // Suppress an ACTIVE synced series' head block when its base occurrence is
+  // completed (S22). The reconciler pins the head at the base, so unlike native
+  // pages it never advances past a completed occurrence — without this the base
+  // would keep rendering alongside its done clone. Gated on `scheduleLocked` so a
+  // detached series (now native, EXDATE-driven) ignores its stale completion map.
+  // Computed BEFORE the empty-rules early return so a completed base is hidden
+  // even in the window where `pages` has loaded but the rules haven't yet.
+  // Preserves `pages` identity when there's nothing to suppress.
+  const headCompleted = (p: PageSummary): boolean => {
+    const baseDate = p.scheduledStart?.slice(0, 10);
+    return !!(p.scheduleLocked && baseDate && p.completedOccurrences?.[baseDate]);
+  };
+  const visiblePages = pages.some(headCompleted) ? pages.filter((p) => !headCompleted(p)) : pages;
+
+  if (recurrenceRules.length === 0) return visiblePages;
 
   const rangeStart = days[0];
   const rangeEnd = addDays(days[days.length - 1]!, 1);
-  if (!rangeStart || !rangeEnd) return pages;
+  if (!rangeStart || !rangeEnd) return visiblePages;
 
   const allVirtual: VirtualOccurrence[] = [];
 
@@ -81,6 +95,6 @@ export function useRecurrenceExpansion({
     }
   }
 
-  if (allVirtual.length === 0) return pages;
-  return [...pages, ...allVirtual];
+  if (allVirtual.length === 0) return visiblePages;
+  return [...visiblePages, ...allVirtual];
 }

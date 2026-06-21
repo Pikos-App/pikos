@@ -181,6 +181,36 @@ describe("useRecurrenceExpansion", () => {
     });
   });
 
+  it("suppresses a synced series' head when its base occurrence is completed (S22)", async () => {
+    // A synced series pins its head at the base (Mar 9). Completing that
+    // occurrence records it in completedOccurrences — the head block must drop
+    // out (its done clone renders instead), while later virtuals keep showing.
+    const head = makePage({
+      completedOccurrences: { "2026-03-09": "clone-1" },
+      scheduledStart: "2026-03-09T09:00:00",
+      scheduleLocked: true,
+    });
+    const rule = makeRule({ scheduledStart: "2026-03-09T09:00:00" });
+    const days = weekDays(new Date(2026, 2, 9));
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days,
+        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        pages: [head],
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      // The head (real page at the completed base date) is gone.
+      expect(result.current.find((p) => p.id === head.id && !("isVirtual" in p))).toBeUndefined();
+      // No virtual resurrects the completed base date either.
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
+    });
+  });
+
   it("expands multiple rules independently in the same week", async () => {
     const pageA = makePage({ id: "page-A", scheduledStart: "2026-03-02T09:00:00" });
     const pageB = makePage({
