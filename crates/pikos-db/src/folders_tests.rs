@@ -352,3 +352,20 @@ async fn external_folder_recolor_is_allowed() {
     .unwrap();
     assert_eq!(updated.color.as_deref(), Some("#A6C8E8"));
 }
+
+#[tokio::test]
+async fn external_folder_can_be_reordered() {
+    // Unlike delete/reparent, reordering only rewrites sort_order — it doesn't
+    // orphan pages or break sync, so the sidebar may reposition an external
+    // folder among siblings.
+    let pool = test_pool().await;
+    insert_test_folder(&pool, "user", "User").await.unwrap();
+    external_folder(&pool, "ext").await;
+
+    reorder_folders_impl(&pool, &["ext".into(), "user".into()])
+        .await
+        .unwrap();
+
+    assert_eq!(fetch_sort_order(&pool, "ext").await, 0);
+    assert_eq!(fetch_sort_order(&pool, "user").await, 1);
+}

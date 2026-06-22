@@ -2,7 +2,7 @@
 // 2026-06-10): re-entrant clone-minting calls, exdate read-modify-write
 // clobbering, and completion racing the per-page mutation queue.
 
-import { MockStorageAdapter } from "@pikos/core";
+import { formatLocalISO, MockStorageAdapter, resolveSyncedInstant } from "@pikos/core";
 import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -174,7 +174,7 @@ describe("rescheduleVirtualOccurrence", () => {
   });
 });
 
-describe("synced recurring completion routing (S22)", () => {
+describe("synced recurring completion routing", () => {
   // The native head-advance path is rejected by the backend for an active synced
   // series. completeRecurringPage must detect a locked series and route to
   // occurrence-based completion so NO entry point (incl. the gap dialog and bulk
@@ -220,5 +220,172 @@ describe("skipOccurrence undo", () => {
 
     const rule = hook.result.current.pages.recurrenceRules.find((r) => r.id === ruleId);
     expect(rule?.rruleExdates).toEqual(["2099-01-19"]);
+  });
+});
+
+// ─── maybeToggleSyncedOccurrence + cloneWallClock ───────────────────────────
+// Toggling a synced recurring occurrence's status must route to occurrence-based
+// completion (never the native head advance) and store the done clone at the
+// viewer-local wall clock for a zoned timed event. maybeToggleSyncedOccurrence
+// is the gate every UI toggle funnels through; cloneWallClock is the conversion.
+
+type Hook = Awaited<ReturnType<typeof setupRecurringPage>>["hook"];
+
+async function setupSyncedRecurring(
+  scheduledStart: string,
+  timezone: string,
+  scheduledEnd?: string
+): Promise<{ hook: Hook; pageId: string }> {
+  const hook = renderHookWithProviders(() => ({
+    pages: usePages(),
+    workspace: useWorkspace(),
+  }));
+  await act(async () => {
+    await hook.result.current.workspace.selectWorkspace();
+  });
+
+  let pageId!: string;
+  await act(async () => {
+    const p = await hook.result.current.pages.createPage({ title: "Synced standup" });
+    pageId = p.id;
+    await hook.result.current.pages.scheduleOnce(p.id, scheduledStart, scheduledEnd);
+    await hook.result.current.pages.createRecurrence({
+      pageId: p.id,
+      rrule: "FREQ=DAILY",
+      scheduledStart,
+      timezone,
+    });
+  });
+  await act(async () => {
+    const storage = hook.result.current.workspace.storage as MockStorageAdapter;
+    storage.markPageSynced(pageId, { state: "active", timezone });
+    await hook.result.current.workspace.reload();
+  });
+
+  return { hook, pageId };
+}
+
+function head(hook: Hook, pageId: string) {
+  const p = hook.result.current.pages.pages.find((page) => page.id === pageId);
+  if (!p) throw new Error("head page not found");
+  return p;
+}
+
+describe("maybeToggleSyncedOccurrence", () => {
+  it("checking the head completes its own date via completeSyncedOccurrence", async () => {
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+
+    let handled!: boolean;
+    act(() => {
+      handled = hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+    });
+
+    expect(handled).toBe(true);
+    expect(completeSpy).toHaveBeenCalledTimes(1);
+    expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({
+      occurrenceDate: "2099-01-05",
+      pageId,
+    });
+  });
+
+  it("a virtual occurrence completes on its own originalDate, not the head's date", async () => {
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+
+    const virtual = {
+      ...head(hook, pageId),
+      originalDate: "2099-01-12",
+      scheduledStart: "2099-01-12T09:00:00",
+    };
+    act(() => {
+      hook.result.current.pages.maybeToggleSyncedOccurrence(virtual, "done");
+    });
+
+    expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({ occurrenceDate: "2099-01-12" });
+  });
+
+  it("unchecking a done clone routes to uncompleteSyncedOccurrence with the series id + date", async () => {
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
+    const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteSyncedOccurrence");
+
+    // completeSyncedOccurrence's optimistic clone insert lands a microtask after
+    // the (fire-and-forget) toggle — flush so the clone is in `pages`.
+    await act(async () => {
+      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      await Promise.resolve();
+    });
+    const cloneId = head(hook, pageId).completedOccurrences?.["2099-01-05"] ?? "";
+    const clone = hook.result.current.pages.pages.find((p) => p.id === cloneId)!;
+
+    let handled!: boolean;
+    act(() => {
+      handled = hook.result.current.pages.maybeToggleSyncedOccurrence(clone, "not_started");
+    });
+
+    expect(handled).toBe(true);
+    expect(uncompleteSpy).toHaveBeenCalledTimes(1);
+    expect(uncompleteSpy.mock.calls[0]?.[0]).toMatchObject({
+      occurrenceDate: "2099-01-05",
+      pageId,
+    });
+  });
+
+  it("returns false for a malformed synced row with no scheduledStart so the native path surfaces the error", async () => {
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+
+    const malformed = { ...head(hook, pageId), scheduledStart: null };
+    let handled!: boolean;
+    act(() => {
+      handled = hook.result.current.pages.maybeToggleSyncedOccurrence(malformed, "done");
+    });
+
+    expect(handled).toBe(false);
+    expect(completeSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("cloneWallClock (via maybeToggleSyncedOccurrence)", () => {
+  it("converts a timed zoned occurrence's clone start to the viewer-local instant", async () => {
+    const { hook, pageId } = await setupSyncedRecurring(
+      "2099-01-05T15:00:00",
+      "America/Los_Angeles",
+      "2099-01-05T16:00:00"
+    );
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+
+    act(() => {
+      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+    });
+
+    // Under TZ=UTC the viewer zone is UTC: 15:00 Los_Angeles → its absolute
+    // instant, read back as a UTC wall clock.
+    const expectedStart = formatLocalISO(
+      resolveSyncedInstant("2099-01-05T15:00:00", "America/Los_Angeles")
+    );
+    const expectedEnd = formatLocalISO(
+      resolveSyncedInstant("2099-01-05T16:00:00", "America/Los_Angeles")
+    );
+    expect(expectedStart).not.toBe("2099-01-05T15:00:00");
+    expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({
+      occurrenceDate: "2099-01-05",
+      scheduledEnd: expectedEnd,
+      scheduledStart: expectedStart,
+    });
+  });
+
+  it("passes an all-day (date-only) start through unchanged", async () => {
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05", "America/Los_Angeles");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+
+    act(() => {
+      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+    });
+
+    expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({
+      occurrenceDate: "2099-01-05",
+      scheduledStart: "2099-01-05",
+    });
   });
 });

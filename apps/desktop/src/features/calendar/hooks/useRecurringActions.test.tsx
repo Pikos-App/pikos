@@ -231,6 +231,50 @@ describe("useRecurringActions", () => {
     expect(hook.result.current.undo.toastItems.length).toBeGreaterThan(0);
   });
 
+  it("routes a scheduleLocked recurring toggle to the synced handler and SKIPS the native path", async () => {
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+    const syncedSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+    const nativeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "Synced standup" });
+      pageId = p.id;
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+
+    // A locked (active-synced) recurring head. maybeToggleSyncedOccurrence keys
+    // off the live page's scheduleLocked + an existing rule, so set both here.
+    const base = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
+    act(() => {
+      hook.result.current.setTargetPage({
+        ...base,
+        scheduledStart: "2099-01-05T09:00:00",
+        scheduleLocked: true,
+      });
+    });
+
+    await act(async () => {
+      hook.result.current.actions.toggleStatus();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(syncedSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ occurrenceDate: "2099-01-05", pageId })
+    );
+    // The short-circuit means the native head-advance path never runs.
+    expect(nativeSpy).not.toHaveBeenCalled();
+  });
+
   it("skipOccurrence is a no-op for non-virtual pages", async () => {
     const hook = setup();
     await act(async () => {

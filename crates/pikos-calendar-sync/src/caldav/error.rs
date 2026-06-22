@@ -41,3 +41,33 @@ impl From<CaldavError> for AppError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mapped(e: CaldavError) -> AppError {
+        e.into()
+    }
+
+    // The boundary mapping decides how a CalDAV failure reads downstream: Invalid =
+    // user-actionable (bad creds/URL), Network = transient (calm stale indicator),
+    // Internal = a bug/contract break. A mis-map would, e.g., show a 500 as
+    // "reconnect needed" or a wrong password as a transient blip.
+    #[test]
+    fn auth_and_not_caldav_are_user_actionable_invalid() {
+        assert!(matches!(mapped(CaldavError::Unauthorized), AppError::Invalid(_)));
+        assert!(matches!(mapped(CaldavError::NotCaldav("x".into())), AppError::Invalid(_)));
+    }
+
+    #[test]
+    fn network_and_unexpected_status_are_network() {
+        assert!(matches!(mapped(CaldavError::Network("x".into())), AppError::Network(_)));
+        assert!(matches!(mapped(CaldavError::UnexpectedStatus(500)), AppError::Network(_)));
+    }
+
+    #[test]
+    fn protocol_is_internal() {
+        assert!(matches!(mapped(CaldavError::Protocol("x".into())), AppError::Internal(_)));
+    }
+}

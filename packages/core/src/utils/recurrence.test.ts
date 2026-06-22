@@ -118,6 +118,26 @@ describe("expandRecurrenceForRange", () => {
     expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
   });
 
+  it("excludes an exdate AND a completed occurrence in the same expansion", () => {
+    // A single locked synced series can carry both exclusion sources at once: a
+    // skipped date in rruleExdates and a separately completed date in
+    // completedOccurrences. Both must drop out while an untouched date survives.
+    const page = makePage({
+      completedOccurrences: { "2026-03-16": "clone-1" },
+      scheduleLocked: true,
+    });
+    const rule = makeRule({ rruleExdates: ["2026-03-09"] });
+
+    const occurrences = expandRecurrenceForRange(
+      rule,
+      page,
+      new Date(2026, 2, 2),
+      new Date(2026, 2, 30)
+    );
+
+    expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-23"]);
+  });
+
   it("ignores completedOccurrences once detached (scheduleLocked false)", () => {
     // A detached series is native (EXDATE-driven) — a stale completion map must
     // not keep suppressing occurrences, or they vanish with no live block.

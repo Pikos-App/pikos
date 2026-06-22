@@ -616,3 +616,33 @@ async fn prune_removes_only_rows_before_cutoff() {
     assert_eq!(log_count(&pool, "reminder").await, 0); // pruned
     assert_eq!(log_count(&pool, "overdue").await, 1); // kept
 }
+
+#[tokio::test]
+async fn active_synced_recurring_page_is_excluded_from_head_reminders() {
+    // A synced recurring head is pinned at the series base by the reconciler (it
+    // never advances), so a native head reminder would fire on the wrong, stale
+    // base occurrence. Both head-reminder queries must exclude an active synced
+    // series. (Reminders for synced recurring occurrences aren't implemented; this
+    // pins that they don't leak through the native path.)
+    let pool = test_pool().await;
+    // Explicit-reminder synced recurring.
+    insert_page(&pool, "rec_ex", "not_started", "2026-05-01T00:00:00").await;
+    set_page_start(&pool, "rec_ex", "2026-05-25T09:10:00").await;
+    insert_rule(&pool, "rec_ex", "2026-05-25T09:10:00").await;
+    insert_reminder(&pool, "rec_ex", 10).await;
+    crate::pool::insert_test_page_sync(&pool, "rec_ex", "active").await.unwrap();
+    // Default-lead synced recurring (no explicit reminder row).
+    insert_page(&pool, "rec_def", "not_started", "2026-05-01T00:00:00").await;
+    set_page_start(&pool, "rec_def", "2026-05-25T09:10:00").await;
+    insert_rule(&pool, "rec_def", "2026-05-25T09:10:00").await;
+    crate::pool::insert_test_page_sync(&pool, "rec_def", "active").await.unwrap();
+
+    assert!(
+        due_recurring_explicit_reminders(&pool, WINDOW_START, NOW_TS).await.unwrap().is_empty(),
+        "active synced recurring excluded from explicit head reminders"
+    );
+    assert!(
+        due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS).await.unwrap().is_empty(),
+        "active synced recurring excluded from default head reminders"
+    );
+}

@@ -401,7 +401,9 @@ pub async fn insert_test_folder(pool: &SqlitePool, id: &str, name: &str) -> AppR
 /// Links an existing test page to a synced calendar (a `page_sync` row), creating
 /// a shared throwaway `sync_account` on first use. `sync_state` ∈ active |
 /// detached | tombstoned. Lets schedule/folder/page guard tests mark a page synced.
-#[cfg(any(test, feature = "test-support"))]
+/// Only pikos-db's own tests use it (not external `test-support` consumers), so it
+/// stays `cfg(test)` — under `test-support` it would compile unused.
+#[cfg(test)]
 pub async fn insert_test_page_sync(
     pool: &SqlitePool,
     page_id: &str,

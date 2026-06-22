@@ -240,3 +240,175 @@ async fn fetch_one_refetches_a_single_resource() {
     assert_eq!(ev.core.ical_uid, "meeting-1@pikos.test");
     assert_eq!(ev.schedule.start, "2026-06-15T10:00:00");
 }
+
+// ─── one malformed body must not sink the whole delta ────────────────────────────
+
+/// A transport that fails any request — proves inline-bodied entries never hit
+/// the network (no multiget for resources that already carry calendar-data).
+struct NoNetwork;
+impl DavTransport for NoNetwork {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("no PROPFIND expected");
+    }
+    async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("inline-bodied entries must not trigger a REPORT");
+    }
+}
+
+fn bodied(href: &str, ics: &str) -> super::super::report_xml::ReportEntry {
+    super::super::report_xml::ReportEntry {
+        href: href.into(),
+        response_status: None,
+        etag: Some("v1".into()),
+        calendar_data: Some(ics.into()),
+    }
+}
+
+#[tokio::test]
+async fn resolve_upserts_skips_a_malformed_body_keeps_the_good_one() {
+    let good = bodied(
+        "/good.ics",
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:good\r\n\
+DTSTART;TZID=America/New_York:20260615T090000\r\nSUMMARY:Good\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+    );
+    // VTODO-only — parse_resource errs on it, the same skip the doc promises.
+    let bad = bodied(
+        "/bad.ics",
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:bad\r\nEND:VTODO\r\nEND:VCALENDAR\r\n",
+    );
+
+    let upserts = resolve_upserts(&NoNetwork, CAL, vec![good, bad]).await.unwrap();
+    assert_eq!(upserts.len(), 1, "one bad body is skipped, the good one survives");
+}
+
+// ─── auth + sync-token bootstrap status mapping ──────────────────────────────────
+
+/// A transport returning a fixed status for every REPORT.
+struct StatusOnly(u16);
+impl DavTransport for StatusOnly {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("no PROPFIND expected");
+    }
+    async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        Ok(DavResponse { status: self.0, location: None, body: String::new() })
+    }
+}
+
+#[tokio::test]
+async fn current_sync_token_is_none_when_server_lacks_sync_collection() {
+    for status in [403u16, 405, 501] {
+        let tok = current_sync_token(&StatusOnly(status), CAL).await.unwrap();
+        assert!(tok.is_none(), "status {status} → no cursor, fall back to re-enumerate");
+    }
+}
+
+#[tokio::test]
+async fn current_sync_token_captures_the_cursor_on_207() {
+    // A 207 sync-collection (the INITIAL fixture) carries the next token.
+    let t = FixtureTransport { mode: Mode::Full };
+    let tok = current_sync_token(&t, CAL).await.unwrap();
+    assert!(tok.is_some(), "a 207 sync-collection yields the incremental cursor");
+}
+
+/// 207 for sync-collection, but 401 for the follow-up multiget — an app password
+/// revoked between the two round-trips.
+struct AuthFailsOnMultiget;
+impl DavTransport for AuthFailsOnMultiget {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("no PROPFIND expected");
+    }
+    async fn report(&self, _: &str, _: &str, body: &str) -> Result<DavResponse, CaldavError> {
+        if body.contains("calendar-multiget") {
+            Ok(DavResponse { status: 401, location: None, body: String::new() })
+        } else {
+            Ok(ok(INITIAL))
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_401_during_multiget_surfaces_as_unauthorized() {
+    let err = sync_calendar(&AuthFailsOnMultiget, CAL, Some(&SyncToken("t1".into())))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, CaldavError::Unauthorized),
+        "revoked creds mid-sync must surface as reconnect-needed, not a silent stale"
+    );
+}
+
+// ─── multiget batching (>75 hrefs) ───────────────────────────────────────────────
+
+/// Echoes one calendar-data response per requested href and counts REPORTs, so a
+/// busy delta exercises the cross-chunk accumulation, not just a single batch.
+struct EchoMultiget {
+    calls: std::sync::atomic::AtomicUsize,
+}
+impl DavTransport for EchoMultiget {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("no PROPFIND expected");
+    }
+    async fn report(&self, _: &str, _: &str, body: &str) -> Result<DavResponse, CaldavError> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let mut xml =
+            String::from("<multistatus xmlns=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\">");
+        for line in body.lines() {
+            let Some(href) =
+                line.trim().strip_prefix("<d:href>").and_then(|s| s.strip_suffix("</d:href>"))
+            else {
+                continue;
+            };
+            let uid = href.trim_start_matches('/').trim_end_matches(".ics");
+            xml.push_str(&format!(
+                "<response><href>{href}</href><propstat><prop><getetag>\"v1\"</getetag>\
+<C:calendar-data>BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:{uid}\r\n\
+DTSTART;TZID=America/New_York:20260615T090000\r\nSUMMARY:E\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n\
+</C:calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat></response>"
+            ));
+        }
+        xml.push_str("</multistatus>");
+        Ok(DavResponse { status: 207, location: None, body: xml })
+    }
+}
+
+#[tokio::test]
+async fn multiget_batches_above_seventy_five_hrefs() {
+    let present: Vec<_> = (0..80)
+        .map(|i| super::super::report_xml::ReportEntry {
+            href: format!("/e{i}.ics"),
+            response_status: None,
+            etag: Some("v1".into()),
+            calendar_data: None,
+        })
+        .collect();
+    let t = EchoMultiget { calls: std::sync::atomic::AtomicUsize::new(0) };
+
+    let upserts = resolve_upserts(&t, CAL, present).await.unwrap();
+
+    assert_eq!(upserts.len(), 80, "every batch's events accumulate");
+    assert_eq!(
+        t.calls.load(std::sync::atomic::Ordering::SeqCst),
+        2,
+        "80 hrefs split into a 75 + 5 chunk → two REPORTs"
+    );
+}
+
+// ─── status + parse error mapping ────────────────────────────────────────────
+
+#[tokio::test]
+async fn an_unexpected_status_is_surfaced_not_swallowed() {
+    // A 500 on the sync-collection must propagate as UnexpectedStatus (→ a calm
+    // network/stale indicator), never be read as an empty delta.
+    let err = sync_calendar(&StatusOnly(500), CAL, Some(&SyncToken("t1".into())))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, CaldavError::UnexpectedStatus(500)));
+}
+
+#[test]
+fn parse_report_rejects_malformed_xml() {
+    // A truncated/ill-formed multistatus must error (→ Protocol), not silently
+    // parse to an empty/partial delta that looks like "nothing changed".
+    let result = parse_report("<multistatus><response></multistatus>");
+    assert!(matches!(result, Err(CaldavError::Protocol(_))));
+}

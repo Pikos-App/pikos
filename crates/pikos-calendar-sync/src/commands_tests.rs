@@ -139,3 +139,30 @@ async fn resync_syncs_only_enabled_calendars() {
             .unwrap();
     assert_eq!(token.as_deref(), Some("tok-1"));
 }
+
+#[tokio::test]
+async fn connect_caldav_persists_nothing_when_discovery_fails() {
+    // connect_caldav validates by discovering FIRST, so a failure must leave no
+    // half-built account or keychain entry. A malformed URL fails discovery at the
+    // parse step (no network), exercising that ordering without a live server.
+    let pool = test_pool().await;
+    let keychain = Keychain::with_store(Box::new(MemStore::default()));
+
+    let err = connect_caldav(
+        &pool,
+        keychain,
+        "not a valid url".into(),
+        "user".into(),
+        "pw".into(),
+        "My Calendar".into(),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(matches!(err, AppError::Invalid(_)), "bad URL surfaces as user-actionable");
+    let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_account")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(accounts, 0, "no account row written before discovery succeeds");
+}

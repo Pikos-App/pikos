@@ -125,6 +125,7 @@ export function DeveloperSettings() {
               <p className="mt-0.5 text-xs text-muted-foreground">{s.description}</p>
             </div>
             <Button
+              aria-label={`Seed ${s.label}`}
               disabled={running || !workspace}
               onClick={() => setPending(s.id)}
               size="sm"

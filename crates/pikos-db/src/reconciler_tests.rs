@@ -1461,3 +1461,254 @@ async fn unsync_then_resync_relinks_in_place() {
     assert_eq!(sync_state(&pool, &page_id).await, "active", "reactivated");
     assert_eq!(page_content_text(&pool, &page_id).await, "my notes", "user layer preserved");
 }
+
+// ─── occurrence deltas only touch an ACTIVE series ────────────────────────────
+
+#[tokio::test]
+async fn occurrence_cancel_against_a_tombstoned_series_is_skipped() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![series("v1", vec![], vec![])])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    tombstone(&pool, &page_id).await;
+
+    // A cancellation arrives upstream for a series the user trashed locally.
+    let occ = UpsertItem::Occurrence(OccurrenceDelta {
+        ical_uid: "uid-series".into(),
+        series_ref: "uid-series".into(),
+        original_date: "2026-06-08T09:00:00".into(),
+        kind: OccurrenceKind::Cancel,
+    });
+    let outcome = reconcile(&pool, &ctx(), &delta(vec![occ])).await.unwrap();
+
+    assert!(outcome.missing_masters.is_empty(), "a tombstoned series is handled, not missing");
+    assert_eq!(rule_exdates(&pool, &page_id).await, Vec::<String>::new(), "trashed series' rule untouched");
+    assert_eq!(sync_state(&pool, &page_id).await, "tombstoned");
+}
+
+#[tokio::test]
+async fn occurrence_modify_against_a_detached_series_is_skipped() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![series("v1", vec![], vec![])])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE page_id = ?")
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let occ = UpsertItem::Occurrence(OccurrenceDelta {
+        ical_uid: "uid-series".into(),
+        series_ref: "uid-series".into(),
+        original_date: "2026-06-08T09:00:00".into(),
+        kind: OccurrenceKind::Modify(timed("2026-06-08T14:00:00", None, "UTC")),
+    });
+    reconcile(&pool, &ctx(), &delta(vec![occ])).await.unwrap();
+
+    assert_eq!(override_count(&pool).await, 0, "detached series gets no override written");
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+}
+
+// ─── a series rewrite must not disturb user-owned completion state ─────────────
+
+#[tokio::test]
+async fn series_rewrite_preserves_user_completed_occurrences() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly_series()])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+
+    // completed_occurrences is user-owned (set by the completion command, never by
+    // the reconciler). A full rule rewrite below must leave it byte-identical.
+    let map = r#"{"2026-06-22":"clone-abc"}"#;
+    sqlx::query("UPDATE page_sync SET completed_occurrences = ? WHERE page_id = ?")
+        .bind(map)
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut bumped = weekly_series();
+    if let UpsertItem::Event(e) = &mut bumped {
+        e.core.etag = Some("v2".into());
+        e.core.title = "Weekly sync (renamed)".into();
+    }
+    reconcile(&pool, &ctx(), &delta(vec![bumped])).await.unwrap();
+
+    assert_eq!(page_title(&pool, &page_id).await, "Weekly sync (renamed)", "rewrite actually ran");
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT completed_occurrences FROM page_sync WHERE page_id = ?")
+            .bind(&page_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored.as_deref(), Some(map), "completion map survives the rewrite");
+}
+
+// ─── relink + teardown of a RECURRING series (singles-only before) ─────────────
+
+#[tokio::test]
+async fn relink_reactivates_a_detached_series_in_place() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly_series()])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE page_id = ?")
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Same uid returns under a new href, still recurring with its exdate + override.
+    let mut moved = weekly_series();
+    if let UpsertItem::Event(e) = &mut moved {
+        e.core.external_id = "/series-new.ics".into();
+        e.core.etag = Some("v2".into());
+    }
+    reconcile(&pool, &ctx(), &delta(vec![moved])).await.unwrap();
+
+    assert_eq!(page_count(&pool).await, 1, "re-linked, not duplicated");
+    assert_eq!(rule_count(&pool).await, 1, "one rule after relink, not stacked");
+    assert_eq!(override_count(&pool).await, 1, "override carried, not duplicated");
+    assert_eq!(sync_state(&pool, &page_id).await, "active");
+    let (_, external_id, _) = only_page_sync(&pool).await;
+    assert_eq!(external_id, "/series-new.ics");
+    assert_eq!(rule_exdates(&pool, &page_id).await, vec!["2026-06-15T09:00:00"]);
+}
+
+#[tokio::test]
+async fn teardown_keeps_an_owned_recurring_series_rule_and_override() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly_series()])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    mark_completed(&pool, &page_id).await; // owned → detaches, kept
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+    assert_eq!(rule_count(&pool).await, 1, "detach severs sync only — rule survives");
+    assert_eq!(override_count(&pool).await, 1);
+    assert!(override_row(&pool, &page_id, "2026-06-08T09:00:00").await.is_some());
+}
+
+// ─── all-day exclusive-end decrement: month/year boundary + unparseable ────────
+
+#[tokio::test]
+async fn all_day_end_decrement_crosses_month_and_year_boundaries() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![
+            single(core("/m.ics", "uid-m", "v1", "MonthEnd"), all_day("2026-06-30", Some("2026-07-01"))),
+            single(core("/y.ics", "uid-y", "v1", "YearEnd"), all_day("2025-12-31", Some("2026-01-01"))),
+        ]),
+    )
+    .await
+    .unwrap();
+
+    async fn inclusive_end(pool: &sqlx::SqlitePool, external: &str) -> String {
+        sqlx::query_scalar(
+            "SELECT ps.scheduled_end FROM page_schedules ps
+             JOIN page_sync s ON s.page_id = ps.page_id
+             WHERE s.external_id = ? AND ps.rule_id IS NULL",
+        )
+        .bind(external)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+    assert_eq!(inclusive_end(&pool, "/m.ics").await, "2026-06-30", "exclusive Jul 1 → inclusive Jun 30");
+    assert_eq!(inclusive_end(&pool, "/y.ics").await, "2025-12-31", "exclusive Jan 1 → inclusive Dec 31");
+}
+
+#[tokio::test]
+async fn all_day_end_that_is_not_a_real_date_passes_through() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(
+            core("/bad.ics", "uid-bad", "v1", "Garbage"),
+            all_day("2026-06-15", Some("2026-13-99")),
+        )]),
+    )
+    .await
+    .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(
+        base_schedule(&pool, &page_id).await.1,
+        Some("2026-13-99".into()),
+        "an unparseable 10-char end is left untouched, not shifted or dropped"
+    );
+}
+
+// ─── UNTIL rewrite: unknown source zone ───────────────────────────────────────
+
+#[tokio::test]
+async fn until_with_an_unknown_zone_passes_the_rrule_through_unchanged() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![series_with_rrule("FREQ=WEEKLY;UNTIL=20260630T120000Z", "Mars/Phobos")]),
+    )
+    .await
+    .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    let (rrule, _, _) = rule_row(&pool, &page_id).await;
+    assert_eq!(
+        rrule, "FREQ=WEEKLY;UNTIL=20260630T120000Z",
+        "an unparseable zone leaves the rrule raw — no panic, no dropped rule"
+    );
+}
+
+// ─── seeded description: edge inputs that must not clobber a body ──────────────
+
+#[tokio::test]
+async fn whitespace_only_description_leaves_the_body_untouched() {
+    let pool = setup().await;
+    let mk = |etag: &str, desc: Option<&str>| {
+        delta(vec![single_full("/ev.ics", "uid-1", etag, "Event", desc, None, &[])])
+    };
+    reconcile(&pool, &ctx(), &mk("v1", Some("Real notes"))).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+
+    // A blank-after-trim upstream description must never blank a body the user may own.
+    reconcile(&pool, &ctx(), &mk("v2", Some("   "))).await.unwrap();
+
+    assert_eq!(page_content_text(&pool, &page_id).await, "Real notes");
+}
+
+#[tokio::test]
+async fn nonempty_body_with_no_seed_hash_parks_the_incoming_description() {
+    let pool = setup().await;
+    // First sync carries no description → empty body, no seed hash recorded.
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single_full("/ev.ics", "uid-1", "v1", "Event", None, None, &[])]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    // A body with no comparable seed hash and no user_modified flag — e.g. content
+    // that predates seed-hash versioning. It is NOT pristine, so it must be held.
+    sqlx::query("UPDATE pages SET content_text = 'migrated body' WHERE id = ?")
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single_full("/ev.ics", "uid-1", "v2", "Event", Some("Upstream notes"), None, &[])]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(page_content_text(&pool, &page_id).await, "migrated body", "not overwritten");
+    let (_, _, pending) = seed_meta(&pool, &page_id).await;
+    assert_eq!(pending.as_deref(), Some("Upstream notes"), "withheld description parked");
+}

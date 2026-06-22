@@ -4,11 +4,11 @@ import { addDays, set } from "date-fns";
 
 // Mock external-calendar sync seed (TEST MODE ONLY). Mirrors the real-DB
 // `dev_seed_synced_calendar` Tauri command so Layer-4 tests, the VITE_SEED
-// harness, and Playwright (S19) exercise synced pages without a network sync.
+// harness, and Playwright exercise synced pages without a network sync.
 // The real app path goes through the Tauri command instead (see DeveloperSettings).
 //
 // Produces the same spread as the dev command: a same-day timed event, a
-// cross-zone event (renders shifted with a source-zone badge), an all-day event
+// cross-zone event (resolves to the viewer's zone, no badge), an all-day event
 // (never shifts), a weekly recurring series, and one detached page (broken-sync).
 
 function at(base: Date, offsetDays: number, hours: number, minutes: number): string {

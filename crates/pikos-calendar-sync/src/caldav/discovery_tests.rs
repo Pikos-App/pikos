@@ -5,7 +5,7 @@
 
 use super::super::error::CaldavError;
 use super::super::transport::{DavResponse, DavTransport};
-use super::{discover_calendars, resolve};
+use super::{discover_calendars, propfind_follow, resolve};
 use url::Url;
 
 const PRINCIPAL: &str = include_str!("../../tests/fixtures/caldav/discovery/01_current_user_principal.xml");
@@ -132,4 +132,77 @@ fn resolve_does_not_downgrade_https_to_http() {
     let from = Url::parse("https://caldav.example.com/principals/me/").unwrap();
     let resolved = resolve(&base, &from, "http://caldav.example.com/calendars/me/").unwrap();
     assert_eq!(resolved.as_str(), "https://caldav.example.com/calendars/me/");
+}
+
+// ─── propfind_follow redirect machinery ───────────────────────────────────────
+
+/// A transport answering every PROPFIND with the same scripted status + location.
+struct FixedResponse {
+    status: u16,
+    location: Option<String>,
+}
+impl DavTransport for FixedResponse {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        Ok(DavResponse { status: self.status, location: self.location.clone(), body: String::new() })
+    }
+    async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("discovery never issues a REPORT");
+    }
+}
+
+#[tokio::test]
+async fn redirect_without_a_location_is_a_protocol_error() {
+    let base = Url::parse("https://caldav.example.com/").unwrap();
+    let t = FixedResponse { status: 302, location: None };
+    let result = propfind_follow(&t, &base, base.clone(), "0", "<b/>").await;
+    assert!(
+        matches!(result, Err(CaldavError::Protocol(_))),
+        "a Location-less redirect can't be followed"
+    );
+}
+
+#[tokio::test]
+async fn a_redirect_loop_stops_after_the_cap() {
+    let base = Url::parse("https://caldav.example.com/").unwrap();
+    // Always bounces to a new path → never resolves to a 207.
+    let t = FixedResponse { status: 301, location: Some("/next".into()) };
+    match propfind_follow(&t, &base, base.clone(), "0", "<b/>").await {
+        Err(CaldavError::Protocol(m)) => assert!(m.contains("too many redirects"), "got: {m}"),
+        _ => panic!("expected a too-many-redirects Protocol error"),
+    }
+}
+
+/// 301 → an http:// target on the first hit, 207 thereafter.
+struct DowngradeThenOk {
+    hits: std::sync::Mutex<u32>,
+}
+impl DavTransport for DowngradeThenOk {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        let mut n = self.hits.lock().unwrap();
+        *n += 1;
+        if *n == 1 {
+            Ok(DavResponse {
+                status: 301,
+                location: Some("http://caldav.example.com/principal/".into()),
+                body: String::new(),
+            })
+        } else {
+            Ok(DavResponse { status: 207, location: None, body: "<ok/>".into() })
+        }
+    }
+    async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("discovery never issues a REPORT");
+    }
+}
+
+#[tokio::test]
+async fn a_redirect_that_downgrades_to_http_is_re_upgraded() {
+    let base = Url::parse("https://caldav.example.com/").unwrap();
+    let t = DowngradeThenOk { hits: std::sync::Mutex::new(0) };
+    let followed = propfind_follow(&t, &base, base.clone(), "0", "<b/>").await.unwrap().unwrap();
+    assert_eq!(
+        followed.final_url.as_str(),
+        "https://caldav.example.com/principal/",
+        "an https base re-applies TLS to an http redirect target"
+    );
 }

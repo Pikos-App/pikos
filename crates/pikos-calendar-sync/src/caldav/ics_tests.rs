@@ -175,3 +175,59 @@ fn resource_without_vevent_errs() {
 fn empty_body_errs() {
     assert!(parse_resource("/e.ics", Some("v1"), "not a calendar at all").is_err());
 }
+
+// ─── EXDATE normalization ─────────────────────────────────────────────────────────
+
+/// An `EXDATE` carried in a DIFFERENT zone than the series must normalize to the
+/// series' source-zone wall-clock, or it won't string-match the expansion and the
+/// cancelled occurrence keeps rendering.
+#[test]
+fn foreign_tzid_exdate_normalizes_to_source_zone() {
+    let body = "BEGIN:VEVENT\r\n\
+UID:s\r\n\
+DTSTART;TZID=America/New_York:20260601T090000\r\n\
+DTEND;TZID=America/New_York:20260601T093000\r\n\
+RRULE:FREQ=WEEKLY;BYDAY=MO\r\n\
+EXDATE;TZID=Europe/London:20260615T140000\r\n\
+SUMMARY:Standup\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/s.ics", Some("v1"), &ics(body)).unwrap();
+    // 14:00 London (BST, UTC+1) = 13:00Z = 09:00 New York (EDT) — the series basis.
+    assert_eq!(ev.recurrence.unwrap().exdates, vec!["2026-06-15T09:00:00"]);
+}
+
+/// One `EXDATE` property can list several comma-separated dates (RFC 5545);
+/// iCloud/Fastmail emit these. Every value must be captured, not just the first.
+#[test]
+fn comma_separated_exdate_captures_every_value() {
+    let body = "BEGIN:VEVENT\r\n\
+UID:s\r\n\
+DTSTART;TZID=America/New_York:20260601T090000\r\n\
+DTEND;TZID=America/New_York:20260601T093000\r\n\
+RRULE:FREQ=WEEKLY;BYDAY=MO\r\n\
+EXDATE;TZID=America/New_York:20260615T090000,20260622T090000,20260629T090000\r\n\
+SUMMARY:Standup\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/s.ics", Some("v1"), &ics(body)).unwrap();
+    assert_eq!(
+        ev.recurrence.unwrap().exdates,
+        vec!["2026-06-15T09:00:00", "2026-06-22T09:00:00", "2026-06-29T09:00:00"]
+    );
+}
+
+/// A resource whose only VEVENT carries a `RECURRENCE-ID` (a detached override
+/// with no master in the same body — malformed for CalDAV but seen in exports)
+/// falls back to that lone VEVENT rather than erroring the whole resource away.
+#[test]
+fn override_only_resource_falls_back_to_the_single_vevent() {
+    let body = "BEGIN:VEVENT\r\n\
+UID:s\r\n\
+RECURRENCE-ID;TZID=America/New_York:20260608T090000\r\n\
+DTSTART;TZID=America/New_York:20260608T110000\r\n\
+DTEND;TZID=America/New_York:20260608T113000\r\n\
+SUMMARY:Standup (moved)\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/o.ics", Some("v1"), &ics(body)).unwrap();
+    assert_eq!(ev.core.ical_uid, "s");
+    assert_eq!(ev.schedule.start, "2026-06-08T11:00:00");
+}
