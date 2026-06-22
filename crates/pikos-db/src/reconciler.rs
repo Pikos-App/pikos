@@ -265,8 +265,8 @@ async fn apply_occurrence(
     ctx: &ReconcileContext,
     occ: &OccurrenceDelta,
 ) -> AppResult<Option<MissingMaster>> {
-    let rule = sqlx::query_as::<_, (String, String)>(
-        "SELECT r.id, r.page_id FROM page_recurrence_rules r
+    let rule = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT r.id, r.page_id, ps.sync_state FROM page_recurrence_rules r
          JOIN page_sync ps ON ps.page_id = r.page_id
          WHERE ps.account_id = ? AND ps.calendar_id = ? AND ps.ical_uid = ?",
     )
@@ -276,12 +276,18 @@ async fn apply_occurrence(
     .fetch_optional(&mut **tx)
     .await?;
 
-    let Some((rule_id, page_id)) = rule else {
+    let Some((rule_id, page_id, state)) = rule else {
         return Ok(Some(MissingMaster {
             ical_uid: occ.ical_uid.clone(),
             series_ref: occ.series_ref.clone(),
         }));
     };
+    // tombstoned: user trashed the series; detached: sync severed. Mutating its
+    // EXDATEs/overrides would resurrect a schedule the user no longer syncs.
+    // Mirrors apply_removal's active-only guard.
+    if state != "active" {
+        return Ok(None);
+    }
 
     match &occ.kind {
         OccurrenceKind::Cancel => {
