@@ -98,6 +98,7 @@ async fn run<P: CalendarProvider>(
     let outcome = reconcile_batched(pool, &ctx, &delta).await?;
     resolve_missing_masters(pool, provider, &ctx, calendar, &delta, &outcome.missing_masters)
         .await?;
+    sweep_absent_events(pool, &ctx, &delta).await?;
 
     let next = match delta.next_token {
         Some(token) => Some(token),
@@ -108,6 +109,31 @@ async fn run<P: CalendarProvider>(
     persist_progress(pool, &calendar.id, next.as_ref(), was_full).await?;
 
     Ok(SyncOutcome::Synced { full_resync: was_full && had_cursor, changed })
+}
+
+/// Drive `reconciler::sweep_absent` on a full authoritative enumerate; no-op
+/// otherwise. Runs after the upserts commit, so every returned event is `active`
+/// and won't be swept.
+async fn sweep_absent_events(
+    pool: &sqlx::SqlitePool,
+    ctx: &ReconcileContext,
+    delta: &SyncDelta,
+) -> AppResult<()> {
+    let Some(window_start) = &delta.authoritative_from else {
+        return Ok(());
+    };
+    let present: std::collections::HashSet<String> = delta
+        .upserts
+        .iter()
+        .filter_map(|item| match item {
+            UpsertItem::Event(ev) => Some(ev.core.external_id.clone()),
+            UpsertItem::Occurrence(_) => None,
+        })
+        .collect();
+    retry_on_busy(|| {
+        pikos_db::reconciler::sweep_absent(pool, ctx, &present, window_start)
+    })
+    .await
 }
 
 /// Above this many delta items, commit the upserts in batches instead of one
@@ -146,6 +172,7 @@ async fn reconcile_batched(
             upserts: batch.to_vec(),
             removals: vec![],
             next_token: None,
+            authoritative_from: None,
         };
         reconcile_safe(pool, ctx, &sub).await?;
     }
@@ -158,6 +185,7 @@ async fn reconcile_batched(
         upserts: tail,
         removals: delta.removals.clone(),
         next_token: None,
+        authoritative_from: None,
     };
     reconcile_safe(pool, ctx, &sub).await
 }

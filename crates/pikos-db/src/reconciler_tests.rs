@@ -110,6 +110,7 @@ fn delta(upserts: Vec<UpsertItem>) -> SyncDelta {
         upserts,
         removals: vec![],
         next_token: None,
+        authoritative_from: None,
     }
 }
 
@@ -661,6 +662,7 @@ async fn removal_takes_the_whole_series_not_one_occurrence() {
             upserts: vec![],
             removals: vec![Removal { external_id: "/series.ics".into() }],
             next_token: None,
+            authoritative_from: None,
         },
     )
     .await
@@ -1132,6 +1134,7 @@ fn removal(external_id: &str) -> SyncDelta {
         upserts: vec![],
         removals: vec![Removal { external_id: external_id.into() }],
         next_token: None,
+        authoritative_from: None,
     }
 }
 
@@ -1316,6 +1319,48 @@ async fn last_opened_alone_is_not_owned() {
     reconcile(&pool, &ctx(), &removal("/ev.ics")).await.unwrap();
 
     assert!(!page_exists(&pool, &page_id).await, "reading is not authoring — hard delete");
+}
+
+/// The full-enumerate sweep's recurring carve-out: a finite series whose `UNTIL`
+/// predates the window is legitimately absent (spared); an unbounded series always
+/// reaches into the window, so its absence is a genuine deletion (swept).
+#[tokio::test]
+async fn sweep_spares_expired_until_series_but_removes_unbounded() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![series_recurring("/finite.ics", "uid-finite", "FREQ=WEEKLY;UNTIL=20260201T100000Z")]))
+        .await
+        .unwrap();
+    reconcile(&pool, &ctx(), &delta(vec![series_recurring("/infinite.ics", "uid-infinite", "FREQ=WEEKLY")]))
+        .await
+        .unwrap();
+
+    // A re-enumerate returning neither: the window is well after the finite series
+    // ended, but the unbounded one should still have been present.
+    sweep_absent(&pool, &ctx(), &std::collections::HashSet::new(), "2026-06-24")
+        .await
+        .unwrap();
+
+    assert!(page_exists_by_uid(&pool, "uid-finite").await, "pre-window finite series spared");
+    assert!(!page_exists_by_uid(&pool, "uid-infinite").await, "live unbounded series swept");
+}
+
+fn series_recurring(href: &str, uid: &str, rrule: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core(href, uid, "v1", "Standup"),
+        schedule: timed("2026-01-01T09:00:00", Some("2026-01-01T09:30:00"), "America/New_York"),
+        recurrence: Some(Recurrence { rrule: rrule.into(), exdates: vec![], overrides: vec![] }),
+    })
+}
+
+async fn page_exists_by_uid(pool: &sqlx::SqlitePool, uid: &str) -> bool {
+    let n: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM page_sync ps JOIN pages p ON p.id = ps.page_id WHERE ps.ical_uid = ?",
+    )
+    .bind(uid)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    n > 0
 }
 
 #[tokio::test]

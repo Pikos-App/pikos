@@ -55,6 +55,7 @@ pub(crate) async fn sync_calendar<T: DavTransport>(
         upserts,
         removals,
         next_token: report.sync_token.map(SyncToken),
+        authoritative_from: None,
     })
 }
 
@@ -108,8 +109,9 @@ async fn backfill<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
 ) -> Result<SyncDelta, CaldavError> {
+    let window_start = Utc::now() - chrono::Duration::days(7);
     let resp = transport
-        .report(calendar_url, "1", &calendar_query_body())
+        .report(calendar_url, "1", &calendar_query_body(window_start))
         .await?;
     match resp.status {
         207 => {}
@@ -119,7 +121,14 @@ async fn backfill<T: DavTransport>(
     let report = parse_report(&resp.body)?;
     let (present, _removals) = split_present(report.entries);
     let upserts = resolve_upserts(transport, calendar_url, present).await?;
-    Ok(SyncDelta { upserts, removals: vec![], next_token: None })
+    // Authoritative set for `[window_start, ∞)`: the engine sweeps stored pages
+    // absent from it, since a backfill carries no deletions of its own.
+    Ok(SyncDelta {
+        upserts,
+        removals: vec![],
+        next_token: None,
+        authoritative_from: Some(window_start.format("%Y-%m-%d").to_string()),
+    })
 }
 
 /// Partition report entries into present resources and deletions (a response-level
@@ -202,11 +211,11 @@ fn sync_collection_body(token: &str) -> String {
     )
 }
 
-/// `calendar-query` bounded to ~1 week before now (`timeMin`), no upper bound. The
-/// server expands recurrences to test overlap, so masters recurring into the
-/// window are returned. Used only for the initial/Recovery enumerate.
-fn calendar_query_body() -> String {
-    let start = (Utc::now() - chrono::Duration::days(7)).format("%Y%m%dT000000Z");
+/// `calendar-query` bounded to `window_start` (no upper bound). The server expands
+/// recurrences to test overlap, so masters recurring into the window are returned.
+/// Used only for the initial/recovery enumerate.
+fn calendar_query_body(window_start: chrono::DateTime<Utc>) -> String {
+    let start = window_start.format("%Y%m%dT000000Z");
     format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">

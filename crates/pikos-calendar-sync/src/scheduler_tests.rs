@@ -111,6 +111,7 @@ fn delta(upserts: Vec<UpsertItem>) -> SyncDelta {
         upserts,
         removals: vec![],
         next_token: Some(SyncToken("t1".into())),
+        authoritative_from: None,
     }
 }
 

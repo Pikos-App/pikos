@@ -134,6 +134,11 @@ pub struct SyncDelta {
     pub upserts: Vec<UpsertItem>,
     pub removals: Vec<Removal>,
     pub next_token: Option<SyncToken>,
+    /// Query window-start date (`YYYY-MM-DD`), set only by a full authoritative
+    /// enumerate; its presence marks `upserts` the complete set for `[start, ∞)`
+    /// and tells the engine to sweep absent pages (see `reconciler::sweep_absent`).
+    /// `None` on an incremental delta, whose removals arrive explicitly.
+    pub authoritative_from: Option<String>,
 }
 
 /// One implementation per provider (CalDAV, then Google). Auth, HTTP, and parsing

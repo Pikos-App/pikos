@@ -130,6 +130,28 @@ fn event(external_id: &str, uid: &str, etag: &str, title: &str) -> UpsertItem {
     })
 }
 
+/// A single non-recurring event at an explicit date, for the full-enumerate sweep
+/// (a pre-window event's occurrence precedes the query window).
+fn dated_event(external_id: &str, uid: &str, title: &str, start: &str, end: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: EventCore {
+            external_id: external_id.into(),
+            ical_uid: uid.into(),
+            etag: Some("v1".into()),
+            title: title.into(),
+            description: None,
+            location: None,
+            attendees: vec![],
+        },
+        schedule: EventSchedule {
+            start: start.into(),
+            end: Some(end.into()),
+            timezone: Some("America/New_York".into()),
+        },
+        recurrence: None,
+    })
+}
+
 /// A recurring master, returned by a scripted `fetch_event` to resolve an orphan.
 fn master(external_id: &str, uid: &str) -> EventUpsert {
     EventUpsert {
@@ -174,6 +196,18 @@ fn delta(upserts: Vec<UpsertItem>, token: Option<&str>) -> SyncDelta {
         upserts,
         removals: vec![],
         next_token: token.map(|t| SyncToken(t.into())),
+        authoritative_from: None,
+    }
+}
+
+/// A full authoritative enumerate: no cursor, and `authoritative_from` set so the
+/// engine sweeps stored pages absent from `upserts`.
+fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
+    SyncDelta {
+        upserts,
+        removals: vec![],
+        next_token: None,
+        authoritative_from: Some(window_start.into()),
     }
 }
 
@@ -235,6 +269,14 @@ async fn override_count(pool: &SqlitePool, original_date: &str) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM page_schedules WHERE original_date = ?")
         .bind(original_date)
         .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn sync_state_by_uid(pool: &SqlitePool, uid: &str) -> Option<String> {
+    sqlx::query_scalar("SELECT sync_state FROM page_sync WHERE ical_uid = ?")
+        .bind(uid)
+        .fetch_optional(pool)
         .await
         .unwrap()
 }
@@ -639,9 +681,85 @@ async fn removal_flows_through() {
         upserts: vec![],
         removals: vec![Removal { external_id: "/e1.ics".into() }],
         next_token: Some(SyncToken("t2".into())),
+        authoritative_from: None,
     }));
     run(&pool, &provider).await;
     assert_eq!(page_count(&pool).await, 0, "bare mirror hard-deleted");
+}
+
+/// A backfill carries no per-event removals, so a stale-token gap (or a server
+/// without `sync-collection`) would otherwise leave an upstream-deleted event as a
+/// permanent ghost. The full-enumerate sweep closes that: an event absent from the
+/// authoritative set is removed — but a pre-window event, legitimately outside the
+/// time-bounded query, must survive.
+#[tokio::test]
+async fn full_resync_sweeps_deleted_but_spares_pre_window() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+
+    // Initial backfill: an in-window event that later vanishes upstream, plus a
+    // pre-window event the query window (start 2026-06-24) never covers.
+    let provider = Scripted::default()
+        .with_sync(Ok(full_enumerate(
+            vec![
+                dated_event("/live.ics", "live", "Team lunch", "2026-06-28T12:00:00", "2026-06-28T13:00:00"),
+                dated_event("/old.ics", "old", "Q1 kickoff", "2026-05-01T09:00:00", "2026-05-01T10:00:00"),
+            ],
+            "2026-06-24",
+        )))
+        .with_bootstrap(SyncToken("tok-A".into()));
+    run(&pool, &provider).await;
+    assert_eq!(page_count(&pool).await, 2);
+
+    // Stale-token gap: the event was deleted upstream during the gap, so the
+    // re-enumerate returns neither it (deleted) nor the pre-window event (out of
+    // range). Only the deleted one should go.
+    let provider = Scripted::default()
+        .with_sync(Ok(full_enumerate(vec![], "2026-06-24")))
+        .with_bootstrap(SyncToken("tok-B".into()));
+    run(&pool, &provider).await;
+
+    assert_eq!(page_count(&pool).await, 1, "deleted event swept, pre-window kept");
+    assert_eq!(sync_state_by_uid(&pool, "live").await, None, "deleted mirror gone");
+    assert_eq!(
+        sync_state_by_uid(&pool, "old").await.as_deref(),
+        Some("active"),
+        "pre-window event survives the sweep"
+    );
+}
+
+/// The sweep runs the normal own-vs-delete lifecycle: an owned page (here
+/// user-modified) detaches rather than hard-deletes, keeping its dormant identity
+/// for a later resync re-link.
+#[tokio::test]
+async fn full_resync_sweep_detaches_owned_page() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+
+    let provider = Scripted::default()
+        .with_sync(Ok(full_enumerate(
+            vec![dated_event("/mine.ics", "mine", "Planning", "2026-06-28T09:00:00", "2026-06-28T10:00:00")],
+            "2026-06-24",
+        )))
+        .with_bootstrap(SyncToken("tok-A".into()));
+    run(&pool, &provider).await;
+    sqlx::query("UPDATE page_sync SET user_modified = 1 WHERE ical_uid = 'mine'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Deleted upstream; the re-enumerate no longer carries it.
+    let provider = Scripted::default()
+        .with_sync(Ok(full_enumerate(vec![], "2026-06-24")))
+        .with_bootstrap(SyncToken("tok-B".into()));
+    run(&pool, &provider).await;
+
+    assert_eq!(page_count(&pool).await, 1, "owned page kept");
+    assert_eq!(
+        sync_state_by_uid(&pool, "mine").await.as_deref(),
+        Some("detached"),
+        "owned page detached, not deleted"
+    );
 }
 
 // ─── temp WAL pool ──────────────────────────────────────────────────────────────

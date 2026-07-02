@@ -348,12 +348,119 @@ async fn apply_removal(
     if state != "active" {
         return Ok(());
     }
-    if is_owned(tx, &page_id).await? {
-        detach_sync(tx, &page_sync_id).await?;
+    detach_or_delete(tx, &page_sync_id, &page_id).await
+}
+
+/// The own-vs-delete decision, shared by an explicit removal, teardown, and the
+/// full-enumerate sweep: an owned page detaches (keeps its dormant identity for a
+/// later resync re-link); a bare mirror hard-deletes. Errs toward keeping.
+async fn detach_or_delete(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_sync_id: &str,
+    page_id: &str,
+) -> AppResult<()> {
+    if is_owned(tx, page_id).await? {
+        detach_sync(tx, page_sync_id).await?;
     } else {
-        hard_delete_page(tx, &page_id).await?;
+        hard_delete_page(tx, page_id).await?;
     }
     Ok(())
+}
+
+/// After a full authoritative enumerate, remove stored active pages the provider
+/// no longer returns — the deletion signal an incremental cursor would carry as a
+/// [`Removal`] but a backfill (initial, stale-token recovery, or a server with no
+/// `sync-collection`) cannot. `present_ids` is every `external_id` the enumerate
+/// returned; `window_start` is its query-window date. A page absent from the set
+/// is a genuine upstream deletion **unless** it's merely pre-window (all its
+/// occurrences precede `window_start`, so a time-bounded query legitimately omits
+/// it) — [`is_pre_window`] spares those. Genuine removals run the normal
+/// detach-if-owned / hard-delete lifecycle. Idempotent, and its own read-then-write
+/// tx (wrap in `retry_on_busy`).
+pub async fn sweep_absent(
+    pool: &sqlx::SqlitePool,
+    ctx: &ReconcileContext,
+    present_ids: &std::collections::HashSet<String>,
+    window_start: &str,
+) -> AppResult<()> {
+    let mut tx = pool.begin().await?;
+
+    let rows = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT id, page_id, external_id FROM page_sync
+         WHERE account_id = ? AND calendar_id = ? AND sync_state = 'active'",
+    )
+    .bind(&ctx.account_id)
+    .bind(&ctx.calendar_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    for (page_sync_id, page_id, external_id) in rows {
+        if present_ids.contains(&external_id) {
+            continue;
+        }
+        if is_pre_window(&mut tx, &page_id, window_start).await? {
+            continue;
+        }
+        detach_or_delete(&mut tx, &page_sync_id, &page_id).await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Whether a page's occurrences all precede `window_start`, so the sweep spares
+/// it. Day-granularity compare — the window is a soft guard, not a correctness
+/// boundary. A recurring series is pre-window only if a cheaply-readable `UNTIL`
+/// bounds it before the window; no `UNTIL` (infinite or `COUNT`) is assumed
+/// in-window. A `COUNT`-bounded series that truly ended pre-window is the one
+/// accepted false negative: rare, worst case detaches an owned page (re-links on
+/// the next real change) or drops a stale past mirror.
+async fn is_pre_window(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    window_start: &str,
+) -> AppResult<bool> {
+    let window_key = date_key(window_start);
+
+    if let Some(rrule) =
+        sqlx::query_scalar::<_, String>("SELECT rrule FROM page_recurrence_rules WHERE page_id = ?")
+            .bind(page_id)
+            .fetch_optional(&mut **tx)
+            .await?
+    {
+        return Ok(match rrule_until(&rrule) {
+            Some(until) => date_key(&until) < window_key,
+            None => false,
+        });
+    }
+
+    let (start, end) = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+        "SELECT scheduled_start, scheduled_end FROM pages WHERE id = ?",
+    )
+    .bind(page_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    // End (inclusive) is the latest instant when present, else the start; no stored
+    // schedule can't be proven pre-window, so don't spare it.
+    Ok(match end.or(start) {
+        Some(instant) => date_key(&instant) < window_key,
+        None => false,
+    })
+}
+
+/// First 8 digits of any date / date-time string → `YYYYMMDD`, so day-granularity
+/// comparison works regardless of format (`2026-06-24`, `2026-06-24T09:00:00`,
+/// `20260624T090000`). Lexical order over the fixed-width result is date order.
+fn date_key(s: &str) -> String {
+    s.chars().filter(char::is_ascii_digit).take(8).collect()
+}
+
+/// An RRULE's `UNTIL` value, if present.
+fn rrule_until(rrule: &str) -> Option<String> {
+    rrule.split(';').find_map(|part| {
+        let (key, value) = part.split_once('=')?;
+        key.eq_ignore_ascii_case("UNTIL").then(|| value.to_string())
+    })
 }
 
 /// Tear down a calendar's live sync (the user unsynced or disconnected it). Same
@@ -392,13 +499,7 @@ pub async fn teardown_calendar(
             }
             // Already severed by a prior upstream removal — keep its dormant identity.
             "detached" => {}
-            _ => {
-                if is_owned(&mut tx, &page_id).await? {
-                    detach_sync(&mut tx, &page_sync_id).await?;
-                } else {
-                    hard_delete_page(&mut tx, &page_id).await?;
-                }
-            }
+            _ => detach_or_delete(&mut tx, &page_sync_id, &page_id).await?,
         }
     }
 
