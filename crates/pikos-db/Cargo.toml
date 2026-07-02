@@ -13,6 +13,8 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 chrono-tz = "0.10"
 thiserror = "2"
+tokio = { version = "1", features = ["time"] }
+pikos-recurrence = { path = "../pikos-recurrence" }
 
 [features]
 # Re-exports test_pool + insert_test_* helpers so downstream crates (the desktop

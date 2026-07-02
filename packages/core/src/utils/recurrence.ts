@@ -428,6 +428,12 @@ export interface RecurrenceOptions {
   interval: number;
   /** Weekdays for FREQ=WEEKLY (rrule.js: 0=Monday … 6=Sunday). */
   byweekday?: RecurrenceWeekday[];
+  /** Positions within the recurrence set, e.g. -1 for "last" (BYSETPOS). */
+  bysetpos?: number[];
+  /** Days of the month, 1–31 or negative from month-end (BYMONTHDAY). */
+  bymonthday?: number[];
+  /** Week-start day (rrule.js: 0=Monday … 6=Sunday); changes weekly grouping. */
+  wkst?: RecurrenceWeekday;
   /** End condition — exactly one of `count` or `until` may be set. */
   count?: number;
   /** End condition as YYYY-MM-DD (date-only). */
@@ -473,6 +479,26 @@ export function parseRrule(rruleStr: string): RecurrenceOptions | null {
       if (numeric.length > 0) options.byweekday = numeric;
     }
 
+    if (parsed.bysetpos != null) {
+      const arr = Array.isArray(parsed.bysetpos) ? parsed.bysetpos : [parsed.bysetpos];
+      if (arr.length > 0) options.bysetpos = arr;
+    }
+
+    if (parsed.bymonthday != null) {
+      const arr = Array.isArray(parsed.bymonthday) ? parsed.bymonthday : [parsed.bymonthday];
+      if (arr.length > 0) options.bymonthday = arr;
+    }
+
+    if (parsed.wkst != null) {
+      const wkst =
+        typeof parsed.wkst === "number"
+          ? parsed.wkst
+          : typeof parsed.wkst === "object" && "weekday" in parsed.wkst
+            ? parsed.wkst.weekday
+            : -1;
+      if (wkst >= 0 && wkst <= 6) options.wkst = wkst as RecurrenceWeekday;
+    }
+
     if (parsed.count != null) options.count = parsed.count;
     if (parsed.until) {
       // rrule UNTIL is a Date in UTC — reduce to YYYY-MM-DD.
@@ -502,6 +528,18 @@ export function buildRrule(options: RecurrenceOptions): string {
 
   if (options.byweekday && options.byweekday.length > 0) {
     rruleOpts.byweekday = [...options.byweekday];
+  }
+
+  if (options.bysetpos && options.bysetpos.length > 0) {
+    rruleOpts.bysetpos = [...options.bysetpos];
+  }
+
+  if (options.bymonthday && options.bymonthday.length > 0) {
+    rruleOpts.bymonthday = [...options.bymonthday];
+  }
+
+  if (options.wkst != null) {
+    rruleOpts.wkst = options.wkst;
   }
 
   if (options.count != null) {

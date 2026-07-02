@@ -145,7 +145,7 @@ struct SyncedReminderRow {
 /// doesn't exist in the zone (spring-forward gap, where `earliest()` is also
 /// None). For a fall-back-ambiguous wall-clock (the hour repeats), `earliest()`
 /// picks the first occurrence and fires once — `single()` would drop it entirely.
-fn synced_fire_instant(
+pub(crate) fn synced_fire_instant(
     wall_clock: &str,
     timezone: &str,
     minutes_before: i64,

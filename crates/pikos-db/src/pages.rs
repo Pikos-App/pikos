@@ -75,10 +75,10 @@ pub struct Page {
     /// at render only for synced (locked) pages, which display absolute in the
     /// viewer's zone; native pages float and ignore it.
     pub timezone: Option<String>,
-    /// User-owned completion map for a synced RECURRENCE (`page_sync.completed_occurrences`):
-    /// `occurrence-date (YYYY-MM-DD) → done-clone page id`. The frontend hides a
-    /// completed occurrence (expansion skip + head suppression) and routes an
-    /// uncomplete by the clone id. `None` for native or non-recurring pages.
+    /// Completion map for a recurring series, built from the `completed_set` table:
+    /// `occurrence-date → done-clone page id`. The frontend hides a completed
+    /// occurrence (expansion skip + head suppression) and routes an uncomplete by
+    /// the clone id. `None` when the series has no completions.
     pub completed_occurrences: Option<std::collections::HashMap<String, String>>,
 }
 
@@ -117,8 +117,8 @@ impl From<PageRow> for Page {
     }
 }
 
-/// Parse the `page_sync.completed_occurrences` JSON map; a malformed value
-/// degrades to `None` rather than failing the whole page hydrate.
+/// Parse the `completed_occurrences` JSON object built by `json_group_object` over
+/// `completed_set`; `NULLIF(..., '{}')` already maps an empty set to `None`.
 fn parse_completed_occurrences(
     raw: Option<String>,
 ) -> Option<std::collections::HashMap<String, String>> {
@@ -228,7 +228,8 @@ const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      WHERE page_sync.page_id = pages.id AND page_sync.sync_state = 'active') \
      AS schedule_locked\
      , (SELECT sync_state FROM page_sync WHERE page_sync.page_id = pages.id) AS sync_state\
-     , (SELECT completed_occurrences FROM page_sync WHERE page_sync.page_id = pages.id) AS completed_occurrences\
+     , NULLIF((SELECT json_group_object(occurrence_date, clone_id) FROM completed_set \
+         WHERE completed_set.page_id = pages.id), '{}') AS completed_occurrences\
      , COALESCE(\
          (SELECT timezone FROM page_recurrence_rules WHERE page_recurrence_rules.page_id = pages.id LIMIT 1), \
          (SELECT timezone FROM page_schedules WHERE page_schedules.page_id = pages.id LIMIT 1)) \
@@ -1211,15 +1212,16 @@ async fn complete_recurring_page_once(
     })
 }
 
-// ─── Synced recurring occurrence completion (S22) ────────────────────────────
+// ─── Synced recurring occurrence completion ──────────────────────────────────
 //
 // A synced recurring series can't reuse native head-advance completion: the
 // reconciler pins the head at the series base and owns the (locked) rule, so
 // advancing the head or merging an EXDATE would be clobbered on the next sync.
-// Completion is instead USER-OWNED state on `page_sync.completed_occurrences` (a
-// `date → done-clone id` map the reconciler never touches) plus a durable done
-// clone (a native page, no `page_sync` link). The frontend hides the completed
-// occurrence (expansion skip + head suppression); the clone renders the done block.
+// Completion is instead per-occurrence state in the `completed_set` table (a
+// `(page_id, occurrence_date) → clone_id` row the reconciler never touches) plus a
+// durable done clone (a native page, no `page_sync` link). The frontend hides the
+// completed occurrence (expansion skip + head suppression); the clone renders the
+// done block.
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1233,44 +1235,24 @@ pub struct CompleteSyncedOccurrenceInput {
     pub scheduled_end: Option<String>,
 }
 
-/// Reads the `completed_occurrences` map of an ACTIVE synced series inside the
-/// tx, erroring if the page isn't one (the caller routed to the wrong path).
-async fn read_synced_completion_map(
+/// Whether an active `page_sync` row owns this page — the guard that keeps this
+/// path to synced series (native recurring completes via the head-advance path).
+async fn is_active_synced(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
-) -> AppResult<std::collections::HashMap<String, String>> {
-    let row: Option<Option<String>> = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT completed_occurrences FROM page_sync WHERE page_id = ? AND sync_state = 'active'",
+) -> AppResult<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM page_sync WHERE page_id = ? AND sync_state = 'active')",
     )
     .bind(page_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    let current = row.ok_or_else(|| {
-        AppError::Conflict("Page is not an active synced recurring series.".to_string())
-    })?;
-    Ok(current
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or_default())
-}
-
-async fn write_synced_completion_map(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    page_id: &str,
-    map: &std::collections::HashMap<String, String>,
-) -> AppResult<()> {
-    let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
-    sqlx::query("UPDATE page_sync SET completed_occurrences = ? WHERE page_id = ?")
-        .bind(json)
-        .bind(page_id)
-        .execute(&mut **tx)
-        .await?;
-    Ok(())
+    .fetch_one(&mut **tx)
+    .await?)
 }
 
 /// Completes one occurrence of a synced recurring series: insert a done clone at
-/// the occurrence and record `date → clone_id`. The head is NOT advanced and the
-/// rule's EXDATEs are NOT touched. Retries on `SQLITE_BUSY_SNAPSHOT` (read-then-write).
+/// the occurrence and record `(page_id, occurrence_date) → clone_id` in
+/// `completed_set`. The head is NOT advanced and the rule's EXDATEs are NOT touched.
+/// Retries on `SQLITE_BUSY_SNAPSHOT` (read-then-write).
 pub async fn complete_synced_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: CompleteSyncedOccurrenceInput,
@@ -1288,7 +1270,11 @@ async fn complete_synced_occurrence_once(
 
     let mut tx = pool.begin().await?;
 
-    let mut map = read_synced_completion_map(&mut tx, &data.page_id).await?;
+    if !is_active_synced(&mut tx, &data.page_id).await? {
+        return Err(AppError::Conflict(
+            "Page is not an active synced recurring series.".to_string(),
+        ));
+    }
 
     let head = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
@@ -1329,8 +1315,14 @@ async fn complete_synced_occurrence_once(
     )
     .await?;
 
-    map.insert(data.occurrence_date.clone(), clone_id.clone());
-    write_synced_completion_map(&mut tx, &data.page_id, &map).await?;
+    sqlx::query(
+        "INSERT OR REPLACE INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, ?)",
+    )
+    .bind(&data.page_id)
+    .bind(&data.occurrence_date)
+    .bind(&clone_id)
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
 
@@ -1351,9 +1343,9 @@ pub struct UncompleteSyncedOccurrenceInput {
     pub occurrence_date: String,
 }
 
-/// Uncompletes a synced occurrence: hard-delete its done clone and drop the date
-/// from the map. No-op if the date isn't completed. The original occurrence
-/// reappears once it's no longer in the map.
+/// Uncompletes a synced occurrence: hard-delete its done clone and drop the
+/// `completed_set` row. No-op if the date isn't completed. The original occurrence
+/// reappears once its set entry is gone.
 pub async fn uncomplete_synced_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: UncompleteSyncedOccurrenceInput,
@@ -1366,13 +1358,23 @@ async fn uncomplete_synced_occurrence_once(
     data: &UncompleteSyncedOccurrenceInput,
 ) -> AppResult<()> {
     let mut tx = pool.begin().await?;
-    let mut map = read_synced_completion_map(&mut tx, &data.page_id).await?;
-    if let Some(clone_id) = map.remove(&data.occurrence_date) {
+    let clone_id: Option<String> = sqlx::query_scalar(
+        "SELECT clone_id FROM completed_set WHERE page_id = ? AND occurrence_date = ?",
+    )
+    .bind(&data.page_id)
+    .bind(&data.occurrence_date)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(clone_id) = clone_id {
+        sqlx::query("DELETE FROM completed_set WHERE page_id = ? AND occurrence_date = ?")
+            .bind(&data.page_id)
+            .bind(&data.occurrence_date)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("DELETE FROM pages WHERE id = ?")
             .bind(&clone_id)
             .execute(&mut *tx)
             .await?;
-        write_synced_completion_map(&mut tx, &data.page_id, &map).await?;
     }
     tx.commit().await?;
     Ok(())
@@ -1521,6 +1523,10 @@ pub async fn get_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<Pag
 #[cfg(test)]
 #[path = "pages_tests.rs"]
 mod pages_tests;
+
+#[cfg(test)]
+#[path = "shadow_invariant_tests.rs"]
+mod shadow_invariant_tests;
 
 #[cfg(test)]
 #[path = "pages_concurrency_tests.rs"]

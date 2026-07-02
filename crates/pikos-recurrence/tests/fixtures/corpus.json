@@ -1,0 +1,346 @@
+{
+  "alignWeekly": [
+    { "anchor": "2026-03-04T09:00:00", "name": "single BYDAY realigns to moved weekday", "rrule": "FREQ=WEEKLY;BYDAY=MO", "expected": "FREQ=WEEKLY;INTERVAL=1;BYDAY=WE" },
+    { "anchor": "2026-03-04T09:00:00", "name": "multi BYDAY unchanged", "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR", "expected": "FREQ=WEEKLY;BYDAY=MO,WE,FR" },
+    { "anchor": "2026-03-04T09:00:00", "name": "non-weekly unchanged", "rrule": "FREQ=DAILY", "expected": "FREQ=DAILY" },
+    { "anchor": "2026-03-04T09:00:00", "name": "already aligned unchanged", "rrule": "FREQ=WEEKLY;BYDAY=WE", "expected": "FREQ=WEEKLY;BYDAY=WE" }
+  ],
+  "computeNextEnd": [
+    { "baseEnd": "2026-03-02T10:00:00", "name": "same-day duration", "nextStart": "2026-03-09T09:00:00", "expected": "2026-03-09T10:00:00" },
+    { "baseEnd": "2026-03-03T01:00:00", "name": "overnight rolls to next day", "nextStart": "2026-03-09T22:00:00", "expected": "2026-03-10T01:00:00" },
+    { "baseEnd": "2026-03-02", "name": "all-day yields null", "nextStart": "2026-03-09", "expected": null }
+  ],
+  "expandRange": [
+    {
+      "end": "2026-03-02T09:30:00", "name": "daily timed", "rangeEnd": "2026-03-09T00:00:00", "rangeStart": "2026-03-02T00:00:00", "rrule": "FREQ=DAILY", "start": "2026-03-02T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T09:30:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-03", "scheduledEnd": "2026-03-03T09:30:00", "scheduledStart": "2026-03-03T09:00:00" },
+        { "originalDate": "2026-03-04", "scheduledEnd": "2026-03-04T09:30:00", "scheduledStart": "2026-03-04T09:00:00" },
+        { "originalDate": "2026-03-05", "scheduledEnd": "2026-03-05T09:30:00", "scheduledStart": "2026-03-05T09:00:00" },
+        { "originalDate": "2026-03-06", "scheduledEnd": "2026-03-06T09:30:00", "scheduledStart": "2026-03-06T09:00:00" },
+        { "originalDate": "2026-03-07", "scheduledEnd": "2026-03-07T09:30:00", "scheduledStart": "2026-03-07T09:00:00" },
+        { "originalDate": "2026-03-08", "scheduledEnd": "2026-03-08T09:30:00", "scheduledStart": "2026-03-08T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-02T10:00:00", "name": "weekly single BYDAY", "rangeEnd": "2026-03-31T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=MO", "start": "2026-03-02T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T10:00:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-09", "scheduledEnd": "2026-03-09T10:00:00", "scheduledStart": "2026-03-09T09:00:00" },
+        { "originalDate": "2026-03-16", "scheduledEnd": "2026-03-16T10:00:00", "scheduledStart": "2026-03-16T09:00:00" },
+        { "originalDate": "2026-03-23", "scheduledEnd": "2026-03-23T10:00:00", "scheduledStart": "2026-03-23T09:00:00" },
+        { "originalDate": "2026-03-30", "scheduledEnd": "2026-03-30T10:00:00", "scheduledStart": "2026-03-30T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-02T10:00:00", "name": "weekly multi BYDAY", "rangeEnd": "2026-03-15T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR", "start": "2026-03-02T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T10:00:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-04", "scheduledEnd": "2026-03-04T10:00:00", "scheduledStart": "2026-03-04T09:00:00" },
+        { "originalDate": "2026-03-06", "scheduledEnd": "2026-03-06T10:00:00", "scheduledStart": "2026-03-06T09:00:00" },
+        { "originalDate": "2026-03-09", "scheduledEnd": "2026-03-09T10:00:00", "scheduledStart": "2026-03-09T09:00:00" },
+        { "originalDate": "2026-03-11", "scheduledEnd": "2026-03-11T10:00:00", "scheduledStart": "2026-03-11T09:00:00" },
+        { "originalDate": "2026-03-13", "scheduledEnd": "2026-03-13T10:00:00", "scheduledStart": "2026-03-13T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-03T10:00:00", "name": "weekly interval=2 WKST=MO (default)", "rangeEnd": "2026-04-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH", "start": "2026-03-03T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-03", "scheduledEnd": "2026-03-03T10:00:00", "scheduledStart": "2026-03-03T09:00:00" },
+        { "originalDate": "2026-03-05", "scheduledEnd": "2026-03-05T10:00:00", "scheduledStart": "2026-03-05T09:00:00" },
+        { "originalDate": "2026-03-17", "scheduledEnd": "2026-03-17T10:00:00", "scheduledStart": "2026-03-17T09:00:00" },
+        { "originalDate": "2026-03-19", "scheduledEnd": "2026-03-19T10:00:00", "scheduledStart": "2026-03-19T09:00:00" },
+        { "originalDate": "2026-03-31", "scheduledEnd": "2026-03-31T10:00:00", "scheduledStart": "2026-03-31T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-03T10:00:00", "name": "weekly interval=2 WKST=SU (shifts grouping)", "rangeEnd": "2026-04-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;WKST=SU", "start": "2026-03-03T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-03", "scheduledEnd": "2026-03-03T10:00:00", "scheduledStart": "2026-03-03T09:00:00" },
+        { "originalDate": "2026-03-05", "scheduledEnd": "2026-03-05T10:00:00", "scheduledStart": "2026-03-05T09:00:00" },
+        { "originalDate": "2026-03-17", "scheduledEnd": "2026-03-17T10:00:00", "scheduledStart": "2026-03-17T09:00:00" },
+        { "originalDate": "2026-03-19", "scheduledEnd": "2026-03-19T10:00:00", "scheduledStart": "2026-03-19T09:00:00" },
+        { "originalDate": "2026-03-31", "scheduledEnd": "2026-03-31T10:00:00", "scheduledStart": "2026-03-31T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-01T10:00:00", "name": "weekly interval=2 BYDAY=SU,MO WKST=MO", "rangeEnd": "2026-04-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO;WKST=MO", "start": "2026-03-01T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-01", "scheduledEnd": "2026-03-01T10:00:00", "scheduledStart": "2026-03-01T09:00:00" },
+        { "originalDate": "2026-03-09", "scheduledEnd": "2026-03-09T10:00:00", "scheduledStart": "2026-03-09T09:00:00" },
+        { "originalDate": "2026-03-15", "scheduledEnd": "2026-03-15T10:00:00", "scheduledStart": "2026-03-15T09:00:00" },
+        { "originalDate": "2026-03-23", "scheduledEnd": "2026-03-23T10:00:00", "scheduledStart": "2026-03-23T09:00:00" },
+        { "originalDate": "2026-03-29", "scheduledEnd": "2026-03-29T10:00:00", "scheduledStart": "2026-03-29T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-01T10:00:00", "name": "weekly interval=2 BYDAY=SU,MO WKST=SU", "rangeEnd": "2026-04-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO;WKST=SU", "start": "2026-03-01T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-01", "scheduledEnd": "2026-03-01T10:00:00", "scheduledStart": "2026-03-01T09:00:00" },
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T10:00:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-15", "scheduledEnd": "2026-03-15T10:00:00", "scheduledStart": "2026-03-15T09:00:00" },
+        { "originalDate": "2026-03-16", "scheduledEnd": "2026-03-16T10:00:00", "scheduledStart": "2026-03-16T09:00:00" },
+        { "originalDate": "2026-03-29", "scheduledEnd": "2026-03-29T10:00:00", "scheduledStart": "2026-03-29T09:00:00" },
+        { "originalDate": "2026-03-30", "scheduledEnd": "2026-03-30T10:00:00", "scheduledStart": "2026-03-30T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-01-15T09:30:00", "name": "monthly BYMONTHDAY=15", "rangeEnd": "2026-06-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=MONTHLY;BYMONTHDAY=15", "start": "2026-01-15T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-01-15", "scheduledEnd": "2026-01-15T09:30:00", "scheduledStart": "2026-01-15T09:00:00" },
+        { "originalDate": "2026-02-15", "scheduledEnd": "2026-02-15T09:30:00", "scheduledStart": "2026-02-15T09:00:00" },
+        { "originalDate": "2026-03-15", "scheduledEnd": "2026-03-15T09:30:00", "scheduledStart": "2026-03-15T09:00:00" },
+        { "originalDate": "2026-04-15", "scheduledEnd": "2026-04-15T09:30:00", "scheduledStart": "2026-04-15T09:00:00" },
+        { "originalDate": "2026-05-15", "scheduledEnd": "2026-05-15T09:30:00", "scheduledStart": "2026-05-15T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-01-31T09:30:00", "name": "monthly BYMONTHDAY=-1 (last day)", "rangeEnd": "2026-06-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=MONTHLY;BYMONTHDAY=-1", "start": "2026-01-31T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-01-31", "scheduledEnd": "2026-01-31T09:30:00", "scheduledStart": "2026-01-31T09:00:00" },
+        { "originalDate": "2026-02-28", "scheduledEnd": "2026-02-28T09:30:00", "scheduledStart": "2026-02-28T09:00:00" },
+        { "originalDate": "2026-03-31", "scheduledEnd": "2026-03-31T09:30:00", "scheduledStart": "2026-03-31T09:00:00" },
+        { "originalDate": "2026-04-30", "scheduledEnd": "2026-04-30T09:30:00", "scheduledStart": "2026-04-30T09:00:00" },
+        { "originalDate": "2026-05-31", "scheduledEnd": "2026-05-31T09:30:00", "scheduledStart": "2026-05-31T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-01-31T09:30:00", "name": "monthly BYMONTHDAY=31 (skips short months)", "rangeEnd": "2026-08-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=MONTHLY;BYMONTHDAY=31", "start": "2026-01-31T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-01-31", "scheduledEnd": "2026-01-31T09:30:00", "scheduledStart": "2026-01-31T09:00:00" },
+        { "originalDate": "2026-03-31", "scheduledEnd": "2026-03-31T09:30:00", "scheduledStart": "2026-03-31T09:00:00" },
+        { "originalDate": "2026-05-31", "scheduledEnd": "2026-05-31T09:30:00", "scheduledStart": "2026-05-31T09:00:00" },
+        { "originalDate": "2026-07-31", "scheduledEnd": "2026-07-31T09:30:00", "scheduledStart": "2026-07-31T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-01-30T09:30:00", "name": "monthly BYSETPOS=-1 last weekday", "rangeEnd": "2026-06-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1", "start": "2026-01-30T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-01-30", "scheduledEnd": "2026-01-30T09:30:00", "scheduledStart": "2026-01-30T09:00:00" },
+        { "originalDate": "2026-02-27", "scheduledEnd": "2026-02-27T09:30:00", "scheduledStart": "2026-02-27T09:00:00" },
+        { "originalDate": "2026-03-31", "scheduledEnd": "2026-03-31T09:30:00", "scheduledStart": "2026-03-31T09:00:00" },
+        { "originalDate": "2026-04-30", "scheduledEnd": "2026-04-30T09:30:00", "scheduledStart": "2026-04-30T09:00:00" },
+        { "originalDate": "2026-05-29", "scheduledEnd": "2026-05-29T09:30:00", "scheduledStart": "2026-05-29T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-01-05T09:30:00", "name": "monthly BYDAY=1MO (first Monday ordinal)", "rangeEnd": "2026-06-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=MONTHLY;BYDAY=1MO", "start": "2026-01-05T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-01-05", "scheduledEnd": "2026-01-05T09:30:00", "scheduledStart": "2026-01-05T09:00:00" },
+        { "originalDate": "2026-02-02", "scheduledEnd": "2026-02-02T09:30:00", "scheduledStart": "2026-02-02T09:00:00" },
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T09:30:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-04-06", "scheduledEnd": "2026-04-06T09:30:00", "scheduledStart": "2026-04-06T09:00:00" },
+        { "originalDate": "2026-05-04", "scheduledEnd": "2026-05-04T09:30:00", "scheduledStart": "2026-05-04T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-01-30T09:30:00", "name": "monthly BYDAY=-1FR (last Friday ordinal)", "rangeEnd": "2026-06-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=MONTHLY;BYDAY=-1FR", "start": "2026-01-30T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-01-30", "scheduledEnd": "2026-01-30T09:30:00", "scheduledStart": "2026-01-30T09:00:00" },
+        { "originalDate": "2026-02-27", "scheduledEnd": "2026-02-27T09:30:00", "scheduledStart": "2026-02-27T09:00:00" },
+        { "originalDate": "2026-03-27", "scheduledEnd": "2026-03-27T09:30:00", "scheduledStart": "2026-03-27T09:00:00" },
+        { "originalDate": "2026-04-24", "scheduledEnd": "2026-04-24T09:30:00", "scheduledStart": "2026-04-24T09:00:00" },
+        { "originalDate": "2026-05-29", "scheduledEnd": "2026-05-29T09:30:00", "scheduledStart": "2026-05-29T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-02-14T10:00:00", "name": "yearly", "rangeEnd": "2030-01-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=YEARLY", "start": "2026-02-14T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-02-14", "scheduledEnd": "2026-02-14T10:00:00", "scheduledStart": "2026-02-14T09:00:00" },
+        { "originalDate": "2027-02-14", "scheduledEnd": "2027-02-14T10:00:00", "scheduledStart": "2027-02-14T09:00:00" },
+        { "originalDate": "2028-02-14", "scheduledEnd": "2028-02-14T10:00:00", "scheduledStart": "2028-02-14T09:00:00" },
+        { "originalDate": "2029-02-14", "scheduledEnd": "2029-02-14T10:00:00", "scheduledStart": "2029-02-14T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-02T09:30:00", "name": "count-limited", "rangeEnd": "2026-04-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=DAILY;COUNT=5", "start": "2026-03-02T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T09:30:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-03", "scheduledEnd": "2026-03-03T09:30:00", "scheduledStart": "2026-03-03T09:00:00" },
+        { "originalDate": "2026-03-04", "scheduledEnd": "2026-03-04T09:30:00", "scheduledStart": "2026-03-04T09:00:00" },
+        { "originalDate": "2026-03-05", "scheduledEnd": "2026-03-05T09:30:00", "scheduledStart": "2026-03-05T09:00:00" },
+        { "originalDate": "2026-03-06", "scheduledEnd": "2026-03-06T09:30:00", "scheduledStart": "2026-03-06T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-02T10:00:00", "name": "until-limited", "rangeEnd": "2026-05-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260330T235959Z", "start": "2026-03-02T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T10:00:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-09", "scheduledEnd": "2026-03-09T10:00:00", "scheduledStart": "2026-03-09T09:00:00" },
+        { "originalDate": "2026-03-16", "scheduledEnd": "2026-03-16T10:00:00", "scheduledStart": "2026-03-16T09:00:00" },
+        { "originalDate": "2026-03-23", "scheduledEnd": "2026-03-23T10:00:00", "scheduledStart": "2026-03-23T09:00:00" },
+        { "originalDate": "2026-03-30", "scheduledEnd": "2026-03-30T10:00:00", "scheduledStart": "2026-03-30T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-02T09:30:00", "exdates": ["2026-03-03", "2026-03-04"], "name": "count-vs-exdate (count applies pre-exclusion)", "rangeEnd": "2026-04-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=DAILY;COUNT=5", "start": "2026-03-02T09:00:00",
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T09:30:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-05", "scheduledEnd": "2026-03-05T09:30:00", "scheduledStart": "2026-03-05T09:00:00" },
+        { "originalDate": "2026-03-06", "scheduledEnd": "2026-03-06T09:30:00", "scheduledStart": "2026-03-06T09:00:00" }
+      ]
+    },
+    {
+      "end": null, "name": "all-day weekly", "rangeEnd": "2026-03-31T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=MO", "start": "2026-03-02", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": null, "scheduledStart": "2026-03-02" },
+        { "originalDate": "2026-03-09", "scheduledEnd": null, "scheduledStart": "2026-03-09" },
+        { "originalDate": "2026-03-16", "scheduledEnd": null, "scheduledStart": "2026-03-16" },
+        { "originalDate": "2026-03-23", "scheduledEnd": null, "scheduledStart": "2026-03-23" },
+        { "originalDate": "2026-03-30", "scheduledEnd": null, "scheduledStart": "2026-03-30" }
+      ]
+    },
+    {
+      "end": "2026-03-01T10:00:00", "name": "weekly Sunday across spring-forward (wall-clock preserved)", "rangeEnd": "2026-03-22T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=SU", "start": "2026-03-01T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-01", "scheduledEnd": "2026-03-01T10:00:00", "scheduledStart": "2026-03-01T09:00:00" },
+        { "originalDate": "2026-03-08", "scheduledEnd": "2026-03-08T10:00:00", "scheduledStart": "2026-03-08T09:00:00" },
+        { "originalDate": "2026-03-15", "scheduledEnd": "2026-03-15T10:00:00", "scheduledStart": "2026-03-15T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-10-30T10:00:00", "name": "daily across fall-back", "rangeEnd": "2026-11-04T00:00:00", "rangeStart": "2026-10-30T00:00:00", "rrule": "FREQ=DAILY", "start": "2026-10-30T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-10-30", "scheduledEnd": "2026-10-30T10:00:00", "scheduledStart": "2026-10-30T09:00:00" },
+        { "originalDate": "2026-10-31", "scheduledEnd": "2026-10-31T10:00:00", "scheduledStart": "2026-10-31T09:00:00" },
+        { "originalDate": "2026-11-01", "scheduledEnd": "2026-11-01T10:00:00", "scheduledStart": "2026-11-01T09:00:00" },
+        { "originalDate": "2026-11-02", "scheduledEnd": "2026-11-02T10:00:00", "scheduledStart": "2026-11-02T09:00:00" },
+        { "originalDate": "2026-11-03", "scheduledEnd": "2026-11-03T10:00:00", "scheduledStart": "2026-11-03T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-01-06T10:00:00", "name": "provider weekly TU,TH count=12", "rangeEnd": "2026-03-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=TU,TH;COUNT=12", "start": "2026-01-06T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-01-06", "scheduledEnd": "2026-01-06T10:00:00", "scheduledStart": "2026-01-06T09:00:00" },
+        { "originalDate": "2026-01-08", "scheduledEnd": "2026-01-08T10:00:00", "scheduledStart": "2026-01-08T09:00:00" },
+        { "originalDate": "2026-01-13", "scheduledEnd": "2026-01-13T10:00:00", "scheduledStart": "2026-01-13T09:00:00" },
+        { "originalDate": "2026-01-15", "scheduledEnd": "2026-01-15T10:00:00", "scheduledStart": "2026-01-15T09:00:00" },
+        { "originalDate": "2026-01-20", "scheduledEnd": "2026-01-20T10:00:00", "scheduledStart": "2026-01-20T09:00:00" },
+        { "originalDate": "2026-01-22", "scheduledEnd": "2026-01-22T10:00:00", "scheduledStart": "2026-01-22T09:00:00" },
+        { "originalDate": "2026-01-27", "scheduledEnd": "2026-01-27T10:00:00", "scheduledStart": "2026-01-27T09:00:00" },
+        { "originalDate": "2026-01-29", "scheduledEnd": "2026-01-29T10:00:00", "scheduledStart": "2026-01-29T09:00:00" },
+        { "originalDate": "2026-02-03", "scheduledEnd": "2026-02-03T10:00:00", "scheduledStart": "2026-02-03T09:00:00" },
+        { "originalDate": "2026-02-05", "scheduledEnd": "2026-02-05T10:00:00", "scheduledStart": "2026-02-05T09:00:00" },
+        { "originalDate": "2026-02-10", "scheduledEnd": "2026-02-10T10:00:00", "scheduledStart": "2026-02-10T09:00:00" },
+        { "originalDate": "2026-02-12", "scheduledEnd": "2026-02-12T10:00:00", "scheduledStart": "2026-02-12T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-03T10:00:00", "name": "provider weekly TU interval=2 until", "rangeEnd": "2026-07-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=TU;INTERVAL=2;UNTIL=20260511T235959Z", "start": "2026-03-03T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-03", "scheduledEnd": "2026-03-03T10:00:00", "scheduledStart": "2026-03-03T09:00:00" },
+        { "originalDate": "2026-03-17", "scheduledEnd": "2026-03-17T10:00:00", "scheduledStart": "2026-03-17T09:00:00" },
+        { "originalDate": "2026-03-31", "scheduledEnd": "2026-03-31T10:00:00", "scheduledStart": "2026-03-31T09:00:00" },
+        { "originalDate": "2026-04-14", "scheduledEnd": "2026-04-14T10:00:00", "scheduledStart": "2026-04-14T09:00:00" },
+        { "originalDate": "2026-04-28", "scheduledEnd": "2026-04-28T10:00:00", "scheduledStart": "2026-04-28T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-02T10:00:00", "name": "until date-only form", "rangeEnd": "2026-05-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260315", "start": "2026-03-02T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T10:00:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-09", "scheduledEnd": "2026-03-09T10:00:00", "scheduledStart": "2026-03-09T09:00:00" }
+      ]
+    },
+    {
+      "end": "2026-03-02T10:00:00", "name": "until datetime no-Z form", "rangeEnd": "2026-05-01T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=DAILY;UNTIL=20260315T100000", "start": "2026-03-02T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T10:00:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-03", "scheduledEnd": "2026-03-03T10:00:00", "scheduledStart": "2026-03-03T09:00:00" },
+        { "originalDate": "2026-03-04", "scheduledEnd": "2026-03-04T10:00:00", "scheduledStart": "2026-03-04T09:00:00" },
+        { "originalDate": "2026-03-05", "scheduledEnd": "2026-03-05T10:00:00", "scheduledStart": "2026-03-05T09:00:00" },
+        { "originalDate": "2026-03-06", "scheduledEnd": "2026-03-06T10:00:00", "scheduledStart": "2026-03-06T09:00:00" },
+        { "originalDate": "2026-03-07", "scheduledEnd": "2026-03-07T10:00:00", "scheduledStart": "2026-03-07T09:00:00" },
+        { "originalDate": "2026-03-08", "scheduledEnd": "2026-03-08T10:00:00", "scheduledStart": "2026-03-08T09:00:00" },
+        { "originalDate": "2026-03-09", "scheduledEnd": "2026-03-09T10:00:00", "scheduledStart": "2026-03-09T09:00:00" },
+        { "originalDate": "2026-03-10", "scheduledEnd": "2026-03-10T10:00:00", "scheduledStart": "2026-03-10T09:00:00" },
+        { "originalDate": "2026-03-11", "scheduledEnd": "2026-03-11T10:00:00", "scheduledStart": "2026-03-11T09:00:00" },
+        { "originalDate": "2026-03-12", "scheduledEnd": "2026-03-12T10:00:00", "scheduledStart": "2026-03-12T09:00:00" },
+        { "originalDate": "2026-03-13", "scheduledEnd": "2026-03-13T10:00:00", "scheduledStart": "2026-03-13T09:00:00" },
+        { "originalDate": "2026-03-14", "scheduledEnd": "2026-03-14T10:00:00", "scheduledStart": "2026-03-14T09:00:00" },
+        { "originalDate": "2026-03-15", "scheduledEnd": "2026-03-15T10:00:00", "scheduledStart": "2026-03-15T09:00:00" }
+      ]
+    },
+    {
+      "end": "2024-02-29T10:00:00", "name": "leap-day yearly anchor", "rangeEnd": "2033-01-01T00:00:00", "rangeStart": "2024-01-01T00:00:00", "rrule": "FREQ=YEARLY", "start": "2024-02-29T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2024-02-29", "scheduledEnd": "2024-02-29T10:00:00", "scheduledStart": "2024-02-29T09:00:00" },
+        { "originalDate": "2028-02-29", "scheduledEnd": "2028-02-29T10:00:00", "scheduledStart": "2028-02-29T09:00:00" },
+        { "originalDate": "2032-02-29", "scheduledEnd": "2032-02-29T10:00:00", "scheduledStart": "2032-02-29T09:00:00" }
+      ]
+    }
+  ],
+  "generatedFrom": "rrule.js ^2.8.1 via packages/core recurrence.ts",
+  "missedBetween": [
+    { "after": "2026-03-02T00:00:00", "before": "2026-03-06T00:00:00", "name": "daily gap", "rrule": "FREQ=DAILY", "start": "2026-03-02T09:00:00", "exdates": [], "expected": ["2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05"] },
+    { "after": "2026-03-02T00:00:00", "before": "2026-03-06T00:00:00", "exdates": ["2026-03-04"], "name": "daily gap with exdate", "rrule": "FREQ=DAILY", "start": "2026-03-02T09:00:00", "expected": ["2026-03-02", "2026-03-03", "2026-03-05"] },
+    { "after": "2026-03-06T00:00:00", "before": "2026-03-02T00:00:00", "name": "empty when before <= after", "rrule": "FREQ=DAILY", "start": "2026-03-02T09:00:00", "exdates": [], "expected": [] }
+  ],
+  "nextAfter": [
+    { "after": "2026-03-02T12:00:00", "name": "simple next", "rrule": "FREQ=WEEKLY;BYDAY=MO", "start": "2026-03-02T09:00:00", "exdates": [], "expected": { "scheduledEnd": null, "scheduledStart": "2026-03-09T09:00:00" } },
+    { "after": "2026-03-02T12:00:00", "exdates": ["2026-03-03", "2026-03-04"], "name": "skips exdates", "rrule": "FREQ=DAILY", "start": "2026-03-02T09:00:00", "expected": { "scheduledEnd": null, "scheduledStart": "2026-03-05T09:00:00" } },
+    { "after": "2026-03-20T00:00:00", "name": "past until returns null", "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260309T235959Z", "start": "2026-03-02T09:00:00", "exdates": [], "expected": null },
+    { "after": "2026-03-02T00:00:00", "name": "all-day next", "rrule": "FREQ=WEEKLY;BYDAY=MO", "start": "2026-03-02", "exdates": [], "expected": { "scheduledEnd": null, "scheduledStart": "2026-03-09" } },
+    { "after": "2027-06-01T00:00:00", "name": "far-future seek (no drop under 500-cap)", "rrule": "FREQ=DAILY", "start": "2026-01-01T08:00:00", "exdates": [], "expected": { "scheduledEnd": null, "scheduledStart": "2027-06-02T08:00:00" } }
+  ],
+  "propertyExpand": [
+    { "rrule": "FREQ=WEEKLY;INTERVAL=1;BYDAY=WE,TH,FR;COUNT=6", "start": "2026-04-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-04-08,2026-04-09,2026-04-10,2026-04-15,2026-04-16,2026-04-17" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=2;COUNT=3", "start": "2026-03-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-03-05,2028-03-05,2030-03-05" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=4;BYDAY=MO;COUNT=4", "start": "2026-04-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-04-27,2026-05-25,2026-06-22,2026-07-20" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=3;COUNT=8", "start": "2026-09-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-09-05,2029-09-05,2032-09-05" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=1;BYDAY=TU,WE,SU;COUNT=4", "start": "2026-08-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-08-05,2026-08-09,2026-08-11,2026-08-12" },
+    { "rrule": "FREQ=DAILY;INTERVAL=4;COUNT=5", "start": "2026-02-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-02-05,2026-02-09,2026-02-13,2026-02-17,2026-02-21" },
+    { "rrule": "FREQ=MONTHLY;INTERVAL=3;BYDAY=MO,TH,FR,SU;BYSETPOS=-1;COUNT=8", "start": "2026-12-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-12-31,2027-03-29,2027-06-28,2027-09-30,2027-12-31,2028-03-31,2028-06-30,2028-09-29" },
+    { "rrule": "FREQ=DAILY;INTERVAL=2;COUNT=3", "start": "2026-08-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-08-05,2026-08-07,2026-08-09" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=1;COUNT=4", "start": "2026-03-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-03-05,2027-03-05,2028-03-05,2029-03-05" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=2;COUNT=7", "start": "2026-01-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-01-05,2028-01-05,2030-01-05,2032-01-05" },
+    { "rrule": "FREQ=DAILY;INTERVAL=1;COUNT=5", "start": "2026-02-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-02-05,2026-02-06,2026-02-07,2026-02-08,2026-02-09" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH,FR;COUNT=5", "start": "2026-04-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-04-14,2026-04-16,2026-04-17,2026-04-28,2026-04-30" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=3;BYDAY=FR,SA,SU;COUNT=7", "start": "2026-05-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-05-08,2026-05-09,2026-05-10,2026-05-29,2026-05-30,2026-05-31,2026-06-19" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=3;BYDAY=FR,SU;COUNT=3", "start": "2026-01-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-01-09,2026-01-11,2026-01-30" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=4;BYDAY=WE,SA;WKST=SU;COUNT=4", "start": "2026-02-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-02-07,2026-03-04,2026-03-07,2026-04-01" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,WE,FR;WKST=SU;COUNT=4", "start": "2026-10-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-10-06,2026-10-07,2026-10-09,2026-10-20" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=1;COUNT=8", "start": "2026-04-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-04-05,2027-04-05,2028-04-05,2029-04-05,2030-04-05,2031-04-05,2032-04-05" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=3;BYDAY=MO,TH,FR,SA;COUNT=5", "start": "2026-08-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-08-06,2026-08-07,2026-08-08,2026-08-24,2026-08-27" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=4;COUNT=4", "start": "2026-05-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-05-05,2030-05-05" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=3;COUNT=6", "start": "2026-09-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-09-05,2029-09-05,2032-09-05" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=4;COUNT=4", "start": "2026-01-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-01-05,2030-01-05" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=2;COUNT=6", "start": "2026-07-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-07-05,2028-07-05,2030-07-05,2032-07-05" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TH,FR;COUNT=6", "start": "2026-03-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-03-05,2026-03-06,2026-03-09,2026-03-12,2026-03-13,2026-03-16" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=1;BYDAY=WE,TH,SU;COUNT=4", "start": "2026-10-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-10-07,2026-10-08,2026-10-11,2026-10-14" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=2;COUNT=6", "start": "2026-07-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-07-05,2028-07-05,2030-07-05,2032-07-05" },
+    { "rrule": "FREQ=DAILY;INTERVAL=2;COUNT=4", "start": "2026-02-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-02-05,2026-02-07,2026-02-09,2026-02-11" },
+    { "rrule": "FREQ=MONTHLY;INTERVAL=1;BYDAY=MO,WE,TH,FR,SA,SU;BYSETPOS=2;COUNT=8", "start": "2026-01-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-02-02,2026-03-02,2026-04-02,2026-05-02,2026-06-03,2026-07-02,2026-08-02,2026-09-03" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=3;BYDAY=TU,TH;COUNT=6", "start": "2026-09-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-09-22,2026-09-24,2026-10-13,2026-10-15,2026-11-03,2026-11-05" },
+    { "rrule": "FREQ=YEARLY;INTERVAL=2;COUNT=7", "start": "2026-01-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-01-05,2028-01-05,2030-01-05,2032-01-05" },
+    { "rrule": "FREQ=DAILY;INTERVAL=3;COUNT=6", "start": "2026-12-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-12-05,2026-12-08,2026-12-11,2026-12-14,2026-12-17,2026-12-20" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=4;BYDAY=FR;WKST=SU;COUNT=7", "start": "2026-04-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-04-10,2026-05-08,2026-06-05,2026-07-03,2026-07-31,2026-08-28,2026-09-25" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH,FR,SU;WKST=MO;COUNT=5", "start": "2026-09-05T08:15:00", "rangeStart": "2026-01-01T00:00:00", "rangeEnd": "2033-01-01T00:00:00", "dates": "2026-09-06,2026-09-14,2026-09-17,2026-09-18,2026-09-20" }
+  ],
+  "roundtrip": [
+    { "built": "FREQ=DAILY;INTERVAL=1", "options": { "freq": "DAILY", "interval": 1 }, "rrule": "FREQ=DAILY" },
+    { "built": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR", "options": { "freq": "WEEKLY", "interval": 2, "byweekday": [0, 2, 4] }, "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR" },
+    { "built": "FREQ=MONTHLY;INTERVAL=1;COUNT=12", "options": { "freq": "MONTHLY", "interval": 1, "count": 12 }, "rrule": "FREQ=MONTHLY;COUNT=12" },
+    { "built": "FREQ=YEARLY;INTERVAL=1;UNTIL=20301231T235959Z", "options": { "freq": "YEARLY", "interval": 1, "until": "2030-12-31" }, "rrule": "FREQ=YEARLY;UNTIL=20301231T235959Z" },
+    { "built": "FREQ=MONTHLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1", "options": { "freq": "MONTHLY", "interval": 1, "byweekday": [0, 1, 2, 3, 4], "bysetpos": [-1] }, "rrule": "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1" },
+    { "built": "FREQ=WEEKLY;INTERVAL=1;BYDAY=SA,SU;WKST=SU", "options": { "freq": "WEEKLY", "interval": 1, "byweekday": [5, 6], "wkst": 6 }, "rrule": "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU" },
+    { "built": "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=15", "options": { "freq": "MONTHLY", "interval": 1, "bymonthday": [15] }, "rrule": "FREQ=MONTHLY;BYMONTHDAY=15" },
+    { "built": "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=-1", "options": { "freq": "MONTHLY", "interval": 1, "bymonthday": [-1] }, "rrule": "FREQ=MONTHLY;BYMONTHDAY=-1" }
+  ],
+  "shortLabel": [
+    { "expected": "Daily", "rrule": "FREQ=DAILY" },
+    { "expected": "Weekly", "rrule": "FREQ=WEEKLY;BYDAY=MO" },
+    { "expected": "Every 2 weeks", "rrule": "FREQ=WEEKLY;INTERVAL=2" },
+    { "expected": "Monthly", "rrule": "FREQ=MONTHLY;BYMONTHDAY=15" },
+    { "expected": "Yearly", "rrule": "FREQ=YEARLY" },
+    { "expected": "Daily × 10", "rrule": "FREQ=DAILY;COUNT=10" },
+    { "expected": "Weekly thru Jun 28", "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260628T235959Z" }
+  ],
+  "snapAnchor": [
+    { "anchor": "2026-03-01T09:00:00", "name": "snaps Sunday anchor to first M/W/F", "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR", "expected": "2026-03-02T09:00:00" },
+    { "anchor": "2026-03-02T09:00:00", "name": "anchor already valid", "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR", "expected": "2026-03-02T09:00:00" },
+    { "anchor": "2026-03-02", "name": "all-day snap", "rrule": "FREQ=WEEKLY;BYDAY=WE", "expected": "2026-03-04" },
+    { "anchor": "2026-03-02T09:00:00", "name": "exhausted rule unchanged", "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260101T000000Z", "expected": "2026-03-02T09:00:00" }
+  ]
+}

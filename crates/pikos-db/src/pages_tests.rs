@@ -1833,14 +1833,14 @@ async fn complete_synced_occurrence_inserts_clone_and_records_map() {
     assert!(!clone.schedule_locked, "clone is native, not sync-locked");
     assert!(clone.sync_state.is_none());
 
-    // The series records date → clone id; the reconciler-owned head is untouched.
-    let map: String =
-        sqlx::query_scalar("SELECT completed_occurrences FROM page_sync WHERE page_id = 'head'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert!(map.contains("2026-06-08"));
-    assert!(map.contains(&clone.id));
+    // The set records (date → clone id); the reconciler-owned head is untouched.
+    let recorded: String = sqlx::query_scalar(
+        "SELECT clone_id FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-06-08'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(recorded, clone.id);
 }
 
 #[tokio::test]
@@ -1870,12 +1870,13 @@ async fn uncomplete_synced_occurrence_deletes_clone_and_drops_date() {
     .unwrap();
 
     assert!(!page_exists(&pool, &clone.id).await, "clone deleted");
-    let map: Option<String> =
-        sqlx::query_scalar("SELECT completed_occurrences FROM page_sync WHERE page_id = 'head'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert!(!map.unwrap_or_default().contains("2026-06-08"), "date dropped from map");
+    let remaining: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-06-08'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(remaining, 0, "date dropped from set");
 }
 
 #[tokio::test]
@@ -1932,7 +1933,7 @@ async fn complete_synced_occurrence_leaves_head_and_rule_untouched() {
     .unwrap();
 
     // The reconciler-owned head must not advance and the rule's EXDATEs must not
-    // gain the completed date — completion lives only in completed_occurrences.
+    // gain the completed date — completion lives only in completed_set.
     assert_eq!(
         fetch_scheduled_start(&pool, "head").await.as_deref(),
         Some("2026-06-01T09:00:00"),
@@ -1951,39 +1952,6 @@ async fn complete_synced_occurrence_leaves_head_and_rule_untouched() {
             .await
             .unwrap();
     assert_eq!(clone_link, 0, "clone is a free native page, no sync link");
-}
-
-#[tokio::test]
-async fn complete_synced_occurrence_degrades_a_malformed_map() {
-    // completed_occurrences is user-owned JSON; a corrupt value must degrade to
-    // empty rather than fail the completion (parse_completed_occurrences swallows).
-    let pool = test_pool().await;
-    synced_recurring_series(&pool).await;
-    sqlx::query("UPDATE page_sync SET completed_occurrences = 'not json{' WHERE page_id = 'head'")
-        .execute(&pool)
-        .await
-        .unwrap();
-
-    let clone = complete_synced_occurrence_impl(
-        &pool,
-        CompleteSyncedOccurrenceInput {
-            page_id: "head".into(),
-            occurrence_date: "2026-06-08".into(),
-            scheduled_start: "2026-06-08T09:00:00".into(),
-            scheduled_end: None,
-        },
-    )
-    .await
-    .unwrap();
-
-    let map: String =
-        sqlx::query_scalar("SELECT completed_occurrences FROM page_sync WHERE page_id = 'head'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    let parsed: std::collections::HashMap<String, String> = serde_json::from_str(&map).unwrap();
-    assert_eq!(parsed.get("2026-06-08"), Some(&clone.id), "rebuilt from empty with only the new date");
-    assert_eq!(parsed.len(), 1);
 }
 
 #[tokio::test]
@@ -2015,10 +1983,11 @@ async fn uncomplete_synced_occurrence_is_a_noop_for_a_different_date() {
     .unwrap();
 
     assert!(page_exists(&pool, &clone.id).await, "unrelated clone survives");
-    let map: String =
-        sqlx::query_scalar("SELECT completed_occurrences FROM page_sync WHERE page_id = 'head'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert!(map.contains("2026-06-08"), "original completion kept");
+    let kept: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-06-08'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(kept, 1, "original completion kept");
 }

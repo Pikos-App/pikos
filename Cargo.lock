@@ -1235,12 +1235,23 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "chrono-tz",
+ "pikos-recurrence",
  "serde",
  "serde_json",
  "sqlx",
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "pikos-recurrence"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

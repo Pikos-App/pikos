@@ -15,6 +15,7 @@ pub mod notification_log;
 pub mod pages;
 mod pool;
 pub mod reconciler;
+pub mod recurrence_derive;
 pub mod reminders;
 pub mod schedules;
 pub mod search;
@@ -32,6 +33,7 @@ pub use pool::{now_iso, now_local_iso, open_pool};
 #[cfg(any(test, feature = "test-support"))]
 pub use pool::{insert_test_folder, insert_test_page, test_pool, TestPage};
 pub use reconciler::*;
+pub use recurrence_derive::*;
 pub use reminders::*;
 pub use schedules::*;
 pub use search::*;

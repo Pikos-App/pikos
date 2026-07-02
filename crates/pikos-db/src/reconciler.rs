@@ -542,10 +542,13 @@ async fn teardown_calendar_once(
 
 /// Pikos-owned = the user has invested in this page, so teardown keeps it. True if
 /// completed, the dirty bit is set, or it carries a field sync never writes (a user
-/// tag or reminder). The row checks belt-and-suspenders the dirty bit: those edits
-/// flow through the editor path that sets it, but reading the rows too keeps the
+/// tag or reminder, or a non-empty completed-set for a completed recurring
+/// occurrence). The row checks belt-and-suspenders the dirty bit: those edits flow
+/// through the editor path that sets it, but reading the rows too keeps the
 /// predicate correct even if a future edit path forgets. `last_opened_at` is not a
-/// signal — reading an event is not authoring it.
+/// signal — reading an event is not authoring it. Without the completed-set check a
+/// synced series with user-completed occurrences would classify non-owned and
+/// hard-delete on upstream removal — losing the completion history.
 async fn is_owned(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -555,6 +558,7 @@ async fn is_owned(
               OR ps.user_modified
               OR (p.tags <> '[]' AND p.tags <> '')
               OR EXISTS (SELECT 1 FROM page_reminders pr WHERE pr.page_id = p.id)
+              OR EXISTS (SELECT 1 FROM completed_set cs WHERE cs.page_id = p.id)
          FROM pages p JOIN page_sync ps ON ps.page_id = p.id
          WHERE p.id = ?",
     )

@@ -83,6 +83,76 @@ describe("completeRecurringPage idempotency", () => {
   });
 });
 
+describe("completeRecurringPage policy inputs (characterization — pins the pre-U6 native path)", () => {
+  // These assert the EXACT adapter payload per policy/gap so a later swap onto
+  // occurrence-sets is a provable behavior change, not a silent one. Date is
+  // faked (only Date, so promises/act are untouched) to make the gap
+  // deterministic; the head sits 5 days before "today" on a daily rule.
+  const NOW = "2099-01-10T12:00:00";
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(NOW));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("no gap (future head) → advance adds only the head's date and steps one occurrence", async () => {
+    vi.setSystemTime(new Date("2099-01-01T12:00:00")); // before the 2099-01-05 head
+    const { hook, pageId, ruleId } = await setupRecurringPage();
+    const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+    });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![0]).toEqual({
+      addExdates: ["2099-01-05"],
+      nextScheduledEnd: null,
+      nextScheduledStart: "2099-01-06T09:00:00",
+      pageId,
+      ruleId,
+    });
+  });
+
+  it("overdue head → advance leaves the gap alone (exdates the head date only)", async () => {
+    const { hook, pageId, ruleId } = await setupRecurringPage();
+    const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+    });
+
+    expect(spy.mock.calls[0]![0]).toEqual({
+      addExdates: ["2099-01-05"],
+      nextScheduledEnd: null,
+      nextScheduledStart: "2099-01-06T09:00:00",
+      pageId,
+      ruleId,
+    });
+  });
+
+  it("overdue head → skip exdates the whole gap and lands on today's occurrence", async () => {
+    const { hook, pageId, ruleId } = await setupRecurringPage();
+    const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId, "skip");
+    });
+
+    // Head 2099-01-05, today 2099-01-10 → gap = 06,07,08,09; skip lands on today.
+    expect(spy.mock.calls[0]![0]).toEqual({
+      addExdates: ["2099-01-05", "2099-01-06", "2099-01-07", "2099-01-08", "2099-01-09"],
+      nextScheduledEnd: null,
+      nextScheduledStart: "2099-01-10T09:00:00",
+      pageId,
+      ruleId,
+    });
+  });
+});
+
 describe("completeRecurringPage serialization behind the mutation queue", () => {
   // Drag-then-complete: scheduleOnce queues its DB writes (ending with the
   // trailing denorm updatePage). Completion used to bypass the queue, so that

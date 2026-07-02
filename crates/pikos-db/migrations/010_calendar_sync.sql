@@ -120,15 +120,6 @@ CREATE TABLE IF NOT EXISTS page_sync (
   -- re-fetch). NULL = nothing pending; cleared on silent refresh or when upstream
   -- matches the body again.
   pending_description             TEXT,
-  -- Occurrence-based completion of a synced RECURRING series (S22). JSON map
-  -- `occurrence-date (YYYY-MM-DD) → done-clone page id`. USER-OWNED: the
-  -- reconciler never reads or writes it, so an upstream rewrite of the locked
-  -- rule can't disturb completions. The clone is a durable native page (no
-  -- page_sync link); expansion hides the completed occurrence. The head is never
-  -- advanced and the rule's EXDATEs are never touched (the reconciler pins the
-  -- head at the series base, so head-advance + EXDATE — native's model — would be
-  -- clobbered on the next sync). NULL/absent = nothing completed.
-  completed_occurrences           TEXT,
   last_synced_at                  TEXT,
   created_at                      TEXT NOT NULL
 );
@@ -152,3 +143,33 @@ CREATE INDEX IF NOT EXISTS idx_page_sync_relink
 -- moved into or out of these folders, guarded in update_page_impl) and the
 -- separate sidebar area. Existing folders default to 0 (regular).
 ALTER TABLE folders ADD COLUMN is_external_calendar INTEGER NOT NULL DEFAULT 0;
+
+-- ─── completed_set / skip_set: unified recurring occurrence state ──────────────
+-- Per-occurrence completion and dismissal for recurring series — native AND synced,
+-- keyed by page_id. The single representation that replaces both prior models:
+-- native head-advance + EXDATE-merge, and the synced completion JSON map (the prior
+-- page_sync.completed_occurrences column).
+--
+-- completed_set: (page_id, occurrence_date) → clone_id. The done clone is a durable
+-- native page; the back-link (clone_id) drives uncomplete. skip_set: dismissed
+-- occurrences (the gap dialog's "advance to today"), no clone. A MOVED occurrence
+-- is a page_schedules override (its original_date is already excluded by expansion),
+-- never a skip — the two are mutually exclusive.
+--
+-- Keyed by page_id and NOT cleared on soft-delete, so restore preserves completion
+-- history; a hard delete cascades them away via ON DELETE CASCADE.
+CREATE TABLE IF NOT EXISTS completed_set (
+  page_id         TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  occurrence_date TEXT NOT NULL,   -- YYYY-MM-DD occurrence key (or timed wall-clock, matching pages.scheduled_start format)
+  clone_id        TEXT NOT NULL,   -- the done clone page; back-link drives uncomplete
+  PRIMARY KEY (page_id, occurrence_date)
+);
+
+-- Reverse lookup for uncomplete-by-clone (unchecking a done clone → its series+date).
+CREATE INDEX IF NOT EXISTS idx_completed_set_clone ON completed_set(clone_id);
+
+CREATE TABLE IF NOT EXISTS skip_set (
+  page_id         TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  occurrence_date TEXT NOT NULL,   -- YYYY-MM-DD
+  PRIMARY KEY (page_id, occurrence_date)
+);

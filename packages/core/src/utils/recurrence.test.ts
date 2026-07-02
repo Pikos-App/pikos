@@ -770,6 +770,11 @@ describe("buildRrule", () => {
       "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR",
       "FREQ=MONTHLY;COUNT=12",
       "FREQ=YEARLY;UNTIL=20301231T235959Z",
+      // Fields the editor save path once silently dropped (BYSETPOS/BYMONTHDAY/WKST).
+      "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
+      "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU",
+      "FREQ=MONTHLY;BYMONTHDAY=15",
+      "FREQ=MONTHLY;BYMONTHDAY=-1",
     ];
     for (const original of cases) {
       const parsed = parseRrule(original);

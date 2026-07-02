@@ -1280,6 +1280,28 @@ async fn removal_of_completed_page_detaches() {
 }
 
 #[tokio::test]
+async fn removal_of_completed_occurrence_series_detaches() {
+    // A synced RECURRING series with a user-completed occurrence is owned even with
+    // no other signal — the completed-set entry alone must force a detach, not the
+    // bare-mirror hard delete that would erase the completion history.
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly_series()])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-22', 'clone-xyz')",
+    )
+    .bind(&page_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    reconcile(&pool, &ctx(), &removal("/series.ics")).await.unwrap();
+
+    assert!(page_exists(&pool, &page_id).await, "completed occurrence = owned, kept");
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+}
+
+#[tokio::test]
 async fn removal_of_user_modified_page_detaches() {
     let pool = setup().await;
     let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
@@ -1635,11 +1657,10 @@ async fn series_rewrite_preserves_user_completed_occurrences() {
     reconcile(&pool, &ctx(), &delta(vec![weekly_series()])).await.unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
 
-    // completed_occurrences is user-owned (set by the completion command, never by
-    // the reconciler). A full rule rewrite below must leave it byte-identical.
-    let map = r#"{"2026-06-22":"clone-abc"}"#;
-    sqlx::query("UPDATE page_sync SET completed_occurrences = ? WHERE page_id = ?")
-        .bind(map)
+    // completed_set is user-owned (set by the completion command, never by the
+    // reconciler). A full rule rewrite below must leave it intact — the set is keyed
+    // by page_id, independent of the page_sync bundle the rewrite replaces.
+    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-22', 'clone-abc')")
         .bind(&page_id)
         .execute(&pool)
         .await
@@ -1653,13 +1674,14 @@ async fn series_rewrite_preserves_user_completed_occurrences() {
     reconcile(&pool, &ctx(), &delta(vec![bumped])).await.unwrap();
 
     assert_eq!(page_title(&pool, &page_id).await, "Weekly sync (renamed)", "rewrite actually ran");
-    let stored: Option<String> =
-        sqlx::query_scalar("SELECT completed_occurrences FROM page_sync WHERE page_id = ?")
-            .bind(&page_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(stored.as_deref(), Some(map), "completion map survives the rewrite");
+    let stored: Option<String> = sqlx::query_scalar(
+        "SELECT clone_id FROM completed_set WHERE page_id = ? AND occurrence_date = '2026-06-22'",
+    )
+    .bind(&page_id)
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored.as_deref(), Some("clone-abc"), "completion survives the rewrite");
 }
 
 // ─── relink + teardown of a RECURRING series (singles-only before) ─────────────
