@@ -110,10 +110,12 @@ async fn apply_event(
     let now = now_iso();
     let (mirror_location, mirror_attendees) = mirror_values(&ev.core);
 
-    let (page_id, is_new) = if let Some((page_sync_id, page_id, stored_etag, _)) = existing {
+    let (page_id, is_new) = if let Some((page_sync_id, page_id, stored_etag, state)) = existing {
         // Unchanged etag → skip every write, so the token-reject full re-sync
         // doesn't churn updated_at and refloat every synced page as "recent".
-        if ev.core.etag.is_some() && stored_etag == ev.core.etag {
+        // Only when already active: a detached row (calendar re-enabled, same etag)
+        // must fall through to reactivate its sync_state, or live sync never resumes.
+        if state == "active" && ev.core.etag.is_some() && stored_etag == ev.core.etag {
             return Ok(());
         }
         update_page_title(tx, &page_id, &ev.core.title, &now).await?;
@@ -471,6 +473,18 @@ fn rrule_until(rrule: &str) -> Option<String> {
 /// The folder survives — de-flagged to a regular folder — whenever a live page
 /// remains, and is removed only when nothing owned survived. Idempotent.
 pub async fn teardown_calendar(
+    pool: &sqlx::SqlitePool,
+    account_id: &str,
+    calendar_id: &str,
+    folder_id: &str,
+) -> AppResult<()> {
+    // Deferred read-then-write (enumerate the links, then rewrite them) — the same
+    // shape that loses the WAL snapshot race elsewhere, so it takes the same retry.
+    crate::tx::retry_on_busy(|| teardown_calendar_once(pool, account_id, calendar_id, folder_id))
+        .await
+}
+
+async fn teardown_calendar_once(
     pool: &sqlx::SqlitePool,
     account_id: &str,
     calendar_id: &str,

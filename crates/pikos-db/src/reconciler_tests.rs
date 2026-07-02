@@ -1482,6 +1482,55 @@ async fn teardown_is_idempotent() {
     assert_eq!(folder_count(&pool).await, 1);
 }
 
+/// teardown_calendar's deferred read-then-write can lose the WAL snapshot (517)
+/// when the editor commits mid-teardown; retry_on_busy must heal it so neither
+/// write surfaces BUSY and the owned page still detaches. Needs a real on-disk WAL
+/// pool and both writers on real threads (`tokio::spawn` + `worker_threads ≥ 2`) —
+/// a cooperative single task can't overlap them tightly enough to reproduce the
+/// 517. The editor uses the real `update_page_impl` (write-first, busy-safe).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn teardown_heals_a_racing_editor_write() {
+    let db = crate::pool::wal_test_pool().await;
+    let pool = db.pool.clone();
+    crate::insert_test_folder(&pool, "f1", "Cal").await.unwrap();
+    let now = now_iso();
+    sqlx::query(
+        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES (?, 'caldav', 'Fastmail', 'basic', ?, ?)",
+    )
+    .bind(ACCOUNT)
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    flag_external(&pool, "f1").await;
+    let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await; // owned → teardown detaches
+
+    let td_pool = pool.clone();
+    let teardown = tokio::spawn(async move { teardown_calendar(&td_pool, ACCOUNT, "cal", "f1").await });
+    let edit_pool = pool.clone();
+    let edit_page = page_id.clone();
+    let edit = tokio::spawn(async move {
+        crate::update_page_impl(
+            &edit_pool,
+            edit_page,
+            crate::PageUpdate {
+                content_text: Some("edited".into()),
+                ..Default::default()
+            },
+        )
+        .await
+    });
+
+    let (td_res, edit_res) = tokio::join!(teardown, edit);
+    td_res.unwrap().expect("teardown must not surface SQLITE_BUSY");
+    edit_res.unwrap().expect("editor write must not surface SQLITE_BUSY");
+
+    assert_eq!(sync_state(&pool, &page_id).await, "detached", "owned page survives the race");
+}
+
 /// The unsync → resync round-trip: an owned page detaches on teardown, then a
 /// fresh sync re-links it in place (no duplicate) and reactivates it.
 #[tokio::test]
@@ -1504,6 +1553,31 @@ async fn unsync_then_resync_relinks_in_place() {
 
     assert_eq!(page_count(&pool).await, 1, "re-linked in place, no duplicate");
     assert_eq!(sync_state(&pool, &page_id).await, "active", "reactivated");
+    assert_eq!(page_content_text(&pool, &page_id).await, "my notes", "user layer preserved");
+}
+
+/// Re-enable path: teardown clears the cursor, so backfill re-delivers the same
+/// events with unchanged etags — the detached row must still reactivate.
+#[tokio::test]
+async fn resync_with_unchanged_etag_reactivates_detached_page() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await;
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(core("/ev.ics", "uid-1", "v1", "Event"), timed("2026-06-15T09:00:00", None, "UTC"))]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(page_count(&pool).await, 1, "re-linked in place, no duplicate");
+    assert_eq!(sync_state(&pool, &page_id).await, "active", "reactivated despite unchanged etag");
     assert_eq!(page_content_text(&pool, &page_id).await, "my notes", "user layer preserved");
 }
 

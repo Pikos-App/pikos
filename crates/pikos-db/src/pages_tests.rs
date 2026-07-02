@@ -1683,6 +1683,21 @@ async fn restore_only_reactivates_a_tombstone_not_a_detached_link() {
 }
 
 #[tokio::test]
+async fn trashing_and_restoring_a_detached_page_keeps_it_detached() {
+    // A detached link must not be tombstoned on trash, or restore reactivates it
+    // (schedule re-locks, the broken-sync notice vanishes) with no upstream event.
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Detached synced")).await.unwrap();
+    mark_synced(&pool, "p", "detached").await;
+
+    soft_delete_page_impl(&pool, "p").await.unwrap();
+    assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("detached"), "trash leaves it severed");
+
+    restore_page_impl(&pool, "p").await.unwrap();
+    assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("detached"), "restore keeps it severed");
+}
+
+#[tokio::test]
 async fn rescheduling_an_occurrence_of_a_synced_series_is_rejected() {
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p", "Recurring synced")).await.unwrap();

@@ -661,8 +661,10 @@ pub async fn soft_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResu
         .execute(&mut *tx)
         .await?;
     // Tombstone the sync link so the next poll doesn't resurrect a deleted synced
-    // page. No-op for native pages (no page_sync row).
-    sqlx::query("UPDATE page_sync SET sync_state = 'tombstoned' WHERE page_id = ?")
+    // page. Only an active link: a detached row (sync severed) must keep that state
+    // through trash → restore, else restore would wrongly reactivate it. No-op for
+    // native pages (no page_sync row).
+    sqlx::query("UPDATE page_sync SET sync_state = 'tombstoned' WHERE page_id = ? AND sync_state = 'active'")
         .bind(id)
         .execute(&mut *tx)
         .await?;

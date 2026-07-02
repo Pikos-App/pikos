@@ -12,6 +12,16 @@
 //! idempotency (etag no-op, identity dedup) absorbs the re-delivery. No work is
 //! buffered across runs.
 //!
+//! **Accepted backfill/bootstrap race.** A full enumerate carries no cursor, so
+//! after reconcile the engine makes a *second* call to fetch the current token
+//! (`current_sync_token`). An upstream change landing in that seconds-wide gap is
+//! reflected in the fetched token but not in the just-applied delta — the cursor
+//! now sits past a change we never ingested, so the next incremental poll skips
+//! it. The change resurfaces only when that event next changes (bumping it past
+//! the cursor again). Accepted, not fixed: closing it needs a provider-atomic
+//! "enumerate-with-token" the CalDAV/Google APIs don't offer, and a full
+//! re-enumerate (focus poll, token rejection) recovers it regardless.
+//!
 //! Scheduling (window-focus + interval polling) is **not** here — that's the
 //! command/UI layer (S10/S12). This module is the unit of work a scheduler calls.
 
