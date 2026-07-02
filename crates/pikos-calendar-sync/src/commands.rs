@@ -27,19 +27,23 @@ pub struct CalendarSyncResult {
     /// `synced` | `offline` | `reconnectNeeded`.
     pub status: String,
     pub full_resync: bool,
+    /// The poll's delta carried items — the scheduler's page-data-changed signal.
+    #[serde(skip)]
+    pub changed: bool,
 }
 
 impl CalendarSyncResult {
     fn new(calendar_id: &str, outcome: SyncOutcome) -> Self {
-        let (status, full_resync) = match outcome {
-            SyncOutcome::Synced { full_resync } => ("synced", full_resync),
-            SyncOutcome::Offline => ("offline", false),
-            SyncOutcome::ReconnectNeeded => ("reconnectNeeded", false),
+        let (status, full_resync, changed) = match outcome {
+            SyncOutcome::Synced { full_resync, changed } => ("synced", full_resync, changed),
+            SyncOutcome::Offline => ("offline", false, false),
+            SyncOutcome::ReconnectNeeded => ("reconnectNeeded", false, false),
         };
         Self {
             calendar_id: calendar_id.to_string(),
             status: status.to_string(),
             full_resync,
+            changed,
         }
     }
 }

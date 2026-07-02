@@ -19,6 +19,7 @@ pub mod schedules;
 #[path = "search/search.rs"]
 pub mod search;
 pub mod sync;
+pub mod sync_loop;
 pub mod tags;
 #[path = "watch.rs"]
 mod watch;

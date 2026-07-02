@@ -106,6 +106,9 @@ export function useCalendarSync(): CalendarSyncState {
         return next;
       });
       await refresh();
+      // A resync can upsert/remove pages — reload PagesContext so the calendar
+      // reflects the result without waiting for the next background pass.
+      await reload();
     } finally {
       setBusyAccountId(null);
     }

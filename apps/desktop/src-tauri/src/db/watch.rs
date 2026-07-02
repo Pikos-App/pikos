@@ -4,14 +4,40 @@
 //! app's own writes (see shared/lib/externalChange.ts) and reloads otherwise.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter};
 
 const EXTERNAL_CHANGE_EVENT: &str = "workspace:external-change";
 const DEBOUNCE: Duration = Duration::from_millis(250);
+
+/// The background sync loop writes through the same workspace file this watcher
+/// observes — even a no-change poll stamps `sync_calendar.last_synced_at` —
+/// so without a gate every poll would emit an external-change and reload the
+/// frontend. The sync driver opens a window here around each pass (it emits its
+/// own signal when a pass actually changed page data). A genuinely external
+/// write landing inside the window is missed; the next write or sync pass
+/// reloads, so staleness is bounded.
+static SUPPRESS_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Replace (never extend) the suppression window: `now + window`.
+pub fn suppress_for(window: Duration) {
+    SUPPRESS_UNTIL_MS.store(now_ms() + window.as_millis() as u64, Ordering::Relaxed);
+}
+
+fn suppressed() -> bool {
+    now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::Relaxed)
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
 
 /// Spawn a background watcher on the workspace file's directory. Best-effort:
 /// any setup failure is logged and the app simply runs without live-refresh.
@@ -42,6 +68,9 @@ fn run(app: AppHandle, db_path: &str) -> notify::Result<()> {
     watcher.watch(&dir, RecursiveMode::NonRecursive)?;
 
     pump(&rx, &prefix, DEBOUNCE, || {
+        if suppressed() {
+            return;
+        }
         let _ = app.emit(EXTERNAL_CHANGE_EVENT, ());
     });
     Ok(())

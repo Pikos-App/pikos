@@ -27,6 +27,7 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useDeepLinkRouter } from "@/shared/deep-link/useDeepLinkRouter";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
 import { useExternalChangeReload } from "@/shared/hooks/useExternalChangeReload";
+import { useSyncAppliedReload } from "@/shared/hooks/useSyncAppliedReload";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardListener, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
@@ -163,6 +164,7 @@ function AppShell() {
   useMenuEvents();
   useDeepLinkRouter();
   useExternalChangeReload();
+  useSyncAppliedReload();
   // Mark first usable render — workspace loaded, shell mounted, layout about to paint.
   // Perf tests measure boot time to this mark instead of domInteractive (which fires
   // before React mounts).

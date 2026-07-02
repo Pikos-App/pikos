@@ -34,8 +34,12 @@ mod engine_tests;
 pub enum SyncOutcome {
     /// Synced cleanly. `full_resync` is true when a stored cursor was rejected and
     /// the engine re-enumerated the window (it converges idempotently); false for
-    /// an incremental delta or the very first backfill.
-    Synced { full_resync: bool },
+    /// an incremental delta or the very first backfill. `changed` is true when the
+    /// delta carried any items — an approximation (a full re-enumerate reports
+    /// changed even when every etag no-ops), erring toward a spurious UI refresh
+    /// rather than a missed one; an empty incremental poll (the common case) is
+    /// reliably `false`.
+    Synced { full_resync: bool, changed: bool },
     /// Transport/offline failure — show a "synced <time> ago" stale indicator and
     /// keep the stored cursor; the next poll retries. No error storm.
     Offline,
@@ -83,6 +87,7 @@ async fn run<P: CalendarProvider>(
     let since = calendar.sync_token.clone().map(SyncToken);
     let had_cursor = since.is_some();
     let delta = provider.sync(calendar, since).await?;
+    let changed = !delta.upserts.is_empty() || !delta.removals.is_empty();
 
     // A provider returns no cursor only from a full enumerate — the initial
     // backfill, or a self-healed token rejection (CalDAV `403 valid-sync-token`
@@ -102,7 +107,7 @@ async fn run<P: CalendarProvider>(
     };
     persist_progress(pool, &calendar.id, next.as_ref(), was_full).await?;
 
-    Ok(SyncOutcome::Synced { full_resync: was_full && had_cursor })
+    Ok(SyncOutcome::Synced { full_resync: was_full && had_cursor, changed })
 }
 
 /// Above this many delta items, commit the upserts in batches instead of one

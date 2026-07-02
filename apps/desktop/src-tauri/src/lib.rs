@@ -83,10 +83,13 @@ pub fn run() {
         }));
     }
 
+    let (sync_trigger_tx, sync_trigger_rx) = db::sync_loop::SyncTriggerSender::new();
+
     builder
         .manage(DbState::new())
         .manage(NotificationSettingsState::new())
         .manage(SchedulerRuntimeState::new())
+        .manage(sync_trigger_tx)
         .plugin(logging::build_plugin())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -96,7 +99,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .setup(|app| {
+        .setup(move |app| {
             log::info!(
                 "=== Pikos {} starting on {} ===",
                 env!("CARGO_PKG_VERSION"),
@@ -113,6 +116,9 @@ pub fn run() {
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(notifications::scheduler::run(handle));
+
+            let sync_handle = app.handle().clone();
+            tauri::async_runtime::spawn(db::sync_loop::run(sync_handle, sync_trigger_rx));
 
             // Restore saved window size/position. Replaces tauri-plugin-window-state
             // which had a drift bug on macOS with our custom title bar.
@@ -147,6 +153,9 @@ pub fn run() {
             match event {
                 WindowEvent::Resized(_) | WindowEvent::Moved(_) => {
                     window_state::save(window.app_handle());
+                }
+                WindowEvent::Focused(true) => {
+                    db::sync_loop::on_focus(window.app_handle());
                 }
                 _ => {}
             }

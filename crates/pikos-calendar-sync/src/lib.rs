@@ -9,8 +9,10 @@ pub mod commands;
 pub mod engine;
 pub mod http;
 pub mod keychain;
+pub mod scheduler;
 
 pub use caldav::{CaldavCredentials, CaldavError, CaldavProvider};
 pub use commands::{connect_caldav, disconnect_account, resync_account, CalendarSyncResult};
 pub use engine::{sync_calendar, SyncOutcome};
 pub use keychain::{Keychain, KeychainError};
+pub use scheduler::{run_sync_loop, PassReport, SchedulerConfig, SyncTrigger, TriggerSource};

@@ -277,7 +277,7 @@ async fn incremental_loop_stores_cursor() {
         .with_bootstrap(SyncToken("tok-A".into()));
 
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false });
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
     assert_eq!(page_count(&pool).await, 1);
     assert_eq!(stored_token(&pool).await.as_deref(), Some("tok-A"));
     assert!(last_synced(&pool).await.is_some());
@@ -290,7 +290,7 @@ async fn incremental_loop_stores_cursor() {
         Some("tok-B"),
     )));
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false });
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
     assert_eq!(page_count(&pool).await, 1, "same event updates, never dupes");
     assert_eq!(stored_token(&pool).await.as_deref(), Some("tok-B"));
     // The incremental sync was driven from the bootstrapped cursor.
@@ -298,6 +298,22 @@ async fn incremental_loop_stores_cursor() {
         provider.sync_since.borrow()[0],
         Some(SyncToken("tok-A".into()))
     );
+}
+
+/// An empty incremental delta — the common every-poll case — reports
+/// `changed: false` so the scheduler doesn't signal a UI reload, while still
+/// advancing the cursor and stamping freshness.
+#[tokio::test]
+async fn empty_incremental_delta_reports_unchanged() {
+    let pool = test_pool().await;
+    seed(&pool, Some("t0")).await;
+
+    let provider = Scripted::default().with_sync(Ok(delta(vec![], Some("t1"))));
+    let outcome = run(&pool, &provider).await;
+
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: false });
+    assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
+    assert!(last_synced(&pool).await.is_some());
 }
 
 /// A stored cursor that the provider self-heals into a full re-enumerate (no
@@ -321,7 +337,7 @@ async fn token_reject_full_resync_converges() {
         .with_bootstrap(SyncToken("t-new".into()));
     let outcome = run(&pool, &provider).await;
 
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true });
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: true });
     assert_eq!(page_count(&pool).await, 1, "re-enumerate converges, no dupe");
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t-new"));
     // Idempotency invariant: unchanged etag → no write, so the re-enumerate doesn't
@@ -375,7 +391,7 @@ async fn orphan_master_fetched_and_applied() {
         .with_fetch(Ok(master("/series.ics", "u-series")));
 
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false });
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
     assert_eq!(page_count(&pool).await, 1, "the series master page");
     assert_eq!(override_count(&pool, "2026-06-21T09:00:00").await, 1);
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
@@ -396,7 +412,7 @@ async fn orphan_master_404_dropped() {
         .with_fetch(Err(AppError::NotFound("gone".into())));
 
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false });
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
     assert_eq!(page_count(&pool).await, 0, "no synthesized page");
     assert_eq!(override_count(&pool, "2026-06-21T09:00:00").await, 0);
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
@@ -438,7 +454,7 @@ async fn partial_failure_is_idempotent() {
         .with_fetch(Ok(master("/series.ics", "u-series")));
     assert_eq!(
         run(&pool, &provider).await,
-        SyncOutcome::Synced { full_resync: false }
+        SyncOutcome::Synced { full_resync: false, changed: true }
     );
     assert_eq!(
         page_count(&pool).await,
@@ -533,7 +549,7 @@ async fn backfill_throughput() {
 
     assert_eq!(
         run(&pool, &provider).await,
-        SyncOutcome::Synced { full_resync: false }
+        SyncOutcome::Synced { full_resync: false, changed: true }
     );
     assert_eq!(page_count(&pool).await, N as i64);
 }
@@ -598,7 +614,7 @@ async fn backfill_does_not_block_interactive_writes() {
     let (outcome, ()) = tokio::join!(backfill, edit);
     let backfill_elapsed = started.elapsed();
 
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false });
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
     assert_eq!(page_count(pool).await, N as i64 + 1);
     assert!(
         edit_elapsed * 2 < backfill_elapsed,
