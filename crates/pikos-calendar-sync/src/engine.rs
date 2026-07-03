@@ -44,11 +44,11 @@ mod engine_tests;
 pub enum SyncOutcome {
     /// Synced cleanly. `full_resync` is true when a stored cursor was rejected and
     /// the engine re-enumerated the window (it converges idempotently); false for
-    /// an incremental delta or the very first backfill. `changed` is true when the
-    /// delta carried any items — an approximation (a full re-enumerate reports
-    /// changed even when every etag no-ops), erring toward a spurious UI refresh
-    /// rather than a missed one; an empty incremental poll (the common case) is
-    /// reliably `false`.
+    /// an incremental delta or the very first backfill. `changed` is true when this
+    /// poll actually mutated page data — derived from the reconciler's applied-write
+    /// count plus any sweep removals, *not* from delta size. So a full re-enumerate
+    /// where every etag no-ops reports `false` (no spurious UI refresh), and a
+    /// sweep-only pass that deletes an upstream-vanished event reports `true`.
     Synced { full_resync: bool, changed: bool },
     /// Transport/offline failure — show a "synced <time> ago" stale indicator and
     /// keep the stored cursor; the next poll retries. No error storm.
@@ -97,7 +97,6 @@ async fn run<P: CalendarProvider>(
     let since = calendar.sync_token.clone().map(SyncToken);
     let had_cursor = since.is_some();
     let delta = provider.sync(calendar, since).await?;
-    let changed = !delta.upserts.is_empty() || !delta.removals.is_empty();
 
     // A provider returns no cursor only from a full enumerate — the initial
     // backfill, or a self-healed token rejection (CalDAV `403 valid-sync-token`
@@ -106,9 +105,12 @@ async fn run<P: CalendarProvider>(
     let was_full = delta.next_token.is_none();
 
     let outcome = reconcile_batched(pool, &ctx, &delta).await?;
-    resolve_missing_masters(pool, provider, &ctx, calendar, &delta, &outcome.missing_masters)
-        .await?;
-    sweep_absent_events(pool, &ctx, &delta).await?;
+    let resolved = resolve_missing_masters(
+        pool, provider, &ctx, calendar, &delta, &outcome.missing_masters,
+    )
+    .await?;
+    let swept = sweep_absent_events(pool, &ctx, &delta).await?;
+    let changed = outcome.applied + resolved + swept > 0;
 
     let next = match delta.next_token {
         Some(token) => Some(token),
@@ -123,16 +125,16 @@ async fn run<P: CalendarProvider>(
 
 /// Drive `reconciler::sweep_absent` on a full authoritative enumerate; no-op
 /// otherwise. Runs after the upserts commit, so every returned event is `active`
-/// and won't be swept.
+/// and won't be swept. Returns how many pages it removed (for the `changed` signal).
 async fn sweep_absent_events(
     pool: &sqlx::SqlitePool,
     ctx: &ReconcileContext,
     delta: &SyncDelta,
-) -> AppResult<()> {
+) -> AppResult<usize> {
     let Some(window_start) = &delta.authoritative_from else {
-        return Ok(());
+        return Ok(0);
     };
-    let present: std::collections::HashSet<String> = delta
+    let mut present: std::collections::HashSet<String> = delta
         .upserts
         .iter()
         .filter_map(|item| match item {
@@ -140,6 +142,8 @@ async fn sweep_absent_events(
             UpsertItem::Occurrence(_) => None,
         })
         .collect();
+    // Spare unresolved-but-present resources from the sweep (see `unresolved_present`).
+    present.extend(delta.unresolved_present.iter().cloned());
     retry_on_busy(|| {
         pikos_db::reconciler::sweep_absent(pool, ctx, &present, window_start)
     })
@@ -177,18 +181,20 @@ async fn reconcile_batched(
         }
     }
 
+    let mut applied = 0;
     for batch in events.chunks(RECONCILE_BATCH) {
         let sub = SyncDelta {
             upserts: batch.to_vec(),
             removals: vec![],
             next_token: None,
             authoritative_from: None,
+            unresolved_present: vec![],
         };
-        reconcile_safe(pool, ctx, &sub).await?;
+        applied += reconcile_safe(pool, ctx, &sub).await?.applied;
     }
 
     if tail.is_empty() && delta.removals.is_empty() {
-        return Ok(ReconcileOutcome::default());
+        return Ok(ReconcileOutcome { missing_masters: vec![], applied });
     }
     // Occurrences + removals, once every master in this delta is stored.
     let sub = SyncDelta {
@@ -196,8 +202,11 @@ async fn reconcile_batched(
         removals: delta.removals.clone(),
         next_token: None,
         authoritative_from: None,
+        unresolved_present: vec![],
     };
-    reconcile_safe(pool, ctx, &sub).await
+    let mut outcome = reconcile_safe(pool, ctx, &sub).await?;
+    outcome.applied += applied;
+    Ok(outcome)
 }
 
 /// `reconcile` under WAL busy/snapshot retry. Its deferred read-then-write can
@@ -220,7 +229,8 @@ async fn reconcile_safe(
 ///
 /// A `404` means the master is truly gone: drop the occurrence delta (terminal,
 /// so the cursor may safely advance). Any other error is transient and propagates
-/// — the cursor is not advanced and the whole run retries next poll.
+/// — the cursor is not advanced and the whole run retries next poll. Returns the
+/// resolving reconcile's applied-write count (for the `changed` signal).
 async fn resolve_missing_masters<P: CalendarProvider>(
     pool: &sqlx::SqlitePool,
     provider: &P,
@@ -228,9 +238,9 @@ async fn resolve_missing_masters<P: CalendarProvider>(
     calendar: &SyncCalendarRow,
     original: &SyncDelta,
     missing: &[MissingMaster],
-) -> AppResult<()> {
+) -> AppResult<usize> {
     if missing.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
 
     let mut resolved = SyncDelta::default();
@@ -252,12 +262,12 @@ async fn resolve_missing_masters<P: CalendarProvider>(
         }
     }
 
-    if !resolved.upserts.is_empty() {
-        // The masters we just fetched are present, so this pass resolves cleanly;
-        // any lingering signal would mean a provider bug, not a retryable orphan.
-        reconcile_safe(pool, ctx, &resolved).await?;
+    if resolved.upserts.is_empty() {
+        return Ok(0);
     }
-    Ok(())
+    // The masters we just fetched are present, so this pass resolves cleanly;
+    // any lingering signal would mean a provider bug, not a retryable orphan.
+    Ok(reconcile_safe(pool, ctx, &resolved).await?.applied)
 }
 
 /// Advance the stored cursor and stamp the freshness clocks. The single writer of

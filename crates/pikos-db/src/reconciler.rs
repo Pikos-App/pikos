@@ -33,11 +33,14 @@ pub struct ReconcileContext {
     pub folder_id: String,
 }
 
-/// What a reconcile surfaced for the engine to act on. Today that's only orphan
-/// masters needing a targeted fetch; it never buffers or drops them itself.
+/// What a reconcile surfaced for the engine to act on: orphan masters needing a
+/// targeted fetch, and `applied` — the count of upserts/removals that actually
+/// mutated state (an etag no-op or tombstoned skip is *not* counted). The engine
+/// derives its `changed` UI-reload signal from `applied` rather than from delta size.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ReconcileOutcome {
     pub missing_masters: Vec<MissingMaster>,
+    pub applied: usize,
 }
 
 /// An occurrence delta whose series has no stored rule and no master in this
@@ -64,20 +67,26 @@ pub async fn reconcile(
     // batch is in the store before any occurrence delta that references it.
     for item in &delta.upserts {
         if let UpsertItem::Event(ev) = item {
-            apply_event(&mut tx, ctx, ev).await?;
+            if apply_event(&mut tx, ctx, ev).await? {
+                outcome.applied += 1;
+            }
         }
     }
     for item in &delta.upserts {
         if let UpsertItem::Occurrence(occ) = item {
-            if let Some(missing) = apply_occurrence(&mut tx, ctx, occ).await? {
-                outcome.missing_masters.push(missing);
+            match apply_occurrence(&mut tx, ctx, occ).await? {
+                OccurrenceResult::Applied => outcome.applied += 1,
+                OccurrenceResult::Missing(missing) => outcome.missing_masters.push(missing),
+                OccurrenceResult::Skipped => {}
             }
         }
     }
 
     // Whole-event removals last: detach if owned, else hard delete.
     for removal in &delta.removals {
-        apply_removal(&mut tx, ctx, removal).await?;
+        if apply_removal(&mut tx, ctx, removal).await? {
+            outcome.applied += 1;
+        }
     }
 
     tx.commit().await?;
@@ -85,15 +94,17 @@ pub async fn reconcile(
 }
 
 /// Upsert a whole event or series: match by external_id, else re-link by
-/// `ical_uid` in-calendar, else create. No-ops on an unchanged etag.
+/// `ical_uid` in-calendar, else create. No-ops on an unchanged etag. Returns
+/// whether it wrote anything — `false` on the tombstoned or etag-no-op skip.
 async fn apply_event(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
     ev: &EventUpsert,
-) -> AppResult<()> {
-    let existing = sqlx::query_as::<_, (String, String, Option<String>, String)>(
-        "SELECT id, page_id, etag, sync_state FROM page_sync
-         WHERE account_id = ? AND calendar_id = ? AND external_id = ?",
+) -> AppResult<bool> {
+    let mut existing = sqlx::query_as::<_, (String, String, Option<String>, String, bool)>(
+        "SELECT ps.id, ps.page_id, ps.etag, ps.sync_state, p.deleted_at IS NOT NULL
+         FROM page_sync ps JOIN pages p ON p.id = ps.page_id
+         WHERE ps.account_id = ? AND ps.calendar_id = ? AND ps.external_id = ?",
     )
     .bind(&ctx.account_id)
     .bind(&ctx.calendar_id)
@@ -103,20 +114,32 @@ async fn apply_event(
 
     // User deleted this event locally — its link is tombstoned. Skip the upsert so
     // the next sync can't resurrect it from trash; restoring it reactivates the row.
-    if matches!(&existing, Some((.., state)) if state == "tombstoned") {
-        return Ok(());
+    if matches!(&existing, Some((_, _, _, state, _)) if state == "tombstoned") {
+        return Ok(false);
+    }
+
+    // A detached page the user then trashed (sync severed first, then deleted): keep
+    // that copy severed in the trash — reactivating it would rewrite an invisible
+    // (`deleted_at`) row and re-lock it on restore. Drop the stale link so its
+    // `external_id` frees, then fall through to mirror the live event fresh.
+    if let Some((page_sync_id, _, _, _, true)) = &existing {
+        sqlx::query("DELETE FROM page_sync WHERE id = ?")
+            .bind(page_sync_id)
+            .execute(&mut **tx)
+            .await?;
+        existing = None;
     }
 
     let now = now_iso();
     let (mirror_location, mirror_attendees) = mirror_values(&ev.core);
 
-    let (page_id, is_new) = if let Some((page_sync_id, page_id, stored_etag, state)) = existing {
+    let (page_id, is_new) = if let Some((page_sync_id, page_id, stored_etag, state, _)) = existing {
         // Unchanged etag → skip every write, so the token-reject full re-sync
         // doesn't churn updated_at and refloat every synced page as "recent".
         // Only when already active: a detached row (calendar re-enabled, same etag)
         // must fall through to reactivate its sync_state, or live sync never resumes.
         if state == "active" && ev.core.etag.is_some() && stored_etag == ev.core.etag {
-            return Ok(());
+            return Ok(false);
         }
         update_page_title(tx, &page_id, &ev.core.title, &now).await?;
         sqlx::query(
@@ -156,7 +179,7 @@ async fn apply_event(
 
     write_schedule(tx, &page_id, ev, &now).await?;
     apply_seeded_description(tx, &page_id, ev.core.description.as_deref(), is_new, &now).await?;
-    Ok(())
+    Ok(true)
 }
 
 /// Find a re-linkable page by `ical_uid`, scoped to this calendar (never across
@@ -266,7 +289,7 @@ async fn apply_occurrence(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
     occ: &OccurrenceDelta,
-) -> AppResult<Option<MissingMaster>> {
+) -> AppResult<OccurrenceResult> {
     let rule = sqlx::query_as::<_, (String, String, String)>(
         "SELECT r.id, r.page_id, ps.sync_state FROM page_recurrence_rules r
          JOIN page_sync ps ON ps.page_id = r.page_id
@@ -279,7 +302,7 @@ async fn apply_occurrence(
     .await?;
 
     let Some((rule_id, page_id, state)) = rule else {
-        return Ok(Some(MissingMaster {
+        return Ok(OccurrenceResult::Missing(MissingMaster {
             ical_uid: occ.ical_uid.clone(),
             series_ref: occ.series_ref.clone(),
         }));
@@ -288,7 +311,7 @@ async fn apply_occurrence(
     // EXDATEs/overrides would resurrect a schedule the user no longer syncs.
     // Mirrors apply_removal's active-only guard.
     if state != "active" {
-        return Ok(None);
+        return Ok(OccurrenceResult::Skipped);
     }
 
     match &occ.kind {
@@ -320,7 +343,15 @@ async fn apply_occurrence(
             .await?;
         }
     }
-    Ok(None)
+    Ok(OccurrenceResult::Applied)
+}
+
+/// What applying one occurrence delta resolved to: it wrote (Cancel/Modify), it
+/// skipped a non-active series, or its master isn't stored yet.
+enum OccurrenceResult {
+    Applied,
+    Skipped,
+    Missing(MissingMaster),
 }
 
 // ─── Lifecycle: removals + teardown ─────────────────────────────────────────────
@@ -333,7 +364,7 @@ async fn apply_removal(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
     removal: &Removal,
-) -> AppResult<()> {
+) -> AppResult<bool> {
     let row = sqlx::query_as::<_, (String, String, String)>(
         "SELECT id, page_id, sync_state FROM page_sync
          WHERE account_id = ? AND calendar_id = ? AND external_id = ?",
@@ -344,13 +375,14 @@ async fn apply_removal(
     .fetch_optional(&mut **tx)
     .await?;
     let Some((page_sync_id, page_id, state)) = row else {
-        return Ok(());
+        return Ok(false);
     };
     // tombstoned: user already trashed it; detached: already severed. Idempotent.
     if state != "active" {
-        return Ok(());
+        return Ok(false);
     }
-    detach_or_delete(tx, &page_sync_id, &page_id).await
+    detach_or_delete(tx, &page_sync_id, &page_id).await?;
+    Ok(true)
 }
 
 /// The own-vs-delete decision, shared by an explicit removal, teardown, and the
@@ -378,13 +410,14 @@ async fn detach_or_delete(
 /// occurrences precede `window_start`, so a time-bounded query legitimately omits
 /// it) — [`is_pre_window`] spares those. Genuine removals run the normal
 /// detach-if-owned / hard-delete lifecycle. Idempotent, and its own read-then-write
-/// tx (wrap in `retry_on_busy`).
+/// tx (wrap in `retry_on_busy`). Returns how many pages it removed — the only
+/// applied count on a sweep-only pass (no upserts, no explicit removals).
 pub async fn sweep_absent(
     pool: &sqlx::SqlitePool,
     ctx: &ReconcileContext,
     present_ids: &std::collections::HashSet<String>,
     window_start: &str,
-) -> AppResult<()> {
+) -> AppResult<usize> {
     let mut tx = pool.begin().await?;
 
     let rows = sqlx::query_as::<_, (String, String, String)>(
@@ -396,6 +429,7 @@ pub async fn sweep_absent(
     .fetch_all(&mut *tx)
     .await?;
 
+    let mut removed = 0;
     for (page_sync_id, page_id, external_id) in rows {
         if present_ids.contains(&external_id) {
             continue;
@@ -404,10 +438,11 @@ pub async fn sweep_absent(
             continue;
         }
         detach_or_delete(&mut tx, &page_sync_id, &page_id).await?;
+        removed += 1;
     }
 
     tx.commit().await?;
-    Ok(())
+    Ok(removed)
 }
 
 /// Whether a page's occurrences all precede `window_start`, so the sweep spares

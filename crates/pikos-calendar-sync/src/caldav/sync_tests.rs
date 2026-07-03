@@ -277,8 +277,51 @@ DTSTART;TZID=America/New_York:20260615T090000\r\nSUMMARY:Good\r\nEND:VEVENT\r\nE
         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:bad\r\nEND:VTODO\r\nEND:VCALENDAR\r\n",
     );
 
-    let upserts = resolve_upserts(&NoNetwork, CAL, vec![good, bad]).await.unwrap();
+    let (upserts, unresolved) = resolve_upserts(&NoNetwork, CAL, vec![good, bad]).await.unwrap();
     assert_eq!(upserts.len(), 1, "one bad body is skipped, the good one survives");
+    assert_eq!(unresolved, vec!["/bad.ics"], "the skipped href is tracked so the sweep spares it");
+}
+
+/// A partial 207: the multiget responds for the href but omits `calendar-data`
+/// (server hiccup / permissions). The entry can't be parsed, so it's tracked in
+/// `unresolved` — not silently dropped, which on a backfill would sweep it as a
+/// deletion.
+#[tokio::test]
+async fn resolve_upserts_tracks_a_bodyless_multiget_entry() {
+    let present = vec![super::super::report_xml::ReportEntry {
+        href: "/nodata.ics".into(),
+        response_status: None,
+        etag: Some("v1".into()),
+        calendar_data: None,
+    }];
+
+    let (upserts, unresolved) = resolve_upserts(&BodylessMultiget, CAL, present).await.unwrap();
+    assert!(upserts.is_empty(), "no body → no upsert");
+    assert_eq!(unresolved, vec!["/nodata.ics"], "the bodyless href is tracked, not dropped");
+}
+
+/// Answers a multiget with the requested hrefs but no `calendar-data` element.
+struct BodylessMultiget;
+impl DavTransport for BodylessMultiget {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("no PROPFIND expected");
+    }
+    async fn report(&self, _: &str, _: &str, body: &str) -> Result<DavResponse, CaldavError> {
+        let mut xml = String::from("<multistatus xmlns=\"DAV:\">");
+        for line in body.lines() {
+            let Some(href) =
+                line.trim().strip_prefix("<d:href>").and_then(|s| s.strip_suffix("</d:href>"))
+            else {
+                continue;
+            };
+            xml.push_str(&format!(
+                "<response><href>{href}</href><propstat><prop><getetag>\"v1\"</getetag></prop>\
+<status>HTTP/1.1 200 OK</status></propstat></response>"
+            ));
+        }
+        xml.push_str("</multistatus>");
+        Ok(DavResponse { status: 207, location: None, body: xml })
+    }
 }
 
 // ─── auth + sync-token bootstrap status mapping ──────────────────────────────────
@@ -383,9 +426,10 @@ async fn multiget_batches_above_seventy_five_hrefs() {
         .collect();
     let t = EchoMultiget { calls: std::sync::atomic::AtomicUsize::new(0) };
 
-    let upserts = resolve_upserts(&t, CAL, present).await.unwrap();
+    let (upserts, unresolved) = resolve_upserts(&t, CAL, present).await.unwrap();
 
     assert_eq!(upserts.len(), 80, "every batch's events accumulate");
+    assert!(unresolved.is_empty(), "all bodies parsed");
     assert_eq!(
         t.calls.load(std::sync::atomic::Ordering::SeqCst),
         2,

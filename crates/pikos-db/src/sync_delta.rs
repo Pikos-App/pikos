@@ -139,6 +139,13 @@ pub struct SyncDelta {
     /// and tells the engine to sweep absent pages (see `reconciler::sweep_absent`).
     /// `None` on an incremental delta, whose removals arrive explicitly.
     pub authoritative_from: Option<String>,
+    /// External ids that WERE present upstream this enumerate but couldn't be turned
+    /// into an upsert (unparseable body, or a multiget entry missing calendar-data).
+    /// The sweep spares these — a resource we failed to parse is live, not deleted,
+    /// and treating it as absent would permanently delete its mirror (incremental
+    /// sync never re-delivers an unchanged event). Only consumed alongside
+    /// `authoritative_from`; ignored on an incremental delta (no sweep runs).
+    pub unresolved_present: Vec<String>,
 }
 
 /// One implementation per provider (CalDAV, then Google). Auth, HTTP, and parsing

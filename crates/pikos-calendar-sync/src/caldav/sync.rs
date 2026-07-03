@@ -50,12 +50,14 @@ pub(crate) async fn sync_calendar<T: DavTransport>(
 
     let report = parse_report(&resp.body)?;
     let (present, removals) = split_present(report.entries);
-    let upserts = resolve_upserts(transport, calendar_url, present).await?;
+    // Incremental deltas don't sweep, so `unresolved` has no consumer — drop it.
+    let (upserts, _unresolved) = resolve_upserts(transport, calendar_url, present).await?;
     Ok(SyncDelta {
         upserts,
         removals,
         next_token: report.sync_token.map(SyncToken),
         authoritative_from: None,
+        unresolved_present: vec![],
     })
 }
 
@@ -120,7 +122,7 @@ async fn backfill<T: DavTransport>(
     }
     let report = parse_report(&resp.body)?;
     let (present, _removals) = split_present(report.entries);
-    let upserts = resolve_upserts(transport, calendar_url, present).await?;
+    let (upserts, unresolved_present) = resolve_upserts(transport, calendar_url, present).await?;
     // Authoritative set for `[window_start, ∞)`: the engine sweeps stored pages
     // absent from it, since a backfill carries no deletions of its own.
     Ok(SyncDelta {
@@ -128,6 +130,7 @@ async fn backfill<T: DavTransport>(
         removals: vec![],
         next_token: None,
         authoritative_from: Some(window_start.format("%Y-%m-%d").to_string()),
+        unresolved_present,
     })
 }
 
@@ -150,12 +153,14 @@ fn split_present(entries: Vec<ReportEntry>) -> (Vec<ReportEntry>, Vec<Removal>) 
 /// Body-and-parse the present resources into upserts: use inline `calendar-data`
 /// when the report already carried it (backfill), else `calendar-multiget` the
 /// rest (sync-collection only returns etags). A resource that fails to parse is
-/// skipped, not fatal — one malformed body must not sink the whole delta.
+/// skipped, not fatal — one malformed body must not sink the whole delta. Returns
+/// `(upserts, unresolved)` — `unresolved` is the hrefs present but yielding no
+/// upsert (see `SyncDelta::unresolved_present`).
 async fn resolve_upserts<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
     present: Vec<ReportEntry>,
-) -> Result<Vec<UpsertItem>, CaldavError> {
+) -> Result<(Vec<UpsertItem>, Vec<String>), CaldavError> {
     let mut bodied: Vec<ReportEntry> = Vec::new();
     let mut needs_fetch: Vec<String> = Vec::new();
     for e in present {
@@ -169,14 +174,22 @@ async fn resolve_upserts<T: DavTransport>(
         bodied.extend(multiget(transport, calendar_url, chunk).await?);
     }
 
-    Ok(bodied
-        .into_iter()
-        .filter_map(|e| {
-            let ics = e.calendar_data.as_deref()?;
-            ics::parse_resource(&e.href, e.etag.as_deref(), ics).ok()
-        })
-        .map(UpsertItem::Event)
-        .collect())
+    let mut upserts = Vec::new();
+    let mut unresolved = Vec::new();
+    for e in bodied {
+        let parsed = e
+            .calendar_data
+            .as_deref()
+            .and_then(|ics| ics::parse_resource(&e.href, e.etag.as_deref(), ics).ok());
+        match parsed {
+            Some(ev) => upserts.push(UpsertItem::Event(ev)),
+            None => {
+                log::warn!("caldav sync: skipping unresolvable resource {}", e.href);
+                unresolved.push(e.href);
+            }
+        }
+    }
+    Ok((upserts, unresolved))
 }
 
 async fn multiget<T: DavTransport>(

@@ -13,6 +13,9 @@ sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runti
 # rustls (no OpenSSL) keeps non-macOS builds system-lib-free.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 thiserror = "2"
+# Warn-level facade for provider-side skips (unparseable/bodyless resources); the
+# desktop app installs the logger that routes these to the shared log file.
+log = "0.4"
 # CalDAV: namespace-aware multistatus parsing + base-URL/redirect resolution +
 # the keychain credential blob ({base_url, username, password}).
 quick-xml = "0.37"

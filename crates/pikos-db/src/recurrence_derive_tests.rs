@@ -192,6 +192,35 @@ async fn dedup_across_ticks_fires_each_occurrence_once() {
 }
 
 #[tokio::test]
+async fn an_unsupported_rule_series_is_skipped_not_fatal() {
+    let pool = test_pool().await;
+    seed_series(&pool, "good", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
+    add_reminder(&pool, "good", 30).await;
+    // A provider rule outside the engine's envelope (YEARLY+BYDAY). Before per-series
+    // isolation, its `RecurrenceError` errored the whole enumeration — no reminder
+    // fired for any series.
+    seed_series(&pool, "bad", "FREQ=YEARLY;BYDAY=1SU", "2026-05-21T09:00:00", None).await;
+    add_reminder(&pool, "bad", 30).await;
+    let now = local("2026-05-25T08:30:00");
+
+    let first = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+        .await
+        .unwrap();
+    assert_eq!(
+        first.iter().map(|d| d.schedule_id.clone()).collect::<Vec<_>>(),
+        vec!["good@2026-05-25T09:00:00#30".to_string()],
+        "the valid series still fires despite the unsupported one",
+    );
+
+    // The bad rule persists, so a later tick must stay isolated (the good series
+    // keeps firing) — the enumeration never errors out.
+    let second = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+        .await
+        .unwrap();
+    assert_eq!(second.len(), 1, "still isolated on the next tick");
+}
+
+#[tokio::test]
 async fn past_occurrence_does_not_fire() {
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;

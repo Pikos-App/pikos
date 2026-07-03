@@ -112,6 +112,7 @@ fn delta(upserts: Vec<UpsertItem>) -> SyncDelta {
         removals: vec![],
         next_token: Some(SyncToken("t1".into())),
         authoritative_from: None,
+        unresolved_present: vec![],
     }
 }
 

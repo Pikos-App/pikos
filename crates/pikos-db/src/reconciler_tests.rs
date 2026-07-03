@@ -111,6 +111,7 @@ fn delta(upserts: Vec<UpsertItem>) -> SyncDelta {
         removals: vec![],
         next_token: None,
         authoritative_from: None,
+        unresolved_present: vec![],
     }
 }
 
@@ -663,6 +664,7 @@ async fn removal_takes_the_whole_series_not_one_occurrence() {
             removals: vec![Removal { external_id: "/series.ics".into() }],
             next_token: None,
             authoritative_from: None,
+            unresolved_present: vec![],
         },
     )
     .await
@@ -1135,6 +1137,7 @@ fn removal(external_id: &str) -> SyncDelta {
         removals: vec![Removal { external_id: external_id.into() }],
         next_token: None,
         authoritative_from: None,
+        unresolved_present: vec![],
     }
 }
 
@@ -1210,6 +1213,23 @@ async fn flag_external(pool: &sqlx::SqlitePool, folder_id: &str) {
 
 async fn page_exists(pool: &sqlx::SqlitePool, page_id: &str) -> bool {
     let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    n == 1
+}
+
+async fn is_trashed(pool: &sqlx::SqlitePool, page_id: &str) -> bool {
+    sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn has_page_sync(pool: &sqlx::SqlitePool, page_id: &str) -> bool {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE page_id = ?")
         .bind(page_id)
         .fetch_one(pool)
         .await
@@ -1601,6 +1621,55 @@ async fn resync_with_unchanged_etag_reactivates_detached_page() {
     assert_eq!(page_count(&pool).await, 1, "re-linked in place, no duplicate");
     assert_eq!(sync_state(&pool, &page_id).await, "active", "reactivated despite unchanged etag");
     assert_eq!(page_content_text(&pool, &page_id).await, "my notes", "user layer preserved");
+}
+
+/// R2: a synced page detached (calendar disabled), then trashed, then the calendar
+/// re-enabled and the still-live event re-enumerated. The trashed copy must stay
+/// severed in the trash — reactivating it would rewrite an invisible (`deleted_at`)
+/// row and re-lock it on restore. Instead the live event mirrors in as a fresh,
+/// visible page and the trashed copy loses its dormant sync link.
+#[tokio::test]
+async fn re_enable_after_trashing_a_detached_page_mirrors_fresh_and_leaves_trash_severed() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    let trashed_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+    simulate_user_body_edit(&pool, &trashed_id, "my notes").await; // owned → detaches, not deleted
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+    assert_eq!(sync_state(&pool, &trashed_id).await, "detached");
+
+    crate::soft_delete_page_impl(&pool, &trashed_id).await.unwrap();
+    assert_eq!(sync_state(&pool, &trashed_id).await, "detached", "trash keeps it severed");
+    assert!(is_trashed(&pool, &trashed_id).await);
+
+    // Re-enable: the backfill re-enumerates the still-live event (same etag).
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(core("/ev.ics", "uid-1", "v1", "Event"), timed("2026-06-15T09:00:00", None, "UTC"))]),
+    )
+    .await
+    .unwrap();
+
+    // The live event now mirrors to a fresh, visible page — separate from the trashed one.
+    let fresh_id: String =
+        sqlx::query_scalar("SELECT page_id FROM page_sync WHERE external_id = '/ev.ics'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_ne!(fresh_id, trashed_id, "mirrored to a new page, not the trashed row");
+    assert_eq!(sync_state(&pool, &fresh_id).await, "active", "fresh mirror is live");
+    assert!(!is_trashed(&pool, &fresh_id).await, "fresh mirror renders");
+
+    // The trashed copy stays in the trash, keeps the user's content, and is severed.
+    assert!(is_trashed(&pool, &trashed_id).await, "original stays trashed");
+    assert_eq!(page_content_text(&pool, &trashed_id).await, "my notes", "user content preserved");
+    assert!(!has_page_sync(&pool, &trashed_id).await, "trashed copy severed from sync");
+
+    // Restoring it leaves it severed — there is no sync link to re-lock.
+    crate::restore_page_impl(&pool, &trashed_id).await.unwrap();
+    assert!(!has_page_sync(&pool, &trashed_id).await, "restored copy stays severed");
+    assert_eq!(page_count(&pool).await, 2, "trashed copy + fresh mirror");
 }
 
 // ─── occurrence deltas only touch an ACTIVE series ────────────────────────────

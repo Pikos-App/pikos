@@ -6,6 +6,9 @@
 //! and never read the cache, so a corrupted `pages.scheduled_start` can't skew
 //! them.
 
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex};
+
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use sqlx::SqlitePool;
 
@@ -227,15 +230,22 @@ pub async fn occurrences_with_open_reminder_window(
         let mut conn = pool.acquire().await?;
         let excl = exclusion_union(&mut conn, &s.page_id, &s.rule_id, &s.rrule_exdates).await?;
         drop(conn);
-        let occurrences = pikos_recurrence::occurrences_in_window(
+        let occurrences = match pikos_recurrence::occurrences_in_window(
             &s.rrule,
             &s.base_start,
             s.base_end.as_deref(),
             &lo,
             &hi,
             &excl,
-        )
-        .map_err(|e| AppError::Internal(format!("reminder enumeration failed: {e}")))?;
+        ) {
+            Ok(occ) => occ,
+            // One series' out-of-envelope rule (a provider shape the engine rejects)
+            // must not sink reminders for every other series — skip it, keep going.
+            Err(e) => {
+                warn_unsupported_series_once(&s.rule_id, &e);
+                continue;
+            }
+        };
 
         for occ in &occurrences {
             for lead in &leads {
@@ -257,6 +267,21 @@ pub async fn occurrences_with_open_reminder_window(
         }
     }
     Ok(out)
+}
+
+/// Rule ids already warned about, so a persistently out-of-envelope series logs
+/// once per process rather than on every ~60s reminder tick.
+static WARNED_RULES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+fn warn_unsupported_series_once(rule_id: &str, err: &pikos_recurrence::RecurrenceError) {
+    let first = WARNED_RULES
+        .lock()
+        .map(|mut seen| seen.insert(rule_id.to_string()))
+        .unwrap_or(true);
+    if first {
+        log::warn!("reminder enumeration skipping series {rule_id}: unsupported rule ({err})");
+    }
 }
 
 /// A reminder lead for a series: its minutes and whether it came from an explicit

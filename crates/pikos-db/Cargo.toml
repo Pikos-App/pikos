@@ -15,6 +15,7 @@ chrono-tz = "0.10"
 thiserror = "2"
 tokio = { version = "1", features = ["time"] }
 pikos-recurrence = { path = "../pikos-recurrence" }
+log = "0.4"
 
 [features]
 # Re-exports test_pool + insert_test_* helpers so downstream crates (the desktop

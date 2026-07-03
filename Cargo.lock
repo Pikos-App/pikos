@@ -1205,6 +1205,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "keyring",
+ "log",
  "pikos-db",
  "quick-xml",
  "reqwest",
@@ -1235,6 +1236,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "chrono-tz",
+ "log",
  "pikos-recurrence",
  "serde",
  "serde_json",

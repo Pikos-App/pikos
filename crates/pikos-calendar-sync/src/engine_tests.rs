@@ -197,6 +197,7 @@ fn delta(upserts: Vec<UpsertItem>, token: Option<&str>) -> SyncDelta {
         removals: vec![],
         next_token: token.map(|t| SyncToken(t.into())),
         authoritative_from: None,
+        unresolved_present: vec![],
     }
 }
 
@@ -208,6 +209,7 @@ fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
         removals: vec![],
         next_token: None,
         authoritative_from: Some(window_start.into()),
+        unresolved_present: vec![],
     }
 }
 
@@ -379,7 +381,9 @@ async fn token_reject_full_resync_converges() {
         .with_bootstrap(SyncToken("t-new".into()));
     let outcome = run(&pool, &provider).await;
 
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: true });
+    // Every etag no-ops, so the re-enumerate applied zero writes → `changed:false`,
+    // even though the delta carried an item. No spurious frontend reload each poll.
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: false });
     assert_eq!(page_count(&pool).await, 1, "re-enumerate converges, no dupe");
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t-new"));
     // Idempotency invariant: unchanged etag → no write, so the re-enumerate doesn't
@@ -454,7 +458,8 @@ async fn orphan_master_404_dropped() {
         .with_fetch(Err(AppError::NotFound("gone".into())));
 
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    // The orphan was dropped and nothing else applied → no real write → unchanged.
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: false });
     assert_eq!(page_count(&pool).await, 0, "no synthesized page");
     assert_eq!(override_count(&pool, "2026-06-21T09:00:00").await, 0);
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
@@ -682,6 +687,7 @@ async fn removal_flows_through() {
         removals: vec![Removal { external_id: "/e1.ics".into() }],
         next_token: Some(SyncToken("t2".into())),
         authoritative_from: None,
+        unresolved_present: vec![],
     }));
     run(&pool, &provider).await;
     assert_eq!(page_count(&pool).await, 0, "bare mirror hard-deleted");
@@ -717,8 +723,12 @@ async fn full_resync_sweeps_deleted_but_spares_pre_window() {
     let provider = Scripted::default()
         .with_sync(Ok(full_enumerate(vec![], "2026-06-24")))
         .with_bootstrap(SyncToken("tok-B".into()));
-    run(&pool, &provider).await;
+    let outcome = run(&pool, &provider).await;
 
+    // Sweep-only pass: no upserts, no explicit removals, yet a page was deleted →
+    // `changed:true` so the scheduler emits the reload (else a ghost until an
+    // unrelated resync).
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: true });
     assert_eq!(page_count(&pool).await, 1, "deleted event swept, pre-window kept");
     assert_eq!(sync_state_by_uid(&pool, "live").await, None, "deleted mirror gone");
     assert_eq!(
@@ -760,6 +770,61 @@ async fn full_resync_sweep_detaches_owned_page() {
         Some("detached"),
         "owned page detached, not deleted"
     );
+}
+
+/// R3: a resource present upstream but unparseable this pass (tracked in
+/// `unresolved_present`) must survive the authoritative sweep — treating it as
+/// absent would permanently delete a live event's mirror, since incremental sync
+/// never re-delivers an unchanged event.
+#[tokio::test]
+async fn full_enumerate_spares_unresolved_pages_from_the_sweep() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+
+    let provider = Scripted::default()
+        .with_sync(Ok(full_enumerate(
+            vec![dated_event("/ev.ics", "ev", "Standup", "2026-06-28T09:00:00", "2026-06-28T10:00:00")],
+            "2026-06-24",
+        )))
+        .with_bootstrap(SyncToken("tok-A".into()));
+    run(&pool, &provider).await;
+    assert_eq!(page_count(&pool).await, 1);
+
+    // Re-enumerate: the event is still live but its body failed to parse, so it's
+    // absent from upserts yet listed in unresolved_present.
+    let mut enumerate = full_enumerate(vec![], "2026-06-24");
+    enumerate.unresolved_present = vec!["/ev.ics".into()];
+    let provider =
+        Scripted::default().with_sync(Ok(enumerate)).with_bootstrap(SyncToken("tok-B".into()));
+    let outcome = run(&pool, &provider).await;
+
+    assert_eq!(page_count(&pool).await, 1, "unparseable-but-live event spared, not swept");
+    assert_eq!(sync_state_by_uid(&pool, "ev").await.as_deref(), Some("active"), "mirror intact");
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: false });
+}
+
+/// A full authoritative enumerate whose single event is unchanged (same etag) and
+/// whose sweep removes nothing → zero real writes → `changed:false`. The delta is
+/// non-empty, so the old delta-size heuristic would have fired a spurious reload
+/// on this pass — every poll of a token-less server hits exactly this shape.
+#[tokio::test]
+async fn all_etag_noop_full_enumerate_reports_unchanged() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+
+    let enumerate = || {
+        Scripted::default()
+            .with_sync(Ok(full_enumerate(
+                vec![dated_event("/e1.ics", "u1", "Lunch", "2026-06-28T12:00:00", "2026-06-28T13:00:00")],
+                "2026-06-24",
+            )))
+            .with_bootstrap(SyncToken("tok".into()))
+    };
+    run(&pool, &enumerate()).await;
+
+    let outcome = run(&pool, &enumerate()).await;
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: false });
+    assert_eq!(page_count(&pool).await, 1, "no dupe, no churn");
 }
 
 // ─── temp WAL pool ──────────────────────────────────────────────────────────────
