@@ -456,3 +456,56 @@ fn parse_report_rejects_malformed_xml() {
     let result = parse_report("<multistatus><response></multistatus>");
     assert!(matches!(result, Err(CaldavError::Protocol(_))));
 }
+
+// ─── ctag PROPFIND ───────────────────────────────────────────────────────────────
+
+/// A PROPFIND-only transport with a fixed status + body (getctag uses PROPFIND,
+/// not REPORT).
+struct PropfindResponse {
+    status: u16,
+    body: String,
+}
+impl DavTransport for PropfindResponse {
+    async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        Ok(DavResponse { status: self.status, location: None, body: self.body.clone() })
+    }
+    async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
+        panic!("no REPORT expected");
+    }
+}
+
+#[tokio::test]
+async fn current_ctag_parses_getctag_from_a_207() {
+    let body = r#"<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">
+  <d:response><d:href>/cal/</d:href><d:propstat>
+    <d:prop><cs:getctag>abc-123</cs:getctag></d:prop>
+    <d:status>HTTP/1.1 200 OK</d:status>
+  </d:propstat></d:response>
+</d:multistatus>"#;
+    let t = PropfindResponse { status: 207, body: body.into() };
+    assert_eq!(current_ctag(&t, CAL).await.unwrap().as_deref(), Some("abc-123"));
+}
+
+#[tokio::test]
+async fn current_ctag_ignores_a_getctag_in_a_404_propstat() {
+    // A server without the prop returns it under a 404 block — must be dropped, not
+    // read as an (empty) ctag that would wrongly match next poll.
+    let body = r#"<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">
+  <d:response><d:href>/cal/</d:href><d:propstat>
+    <d:prop><cs:getctag/></d:prop>
+    <d:status>HTTP/1.1 404 Not Found</d:status>
+  </d:propstat></d:response>
+</d:multistatus>"#;
+    let t = PropfindResponse { status: 207, body: body.into() };
+    assert!(current_ctag(&t, CAL).await.unwrap().is_none(), "404 propstat → no ctag");
+}
+
+#[tokio::test]
+async fn current_ctag_is_none_on_unsupported_status() {
+    for status in [403u16, 404, 405, 501] {
+        let t = PropfindResponse { status, body: String::new() };
+        assert!(current_ctag(&t, CAL).await.unwrap().is_none(), "status {status} → no ctag");
+    }
+}

@@ -16,6 +16,7 @@ use quick_xml::NsReader;
 const NS_DAV: &[u8] = b"DAV:";
 const NS_CALDAV: &[u8] = b"urn:ietf:params:xml:ns:caldav";
 const NS_APPLE: &[u8] = b"http://apple.com/ns/ical/";
+const NS_CALSRV: &[u8] = b"http://calendarserver.org/ns/";
 
 /// One `<response>`, reduced to the props the discovery chain reads.
 #[derive(Default)]
@@ -30,6 +31,8 @@ struct RawResponse {
     display_name: Option<String>,
     color: Option<String>,
     components: Vec<String>,
+    /// `<cs:getctag>` — the collection change-tag, present only on a ctag PROPFIND.
+    ctag: Option<String>,
 }
 
 /// A calendar collection discovered in an enumeration, before VEVENT filtering.
@@ -50,6 +53,12 @@ pub(crate) fn parse_principal_href(xml: &str) -> Result<Option<String>, CaldavEr
 
 pub(crate) fn parse_home_set_href(xml: &str) -> Result<Option<String>, CaldavError> {
     Ok(parse_multistatus(xml)?.into_iter().find_map(|r| r.home_href))
+}
+
+/// The collection's `getctag`, taken only from a 2xx propstat (an unsupported
+/// prop comes back under a 404 block and is dropped). `None` when absent.
+pub(crate) fn parse_ctag(xml: &str) -> Result<Option<String>, CaldavError> {
+    Ok(parse_multistatus(xml)?.into_iter().find_map(|r| r.ctag))
 }
 
 pub(crate) fn parse_calendars(xml: &str) -> Result<Vec<RawCalendar>, CaldavError> {
@@ -75,6 +84,7 @@ enum Capture {
     HomeHref,
     DisplayName,
     Color,
+    Ctag,
     Status,
 }
 
@@ -102,6 +112,7 @@ struct PropBuf {
     display_name: Option<String>,
     color: Option<String>,
     components: Vec<String>,
+    ctag: Option<String>,
 }
 
 impl Parse {
@@ -149,6 +160,7 @@ impl Parse {
             (NS_CALDAV, b"calendar-home-set") => self.in_homeset = true,
             (NS_DAV, b"displayname") => self.capture = Capture::DisplayName,
             (NS_APPLE, b"calendar-color") => self.capture = Capture::Color,
+            (NS_CALSRV, b"getctag") => self.capture = Capture::Ctag,
             (NS_DAV, b"status") => self.capture = Capture::Status,
             (NS_DAV, b"href") => {
                 self.capture = if self.in_principal {
@@ -182,6 +194,7 @@ impl Parse {
             Capture::HomeHref => push_opt(&mut self.pbuf.home_href, text),
             Capture::DisplayName => push_opt(&mut self.pbuf.display_name, text),
             Capture::Color => push_opt(&mut self.pbuf.color, text),
+            Capture::Ctag => push_opt(&mut self.pbuf.ctag, text),
             Capture::Status => self.status_text.push_str(text),
             Capture::None => {}
         }
@@ -189,7 +202,10 @@ impl Parse {
 
     fn close(&mut self, ns: &[u8], local: &[u8]) {
         match (ns, local) {
-            (NS_DAV, b"href") | (NS_DAV, b"displayname") | (NS_APPLE, b"calendar-color") => {
+            (NS_DAV, b"href")
+            | (NS_DAV, b"displayname")
+            | (NS_APPLE, b"calendar-color")
+            | (NS_CALSRV, b"getctag") => {
                 self.capture = Capture::None;
             }
             (NS_DAV, b"status") => {
@@ -285,6 +301,9 @@ fn merge(cur: Option<&mut RawResponse>, pbuf: &mut PropBuf) {
     }
     if pbuf.color.is_some() {
         c.color = pbuf.color.take();
+    }
+    if pbuf.ctag.is_some() {
+        c.ctag = pbuf.ctag.take();
     }
     if !pbuf.components.is_empty() {
         c.components.append(&mut pbuf.components);

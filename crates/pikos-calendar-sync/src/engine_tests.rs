@@ -21,7 +21,7 @@ use pikos_db::sync_delta::{
 };
 use pikos_db::{insert_test_folder, insert_test_page, now_iso, test_pool, PageUpdate, TestPage};
 
-use super::{sync_calendar, SyncOutcome};
+use super::{sync_calendar, SyncOutcome, FORCE_FULL_INTERVAL_HOURS};
 
 const ACCOUNT: &str = "acc1";
 const CAL: &str = "cal1";
@@ -39,6 +39,7 @@ struct Scripted {
     sync: RefCell<VecDeque<AppResult<SyncDelta>>>,
     fetch: RefCell<VecDeque<AppResult<EventUpsert>>>,
     bootstrap: RefCell<VecDeque<AppResult<Option<SyncToken>>>>,
+    ctag: RefCell<VecDeque<AppResult<Option<String>>>>,
     /// The `since` cursor each `sync` call received, for assertions.
     sync_since: RefCell<Vec<Option<SyncToken>>>,
 }
@@ -55,6 +56,13 @@ impl Scripted {
     fn with_bootstrap(self, t: SyncToken) -> Self {
         self.bootstrap.borrow_mut().push_back(Ok(Some(t)));
         self
+    }
+    fn with_ctag(self, c: Option<&str>) -> Self {
+        self.ctag.borrow_mut().push_back(Ok(c.map(String::from)));
+        self
+    }
+    fn sync_calls(&self) -> usize {
+        self.sync_since.borrow().len()
     }
 }
 
@@ -94,6 +102,10 @@ impl CalendarProvider for Scripted {
         _calendar: &SyncCalendarRow,
     ) -> AppResult<Option<SyncToken>> {
         self.bootstrap.borrow_mut().pop_front().unwrap_or(Ok(None))
+    }
+
+    async fn current_ctag(&self, _calendar: &SyncCalendarRow) -> AppResult<Option<String>> {
+        self.ctag.borrow_mut().pop_front().unwrap_or(Ok(None))
     }
 }
 
@@ -278,6 +290,30 @@ async fn stored_token(pool: &SqlitePool) -> Option<String> {
         .fetch_one(pool)
         .await
         .unwrap()
+}
+
+async fn stored_ctag(pool: &SqlitePool) -> Option<String> {
+    sqlx::query_scalar("SELECT ctag FROM sync_calendar WHERE id = ?")
+        .bind(CAL)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// Seed a token-less calendar into the ctag-skip precondition: a stored ctag and a
+/// `last_full_sync_at` `hours_ago` in the past (so a test can put the periodic
+/// re-enumerate in or out of its window).
+async fn set_ctag_state(pool: &SqlitePool, ctag: &str, hours_ago: i64) {
+    let last_full = (chrono::Utc::now() - chrono::Duration::hours(hours_ago))
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
+    sqlx::query("UPDATE sync_calendar SET ctag = ?, last_full_sync_at = ? WHERE id = ?")
+        .bind(ctag)
+        .bind(&last_full)
+        .bind(CAL)
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 async fn page_updated_at(pool: &SqlitePool) -> String {
@@ -841,6 +877,69 @@ async fn all_etag_noop_full_enumerate_reports_unchanged() {
     let outcome = run(&pool, &enumerate()).await;
     assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: false });
     assert_eq!(page_count(&pool).await, 1, "no dupe, no churn");
+}
+
+// ─── ctag precheck (token-less servers) ─────────────────────────────────────────
+
+#[tokio::test]
+async fn unchanged_ctag_skips_the_enumerate() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+    set_ctag_state(&pool, "ctag-1", 0).await;
+
+    // Same ctag + a recent full sync → nothing to do; sync() must not be called.
+    let provider = Scripted::default().with_ctag(Some("ctag-1"));
+    let outcome = run(&pool, &provider).await;
+
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: false });
+    assert_eq!(provider.sync_calls(), 0, "an unchanged ctag must not enumerate");
+    assert_eq!(page_count(&pool).await, 0);
+}
+
+#[tokio::test]
+async fn changed_ctag_enumerates_and_stores_the_new_ctag() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+    set_ctag_state(&pool, "ctag-1", 0).await;
+
+    let provider = Scripted::default().with_ctag(Some("ctag-2")).with_sync(Ok(full_enumerate(
+        vec![dated_event("/e1.ics", "u1", "Lunch", "2026-06-28T12:00:00", "2026-06-28T13:00:00")],
+        "2026-06-24",
+    )));
+    let outcome = run(&pool, &provider).await;
+
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    assert_eq!(provider.sync_calls(), 1, "a moved ctag must enumerate");
+    assert_eq!(page_count(&pool).await, 1);
+    assert_eq!(stored_ctag(&pool).await.as_deref(), Some("ctag-2"), "the new ctag is persisted");
+}
+
+#[tokio::test]
+async fn periodic_backstop_enumerates_despite_a_matching_ctag() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+    // Ctag matches, but the last full sync is older than the safety interval.
+    set_ctag_state(&pool, "ctag-1", FORCE_FULL_INTERVAL_HOURS + 1).await;
+
+    let provider =
+        Scripted::default().with_ctag(Some("ctag-1")).with_sync(Ok(full_enumerate(vec![], "2026-06-24")));
+    let outcome = run(&pool, &provider).await;
+
+    assert_eq!(provider.sync_calls(), 1, "an overdue full sync enumerates even on a matching ctag");
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: false });
+}
+
+#[tokio::test]
+async fn first_poll_without_a_stored_ctag_enumerates_and_captures_it() {
+    let pool = test_pool().await;
+    seed(&pool, None).await; // ctag + last_full_sync_at both NULL
+
+    let provider =
+        Scripted::default().with_ctag(Some("ctag-1")).with_sync(Ok(full_enumerate(vec![], "2026-06-24")));
+    run(&pool, &provider).await;
+
+    assert_eq!(provider.sync_calls(), 1, "no stored ctag → must enumerate");
+    assert_eq!(stored_ctag(&pool).await.as_deref(), Some("ctag-1"), "first ctag captured");
 }
 
 // ─── temp WAL pool ──────────────────────────────────────────────────────────────

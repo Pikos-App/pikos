@@ -25,6 +25,7 @@
 //! Scheduling (window-focus + interval polling) is **not** here — that's the
 //! command/UI layer. This module is the unit of work a scheduler calls.
 
+use chrono::{DateTime, Duration, Utc};
 use pikos_db::error::{AppError, AppResult};
 use pikos_db::now_iso;
 use pikos_db::reconciler::{reconcile, MissingMaster, ReconcileContext, ReconcileOutcome};
@@ -96,6 +97,23 @@ async fn run<P: CalendarProvider>(
 
     let since = calendar.sync_token.clone().map(SyncToken);
     let had_cursor = since.is_some();
+
+    // A token-less collection (no `sync-collection`) would otherwise re-enumerate
+    // every poll. Gate that on the collection's change-tag: unchanged since the
+    // last full enumerate — and not yet due a periodic safety re-enumerate — means
+    // nothing to do. Fetched before the enumerate so a change landing in the gap
+    // re-triggers next poll rather than being masked by a newer stored ctag
+    // (convergent, never lossy).
+    let ctag = if had_cursor {
+        None
+    } else {
+        provider.current_ctag(calendar).await.unwrap_or(None)
+    };
+    if !had_cursor && can_skip_enumerate(calendar, ctag.as_deref()) {
+        persist_skip(pool, &calendar.id).await?;
+        return Ok(SyncOutcome::Synced { full_resync: false, changed: false });
+    }
+
     let delta = provider.sync(calendar, since).await?;
 
     // A provider returns no cursor only from a full enumerate — the initial
@@ -118,7 +136,7 @@ async fn run<P: CalendarProvider>(
         // next poll re-enumerates and retries — wasteful but convergent, never wrong.
         None => provider.current_sync_token(calendar).await.unwrap_or(None),
     };
-    persist_progress(pool, &calendar.id, next.as_ref(), was_full).await?;
+    persist_progress(pool, &calendar.id, next.as_ref(), was_full, ctag.as_deref()).await?;
 
     Ok(SyncOutcome::Synced { full_resync: was_full && had_cursor, changed })
 }
@@ -161,6 +179,12 @@ async fn sweep_absent_events(
 /// instant-interaction bar). Small deltas keep the reconciler's single-transaction
 /// all-or-nothing semantics.
 const RECONCILE_BATCH: usize = 200;
+
+/// A token-less calendar re-enumerates at least this often regardless of its
+/// ctag, bounding staleness if the server's `getctag` is unreliable (doesn't move
+/// on a change). The ctag skip is an optimisation over this backstop, never the
+/// sole guarantee.
+const FORCE_FULL_INTERVAL_HOURS: i64 = 6;
 
 /// Reconcile a delta, splitting a large one into batched transactions (see
 /// [`RECONCILE_BATCH`]). Whole-event/series upserts have no cross-item dependency
@@ -267,23 +291,62 @@ async fn resolve_missing_masters<P: CalendarProvider>(
     Ok(master_ids)
 }
 
+/// Whether a token-less poll may skip enumerating: the collection change-tag must
+/// be present on BOTH sides and match, AND a periodic safety re-enumerate must not
+/// be due. A missing tag on either side (server doesn't support `getctag`, or the
+/// first poll before one is stored) forces enumeration — so an absent or
+/// unreliable tag degrades to bounded staleness, never a dropped change.
+fn can_skip_enumerate(calendar: &SyncCalendarRow, current_ctag: Option<&str>) -> bool {
+    let (Some(stored), Some(current)) = (calendar.ctag.as_deref(), current_ctag) else {
+        return false;
+    };
+    stored == current && !force_full_due(calendar.last_full_sync_at.as_deref())
+}
+
+/// Whether the periodic safety re-enumerate is due. A missing or unparseable
+/// timestamp counts as due, so the backstop errs toward enumerating.
+fn force_full_due(last_full_sync_at: Option<&str>) -> bool {
+    let Some(ts) = last_full_sync_at.and_then(|s| DateTime::parse_from_rfc3339(s).ok()) else {
+        return true;
+    };
+    Utc::now().signed_duration_since(ts.with_timezone(&Utc))
+        >= Duration::hours(FORCE_FULL_INTERVAL_HOURS)
+}
+
+/// Stamp a no-op poll's freshness clock without touching the cursor, ctag, or
+/// full-sync mark — the ctag matched, so nothing was enumerated.
+async fn persist_skip(pool: &sqlx::SqlitePool, calendar_id: &str) -> AppResult<()> {
+    let now = now_iso();
+    sqlx::query("UPDATE sync_calendar SET last_synced_at = ?, updated_at = ? WHERE id = ?")
+        .bind(&now)
+        .bind(&now)
+        .bind(calendar_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Advance the stored cursor and stamp the freshness clocks. The single writer of
-/// `sync_calendar`'s sync state, run only after a fully successful poll.
+/// `sync_calendar`'s sync state, run only after a fully successful poll. `ctag` is
+/// recorded on a full enumerate so the next token-less poll can diff against it;
+/// incremental polls leave it untouched.
 async fn persist_progress(
     pool: &sqlx::SqlitePool,
     calendar_id: &str,
     token: Option<&SyncToken>,
     was_full: bool,
+    ctag: Option<&str>,
 ) -> AppResult<()> {
     let now = now_iso();
     let token_str = token.map(|t| t.0.as_str());
     if was_full {
         sqlx::query(
             "UPDATE sync_calendar
-             SET sync_token = ?, last_full_sync_at = ?, last_synced_at = ?, updated_at = ?
+             SET sync_token = ?, ctag = ?, last_full_sync_at = ?, last_synced_at = ?, updated_at = ?
              WHERE id = ?",
         )
         .bind(token_str)
+        .bind(ctag)
         .bind(&now)
         .bind(&now)
         .bind(&now)

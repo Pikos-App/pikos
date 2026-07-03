@@ -83,6 +83,23 @@ pub(crate) async fn current_sync_token<T: DavTransport>(
     }
 }
 
+/// The collection's `getctag` (calendarserver change-tag) via a Depth-0 PROPFIND.
+/// Lets a token-less poll skip re-enumerating when the collection is unchanged. A
+/// server without the property or PROPFIND support answers `403`/`404`/`405`/`501`
+/// → `None`, so the engine keeps enumerating rather than trusting an absent tag.
+pub(crate) async fn current_ctag<T: DavTransport>(
+    transport: &T,
+    calendar_url: &str,
+) -> Result<Option<String>, CaldavError> {
+    let resp = transport.propfind(calendar_url, "0", GETCTAG_BODY).await?;
+    match resp.status {
+        207 => Ok(super::xml::parse_ctag(&resp.body)?),
+        403 | 404 | 405 | 501 => Ok(None),
+        401 => Err(CaldavError::Unauthorized),
+        other => Err(CaldavError::UnexpectedStatus(other)),
+    }
+}
+
 /// Refetch one resource (CalDAV's `fetch_event`: a trivial single-href
 /// `calendar-multiget`). CalDAV never orphans a master, so this is only the
 /// generic single-resource refetch, never a series reconstruction.
@@ -209,6 +226,11 @@ async fn multiget<T: DavTransport>(
 }
 
 // ─── request bodies ─────────────────────────────────────────────────────────────
+
+const GETCTAG_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/">
+  <d:prop><cs:getctag/></d:prop>
+</d:propfind>"#;
 
 fn sync_collection_body(token: &str) -> String {
     format!(

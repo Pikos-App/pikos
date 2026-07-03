@@ -96,4 +96,10 @@ impl CalendarProvider for CaldavProvider {
         let transport = ReqwestDav::new(creds.username, creds.password);
         Ok(sync::current_sync_token(&transport, &calendar.calendar_id).await?)
     }
+
+    async fn current_ctag(&self, calendar: &SyncCalendarRow) -> AppResult<Option<String>> {
+        let creds = self.credentials_by_id(&calendar.account_id)?;
+        let transport = ReqwestDav::new(creds.username, creds.password);
+        Ok(sync::current_ctag(&transport, &calendar.calendar_id).await?)
+    }
 }

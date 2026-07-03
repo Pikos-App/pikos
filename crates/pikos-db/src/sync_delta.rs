@@ -187,4 +187,14 @@ pub trait CalendarProvider {
         &self,
         calendar: &SyncCalendarRow,
     ) -> AppResult<Option<SyncToken>>;
+
+    /// The collection's opaque change-tag (CalDAV `getctag`), for token-less
+    /// servers that lack `sync-collection`. Unchanged since the last full
+    /// enumerate ⇒ the poll can skip re-enumerating. Defaults to `None` — a
+    /// provider with a real incremental cursor (Google `syncToken`, a
+    /// `sync-collection` server) never needs it, and a `None` here means the
+    /// engine simply never skips.
+    async fn current_ctag(&self, _calendar: &SyncCalendarRow) -> AppResult<Option<String>> {
+        Ok(None)
+    }
 }
