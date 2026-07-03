@@ -1,6 +1,7 @@
 import {
   buildRrule,
   formatDateOnly,
+  optionsForFreq,
   parseLocalISO,
   parseRrule,
   type RecurrenceFreq,
@@ -132,12 +133,7 @@ export function RecurrencePopover({
   }
 
   function handleSelectFreq(freq: RecurrenceFreq) {
-    const base: RecurrenceOptions = options
-      ? { ...options, freq, interval: options.interval }
-      : { freq, interval: 1 };
-    // BYDAY only meaningful for WEEKLY.
-    if (freq !== "WEEKLY") delete base.byweekday;
-    emit(base);
+    emit(options ? optionsForFreq(options, freq) : { freq, interval: 1 });
   }
 
   function handleIntervalCommit() {

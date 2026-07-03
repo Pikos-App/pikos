@@ -105,6 +105,7 @@ fn account() -> SyncAccountRow {
         provider: "caldav".into(),
         display_name: "Fastmail".into(),
         auth_kind: "basic".into(),
+        reconnect_needed: false,
         created_at: now_iso(),
         updated_at: now_iso(),
     }
@@ -463,6 +464,35 @@ async fn orphan_master_404_dropped() {
     assert_eq!(page_count(&pool).await, 0, "no synthesized page");
     assert_eq!(override_count(&pool, "2026-06-21T09:00:00").await, 0);
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
+}
+
+/// A full authoritative enumerate carrying a lone occurrence (master absent)
+/// fetches the master to resolve it — and the sweep must spare that just-created
+/// master, not detach/delete it in the same pass. Arms for Google (S15), which
+/// emits lone occurrences in a full enumerate; CalDAV never does today.
+#[tokio::test]
+async fn full_enumerate_spares_a_resolved_orphan_master_from_the_sweep() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+
+    let provider = Scripted::default()
+        .with_sync(Ok(full_enumerate(
+            vec![orphan_occurrence("u-series", "series-ref-1")],
+            "2026-06-15",
+        )))
+        .with_fetch(Ok(master("/series.ics", "u-series")))
+        .with_bootstrap(SyncToken("tok".into()));
+
+    let outcome = run(&pool, &provider).await;
+
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    assert_eq!(page_count(&pool).await, 1, "the fetched master survives its own pass");
+    assert_eq!(
+        sync_state_by_uid(&pool, "u-series").await.as_deref(),
+        Some("active"),
+        "resolved master not swept",
+    );
+    assert_eq!(override_count(&pool, "2026-06-21T09:00:00").await, 1, "the override landed");
 }
 
 /// A transient orphan-fetch failure must not advance the cursor; the next poll

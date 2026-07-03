@@ -136,8 +136,12 @@ where
     report
 }
 
+/// Accounts the background pass polls — excludes those flagged `reconnect_needed`
+/// (a rejected credential); a manual resync clears the flag and re-includes them.
 async fn load_accounts(pool: &SqlitePool) -> Result<Vec<SyncAccountRow>, AppError> {
-    Ok(sqlx::query_as::<_, SyncAccountRow>("SELECT * FROM sync_account")
-        .fetch_all(pool)
-        .await?)
+    Ok(
+        sqlx::query_as::<_, SyncAccountRow>("SELECT * FROM sync_account WHERE reconnect_needed = 0")
+            .fetch_all(pool)
+            .await?,
+    )
 }

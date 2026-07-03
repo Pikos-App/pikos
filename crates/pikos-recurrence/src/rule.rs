@@ -178,6 +178,21 @@ fn parse_until(value: &str) -> Option<NaiveDateTime> {
     }
 }
 
+/// The `UNTIL` instant of an RRULE, FREQ-agnostic — finds and parses the token
+/// without validating the rule's envelope. Use this (NOT [`parse_rrule`]) to ask
+/// "is this series bounded?": `parse_rrule` returns `None` on an out-of-envelope
+/// FREQ (e.g. `FREQ=HOURLY`), which would misread a bounded rule as unbounded. The
+/// UNTIL format handling is shared with the enumerator via [`parse_until`].
+pub fn extract_until(rrule: &str) -> Option<NaiveDateTime> {
+    rrule
+        .split(';')
+        .find_map(|part| {
+            let (key, value) = part.split_once('=')?;
+            key.eq_ignore_ascii_case("UNTIL").then_some(value)
+        })
+        .and_then(parse_until)
+}
+
 /// A single BYDAY term: an optional ordinal (`1` in `1MO`, `-1` in `-1FR`) and
 /// the weekday index (0 = Monday … 6 = Sunday).
 #[derive(Debug, Clone, Copy)]

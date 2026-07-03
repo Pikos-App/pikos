@@ -1386,6 +1386,33 @@ async fn sweep_spares_expired_until_series_but_removes_unbounded() {
     assert!(!page_exists_by_uid(&pool, "uid-infinite").await, "live unbounded series swept");
 }
 
+/// Window-edge timezone skew: storage is source-zone wall-clock but the server's
+/// time-range bound is UTC, so an ahead-of-UTC event whose UTC instant falls just
+/// before the window is server-excluded while its local date lands on the window
+/// day. The one-day sweep slack spares it — sweeping would drop a live event.
+#[tokio::test]
+async fn sweep_spares_an_ahead_of_utc_window_edge_event() {
+    let pool = setup().await;
+    // Wall-clock 2026-06-24T05:00 in Tokyo (UTC+9) = 2026-06-23T20:00Z, so the
+    // UTC-bounded backfill (window start 2026-06-24) legitimately omits it.
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(
+            core("/edge.ics", "uid-edge", "v1", "Standup"),
+            timed("2026-06-24T05:00:00", Some("2026-06-24T05:30:00"), "Asia/Tokyo"),
+        )]),
+    )
+    .await
+    .unwrap();
+
+    sweep_absent(&pool, &ctx(), &std::collections::HashSet::new(), "2026-06-24")
+        .await
+        .unwrap();
+
+    assert!(page_exists_by_uid(&pool, "uid-edge").await, "window-edge event spared, not swept");
+}
+
 fn series_recurring(href: &str, uid: &str, rrule: &str) -> UpsertItem {
     UpsertItem::Event(EventUpsert {
         core: core(href, uid, "v1", "Standup"),

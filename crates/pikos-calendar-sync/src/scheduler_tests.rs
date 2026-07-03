@@ -299,6 +299,45 @@ async fn account_error_does_not_abort_pass() {
     assert_eq!(page_count(&pool).await, 1);
 }
 
+async fn reconnect_needed(pool: &SqlitePool, account_id: &str) -> bool {
+    sqlx::query_scalar("SELECT reconnect_needed FROM sync_account WHERE id = ?")
+        .bind(account_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// A rejected credential flags the account so the background scheduler stops
+/// polling it every pass; only a manual resync re-includes it.
+#[tokio::test]
+async fn reconnect_needed_account_is_skipped_until_manual_resync() {
+    let pool = test_pool().await;
+    seed_account(&pool, "acc1", "f1").await;
+
+    // Pass 1: the app password is revoked → the engine maps it to ReconnectNeeded,
+    // which flags the account (an outcome, not a reported error).
+    let provider = Shared::default().with_sync(Err(AppError::Invalid("revoked".into())));
+    let report = super::run_pass(&pool, &|_: &SyncAccountRow| provider.clone()).await;
+    assert!(report.errors.is_empty(), "reconnect-needed is an outcome, not an error");
+    assert_eq!(provider.calls.get(), 1, "polled once");
+    assert!(reconnect_needed(&pool, "acc1").await, "flagged after the rejection");
+
+    // Pass 2: the flagged account is skipped — no provider call (its scripted queue
+    // is empty, so a stray poll would panic).
+    super::run_pass(&pool, &|_: &SyncAccountRow| provider.clone()).await;
+    assert_eq!(provider.calls.get(), 1, "flagged account not polled again");
+
+    // Manual resync with working creds clears the flag — the re-inclusion path.
+    let good = Shared::default().with_sync(Ok(delta(vec![event("/e1.ics", "u1")])));
+    crate::commands::resync_account(&pool, &good, "acc1").await.unwrap();
+    assert!(!reconnect_needed(&pool, "acc1").await, "a clean resync cleared the flag");
+
+    // The next background pass includes the account again.
+    let provider = Shared::default().with_sync(Ok(delta(vec![])));
+    super::run_pass(&pool, &|_: &SyncAccountRow| provider.clone()).await;
+    assert_eq!(provider.calls.get(), 1, "account polled again after reconnect");
+}
+
 /// No pool (app not connected yet / mid workspace-switch) → the trigger is
 /// dropped without a pass; the loop stays alive for the next trigger.
 #[tokio::test]

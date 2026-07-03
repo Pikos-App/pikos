@@ -420,21 +420,27 @@ pub async fn sweep_absent(
 ) -> AppResult<usize> {
     let mut tx = pool.begin().await?;
 
-    let rows = sqlx::query_as::<_, (String, String, String)>(
-        "SELECT id, page_id, external_id FROM page_sync
-         WHERE account_id = ? AND calendar_id = ? AND sync_state = 'active'",
+    // One SELECT joins each active link's rule + head schedule, so the pre-window
+    // check is a pure comparison per row instead of 1–2 queries inside the tx.
+    let rows = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>, Option<String>)>(
+        "SELECT ps.id, ps.page_id, ps.external_id, r.rrule, p.scheduled_start, p.scheduled_end
+         FROM page_sync ps
+         JOIN pages p ON p.id = ps.page_id
+         LEFT JOIN page_recurrence_rules r ON r.page_id = ps.page_id
+         WHERE ps.account_id = ? AND ps.calendar_id = ? AND ps.sync_state = 'active'",
     )
     .bind(&ctx.account_id)
     .bind(&ctx.calendar_id)
     .fetch_all(&mut *tx)
     .await?;
 
+    let window_key = date_key(window_start);
     let mut removed = 0;
-    for (page_sync_id, page_id, external_id) in rows {
+    for (page_sync_id, page_id, external_id, rrule, start, end) in rows {
         if present_ids.contains(&external_id) {
             continue;
         }
-        if is_pre_window(&mut tx, &page_id, window_start).await? {
+        if is_pre_window(rrule.as_deref(), start.as_deref(), end.as_deref(), &window_key) {
             continue;
         }
         detach_or_delete(&mut tx, &page_sync_id, &page_id).await?;
@@ -445,44 +451,38 @@ pub async fn sweep_absent(
     Ok(removed)
 }
 
-/// Whether a page's occurrences all precede `window_start`, so the sweep spares
-/// it. Day-granularity compare — the window is a soft guard, not a correctness
-/// boundary. A recurring series is pre-window only if a cheaply-readable `UNTIL`
-/// bounds it before the window; no `UNTIL` (infinite or `COUNT`) is assumed
-/// in-window. A `COUNT`-bounded series that truly ended pre-window is the one
-/// accepted false negative: rare, worst case detaches an owned page (re-links on
-/// the next real change) or drops a stale past mirror.
-async fn is_pre_window(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    page_id: &str,
-    window_start: &str,
-) -> AppResult<bool> {
-    let window_key = date_key(window_start);
-
-    if let Some(rrule) =
-        sqlx::query_scalar::<_, String>("SELECT rrule FROM page_recurrence_rules WHERE page_id = ?")
-            .bind(page_id)
-            .fetch_optional(&mut **tx)
-            .await?
-    {
-        return Ok(match rrule_until(&rrule) {
-            Some(until) => date_key(&until) < window_key,
+/// Whether a page's occurrences all precede `window_start`, so the sweep spares it.
+/// Day-granularity, and deliberately biased toward keeping:
+///
+/// - **One day of slack** (`<=`, not `<`): storage is source-zone wall-clock while
+///   the server's time-range bound is a UTC instant, so an ahead-of-UTC event whose
+///   UTC instant falls just before the window (≤ ~14h) is server-excluded yet its
+///   local wall-clock date lands on the window day. Sparing that day keeps a live
+///   event from being swept; behind-UTC zones already fail safe.
+/// - **Recurring is bounded only by a readable `UNTIL`** (via [`extract_until`],
+///   FREQ-agnostic so an out-of-envelope rule still reads its bound). No `UNTIL`
+///   (infinite or `COUNT`) is assumed in-window. A `COUNT`-bounded series that truly
+///   ended pre-window is the one accepted false negative — expanding COUNT to catch
+///   it isn't worth the cost for a soft sweep guard. Rare, and worst case detaches an
+///   owned page (re-links on the next real change) or drops a stale past mirror.
+fn is_pre_window(
+    rrule: Option<&str>,
+    start: Option<&str>,
+    end: Option<&str>,
+    window_key: &str,
+) -> bool {
+    if let Some(rrule) = rrule {
+        return match pikos_recurrence::extract_until(rrule) {
+            Some(until) => until.format("%Y%m%d").to_string().as_str() <= window_key,
             None => false,
-        });
+        };
     }
-
-    let (start, end) = sqlx::query_as::<_, (Option<String>, Option<String>)>(
-        "SELECT scheduled_start, scheduled_end FROM pages WHERE id = ?",
-    )
-    .bind(page_id)
-    .fetch_one(&mut **tx)
-    .await?;
     // End (inclusive) is the latest instant when present, else the start; no stored
     // schedule can't be proven pre-window, so don't spare it.
-    Ok(match end.or(start) {
-        Some(instant) => date_key(&instant) < window_key,
+    match end.or(start) {
+        Some(instant) => date_key(instant).as_str() <= window_key,
         None => false,
-    })
+    }
 }
 
 /// First 8 digits of any date / date-time string → `YYYYMMDD`, so day-granularity
@@ -490,14 +490,6 @@ async fn is_pre_window(
 /// `20260624T090000`). Lexical order over the fixed-width result is date order.
 fn date_key(s: &str) -> String {
     s.chars().filter(char::is_ascii_digit).take(8).collect()
-}
-
-/// An RRULE's `UNTIL` value, if present.
-fn rrule_until(rrule: &str) -> Option<String> {
-    rrule.split(';').find_map(|part| {
-        let (key, value) = part.split_once('=')?;
-        key.eq_ignore_ascii_case("UNTIL").then(|| value.to_string())
-    })
 }
 
 /// Tear down a calendar's live sync (the user unsynced or disconnected it). Same

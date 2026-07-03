@@ -26,6 +26,7 @@ export {
   expandRecurrenceForRange,
   missedOccurrencesBetween,
   nextOccurrenceAfter,
+  optionsForFreq,
   parseRrule,
   rruleToLabel,
   rruleToShortLabel,

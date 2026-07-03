@@ -7,6 +7,7 @@ import {
   computeNextEnd,
   expandRecurrenceForRange,
   nextOccurrenceAfter,
+  optionsForFreq,
   parseRrule,
   rruleToLabel,
   rruleToShortLabel,
@@ -784,6 +785,49 @@ describe("buildRrule", () => {
       // differ (rrule.js doesn't preserve field order).
       expect(parseRrule(rebuilt)).toEqual(parsed);
     }
+  });
+});
+
+describe("optionsForFreq", () => {
+  it("drops BYMONTHDAY when an imported monthly rule switches to weekly", () => {
+    const imported = parseRrule("FREQ=MONTHLY;BYMONTHDAY=15")!;
+    const next = optionsForFreq(imported, "WEEKLY");
+    expect(next).toEqual({ freq: "WEEKLY", interval: 1 });
+  });
+
+  it("drops BY* terms a non-weekly freq can't carry", () => {
+    const imported = parseRrule("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1")!;
+    expect(optionsForFreq(imported, "DAILY")).toEqual({ freq: "DAILY", interval: 1 });
+    expect(optionsForFreq(imported, "WEEKLY").bysetpos).toBeUndefined();
+    expect(optionsForFreq(imported, "YEARLY")).toEqual({ freq: "YEARLY", interval: 1 });
+  });
+
+  it("keeps byweekday + wkst only for weekly", () => {
+    const imported = parseRrule("FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU")!;
+    const weekly = optionsForFreq(imported, "WEEKLY");
+    expect(weekly.byweekday).toEqual(imported.byweekday);
+    expect(weekly.wkst).toBe(imported.wkst);
+    const monthly = optionsForFreq(imported, "MONTHLY");
+    expect(monthly.byweekday).toBeUndefined();
+    expect(monthly.wkst).toBeUndefined();
+  });
+
+  it("keeps bymonthday when staying monthly", () => {
+    const imported = parseRrule("FREQ=MONTHLY;BYMONTHDAY=15")!;
+    expect(optionsForFreq(imported, "MONTHLY").bymonthday).toEqual([15]);
+  });
+
+  it("preserves the end condition across a freq change", () => {
+    expect(optionsForFreq({ count: 5, freq: "MONTHLY", interval: 2 }, "WEEKLY")).toEqual({
+      count: 5,
+      freq: "WEEKLY",
+      interval: 2,
+    });
+    expect(optionsForFreq({ freq: "MONTHLY", interval: 1, until: "2026-12-31" }, "DAILY")).toEqual({
+      freq: "DAILY",
+      interval: 1,
+      until: "2026-12-31",
+    });
   });
 });
 

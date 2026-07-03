@@ -119,14 +119,44 @@ pub async fn resync_account<P: CalendarProvider>(
     let calendars = load_enabled_calendar_rows(pool, account_id).await?;
 
     let mut results = Vec::with_capacity(calendars.len());
+    let mut any_reconnect = false;
+    let mut any_synced = false;
     for cal in &calendars {
         let Some(folder_id) = cal.folder_id.clone() else {
             continue;
         };
         let outcome = sync_calendar(pool, provider, &account, cal, &folder_id).await?;
+        match outcome {
+            SyncOutcome::ReconnectNeeded => any_reconnect = true,
+            SyncOutcome::Synced { .. } => any_synced = true,
+            SyncOutcome::Offline => {}
+        }
         results.push(CalendarSyncResult::new(&cal.calendar_id, outcome));
     }
+
+    // The flag is account-wide (credentials are), so any rejection sets it and any
+    // clean sync clears it. Write only on a transition to avoid churning updated_at.
+    let next = if any_reconnect {
+        true
+    } else if any_synced {
+        false
+    } else {
+        account.reconnect_needed
+    };
+    if next != account.reconnect_needed {
+        set_reconnect_needed(pool, account_id, next).await?;
+    }
     Ok(results)
+}
+
+async fn set_reconnect_needed(pool: &SqlitePool, account_id: &str, needed: bool) -> AppResult<()> {
+    sqlx::query("UPDATE sync_account SET reconnect_needed = ?, updated_at = ? WHERE id = ?")
+        .bind(needed)
+        .bind(pikos_db::now_iso())
+        .bind(account_id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 async fn load_account_row(pool: &SqlitePool, account_id: &str) -> AppResult<SyncAccountRow> {

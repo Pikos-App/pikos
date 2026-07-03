@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS sync_account (
   provider      TEXT NOT NULL,                 -- 'google' | 'caldav' | 'outlook' | etc; validated app-side
   display_name  TEXT NOT NULL,                 -- email (Google) / server·username (CalDAV)
   auth_kind     TEXT NOT NULL CHECK (auth_kind IN ('basic', 'oauth')),
+  -- Set when a poll's credentials are rejected (revoked/rotated app password); the
+  -- background scheduler stops polling the account until a manual resync clears it,
+  -- so a dead credential can't hammer a provider's failed-login throttle every pass.
+  reconnect_needed INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
 );

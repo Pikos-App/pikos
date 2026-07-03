@@ -554,3 +554,28 @@ export function buildRrule(options: RecurrenceOptions): string {
   const rrule = new RRule(rruleOpts);
   return rrule.toString().replace(/^RRULE:/, "");
 }
+
+/**
+ * Re-key options to a new frequency, keeping interval + the end condition and only
+ * the `BY*` terms that frequency can carry in the engine's envelope. The editor
+ * only authors freq/interval/byweekday, but `parseRrule` surfaces `bymonthday`/
+ * `bysetpos`/`wkst` from an imported (synced) rule — without this whitelist a freq
+ * change would leak them, e.g. `BYMONTHDAY=15` onto a WEEKLY rule, which rrule.js
+ * expands ~monthly under a "Weekly" label and the Rust engine rejects as
+ * Unsupported.
+ */
+export function optionsForFreq(
+  options: RecurrenceOptions,
+  freq: RecurrenceFreq
+): RecurrenceOptions {
+  const next: RecurrenceOptions = { freq, interval: options.interval };
+  if (options.count != null) next.count = options.count;
+  else if (options.until) next.until = options.until;
+  if (freq === "WEEKLY") {
+    if (options.byweekday) next.byweekday = options.byweekday;
+    if (options.wkst != null) next.wkst = options.wkst;
+  } else if (freq === "MONTHLY") {
+    if (options.bymonthday) next.bymonthday = options.bymonthday;
+  }
+  return next;
+}

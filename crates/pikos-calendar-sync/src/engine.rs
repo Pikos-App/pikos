@@ -105,12 +105,12 @@ async fn run<P: CalendarProvider>(
     let was_full = delta.next_token.is_none();
 
     let outcome = reconcile_batched(pool, &ctx, &delta).await?;
-    let resolved = resolve_missing_masters(
+    let resolved_masters = resolve_missing_masters(
         pool, provider, &ctx, calendar, &delta, &outcome.missing_masters,
     )
     .await?;
-    let swept = sweep_absent_events(pool, &ctx, &delta).await?;
-    let changed = outcome.applied + resolved + swept > 0;
+    let swept = sweep_absent_events(pool, &ctx, &delta, &resolved_masters).await?;
+    let changed = outcome.applied > 0 || !resolved_masters.is_empty() || swept > 0;
 
     let next = match delta.next_token {
         Some(token) => Some(token),
@@ -130,6 +130,7 @@ async fn sweep_absent_events(
     pool: &sqlx::SqlitePool,
     ctx: &ReconcileContext,
     delta: &SyncDelta,
+    resolved_masters: &[String],
 ) -> AppResult<usize> {
     let Some(window_start) = &delta.authoritative_from else {
         return Ok(0);
@@ -144,6 +145,10 @@ async fn sweep_absent_events(
         .collect();
     // Spare unresolved-but-present resources from the sweep (see `unresolved_present`).
     present.extend(delta.unresolved_present.iter().cloned());
+    // Spare masters fetched to resolve a lone occurrence this pass — they carry the
+    // series' external_id but never appear in `upserts`, so they'd otherwise be
+    // detached/deleted in the same pass that created them.
+    present.extend(resolved_masters.iter().cloned());
     retry_on_busy(|| {
         pikos_db::reconciler::sweep_absent(pool, ctx, &present, window_start)
     })
@@ -230,7 +235,8 @@ async fn reconcile_safe(
 /// A `404` means the master is truly gone: drop the occurrence delta (terminal,
 /// so the cursor may safely advance). Any other error is transient and propagates
 /// — the cursor is not advanced and the whole run retries next poll. Returns the
-/// resolving reconcile's applied-write count (for the `changed` signal).
+/// external ids of the masters it fetched and stored, so the authoritative sweep
+/// can spare them; a non-empty result also drives the `changed` signal.
 async fn resolve_missing_masters<P: CalendarProvider>(
     pool: &sqlx::SqlitePool,
     provider: &P,
@@ -238,15 +244,17 @@ async fn resolve_missing_masters<P: CalendarProvider>(
     calendar: &SyncCalendarRow,
     original: &SyncDelta,
     missing: &[MissingMaster],
-) -> AppResult<usize> {
+) -> AppResult<Vec<String>> {
     if missing.is_empty() {
-        return Ok(0);
+        return Ok(vec![]);
     }
 
     let mut resolved = SyncDelta::default();
+    let mut master_ids = Vec::new();
     for mm in missing {
         match provider.fetch_event(calendar, &mm.series_ref).await {
             Ok(master) => {
+                master_ids.push(master.core.external_id.clone());
                 resolved.upserts.push(UpsertItem::Event(master));
                 for item in &original.upserts {
                     if let UpsertItem::Occurrence(occ) = item {
@@ -263,11 +271,12 @@ async fn resolve_missing_masters<P: CalendarProvider>(
     }
 
     if resolved.upserts.is_empty() {
-        return Ok(0);
+        return Ok(vec![]);
     }
     // The masters we just fetched are present, so this pass resolves cleanly;
     // any lingering signal would mean a provider bug, not a retryable orphan.
-    Ok(reconcile_safe(pool, ctx, &resolved).await?.applied)
+    reconcile_safe(pool, ctx, &resolved).await?;
+    Ok(master_ids)
 }
 
 /// Advance the stored cursor and stamp the freshness clocks. The single writer of

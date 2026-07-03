@@ -16,6 +16,9 @@ pub struct SyncAccountRow {
     pub display_name: String,
     /// 'basic' (CalDAV app password) | 'oauth' (Google)
     pub auth_kind: String,
+    /// Credentials were rejected on a poll; the background scheduler skips this
+    /// account until a manual resync succeeds and clears it.
+    pub reconnect_needed: bool,
     pub created_at: String,
     pub updated_at: String,
 }

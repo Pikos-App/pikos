@@ -3282,6 +3282,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "keyring",
+ "log",
  "pikos-db",
  "quick-xml 0.37.5",
  "reqwest 0.12.28",
@@ -3298,11 +3299,22 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "chrono-tz",
+ "log",
+ "pikos-recurrence",
  "serde",
  "serde_json",
  "sqlx",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
+]
+
+[[package]]
+name = "pikos-recurrence"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

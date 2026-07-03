@@ -23,7 +23,7 @@ pub use engine::{
     Occurrence,
 };
 pub use label::rrule_to_short_label;
-pub use rule::{build_rrule, parse_rrule, Freq, RecurrenceOptions, RecurrenceError};
+pub use rule::{build_rrule, extract_until, parse_rrule, Freq, RecurrenceOptions, RecurrenceError};
 
 /// A naive wall-clock value: a date, optionally with a time. Time-less values are
 /// all-day (rendered `YYYY-MM-DD`); timed values render `YYYY-MM-DDTHH:MM:SS`.
