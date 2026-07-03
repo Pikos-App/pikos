@@ -183,16 +183,19 @@ async fn apply_event(
 }
 
 /// Find a re-linkable page by `ical_uid`, scoped to this calendar (never across
-/// calendars — that would ping-pong the identity every poll).
+/// calendars — that would ping-pong the identity every poll). Trashed pages are
+/// excluded: re-linking one under a changed href would rewrite an invisible
+/// (`deleted_at`) row and re-lock it on restore — same invariant the external_id
+/// match site enforces (never write a deleted page's link).
 async fn find_relink(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
     ical_uid: &str,
 ) -> AppResult<Option<(String, String)>> {
     Ok(sqlx::query_as::<_, (String, String)>(
-        "SELECT id, page_id FROM page_sync
-         WHERE account_id = ? AND calendar_id = ? AND ical_uid = ?
-           AND sync_state != 'tombstoned'",
+        "SELECT ps.id, ps.page_id FROM page_sync ps JOIN pages p ON p.id = ps.page_id
+         WHERE ps.account_id = ? AND ps.calendar_id = ? AND ps.ical_uid = ?
+           AND ps.sync_state != 'tombstoned' AND p.deleted_at IS NULL",
     )
     .bind(&ctx.account_id)
     .bind(&ctx.calendar_id)

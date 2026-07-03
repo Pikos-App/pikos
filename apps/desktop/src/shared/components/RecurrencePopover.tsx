@@ -133,6 +133,10 @@ export function RecurrencePopover({
   }
 
   function handleSelectFreq(freq: RecurrenceFreq) {
+    // Re-clicking the current freq must be a no-op: optionsForFreq's MONTHLY
+    // whitelist keeps only bymonthday, so a re-emit would silently strip a
+    // "3rd Friday" rule's BYDAY/BYSETPOS down to the base date's monthday.
+    if (freq === options?.freq) return;
     emit(options ? optionsForFreq(options, freq) : { freq, interval: 1 });
   }
 

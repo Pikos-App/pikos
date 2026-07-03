@@ -1752,6 +1752,53 @@ async fn re_enable_after_trashing_a_detached_page_mirrors_fresh_and_leaves_trash
     assert_eq!(page_count(&pool).await, 2, "trashed copy + fresh mirror");
 }
 
+/// R15: same as above, but the re-enumerated event returns under a *changed href*
+/// (same UID) — the exact case re-link exists for. The external_id guard at the
+/// match site can't fire (href differs), so without excluding trashed pages from
+/// `find_relink` the UID match would reactivate the invisible trashed row and
+/// re-lock it on restore. The fix mirrors fresh and leaves the trash severed.
+#[tokio::test]
+async fn re_enable_under_changed_href_mirrors_fresh_and_leaves_trash_severed() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    let trashed_id = synced_page(&pool, "/ev.ics", "uid-1").await;
+    simulate_user_body_edit(&pool, &trashed_id, "my notes").await; // owned → detaches, not deleted
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+    crate::soft_delete_page_impl(&pool, &trashed_id).await.unwrap();
+    assert!(is_trashed(&pool, &trashed_id).await);
+
+    // Re-enable: the same live event re-enumerates under a new href, same UID.
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(core("/ev-2.ics", "uid-1", "v1", "Event"), timed("2026-06-15T09:00:00", None, "UTC"))]),
+    )
+    .await
+    .unwrap();
+
+    // The live event mirrors to a fresh, visible page under the new href.
+    let fresh_id: String =
+        sqlx::query_scalar("SELECT page_id FROM page_sync WHERE external_id = '/ev-2.ics'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_ne!(fresh_id, trashed_id, "mirrored to a new page, not the trashed row");
+    assert_eq!(sync_state(&pool, &fresh_id).await, "active", "fresh mirror is live");
+    assert!(!is_trashed(&pool, &fresh_id).await, "fresh mirror renders");
+
+    // The trashed copy stays trashed, keeps the user's content, and is NOT
+    // reactivated. Its stale link (the old href) survives severed-in-place —
+    // harmless, since that external_id no longer collides with the live event.
+    assert!(is_trashed(&pool, &trashed_id).await, "original stays trashed");
+    assert_eq!(page_content_text(&pool, &trashed_id).await, "my notes", "user content preserved");
+    assert_eq!(sync_state(&pool, &trashed_id).await, "detached", "trashed copy not reactivated");
+
+    crate::restore_page_impl(&pool, &trashed_id).await.unwrap();
+    assert_eq!(sync_state(&pool, &trashed_id).await, "detached", "restored copy stays severed");
+    assert_eq!(page_count(&pool).await, 2, "trashed copy + fresh mirror");
+}
+
 // ─── occurrence deltas only touch an ACTIVE series ────────────────────────────
 
 #[tokio::test]
