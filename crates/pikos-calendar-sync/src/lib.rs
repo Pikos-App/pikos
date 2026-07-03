@@ -11,6 +11,10 @@ pub mod http;
 pub mod keychain;
 pub mod scheduler;
 
+#[cfg(test)]
+#[path = "test_support.rs"]
+mod test_support;
+
 pub use caldav::{CaldavCredentials, CaldavError, CaldavProvider};
 pub use commands::{connect_caldav, disconnect_account, resync_account, CalendarSyncResult};
 pub use engine::{sync_calendar, SyncOutcome};

@@ -19,9 +19,10 @@ use pikos_db::sync_delta::{
     CalendarProvider, EventCore, EventSchedule, EventUpsert, OccurrenceDelta, OccurrenceKind,
     Recurrence, Removal, SyncDelta, SyncToken, UpsertItem,
 };
-use pikos_db::{insert_test_folder, insert_test_page, now_iso, test_pool, PageUpdate, TestPage};
+use pikos_db::{insert_test_page, now_iso, test_pool, PageUpdate, TestPage};
 
 use super::{sync_calendar, SyncOutcome, FORCE_FULL_INTERVAL_HOURS};
+use crate::test_support::{delta, event, page_count, seed_calendar, CalSeed};
 
 const ACCOUNT: &str = "acc1";
 const CAL: &str = "cal1";
@@ -123,26 +124,6 @@ fn account() -> SyncAccountRow {
     }
 }
 
-fn event(external_id: &str, uid: &str, etag: &str, title: &str) -> UpsertItem {
-    UpsertItem::Event(EventUpsert {
-        core: EventCore {
-            external_id: external_id.into(),
-            ical_uid: uid.into(),
-            etag: Some(etag.into()),
-            title: title.into(),
-            description: None,
-            location: None,
-            attendees: vec![],
-        },
-        schedule: EventSchedule {
-            start: "2026-06-20T09:00:00".into(),
-            end: Some("2026-06-20T10:00:00".into()),
-            timezone: Some("America/New_York".into()),
-        },
-        recurrence: None,
-    })
-}
-
 /// A single non-recurring event at an explicit date, for the full-enumerate sweep
 /// (a pre-window event's occurrence precedes the query window).
 fn dated_event(external_id: &str, uid: &str, title: &str, start: &str, end: &str) -> UpsertItem {
@@ -204,10 +185,6 @@ fn orphan_occurrence(uid: &str, series_ref: &str) -> UpsertItem {
     })
 }
 
-fn delta(upserts: Vec<UpsertItem>, token: Option<&str>) -> SyncDelta {
-    SyncDelta { upserts, next_token: token.map(|t| SyncToken(t.into())), ..Default::default() }
-}
-
 /// A full authoritative enumerate: no cursor, and `authoritative_from` set so the
 /// engine sweeps stored pages absent from `upserts`.
 fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
@@ -216,34 +193,23 @@ fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
 
 // ─── DB setup + queries ─────────────────────────────────────────────────────────
 
+/// `link_folder: false` asserts the engine uses its `FOLDER` argument, not the
+/// stored calendar link the scheduler polls by.
 async fn seed(pool: &SqlitePool, sync_token: Option<&str>) {
-    insert_test_folder(pool, FOLDER, "Work").await.unwrap();
-    let now = now_iso();
-    sqlx::query(
-        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
-         VALUES (?, 'caldav', 'Fastmail', 'basic', ?, ?)",
+    seed_calendar(
+        pool,
+        CalSeed {
+            account_id: ACCOUNT,
+            cal_row_id: CAL,
+            calendar_id: CAL_ID,
+            display_name: "Work",
+            folder_id: FOLDER,
+            folder_name: "Work",
+            link_folder: false,
+            sync_token,
+        },
     )
-    .bind(ACCOUNT)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
-    .await
-    .unwrap();
-    sqlx::query(
-        "INSERT INTO sync_calendar
-         (id, account_id, calendar_id, display_name, color, enabled, sync_token, ctag,
-          last_full_sync_at, last_synced_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'Work', NULL, 1, ?, NULL, NULL, NULL, ?, ?)",
-    )
-    .bind(CAL)
-    .bind(ACCOUNT)
-    .bind(CAL_ID)
-    .bind(sync_token)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
-    .await
-    .unwrap();
+    .await;
 }
 
 async fn calendar(pool: &SqlitePool) -> SyncCalendarRow {
@@ -257,13 +223,6 @@ async fn calendar(pool: &SqlitePool) -> SyncCalendarRow {
 async fn run(pool: &SqlitePool, provider: &Scripted) -> SyncOutcome {
     let cal = calendar(pool).await;
     sync_calendar(pool, provider, &account(), &cal, FOLDER)
-        .await
-        .unwrap()
-}
-
-async fn page_count(pool: &SqlitePool) -> i64 {
-    sqlx::query_scalar("SELECT COUNT(*) FROM pages")
-        .fetch_one(pool)
         .await
         .unwrap()
 }

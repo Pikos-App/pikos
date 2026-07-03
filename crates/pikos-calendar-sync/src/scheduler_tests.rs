@@ -14,12 +14,12 @@ use sqlx::SqlitePool;
 use pikos_db::error::{AppError, AppResult};
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
 use pikos_db::sync_delta::{
-    CalendarProvider, EventCore, EventSchedule, EventUpsert, RemoteCalendar, SyncDelta, SyncToken,
-    UpsertItem,
+    CalendarProvider, EventUpsert, RemoteCalendar, SyncDelta, SyncToken, UpsertItem,
 };
-use pikos_db::{insert_test_folder, now_iso, test_pool};
+use pikos_db::test_pool;
 
 use super::{run_sync_loop, SchedulerConfig, SyncTrigger, TriggerSource};
+use crate::test_support::{self, page_count, seed_calendar, CalSeed};
 
 // ─── scripted trigger source ────────────────────────────────────────────────────
 
@@ -86,67 +86,33 @@ impl CalendarProvider for Shared {
 
 // ─── builders + seed ────────────────────────────────────────────────────────────
 
+/// Scheduler tests don't exercise reconciliation, so etag/title are fixed —
+/// the full-fidelity constructor lives in `test_support`.
 fn event(external_id: &str, uid: &str) -> UpsertItem {
-    UpsertItem::Event(EventUpsert {
-        core: EventCore {
-            external_id: external_id.into(),
-            ical_uid: uid.into(),
-            etag: Some("v1".into()),
-            title: "Lunch".into(),
-            description: None,
-            location: None,
-            attendees: vec![],
-        },
-        schedule: EventSchedule {
-            start: "2026-06-20T09:00:00".into(),
-            end: Some("2026-06-20T10:00:00".into()),
-            timezone: Some("America/New_York".into()),
-        },
-        recurrence: None,
-    })
+    test_support::event(external_id, uid, "v1", "Lunch")
 }
 
 fn delta(upserts: Vec<UpsertItem>) -> SyncDelta {
-    SyncDelta { upserts, next_token: Some(SyncToken("t1".into())), ..Default::default() }
+    test_support::delta(upserts, Some("t1"))
 }
 
 /// One account with one enabled, folder-linked calendar — the shape
 /// `resync_account` polls.
 async fn seed_account(pool: &SqlitePool, account_id: &str, folder_id: &str) {
-    insert_test_folder(pool, folder_id, "Cal").await.unwrap();
-    let now = now_iso();
-    sqlx::query(
-        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
-         VALUES (?, 'caldav', 'Test', 'basic', ?, ?)",
+    seed_calendar(
+        pool,
+        CalSeed {
+            account_id,
+            cal_row_id: &format!("{account_id}-cal"),
+            calendar_id: &format!("https://dav.example/{account_id}/"),
+            display_name: "Cal",
+            folder_id,
+            folder_name: "Cal",
+            link_folder: true,
+            sync_token: None,
+        },
     )
-    .bind(account_id)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
-    .await
-    .unwrap();
-    sqlx::query(
-        "INSERT INTO sync_calendar
-         (id, account_id, calendar_id, display_name, color, enabled, folder_id, sync_token,
-          ctag, last_full_sync_at, last_synced_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'Cal', NULL, 1, ?, NULL, NULL, NULL, NULL, ?, ?)",
-    )
-    .bind(format!("{account_id}-cal"))
-    .bind(account_id)
-    .bind(format!("https://dav.example/{account_id}/"))
-    .bind(folder_id)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
-async fn page_count(pool: &SqlitePool) -> i64 {
-    sqlx::query_scalar("SELECT COUNT(*) FROM pages")
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    .await;
 }
 
 /// Drive the loop with a scripted trigger list and one shared provider; return
