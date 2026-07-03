@@ -188,13 +188,8 @@ pub async fn occurrences_with_open_reminder_window(
     .fetch_all(pool)
     .await?;
 
-    let mut out = Vec::new();
+    let mut candidates = Vec::new();
     for s in series {
-        let leads = reminder_leads(pool, &s.page_id, default_minutes).await?;
-        if leads.is_empty() {
-            continue;
-        }
-
         // The wall-clock "now" the occurrence enumeration seeks near: source-zone
         // for synced, device-local for native. An unparseable synced zone is
         // skipped (matches `synced_fire_instant`'s None).
@@ -214,37 +209,37 @@ pub async fn occurrences_with_open_reminder_window(
             .format(WALL_FMT)
             .to_string();
 
-        let mut conn = pool.acquire().await?;
-        let excl = exclusion_union(&mut conn, &s.page_id, &s.rule_id, &s.rrule_exdates).await?;
-        drop(conn);
-        let occurrences = match pikos_recurrence::occurrences_in_window(
-            &s.rrule,
-            &s.base_start,
-            s.base_end.as_deref(),
-            &lo,
-            &hi,
-            &excl,
-        ) {
-            Ok(occ) => occ,
-            // One series' out-of-envelope rule (a provider shape the engine rejects)
-            // must not sink reminders for every other series — skip it, keep going.
+        // Enumerate first (pure, no DB). Exclusions only ever remove occurrences,
+        // so a series with none in-window here has none after exclusion — skip it
+        // before running its leads/exclusion queries. An out-of-envelope rule (a
+        // provider shape the engine rejects) is skipped, not fatal to the batch.
+        match enumerate_window(&s, &lo, &hi, &[]) {
+            Ok(occ) if occ.is_empty() => continue,
+            Ok(_) => {}
             Err(e) => {
                 warn_unsupported_series_once(&s.rule_id, &e);
                 continue;
             }
-        };
+        }
+
+        let leads = reminder_leads(pool, &s.page_id, default_minutes).await?;
+        if leads.is_empty() {
+            continue;
+        }
+
+        let mut conn = pool.acquire().await?;
+        let excl = exclusion_union(&mut conn, &s.page_id, &s.rule_id, &s.rrule_exdates).await?;
+        drop(conn);
+        // The rule already parsed in the prefilter, so this can't newly error.
+        let occurrences = enumerate_window(&s, &lo, &hi, &excl).unwrap_or_default();
 
         for occ in &occurrences {
             for lead in &leads {
                 if !fires_in_window(&s, &occ.scheduled_start, lead.minutes, now_local, now_utc) {
                     continue;
                 }
-                let schedule_id = lead.schedule_id(&s.page_id, &occ.scheduled_start);
-                if reminder_already_fired(pool, &schedule_id).await? {
-                    continue;
-                }
-                out.push(DueReminder {
-                    schedule_id,
+                candidates.push(DueReminder {
+                    schedule_id: lead.schedule_id(&s.page_id, &occ.scheduled_start),
                     page_id: s.page_id.clone(),
                     title: s.title.clone(),
                     scheduled_start: occ.scheduled_start.clone(),
@@ -253,7 +248,31 @@ pub async fn occurrences_with_open_reminder_window(
             }
         }
     }
-    Ok(out)
+
+    let fired = fired_schedule_ids(pool, &candidates).await?;
+    Ok(candidates
+        .into_iter()
+        .filter(|c| !fired.contains(&c.schedule_id))
+        .collect())
+}
+
+/// Recurring occurrences in `[lo, hi]` (wall-clock), minus `excl`. A thin wrapper
+/// over the pure engine so the reminder path can enumerate once to prefilter
+/// (empty `excl`) and again with the real exclusion set.
+fn enumerate_window(
+    s: &ReminderSeries,
+    lo: &str,
+    hi: &str,
+    excl: &[String],
+) -> Result<Vec<pikos_recurrence::Occurrence>, pikos_recurrence::RecurrenceError> {
+    pikos_recurrence::occurrences_in_window(
+        &s.rrule,
+        &s.base_start,
+        s.base_end.as_deref(),
+        lo,
+        hi,
+        excl,
+    )
 }
 
 /// Rule ids already warned about, so a persistently out-of-envelope series logs
@@ -342,14 +361,26 @@ fn fires_in_window(
     }
 }
 
-async fn reminder_already_fired(pool: &SqlitePool, schedule_id: &str) -> AppResult<bool> {
-    Ok(sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM notification_log
-                       WHERE schedule_id = ? AND type = 'reminder')",
-    )
-    .bind(schedule_id)
-    .fetch_one(pool)
-    .await?)
+/// The `schedule_id`s among `candidates` already logged as fired reminders —
+/// one batched `IN(...)` lookup, so dedup costs a single query per tick rather
+/// than one per candidate occurrence×lead.
+async fn fired_schedule_ids(
+    pool: &SqlitePool,
+    candidates: &[DueReminder],
+) -> AppResult<HashSet<String>> {
+    if candidates.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+        "SELECT schedule_id FROM notification_log WHERE type = 'reminder' AND schedule_id IN (",
+    );
+    let mut separated = builder.separated(", ");
+    for c in candidates {
+        separated.push_bind(&c.schedule_id);
+    }
+    separated.push_unseparated(")");
+    let rows: Vec<String> = builder.build_query_scalar().fetch_all(pool).await?;
+    Ok(rows.into_iter().collect())
 }
 
 #[cfg(test)]
