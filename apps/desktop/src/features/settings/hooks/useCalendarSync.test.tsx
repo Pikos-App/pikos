@@ -1,6 +1,7 @@
 import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { usePages } from "@/shared/context/PagesContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
 import { useCalendarSync } from "./useCalendarSync";
@@ -77,6 +78,30 @@ describe("useCalendarSync", () => {
     const updated = hook.result.current.accounts[0]!.calendars.find((c) => c.id === cal.id)!;
     expect(updated.color).toBe("#E5534B");
     expect(updated.enabled).toBe(false);
+  });
+
+  it("recolorCalendar patches the enabled calendar's folder colour in place", async () => {
+    const hook = renderHookWithProviders(() => ({
+      pages: usePages(),
+      sync: useCalendarSync(),
+    }));
+    await waitFor(() => expect(hook.result.current.sync.loading).toBe(false));
+    await act(async () => {
+      await hook.result.current.sync.connect(CONN);
+    });
+    const cal = hook.result.current.sync.accounts[0]!.calendars[0]!;
+    await act(async () => {
+      await hook.result.current.sync.toggleCalendar(cal.id, true, "#A8CDB4");
+    });
+    const folderId = hook.result.current.sync.accounts[0]!.calendars.find(
+      (c) => c.id === cal.id
+    )!.folderId!;
+
+    await act(async () => {
+      await hook.result.current.sync.recolorCalendar(cal.id, true, "#E5534B");
+    });
+
+    expect(hook.result.current.pages.folders.find((f) => f.id === folderId)?.color).toBe("#E5534B");
   });
 
   it("resync records per-calendar results and clears the busy flag", async () => {

@@ -1,6 +1,7 @@
 import type { AccountWithCalendars, CalendarSyncResult, NewCaldavConnection } from "@pikos/core";
 import { useEffect, useState } from "react";
 
+import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 // Last resync outcome keyed by sync_calendar ROW id (not the provider
@@ -29,6 +30,7 @@ export interface CalendarSyncState {
 
 export function useCalendarSync(): CalendarSyncState {
   const { reload, storage } = useWorkspace();
+  const { patchFolderColor } = usePages();
   const [accounts, setAccounts] = useState<AccountWithCalendars[]>([]);
   const [results, setResults] = useState<ResultMap>({});
   const [loading, setLoading] = useState(true);
@@ -82,11 +84,15 @@ export function useCalendarSync(): CalendarSyncState {
     await reload();
   }
 
+  // An enabled calendar's folder already exists; a disabled one has none to repaint.
   async function recolorCalendar(calendarRowId: string, enabled: boolean, color: string) {
     if (!storage) return;
+    const folderId = accounts
+      .flatMap((a) => a.calendars)
+      .find((c) => c.id === calendarRowId)?.folderId;
     await storage.toggleSyncCalendar(calendarRowId, enabled, color);
     await refresh();
-    await reload();
+    if (folderId) patchFolderColor(folderId, color);
   }
 
   async function resync(accountId: string) {

@@ -78,6 +78,10 @@ export interface PagesContextValue {
   restorePage: (id: string) => Promise<void>;
   createFolder: (opts: { name: string; color?: string }) => Promise<Folder>;
   updateFolder: (id: string, updates: FolderUpdate) => Promise<void>;
+  /** In-place folder colour patch, no DB write — the colour is already persisted
+   *  (external-calendar recolor writes via the sync adapter). Avoids a full
+   *  workspace reload just to repaint one sidebar swatch. */
+  patchFolderColor: (folderId: string, color: string) => void;
   deleteFolder: (id: string) => Promise<void>;
   /** Soft-delete folder + all its pages. Recoverable via restoreFolder. */
   softDeleteFolder: (id: string) => Promise<void>;
@@ -125,7 +129,7 @@ export interface PagesContextValue {
   skipOccurrence: (ruleId: string, date: string) => Promise<() => void>;
   /**
    * Routes a status toggle that belongs to a synced recurring series to
-   * occurrence-based completion (S22), bypassing the native head-advance path.
+   * occurrence-based completion, bypassing the native head-advance path.
    * Returns true when handled — the caller must not fall through.
    */
   maybeToggleSyncedOccurrence: (page: PageSummary, nextStatus: PageStatus) => boolean;
@@ -429,6 +433,10 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
     const updated = await adapter.updateFolder(id, updates);
     setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
+  }
+
+  function patchFolderColor(folderId: string, color: string) {
+    setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, color } : f)));
   }
 
   async function deleteFolder(id: string) {
@@ -786,7 +794,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     };
   }
 
-  // ─── Synced recurring occurrence completion (S22) ──────────────────────────
+  // ─── Synced recurring occurrence completion ────────────────────────────────
   // Synced recurring series can't use the native head-advance path (the
   // reconciler pins the head + owns the locked rule). Completion is user-owned
   // per-occurrence state: a done clone + a `date → clone` map on the series.
@@ -1029,6 +1037,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     mergePages,
     pageErrors,
     pages,
+    patchFolderColor,
     recurrenceRules,
     reorderFolders,
     reorderPages,
