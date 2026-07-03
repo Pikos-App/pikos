@@ -13,6 +13,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { folderMoveTargets } from "@/features/pages/utils/folderMoveTargets";
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
@@ -380,7 +381,7 @@ export function PageListItem({
             >
               Inbox
             </ContextMenuItem>
-            {folders.map((folder) => (
+            {folderMoveTargets(folders).map((folder) => (
               <ContextMenuItem
                 className={cn(page.folderId === folder.id && "font-medium")}
                 key={folder.id}

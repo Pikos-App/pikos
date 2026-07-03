@@ -646,3 +646,27 @@ async fn active_synced_recurring_page_is_excluded_from_head_reminders() {
         "active synced recurring excluded from default head reminders"
     );
 }
+
+// ─── synced_fire_instant DST edges (doc-comment contract, previously untested) ──
+
+#[test]
+fn synced_fire_instant_spring_forward_gap_never_fires() {
+    // 2026-03-08 02:30 America/New_York doesn't exist (02:00 EST jumps to 03:00
+    // EDT). `earliest()` is None in the gap → the reminder silently never fires.
+    assert_eq!(
+        synced_fire_instant("2026-03-08T02:30:00", "America/New_York", 0),
+        None
+    );
+}
+
+#[test]
+fn synced_fire_instant_fall_back_ambiguous_picks_the_earlier_offset() {
+    // 2026-11-01 01:30 America/New_York happens twice (02:00 EDT falls back to
+    // 01:00 EST). `earliest()` fires once at the first (EDT, UTC-4) instant —
+    // 05:30Z, not the later 06:30Z EST one, and never both.
+    let fire = synced_fire_instant("2026-11-01T01:30:00", "America/New_York", 0);
+    assert_eq!(
+        fire,
+        Some("2026-11-01T05:30:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap())
+    );
+}

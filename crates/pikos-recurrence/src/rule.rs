@@ -266,6 +266,12 @@ impl ParsedRule {
     fn validate_envelope(&self) -> Result<(), RecurrenceError> {
         let unsupported =
             |what: &str| Err(RecurrenceError::Unsupported(format!("{what} for FREQ={}", self.freq.as_str())));
+        // RFC 5545 forbids COUNT and UNTIL together. The enumerator applies both
+        // (COUNT first, then UNTIL), so a malformed feed carrying both would enumerate
+        // to whichever bound is tighter with no signal — reject it loudly instead.
+        if self.count.is_some() && self.until.is_some() {
+            return Err(RecurrenceError::Unsupported("COUNT combined with UNTIL".into()));
+        }
         match self.freq {
             Freq::Daily | Freq::Yearly => {
                 if !self.byday.is_empty() {

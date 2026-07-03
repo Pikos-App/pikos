@@ -161,6 +161,46 @@ END:VEVENT\r\n";
     assert_eq!(ov.original_date, "2026-06-08T09:00:00");
 }
 
+// ─── cross-zone degradation (pins the current silent fallbacks) ─────────────────
+
+/// A non-IANA `TZID` with no `VTIMEZONE` to resolve it is genuinely unresolvable,
+/// so `source_zone` yields nothing and the event degrades to a zoneless, literal
+/// wall-clock. Acceptable fallback, but silent — a cross-zone viewer sees the time
+/// unshifted with no badge.
+#[test]
+fn unresolvable_tzid_without_vtimezone_degrades_to_zoneless() {
+    let body = "BEGIN:VEVENT\r\n\
+UID:bad-tz\r\n\
+DTSTART;TZID=Middle-earth/Shire:20260615T090000\r\n\
+DTEND;TZID=Middle-earth/Shire:20260615T100000\r\n\
+SUMMARY:Unresolvable zone\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/bad.ics", Some("v1"), &ics(body)).unwrap();
+    assert_eq!(ev.schedule.start, "2026-06-15T09:00:00", "literal wall-clock, unshifted");
+    assert_eq!(ev.schedule.timezone, None, "the zone is silently dropped");
+}
+
+/// An `EXDATE` in a foreign zone whose local time is nonexistent there (a
+/// spring-forward gap) can't resolve to an instant — `convert_to_zone` returns
+/// None and `instant_wall_clock` falls back to the literal, UNCONVERTED value.
+/// Pinned: the stored EXDATE stays in the foreign basis, so it silently won't
+/// string-match the source-zone expansion.
+#[test]
+fn exdate_in_a_foreign_dst_gap_falls_back_to_the_unconverted_literal() {
+    let body = "BEGIN:VEVENT\r\n\
+UID:s\r\n\
+DTSTART;TZID=America/Los_Angeles:20260601T090000\r\n\
+DTEND;TZID=America/Los_Angeles:20260601T093000\r\n\
+RRULE:FREQ=WEEKLY;BYDAY=MO\r\n\
+EXDATE;TZID=America/New_York:20260308T023000\r\n\
+SUMMARY:Standup\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/s.ics", Some("v1"), &ics(body)).unwrap();
+    // 02:30 America/New_York on 2026-03-08 doesn't exist (02:00 EST → 03:00 EDT);
+    // the conversion bails and the raw NY wall-clock is stored as-is, unconverted.
+    assert_eq!(ev.recurrence.unwrap().exdates, vec!["2026-03-08T02:30:00"]);
+}
+
 // ─── malformed / non-VEVENT ─────────────────────────────────────────────────────
 
 #[test]

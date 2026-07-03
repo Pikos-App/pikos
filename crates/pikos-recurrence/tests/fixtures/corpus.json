@@ -145,6 +145,17 @@
       ]
     },
     {
+      "end": "2026-01-01T09:30:00", "name": "monthly BYMONTHDAY + BYSETPOS", "rangeEnd": "2026-04-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=MONTHLY;BYMONTHDAY=1,15,-1;BYSETPOS=1,-1", "start": "2026-01-01T09:00:00", "exdates": [],
+      "expected": [
+        { "originalDate": "2026-01-01", "scheduledEnd": "2026-01-01T09:30:00", "scheduledStart": "2026-01-01T09:00:00" },
+        { "originalDate": "2026-01-31", "scheduledEnd": "2026-01-31T09:30:00", "scheduledStart": "2026-01-31T09:00:00" },
+        { "originalDate": "2026-02-01", "scheduledEnd": "2026-02-01T09:30:00", "scheduledStart": "2026-02-01T09:00:00" },
+        { "originalDate": "2026-02-28", "scheduledEnd": "2026-02-28T09:30:00", "scheduledStart": "2026-02-28T09:00:00" },
+        { "originalDate": "2026-03-01", "scheduledEnd": "2026-03-01T09:30:00", "scheduledStart": "2026-03-01T09:00:00" },
+        { "originalDate": "2026-03-31", "scheduledEnd": "2026-03-31T09:30:00", "scheduledStart": "2026-03-31T09:00:00" }
+      ]
+    },
+    {
       "end": "2026-02-14T10:00:00", "name": "yearly", "rangeEnd": "2030-01-01T00:00:00", "rangeStart": "2026-01-01T00:00:00", "rrule": "FREQ=YEARLY", "start": "2026-02-14T09:00:00", "exdates": [],
       "expected": [
         { "originalDate": "2026-02-14", "scheduledEnd": "2026-02-14T10:00:00", "scheduledStart": "2026-02-14T09:00:00" },

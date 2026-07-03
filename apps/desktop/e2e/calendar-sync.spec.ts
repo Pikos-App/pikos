@@ -173,6 +173,35 @@ appTest("synced events render source + detached treatment, schedule read-only @t
   await expect(title).toHaveAttribute("readonly", "");
 });
 
+// ─── tier2: a synced block can't be dragged ──────────────────────────────────
+
+// The only DOM-level proof that a calendar-owned block is immovable; every other
+// check of this invariant is at the isolated-hook level (useTimedDrag/useTimedResize).
+appTest("a synced block can't be dragged @tier2", async ({ app }) => {
+  await seedSynced(app);
+  await openCalendarMode(app);
+
+  const block = app.getByRole("button", { name: /Design review \(LA team\),/ });
+  await expect(block).toBeVisible();
+  const before = await block.boundingBox();
+  if (!before) throw new Error("synced block missing");
+  // The accessible name is "<title>, <time>", so a schedule change would change it.
+  const label = await block.getAttribute("aria-label");
+
+  const cx = before.x + before.width / 2;
+  const cy = before.y + before.height / 2;
+  await app.mouse.move(cx, cy);
+  await app.mouse.down();
+  // Past dnd-kit's 8px activation threshold, then a full ~2h down the column.
+  await app.mouse.move(cx, cy + 16, { steps: 4 });
+  await app.mouse.move(cx, cy + 160, { steps: 10 });
+  await app.mouse.up();
+
+  const after = await block.boundingBox();
+  expect(Math.abs((after?.y ?? -1) - before.y)).toBeLessThan(5);
+  expect(await block.getAttribute("aria-label")).toBe(label);
+});
+
 // ─── tier2: FTS search finds a synced page ───────────────────────────────────
 
 appTest("search finds a synced page @tier2", async ({ app }) => {

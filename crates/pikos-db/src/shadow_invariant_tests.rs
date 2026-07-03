@@ -130,6 +130,12 @@ const CORPUS: &[(&str, &str, Option<&str>)] = &[
     ("FREQ=YEARLY", "2026-02-14T09:00:00", None),
     ("FREQ=DAILY;UNTIL=20260525T235959Z", "2026-05-21T09:00:00", None),
     ("FREQ=WEEKLY;BYDAY=MO", "2026-05-18", None), // all-day
+    // The real recorded standup event from the CalDAV sync fixtures (tests/
+    // fixtures/caldav/sync) — BYDAY combined with a UNTIL=…Z bound, an intersection
+    // the hand-written entries above split apart. The fixtures' other RRULEs are
+    // VTIMEZONE-transition rules (FREQ=YEARLY;BYMONTH=…), which BYMONTH puts outside
+    // the native engine's envelope, so they're not valid native-series shapes.
+    ("FREQ=WEEKLY;BYDAY=MO;UNTIL=20260831T130000Z", "2026-06-01T09:00:00", Some("2026-06-01T09:30:00")),
 ];
 
 #[tokio::test]

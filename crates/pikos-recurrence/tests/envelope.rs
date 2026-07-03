@@ -46,6 +46,13 @@ fn rejects_by_parts_misapplied_to_freq() {
 }
 
 #[test]
+fn rejects_count_and_until_together() {
+    assert_unsupported("FREQ=DAILY;COUNT=5;UNTIL=20260101T000000Z");
+    assert_ok("FREQ=DAILY;COUNT=5");
+    assert_ok("FREQ=DAILY;UNTIL=20260101T000000Z");
+}
+
+#[test]
 fn accepts_in_envelope() {
     assert_ok("FREQ=DAILY");
     assert_ok("FREQ=WEEKLY;BYDAY=MO,WE,FR;WKST=SU");

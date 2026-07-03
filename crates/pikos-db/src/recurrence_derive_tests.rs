@@ -273,6 +273,34 @@ async fn synced_series_fires_at_the_absolute_instant_seeking_from_a_far_base() {
 }
 
 #[tokio::test]
+async fn synced_reminder_lead_straddling_a_spring_forward_still_fires_once() {
+    // Pins the DST-widen prefilter pad (recurrence_derive: `hi + 1h`). Occurrence
+    // is 03:30 America/New_York on 2026-03-08 (03:30 EDT, UTC-4 = 07:30Z); a 60-min
+    // lead fires at 06:30Z, which in NY is 01:30 EST — BEFORE the 07:00Z jump. So
+    // `zone_now` (01:30) plus max_lead (60) lands the wall-clock window at 02:30,
+    // an hour short of the 03:30 occurrence: without the +1h pad the occurrence is
+    // never enumerated and the reminder silently drops. The exact absolute check
+    // then keeps it to a single fire.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T03:30:00", None).await;
+    insert_test_page_sync(&pool, "head", "active").await.unwrap();
+    sqlx::query("UPDATE page_recurrence_rules SET timezone = 'America/New_York' WHERE page_id = 'head'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    add_reminder(&pool, "head", 60).await;
+
+    let now_utc = utc("2026-03-08T06:30:00Z");
+    let due = occurrences_with_open_reminder_window(&pool, local("2026-03-08T01:30:00"), now_utc, 15, 60)
+        .await
+        .unwrap();
+
+    assert_eq!(due.len(), 1, "the boundary occurrence must fire exactly once");
+    assert_eq!(due[0].scheduled_start, "2026-03-08T03:30:00");
+    assert_eq!(due[0].minutes_before, 60);
+}
+
+#[tokio::test]
 async fn reminders_ignore_a_corrupted_display_cache() {
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;

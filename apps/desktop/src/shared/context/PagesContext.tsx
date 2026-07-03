@@ -221,6 +221,10 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   // re-entrant call would mint a duplicate. Checked + added synchronously
   // before the first await; cleared on settle so a later genuine call runs.
   const completingRecurringRef = useRef<Set<string>>(new Set());
+  // Same guard for synced occurrences: the toggle path fires completeSyncedOccurrence
+  // fire-and-forget with no disabled state, so a double-click would append the
+  // (idempotent) clone twice into `pages`.
+  const completingSyncedRef = useRef<Set<string>>(new Set());
   const reschedulingVirtualRef = useRef<Set<string>>(new Set());
   const [pageErrors, setPageErrors] = useState<Map<string, StorageError>>(new Map());
 
@@ -800,7 +804,15 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   // per-occurrence state: a done clone + a `date → clone` map on the series.
 
   async function completeSyncedOccurrence(input: CompleteSyncedOccurrenceInput): Promise<void> {
-    const clone = await adapter.completeSyncedOccurrence(input);
+    const key = `${input.pageId}:${input.occurrenceDate}`;
+    if (completingSyncedRef.current.has(key)) return;
+    completingSyncedRef.current.add(key);
+    let clone: PageSummary;
+    try {
+      clone = await adapter.completeSyncedOccurrence(input);
+    } finally {
+      completingSyncedRef.current.delete(key);
+    }
     setPages((prev) => {
       const withMap = prev.map((p) =>
         p.id === input.pageId

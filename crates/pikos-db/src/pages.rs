@@ -1301,6 +1301,32 @@ async fn complete_synced_occurrence_once(
         ));
     }
 
+    // Idempotency guard: a double-click or a post-`SQLITE_BUSY_SNAPSHOT` retry must
+    // not mint a second clone. `INSERT OR REPLACE` below would overwrite the
+    // completed_set clone_id and orphan the first clone's page — a permanent
+    // duplicate "done" ghost in search/exports. If a live clone already exists for
+    // this occurrence, return it unchanged; if it was trashed out of band, fall
+    // through and let the OR REPLACE re-point the set row.
+    let existing_clone: Option<String> = sqlx::query_scalar(
+        "SELECT clone_id FROM completed_set WHERE page_id = ? AND occurrence_date = ?",
+    )
+    .bind(&data.page_id)
+    .bind(&data.occurrence_date)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(existing_clone) = existing_clone {
+        let existing = sqlx::query_as::<_, PageSummaryRow>(&format!(
+            // sql-ok: SUMMARY_COLUMNS is a compile-time constant
+            "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
+        ))
+        .bind(&existing_clone)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some(existing) = existing {
+            return Ok(PageSummary::from(existing));
+        }
+    }
+
     insert_head_clone_tx(
         &mut tx,
         &head,

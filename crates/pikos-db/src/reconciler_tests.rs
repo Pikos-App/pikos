@@ -1307,6 +1307,25 @@ async fn removal_of_completed_occurrence_series_detaches() {
 }
 
 #[tokio::test]
+async fn removal_of_skipped_occurrence_series_detaches() {
+    // Skip-set entry alone makes the series owned → detach, not the hard delete that
+    // would cascade the skip_set away and resurrect dismissed occurrences on resync.
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly_series()])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES (?, '2026-06-22')")
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    reconcile(&pool, &ctx(), &removal("/series.ics")).await.unwrap();
+
+    assert!(page_exists(&pool, &page_id).await, "skipped occurrence = owned, kept");
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+}
+
+#[tokio::test]
 async fn removal_of_user_modified_page_detaches() {
     let pool = setup().await;
     let page_id = synced_page(&pool, "/ev.ics", "uid-1").await;
@@ -1518,6 +1537,55 @@ async fn teardown_clears_tombstones_but_keeps_trashed_page() {
     assert!(ical_uid_of(&pool, &dead).await.is_none(), "tombstone link cleared for a fresh resync");
     assert!(page_exists(&pool, &dead).await, "the page itself stays in trash");
     assert!(deleted_at_of(&pool, &dead).await.is_some());
+}
+
+#[tokio::test]
+async fn resync_after_teardown_makes_a_fresh_page_and_leaves_the_trashed_one_untouched() {
+    // Teardown clears a trashed page's tombstone by design, so a later resync of the
+    // same UID has nothing suppressing it — the reconciler mints a NEW page. The safe
+    // outcome: the trashed original keeps its content and stays in trash, and the
+    // resynced copy is a distinct live page (an accepted duplicate, not a resurrection
+    // that clobbers the user's trashed notes).
+    let pool = setup().await;
+    let owned = synced_page(&pool, "/owned.ics", "uid-owned").await;
+    mark_completed(&pool, &owned).await; // keeps the folder alive through teardown
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single_full("/dead.ics", "uid-dead", "v1", "Team sync", Some("Original agenda"), None, &[])]),
+    )
+    .await
+    .unwrap();
+    let dead = sqlx::query_scalar::<_, String>("SELECT page_id FROM page_sync WHERE ical_uid = 'uid-dead'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    tombstone(&pool, &dead).await;
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1").await.unwrap();
+    flag_external(&pool, "f1").await; // re-enable re-flags the folder external
+
+    // Resync: the same UID returns from the provider with a changed description.
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single_full("/dead.ics", "uid-dead", "v2", "Team sync", Some("Fresh agenda"), None, &[])]),
+    )
+    .await
+    .unwrap();
+
+    assert!(deleted_at_of(&pool, &dead).await.is_some(), "original stays in trash");
+    assert_eq!(page_content_text(&pool, &dead).await, "Original agenda", "trashed content untouched");
+
+    let fresh = sqlx::query_scalar::<_, String>(
+        "SELECT page_id FROM page_sync WHERE ical_uid = 'uid-dead' AND sync_state = 'active'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_ne!(fresh, dead, "a new page, not the trashed one resurrected");
+    assert!(deleted_at_of(&pool, &fresh).await.is_none(), "the resynced copy is live");
 }
 
 #[tokio::test]

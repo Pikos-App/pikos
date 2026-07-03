@@ -1844,6 +1844,39 @@ async fn complete_synced_occurrence_inserts_clone_and_records_map() {
 }
 
 #[tokio::test]
+async fn complete_synced_occurrence_twice_is_idempotent() {
+    // Second call for the same page/date returns the same clone — no orphaned ghost.
+    let pool = test_pool().await;
+    synced_recurring_series(&pool).await;
+
+    let input = || CompleteSyncedOccurrenceInput {
+        page_id: "head".into(),
+        occurrence_date: "2026-06-08".into(),
+        scheduled_start: "2026-06-08T09:00:00".into(),
+        scheduled_end: Some("2026-06-08T09:30:00".into()),
+    };
+
+    let first = complete_synced_occurrence_impl(&pool, input()).await.unwrap();
+    let second = complete_synced_occurrence_impl(&pool, input()).await.unwrap();
+
+    assert_eq!(second.id, first.id, "second completion returns the same clone");
+
+    let clone_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE status = 'done' AND deleted_at IS NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(clone_count, 1, "exactly one done clone — no orphan");
+
+    let set_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM completed_set WHERE page_id = 'head'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(set_count, 1);
+}
+
+#[tokio::test]
 async fn uncomplete_synced_occurrence_deletes_clone_and_drops_date() {
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;

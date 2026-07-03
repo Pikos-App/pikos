@@ -226,3 +226,57 @@ fn parse_status_code(s: &str) -> Option<u16> {
 fn is_ok(code: u16) -> bool {
     (200..300).contains(&code)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A multiget/sync `<response>` can split its props across propstat blocks at
+    // different statuses (RFC 4918 §9.1). The recorded fixtures never exercise this
+    // on the sync path, so pin it here: props are kept ONLY from a 2xx block.
+    #[test]
+    fn mixed_propstat_keeps_only_the_2xx_block() {
+        let xml = r#"<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <response>
+    <href>/cal/only-etag.ics</href>
+    <propstat>
+      <prop><getetag>"etag-1"</getetag></prop>
+      <status>HTTP/1.1 200 OK</status>
+    </propstat>
+    <propstat>
+      <prop><C:calendar-data/></prop>
+      <status>HTTP/1.1 404 Not Found</status>
+    </propstat>
+  </response>
+  <response>
+    <href>/cal/full.ics</href>
+    <propstat>
+      <prop>
+        <getetag>"etag-2"</getetag>
+        <C:calendar-data>BEGIN:VCALENDAR
+END:VCALENDAR</C:calendar-data>
+      </prop>
+      <status>HTTP/1.1 200 OK</status>
+    </propstat>
+    <propstat>
+      <prop><displayname/></prop>
+      <status>HTTP/1.1 404 Not Found</status>
+    </propstat>
+  </response>
+</multistatus>"#;
+
+        let result = parse_report(xml).unwrap();
+        let by_href = |h: &str| result.entries.iter().find(|e| e.href == h).unwrap();
+
+        // getetag under 200, calendar-data offered under 404 → body dropped, not the
+        // empty 404 value silently adopted as the resource's ICS.
+        let only_etag = by_href("/cal/only-etag.ics");
+        assert_eq!(only_etag.etag.as_deref(), Some("\"etag-1\""));
+        assert_eq!(only_etag.calendar_data, None);
+
+        // A sibling 404 propstat must not discard the 2xx block's props.
+        let full = by_href("/cal/full.ics");
+        assert_eq!(full.etag.as_deref(), Some("\"etag-2\""));
+        assert_eq!(full.calendar_data.as_deref(), Some("BEGIN:VCALENDAR\nEND:VCALENDAR"));
+    }
+}

@@ -401,6 +401,23 @@ describe("maybeToggleSyncedOccurrence", () => {
     });
   });
 
+  it("drops a re-entrant completion of the same occurrence — one clone, no duplicate", async () => {
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+
+    await act(async () => {
+      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      await Promise.resolve();
+    });
+
+    expect(completeSpy).toHaveBeenCalledTimes(1);
+    const pages = hook.result.current.pages.pages;
+    expect(new Set(pages.map((p) => p.id)).size).toBe(pages.length);
+    const doneClones = pages.filter((p) => p.title === "Synced standup" && p.status === "done");
+    expect(doneClones).toHaveLength(1);
+  });
+
   it("returns false for a malformed synced row with no scheduledStart so the native path surfaces the error", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");

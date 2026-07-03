@@ -941,6 +941,12 @@ async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
         .unwrap_err();
     assert!(matches!(skip, AppError::Conflict(_)), "skip occurrence locked");
 
+    // Undo-skip (remove exdate) → rejected, symmetric with the add-exdate guard.
+    let unskip = remove_rule_exdate_impl(&pool, rule.id.clone(), "2026-07-13".into())
+        .await
+        .unwrap_err();
+    assert!(matches!(unskip, AppError::Conflict(_)), "undo-skip locked");
+
     // Delete recurrence → rejected.
     let del = delete_recurrence_rule_impl(&pool, &rule.id).await.unwrap_err();
     assert!(matches!(del, AppError::Conflict(_)), "delete recurrence locked");

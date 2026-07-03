@@ -191,6 +191,16 @@ const EXPAND_CASES: ExpandCase[] = [
     start: "2026-01-30T09:00:00",
   },
   {
+    // BYSETPOS over a BYMONTHDAY set — supported but never paired above; picks the
+    // first & last of {1st, 15th, last-day} each month.
+    end: "2026-01-01T09:30:00",
+    name: "monthly BYMONTHDAY + BYSETPOS",
+    rangeEnd: "2026-04-01T00:00:00",
+    rangeStart: "2026-01-01T00:00:00",
+    rrule: "FREQ=MONTHLY;BYMONTHDAY=1,15,-1;BYSETPOS=1,-1",
+    start: "2026-01-01T09:00:00",
+  },
+  {
     end: "2026-02-14T10:00:00",
     name: "yearly",
     rangeEnd: "2030-01-01T00:00:00",
