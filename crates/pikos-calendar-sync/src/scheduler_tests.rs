@@ -107,13 +107,7 @@ fn event(external_id: &str, uid: &str) -> UpsertItem {
 }
 
 fn delta(upserts: Vec<UpsertItem>) -> SyncDelta {
-    SyncDelta {
-        upserts,
-        removals: vec![],
-        next_token: Some(SyncToken("t1".into())),
-        authoritative_from: None,
-        unresolved_present: vec![],
-    }
+    SyncDelta { upserts, next_token: Some(SyncToken("t1".into())), ..Default::default() }
 }
 
 /// One account with one enabled, folder-linked calendar — the shape

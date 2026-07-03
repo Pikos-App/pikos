@@ -56,8 +56,7 @@ pub(crate) async fn sync_calendar<T: DavTransport>(
         upserts,
         removals,
         next_token: report.sync_token.map(SyncToken),
-        authoritative_from: None,
-        unresolved_present: vec![],
+        ..Default::default()
     })
 }
 
@@ -127,10 +126,9 @@ async fn backfill<T: DavTransport>(
     // absent from it, since a backfill carries no deletions of its own.
     Ok(SyncDelta {
         upserts,
-        removals: vec![],
-        next_token: None,
         authoritative_from: Some(window_start.format("%Y-%m-%d").to_string()),
         unresolved_present,
+        ..Default::default()
     })
 }
 

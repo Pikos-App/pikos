@@ -52,7 +52,7 @@ impl AppError {
     /// Stable, content-free kind tag for frontend branching. Lives next to
     /// the variant list so adding a variant produces a compile error here
     /// before reaching the wire format.
-    fn kind(&self) -> &'static str {
+    pub fn kind(&self) -> &'static str {
         match self {
             AppError::Db(_) => "Db",
             AppError::NotFound(_) => "NotFound",

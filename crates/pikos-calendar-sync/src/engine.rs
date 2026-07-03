@@ -188,13 +188,7 @@ async fn reconcile_batched(
 
     let mut applied = 0;
     for batch in events.chunks(RECONCILE_BATCH) {
-        let sub = SyncDelta {
-            upserts: batch.to_vec(),
-            removals: vec![],
-            next_token: None,
-            authoritative_from: None,
-            unresolved_present: vec![],
-        };
+        let sub = SyncDelta { upserts: batch.to_vec(), ..Default::default() };
         applied += reconcile_safe(pool, ctx, &sub).await?.applied;
     }
 
@@ -202,13 +196,7 @@ async fn reconcile_batched(
         return Ok(ReconcileOutcome { missing_masters: vec![], applied });
     }
     // Occurrences + removals, once every master in this delta is stored.
-    let sub = SyncDelta {
-        upserts: tail,
-        removals: delta.removals.clone(),
-        next_token: None,
-        authoritative_from: None,
-        unresolved_present: vec![],
-    };
+    let sub = SyncDelta { upserts: tail, removals: delta.removals.clone(), ..Default::default() };
     let mut outcome = reconcile_safe(pool, ctx, &sub).await?;
     outcome.applied += applied;
     Ok(outcome)

@@ -1,6 +1,6 @@
 //! The engine must REJECT (not silently mis-enumerate) any RRULE outside its
-//! supported envelope, so a caller feeding arbitrary provider rules (U5, synced
-//! series) can fall back loudly. See `ParsedRule::validate_envelope`.
+//! supported envelope, so a caller feeding arbitrary synced-provider rules can
+//! fall back loudly. See `ParsedRule::validate_envelope`.
 
 use pikos_recurrence::{expand_range, RecurrenceError};
 

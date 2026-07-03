@@ -193,25 +193,13 @@ fn orphan_occurrence(uid: &str, series_ref: &str) -> UpsertItem {
 }
 
 fn delta(upserts: Vec<UpsertItem>, token: Option<&str>) -> SyncDelta {
-    SyncDelta {
-        upserts,
-        removals: vec![],
-        next_token: token.map(|t| SyncToken(t.into())),
-        authoritative_from: None,
-        unresolved_present: vec![],
-    }
+    SyncDelta { upserts, next_token: token.map(|t| SyncToken(t.into())), ..Default::default() }
 }
 
 /// A full authoritative enumerate: no cursor, and `authoritative_from` set so the
 /// engine sweeps stored pages absent from `upserts`.
 fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
-    SyncDelta {
-        upserts,
-        removals: vec![],
-        next_token: None,
-        authoritative_from: Some(window_start.into()),
-        unresolved_present: vec![],
-    }
+    SyncDelta { upserts, authoritative_from: Some(window_start.into()), ..Default::default() }
 }
 
 // ─── DB setup + queries ─────────────────────────────────────────────────────────
@@ -713,11 +701,9 @@ async fn removal_flows_through() {
     assert_eq!(page_count(&pool).await, 1);
 
     let provider = Scripted::default().with_sync(Ok(SyncDelta {
-        upserts: vec![],
         removals: vec![Removal { external_id: "/e1.ics".into() }],
         next_token: Some(SyncToken("t2".into())),
-        authoritative_from: None,
-        unresolved_present: vec![],
+        ..Default::default()
     }));
     run(&pool, &provider).await;
     assert_eq!(page_count(&pool).await, 0, "bare mirror hard-deleted");

@@ -20,10 +20,8 @@ use super::DbState;
 /// each poll cheap).
 const POLL_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
-/// Watcher suppression stamped at pass start — generous so even a long initial
-/// backfill stays covered; shortened to [`TRAILING_COVER`] once the pass ends.
-const PASS_COVER: Duration = Duration::from_secs(10 * 60);
-/// Covers the watcher's debounce tail after the pass's last write.
+/// Covers the watcher's debounce tail after a pass's last write (the bracket around
+/// the pass itself is what suppresses the pass; see `watch::suppress_begin`).
 const TRAILING_COVER: Duration = Duration::from_secs(2);
 
 /// Emitted after a background pass that changed page data; the frontend
@@ -100,15 +98,15 @@ pub async fn run(app: AppHandle, rx: mpsc::Receiver<SyncTrigger>) {
         // `account.provider` when it lands.
         |_account| CaldavProvider::new(Keychain::system()),
         SchedulerConfig::default(),
-        || super::watch::suppress_for(PASS_COVER),
+        super::watch::suppress_begin,
         move |report: &PassReport| {
-            super::watch::suppress_for(TRAILING_COVER);
+            super::watch::suppress_end(TRAILING_COVER);
             for (account_id, e) in &report.errors {
                 // Variant only — AppError's Display can echo SQL fragments or
                 // user-derived values into the log.
                 log::warn!(
                     "calendar_sync_pass_failed account={account_id} kind={}",
-                    classify(e)
+                    e.kind()
                 );
             }
             if report.changed {
@@ -120,16 +118,3 @@ pub async fn run(app: AppHandle, rx: mpsc::Receiver<SyncTrigger>) {
     .await;
 }
 
-fn classify(e: &pikos_db::error::AppError) -> &'static str {
-    use pikos_db::error::AppError::*;
-    match e {
-        Db(_) => "db",
-        NotFound(_) => "not_found",
-        Conflict(_) => "conflict",
-        Io(_) => "io",
-        Serde(_) => "serde",
-        Invalid(_) => "invalid",
-        Network(_) => "network",
-        Internal(_) => "internal",
-    }
-}

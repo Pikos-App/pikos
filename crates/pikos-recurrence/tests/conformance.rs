@@ -5,7 +5,7 @@
 
 use pikos_recurrence::{
     align_weekly_rule_to_anchor, build_rrule, compute_next_end, expand_range, missed_occurrences_between,
-    next_occurrence_after, parse_rrule, rrule_to_short_label, snap_anchor_to_rule, Freq, RecurrenceOptions,
+    next_occurrence_after, parse_rrule, rrule_to_short_label, snap_anchor_to_rule, RecurrenceOptions,
 };
 use serde::Deserialize;
 
@@ -142,19 +142,9 @@ struct CorpusOptions {
     until: Option<String>,
 }
 
-fn freq_str(freq: Freq) -> String {
-    match freq {
-        Freq::Daily => "DAILY",
-        Freq::Weekly => "WEEKLY",
-        Freq::Monthly => "MONTHLY",
-        Freq::Yearly => "YEARLY",
-    }
-    .to_string()
-}
-
 fn to_corpus(o: &RecurrenceOptions) -> CorpusOptions {
     CorpusOptions {
-        freq: freq_str(o.freq.expect("freq")),
+        freq: o.freq.expect("freq").as_str().to_string(),
         interval: o.interval,
         byweekday: o.byweekday.clone(),
         bysetpos: o.bysetpos.clone(),

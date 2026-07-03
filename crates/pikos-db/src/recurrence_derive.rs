@@ -128,19 +128,6 @@ pub async fn recompute_recurring_schedule(
     Ok(())
 }
 
-/// Pool wrapper: recompute in its own transaction, healing a lost-snapshot race.
-/// For the foreground time-tick / load paths that recompute a single page outside
-/// any larger write.
-pub async fn recompute_recurring_schedule_pool(pool: &SqlitePool, page_id: &str) -> AppResult<()> {
-    crate::tx::retry_on_busy(|| async {
-        let mut tx = pool.begin().await?;
-        recompute_recurring_schedule(&mut tx, page_id).await?;
-        tx.commit().await?;
-        Ok(())
-    })
-    .await
-}
-
 /// The stateless display derivation for one page, read-only — the `cache ==
 /// f(truth)` reference and the shadow-invariant oracle. `None` once a finite
 /// series is exhausted.

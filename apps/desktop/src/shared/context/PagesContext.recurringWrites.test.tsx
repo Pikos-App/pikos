@@ -83,7 +83,7 @@ describe("completeRecurringPage idempotency", () => {
   });
 });
 
-describe("completeRecurringPage policy inputs (characterization — pins the pre-U6 native path)", () => {
+describe("completeRecurringPage policy inputs (characterization — pins the current native-completion path)", () => {
   // These assert the EXACT adapter payload per policy/gap so a later swap onto
   // occurrence-sets is a provable behavior change, not a silent one. Date is
   // faked (only Date, so promises/act are untouched) to make the gap

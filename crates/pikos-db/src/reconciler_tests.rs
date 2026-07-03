@@ -106,13 +106,7 @@ fn single_full(
 }
 
 fn delta(upserts: Vec<UpsertItem>) -> SyncDelta {
-    SyncDelta {
-        upserts,
-        removals: vec![],
-        next_token: None,
-        authoritative_from: None,
-        unresolved_present: vec![],
-    }
+    SyncDelta { upserts, ..Default::default() }
 }
 
 // ─── query helpers ────────────────────────────────────────────────────────────
@@ -660,11 +654,8 @@ async fn removal_takes_the_whole_series_not_one_occurrence() {
         &pool,
         &ctx(),
         &SyncDelta {
-            upserts: vec![],
             removals: vec![Removal { external_id: "/series.ics".into() }],
-            next_token: None,
-            authoritative_from: None,
-            unresolved_present: vec![],
+            ..Default::default()
         },
     )
     .await
@@ -1132,13 +1123,7 @@ async fn occurrence_modify_replaces_a_prior_override() {
 // ─── lifecycle: removals, ownership, teardown (S5) ────────────────────────────
 
 fn removal(external_id: &str) -> SyncDelta {
-    SyncDelta {
-        upserts: vec![],
-        removals: vec![Removal { external_id: external_id.into() }],
-        next_token: None,
-        authoritative_from: None,
-        unresolved_present: vec![],
-    }
+    SyncDelta { removals: vec![Removal { external_id: external_id.into() }], ..Default::default() }
 }
 
 /// Sync one bare single event and return its page_id — the starting point for the

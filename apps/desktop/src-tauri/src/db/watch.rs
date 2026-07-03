@@ -4,7 +4,7 @@
 //! app's own writes (see shared/lib/externalChange.ts) and reloads otherwise.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -15,21 +15,33 @@ const EXTERNAL_CHANGE_EVENT: &str = "workspace:external-change";
 const DEBOUNCE: Duration = Duration::from_millis(250);
 
 /// The background sync loop writes through the same workspace file this watcher
-/// observes — even a no-change poll stamps `sync_calendar.last_synced_at` —
-/// so without a gate every poll would emit an external-change and reload the
-/// frontend. The sync driver opens a window here around each pass (it emits its
-/// own signal when a pass actually changed page data). A genuinely external
-/// write landing inside the window is missed; the next write or sync pass
-/// reloads, so staleness is bounded.
+/// observes — even a no-change poll stamps `sync_calendar.last_synced_at` — so
+/// without a gate every poll would emit an external-change and reload the frontend.
+/// The sync driver brackets each pass with [`suppress_begin`]/[`suppress_end`] (it
+/// emits its own signal when a pass actually changed page data). A pass of any
+/// length is covered for its full duration, plus a short trailing window for writes
+/// flushing just after. A genuinely external write landing inside the bracket is
+/// missed — indistinguishable from the pass's own echoes — but bounded: the next
+/// write reloads.
+static SUPPRESS_DEPTH: AtomicU32 = AtomicU32::new(0);
+/// Trailing debounce deadline armed by [`suppress_end`]; covers writes still
+/// flushing just after the bracket closes.
 static SUPPRESS_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
 
-/// Replace (never extend) the suppression window: `now + window`.
-pub fn suppress_for(window: Duration) {
-    SUPPRESS_UNTIL_MS.store(now_ms() + window.as_millis() as u64, Ordering::Relaxed);
+/// Open the suppression bracket (pass start). Balanced by [`suppress_end`].
+pub fn suppress_begin() {
+    SUPPRESS_DEPTH.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Close the bracket (pass end), arming a short trailing window first so no echo
+/// leaks in the gap before the depth drops.
+pub fn suppress_end(tail: Duration) {
+    SUPPRESS_UNTIL_MS.store(now_ms() + tail.as_millis() as u64, Ordering::Relaxed);
+    SUPPRESS_DEPTH.fetch_sub(1, Ordering::Relaxed);
 }
 
 fn suppressed() -> bool {
-    now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::Relaxed)
+    SUPPRESS_DEPTH.load(Ordering::Relaxed) > 0 || now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::Relaxed)
 }
 
 fn now_ms() -> u64 {
@@ -302,6 +314,48 @@ mod tests {
         );
 
         drop(watcher);
+        h.join().unwrap();
+    }
+
+    /// The bracket suppresses a write for any pass duration, and once the bracket +
+    /// trailing window lapse an external write reloads. Mirrors production's
+    /// `suppressed()` gate in the emit closure.
+    #[test]
+    fn bracketed_pass_suppresses_regardless_of_duration_then_releases() {
+        SUPPRESS_DEPTH.store(0, Ordering::Relaxed);
+        SUPPRESS_UNTIL_MS.store(0, Ordering::Relaxed);
+
+        let (tx, rx) = channel::<notify::Result<Event>>();
+        let count = Arc::new(Mutex::new(0u32));
+        let c = count.clone();
+        let h = thread::spawn(move || {
+            pump(&rx, "default.sqlite", Duration::from_millis(50), || {
+                if suppressed() {
+                    return;
+                }
+                *c.lock().unwrap() += 1;
+            });
+        });
+        let db = PathBuf::from("/tmp/whatever/default.sqlite");
+
+        // Inside the bracket with zero time-based cover, depth alone suppresses —
+        // pass length is irrelevant.
+        suppress_begin();
+        tx.send(synthetic(EventKind::Modify(notify::event::ModifyKind::Any), vec![db.clone()]))
+            .unwrap();
+        thread::sleep(Duration::from_millis(150));
+        assert_eq!(*count.lock().unwrap(), 0, "write inside the bracket is suppressed");
+
+        // Close the bracket with a short tail, let it lapse, then an external write
+        // reloads.
+        suppress_end(Duration::from_millis(40));
+        thread::sleep(Duration::from_millis(100));
+        tx.send(synthetic(EventKind::Modify(notify::event::ModifyKind::Any), vec![db.clone()]))
+            .unwrap();
+        thread::sleep(Duration::from_millis(150));
+        assert_eq!(*count.lock().unwrap(), 1, "post-release external write reloads");
+
+        drain(tx);
         h.join().unwrap();
     }
 }

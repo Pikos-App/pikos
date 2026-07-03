@@ -41,7 +41,7 @@ impl Freq {
             _ => None,
         }
     }
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Freq::Daily => "DAILY",
             Freq::Weekly => "WEEKLY",

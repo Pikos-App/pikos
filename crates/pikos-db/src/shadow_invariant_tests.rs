@@ -35,7 +35,7 @@ async fn head_status(pool: &sqlx::SqlitePool) -> String {
 /// up-front, like a user dismissing them) then `completions` head completions,
 /// asserting `head == oldest_open(base, rrule, completed ∪ skipped)` at every
 /// step. Each completion supplies the next date the way the frontend does
-/// (rrule.js next, which U1 pins equal to this engine).
+/// (rrule.js next, which the conformance corpus pins equal to this engine).
 async fn assert_invariant(rrule: &str, base_start: &str, base_end: Option<&str>, skip_indices: &[usize], completions: usize) {
     let pool = test_pool().await;
     insert_test_page(

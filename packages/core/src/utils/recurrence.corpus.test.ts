@@ -1,7 +1,7 @@
 // ─── Conformance corpus — the rrule.js oracle for the Rust recurrence engine ──
 //
-// The Rust crate `pikos-recurrence` (backlog U1) must enumerate occurrences
-// byte-identically to rrule.js. This file is the single source of that truth: it
+// The Rust crate `pikos-recurrence` must enumerate occurrences byte-identically
+// to rrule.js. This file is the single source of that truth: it
 // drives the REAL `recurrence.ts` functions over a fixed case set and emits their
 // output to a committed JSON fixture the Rust conformance test reads.
 //
