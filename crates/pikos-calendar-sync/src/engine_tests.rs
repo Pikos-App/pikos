@@ -456,7 +456,7 @@ async fn orphan_master_404_dropped() {
 
 /// A full authoritative enumerate carrying a lone occurrence (master absent)
 /// fetches the master to resolve it — and the sweep must spare that just-created
-/// master, not detach/delete it in the same pass. Arms for Google (S15), which
+/// master, not detach/delete it in the same pass. Arms for Google, which
 /// emits lone occurrences in a full enumerate; CalDAV never does today.
 #[tokio::test]
 async fn full_enumerate_spares_a_resolved_orphan_master_from_the_sweep() {

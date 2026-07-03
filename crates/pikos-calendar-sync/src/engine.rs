@@ -23,7 +23,7 @@
 //! re-enumerate (focus poll, token rejection) recovers it regardless.
 //!
 //! Scheduling (window-focus + interval polling) is **not** here — that's the
-//! command/UI layer (S10/S12). This module is the unit of work a scheduler calls.
+//! command/UI layer. This module is the unit of work a scheduler calls.
 
 use pikos_db::error::{AppError, AppResult};
 use pikos_db::now_iso;

@@ -52,7 +52,7 @@ export function useRecurrenceExpansion({
   }, [startStr, endStr, ruleCount]);
 
   // Suppress an ACTIVE synced series' head block when its base occurrence is
-  // completed (S22). The reconciler pins the head at the base, so unlike native
+  // completed. The reconciler pins the head at the base, so unlike native
   // pages it never advances past a completed occurrence — without this the base
   // would keep rendering alongside its done clone. Gated on `scheduleLocked` so a
   // detached series (now native, EXDATE-driven) ignores its stale completion map.

@@ -181,7 +181,7 @@ describe("useRecurrenceExpansion", () => {
     });
   });
 
-  it("suppresses a synced series' head when its base occurrence is completed (S22)", async () => {
+  it("suppresses a synced series' head when its base occurrence is completed", async () => {
     // A synced series pins its head at the base (Mar 9). Completing that
     // occurrence records it in completedOccurrences — the head block must drop
     // out (its done clone renders instead), while later virtuals keep showing.

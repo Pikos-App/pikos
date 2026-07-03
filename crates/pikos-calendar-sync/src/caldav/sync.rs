@@ -10,7 +10,7 @@
 //! Backfill path (no token yet, or after a `403`): a `calendar-query` REPORT
 //! time-bounded to ~1 week before now, requesting `calendar-data` inline so no
 //! second round-trip is needed. It carries no sync-token; bootstrapping the first
-//! token is the engine's job (S9), so a backfill `SyncDelta` has `next_token =
+//! token is the engine's job, so a backfill `SyncDelta` has `next_token =
 //! None`.
 
 use chrono::Utc;

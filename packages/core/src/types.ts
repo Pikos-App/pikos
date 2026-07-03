@@ -191,7 +191,7 @@ export interface CompleteRecurringResult {
   ruleExdates?: string[] | null;
 }
 
-/** Complete one occurrence of a synced recurring series (S22). Records a
+/** Complete one occurrence of a synced recurring series. Records a
  * user-owned `date → done-clone` entry and inserts a done clone — never advances
  * the reconciler-pinned head or touches the locked rule's EXDATEs. */
 export interface CompleteSyncedOccurrenceInput {

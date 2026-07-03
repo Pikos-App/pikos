@@ -233,7 +233,7 @@ export function MetadataHeader({
   }
 
   function handleStatusChange(status: PageStatus) {
-    // Synced recurring → occurrence-based completion (S22), not native advance.
+    // Synced recurring → occurrence-based completion, not native advance.
     if (maybeToggleSyncedOccurrence(page, status)) return;
     // Recurring pages route through the gap-resolution dialog. The dialog
     // fast-paths when there's no gap between head and today.

@@ -79,7 +79,7 @@ fn single(core: EventCore, schedule: EventSchedule) -> UpsertItem {
     })
 }
 
-/// A single event carrying the mirror metadata + description that S4 reconciles.
+/// A single event carrying the mirror metadata + description the reconciler applies.
 #[allow(clippy::too_many_arguments)]
 fn single_full(
     external_id: &str,
@@ -501,7 +501,7 @@ async fn occurrence_cancel_adds_exdate() {
     assert_eq!(rule_exdates(&pool, &page_id).await, vec!["2026-06-15T09:00:00"]);
 }
 
-// ─── timezone normalization (S3) ──────────────────────────────────────────────
+// ─── timezone normalization ──────────────────────────────────────────────────
 
 /// Build a timed series with a given RRULE and source zone, no exdates/overrides.
 fn series_with_rrule(rrule: &str, tz: &str) -> UpsertItem {
@@ -664,7 +664,7 @@ async fn removal_takes_the_whole_series_not_one_occurrence() {
     assert_eq!(rule_count(&pool).await, 0);
 }
 
-// ─── three field layers: mirror / seeded / user (S4) ──────────────────────────
+// ─── three field layers: mirror / seeded / user ───────────────────────────────
 
 #[tokio::test]
 async fn mirror_metadata_is_written_read_only() {
@@ -1120,7 +1120,7 @@ async fn occurrence_modify_replaces_a_prior_override() {
     );
 }
 
-// ─── lifecycle: removals, ownership, teardown (S5) ────────────────────────────
+// ─── lifecycle: removals, ownership, teardown ─────────────────────────────────
 
 fn removal(external_id: &str) -> SyncDelta {
     SyncDelta { removals: vec![Removal { external_id: external_id.into() }], ..Default::default() }

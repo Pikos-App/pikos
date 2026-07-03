@@ -1240,7 +1240,7 @@ describe("schedule and rule updates", () => {
   });
 });
 
-describe("synced occurrence completion (S22)", () => {
+describe("synced occurrence completion", () => {
   it("records date → clone and produces a durable native done clone", async () => {
     const series = await createTestPage({ title: "Weekly 1:1" });
     adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });

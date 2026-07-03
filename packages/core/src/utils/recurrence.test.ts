@@ -102,7 +102,7 @@ describe("expandRecurrenceForRange", () => {
   });
 
   it("excludes dates completed on an active synced series (completedOccurrences)", () => {
-    // S22: an active synced recurring occurrence is hidden once completed — its
+    // An active synced recurring occurrence is hidden once completed — its
     // done clone renders in its place. Expansion skips the completed date's
     // virtual. Gated on scheduleLocked (active synced).
     const page = makePage({

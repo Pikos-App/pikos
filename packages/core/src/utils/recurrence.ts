@@ -53,7 +53,7 @@ export function expandRecurrenceForRange(
   existingSchedules: PageSchedule[] = []
 ): VirtualOccurrence[] {
   // Build the set of dates that have been materialised as overrides, skipped, or
-  // — for an ACTIVE synced series — completed per-occurrence (user-owned, S22). A
+  // — for an ACTIVE synced series — completed per-occurrence (user-owned). A
   // completed date is hidden so its done clone renders in its place; the base
   // occurrence (the head) is suppressed separately in `useRecurrenceExpansion`.
   // Gate on `scheduleLocked`: once a series detaches it becomes a native rule
