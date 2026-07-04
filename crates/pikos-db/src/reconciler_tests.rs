@@ -1880,6 +1880,139 @@ async fn series_rewrite_preserves_user_completed_occurrences() {
     assert_eq!(stored.as_deref(), Some("clone-abc"), "completion survives the rewrite");
 }
 
+// ─── head recompute over the sets (reconciler repoint) ─────────────────────────
+
+/// A plain weekly series (no exdate/override), etag-tagged so a re-sync forces a
+/// real rewrite. Occurrences step 7 days from the 2026-06-01 base.
+fn weekly(etag: &str, rrule: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core("/series.ics", "uid-series", etag, "Weekly"),
+        schedule: timed("2026-06-01T09:00:00", None, "UTC"),
+        recurrence: Some(Recurrence { rrule: rrule.into(), exdates: vec![], overrides: vec![] }),
+    })
+}
+
+/// (scheduled_start, status, completed_at) of the page denorm — the cache the
+/// recompute owns for a recurring page.
+async fn page_denorm(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+) -> (Option<String>, String, Option<String>) {
+    sqlx::query_as("SELECT scheduled_start, status, completed_at FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// The reconciler head is the oldest-open occurrence, not the raw base: a rule
+/// rewrite carries the completed + skip sets (keyed by page_id) through, and the
+/// recompute honours both when re-pinning the denorm.
+#[tokio::test]
+async fn series_rewrite_recomputes_head_over_both_sets() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly("v1", "FREQ=WEEKLY")])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(page_denorm(&pool, &page_id).await.0.as_deref(), Some("2026-06-01T09:00:00"));
+
+    // Complete the base, dismiss the next — the head should skip past both.
+    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-01', 'c1')")
+        .bind(&page_id).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES (?, '2026-06-08')")
+        .bind(&page_id).execute(&pool).await.unwrap();
+
+    reconcile(&pool, &ctx(), &delta(vec![weekly("v2", "FREQ=WEEKLY")])).await.unwrap();
+
+    let completed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM completed_set WHERE page_id = ?")
+        .bind(&page_id).fetch_one(&pool).await.unwrap();
+    let skipped: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM skip_set WHERE page_id = ?")
+        .bind(&page_id).fetch_one(&pool).await.unwrap();
+    assert_eq!((completed, skipped), (1, 1), "both sets survive the wholesale rewrite");
+    assert_eq!(
+        page_denorm(&pool, &page_id).await.0.as_deref(),
+        Some("2026-06-15T09:00:00"),
+        "head recomputes past the completed base and the skipped next occurrence",
+    );
+}
+
+/// A finite series exhausted by exclusion recomputes to `done`; the provider
+/// extending it (a later UNTIL) must un-mark the head both times the recompute runs.
+#[tokio::test]
+async fn provider_re_extension_unmarks_exhausted_head() {
+    let pool = setup().await;
+    // Only 2026-06-01 exists (floating UNTIL passes through untouched).
+    reconcile(&pool, &ctx(), &delta(vec![weekly("v1", "FREQ=WEEKLY;UNTIL=20260601T090000")]))
+        .await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+
+    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-01', 'c1')")
+        .bind(&page_id).execute(&pool).await.unwrap();
+    // Re-sync the same one-shot rule → sole occurrence excluded → exhausted → done.
+    reconcile(&pool, &ctx(), &delta(vec![weekly("v2", "FREQ=WEEKLY;UNTIL=20260601T090000")]))
+        .await.unwrap();
+    let (_, status, completed_at) = page_denorm(&pool, &page_id).await;
+    assert_eq!(status, "done", "exhausted series marks the head done");
+    assert!(completed_at.is_some());
+
+    // Provider extends the series → the next occurrence opens → head un-marked.
+    reconcile(&pool, &ctx(), &delta(vec![weekly("v3", "FREQ=WEEKLY;UNTIL=20260701T090000")]))
+        .await.unwrap();
+    let (start, status, completed_at) = page_denorm(&pool, &page_id).await;
+    assert_eq!(status, "not_started", "re-extension un-marks the head");
+    assert_eq!(completed_at, None);
+    assert_eq!(start.as_deref(), Some("2026-06-08T09:00:00"));
+}
+
+/// The provider converting an exhausted recurring series into a single event drops
+/// the rule but never writes `status`; the transition must clear the stale terminal
+/// `done` or the event stays done and vanishes from the calendar.
+#[tokio::test]
+async fn recurring_to_single_transition_clears_terminal_done() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly("v1", "FREQ=WEEKLY")])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    // Simulate the terminal state a prior exhausted recompute left.
+    sqlx::query("UPDATE pages SET status = 'done', completed_at = ? WHERE id = ?")
+        .bind(now_iso()).bind(&page_id).execute(&pool).await.unwrap();
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(core("/series.ics", "uid-series", "v2", "Weekly"), timed("2026-07-01T10:00:00", None, "UTC"))]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(rule_count(&pool).await, 0, "rule dropped — now a single event");
+    let (start, status, completed_at) = page_denorm(&pool, &page_id).await;
+    assert_eq!(status, "not_started", "recurring→single un-marks the stale terminal done");
+    assert_eq!(completed_at, None);
+    assert_eq!(start.as_deref(), Some("2026-07-01T10:00:00"));
+}
+
+/// Detaching an owned series (upstream removal) recomputes its head: once detached
+/// the page unlocks and the frontend's completed-base suppression stops, so a head
+/// still pinned to a completed base would double-render beside its done clone.
+#[tokio::test]
+async fn detach_recomputes_head_off_completed_base() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly("v1", "FREQ=WEEKLY")])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    // Completed base makes the series owned (→ detach, not hard delete) and moves
+    // the recomputed head forward.
+    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-01', 'c1')")
+        .bind(&page_id).execute(&pool).await.unwrap();
+
+    reconcile(&pool, &ctx(), &removal("/series.ics")).await.unwrap();
+
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+    assert_eq!(
+        page_denorm(&pool, &page_id).await.0.as_deref(),
+        Some("2026-06-08T09:00:00"),
+        "detach moves the head off the completed base",
+    );
+}
+
 // ─── relink + teardown of a RECURRING series (singles-only before) ─────────────
 
 #[tokio::test]

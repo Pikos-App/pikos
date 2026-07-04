@@ -207,12 +207,26 @@ async fn find_relink(
 /// Replace the page's mirror schedule wholesale. The schedule is fully
 /// reconciler-owned for a synced page, so a clean delete-and-reinsert is the
 /// simplest idempotent write — re-running yields the same rows.
+///
+/// A recurring page's head is then recomputed to its oldest-open occurrence
+/// (completed/skip sets, keyed by `page_id`, survive the rule rewrite and may push
+/// it past the raw base) with the derivation owning terminal status both
+/// directions. A recurring→single transition (rule dropped) un-marks a stale
+/// terminal `done` the old series' recompute stamped — no rule survives to do it,
+/// and the provider re-delivering the event as a single means it's live again.
 async fn write_schedule(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
     ev: &EventUpsert,
     now: &str,
 ) -> AppResult<()> {
+    let had_rule: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_id = ?)",
+    )
+    .bind(page_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
     sqlx::query("DELETE FROM page_recurrence_rules WHERE page_id = ?")
         .bind(page_id)
         .execute(&mut **tx)
@@ -274,14 +288,27 @@ async fn write_schedule(
         .await?;
     }
 
-    // Keep the calendar denorm pointing at the base occurrence.
-    sqlx::query("UPDATE pages SET scheduled_start = ?, scheduled_end = ?, updated_at = ? WHERE id = ?")
-        .bind(&ev.schedule.start)
-        .bind(&base_end)
-        .bind(now)
-        .bind(page_id)
-        .execute(&mut **tx)
-        .await?;
+    // Base-occurrence floor; the recurring recompute below refines it, and a
+    // recurring→single drop clears a stale terminal `done` here (see fn doc).
+    let clear_terminal = had_rule && ev.recurrence.is_none();
+    sqlx::query(
+        "UPDATE pages SET scheduled_start = ?1, scheduled_end = ?2,
+           status = CASE WHEN ?3 AND status = 'done' THEN 'not_started' ELSE status END,
+           completed_at = CASE WHEN ?3 AND status = 'done' THEN NULL ELSE completed_at END,
+           updated_at = ?4
+         WHERE id = ?5",
+    )
+    .bind(&ev.schedule.start)
+    .bind(&base_end)
+    .bind(clear_terminal)
+    .bind(now)
+    .bind(page_id)
+    .execute(&mut **tx)
+    .await?;
+
+    if ev.recurrence.is_some() {
+        crate::recurrence_derive::recompute_recurring_schedule(tx, page_id).await?;
+    }
     Ok(())
 }
 
@@ -397,7 +424,7 @@ async fn detach_or_delete(
     page_id: &str,
 ) -> AppResult<()> {
     if is_owned(tx, page_id).await? {
-        detach_sync(tx, page_sync_id).await?;
+        detach_sync(tx, page_sync_id, page_id).await?;
     } else {
         hard_delete_page(tx, page_id).await?;
     }
@@ -603,16 +630,22 @@ async fn is_owned(
 
 /// Sever the live sync link, keeping the page, its last-known schedule, and its
 /// dormant identity (`ical_uid` + provider/calendar hint) for a later resync
-/// re-link. Touches no `pages` field, so a detach never refloats the page as
-/// "recently edited".
+/// re-link. Recomputes a recurring head (no-op otherwise): once detached the page
+/// unlocks and the frontend's completed-base head suppression stops applying, so a
+/// series whose base is a completed occurrence would double-render beside its done
+/// clone until the next on-load heal — the recompute moves the head to oldest-open
+/// now. The `sync_state` flip aside, it touches `pages` only via that recompute, so
+/// a detach never refloats an unaffected page as "recently edited".
 async fn detach_sync(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
+    page_id: &str,
 ) -> AppResult<()> {
     sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE id = ?")
         .bind(page_sync_id)
         .execute(&mut **tx)
         .await?;
+    crate::recurrence_derive::recompute_recurring_schedule(tx, page_id).await?;
     Ok(())
 }
 
