@@ -229,13 +229,12 @@ describe("useRecurringActions", () => {
     expect(hook.result.current.undo.toastItems.length).toBeGreaterThan(0);
   });
 
-  it("routes a scheduleLocked recurring toggle to the synced handler and SKIPS the native path", async () => {
+  it("routes a scheduleLocked recurring toggle through the unified command with the client occurrence", async () => {
     const hook = setup();
     await act(async () => {
       await hook.result.current.workspace.selectWorkspace();
     });
-    const syncedSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
-    const nativeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     let pageId!: string;
     await act(async () => {
@@ -266,11 +265,11 @@ describe("useRecurringActions", () => {
       await Promise.resolve();
     });
 
-    expect(syncedSpy).toHaveBeenCalledWith(
+    // Routed as synced: the one unified command is called with the client-supplied
+    // occurrence, not the bare native shape.
+    expect(completeSpy).toHaveBeenCalledWith(
       expect.objectContaining({ occurrenceDate: "2099-01-05", pageId })
     );
-    // The short-circuit means the native head-advance path never runs.
-    expect(nativeSpy).not.toHaveBeenCalled();
   });
 
   it("skipOccurrence is a no-op for non-virtual pages", async () => {

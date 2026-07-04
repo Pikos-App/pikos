@@ -995,11 +995,19 @@ pub async fn list_completed_pages_impl(
 pub struct CompleteRecurringInput {
     pub page_id: String,
     /// Missed-occurrence dates (YYYY-MM-DD) the "advance to today" gap dialog
-    /// dismisses — written to the skip-set. Empty for a plain completion. The
-    /// completed occurrence itself is the head's own date, derived server-side,
-    /// never sent by the client.
+    /// dismisses — written to the skip-set. Empty for a plain completion.
     #[serde(default)]
     pub skip_dates: Vec<String>,
+    /// Synced series only: the client-rendered occurrence being completed, since the
+    /// reconciler pins the head at the series base (the client virtual is the only
+    /// place the occurrence exists). A native series omits these — its occurrence is
+    /// the head's own oldest-open date, derived server-side and never client-sent.
+    #[serde(default)]
+    pub occurrence_date: Option<String>,
+    #[serde(default)]
+    pub scheduled_start: Option<String>,
+    #[serde(default)]
+    pub scheduled_end: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1012,13 +1020,19 @@ pub struct CompleteRecurringResult {
     pub head: PageSummary,
 }
 
-/// Atomically completes the head occurrence of a native recurring page onto the
-/// occurrence-sets model:
-/// 1. Clones the head as a done page at its current occurrence (snapshot).
+/// Atomically completes one occurrence of a recurring page (native or synced) onto
+/// the occurrence-sets model:
+/// 1. Clones the head as a done page at the occurrence being completed (snapshot):
+///    for a native series the head's own oldest-open occurrence; for a synced series
+///    the client-supplied virtual (validated against the rule), since the reconciler
+///    pins the head at the base.
 /// 2. Records `(page_id, occurrence_date) → clone_id` in `completed_set`, and any
-///    gap `skip_dates` in `skip_set` — no head-advance, no EXDATE merge.
+///    gap `skip_dates` in `skip_set` — no EXDATE merge (the exclusion is set-only).
 /// 3. Recomputes `pages.scheduled_start` from truth (`recompute_recurring_schedule`),
-///    which advances the head to the next open occurrence or marks it `done`.
+///    which advances the head to the next open occurrence or marks it `done`. A
+///    synced head advances the same way; the reconciler recomputes off the same sets
+///    on the next sync, so the two converge (an out-of-envelope rule the engine can't
+///    advance stays put, suppressed on the frontend by `headCompleted`).
 ///
 /// Entire flow runs in one transaction: a mid-flight crash can't leave a clone
 /// without its set entry (lost history) or a set entry without a recompute (stale
@@ -1137,21 +1151,45 @@ async fn complete_recurring_page_once(
             .map(Page::from)
             .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", data.page_id)))?;
 
-    // Safety net for any non-UI caller (CLI, a missed frontend branch): synced
-    // recurring completion must route to `complete_synced_occurrence_impl` — the
-    // reconciler owns the head + the locked rule.
-    if head.schedule_locked {
+    // Occurrence completion is set-only, so a misroute to a non-recurring page would
+    // mint a clone no series can ever suppress. Reject it (both kinds).
+    let is_recurring: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_id = ?)",
+    )
+    .bind(&data.page_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !is_recurring {
         return Err(AppError::Conflict(
-            "Synced recurring events complete per-occurrence — not via head advance.".to_string(),
+            "Occurrence completion applies only to a recurring series.".to_string(),
         ));
     }
 
-    // The head sits on the occurrence being completed (oldest-open): its own
-    // wall-clock is the clone's schedule and the completed-set key (day-level).
-    let occurrence_start = head.scheduled_start.clone().ok_or_else(|| {
-        AppError::Conflict("Recurring page has no scheduled occurrence to complete.".to_string())
-    })?;
-    let occurrence_date = occurrence_start[..occurrence_start.len().min(10)].to_string();
+    // Resolve the occurrence being completed. A native head sits on it (oldest-open),
+    // so its own wall-clock is the clone's schedule and the completed-set key. A synced
+    // series' head is reconciler-pinned at the base, so the client supplies the
+    // rendered virtual — validated against the rule so a cross-zone off-by-one key can't
+    // write a set entry that matches no occurrence (an unsuppressable open occurrence).
+    let (occurrence_date, occurrence_start, occurrence_end) = if head.schedule_locked {
+        let occurrence_date = data.occurrence_date.clone().ok_or_else(|| {
+            AppError::Conflict("Synced occurrence completion requires an occurrence date.".to_string())
+        })?;
+        let start = data.scheduled_start.clone().ok_or_else(|| {
+            AppError::Conflict("Synced occurrence completion requires the occurrence start.".to_string())
+        })?;
+        if !synced_occurrence_is_valid(&mut tx, &data.page_id, &occurrence_date).await? {
+            return Err(AppError::Conflict(
+                "Occurrence is not part of this synced series.".to_string(),
+            ));
+        }
+        (occurrence_date, start, data.scheduled_end.clone())
+    } else {
+        let occurrence_start = head.scheduled_start.clone().ok_or_else(|| {
+            AppError::Conflict("Recurring page has no scheduled occurrence to complete.".to_string())
+        })?;
+        let occurrence_date = occurrence_start[..occurrence_start.len().min(10)].to_string();
+        (occurrence_date, occurrence_start, head.scheduled_end.clone())
+    };
 
     // Idempotency: a double-click or post-`SQLITE_BUSY_SNAPSHOT` retry must not mint
     // a second clone for the same occurrence. A live clone → return it unchanged;
@@ -1175,7 +1213,7 @@ async fn complete_recurring_page_once(
             status: "done",
             completed_at: Some(&completed),
             scheduled_start: Some(&occurrence_start),
-            scheduled_end: head.scheduled_end.as_deref(),
+            scheduled_end: occurrence_end.as_deref(),
         },
         &now,
     )
@@ -1257,31 +1295,8 @@ async fn existing_completed_clone(
     Ok(row.map(PageSummary::from))
 }
 
-// ─── Synced recurring occurrence completion ──────────────────────────────────
-//
-// A synced recurring series can't reuse native head-advance completion: the
-// reconciler pins the head at the series base and owns the (locked) rule, so
-// advancing the head or merging an EXDATE would be clobbered on the next sync.
-// Completion is instead per-occurrence state in the `completed_set` table (a
-// `(page_id, occurrence_date) → clone_id` row the reconciler never touches) plus a
-// durable done clone (a native page, no `page_sync` link). The frontend hides the
-// completed occurrence (expansion skip + head suppression); the clone renders the
-// done block.
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CompleteSyncedOccurrenceInput {
-    pub page_id: String,
-    /// Occurrence date being completed (YYYY-MM-DD) — the map key.
-    pub occurrence_date: String,
-    /// The occurrence's start/end wall-clock — the done clone is scheduled here.
-    pub scheduled_start: String,
-    #[serde(default)]
-    pub scheduled_end: Option<String>,
-}
-
-/// Whether an active `page_sync` row owns this page — the guard that keeps this
-/// path to synced series (native recurring completes via the head-advance path).
+/// Whether an active `page_sync` row owns this page — the guard that forks a write
+/// on native vs reconciler-owned (synced) treatment.
 async fn is_active_synced(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1294,130 +1309,39 @@ async fn is_active_synced(
     .await?)
 }
 
-/// Completes one occurrence of a synced recurring series: insert a done clone at
-/// the occurrence and record `(page_id, occurrence_date) → clone_id` in
-/// `completed_set`. The head is NOT advanced and the rule's EXDATEs are NOT touched.
-/// Retries on `SQLITE_BUSY_SNAPSHOT` (read-then-write).
-pub async fn complete_synced_occurrence_impl(
-    pool: &sqlx::SqlitePool,
-    data: CompleteSyncedOccurrenceInput,
-) -> AppResult<PageSummary> {
-    crate::tx::retry_on_busy(|| complete_synced_occurrence_once(pool, &data)).await
-}
-
-async fn complete_synced_occurrence_once(
-    pool: &sqlx::SqlitePool,
-    data: &CompleteSyncedOccurrenceInput,
-) -> AppResult<PageSummary> {
-    let now = now_iso();
-    let completed = now_local_iso();
-    let clone_id = uuid::Uuid::new_v4().to_string();
-
-    let mut tx = pool.begin().await?;
-
-    if !is_active_synced(&mut tx, &data.page_id).await? {
-        return Err(AppError::Conflict(
-            "Page is not an active synced recurring series.".to_string(),
-        ));
-    }
-
-    let head = sqlx::query_as::<_, PageRow>(&format!(
-        "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
-    ))
-    .bind(&data.page_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .map(Page::from)
-    .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", data.page_id)))?;
-
-    // Occurrence-based completion only applies to a recurring series — a synced
-    // one-off completes via the normal status flip. Reject a non-recurring page
-    // (symmetric with the native head-advance guard) so a misrouted call can't
-    // mint an unsuppressable clone.
-    let is_recurring: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_id = ?)",
+/// Whether `occurrence_date` (YYYY-MM-DD) is a real occurrence of the page's rule.
+/// A synced series completes a client-rendered virtual, so a cross-zone off-by-one
+/// key would otherwise write a `completed_set` entry matching no occurrence — leaving
+/// it open beside its done clone permanently. The raw rule (no exclusions) is
+/// enumerated so a moved override's `original_date` still counts. An out-of-envelope
+/// rule the engine can't parse skips the check — there's nothing to validate against.
+async fn synced_occurrence_is_valid(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    occurrence_date: &str,
+) -> AppResult<bool> {
+    let rule: Option<(String, String, Option<String>)> = sqlx::query_as(
+        "SELECT rrule, scheduled_start, scheduled_end FROM page_recurrence_rules WHERE page_id = ?",
     )
-    .bind(&data.page_id)
-    .fetch_one(&mut *tx)
+    .bind(page_id)
+    .fetch_optional(&mut **tx)
     .await?;
-    if !is_recurring {
-        return Err(AppError::Conflict(
-            "Occurrence completion applies only to a recurring synced series.".to_string(),
-        ));
+    let Some((rrule, base_start, base_end)) = rule else {
+        return Ok(false);
+    };
+    let day = &occurrence_date[..occurrence_date.len().min(10)];
+    let (lo, hi) = (format!("{day}T00:00:00"), format!("{day}T23:59:59"));
+    match pikos_recurrence::occurrences_in_window(
+        &rrule,
+        &base_start,
+        base_end.as_deref(),
+        &lo,
+        &hi,
+        &[],
+    ) {
+        Ok(occ) => Ok(occ.iter().any(|o| o.original_date.as_str() == day)),
+        Err(_) => Ok(true),
     }
-
-    // Idempotency guard: a double-click or a post-`SQLITE_BUSY_SNAPSHOT` retry must
-    // not mint a second clone. `INSERT OR REPLACE` below would overwrite the
-    // completed_set clone_id and orphan the first clone's page — a permanent
-    // duplicate "done" ghost in search/exports. A live clone → return it unchanged;
-    // a trashed one falls through so the OR REPLACE re-points the set row.
-    if let Some(existing) =
-        existing_completed_clone(&mut tx, &data.page_id, &data.occurrence_date).await?
-    {
-        return Ok(existing);
-    }
-
-    insert_head_clone_tx(
-        &mut tx,
-        &head,
-        CloneSpec {
-            clone_id: &clone_id,
-            status: "done",
-            completed_at: Some(&completed),
-            scheduled_start: Some(&data.scheduled_start),
-            scheduled_end: data.scheduled_end.as_deref(),
-        },
-        &now,
-    )
-    .await?;
-
-    sqlx::query(
-        "INSERT OR REPLACE INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, ?)",
-    )
-    .bind(&data.page_id)
-    .bind(&data.occurrence_date)
-    .bind(&clone_id)
-    .execute(&mut *tx)
-    .await?;
-
-    tx.commit().await?;
-
-    let clone_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
-        // sql-ok: SUMMARY_COLUMNS is a compile-time constant
-        "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
-    ))
-    .bind(&clone_id)
-    .fetch_one(pool)
-    .await?;
-    Ok(PageSummary::from(clone_row))
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UncompleteSyncedOccurrenceInput {
-    pub page_id: String,
-    pub occurrence_date: String,
-}
-
-/// Uncompletes a synced occurrence: hard-delete its done clone and drop the
-/// `completed_set` row. No-op if the date isn't completed. The original occurrence
-/// reappears once its set entry is gone.
-pub async fn uncomplete_synced_occurrence_impl(
-    pool: &sqlx::SqlitePool,
-    data: UncompleteSyncedOccurrenceInput,
-) -> AppResult<()> {
-    crate::tx::retry_on_busy(|| uncomplete_synced_occurrence_once(pool, &data)).await
-}
-
-async fn uncomplete_synced_occurrence_once(
-    pool: &sqlx::SqlitePool,
-    data: &UncompleteSyncedOccurrenceInput,
-) -> AppResult<()> {
-    let mut tx = pool.begin().await?;
-    // No recompute: the reconciler owns a synced series' head + locked rule.
-    drop_completed_occurrence_tx(&mut tx, &data.page_id, &data.occurrence_date).await?;
-    tx.commit().await?;
-    Ok(())
 }
 
 /// Removes a completed occurrence: drop its `completed_set` row and hard-delete
@@ -1458,23 +1382,18 @@ pub struct UncompleteRecurringInput {
     pub occurrence_date: String,
 }
 
-/// Reverses a native recurring completion: drop the completed-set entry, delete
-/// the done clone via its back-link, and recompute the head — which un-marks a
-/// `done` head when the series yields the occurrence again. No-op if the date
-/// isn't completed. Pre-swap native completions have no back-link, so they are
-/// not uncompletable.
+/// Reverses a recurring completion (native or synced): drop the completed-set entry,
+/// delete the done clone via its back-link, and recompute the head — which un-marks a
+/// `done` head, or rewinds a synced head, when the series yields the occurrence again.
+/// No-op if the date isn't completed. Pre-swap native completions have no back-link,
+/// so they are not uncompletable. Synced recompute converges with the reconciler's on
+/// the next sync (both derive off the same sets).
 pub async fn uncomplete_recurring_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: UncompleteRecurringInput,
 ) -> AppResult<()> {
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
-        if is_active_synced(&mut tx, &data.page_id).await? {
-            return Err(AppError::Conflict(
-                "Synced occurrences are uncompleted upstream, not via the completed-set."
-                    .to_string(),
-            ));
-        }
         drop_completed_occurrence_tx(&mut tx, &data.page_id, &data.occurrence_date).await?;
         crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &data.page_id).await?;
         tx.commit().await?;
@@ -1491,21 +1410,18 @@ pub struct SkipOccurrenceInput {
     pub occurrence_date: String,
 }
 
-/// Dismisses one occurrence of a native recurring series to the skip-set, then
-/// recomputes the head. Rejects a synced series (the provider owns its EXDATEs).
-/// A dismissal is distinct from a *moved* occurrence (a `page_schedules` override)
-/// — the two are mutually exclusive. Undo is [`undo_skip_occurrence_impl`].
+/// Dismisses one occurrence of a recurring series (native or synced) to the skip-set,
+/// then recomputes the head. The skip-set is user state the reconciler never writes,
+/// so a synced skip survives sync and converges (expansion unions completed ∪ skip for
+/// both kinds); the provider's own EXDATEs stay separate. A dismissal is distinct from
+/// a *moved* occurrence (a `page_schedules` override) — the two are mutually exclusive.
+/// Undo is [`undo_skip_occurrence_impl`].
 pub async fn skip_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: SkipOccurrenceInput,
 ) -> AppResult<()> {
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
-        if is_active_synced(&mut tx, &data.page_id).await? {
-            return Err(AppError::Conflict(
-                "Synced occurrences are dismissed upstream, not via the skip-set.".to_string(),
-            ));
-        }
         sqlx::query("INSERT OR IGNORE INTO skip_set (page_id, occurrence_date) VALUES (?, ?)")
             .bind(&data.page_id)
             .bind(&data.occurrence_date)
@@ -1526,11 +1442,6 @@ pub async fn undo_skip_occurrence_impl(
 ) -> AppResult<()> {
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
-        if is_active_synced(&mut tx, &data.page_id).await? {
-            return Err(AppError::Conflict(
-                "Synced occurrences are dismissed upstream, not via the skip-set.".to_string(),
-            ));
-        }
         sqlx::query("DELETE FROM skip_set WHERE page_id = ? AND occurrence_date = ?")
             .bind(&data.page_id)
             .bind(&data.occurrence_date)

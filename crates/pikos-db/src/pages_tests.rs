@@ -59,7 +59,7 @@ async fn series_advances_to_next_open_occurrence() {
 
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap();
@@ -141,7 +141,7 @@ async fn completion_records_the_set_and_leaves_rule_exdates_untouched() {
 
     complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap();
@@ -202,7 +202,7 @@ async fn series_marks_head_done_when_exhausted() {
 
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap();
@@ -237,7 +237,7 @@ async fn syncs_normalized_tag_tables_on_clone() {
 
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap();
@@ -256,7 +256,7 @@ async fn missing_head_returns_not_found() {
     let pool = test_pool().await;
     let err = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "nope".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "nope".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap_err();
@@ -283,7 +283,7 @@ async fn rejects_soft_deleted_head() {
 
     let err = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap_err();
@@ -351,7 +351,7 @@ async fn advanced_head_survives_later_denorm_refresh() {
     // Complete the 05-21 occurrence; the recompute advances the head to 05-28.
     complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap();
@@ -386,7 +386,7 @@ async fn uncomplete_reverses_a_native_completion() {
 
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap();
@@ -436,7 +436,7 @@ async fn exhausted_series_uncomplete_unmarks_done() {
 
     complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap();
@@ -533,7 +533,7 @@ async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
     for _ in 0..2 {
         complete_recurring_page_impl(
             &pool,
-            CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+            CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
         )
         .await
         .unwrap();
@@ -1935,32 +1935,9 @@ async fn today_view_carries_schedule_locked() {
     assert!(p.schedule_locked, "Today view must carry schedule_locked");
 }
 
-#[tokio::test]
-async fn complete_synced_occurrence_rejects_non_recurring() {
-    // Occurrence completion only applies to a recurring synced series. A synced
-    // ONE-OFF has no rule, so the writer must reject rather than mint a clone the
-    // expansion can never suppress (symmetric with the native head-advance guard).
-    let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Synced one-off"))
-        .await
-        .unwrap();
-    mark_synced(&pool, "p", "active").await;
-
-    let err = complete_synced_occurrence_impl(
-        &pool,
-        CompleteSyncedOccurrenceInput {
-            page_id: "p".into(),
-            occurrence_date: "2026-06-01".into(),
-            scheduled_start: "2026-06-01T09:00:00".into(),
-            scheduled_end: None,
-        },
-    )
-    .await
-    .unwrap_err();
-    assert!(matches!(err, AppError::Conflict(_)), "non-recurring synced page rejected");
-}
-
-/// Build an active synced recurring series ("head") for the occurrence tests.
+/// Build an active synced recurring series ("head") for the occurrence tests: a
+/// weekly-Monday rule from 2026-06-01 (so 06-01, 06-08, 06-15… are occurrences and
+/// e.g. 06-03 is not, which the occurrence-validation guard rejects).
 async fn synced_recurring_series(pool: &sqlx::SqlitePool) {
     insert_test_page(
         pool,
@@ -1988,22 +1965,52 @@ async fn synced_recurring_series(pool: &sqlx::SqlitePool) {
     mark_synced(pool, "head", "active").await;
 }
 
-#[tokio::test]
-async fn complete_synced_occurrence_inserts_clone_and_records_map() {
-    let pool = test_pool().await;
-    synced_recurring_series(&pool).await;
+/// A synced-occurrence completion payload for the unified command.
+fn synced_complete(date: &str, start: &str) -> CompleteRecurringInput {
+    CompleteRecurringInput {
+        page_id: "head".into(),
+        skip_dates: vec![],
+        occurrence_date: Some(date.into()),
+        scheduled_start: Some(start.into()),
+        scheduled_end: None,
+    }
+}
 
-    let clone = complete_synced_occurrence_impl(
+#[tokio::test]
+async fn unified_completion_rejects_a_non_recurring_synced_page() {
+    // Occurrence completion only applies to a recurring series. A synced ONE-OFF has
+    // no rule, so the writer rejects rather than mint a clone expansion can't suppress.
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Synced one-off"))
+        .await
+        .unwrap();
+    mark_synced(&pool, "p", "active").await;
+
+    let err = complete_recurring_page_impl(
         &pool,
-        CompleteSyncedOccurrenceInput {
-            page_id: "head".into(),
-            occurrence_date: "2026-06-08".into(),
-            scheduled_start: "2026-06-08T09:00:00".into(),
-            scheduled_end: Some("2026-06-08T09:30:00".into()),
+        CompleteRecurringInput {
+            page_id: "p".into(),
+            skip_dates: vec![],
+            occurrence_date: Some("2026-06-01".into()),
+            scheduled_start: Some("2026-06-01T09:00:00".into()),
+            scheduled_end: None,
         },
     )
     .await
-    .unwrap();
+    .unwrap_err();
+    assert!(matches!(err, AppError::Conflict(_)), "non-recurring synced page rejected");
+}
+
+#[tokio::test]
+async fn synced_completion_inserts_clone_and_records_map() {
+    let pool = test_pool().await;
+    synced_recurring_series(&pool).await;
+
+    // Completing a FUTURE occurrence (06-08) leaves the oldest-open head (06-01) put.
+    let result = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
+        .await
+        .unwrap();
+    let clone = result.clone;
 
     // The clone is a durable native done page at the occurrence — no sync link.
     assert_eq!(clone.status, "done");
@@ -2011,7 +2018,6 @@ async fn complete_synced_occurrence_inserts_clone_and_records_map() {
     assert!(!clone.schedule_locked, "clone is native, not sync-locked");
     assert!(clone.sync_state.is_none());
 
-    // The set records (date → clone id); the reconciler-owned head is untouched.
     let recorded: String = sqlx::query_scalar(
         "SELECT clone_id FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-06-08'",
     )
@@ -2019,160 +2025,203 @@ async fn complete_synced_occurrence_inserts_clone_and_records_map() {
     .await
     .unwrap();
     assert_eq!(recorded, clone.id);
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-06-01T09:00:00"),
+        "oldest-open head unchanged when a later occurrence is completed"
+    );
 }
 
 #[tokio::test]
-async fn complete_synced_occurrence_twice_is_idempotent() {
+async fn synced_completion_of_the_oldest_open_advances_the_head() {
+    // U9a: a synced completion now advances the head (the reconciler recomputes off
+    // the same completed-set on the next sync, so the two converge).
+    let pool = test_pool().await;
+    synced_recurring_series(&pool).await;
+
+    let result = complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T09:00:00"))
+        .await
+        .unwrap();
+
+    assert_eq!(result.head.scheduled_start.as_deref(), Some("2026-06-08T09:00:00"));
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-06-08T09:00:00"),
+        "head advanced off the completed oldest-open occurrence"
+    );
+}
+
+#[tokio::test]
+async fn synced_completion_twice_is_idempotent() {
     // Second call for the same page/date returns the same clone — no orphaned ghost.
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
 
-    let input = || CompleteSyncedOccurrenceInput {
-        page_id: "head".into(),
-        occurrence_date: "2026-06-08".into(),
-        scheduled_start: "2026-06-08T09:00:00".into(),
-        scheduled_end: Some("2026-06-08T09:30:00".into()),
-    };
+    let first = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
+        .await
+        .unwrap();
+    let second = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
+        .await
+        .unwrap();
 
-    let first = complete_synced_occurrence_impl(&pool, input()).await.unwrap();
-    let second = complete_synced_occurrence_impl(&pool, input()).await.unwrap();
-
-    assert_eq!(second.id, first.id, "second completion returns the same clone");
-
+    assert_eq!(second.clone.id, first.clone.id, "second completion returns the same clone");
     let clone_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE status = 'done' AND deleted_at IS NULL")
             .fetch_one(&pool)
             .await
             .unwrap();
     assert_eq!(clone_count, 1, "exactly one done clone — no orphan");
+}
 
+#[tokio::test]
+async fn synced_completion_rejects_an_occurrence_not_in_the_rule() {
+    // A cross-zone off-by-one key would write a completed_set entry matching no
+    // occurrence (open forever beside its clone). 06-03 is a Wednesday; the rule is
+    // weekly-Monday, so the engine-validation guard rejects it.
+    let pool = test_pool().await;
+    synced_recurring_series(&pool).await;
+
+    let err = complete_recurring_page_impl(&pool, synced_complete("2026-06-03", "2026-06-03T09:00:00"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, AppError::Conflict(_)), "off-rule occurrence rejected");
     let set_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM completed_set WHERE page_id = 'head'")
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(set_count, 1);
+    assert_eq!(set_count, 0, "no phantom completed-set entry written");
 }
 
 #[tokio::test]
-async fn uncomplete_synced_occurrence_deletes_clone_and_drops_date() {
+async fn unified_completion_requires_an_occurrence_for_a_synced_series() {
+    // A non-UI caller passing the bare native shape (no occurrence) against a synced
+    // series is rejected — the reconciler-pinned head is not the occurrence to complete.
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
-    let clone = complete_synced_occurrence_impl(
+
+    let err = complete_recurring_page_impl(
         &pool,
-        CompleteSyncedOccurrenceInput {
+        CompleteRecurringInput {
             page_id: "head".into(),
-            occurrence_date: "2026-06-08".into(),
-            scheduled_start: "2026-06-08T09:00:00".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
             scheduled_end: None,
         },
     )
     .await
-    .unwrap();
+    .unwrap_err();
+    assert!(matches!(err, AppError::Conflict(_)), "synced series needs an occurrence");
+}
 
-    uncomplete_synced_occurrence_impl(
+#[tokio::test]
+async fn synced_uncomplete_deletes_clone_and_rewinds_the_head() {
+    let pool = test_pool().await;
+    synced_recurring_series(&pool).await;
+    // Complete the oldest-open occurrence → head advances to 06-08.
+    let clone = complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T09:00:00"))
+        .await
+        .unwrap()
+        .clone;
+
+    uncomplete_recurring_occurrence_impl(
         &pool,
-        UncompleteSyncedOccurrenceInput {
-            page_id: "head".into(),
-            occurrence_date: "2026-06-08".into(),
-        },
+        UncompleteRecurringInput { page_id: "head".into(), occurrence_date: "2026-06-01".into() },
     )
     .await
     .unwrap();
 
     assert!(!page_exists(&pool, &clone.id).await, "clone deleted");
     let remaining: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-06-08'",
+        "SELECT COUNT(*) FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-06-01'",
     )
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(remaining, 0, "date dropped from set");
-}
-
-#[tokio::test]
-async fn native_recurring_completion_rejects_an_active_synced_series() {
-    // The native head-advance path would clone the head AND advance its
-    // schedule + merge an EXDATE — all reconciler-owned for a synced series, so
-    // it gets clobbered on the next sync. A CLI/non-UI caller must be rejected
-    // and routed to complete_synced_occurrence_impl instead.
-    let pool = test_pool().await;
-    synced_recurring_series(&pool).await;
-
-    let err = complete_recurring_page_impl(
-        &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
-    )
-    .await
-    .unwrap_err();
-
-    assert!(matches!(err, AppError::Conflict(_)), "synced series rejects native completion");
     assert_eq!(
         fetch_scheduled_start(&pool, "head").await.as_deref(),
         Some("2026-06-01T09:00:00"),
-        "head schedule not advanced"
+        "head rewound to the reopened occurrence"
     );
-    assert_eq!(count_pages(&pool).await, 1, "no clone minted");
 }
 
 #[tokio::test]
-async fn native_uncomplete_and_undo_skip_reject_an_active_synced_series() {
-    // The native reverse commands recompute a reconciler-owned head — a non-UI
-    // caller (CLI) must be rejected, mirroring skip/complete. The synced reverse
-    // path is uncomplete_synced_occurrence_impl.
+async fn synced_uncomplete_and_undo_skip_no_longer_reject_synced() {
+    // U9a folds the synced fork into the unified reverse commands: they now handle a
+    // synced series (no-op when the date isn't in the set) instead of rejecting it.
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
 
-    let uncomplete = uncomplete_recurring_occurrence_impl(
+    uncomplete_recurring_occurrence_impl(
         &pool,
         UncompleteRecurringInput { page_id: "head".into(), occurrence_date: "2026-06-01".into() },
     )
     .await
-    .unwrap_err();
-    assert!(matches!(uncomplete, AppError::Conflict(_)), "synced uncomplete rejected");
-
-    let undo_skip = undo_skip_occurrence_impl(
+    .expect("synced uncomplete no longer rejected");
+    undo_skip_occurrence_impl(
         &pool,
         SkipOccurrenceInput { page_id: "head".into(), occurrence_date: "2026-06-01".into() },
     )
     .await
-    .unwrap_err();
-    assert!(matches!(undo_skip, AppError::Conflict(_)), "synced undo-skip rejected");
+    .expect("synced undo-skip no longer rejected");
+}
+
+#[tokio::test]
+async fn synced_skip_is_allowed_and_recomputes() {
+    // Decision (2026-07-04): the skip-set is user state the reconciler never writes,
+    // so a synced skip is allowed and converges. Skipping the oldest-open advances
+    // the head like a completion does.
+    let pool = test_pool().await;
+    synced_recurring_series(&pool).await;
+
+    skip_occurrence_impl(
+        &pool,
+        SkipOccurrenceInput { page_id: "head".into(), occurrence_date: "2026-06-01".into() },
+    )
+    .await
+    .expect("synced skip allowed");
+
+    let skipped: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM skip_set WHERE page_id = 'head' AND occurrence_date = '2026-06-01'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(skipped, 1, "skip recorded in the skip-set");
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-06-08T09:00:00"),
+        "head advanced off the skipped oldest-open occurrence"
+    );
 }
 
 #[tokio::test]
 async fn restore_skips_recompute_for_an_active_synced_series() {
-    // Restore reactivates the sync link, so its recompute must stay excluded like
-    // the foreground heal — else it advances the reconciler-pinned head off a
-    // completed-set entry the provider still owns.
+    // Restore reactivates the sync link, so its recompute stays excluded like the
+    // foreground heal — else it clobbers a reconciler-pinned head. Pin the head at a
+    // value the recompute would NOT derive (06-15, not the oldest-open 06-01) and
+    // confirm restore leaves it there.
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
-    // A completed occurrence at the head's own date: a native recompute would
-    // advance the head to the next week; the reconciler keeps it pinned.
-    complete_synced_occurrence_impl(
-        &pool,
-        CompleteSyncedOccurrenceInput {
-            page_id: "head".into(),
-            occurrence_date: "2026-06-01".into(),
-            scheduled_start: "2026-06-01T09:00:00".into(),
-            scheduled_end: Some("2026-06-01T09:30:00".into()),
-        },
-    )
-    .await
-    .unwrap();
+    sqlx::query("UPDATE pages SET scheduled_start = '2026-06-15T09:00:00' WHERE id = 'head'")
+        .execute(&pool)
+        .await
+        .unwrap();
 
     soft_delete_page_impl(&pool, "head").await.unwrap();
     restore_page_impl(&pool, "head").await.unwrap();
 
     assert_eq!(
         fetch_scheduled_start(&pool, "head").await.as_deref(),
-        Some("2026-06-01T09:00:00"),
-        "reconciler-pinned head not advanced by restore's recompute"
+        Some("2026-06-15T09:00:00"),
+        "reconciler-pinned head not re-derived by restore's recompute"
     );
 }
 
 #[tokio::test]
-async fn complete_synced_occurrence_leaves_head_and_rule_untouched() {
+async fn synced_completion_leaves_rule_exdates_untouched() {
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
     let exdates_before: String =
@@ -2181,64 +2230,40 @@ async fn complete_synced_occurrence_leaves_head_and_rule_untouched() {
             .await
             .unwrap();
 
-    let clone = complete_synced_occurrence_impl(
-        &pool,
-        CompleteSyncedOccurrenceInput {
-            page_id: "head".into(),
-            occurrence_date: "2026-06-08".into(),
-            scheduled_start: "2026-06-08T09:00:00".into(),
-            scheduled_end: None,
-        },
-    )
-    .await
-    .unwrap();
+    let clone = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
+        .await
+        .unwrap()
+        .clone;
 
-    // The reconciler-owned head must not advance and the rule's EXDATEs must not
-    // gain the completed date — completion lives only in completed_set.
-    assert_eq!(
-        fetch_scheduled_start(&pool, "head").await.as_deref(),
-        Some("2026-06-01T09:00:00"),
-        "head schedule unchanged"
-    );
+    // Completion lives only in completed_set — the reconciler-owned EXDATEs are untouched.
     let exdates_after: String =
         sqlx::query_scalar("SELECT rrule_exdates FROM page_recurrence_rules WHERE page_id = 'head'")
             .fetch_one(&pool)
             .await
             .unwrap();
     assert_eq!(exdates_before, exdates_after, "rule EXDATEs untouched");
-    let clone_link: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE page_id = ?")
-            .bind(&clone.id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let clone_link: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE page_id = ?")
+        .bind(&clone.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(clone_link, 0, "clone is a free native page, no sync link");
 }
 
 #[tokio::test]
-async fn uncomplete_synced_occurrence_is_a_noop_for_a_different_date() {
+async fn synced_uncomplete_is_a_noop_for_a_different_date() {
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
-    let clone = complete_synced_occurrence_impl(
-        &pool,
-        CompleteSyncedOccurrenceInput {
-            page_id: "head".into(),
-            occurrence_date: "2026-06-08".into(),
-            scheduled_start: "2026-06-08T09:00:00".into(),
-            scheduled_end: None,
-        },
-    )
-    .await
-    .unwrap();
+    let clone = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
+        .await
+        .unwrap()
+        .clone;
 
     // Uncompleting an occurrence that was never completed must not delete the
     // existing clone or disturb the map.
-    uncomplete_synced_occurrence_impl(
+    uncomplete_recurring_occurrence_impl(
         &pool,
-        UncompleteSyncedOccurrenceInput {
-            page_id: "head".into(),
-            occurrence_date: "2026-06-15".into(),
-        },
+        UncompleteRecurringInput { page_id: "head".into(), occurrence_date: "2026-06-15".into() },
     )
     .await
     .unwrap();

@@ -123,7 +123,7 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
     // The completion still lands: head advanced, clone created.
     complete_recurring_page_impl(
         pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
     )
     .await
     .unwrap();

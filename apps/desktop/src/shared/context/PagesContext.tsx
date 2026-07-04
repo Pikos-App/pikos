@@ -7,7 +7,7 @@
 import type {
   CompletedPagesFilter,
   CompletedPagesResponse,
-  CompleteSyncedOccurrenceInput,
+  CompleteRecurringResult,
   Folder,
   Page,
   PageRecurrenceRule,
@@ -580,7 +580,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
           // derivation owns the recurring head). Adopt that result so a drop onto
           // a set-excluded date — which the local snap can't detect — converges to
           // the head the backend actually derived.
-          await adoptRecomputedHead(pageId);
+          await patchRecomputedHead(pageId);
         }
       } catch (e) {
         log.error(`scheduleOnce(${pageId}) failed; rolling back optimistic schedule`, e);
@@ -642,24 +642,28 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   }
 
   /** Re-fetch a recurring head after a backend recompute (which returns void) and
-   * patch the derived fields into pages state, so the FE reflects the head the
-   * derivation actually produced rather than an optimistic guess. */
-  async function adoptRecomputedHead(pageId: string): Promise<void> {
+   * patch its derived fields into state, so the FE reflects the head the derivation
+   * produced rather than an optimistic guess. `dropCloneId` removes the deleted done
+   * clone in the same update (the uncomplete path); the drop applies even if the head
+   * fetch comes back empty. */
+  async function patchRecomputedHead(pageId: string, dropCloneId?: string): Promise<void> {
     const fresh = await adapter.getPage(pageId);
-    if (!fresh) return;
-    setPages((prev) =>
-      prev.map((p) =>
+    setPages((prev) => {
+      const base = dropCloneId ? prev.filter((p) => p.id !== dropCloneId) : prev;
+      if (!fresh) return base;
+      return base.map((p) =>
         p.id === pageId
           ? {
               ...p,
               completedAt: fresh.completedAt ?? null,
+              completedOccurrences: fresh.completedOccurrences ?? null,
               scheduledEnd: fresh.scheduledEnd ?? null,
               scheduledStart: fresh.scheduledStart ?? null,
               status: fresh.status,
             }
           : p
-      )
-    );
+      );
+    });
   }
 
   /** Uncompletes the NEWEST completed occurrence, then adopts the recomputed head.
@@ -675,23 +679,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     const cloneId = map![newestDate];
     await enqueue(pageId, async () => {
       await adapter.uncompleteRecurringOccurrence({ occurrenceDate: newestDate, pageId });
-      const fresh = await adapter.getPage(pageId);
-      setPages((prev) =>
-        prev
-          .filter((p) => p.id !== cloneId)
-          .map((p) =>
-            p.id === pageId && fresh
-              ? {
-                  ...p,
-                  completedAt: fresh.completedAt ?? null,
-                  completedOccurrences: fresh.completedOccurrences ?? null,
-                  scheduledEnd: fresh.scheduledEnd ?? null,
-                  scheduledStart: fresh.scheduledStart ?? null,
-                  status: fresh.status,
-                }
-              : p
-          )
-      );
+      await patchRecomputedHead(pageId, cloneId);
     });
     return true;
   }
@@ -761,9 +749,12 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     // Re-entrancy guard: the checkbox path is fire-and-forget and not disabled
     // in flight, and the backend mints one clone + one head-advance per call —
     // a re-entrant call (or, now that completion is queued, a SERIALIZED
-    // second call) would complete two occurrences for one gesture.
-    if (completingRecurringRef.current.has(pageId)) return;
-    completingRecurringRef.current.add(pageId);
+    // second call) would complete two occurrences for one gesture. Keyed per
+    // occurrence (`pageId:date`, unified with the synced path) so completing two
+    // different virtuals of one series in quick succession isn't dropped.
+    const occKey = `${pageId}:${page?.scheduledStart?.slice(0, 10) ?? ""}`;
+    if (completingRecurringRef.current.has(occKey)) return;
+    completingRecurringRef.current.add(occKey);
     try {
       // Drain any pending debounced patch for this page before advancing the
       // head. The head's denorm scheduledStart is written through the 800ms
@@ -780,7 +771,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
       // means the advance is computed from fully settled state.
       await enqueue(pageId, () => completeRecurringPageQueued(pageId, missedPolicy));
     } finally {
-      completingRecurringRef.current.delete(pageId);
+      completingRecurringRef.current.delete(occKey);
     }
   }
 
@@ -845,39 +836,32 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   }
 
   // ─── Synced recurring occurrence completion ────────────────────────────────
-  // Synced recurring series can't use the native head-advance path (the
-  // reconciler pins the head + owns the locked rule). Completion is user-owned
-  // per-occurrence state: a done clone + a `date → clone` map on the series.
+  // Thin routing to the unified command with the client-rendered virtual; the model
+  // (why a synced series supplies its occurrence, and how the recompute converges) is
+  // documented on `complete_recurring_page` in the backend.
 
-  async function completeSyncedOccurrence(input: CompleteSyncedOccurrenceInput): Promise<void> {
+  async function completeSyncedOccurrence(input: {
+    pageId: string;
+    occurrenceDate: string;
+    scheduledStart: string;
+    scheduledEnd?: string;
+  }): Promise<void> {
     const key = `${input.pageId}:${input.occurrenceDate}`;
     if (completingSyncedRef.current.has(key)) return;
     completingSyncedRef.current.add(key);
-    let clone: PageSummary;
+    let result: CompleteRecurringResult;
     try {
-      clone = await adapter.completeSyncedOccurrence(input);
+      result = await adapter.completeRecurringPage(input);
     } finally {
       completingSyncedRef.current.delete(key);
     }
+    // Surface the done clone alongside the advanced head, deduped since an idempotent
+    // repeat re-returns the same clone already in state.
     setPages((prev) => {
-      const withMap = prev.map((p) =>
-        p.id === input.pageId
-          ? {
-              ...p,
-              completedOccurrences: {
-                ...(p.completedOccurrences ?? {}),
-                [input.occurrenceDate]: clone.id,
-              },
-            }
-          : p
-      );
-      // Surface the done clone immediately (mirrors completeRecurringPage); the
-      // next range load reconciles it as a normal completed page. A repeat
-      // completion re-returns the same clone (idempotent backend), so it may
-      // already be in state.
-      return prev.some((p) => p.id === clone.id)
-        ? withMap.map((p) => (p.id === clone.id ? clone : p))
-        : [...withMap, clone];
+      const withHead = prev.map((p) => (p.id === input.pageId ? result.head : p));
+      return prev.some((p) => p.id === result.clone.id)
+        ? withHead.map((p) => (p.id === result.clone.id ? result.clone : p))
+        : [...withHead, result.clone];
     });
   }
 
@@ -887,16 +871,9 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   ): Promise<void> {
     const series = pagesRef.current.find((p) => p.id === seriesId);
     const cloneId = series?.completedOccurrences?.[occurrenceDate];
-    await adapter.uncompleteSyncedOccurrence({ occurrenceDate, pageId: seriesId });
-    setPages((prev) =>
-      prev
-        .filter((p) => p.id !== cloneId)
-        .map((p) => {
-          if (p.id !== seriesId || !p.completedOccurrences) return p;
-          const { [occurrenceDate]: _removed, ...rest } = p.completedOccurrences;
-          return { ...p, completedOccurrences: rest };
-        })
-    );
+    // The unified uncomplete recomputes the head, so re-fetch it rather than guess.
+    await adapter.uncompleteRecurringOccurrence({ occurrenceDate, pageId: seriesId });
+    await patchRecomputedHead(seriesId, cloneId);
   }
 
   /**

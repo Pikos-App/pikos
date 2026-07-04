@@ -177,6 +177,12 @@ export interface CompleteRecurringInput {
   /** Missed-occurrence dates (YYYY-MM-DD) the "advance to today" gap dialog
    * dismisses — written to the skip-set. Empty for a plain completion. */
   skipDates?: string[];
+  /** Synced series only: the client-rendered occurrence being completed, since the
+   * reconciler pins the head at the base. Native omits these — its occurrence is the
+   * head's own oldest-open date, derived server-side. */
+  occurrenceDate?: string;
+  scheduledStart?: string;
+  scheduledEnd?: string;
 }
 
 export interface CompleteRecurringResult {
@@ -185,34 +191,16 @@ export interface CompleteRecurringResult {
   head: PageSummary;
 }
 
-/** Reverse a native recurring completion by occurrence date: deletes the done
- * clone via its back-link, drops the completed-set entry, and recomputes. */
+/** Reverse a recurring completion (native or synced) by occurrence date: deletes the
+ * done clone via its back-link, drops the completed-set entry, and recomputes. */
 export interface UncompleteRecurringInput {
   pageId: string;
   occurrenceDate: string;
 }
 
-/** Dismiss (or, via undo, restore) one native recurring occurrence to/from the
- * skip-set. */
+/** Dismiss (or, via undo, restore) one recurring occurrence to/from the skip-set
+ * (native or synced — the skip-set is user state, distinct from provider EXDATEs). */
 export interface SkipOccurrenceInput {
-  pageId: string;
-  occurrenceDate: string;
-}
-
-/** Complete one occurrence of a synced recurring series. Records a
- * user-owned `date → done-clone` entry and inserts a done clone — never advances
- * the reconciler-pinned head or touches the locked rule's EXDATEs. */
-export interface CompleteSyncedOccurrenceInput {
-  pageId: string;
-  /** Occurrence date being completed (YYYY-MM-DD) — the completion-map key. */
-  occurrenceDate: string;
-  /** The occurrence's start/end wall-clock — the done clone is scheduled here. */
-  scheduledStart: string;
-  scheduledEnd?: string;
-}
-
-/** Reverse a synced-occurrence completion: delete the clone, drop the date. */
-export interface UncompleteSyncedOccurrenceInput {
   pageId: string;
   occurrenceDate: string;
 }

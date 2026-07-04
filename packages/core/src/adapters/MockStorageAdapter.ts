@@ -22,7 +22,6 @@ import type {
   CompletedPagesResponse,
   CompleteRecurringInput,
   CompleteRecurringResult,
-  CompleteSyncedOccurrenceInput,
   Folder,
   Page,
   PageFilter,
@@ -39,7 +38,6 @@ import type {
   SyncAccount,
   SyncCalendar,
   UncompleteRecurringInput,
-  UncompleteSyncedOccurrenceInput,
 } from "../types";
 import { nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
@@ -598,9 +596,16 @@ export class MockStorageAdapter implements StorageAdapter {
     const head = this.pages.get(data.pageId);
     if (!head) throw new Error(`Page not found: ${data.pageId}`);
 
-    const occurrenceDate = head.scheduledStart?.slice(0, 10);
+    // Native completes the head's own oldest-open occurrence (server-derived); a synced
+    // series' head is reconciler-pinned, so the client supplies the rendered virtual.
+    const occurrenceDate = head.scheduleLocked
+      ? data.occurrenceDate
+      : head.scheduledStart?.slice(0, 10);
     if (!occurrenceDate)
       throw new Error(`Recurring page has no scheduled occurrence: ${data.pageId}`);
+    const cloneStart = head.scheduleLocked ? data.scheduledStart : head.scheduledStart;
+    if (!cloneStart) throw new Error(`Synced occurrence completion requires a start.`);
+    const cloneEnd = (head.scheduleLocked ? data.scheduledEnd : head.scheduledEnd) ?? null;
 
     // Idempotency: a repeat completion of the same occurrence returns the existing
     // live clone rather than minting a duplicate (mirrors the Rust guard).
@@ -614,6 +619,8 @@ export class MockStorageAdapter implements StorageAdapter {
     const timestamp = now();
     // `completedAt` follows the local-wall-clock convention (date-compared against
     // the local day in the Completed view), unlike created/updated_at which are UTC.
+    // The clone is always a durable NATIVE page (no sync provenance, never locked) —
+    // for a synced series it's the user's own completion record.
     const clone: Page = {
       ...head,
       completedAt: nowLocalISO(),
@@ -621,15 +628,20 @@ export class MockStorageAdapter implements StorageAdapter {
       content: head.content,
       createdAt: timestamp,
       id: cloneId,
+      scheduledEnd: cloneEnd,
+      scheduledStart: cloneStart,
+      scheduleLocked: false,
       skippedOccurrences: null,
       sortOrder: nextSortOrder([...this.pages.values()]),
       status: "done",
+      syncState: null,
       updatedAt: timestamp,
     };
     this.pages.set(cloneId, clone);
 
     // Record the completion + any gap skips on the head, then recompute it onto the
-    // next open occurrence (or done). No head-advance/exdate-merge sent by the client.
+    // next open occurrence (or done) — for both kinds; the reconciler converges a
+    // synced head off the same sets on the next sync.
     const completedOccurrences = {
       ...(head.completedOccurrences ?? {}),
       [occurrenceDate]: cloneId,
@@ -732,51 +744,6 @@ export class MockStorageAdapter implements StorageAdapter {
     this.recomputeHead(rule.pageId);
 
     return Promise.resolve({ clone: toSummary(clone), ruleExdates });
-  }
-
-  completeSyncedOccurrence(data: CompleteSyncedOccurrenceInput): Promise<PageSummary> {
-    const head = this.pages.get(data.pageId);
-    if (!head) return Promise.reject(new Error(`Page not found: ${data.pageId}`));
-    // Idempotency (mirrors the Rust guard); a trashed clone falls through so the
-    // map re-points to a fresh one.
-    const existingId = head.completedOccurrences?.[data.occurrenceDate];
-    if (existingId && !this.softDeleted.has(existingId)) {
-      const existing = this.pages.get(existingId);
-      if (existing) return Promise.resolve(toSummary(existing));
-    }
-    const cloneId = uuid();
-    const timestamp = now();
-    const clone: Page = {
-      ...head,
-      completedAt: nowLocalISO(),
-      // The done clone is a durable NATIVE page — no sync provenance, never locked.
-      completedOccurrences: null,
-      createdAt: timestamp,
-      id: cloneId,
-      scheduledEnd: data.scheduledEnd ?? null,
-      scheduledStart: data.scheduledStart,
-      scheduleLocked: false,
-      skippedOccurrences: null,
-      sortOrder: nextSortOrder([...this.pages.values()]),
-      status: "done",
-      syncState: null,
-      updatedAt: timestamp,
-    };
-    this.pages.set(cloneId, clone);
-    const map = { ...(head.completedOccurrences ?? {}), [data.occurrenceDate]: cloneId };
-    this.pages.set(head.id, { ...head, completedOccurrences: map, updatedAt: timestamp });
-    return Promise.resolve(toSummary(clone));
-  }
-
-  uncompleteSyncedOccurrence(data: UncompleteSyncedOccurrenceInput): Promise<void> {
-    const head = this.pages.get(data.pageId);
-    if (!head?.completedOccurrences) return Promise.resolve();
-    const cloneId = head.completedOccurrences[data.occurrenceDate];
-    if (!cloneId) return Promise.resolve();
-    this.pages.delete(cloneId);
-    const { [data.occurrenceDate]: _removed, ...rest } = head.completedOccurrences;
-    this.pages.set(head.id, { ...head, completedOccurrences: rest, updatedAt: now() });
-    return Promise.resolve();
   }
 
   // ─── Reminders ──────────────────────────────────────────────────────────────

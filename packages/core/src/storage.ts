@@ -5,7 +5,6 @@ import type {
   CompletedPagesResponse,
   CompleteRecurringInput,
   CompleteRecurringResult,
-  CompleteSyncedOccurrenceInput,
   Folder,
   Page,
   PageFilter,
@@ -20,7 +19,6 @@ import type {
   SkipOccurrenceInput,
   SyncCalendar,
   UncompleteRecurringInput,
-  UncompleteSyncedOccurrenceInput,
 } from "./types";
 
 // ─── Page input helpers ───────────────────────────────────────────────────────
@@ -176,13 +174,17 @@ export interface StorageAdapter {
   listRecurrenceRules(): Promise<PageRecurrenceRule[]>;
 
   // Recurring completion
-  /** Complete the head occurrence: done clone + completed-set entry, then recompute
-   * the head onto the next open occurrence (or done). Gap dismissals go to skipDates. */
+  /** Complete one occurrence of a recurring page (native or synced): done clone +
+   * completed-set entry, then recompute the head onto the next open occurrence (or
+   * done). Native completes the head's own occurrence (server-derived); synced passes
+   * the client-rendered virtual (occurrenceDate/scheduledStart). Gap dismissals go to
+   * skipDates. */
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult>;
-  /** Reverse a native recurring completion by occurrence date (delete the clone via
-   * its back-link, drop the completed-set entry, recompute the head). */
+  /** Reverse a recurring completion (native or synced) by occurrence date (delete the
+   * clone via its back-link, drop the completed-set entry, recompute the head). */
   uncompleteRecurringOccurrence(data: UncompleteRecurringInput): Promise<void>;
-  /** Dismiss one native recurring occurrence to the skip-set (recomputes the head). */
+  /** Dismiss one recurring occurrence to the skip-set, recomputing the head (native or
+   * synced — the skip-set is user state, distinct from provider EXDATEs). */
   skipOccurrence(data: SkipOccurrenceInput): Promise<void>;
   /** Undo a skip: drop the skip-set entry and recompute. */
   undoSkipOccurrence(data: SkipOccurrenceInput): Promise<void>;
@@ -192,11 +194,6 @@ export interface StorageAdapter {
   /** Materialize a virtual occurrence at a new time: clone head + schedule the
    * clone + exdate the original date, in ONE transaction. */
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult>;
-  /** Complete one occurrence of a synced recurring series — done clone +
-   * user-owned completion map, no head advance. Returns the done clone. */
-  completeSyncedOccurrence(data: CompleteSyncedOccurrenceInput): Promise<PageSummary>;
-  /** Reverse a synced-occurrence completion (delete the clone, drop the date). */
-  uncompleteSyncedOccurrence(data: UncompleteSyncedOccurrenceInput): Promise<void>;
 
   // Reminders
   createPageReminder(data: NewPageReminder): Promise<PageReminder>;

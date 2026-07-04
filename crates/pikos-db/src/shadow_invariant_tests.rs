@@ -83,7 +83,7 @@ async fn assert_invariant(rrule: &str, base_start: &str, base_end: Option<&str>,
         exdates.push(head_occ.original_date.clone());
         complete_recurring_page_impl(
             &pool,
-            CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
+            CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
         )
         .await
         .unwrap();

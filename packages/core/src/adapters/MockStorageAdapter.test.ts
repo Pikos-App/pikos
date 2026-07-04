@@ -1227,12 +1227,12 @@ describe("schedule and rule updates", () => {
   });
 });
 
-describe("synced occurrence completion", () => {
+describe("synced occurrence completion (via unified completeRecurringPage)", () => {
   it("records date → clone and produces a durable native done clone", async () => {
     const series = await createTestPage({ title: "Weekly 1:1" });
     adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
 
-    const clone = await adapter.completeSyncedOccurrence({
+    const { clone } = await adapter.completeRecurringPage({
       occurrenceDate: "2026-03-09",
       pageId: series.id,
       scheduledEnd: "2026-03-09T14:30:00",
@@ -1253,42 +1253,42 @@ describe("synced occurrence completion", () => {
   it("a repeat completion of the same occurrence returns the existing clone, not a second one", async () => {
     const series = await createTestPage({ title: "Weekly 1:1" });
     adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
-    const first = await adapter.completeSyncedOccurrence({
+    const first = await adapter.completeRecurringPage({
       occurrenceDate: "2026-03-09",
       pageId: series.id,
       scheduledStart: "2026-03-09T14:00:00",
     });
 
-    const second = await adapter.completeSyncedOccurrence({
+    const second = await adapter.completeRecurringPage({
       occurrenceDate: "2026-03-09",
       pageId: series.id,
       scheduledStart: "2026-03-09T14:00:00",
     });
 
-    expect(second.id).toBe(first.id);
+    expect(second.clone.id).toBe(first.clone.id);
     const done = await adapter.listPages({ status: "done" });
     expect(done.filter((p) => p.title === "Weekly 1:1")).toHaveLength(1);
     const updatedSeries = await adapter.getPage(series.id);
-    expect(updatedSeries?.completedOccurrences).toEqual({ "2026-03-09": first.id });
+    expect(updatedSeries?.completedOccurrences).toEqual({ "2026-03-09": first.clone.id });
   });
 
   it("uncomplete deletes the clone and drops the date", async () => {
     const series = await createTestPage({ title: "Weekly 1:1" });
     adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
-    const clone = await adapter.completeSyncedOccurrence({
+    const { clone } = await adapter.completeRecurringPage({
       occurrenceDate: "2026-03-09",
       pageId: series.id,
       scheduledStart: "2026-03-09T14:00:00",
     });
 
-    await adapter.uncompleteSyncedOccurrence({
+    await adapter.uncompleteRecurringOccurrence({
       occurrenceDate: "2026-03-09",
       pageId: series.id,
     });
 
     expect(await adapter.getPage(clone.id)).toBeNull();
     const updatedSeries = await adapter.getPage(series.id);
-    expect(updatedSeries?.completedOccurrences).toEqual({});
+    expect(updatedSeries?.completedOccurrences).toBeNull();
   });
 });
 

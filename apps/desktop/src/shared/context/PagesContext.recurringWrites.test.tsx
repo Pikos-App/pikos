@@ -228,11 +228,11 @@ describe("rescheduleVirtualOccurrence", () => {
 });
 
 describe("synced recurring completion routing", () => {
-  // The native head-advance path is rejected by the backend for an active synced
-  // series. completeRecurringPage must detect a locked series and route to
-  // occurrence-based completion so NO entry point (incl. the gap dialog and bulk
-  // select, which both funnel here) can hit the Conflict.
-  it("routes an active synced series to occurrence completion, never the native path", async () => {
+  // Both kinds now go through the one unified command; a synced series must call it
+  // with the client-supplied occurrence (occurrenceDate/scheduledStart), never the
+  // bare native shape, so no entry point (incl. the gap dialog and bulk select, which
+  // both funnel here) advances the reconciler-pinned head off a server-derived date.
+  it("routes an active synced series through the unified command with the client occurrence", async () => {
     const { hook, pageId } = await setupRecurringPage();
     const storage = hook.result.current.workspace.storage as MockStorageAdapter;
     await act(async () => {
@@ -240,15 +240,15 @@ describe("synced recurring completion routing", () => {
       await hook.result.current.workspace.reload();
     });
 
-    const nativeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
-    const syncedSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
       await hook.result.current.pages.completeRecurringPage(pageId, "advance");
     });
 
-    expect(syncedSpy).toHaveBeenCalledTimes(1);
-    expect(nativeSpy).not.toHaveBeenCalled();
+    expect(completeSpy).toHaveBeenCalledTimes(1);
+    expect(completeSpy.mock.calls[0]?.[0].occurrenceDate).toBeDefined();
+    expect(completeSpy.mock.calls[0]?.[0].scheduledStart).toBeDefined();
   });
 });
 
@@ -328,7 +328,7 @@ function head(hook: Hook, pageId: string) {
 describe("maybeToggleSyncedOccurrence", () => {
   it("checking the head completes its own date via completeSyncedOccurrence", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     let handled!: boolean;
     act(() => {
@@ -345,7 +345,7 @@ describe("maybeToggleSyncedOccurrence", () => {
 
   it("a virtual occurrence completes on its own originalDate, not the head's date", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     const virtual = {
       ...head(hook, pageId),
@@ -361,7 +361,7 @@ describe("maybeToggleSyncedOccurrence", () => {
 
   it("unchecking a done clone routes to uncompleteSyncedOccurrence with the series id + date", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteSyncedOccurrence");
+    const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteRecurringOccurrence");
 
     // completeSyncedOccurrence's optimistic clone insert lands a microtask after
     // the (fire-and-forget) toggle — flush so the clone is in `pages`.
@@ -387,7 +387,7 @@ describe("maybeToggleSyncedOccurrence", () => {
 
   it("drops a re-entrant completion of the same occurrence — one clone, no duplicate", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
       hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
@@ -402,18 +402,24 @@ describe("maybeToggleSyncedOccurrence", () => {
     expect(doneClones).toHaveLength(1);
   });
 
-  it("a settled re-completion of the same occurrence replaces the clone in state — no duplicate row", async () => {
+  it("a settled re-completion of the SAME occurrence replaces the clone in state — no duplicate row", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
-    // Two separate gestures, each settled before the next — the user re-clicking
-    // a head row that gave no completion feedback.
+    // Complete a fixed virtual twice (the head itself advances off the completed date
+    // now, so re-clicking the head would be a *different* occurrence — the idempotency
+    // being tested is per-occurrence, so pin the same originalDate both gestures).
+    const virtual = {
+      ...head(hook, pageId),
+      originalDate: "2099-01-05",
+      scheduledStart: "2099-01-05T09:00:00",
+    };
     await act(async () => {
-      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      hook.result.current.pages.maybeToggleSyncedOccurrence(virtual, "done");
       await Promise.resolve();
     });
     await act(async () => {
-      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      hook.result.current.pages.maybeToggleSyncedOccurrence(virtual, "done");
       await Promise.resolve();
     });
 
@@ -426,7 +432,7 @@ describe("maybeToggleSyncedOccurrence", () => {
 
   it("returns false for a malformed synced row with no scheduledStart so the native path surfaces the error", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     const malformed = { ...head(hook, pageId), scheduledStart: null };
     let handled!: boolean;
@@ -446,7 +452,7 @@ describe("cloneWallClock (via maybeToggleSyncedOccurrence)", () => {
       "America/Los_Angeles",
       "2099-01-05T16:00:00"
     );
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     act(() => {
       hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
@@ -470,7 +476,7 @@ describe("cloneWallClock (via maybeToggleSyncedOccurrence)", () => {
 
   it("passes an all-day (date-only) start through unchanged", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05", "America/Los_Angeles");
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     act(() => {
       hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");

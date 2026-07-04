@@ -27,11 +27,11 @@ use db::{
         create_page_reminder, delete_page_reminder, delete_page_reminders, list_page_reminders,
     },
     pages::{
-        complete_recurring_page, complete_synced_occurrence, create_page, delete_page, get_page,
+        complete_recurring_page, create_page, delete_page, get_page,
         list_completed_pages, list_pages, list_pages_today, recompute_recurring_schedules,
         reorder_pages, reschedule_virtual_occurrence, restore_page, set_pages_status,
         skip_occurrence, soft_delete_page, uncomplete_recurring_occurrence,
-        uncomplete_synced_occurrence, undo_skip_occurrence, update_page,
+        undo_skip_occurrence, update_page,
     },
     schedules::{
         add_rule_exdates, create_page_schedule, create_recurrence_rule, delete_page_schedule,
@@ -330,8 +330,6 @@ pub fn run() {
             reorder_pages,
             set_pages_status,
             complete_recurring_page,
-            complete_synced_occurrence,
-            uncomplete_synced_occurrence,
             uncomplete_recurring_occurrence,
             skip_occurrence,
             undo_skip_occurrence,
