@@ -2,6 +2,7 @@
 
 import { subDays } from "date-fns";
 
+import { StorageError } from "../errors";
 import type {
   FolderUpdate,
   NewCaldavConnection,
@@ -44,6 +45,18 @@ import { nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
 import { computeNextEnd, nextOccurrenceAfter, rawExpandRule } from "../utils/recurrence";
+
+// Command-layer guard messages, mirrored verbatim from the Rust writers so a
+// mis-routed write fails identically in test mode and in prod. If the backend
+// copy changes, these must move in lockstep (crates/pikos-db/src/sync.rs and
+// pages.rs). The mock is the only place e2e/unit tests see these rejections.
+const SYNCED_READONLY_MSG =
+  "This event is synced from an external calendar — its title and schedule are read-only.";
+const NOT_RECURRING_MSG = "Occurrence completion applies only to a recurring series.";
+const SYNCED_NEEDS_DATE_MSG = "Synced occurrence completion requires an occurrence date.";
+const SYNCED_NEEDS_START_MSG = "Synced occurrence completion requires the occurrence start.";
+const OCCURRENCE_NOT_IN_SERIES_MSG = "Occurrence is not part of this synced series.";
+const NO_OCCURRENCE_MSG = "Recurring page has no scheduled occurrence to complete.";
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -119,6 +132,29 @@ export class MockStorageAdapter implements StorageAdapter {
     this.syncCalendars.clear();
   }
 
+  // ─── Command-layer guards ────────────────────────────────────────────────────
+
+  /** The locked-mirror rejection the backend's `ensure_page_schedule_unlocked`
+   *  throws for a synced (`active`) page, else null. Returned (not thrown) so callers
+   *  reject the promise — a synchronous throw would break `.rejects` matchers. */
+  private lockedMirrorError(pageId: string | undefined): StorageError | null {
+    return pageId != null && this.pages.get(pageId)?.scheduleLocked
+      ? new StorageError("Conflict", SYNCED_READONLY_MSG)
+      : null;
+  }
+
+  /** Backend `synced_occurrence_is_valid`: is `day` (YYYY-MM-DD) a real occurrence
+   *  of the page's rule? Guards against a cross-zone off-by-one occurrence key that
+   *  would write an unsuppressable completed-set entry. */
+  private syncedOccurrenceValid(pageId: string, day: string): boolean {
+    const rule = [...this.rules.values()].find((r) => r.pageId === pageId);
+    const page = this.pages.get(pageId);
+    if (!rule || !page) return false;
+    const lo = parseLocalISO(`${day}T00:00:00`);
+    const hi = parseLocalISO(`${day}T23:59:59`);
+    return rawExpandRule(rule, page, lo, hi).some((o) => o.originalDate === day);
+  }
+
   // ─── Pages ──────────────────────────────────────────────────────────────────
 
   getPage(id: string): Promise<Page | null> {
@@ -166,6 +202,16 @@ export class MockStorageAdapter implements StorageAdapter {
   updatePage(id: string, updates: PageUpdate): Promise<Page> {
     const existing = this.pages.get(id);
     if (!existing) return Promise.reject(new Error(`Page not found: ${id}`));
+    // Locked mirror: title + schedule are calendar-owned on a synced page.
+    // Body/meta/status/tags stay editable (matches update_page_impl, pages.rs).
+    if (
+      updates.title !== undefined ||
+      updates.scheduledStart !== undefined ||
+      updates.scheduledEnd !== undefined
+    ) {
+      const locked = this.lockedMirrorError(id);
+      if (locked) return Promise.reject(locked);
+    }
     const updated: Page = { ...existing, ...updates, id, updatedAt: now() };
     // Keep contentText in sync with content unless the caller explicitly set it.
     if (updates.content !== undefined && updates.contentText === undefined) {
@@ -405,6 +451,8 @@ export class MockStorageAdapter implements StorageAdapter {
   // ─── Schedules ──────────────────────────────────────────────────────────────
 
   createPageSchedule(data: NewPageSchedule): Promise<PageSchedule> {
+    const locked = this.lockedMirrorError(data.pageId);
+    if (locked) return Promise.reject(locked);
     const schedule: PageSchedule = {
       id: uuid(),
       pageId: data.pageId,
@@ -424,6 +472,8 @@ export class MockStorageAdapter implements StorageAdapter {
   updatePageSchedule(id: string, updates: PageScheduleUpdate): Promise<PageSchedule> {
     const existing = this.schedules.get(id);
     if (!existing) return Promise.reject(new Error(`Schedule not found: ${id}`));
+    const locked = this.lockedMirrorError(existing.pageId);
+    if (locked) return Promise.reject(locked);
     const updated = { ...existing };
     if (updates.scheduledStart !== undefined) updated.scheduledStart = updates.scheduledStart;
     if (updates.status !== undefined) updated.status = updates.status;
@@ -436,6 +486,8 @@ export class MockStorageAdapter implements StorageAdapter {
 
   deletePageSchedule(id: string): Promise<void> {
     const schedule = this.schedules.get(id);
+    const locked = this.lockedMirrorError(schedule?.pageId);
+    if (locked) return Promise.reject(locked);
     this.schedules.delete(id);
     if (schedule) this._refreshDenorm(schedule.pageId);
     return Promise.resolve();
@@ -466,6 +518,8 @@ export class MockStorageAdapter implements StorageAdapter {
   // ─── Recurrence rules ────────────────────────────────────────────────────────
 
   createRecurrenceRule(data: NewRecurrenceRule): Promise<PageRecurrenceRule> {
+    const locked = this.lockedMirrorError(data.pageId);
+    if (locked) return Promise.reject(locked);
     // SQL enforces UNIQUE(page_id) on page_recurrence_rules — a page has at
     // most one rule. Mirror it so tests that accidentally create two surface
     // the conflict here instead of passing the mock and failing in prod.
@@ -494,6 +548,8 @@ export class MockStorageAdapter implements StorageAdapter {
   updateRecurrenceRule(id: string, updates: RecurrenceRuleUpdate): Promise<PageRecurrenceRule> {
     const existing = this.rules.get(id);
     if (!existing) return Promise.reject(new Error(`Recurrence rule not found: ${id}`));
+    const locked = this.lockedMirrorError(existing.pageId);
+    if (locked) return Promise.reject(locked);
     const updated = { ...existing };
     if (updates.rrule !== undefined) updated.rrule = updates.rrule;
     if (updates.rruleExdates !== undefined) updated.rruleExdates = updates.rruleExdates;
@@ -509,6 +565,8 @@ export class MockStorageAdapter implements StorageAdapter {
   addRuleExdates(id: string, dates: string[]): Promise<PageRecurrenceRule> {
     const rule = this.rules.get(id);
     if (!rule) return Promise.reject(new Error(`Recurrence rule not found: ${id}`));
+    const locked = this.lockedMirrorError(rule.pageId);
+    if (locked) return Promise.reject(locked);
     // Merge into the CURRENT row (mirrors the Rust read-merge-write tx) — never
     // a replacement, so exdates written since the caller's snapshot survive.
     const merged = [...rule.rruleExdates];
@@ -524,6 +582,8 @@ export class MockStorageAdapter implements StorageAdapter {
   removeRuleExdate(id: string, date: string): Promise<PageRecurrenceRule> {
     const rule = this.rules.get(id);
     if (!rule) return Promise.reject(new Error(`Recurrence rule not found: ${id}`));
+    const locked = this.lockedMirrorError(rule.pageId);
+    if (locked) return Promise.reject(locked);
     const updated = { ...rule, rruleExdates: rule.rruleExdates.filter((d) => d !== date) };
     this.rules.set(id, updated);
     this.recomputeHead(rule.pageId);
@@ -531,6 +591,8 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   deleteRecurrenceRule(id: string): Promise<void> {
+    const locked = this.lockedMirrorError(this.rules.get(id)?.pageId);
+    if (locked) return Promise.reject(locked);
     this.rules.delete(id);
     return Promise.resolve();
   }
@@ -610,18 +672,38 @@ export class MockStorageAdapter implements StorageAdapter {
 
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult> {
     const head = this.pages.get(data.pageId);
-    if (!head) throw new Error(`Page not found: ${data.pageId}`);
+    if (!head)
+      return Promise.reject(new StorageError("NotFound", `Page not found: ${data.pageId}`));
+
+    // Occurrence completion is set-only — a mis-route to a non-recurring page would
+    // mint a clone no series can suppress. Reject it (both kinds), as the backend does.
+    const hasRule = [...this.rules.values()].some((r) => r.pageId === data.pageId);
+    if (!hasRule) return Promise.reject(new StorageError("Conflict", NOT_RECURRING_MSG));
 
     // Native completes the head's own oldest-open occurrence (server-derived); a synced
-    // series' head is reconciler-pinned, so the client supplies the rendered virtual.
-    const occurrenceDate = head.scheduleLocked
-      ? data.occurrenceDate
-      : head.scheduledStart?.slice(0, 10);
-    if (!occurrenceDate)
-      throw new Error(`Recurring page has no scheduled occurrence: ${data.pageId}`);
-    const cloneStart = head.scheduleLocked ? data.scheduledStart : head.scheduledStart;
-    if (!cloneStart) throw new Error(`Synced occurrence completion requires a start.`);
-    const cloneEnd = (head.scheduleLocked ? data.scheduledEnd : head.scheduledEnd) ?? null;
+    // series' head is reconciler-pinned, so the client supplies the rendered virtual —
+    // validated against the rule so a cross-zone off-by-one key can't write an
+    // unsuppressable completed-set entry.
+    let occurrenceDate: string;
+    let cloneStart: string;
+    let cloneEnd: string | null;
+    if (head.scheduleLocked) {
+      if (!data.occurrenceDate)
+        return Promise.reject(new StorageError("Conflict", SYNCED_NEEDS_DATE_MSG));
+      if (!data.scheduledStart)
+        return Promise.reject(new StorageError("Conflict", SYNCED_NEEDS_START_MSG));
+      if (!this.syncedOccurrenceValid(data.pageId, data.occurrenceDate))
+        return Promise.reject(new StorageError("Conflict", OCCURRENCE_NOT_IN_SERIES_MSG));
+      occurrenceDate = data.occurrenceDate;
+      cloneStart = data.scheduledStart;
+      cloneEnd = data.scheduledEnd ?? null;
+    } else {
+      if (!head.scheduledStart)
+        return Promise.reject(new StorageError("Conflict", NO_OCCURRENCE_MSG));
+      occurrenceDate = head.scheduledStart.slice(0, 10);
+      cloneStart = head.scheduledStart;
+      cloneEnd = head.scheduledEnd ?? null;
+    }
 
     // Idempotency: a repeat completion of the same occurrence returns the existing
     // live clone rather than minting a duplicate (mirrors the Rust guard).
@@ -727,6 +809,8 @@ export class MockStorageAdapter implements StorageAdapter {
     if (!head || this.softDeleted.has(rule.pageId)) {
       return Promise.reject(new Error(`Page not found: ${rule.pageId}`));
     }
+    const locked = this.lockedMirrorError(rule.pageId);
+    if (locked) return Promise.reject(locked);
 
     const timestamp = now();
     const clone: Page = {

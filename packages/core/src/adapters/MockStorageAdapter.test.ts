@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { StorageError, type StorageErrorKind } from "../errors";
 import type { Page, PageSummary } from "../types";
 import { MockStorageAdapter } from "./MockStorageAdapter";
 
@@ -10,6 +11,24 @@ let adapter: MockStorageAdapter;
 beforeEach(() => {
   adapter = new MockStorageAdapter();
 });
+
+/** Assert a storage op rejects with a StorageError of the given kind (and, if
+ *  provided, a message matching `messageRe`). Keeps the parity tests lint-clean:
+ *  matcher helpers like `expect.stringMatching` type as `any` inside toMatchObject. */
+async function expectRejection(
+  promise: Promise<unknown>,
+  kind: StorageErrorKind,
+  messageRe?: RegExp
+): Promise<void> {
+  const err: unknown = await promise.then(
+    () => null,
+    (e: unknown) => e
+  );
+  expect(err).toBeInstanceOf(StorageError);
+  const se = err as StorageError;
+  expect(se.kind).toBe(kind);
+  if (messageRe) expect(se.message).toMatch(messageRe);
+}
 
 /** Creates a page with sensible defaults and returns it. */
 async function createTestPage(overrides: Partial<Page> = {}): Promise<Page> {
@@ -649,9 +668,11 @@ describe("completeRecurringPage", () => {
     expect(donePages).toHaveLength(3);
   });
 
-  it("throws when page not found", () => {
-    expect(() => adapter.completeRecurringPage({ pageId: "nonexistent" })).toThrow(
-      "Page not found"
+  it("rejects with NotFound when page not found", async () => {
+    await expectRejection(
+      adapter.completeRecurringPage({ pageId: "nonexistent" }),
+      "NotFound",
+      /Page not found/
     );
   });
 });
@@ -1284,9 +1305,23 @@ describe("schedule and rule updates", () => {
 });
 
 describe("synced occurrence completion (via unified completeRecurringPage)", () => {
-  it("records date → clone and produces a durable native done clone", async () => {
+  // A synced series carries a rule (seeded while unlocked, mirroring the reconciler).
+  // The completeRecurringPage guard rejects a non-recurring page, so the rule must
+  // exist before markPageSynced locks it.
+  async function seedSyncedSeries(): Promise<Page> {
     const series = await createTestPage({ title: "Weekly 1:1" });
+    await adapter.createRecurrenceRule({
+      pageId: series.id,
+      rrule: "FREQ=WEEKLY",
+      scheduledStart: "2026-03-09T14:00:00",
+      timezone: "Europe/London",
+    });
     adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
+    return series;
+  }
+
+  it("records date → clone and produces a durable native done clone", async () => {
+    const series = await seedSyncedSeries();
 
     const { clone } = await adapter.completeRecurringPage({
       occurrenceDate: "2026-03-09",
@@ -1307,8 +1342,7 @@ describe("synced occurrence completion (via unified completeRecurringPage)", () 
   });
 
   it("a repeat completion of the same occurrence returns the existing clone, not a second one", async () => {
-    const series = await createTestPage({ title: "Weekly 1:1" });
-    adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
+    const series = await seedSyncedSeries();
     const first = await adapter.completeRecurringPage({
       occurrenceDate: "2026-03-09",
       pageId: series.id,
@@ -1329,8 +1363,7 @@ describe("synced occurrence completion (via unified completeRecurringPage)", () 
   });
 
   it("uncomplete deletes the clone and drops the date", async () => {
-    const series = await createTestPage({ title: "Weekly 1:1" });
-    adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
+    const series = await seedSyncedSeries();
     const { clone } = await adapter.completeRecurringPage({
       occurrenceDate: "2026-03-09",
       pageId: series.id,
@@ -1345,6 +1378,162 @@ describe("synced occurrence completion (via unified completeRecurringPage)", () 
     expect(await adapter.getPage(clone.id)).toBeNull();
     const updatedSeries = await adapter.getPage(series.id);
     expect(updatedSeries?.completedOccurrences).toBeNull();
+  });
+});
+
+// ─── Command-layer guard parity ──────────────────────────────────────────────
+// The mock must reject the same command-layer ops the Rust writers do, so a
+// mis-routed write fails identically in test mode and prod (the fidelity gap
+// that let a synced completion pass green in the mock while the backend rejected
+// it). Each locked-mirror op rejects with kind "Conflict"; completeRecurringPage
+// validates the occurrence before minting a clone. See ensure_page_schedule_unlocked
+// (sync.rs) and complete_recurring_page (pages.rs).
+
+describe("command-layer guard parity (locked synced mirror)", () => {
+  const READONLY = /synced from an external calendar/;
+
+  /** An active synced series with a schedule + rule seeded while still unlocked
+   *  (mirroring the reconciler's raw-SQL writes), then locked. */
+  async function seedLockedSeries() {
+    const page = await createTestPage({ title: "Synced 1:1" });
+    const schedule = await adapter.createPageSchedule({
+      pageId: page.id,
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+    const rule = await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY",
+      scheduledStart: "2026-03-09T14:00:00",
+      timezone: "Europe/London",
+    });
+    adapter.markPageSynced(page.id, { state: "active", timezone: "Europe/London" });
+    return { page, rule, schedule };
+  }
+
+  it("updatePage rejects a title or schedule edit but allows a body edit", async () => {
+    const { page } = await seedLockedSeries();
+    await expectRejection(adapter.updatePage(page.id, { title: "renamed" }), "Conflict", READONLY);
+    await expectRejection(
+      adapter.updatePage(page.id, { scheduledStart: "2026-03-10T14:00:00" }),
+      "Conflict"
+    );
+    // Body stays editable on a synced page.
+    const ok = await adapter.updatePage(page.id, { content: "notes" });
+    expect(ok.content).toBe("notes");
+  });
+
+  it("createPageSchedule rejects on a locked page", async () => {
+    const { page } = await seedLockedSeries();
+    await expectRejection(
+      adapter.createPageSchedule({ pageId: page.id, scheduledStart: "2026-03-10T09:00:00" }),
+      "Conflict",
+      READONLY
+    );
+  });
+
+  it("updatePageSchedule + deletePageSchedule reject on a locked page", async () => {
+    const { schedule } = await seedLockedSeries();
+    await expectRejection(
+      adapter.updatePageSchedule(schedule.id, { scheduledStart: "2026-03-10T09:00:00" }),
+      "Conflict"
+    );
+    await expectRejection(adapter.deletePageSchedule(schedule.id), "Conflict");
+  });
+
+  it("createRecurrenceRule rejects on a locked page", async () => {
+    const page = await createTestPage({ title: "Locked" });
+    adapter.markPageSynced(page.id, { state: "active", timezone: "Europe/London" });
+    await expectRejection(
+      adapter.createRecurrenceRule({
+        pageId: page.id,
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2026-03-09T14:00:00",
+        timezone: "Europe/London",
+      }),
+      "Conflict",
+      READONLY
+    );
+  });
+
+  it("updateRecurrenceRule / exdate writes / delete reject on a locked page", async () => {
+    const { rule } = await seedLockedSeries();
+    await expectRejection(
+      adapter.updateRecurrenceRule(rule.id, { rrule: "FREQ=DAILY" }),
+      "Conflict"
+    );
+    await expectRejection(adapter.addRuleExdates(rule.id, ["2026-03-16"]), "Conflict");
+    await expectRejection(adapter.removeRuleExdate(rule.id, "2026-03-16"), "Conflict");
+    await expectRejection(adapter.deleteRecurrenceRule(rule.id), "Conflict");
+  });
+
+  it("rescheduleVirtualOccurrence rejects on a locked series", async () => {
+    const { rule } = await seedLockedSeries();
+    await expectRejection(
+      adapter.rescheduleVirtualOccurrence({
+        originalDate: "2026-03-16",
+        ruleId: rule.id,
+        scheduledStart: "2026-03-16T15:00:00",
+        timezone: "Europe/London",
+      }),
+      "Conflict",
+      READONLY
+    );
+  });
+
+  it("a detached page is unlocked — the same ops succeed", async () => {
+    const page = await createTestPage({ title: "Detached" });
+    await adapter.createPageSchedule({ pageId: page.id, scheduledStart: "2026-03-09T14:00:00" });
+    adapter.markPageSynced(page.id, { state: "detached", timezone: "Europe/London" });
+    const renamed = await adapter.updatePage(page.id, { title: "editable" });
+    expect(renamed.title).toBe("editable");
+  });
+});
+
+describe("completeRecurringPage occurrence validation", () => {
+  it("rejects a non-recurring page (both kinds) with Conflict", async () => {
+    const page = await createTestPage({ title: "One-off" });
+    await expectRejection(
+      adapter.completeRecurringPage({ pageId: page.id }),
+      "Conflict",
+      /only to a recurring series/
+    );
+  });
+
+  it("rejects a synced completion missing its occurrence date", async () => {
+    const page = await createTestPage({ title: "Synced" });
+    await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY",
+      scheduledStart: "2026-03-09T14:00:00",
+      timezone: "Europe/London",
+    });
+    adapter.markPageSynced(page.id, { state: "active", timezone: "Europe/London" });
+    await expectRejection(
+      adapter.completeRecurringPage({ pageId: page.id, scheduledStart: "2026-03-09T14:00:00" }),
+      "Conflict",
+      /requires an occurrence date/
+    );
+  });
+
+  it("rejects a synced occurrence that is not part of the series", async () => {
+    const page = await createTestPage({ title: "Synced" });
+    await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=WEEKLY", // Mondays from 2026-03-09
+      scheduledStart: "2026-03-09T14:00:00",
+      timezone: "Europe/London",
+    });
+    adapter.markPageSynced(page.id, { state: "active", timezone: "Europe/London" });
+    // 2026-03-10 is a Tuesday — not an occurrence of the weekly-Monday rule.
+    await expectRejection(
+      adapter.completeRecurringPage({
+        occurrenceDate: "2026-03-10",
+        pageId: page.id,
+        scheduledStart: "2026-03-10T14:00:00",
+      }),
+      "Conflict",
+      /not part of this synced series/
+    );
   });
 });
 

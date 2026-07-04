@@ -202,6 +202,79 @@ appTest("a synced block can't be dragged @tier2", async ({ app }) => {
   expect(await block.getAttribute("aria-label")).toBe(label);
 });
 
+// ─── tier2: synced recurring completion (the recurring × synced intersection) ─
+//
+// The recurring × synced intersection previously had zero e2e. A synced recurring
+// occurrence must complete through the unified completeRecurringPage with a *client*
+// occurrence — never a bare updatePage(status), which the locked mirror rejects
+// (mock guard parity). The seed's "Weekly 1:1 (London)" is London-source viewed under New York,
+// so a green completion also proves cross-zone occurrence-date-key agreement:
+// a mis-keyed occurrence would be rejected as "not part of this synced series"
+// and no clone would land.
+
+/** Open the external-calendar "Personal" folder — isolates the synced recurring
+ *  head. A same-named draggable user folder also exists; the external one is the
+ *  non-sortable sidebar item (external calendars aren't in the dnd reorder set). */
+async function openPersonalFolder(app: Page) {
+  await app.locator('[aria-label="Personal"]:not([aria-roledescription="sortable"])').click();
+}
+
+function seriesRows(app: Page) {
+  return app.locator("[data-page-list-item]").filter({ hasText: "Weekly 1:1 (London)" });
+}
+
+appTest("completing a synced recurring occurrence drops one done clone, no read-only conflict @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
+
+  const head = seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) });
+  await expect(head).toHaveCount(1);
+  await head.getByRole("checkbox", { name: /Mark done/i }).click();
+
+  // Never surfaces the locked-mirror error (a mis-route to updatePage would).
+  await expect(app.getByText(/read-only/i)).toHaveCount(0);
+
+  // Exactly one durable done clone lands in Completed — a duplicate-append
+  // regression on the completion path would show two.
+  await app.getByRole("button", { name: "Completed", exact: true }).click();
+  const doneClone = seriesRows(app).filter({
+    has: app.getByRole("checkbox", { name: /Mark not done/i }),
+  });
+  await expect(doneClone).toHaveCount(1);
+  // The head stayed open and advanced (still checkable) — it did not get marked done.
+  await expect(seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })).toHaveCount(1);
+});
+
+appTest("unchecking a synced recurring done clone restores the occurrence @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
+
+  await seriesRows(app)
+    .filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
+    .getByRole("checkbox", { name: /Mark done/i })
+    .click();
+
+  await app.getByRole("button", { name: "Completed", exact: true }).click();
+  const doneClone = seriesRows(app).filter({
+    has: app.getByRole("checkbox", { name: /Mark not done/i }),
+  });
+  await expect(doneClone).toHaveCount(1);
+
+  // Uncheck the clone → uncompleteRecurringOccurrence drops the clone and rewinds
+  // the head onto the restored occurrence.
+  await doneClone.getByRole("checkbox", { name: /Mark not done/i }).click();
+  await expect(
+    seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) })
+  ).toHaveCount(0);
+  await expect(
+    seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
+  ).toHaveCount(1);
+});
+
 // ─── tier2: FTS search finds a synced page ───────────────────────────────────
 
 appTest("search finds a synced page @tier2", async ({ app }) => {
