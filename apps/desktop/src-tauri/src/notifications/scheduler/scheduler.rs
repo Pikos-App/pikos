@@ -295,7 +295,7 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
 
     fire_explicit_reminders(app, &pool, &window_start, &now_ts).await?;
     fire_default_reminders(app, &pool, &settings, &window_start, &now_ts).await?;
-    fire_recurring_reminders(app, &pool, &settings, &window_start, &now_ts).await?;
+    fire_recurring_reminders(app, &pool, &settings, now.naive_local(), now.to_utc()).await?;
     fire_synced_reminders(app, &pool, now.to_utc()).await?;
 
     Ok(())
@@ -353,25 +353,21 @@ async fn fire_default_reminders(
     Ok(())
 }
 
-/// Recurring (rrule-backed) pages — reminders fire off the advancing head
-/// (`pages.scheduled_start`), not the stale page_schedules anchor row. Honors
-/// per-page `page_reminders` lead times when present, else the global default.
+/// Recurring (rrule-backed) pages — see `due_recurring_reminders` for the firing
+/// semantics. Both `now_local` and `now_utc` are passed rather than a pre-formatted
+/// string window because a series can have more than one occurrence in-window (a
+/// short lead and a long lead resolving to the same instant), and native vs synced
+/// occurrences compare against different clocks.
 async fn fire_recurring_reminders(
     app: &AppHandle,
     pool: &SqlitePool,
     settings: &NotificationSettings,
-    window_start: &str,
-    now_ts: &str,
+    now_local: chrono::NaiveDateTime,
+    now_utc: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), sqlx::Error> {
-    let explicit = pikos_db::due_recurring_explicit_reminders(pool, window_start, now_ts).await?;
-    for row in explicit {
-        fire_reminder(app, pool, &row).await?;
-    }
-
     let minutes = settings.default_minutes_before;
-    let default =
-        pikos_db::due_recurring_default_reminders(pool, minutes, window_start, now_ts).await?;
-    for row in default {
+    let due = pikos_db::due_recurring_reminders(pool, now_local, now_utc, minutes).await?;
+    for row in due {
         fire_reminder(app, pool, &row).await?;
     }
 

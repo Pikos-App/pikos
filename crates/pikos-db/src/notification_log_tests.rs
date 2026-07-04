@@ -434,164 +434,71 @@ async fn diagnostics_none_for_missing_page() {
         .is_none());
 }
 
-// ─── recurring head reminders ────────────────────────────────────────────────
+// ─── recurring occurrence reminders (native path guards) ─────────────────────
+//
+// Per-occurrence firing (native + synced, DST, dedup, completed-silent) lives in
+// `recurrence_derive_tests`. These pin the two things that stay in this module:
+// the `due_recurring_reminders` seam threads through to the enumeration, and the
+// one-off page_schedules queries partition occurrences correctly with a recurring
+// page's rows (skip the stale anchor, still fire a materialized override).
+
+fn naive(s: &str) -> chrono::NaiveDateTime {
+    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S").unwrap()
+}
 
 #[tokio::test]
-async fn recurring_default_reminder_fires_off_the_head() {
+async fn due_recurring_reminders_fires_a_native_occurrence() {
     let pool = test_pool().await;
     insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
-    // Head occurrence is 09:10; default 10-min lead fires at 09:00 → in window.
-    set_page_start(&pool, "rec", "2026-05-25T09:10:00").await;
-    insert_rule(&pool, "rec", "2026-05-25T09:10:00").await;
+    insert_rule(&pool, "rec", "2026-05-25T09:00:00").await; // daily, timed base
+    insert_reminder(&pool, "rec", 30).await;
+    // 09:00 with a 30-min lead fires at 08:30 (device-local; native series).
+    let now = naive("2026-05-25T08:30:00");
 
-    let due = due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+    let due = due_recurring_reminders(&pool, now, now.and_utc(), 15)
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
-    assert_eq!(due[0].page_id, "rec");
-    assert_eq!(due[0].minutes_before, 10);
-    // Synthetic dedup id keys on the occurrence start so each occurrence is distinct.
-    assert_eq!(due[0].schedule_id, "rec@2026-05-25T09:10:00");
+    assert_eq!(due[0].schedule_id, "rec@2026-05-25T09:00:00#30");
 }
 
 #[tokio::test]
-async fn recurring_explicit_reminder_uses_page_reminder_lead() {
+async fn native_reminder_paths_skip_a_recurring_pages_anchor_row() {
     let pool = test_pool().await;
     insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
     set_page_start(&pool, "rec", "2026-05-25T09:10:00").await;
     insert_rule(&pool, "rec", "2026-05-25T09:10:00").await;
+    // The original scheduleOnce anchor (rule_id IS NULL) lingers at the head time.
+    // The enumeration owns that occurrence, so firing off the anchor would double it.
+    insert_schedule(&pool, "anchor", "rec", "2026-05-25T09:10:00", "not_started").await;
+
+    assert!(due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+        .await
+        .unwrap()
+        .is_empty());
     insert_reminder(&pool, "rec", 10).await;
-
-    let explicit = due_recurring_explicit_reminders(&pool, WINDOW_START, NOW_TS)
-        .await
-        .unwrap();
-    assert_eq!(explicit.len(), 1);
-    assert_eq!(explicit[0].minutes_before, 10);
-    // Explicit id encodes the lead so multiple reminders on one occurrence differ.
-    assert_eq!(explicit[0].schedule_id, "rec@2026-05-25T09:10:00#10");
-
-    // A page with explicit reminders must not also hit the default path.
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+    assert!(due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
         .await
         .unwrap()
         .is_empty());
 }
 
 #[tokio::test]
-async fn recurring_lingering_anchor_row_is_not_a_reminder_source() {
-    let pool = test_pool().await;
-    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
-    set_page_start(&pool, "rec", "2026-05-25T09:10:00").await; // head
-    insert_rule(&pool, "rec", "2026-05-25T09:10:00").await;
-    // The original scheduleOnce anchor (rule_id IS NULL) lingers at the same time.
-    insert_schedule(&pool, "anchor", "rec", "2026-05-25T09:10:00", "not_started").await;
-
-    // The page_schedules default query must skip the stale anchor (page has a rule)…
-    assert!(due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
-    // …and the head-based query fires exactly once — no double reminder.
-    assert_eq!(
-        due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-            .await
-            .unwrap()
-            .len(),
-        1
-    );
-}
-
-#[tokio::test]
-async fn completing_before_the_reminder_suppresses_it() {
-    let pool = test_pool().await;
-    // Reproduces the reported bug: complete the occurrence (head advances to the
-    // next day) seconds before the original occurrence's reminder would fire.
-    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
-    set_page_start(&pool, "rec", "2026-05-26T09:10:00").await; // advanced by completion
-    insert_rule(&pool, "rec", "2026-05-25T09:10:00").await;
-    // Anchor still points at the just-completed 05-25 occurrence.
-    insert_schedule(&pool, "anchor", "rec", "2026-05-25T09:10:00", "not_started").await;
-
-    // Neither path fires: anchor is excluded, and the advanced head is out of window.
-    assert!(due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
-}
-
-#[tokio::test]
-async fn recurring_head_reminder_dedups_per_occurrence() {
+async fn native_default_path_fires_a_recurring_override_row() {
     let pool = test_pool().await;
     insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
     set_page_start(&pool, "rec", "2026-05-25T09:10:00").await;
     insert_rule(&pool, "rec", "2026-05-25T09:10:00").await;
-
-    // First tick fires; record it under the synthetic id.
-    log_reminder_fired(&pool, "rec", "rec@2026-05-25T09:10:00", NOW_TS)
-        .await
-        .unwrap();
-
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
-}
-
-#[tokio::test]
-async fn recurring_all_day_head_has_no_reminder() {
-    let pool = test_pool().await;
-    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
-    set_page_start(&pool, "rec", "2026-05-25").await; // date-only = all-day
-    insert_rule(&pool, "rec", "2026-05-25").await;
-
-    assert!(due_recurring_default_reminders(&pool, 0, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
-}
-
-#[tokio::test]
-async fn recurring_head_skips_when_a_materialized_override_covers_it() {
-    let pool = test_pool().await;
-    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
-    set_page_start(&pool, "rec", "2026-05-25T09:10:00").await;
-    insert_rule(&pool, "rec", "2026-05-25T09:10:00").await;
-    // A moved/edited occurrence materialized at the same start as the head.
+    // A moved/edited occurrence materialized as a real page_schedules row fires via
+    // the page_schedules query; the enumeration excludes its original_date, so the
+    // two paths partition the series' occurrences rather than double-firing one.
     insert_override(&pool, "ov", "rec", "2026-05-25T09:10:00", "not_started").await;
 
-    // The head query defers — the override row owns this occurrence's reminder…
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
-    // …and the override (rule_id IS NOT NULL) still fires via page_schedules.
     let via_schedule = due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
         .await
         .unwrap();
     assert_eq!(via_schedule.len(), 1);
     assert_eq!(via_schedule[0].schedule_id, "ov");
-}
-
-#[tokio::test]
-async fn recurring_head_excludes_done_and_deleted_pages() {
-    let pool = test_pool().await;
-    insert_page(&pool, "done", "done", "2026-05-01T00:00:00").await;
-    set_page_start(&pool, "done", "2026-05-25T09:10:00").await;
-    insert_rule(&pool, "done", "2026-05-25T09:10:00").await;
-
-    insert_page(&pool, "del", "not_started", "2026-05-01T00:00:00").await;
-    set_page_start(&pool, "del", "2026-05-25T09:10:00").await;
-    insert_rule(&pool, "del", "2026-05-25T09:10:00").await;
-    soft_delete_page(&pool, "del").await;
-
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
 }
 
 // ─── prune ───────────────────────────────────────────────────────────────────
@@ -617,35 +524,10 @@ async fn prune_removes_only_rows_before_cutoff() {
     assert_eq!(log_count(&pool, "overdue").await, 1); // kept
 }
 
-#[tokio::test]
-async fn active_synced_recurring_page_is_excluded_from_head_reminders() {
-    // A synced recurring head is pinned at the series base by the reconciler (it
-    // never advances), so a native head reminder would fire on the wrong, stale
-    // base occurrence. Both head-reminder queries must exclude an active synced
-    // series. (Reminders for synced recurring occurrences aren't implemented; this
-    // pins that they don't leak through the native path.)
-    let pool = test_pool().await;
-    // Explicit-reminder synced recurring.
-    insert_page(&pool, "rec_ex", "not_started", "2026-05-01T00:00:00").await;
-    set_page_start(&pool, "rec_ex", "2026-05-25T09:10:00").await;
-    insert_rule(&pool, "rec_ex", "2026-05-25T09:10:00").await;
-    insert_reminder(&pool, "rec_ex", 10).await;
-    crate::pool::insert_test_page_sync(&pool, "rec_ex", "active").await.unwrap();
-    // Default-lead synced recurring (no explicit reminder row).
-    insert_page(&pool, "rec_def", "not_started", "2026-05-01T00:00:00").await;
-    set_page_start(&pool, "rec_def", "2026-05-25T09:10:00").await;
-    insert_rule(&pool, "rec_def", "2026-05-25T09:10:00").await;
-    crate::pool::insert_test_page_sync(&pool, "rec_def", "active").await.unwrap();
-
-    assert!(
-        due_recurring_explicit_reminders(&pool, WINDOW_START, NOW_TS).await.unwrap().is_empty(),
-        "active synced recurring excluded from explicit head reminders"
-    );
-    assert!(
-        due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS).await.unwrap().is_empty(),
-        "active synced recurring excluded from default head reminders"
-    );
-}
+// Active synced recurring series now FIRE (they no longer leak-vs-suppress on the
+// native path): the enumeration resolves each occurrence's source-zone → absolute
+// instant. Covered in `recurrence_derive_tests`
+// (`synced_series_fires_at_the_absolute_instant_*`, detached + default-suppression).
 
 // ─── synced_fire_instant DST edges (doc-comment contract, previously untested) ──
 

@@ -119,22 +119,17 @@ async fn recurring_completion_clone_is_searchable() {
     .await
     .unwrap();
 
-    // Complete today's occurrence and advance the head to tomorrow.
+    // Complete the head occurrence (2026-05-29, derived server-side). The recompute
+    // then advances the head to the next open occurrence.
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput {
-            page_id: head.id.clone(),
-            next_scheduled_start: Some("2026-05-30T09:00:00".to_string()),
-            next_scheduled_end: None,
-            rule_id: None,
-            add_exdates: None,
-        },
+        CompleteRecurringInput { page_id: head.id.clone(), skip_dates: vec![] },
     )
     .await
     .unwrap();
 
     // The clone is a done snapshot of the occurrence just completed; the head
-    // stays open, advanced to the next date.
+    // stays open, recomputed to the next date.
     assert_eq!(result.clone.status, "done");
     assert_eq!(result.head.status, "not_started");
     assert_eq!(

@@ -1,8 +1,8 @@
 // MetadataHeader — synced (locked) + detached provenance rendering.
 // Verifies: a locked page's title is read-only (no button affordance, click does
 // not enter edit mode); a detached page shows the disconnected notice; the
-// reminder bell is suppressed on a locked RECURRING series but present on a
-// locked non-recurring timed page.
+// reminder bell shows on a locked timed page whether or not it recurs (synced
+// recurring occurrences now fire per-occurrence).
 
 import type { Page } from "@pikos/core";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
@@ -116,7 +116,7 @@ describe("MetadataHeader — detached notice", () => {
 });
 
 describe("MetadataHeader — reminder bell on locked pages", () => {
-  it("suppresses the reminder bell on a locked RECURRING series", async () => {
+  it("shows the reminder bell on a locked RECURRING series", async () => {
     const page = makePage({ id: "rec1", scheduleLocked: true, syncState: "active" });
     const { pagesApi } = await renderHeader(page);
     await act(async () => {
@@ -127,7 +127,7 @@ describe("MetadataHeader — reminder bell on locked pages", () => {
         timezone: "America/New_York",
       });
     });
-    expect(screen.queryByLabelText(/reminder/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/reminder/i)).toBeInTheDocument();
   });
 
   it("shows the reminder bell on a locked NON-recurring timed page", async () => {

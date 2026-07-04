@@ -191,12 +191,15 @@ struct ReminderSeries {
 /// reminder-lead), so a series with two occurrences in-window fires both (a scalar
 /// head misses one). Native series compare wall-clock in device-local time
 /// (`now_local`); synced series resolve occurrence wall-clock + TZID → absolute
-/// UTC and compare against `now_utc`. Completed/skipped occurrences are excluded
-/// via the union, and the dedup key matches the scheduler's existing
-/// `page_id@start[#lead]` format so `notification_log` rows line up. All-day
-/// series are out of scope (they'd fire at midnight-minus-N). `max_lead` bounds
-/// the enumeration window; the caller passes an upper bound over every configured
-/// lead.
+/// UTC and compare against `now_utc`. `synced` is `sync_state = 'active'`, so a
+/// **detached** series is treated as native and fires on device-local wall-clock —
+/// consistent with the display, which also treats a detached series as native once
+/// it unlocks (`useRecurrenceExpansion`), even though its wall-clock stays
+/// source-zone-stamped. Completed/skipped occurrences are excluded via the union,
+/// and the dedup key matches the scheduler's existing `page_id@start[#lead]` format
+/// so `notification_log` rows line up. All-day series are out of scope (they'd fire
+/// at midnight-minus-N). `max_lead` bounds the enumeration window; the caller passes
+/// an upper bound over every configured lead.
 pub async fn occurrences_with_open_reminder_window(
     pool: &SqlitePool,
     now_local: NaiveDateTime,
@@ -341,7 +344,7 @@ impl Lead {
 
 /// A page with any `page_reminders` row is on the explicit path (a lone `-1`
 /// sentinel row means "no reminders" → empty); a page with none uses the global
-/// default lead.
+/// default lead — synced recurring series included, matching native.
 async fn reminder_leads(
     pool: &SqlitePool,
     page_id: &str,

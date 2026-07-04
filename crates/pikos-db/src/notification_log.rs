@@ -121,10 +121,9 @@ pub async fn due_default_reminders(
 // exclude active-synced pages and this path handles them instead.
 //
 // Only **explicit** (user-added) reminders apply — synced pages get no default
-// reminder (a user reminder is what marks the page owned). Synced *recurring*
-// events are out of scope here: the reconciler pins the head at the series base,
-// so there's no advancing head to fire per-occurrence off — excluded everywhere
-// (no wrong-time fire) until per-occurrence synced reminders land.
+// reminder (a user reminder is what marks the page owned). This path is one-off
+// only; synced *recurring* occurrences fire through `due_recurring_reminders`
+// (which resolves the same source-zone → absolute instant per occurrence).
 //
 // SQLite can't resolve IANA zones, so the SQL is only a coarse ±15h prefilter
 // (covers every real zone offset) and the exact absolute-window check runs in
@@ -213,104 +212,45 @@ pub async fn due_synced_reminders(
         .collect())
 }
 
-// ─── Recurring head reminders ────────────────────────────────────────────────
+// ─── Recurring occurrence reminders ──────────────────────────────────────────
 //
-// rrule-backed pages don't store a `page_schedules` row per occurrence — the
-// current occurrence ("head") lives in `pages.scheduled_start`, advanced by
-// `complete_recurring_page_impl`. The page_schedules queries above deliberately
-// skip such pages' stale `rule_id IS NULL` anchor rows, so reminders for
-// recurring pages come from here instead: fire off the head, keyed for dedup by
-// a synthetic `page_id@scheduled_start` id so each occurrence reminds exactly
-// once and completing the head (which advances `scheduled_start`) naturally
-// re-arms the next occurrence and suppresses the just-completed one.
-//
-// A head that coincides with a materialized override row (`rule_id IS NOT NULL`
-// at the same start) is skipped here — the override row drives that reminder via
-// the page_schedules query, so it can't double-fire.
+// rrule-backed pages have no per-occurrence `page_schedules` row, so their
+// reminders come from enumerating the rule directly rather than off a stored row
+// (the page_schedules queries above deliberately skip a recurring page's stale
+// `rule_id IS NULL` anchor). Native series fire on device-local wall-clock, synced
+// on the source-zone → absolute instant; each occurrence dedups on a synthetic
+// `page_id@start[#lead]` id, so completing or skipping one (which lands it in the
+// exclusion union) suppresses its reminder without touching the others.
 
-/// Recurring pages with explicit `page_reminders` rows whose lead time off the
-/// head lands in `(window_start, now_ts]`. Dedup id encodes the lead time so
-/// multiple reminders on one occurrence stay independent.
-pub async fn due_recurring_explicit_reminders(
+/// The sqlx-facing seam over [`crate::recurrence_derive::occurrences_with_open_reminder_window`]
+/// for the scheduler: owns the `max_lead` bound (an upper bound over every
+/// configured lead) and maps the enumeration's `AppError` back to a content-free
+/// `sqlx::Error` so the run loop's `classify_sqlx` never echoes a page title. The
+/// enumeration isolates per-series rule failures internally, so the only error that
+/// reaches here is a real DB error (`AppError::Db`).
+pub async fn due_recurring_reminders(
     pool: &SqlitePool,
-    window_start: &str,
-    now_ts: &str,
-) -> Result<Vec<DueReminder>, sqlx::Error> {
-    sqlx::query_as(
-        "SELECT (p.id || '@' || p.scheduled_start || '#' || pr.minutes_before) AS schedule_id,
-                p.id AS page_id, p.title, p.scheduled_start, pr.minutes_before
-         FROM pages p
-         JOIN page_recurrence_rules r ON r.page_id = p.id
-         JOIN page_reminders pr ON pr.page_id = p.id
-         WHERE p.status != 'done'
-           AND p.deleted_at IS NULL
-           AND pr.minutes_before >= 0
-           AND p.scheduled_start LIKE '%T%'
-           AND datetime(p.scheduled_start, '-' || pr.minutes_before || ' minutes')
-               BETWEEN ? AND ?
-           AND NOT EXISTS (
-             SELECT 1 FROM page_schedules ps
-             WHERE ps.page_id = p.id AND ps.rule_id IS NOT NULL
-               AND ps.scheduled_start = p.scheduled_start
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM page_sync sy
-             WHERE sy.page_id = p.id AND sy.sync_state = 'active'
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM notification_log nl
-             WHERE nl.schedule_id = (p.id || '@' || p.scheduled_start || '#' || pr.minutes_before)
-               AND nl.type = 'reminder'
-           )",
-    )
-    .bind(window_start)
-    .bind(now_ts)
-    .fetch_all(pool)
-    .await
-}
-
-/// Recurring pages *without* `page_reminders` rows — use the global default
-/// lead time off the head. Dedup id is `page_id@scheduled_start`.
-pub async fn due_recurring_default_reminders(
-    pool: &SqlitePool,
+    now_local: chrono::NaiveDateTime,
+    now_utc: chrono::DateTime<chrono::Utc>,
     default_minutes: i64,
-    window_start: &str,
-    now_ts: &str,
 ) -> Result<Vec<DueReminder>, sqlx::Error> {
-    sqlx::query_as(
-        "SELECT (p.id || '@' || p.scheduled_start) AS schedule_id,
-                p.id AS page_id, p.title, p.scheduled_start, ? AS minutes_before
-         FROM pages p
-         JOIN page_recurrence_rules r ON r.page_id = p.id
-         WHERE p.status != 'done'
-           AND p.deleted_at IS NULL
-           AND p.scheduled_start LIKE '%T%'
-           AND NOT EXISTS (
-             SELECT 1 FROM page_reminders pr WHERE pr.page_id = p.id
-           )
-           AND datetime(p.scheduled_start, '-' || ? || ' minutes')
-               BETWEEN ? AND ?
-           AND NOT EXISTS (
-             SELECT 1 FROM page_schedules ps
-             WHERE ps.page_id = p.id AND ps.rule_id IS NOT NULL
-               AND ps.scheduled_start = p.scheduled_start
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM page_sync sy
-             WHERE sy.page_id = p.id AND sy.sync_state = 'active'
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM notification_log nl
-             WHERE nl.schedule_id = (p.id || '@' || p.scheduled_start)
-               AND nl.type = 'reminder'
-           )",
+    let max_explicit: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(minutes_before), 0) FROM page_reminders")
+            .fetch_one(pool)
+            .await?;
+    let max_lead = default_minutes.max(max_explicit).max(0);
+    crate::recurrence_derive::occurrences_with_open_reminder_window(
+        pool,
+        now_local,
+        now_utc,
+        default_minutes,
+        max_lead,
     )
-    .bind(default_minutes)
-    .bind(default_minutes)
-    .bind(window_start)
-    .bind(now_ts)
-    .fetch_all(pool)
     .await
+    .map_err(|e| match e {
+        crate::error::AppError::Db(e) => e,
+        _ => sqlx::Error::Protocol("recurring reminder enumeration failed".into()),
+    })
 }
 
 /// Whether the daily-summary marker row was already inserted on `date`

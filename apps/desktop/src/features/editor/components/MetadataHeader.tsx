@@ -118,12 +118,12 @@ function Byline({
         {/* Reminders only apply to timed events — all-day schedules have no
             start time to fire "minutes before" against, so the scheduler
             ignores them (see notifications/scheduler). Hide the bell to match.
-            Reminders stay editable on synced ONE-OFF events (user-owned layer),
-            but a synced RECURRING series has no per-occurrence reminder path yet
-            (the head is pinned), so hide the bell rather than offer a dead one. */}
-        {!!page.scheduledStart &&
-          isTimedIso(page.scheduledStart) &&
-          !(locked && recurrenceRule) && <ReminderDropdown pageId={page.id} />}
+            Reminders are user-owned and stay editable on every synced event —
+            one-off and recurring alike — since synced recurring occurrences now
+            fire per-occurrence (see notifications/scheduler). */}
+        {!!page.scheduledStart && isTimedIso(page.scheduledStart) && (
+          <ReminderDropdown pageId={page.id} />
+        )}
         {locked ? (
           lockedRecurrenceLabel && (
             <span className="truncate text-subtle">{lockedRecurrenceLabel}</span>

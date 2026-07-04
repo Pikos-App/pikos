@@ -301,6 +301,79 @@ async fn synced_reminder_lead_straddling_a_spring_forward_still_fires_once() {
 }
 
 #[tokio::test]
+async fn detached_series_fires_on_device_local_wall_clock_not_source_zone() {
+    // Once detached the page unlocks and the display treats it as native
+    // (`useRecurrenceExpansion`), so reminders match: device-local wall-clock, even
+    // though the stored wall-clock is still source-zone-stamped. `synced` keys on
+    // sync_state = 'active', so a detached row falls to the native branch.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2026-05-25T09:00:00", None).await; // zone = LA
+    insert_test_page_sync(&pool, "head", "detached").await.unwrap();
+    add_reminder(&pool, "head", 30).await;
+
+    // now_utc is set so the SYNCED interpretation (09:00 LA = 16:00Z, lead 30 →
+    // 15:45Z) would NOT be in-window — only the native (device-local 08:30 + 30 →
+    // 09:00) interpretation fires. Firing here proves the detached row is native.
+    let now_local = local("2026-05-25T08:30:00");
+    let due = occurrences_with_open_reminder_window(&pool, now_local, now_local.and_utc(), 15, 60)
+        .await
+        .unwrap();
+
+    assert_eq!(due.len(), 1, "detached series fires on device-local wall-clock");
+    assert_eq!(due[0].scheduled_start, "2026-05-25T09:00:00");
+}
+
+#[tokio::test]
+async fn active_synced_series_fires_the_default_reminder() {
+    // A synced series gets the global default lead like native (no explicit reminder
+    // needed). The default fires at the source-zone → absolute instant: 09:00 LA
+    // (PDT, UTC-7) = 16:00Z, default 15 → 15:45Z.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2026-05-25T09:00:00", None).await; // zone = LA
+    insert_test_page_sync(&pool, "head", "active").await.unwrap();
+
+    let due = occurrences_with_open_reminder_window(
+        &pool,
+        local("2026-05-25T08:45:00"),
+        utc("2026-05-25T15:45:00Z"),
+        15,
+        60,
+    )
+    .await
+    .unwrap();
+    assert_eq!(due.len(), 1, "synced series fires the default reminder");
+    assert_eq!(due[0].scheduled_start, "2026-05-25T09:00:00");
+    assert_eq!(due[0].minutes_before, 15);
+}
+
+#[tokio::test]
+async fn all_day_series_never_fires() {
+    let pool = test_pool().await;
+    // A date-only base is all-day — excluded by the `LIKE '%T%'` gate for both kinds.
+    insert_test_page(
+        &pool,
+        TestPage { scheduled_start: Some("2026-05-25"), ..TestPage::new("head", "S") },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules (id, page_id, rrule, scheduled_start, timezone, created_at)
+         VALUES ('r', 'head', 'FREQ=DAILY', '2026-05-25', 'UTC', ?)",
+    )
+    .bind(now_iso())
+    .execute(&pool)
+    .await
+    .unwrap();
+    add_reminder(&pool, "head", 30).await;
+
+    let now = local("2026-05-25T00:00:00");
+    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+        .await
+        .unwrap();
+    assert!(due.is_empty(), "all-day recurring series has no reminder");
+}
+
+#[tokio::test]
 async fn reminders_ignore_a_corrupted_display_cache() {
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
