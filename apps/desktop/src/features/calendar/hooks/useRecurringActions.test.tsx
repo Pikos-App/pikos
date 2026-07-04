@@ -248,7 +248,7 @@ describe("useRecurringActions", () => {
       });
     });
 
-    // A locked (active-synced) recurring head. maybeToggleSyncedOccurrence keys
+    // A locked (active-synced) recurring head. maybeToggleRecurringOccurrence keys
     // off the live page's scheduleLocked + an existing rule, so set both here.
     const base = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
     act(() => {

@@ -139,7 +139,7 @@ export interface PagesContextValue {
    * occurrence-based completion, bypassing the native head-advance path.
    * Returns true when handled — the caller must not fall through.
    */
-  maybeToggleSyncedOccurrence: (page: PageSummary, nextStatus: PageStatus) => boolean;
+  maybeToggleRecurringOccurrence: (page: PageSummary, nextStatus: PageStatus) => boolean;
   /**
    * Un-done of a native recurring head → occurrence-uncomplete (undo the last
    * completion), not a plain status flip that a recompute would revert. Returns
@@ -768,10 +768,11 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   ): Promise<void> {
     // Backstop for synced series: the native head-advance path below is rejected
     // by the backend for an active synced page (the reconciler owns the head).
-    // UI callers should branch via maybeToggleSyncedOccurrence first, but route
-    // here too so no entry point (incl. the gap dialog) can hit the Conflict.
+    // Intentionally redundant with the shared toggle router — direct callers that
+    // don't go through it (bulk-select, the gap dialog's confirm) route here too,
+    // so no entry point can hit the Conflict.
     const page = pagesRef.current.find((p) => p.id === pageId);
-    if (page && maybeToggleSyncedOccurrence(page, "done")) return;
+    if (page && maybeToggleRecurringOccurrence(page, "done")) return;
     // Re-entrancy guard: the checkbox path is fire-and-forget and not disabled
     // in flight, and the backend mints one clone + one head-advance per call —
     // a re-entrant call (or, now that completion is queued, a SERIALIZED
@@ -891,25 +892,23 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  async function uncompleteSyncedOccurrence(
-    seriesId: string,
-    occurrenceDate: string
-  ): Promise<void> {
+  // The unified backend uncomplete recomputes the head (native or synced), so
+  // re-fetch it rather than guess.
+  async function uncompleteRecurringClone(seriesId: string, occurrenceDate: string): Promise<void> {
     const series = pagesRef.current.find((p) => p.id === seriesId);
     const cloneId = series?.completedOccurrences?.[occurrenceDate];
-    // The unified uncomplete recomputes the head, so re-fetch it rather than guess.
     await adapter.uncompleteRecurringOccurrence({ occurrenceDate, pageId: seriesId });
     await patchRecomputedHead(seriesId, cloneId);
   }
 
   /**
-   * Find the synced series + date a done clone belongs to, or null. Scans the
-   * loaded series' completion maps — reliable because active synced series are
-   * always in `pages` (the loader fetches all active pages with no folder/range
-   * filter), and the done clone's series is active. Skips non-synced pages in O(1)
-   * each, so a native uncheck costs ~one property read per page.
+   * Find the recurring series + date a done clone belongs to, or null — native or
+   * synced. Scans the loaded series' completion maps — reliable because active
+   * series are always in `pages` (the loader fetches all active pages with no
+   * folder/range filter), and the done clone's series is active. Skips pages with
+   * no completion map in O(1) each, so an uncheck costs ~one property read per page.
    */
-  function findSyncedOccurrenceClone(
+  function findRecurringOccurrenceClone(
     cloneId: string
   ): { seriesId: string; occurrenceDate: string } | null {
     for (const p of pagesRef.current) {
@@ -934,15 +933,15 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   }
 
   /**
-   * Intercepts a status toggle that belongs to a synced recurring series and
-   * routes it to occurrence-based completion. Returns true ONLY when it actually
-   * handled the toggle (caller must then NOT fall through). Returns false for
-   * everything else — including a malformed synced row with no `scheduledStart`,
-   * so the native path runs and surfaces an error rather than silently swallowing
-   * the click. Two handled cases: checking an active synced occurrence (head or
-   * virtual) → complete it; unchecking its done clone → uncomplete + restore.
+   * Intercepts a status toggle that must route to occurrence-based completion, and
+   * returns true ONLY when it handled it (caller must then NOT fall through). Two
+   * cases: checking an active *synced* occurrence (head or virtual) → complete it;
+   * unchecking *any* recurring done clone (native or synced) → uncomplete + restore.
+   * Returns false for everything else — including a malformed synced row with no
+   * `scheduledStart`, so the native path runs and surfaces an error rather than
+   * silently swallowing the click.
    */
-  function maybeToggleSyncedOccurrence(page: PageSummary, nextStatus: PageStatus): boolean {
+  function maybeToggleRecurringOccurrence(page: PageSummary, nextStatus: PageStatus): boolean {
     const isSyncedRecurring =
       !!page.scheduleLocked && recurrenceRulesRef.current.some((r) => r.pageId === page.id);
     if (isSyncedRecurring && nextStatus === "done" && page.scheduledStart) {
@@ -962,9 +961,9 @@ export function PagesProvider({ children }: { children: ReactNode }) {
       return true;
     }
     if (nextStatus === "not_started") {
-      const found = findSyncedOccurrenceClone(page.id);
+      const found = findRecurringOccurrenceClone(page.id);
       if (found) {
-        void uncompleteSyncedOccurrence(found.seriesId, found.occurrenceDate);
+        void uncompleteRecurringClone(found.seriesId, found.occurrenceDate);
         return true;
       }
     }
@@ -1099,7 +1098,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     getPage,
     listCompletedPages,
     listSchedulesRange,
-    maybeToggleSyncedOccurrence,
+    maybeToggleRecurringOccurrence,
     mergePages,
     pageErrors,
     pages,

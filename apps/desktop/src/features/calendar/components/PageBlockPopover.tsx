@@ -1,12 +1,5 @@
-import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
-import {
-  getLocalTimezone,
-  isDone,
-  isTimedIso,
-  nowLocalISO,
-  rruleToLabel,
-  snapAnchorToRule,
-} from "@pikos/core";
+import type { PagePriority, PageSummary } from "@pikos/core";
+import { getLocalTimezone, isDone, isTimedIso, rruleToLabel, snapAnchorToRule } from "@pikos/core";
 import { CalendarOff, CalendarX, ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -18,8 +11,8 @@ import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { usePages } from "@/shared/context/PagesContext";
-import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { computeScheduleTransition, normalizeEndInput } from "@/shared/utils/schedule";
 import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
@@ -41,14 +34,12 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
     createRecurrence,
     deleteRecurrence,
     folders,
-    maybeToggleSyncedOccurrence,
     recurrenceRules,
     scheduleOnce,
-    uncompleteRecurringOrFlip,
     updatePage,
     updateRecurrence,
   } = usePages();
-  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
+  const togglePageStatus = useRecurringStatusToggle();
   const { openPage } = useUI();
 
   useKeyboardScope("modal");
@@ -77,17 +68,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   const done = isDone(page);
 
   function handleStatusToggle() {
-    const newStatus: PageStatus = done ? "not_started" : "done";
-    if (maybeToggleSyncedOccurrence(page, newStatus)) return;
-    if (recurrenceRules.some((r) => r.pageId === page.id)) {
-      if (newStatus === "done") requestRecurringComplete(page.id);
-      else void uncompleteRecurringOrFlip(page.id);
-      return;
-    }
-    updatePage(page.id, {
-      completedAt: newStatus === "done" ? nowLocalISO() : null,
-      status: newStatus,
-    });
+    togglePageStatus(page, done ? "not_started" : "done");
   }
 
   function handleTitleBlur(e: React.FocusEvent<HTMLInputElement>) {

@@ -276,10 +276,10 @@ describe("skipOccurrence undo", () => {
   });
 });
 
-// ─── maybeToggleSyncedOccurrence + cloneWallClock ───────────────────────────
+// ─── maybeToggleRecurringOccurrence + cloneWallClock ───────────────────────────
 // Toggling a synced recurring occurrence's status must route to occurrence-based
 // completion (never the native head advance) and store the done clone at the
-// viewer-local wall clock for a zoned timed event. maybeToggleSyncedOccurrence
+// viewer-local wall clock for a zoned timed event. maybeToggleRecurringOccurrence
 // is the gate every UI toggle funnels through; cloneWallClock is the conversion.
 
 type Hook = Awaited<ReturnType<typeof setupRecurringPage>>["hook"];
@@ -325,14 +325,17 @@ function head(hook: Hook, pageId: string) {
   return p;
 }
 
-describe("maybeToggleSyncedOccurrence", () => {
+describe("maybeToggleRecurringOccurrence", () => {
   it("checking the head completes its own date via completeSyncedOccurrence", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     let handled!: boolean;
     act(() => {
-      handled = hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(
+        head(hook, pageId),
+        "done"
+      );
     });
 
     expect(handled).toBe(true);
@@ -353,20 +356,20 @@ describe("maybeToggleSyncedOccurrence", () => {
       scheduledStart: "2099-01-12T09:00:00",
     };
     act(() => {
-      hook.result.current.pages.maybeToggleSyncedOccurrence(virtual, "done");
+      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
     });
 
     expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({ occurrenceDate: "2099-01-12" });
   });
 
-  it("unchecking a done clone routes to uncompleteSyncedOccurrence with the series id + date", async () => {
+  it("unchecking a done clone routes to uncompleteRecurringOccurrence with the series id + date", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
     const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteRecurringOccurrence");
 
     // completeSyncedOccurrence's optimistic clone insert lands a microtask after
     // the (fire-and-forget) toggle — flush so the clone is in `pages`.
     await act(async () => {
-      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      hook.result.current.pages.maybeToggleRecurringOccurrence(head(hook, pageId), "done");
       await Promise.resolve();
     });
     const cloneId = head(hook, pageId).completedOccurrences?.["2099-01-05"] ?? "";
@@ -374,7 +377,7 @@ describe("maybeToggleSyncedOccurrence", () => {
 
     let handled!: boolean;
     act(() => {
-      handled = hook.result.current.pages.maybeToggleSyncedOccurrence(clone, "not_started");
+      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(clone, "not_started");
     });
 
     expect(handled).toBe(true);
@@ -390,8 +393,8 @@ describe("maybeToggleSyncedOccurrence", () => {
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
-      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
-      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      hook.result.current.pages.maybeToggleRecurringOccurrence(head(hook, pageId), "done");
+      hook.result.current.pages.maybeToggleRecurringOccurrence(head(hook, pageId), "done");
       await Promise.resolve();
     });
 
@@ -415,11 +418,11 @@ describe("maybeToggleSyncedOccurrence", () => {
       scheduledStart: "2099-01-05T09:00:00",
     };
     await act(async () => {
-      hook.result.current.pages.maybeToggleSyncedOccurrence(virtual, "done");
+      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
       await Promise.resolve();
     });
     await act(async () => {
-      hook.result.current.pages.maybeToggleSyncedOccurrence(virtual, "done");
+      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
       await Promise.resolve();
     });
 
@@ -437,7 +440,7 @@ describe("maybeToggleSyncedOccurrence", () => {
     const malformed = { ...head(hook, pageId), scheduledStart: null };
     let handled!: boolean;
     act(() => {
-      handled = hook.result.current.pages.maybeToggleSyncedOccurrence(malformed, "done");
+      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(malformed, "done");
     });
 
     expect(handled).toBe(false);
@@ -445,7 +448,7 @@ describe("maybeToggleSyncedOccurrence", () => {
   });
 });
 
-describe("cloneWallClock (via maybeToggleSyncedOccurrence)", () => {
+describe("cloneWallClock (via maybeToggleRecurringOccurrence)", () => {
   it("converts a timed zoned occurrence's clone start to the viewer-local instant", async () => {
     const { hook, pageId } = await setupSyncedRecurring(
       "2099-01-05T15:00:00",
@@ -455,7 +458,7 @@ describe("cloneWallClock (via maybeToggleSyncedOccurrence)", () => {
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     act(() => {
-      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      hook.result.current.pages.maybeToggleRecurringOccurrence(head(hook, pageId), "done");
     });
 
     // Under TZ=UTC the viewer zone is UTC: 15:00 Los_Angeles → its absolute
@@ -479,7 +482,7 @@ describe("cloneWallClock (via maybeToggleSyncedOccurrence)", () => {
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     act(() => {
-      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      hook.result.current.pages.maybeToggleRecurringOccurrence(head(hook, pageId), "done");
     });
 
     expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({

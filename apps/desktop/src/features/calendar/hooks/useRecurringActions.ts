@@ -1,9 +1,9 @@
-import type { PageStatus, PageSummary, VirtualOccurrence } from "@pikos/core";
-import { isDone, nowLocalISO } from "@pikos/core";
+import type { PageSummary, VirtualOccurrence } from "@pikos/core";
+import { isDone } from "@pikos/core";
 
 import { usePages } from "@/shared/context/PagesContext";
-import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
+import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
 interface UseRecurringActionsResult {
   /** True when the page is a virtual rrule occurrence (not a real DB page). */
@@ -15,39 +15,15 @@ interface UseRecurringActionsResult {
 }
 
 export function useRecurringActions(page: PageSummary): UseRecurringActionsResult {
-  const {
-    maybeToggleSyncedOccurrence,
-    recurrenceRules,
-    skipOccurrence: skipOccurrenceFn,
-    uncompleteRecurringOrFlip,
-    updatePage,
-  } = usePages();
-  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
+  const { skipOccurrence: skipOccurrenceFn } = usePages();
+  const togglePageStatus = useRecurringStatusToggle();
   const { requestUndoableAction } = useUndoDelete();
 
   const isRecurring = "isVirtual" in page && (page as { isVirtual?: boolean }).isVirtual === true;
   const done = isDone(page);
 
   function toggleStatus() {
-    const newStatus: PageStatus = done ? "not_started" : "done";
-    // Synced recurring occurrences (and their done clones) route to occurrence-
-    // based completion, never the native head-advance path.
-    if (maybeToggleSyncedOccurrence(page, newStatus)) return;
-    if (newStatus === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      // Routes through the gap-resolution dialog. If today > head's
-      // scheduledStart there are missed days that need a policy decision;
-      // otherwise the request resolves immediately to advance.
-      requestRecurringComplete(page.id);
-      return;
-    }
-    if (newStatus === "not_started" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      void uncompleteRecurringOrFlip(page.id);
-      return;
-    }
-    updatePage(page.id, {
-      completedAt: newStatus === "done" ? nowLocalISO() : null,
-      status: newStatus,
-    });
+    togglePageStatus(page, done ? "not_started" : "done");
   }
 
   async function handleSkipOccurrence() {

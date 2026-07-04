@@ -6,7 +6,6 @@ import {
   isDone,
   isTimedIso,
   localToday,
-  nowLocalISO,
   parseLocalISO,
   rruleToLabel,
   snapAnchorToRule,
@@ -27,8 +26,8 @@ import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
-import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
 
 import { DateSchedulePopover } from "./DateSchedulePopover";
@@ -205,16 +204,14 @@ export function MetadataHeader({
     deleteRecurrence,
     flushPage,
     folders,
-    maybeToggleSyncedOccurrence,
     pageErrors,
     recurrenceRules,
     scheduleOnce,
     tags,
-    uncompleteRecurringOrFlip,
     updatePage,
     updateRecurrence,
   } = usePages();
-  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
+  const togglePageStatus = useRecurringStatusToggle();
   const { lineWidth } = useEditorSettings();
   const { flashPageBlock, requestCalendarScroll, setReferenceDate, setRightPanel } = useUI();
   const allTagNames = tags.map((t) => t.name);
@@ -234,20 +231,7 @@ export function MetadataHeader({
   }
 
   function handleStatusChange(status: PageStatus) {
-    // Synced recurring → occurrence-based completion, not native advance.
-    if (maybeToggleSyncedOccurrence(page, status)) return;
-    // Recurring completion routes through the gap-resolution dialog (fast-paths
-    // when there's no gap between head and today); un-done rewinds the last
-    // occurrence.
-    if (recurrenceRules.some((r) => r.pageId === page.id)) {
-      if (status === "done") requestRecurringComplete(page.id);
-      else void uncompleteRecurringOrFlip(page.id);
-      return;
-    }
-    updatePage(page.id, {
-      completedAt: status === "done" ? nowLocalISO() : null,
-      status,
-    });
+    togglePageStatus(page, status);
   }
 
   function handleFolderChange(folderId: string | null) {
