@@ -272,6 +272,85 @@ describe("useRecurringActions", () => {
     );
   });
 
+  it("un-checking a done recurring head rewinds the last occurrence, not a plain flip", async () => {
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "Standup" });
+      pageId = p.id;
+      await hook.result.current.pages.scheduleOnce(p.id, "2099-01-05T09:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+
+    // Complete once so the head carries a completed occurrence to rewind.
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId);
+    });
+
+    const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteRecurringOccurrence");
+    const liveHead = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
+    act(() => {
+      hook.result.current.setTargetPage({ ...liveHead, status: "done" });
+    });
+
+    await act(async () => {
+      hook.result.current.actions.toggleStatus();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(uncompleteSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ occurrenceDate: "2099-01-05", pageId })
+    );
+  });
+
+  it("un-checking a recurring head with nothing completed falls back to a plain flip", async () => {
+    const hook = setup();
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "Standup" });
+      pageId = p.id;
+      await hook.result.current.pages.scheduleOnce(p.id, "2099-01-05T09:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+
+    const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteRecurringOccurrence");
+    const liveHead = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
+    act(() => {
+      hook.result.current.setTargetPage({ ...liveHead, status: "done" });
+    });
+
+    await act(async () => {
+      hook.result.current.actions.toggleStatus();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // No completed occurrence to rewind → the plain-flip fallback runs instead.
+    expect(uncompleteSpy).not.toHaveBeenCalled();
+    expect(hook.result.current.pages.pages.find((p) => p.id === pageId)?.status).toBe(
+      "not_started"
+    );
+  });
+
   it("skipOccurrence is a no-op for non-virtual pages", async () => {
     const hook = setup();
     await act(async () => {

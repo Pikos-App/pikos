@@ -56,6 +56,20 @@ export function useRecurringCompleteDialog(): RecurringCompleteDialogContextValu
   return ctx;
 }
 
+/**
+ * Dates already taken out of the series: rule EXDATEs ∪ completed ∪ skipped.
+ * Same exclusion union the calendar expansion applies (see
+ * `expandRecurrenceForRange`); without it the labels count already-addressed
+ * occurrences as "missed".
+ */
+function occurrenceExclusions(rule: PageRecurrenceRule, head: PageSummary | undefined): string[] {
+  return [
+    ...rule.rruleExdates,
+    ...(head?.completedOccurrences ? Object.keys(head.completedOccurrences) : []),
+    ...(head?.skippedOccurrences ?? []),
+  ];
+}
+
 function computeMissedDates(rule: PageRecurrenceRule, head: PageSummary | undefined): string[] {
   if (!head?.scheduledStart) return [];
   const headDate = parseLocalISO(head.scheduledStart);
@@ -66,7 +80,7 @@ function computeMissedDates(rule: PageRecurrenceRule, head: PageSummary | undefi
     rule.scheduledStart,
     headDate,
     todayStart,
-    rule.rruleExdates
+    occurrenceExclusions(rule, head)
   );
 }
 
@@ -99,7 +113,7 @@ export function RecurringCompleteDialogProvider({ children }: { children: ReactN
     // + exdate logic in PagesContext.completeRecurringPage.
     const headDateStr = head?.scheduledStart?.slice(0, 10);
     const skipExdates = [
-      ...rule.rruleExdates,
+      ...occurrenceExclusions(rule, head),
       ...(headDateStr ? [headDateStr] : []),
       ...missedDates,
     ];

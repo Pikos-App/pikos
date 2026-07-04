@@ -14,7 +14,14 @@ import { useCompletedPages } from "./useCompletedPages";
 export const UNDO_TOAST_DURATION_MS = 8000;
 
 export function usePageList() {
-  const { folders, maybeToggleSyncedOccurrence, pages, recurrenceRules, updatePage } = usePages();
+  const {
+    folders,
+    maybeToggleSyncedOccurrence,
+    pages,
+    recurrenceRules,
+    uncompleteRecurringOrFlip,
+    updatePage,
+  } = usePages();
   const { request: requestRecurringComplete } = useRecurringCompleteDialog();
   const { activeViewId, getSortMode, openPage, setActivePage } = useUI();
   const { hiddenIds, requestDeletePage } = useUndoDelete();
@@ -59,11 +66,12 @@ export function usePageList() {
     const page =
       pages.find((p) => p.id === pageId) ?? completed.completedPages.find((p) => p.id === pageId);
     if (page && maybeToggleSyncedOccurrence(page, nextStatus)) return;
-    // Recurring pages route through the gap-resolution dialog (which fast-
-    // paths to advance when there's no gap). Non-recurring or un-completing
-    // a done page just flips status directly.
-    if (!isDone && recurrenceRules.some((r) => r.pageId === pageId)) {
-      requestRecurringComplete(pageId);
+    // Recurring completion routes through the gap-resolution dialog (which
+    // fast-paths to advance when there's no gap); un-done rewinds the last
+    // occurrence. Non-recurring flips directly.
+    if (recurrenceRules.some((r) => r.pageId === pageId)) {
+      if (isDone) void uncompleteRecurringOrFlip(pageId);
+      else requestRecurringComplete(pageId);
       return;
     }
     updatePage(pageId, {

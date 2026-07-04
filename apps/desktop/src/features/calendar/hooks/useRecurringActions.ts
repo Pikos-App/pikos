@@ -19,7 +19,7 @@ export function useRecurringActions(page: PageSummary): UseRecurringActionsResul
     maybeToggleSyncedOccurrence,
     recurrenceRules,
     skipOccurrence: skipOccurrenceFn,
-    uncompleteRecurringHead,
+    uncompleteRecurringOrFlip,
     updatePage,
   } = usePages();
   const { request: requestRecurringComplete } = useRecurringCompleteDialog();
@@ -41,10 +41,7 @@ export function useRecurringActions(page: PageSummary): UseRecurringActionsResul
       return;
     }
     if (newStatus === "not_started" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      // Recurring head un-done routes through uncomplete (see uncompleteRecurringHead).
-      void uncompleteRecurringHead(page.id).then((handled) => {
-        if (!handled) updatePage(page.id, { completedAt: null, status: newStatus });
-      });
+      void uncompleteRecurringOrFlip(page.id);
       return;
     }
     updatePage(page.id, {

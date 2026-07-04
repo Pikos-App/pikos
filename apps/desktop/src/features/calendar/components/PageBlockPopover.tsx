@@ -44,6 +44,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
     maybeToggleSyncedOccurrence,
     recurrenceRules,
     scheduleOnce,
+    uncompleteRecurringOrFlip,
     updatePage,
     updateRecurrence,
   } = usePages();
@@ -78,8 +79,9 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
   function handleStatusToggle() {
     const newStatus: PageStatus = done ? "not_started" : "done";
     if (maybeToggleSyncedOccurrence(page, newStatus)) return;
-    if (newStatus === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      requestRecurringComplete(page.id);
+    if (recurrenceRules.some((r) => r.pageId === page.id)) {
+      if (newStatus === "done") requestRecurringComplete(page.id);
+      else void uncompleteRecurringOrFlip(page.id);
       return;
     }
     updatePage(page.id, {

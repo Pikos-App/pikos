@@ -140,6 +140,12 @@ export interface PagesContextValue {
    * leaves the caller to do its plain flip.
    */
   uncompleteRecurringHead: (pageId: string) => Promise<boolean>;
+  /**
+   * Uncheck a recurring page: rewind the last occurrence via
+   * `uncompleteRecurringHead`, or plain-flip to `not_started` when there's
+   * nothing to rewind.
+   */
+  uncompleteRecurringOrFlip: (pageId: string) => Promise<void>;
   /** Paginated completed pages — lazy-loaded when the "Completed" section is expanded. */
   listCompletedPages: (filter: CompletedPagesFilter) => Promise<CompletedPagesResponse>;
   /** Merge lazy-loaded pages (e.g. completed) into the pages array, deduplicating by ID. */
@@ -684,6 +690,11 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     return true;
   }
 
+  async function uncompleteRecurringOrFlip(pageId: string): Promise<void> {
+    if (await uncompleteRecurringHead(pageId)) return;
+    updatePage(pageId, { completedAt: null, status: "not_started" });
+  }
+
   /**
    * Drag-to-reschedule (or popover Date pick) on a virtual rrule occurrence.
    * Materialises the occurrence as an independent real page: clones the head's
@@ -1092,6 +1103,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     softDeletePage,
     tags,
     uncompleteRecurringHead,
+    uncompleteRecurringOrFlip,
     updateFolder,
     updatePage,
     updateRecurrence,

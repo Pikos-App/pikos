@@ -210,6 +210,7 @@ export function MetadataHeader({
     recurrenceRules,
     scheduleOnce,
     tags,
+    uncompleteRecurringOrFlip,
     updatePage,
     updateRecurrence,
   } = usePages();
@@ -235,10 +236,12 @@ export function MetadataHeader({
   function handleStatusChange(status: PageStatus) {
     // Synced recurring → occurrence-based completion, not native advance.
     if (maybeToggleSyncedOccurrence(page, status)) return;
-    // Recurring pages route through the gap-resolution dialog. The dialog
-    // fast-paths when there's no gap between head and today.
-    if (status === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      requestRecurringComplete(page.id);
+    // Recurring completion routes through the gap-resolution dialog (fast-paths
+    // when there's no gap between head and today); un-done rewinds the last
+    // occurrence.
+    if (recurrenceRules.some((r) => r.pageId === page.id)) {
+      if (status === "done") requestRecurringComplete(page.id);
+      else void uncompleteRecurringOrFlip(page.id);
       return;
     }
     updatePage(page.id, {

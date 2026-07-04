@@ -1,4 +1,5 @@
 import type { Page } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core";
 import { act, waitFor } from "@testing-library/react";
 import { format } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -196,6 +197,37 @@ describe("usePageList — handleToggleStatus", () => {
     // The page itself remains not_started — the head advanced to a future occurrence.
     const updated = hook.result.current.pages.pages.find((p) => p.id === page.id);
     expect(updated?.status).toBe("not_started");
+  });
+
+  it("un-checking a done recurring head rewinds the last occurrence, not a plain flip", async () => {
+    const hook = setup();
+    await init(hook);
+    const page = await makePage(hook, { title: "Recurring" });
+
+    await act(async () => {
+      await hook.result.current.pages.scheduleOnce(page.id, "2099-01-05T09:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(page.id);
+    });
+
+    const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteRecurringOccurrence");
+
+    await act(async () => {
+      hook.result.current.pageList.handleToggleStatus(page.id, "done");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(uncompleteSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ occurrenceDate: "2099-01-05", pageId: page.id })
+    );
   });
 });
 
