@@ -211,9 +211,12 @@ async fn find_relink(
 /// A recurring page's head is then recomputed to its oldest-open occurrence
 /// (completed/skip sets, keyed by `page_id`, survive the rule rewrite and may push
 /// it past the raw base) with the derivation owning terminal status both
-/// directions. A recurring→single transition (rule dropped) un-marks a stale
-/// terminal `done` the old series' recompute stamped — no rule survives to do it,
-/// and the provider re-delivering the event as a single means it's live again.
+/// directions. Any rewrite of a page that *had* a rule first un-marks a stale
+/// terminal `done` the old series' recompute stamped: on a recurrence→single drop
+/// no rule survives to clear it (and re-delivery as a single means it's live), and
+/// on a recurrence→recurrence rewrite an engine-rejected new rule makes the
+/// recompute skip — leaving the page invisibly `done` — so it's cleared up front
+/// and a supported recompute re-marks it if the new series is still exhausted.
 async fn write_schedule(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -289,8 +292,8 @@ async fn write_schedule(
     }
 
     // Base-occurrence floor; the recurring recompute below refines it, and a
-    // recurring→single drop clears a stale terminal `done` here (see fn doc).
-    let clear_terminal = had_rule && ev.recurrence.is_none();
+    // rewrite of a page that had a rule clears a stale terminal `done` here (see fn doc).
+    let clear_terminal = had_rule;
     sqlx::query(
         "UPDATE pages SET scheduled_start = ?1, scheduled_end = ?2,
            status = CASE WHEN ?3 AND status = 'done' THEN 'not_started' ELSE status END,
@@ -634,8 +637,10 @@ async fn is_owned(
 /// unlocks and the frontend's completed-base head suppression stops applying, so a
 /// series whose base is a completed occurrence would double-render beside its done
 /// clone until the next on-load heal — the recompute moves the head to oldest-open
-/// now. The `sync_state` flip aside, it touches `pages` only via that recompute, so
-/// a detach never refloats an unaffected page as "recently edited".
+/// now. The `sync_state` flip is on `page_sync`, so a non-recurring detach leaves
+/// `pages.updated_at` untouched (the recompute no-ops). A recurring detach does
+/// bump it via the recompute's head write — correct, since unlocking the page is a
+/// real state change — so it refloats as "recently edited".
 async fn detach_sync(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,

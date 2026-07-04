@@ -446,6 +446,60 @@ async fn series_bundle_writes_rule_exdate_and_override() {
     );
 }
 
+async fn page_status(pool: &sqlx::SqlitePool, page_id: &str) -> (String, Option<String>) {
+    sqlx::query_as("SELECT status, completed_at FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn force_terminal_done(pool: &sqlx::SqlitePool, page_id: &str) {
+    sqlx::query(
+        "UPDATE pages SET status = 'done', completed_at = '2026-06-30T00:00:00' WHERE id = ?",
+    )
+    .bind(page_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+fn series_v(etag: &str, rrule: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core("/series.ics", "uid-series", etag, "Series"),
+        schedule: timed("2026-06-01T09:00:00", Some("2026-06-01T09:30:00"), "America/New_York"),
+        recurrence: Some(Recurrence {
+            rrule: rrule.into(),
+            exdates: vec![],
+            overrides: vec![],
+        }),
+    })
+}
+
+#[tokio::test]
+async fn exhausted_done_series_rewritten_to_unsupported_rule_unmarks_done() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![series_v("v1", "FREQ=WEEKLY;BYDAY=MO")]))
+        .await
+        .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    // Simulate the finite series having exhausted to a terminal-done head.
+    force_terminal_done(&pool, &page_id).await;
+
+    // The provider rewrites the rule into a shape the engine rejects (BYSETPOS), so
+    // recompute_recurring_schedule skips it. Without the up-front terminal clear the
+    // page would stay `done` → invisible on the calendar and reminder-excluded.
+    reconcile(&pool, &ctx(), &delta(vec![series_v("v2", "FREQ=MONTHLY;BYSETPOS=1;BYDAY=MO")]))
+        .await
+        .unwrap();
+
+    let (status, completed_at) = page_status(&pool, &page_id).await;
+    assert_eq!(status, "not_started");
+    assert!(completed_at.is_none());
+    // Storage still takes the rewrite — the rejection is only in derivation.
+    assert_eq!(rule_row(&pool, &page_id).await.0, "FREQ=MONTHLY;BYSETPOS=1;BYDAY=MO");
+}
+
 #[tokio::test]
 async fn occurrence_modify_against_stored_rule() {
     let pool = setup().await;
