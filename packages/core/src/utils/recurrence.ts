@@ -52,20 +52,18 @@ export function expandRecurrenceForRange(
   rangeEnd: Date,
   existingSchedules: PageSchedule[] = []
 ): VirtualOccurrence[] {
-  // Build the set of dates that have been materialised as overrides, skipped, or
-  // — for an ACTIVE synced series — completed per-occurrence (user-owned). A
-  // completed date is hidden so its done clone renders in its place; the base
-  // occurrence (the head) is suppressed separately in `useRecurrenceExpansion`.
-  // Gate on `scheduleLocked`: once a series detaches it becomes a native rule
-  // (EXDATE-driven), so a stale completion map must NOT keep suppressing dates.
+  // Build the set of dates removed from the expansion: provider/legacy EXDATEs,
+  // materialised overrides (moved occurrences), and the occurrence-sets — completed
+  // (its done clone renders in its place) and skipped (dismissed). Sets apply to
+  // BOTH native and synced series under the unified model; the base occurrence (the
+  // head) is suppressed separately in `useRecurrenceExpansion`.
   const excludedDates = new Set<string>([
     ...rule.rruleExdates,
     ...existingSchedules
       .filter((s) => s.ruleId === rule.id && s.originalDate)
       .map((s) => s.originalDate!),
-    ...(page.scheduleLocked && page.completedOccurrences
-      ? Object.keys(page.completedOccurrences)
-      : []),
+    ...(page.completedOccurrences ? Object.keys(page.completedOccurrences) : []),
+    ...(page.skippedOccurrences ?? []),
   ]);
 
   // Parse the base occurrence times to compute duration offset.

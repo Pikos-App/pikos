@@ -60,10 +60,13 @@ export interface Page {
   // Source/authoring IANA zone (from the schedule/rule). Consumed at render only
   // for synced (locked) pages — they show absolute in the viewer's zone; native floats.
   timezone?: string | null;
-  // User-owned completion map for a synced RECURRING series: occurrence-date
+  // Completion map for a RECURRING series (native + synced): occurrence-date
   // (YYYY-MM-DD) → done-clone page id. Expansion hides completed occurrences; an
-  // uncomplete is routed by the clone id. Null/absent for native/non-recurring.
+  // uncomplete is routed by the clone id. Null/absent for non-recurring.
   completedOccurrences?: Record<string, string> | null;
+  // Dismissed occurrence dates (YYYY-MM-DD) for a recurring series, from skip_set.
+  // Excluded from expansion. Null/absent when nothing is skipped.
+  skippedOccurrences?: string[] | null;
 }
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────
@@ -166,29 +169,34 @@ export type PageSummary = Omit<Page, "content" | "contentText">;
 
 // ─── Recurring completion ────────────────────────────────────────────────────
 
-/** Input for completing a recurring page (clone-and-advance). */
+/** Input for completing the head occurrence of a native recurring page. The
+ * completed occurrence is the head's own date (derived server-side); the backend
+ * records it in `completed_set` and recomputes the head. */
 export interface CompleteRecurringInput {
   pageId: string;
-  nextScheduledStart: string | null;
-  nextScheduledEnd: string | null;
-  /** Rule to advance the exdates on, folded into the completion transaction so
-   * it's atomic and avoids a second concurrent write (which deadlocks the WAL
-   * pool with SQLITE_BUSY). Omit when no exdate change is needed. */
-  ruleId?: string | null;
-  /** Dates to ADD to `ruleId`'s exdates — merged into the current row inside
-   * the transaction. A full replacement array is deliberately not accepted: it
-   * would erase exdates persisted after this snapshot was computed (an
-   * interleaved skip or another completion), resurrecting their occurrences.
-   * Ignored unless `ruleId` is set. */
-  addExdates?: string[] | null;
+  /** Missed-occurrence dates (YYYY-MM-DD) the "advance to today" gap dialog
+   * dismisses — written to the skip-set. Empty for a plain completion. */
+  skipDates?: string[];
 }
 
 export interface CompleteRecurringResult {
   clone: PageSummary;
+  /** The head after recompute — advanced to the next open occurrence, or done. */
   head: PageSummary;
-  /** Post-merge exdates when `ruleId` was supplied — sync local rule state from
-   * this, not from a locally computed array. */
-  ruleExdates?: string[] | null;
+}
+
+/** Reverse a native recurring completion by occurrence date: deletes the done
+ * clone via its back-link, drops the completed-set entry, and recomputes. */
+export interface UncompleteRecurringInput {
+  pageId: string;
+  occurrenceDate: string;
+}
+
+/** Dismiss (or, via undo, restore) one native recurring occurrence to/from the
+ * skip-set. */
+export interface SkipOccurrenceInput {
+  pageId: string;
+  occurrenceDate: string;
 }
 
 /** Complete one occurrence of a synced recurring series. Records a

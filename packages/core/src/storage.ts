@@ -17,7 +17,9 @@ import type {
   RescheduleVirtualInput,
   RescheduleVirtualResult,
   SearchResponse,
+  SkipOccurrenceInput,
   SyncCalendar,
+  UncompleteRecurringInput,
   UncompleteSyncedOccurrenceInput,
 } from "./types";
 
@@ -161,11 +163,12 @@ export interface StorageAdapter {
   /** A page has at most one rule. Errors if a rule already exists — call getRecurrenceRule first. */
   createRecurrenceRule(data: NewRecurrenceRule): Promise<PageRecurrenceRule>;
   updateRecurrenceRule(id: string, updates: RecurrenceRuleUpdate): Promise<PageRecurrenceRule>;
-  /** Skip occurrences: merges dates into the rule's exdates DB-side (read-merge-write
-   * in one transaction). Use this — never updateRecurrenceRule with a full array
-   * computed client-side, which races other exdate writers and erases their dates. */
+  /** Add EXDATEs to a rule, merged DB-side (read-merge-write in one transaction),
+   * then recompute the head. Native user dismissals use skipOccurrence; this is for
+   * provider/manual EXDATE writes. Never updateRecurrenceRule with a full array
+   * computed client-side, which races other writers and erases their dates. */
   addRuleExdates(id: string, dates: string[]): Promise<PageRecurrenceRule>;
-  /** Undo a skip: removes exactly one date from the rule's current exdates. */
+  /** Remove exactly one EXDATE from a rule's current set, then recompute. */
   removeRuleExdate(id: string, date: string): Promise<PageRecurrenceRule>;
   deleteRecurrenceRule(id: string): Promise<void>;
   getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null>;
@@ -173,8 +176,19 @@ export interface StorageAdapter {
   listRecurrenceRules(): Promise<PageRecurrenceRule[]>;
 
   // Recurring completion
-  /** Clone head as done, advance to next occurrence (or mark done if series finished). */
+  /** Complete the head occurrence: done clone + completed-set entry, then recompute
+   * the head onto the next open occurrence (or done). Gap dismissals go to skipDates. */
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult>;
+  /** Reverse a native recurring completion by occurrence date (delete the clone via
+   * its back-link, drop the completed-set entry, recompute the head). */
+  uncompleteRecurringOccurrence(data: UncompleteRecurringInput): Promise<void>;
+  /** Dismiss one native recurring occurrence to the skip-set (recomputes the head). */
+  skipOccurrence(data: SkipOccurrenceInput): Promise<void>;
+  /** Undo a skip: drop the skip-set entry and recompute. */
+  undoSkipOccurrence(data: SkipOccurrenceInput): Promise<void>;
+  /** Heal the display cache for every native recurring series on load; returns the
+   * summaries whose head materially changed so the caller patches only those. */
+  recomputeRecurringSchedules(): Promise<PageSummary[]>;
   /** Materialize a virtual occurrence at a new time: clone head + schedule the
    * clone + exdate the original date, in ONE transaction. */
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult>;

@@ -96,7 +96,8 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
     insert_test_page(pool, TestPage::new("other", "Other"))
         .await
         .unwrap();
-    let rule = crate::create_recurrence_rule_impl(
+    // A rule is required: completion derives the head advance via recompute.
+    crate::create_recurrence_rule_impl(
         pool,
         crate::NewRecurrenceRule {
             page_id: "head".into(),
@@ -122,13 +123,7 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
     // The completion still lands: head advanced, clone created.
     complete_recurring_page_impl(
         pool,
-        CompleteRecurringInput {
-            page_id: "head".into(),
-            next_scheduled_start: Some("2026-06-06".into()),
-            next_scheduled_end: None,
-            rule_id: Some(rule.id.clone()),
-            add_exdates: Some(vec!["2026-06-05".into()]),
-        },
+        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
     )
     .await
     .unwrap();

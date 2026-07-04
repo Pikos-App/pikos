@@ -19,6 +19,7 @@ export function useRecurringActions(page: PageSummary): UseRecurringActionsResul
     maybeToggleSyncedOccurrence,
     recurrenceRules,
     skipOccurrence: skipOccurrenceFn,
+    uncompleteRecurringHead,
     updatePage,
   } = usePages();
   const { request: requestRecurringComplete } = useRecurringCompleteDialog();
@@ -39,6 +40,13 @@ export function useRecurringActions(page: PageSummary): UseRecurringActionsResul
       requestRecurringComplete(page.id);
       return;
     }
+    if (newStatus === "not_started" && recurrenceRules.some((r) => r.pageId === page.id)) {
+      // Recurring head un-done routes through uncomplete (see uncompleteRecurringHead).
+      void uncompleteRecurringHead(page.id).then((handled) => {
+        if (!handled) updatePage(page.id, { completedAt: null, status: newStatus });
+      });
+      return;
+    }
     updatePage(page.id, {
       completedAt: newStatus === "done" ? nowLocalISO() : null,
       status: newStatus,
@@ -48,8 +56,8 @@ export function useRecurringActions(page: PageSummary): UseRecurringActionsResul
   async function handleSkipOccurrence() {
     if (!isRecurring) return;
     const virtual = page as VirtualOccurrence;
-    const undoFn = await skipOccurrenceFn(virtual.ruleId, virtual.originalDate);
-    const undoId = `skip:${virtual.ruleId}:${virtual.originalDate}`;
+    const undoFn = await skipOccurrenceFn(virtual.id, virtual.originalDate);
+    const undoId = `skip:${virtual.id}:${virtual.originalDate}`;
     requestUndoableAction(undoId, `Skipped ${page.title || "occurrence"}`, undoFn);
   }
 

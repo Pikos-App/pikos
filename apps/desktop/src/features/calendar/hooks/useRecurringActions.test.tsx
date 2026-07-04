@@ -174,12 +174,10 @@ describe("useRecurringActions", () => {
       await Promise.resolve();
     });
 
-    expect(completeSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ nextScheduledStart: "2099-01-12T09:00:00", pageId })
-    );
+    expect(completeSpy).toHaveBeenCalledWith(expect.objectContaining({ pageId }));
   });
 
-  it("skipOccurrence on a virtual page adds an exdate and registers an undoable toast", async () => {
+  it("skipOccurrence on a virtual page dismisses to the skip-set and registers an undoable toast", async () => {
     const hook = setup();
     await act(async () => {
       await hook.result.current.workspace.selectWorkspace();
@@ -225,8 +223,8 @@ describe("useRecurringActions", () => {
       await hook.result.current.actions.skipOccurrence();
     });
 
-    const rule = hook.result.current.pages.recurrenceRules.find((r) => r.id === ruleId);
-    expect(rule?.rruleExdates).toEqual(["2099-01-12"]);
+    const page = hook.result.current.pages.pages.find((p) => p.id === pageId);
+    expect(page?.skippedOccurrences).toEqual(["2099-01-12"]);
     // The toast queue holds the undo action so the user can dismiss-or-undo.
     expect(hook.result.current.undo.toastItems.length).toBeGreaterThan(0);
   });

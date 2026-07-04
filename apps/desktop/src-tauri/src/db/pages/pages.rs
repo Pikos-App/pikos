@@ -125,3 +125,38 @@ pub async fn uncomplete_synced_occurrence(
     let pool = state.get_pool().await?;
     uncomplete_synced_occurrence_impl(&pool, data).await
 }
+
+#[tauri::command]
+pub async fn uncomplete_recurring_occurrence(
+    state: State<'_, DbState>,
+    data: UncompleteRecurringInput,
+) -> AppResult<()> {
+    let pool = state.get_pool().await?;
+    uncomplete_recurring_occurrence_impl(&pool, data).await
+}
+
+#[tauri::command]
+pub async fn skip_occurrence(
+    state: State<'_, DbState>,
+    data: SkipOccurrenceInput,
+) -> AppResult<()> {
+    let pool = state.get_pool().await?;
+    skip_occurrence_impl(&pool, data).await
+}
+
+#[tauri::command]
+pub async fn undo_skip_occurrence(
+    state: State<'_, DbState>,
+    data: SkipOccurrenceInput,
+) -> AppResult<()> {
+    let pool = state.get_pool().await?;
+    undo_skip_occurrence_impl(&pool, data).await
+}
+
+#[tauri::command]
+pub async fn recompute_recurring_schedules(
+    state: State<'_, DbState>,
+) -> AppResult<Vec<PageSummary>> {
+    let pool = state.get_pool().await?;
+    recompute_recurring_schedules_impl(&pool).await
+}

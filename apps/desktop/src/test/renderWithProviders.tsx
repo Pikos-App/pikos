@@ -19,6 +19,7 @@ import type { ReactElement, ReactNode } from "react";
 
 import { CalendarDnDProvider } from "@/shared/context/CalendarDnDContext";
 import { ImportProvider } from "@/shared/context/ImportContext";
+import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
 import { PagesProvider } from "@/shared/context/PagesContext";
 import { RecurringCompleteDialogProvider } from "@/shared/context/RecurringCompleteDialogContext";
 import { SelectionProvider } from "@/shared/context/SelectionContext";
@@ -35,7 +36,9 @@ function TestProviders({ children }: { children: ReactNode }) {
             <SelectionProvider>
               <CalendarDnDProvider>
                 <UndoDeleteProvider>
-                  <RecurringCompleteDialogProvider>{children}</RecurringCompleteDialogProvider>
+                  <RecurringCompleteDialogProvider>
+                    <ListSettingsProvider>{children}</ListSettingsProvider>
+                  </RecurringCompleteDialogProvider>
                 </UndoDeleteProvider>
               </CalendarDnDProvider>
             </SelectionProvider>

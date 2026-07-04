@@ -1,5 +1,7 @@
 // In-memory StorageAdapter for tests — injected via VITE_TEST_MODE.
 
+import { subDays } from "date-fns";
+
 import type {
   FolderUpdate,
   NewCaldavConnection,
@@ -33,13 +35,16 @@ import type {
   RescheduleVirtualResult,
   SearchResponse,
   SearchResult,
+  SkipOccurrenceInput,
   SyncAccount,
   SyncCalendar,
+  UncompleteRecurringInput,
   UncompleteSyncedOccurrenceInput,
 } from "../types";
-import { nowLocalISO } from "../utils/dates";
+import { nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
+import { computeNextEnd, nextOccurrenceAfter } from "../utils/recurrence";
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -483,6 +488,7 @@ export class MockStorageAdapter implements StorageAdapter {
       timezone: data.timezone,
     };
     this.rules.set(rule.id, rule);
+    this.recomputeHead(rule.pageId);
     return Promise.resolve(rule);
   }
 
@@ -497,6 +503,7 @@ export class MockStorageAdapter implements StorageAdapter {
     if (updates.scheduledEnd === null) delete updated.scheduledEnd;
     else if (updates.scheduledEnd !== undefined) updated.scheduledEnd = updates.scheduledEnd;
     this.rules.set(id, updated);
+    this.recomputeHead(updated.pageId);
     return Promise.resolve(updated);
   }
 
@@ -511,6 +518,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     const updated = { ...rule, rruleExdates: merged };
     this.rules.set(id, updated);
+    this.recomputeHead(rule.pageId);
     return Promise.resolve(updated);
   }
 
@@ -519,6 +527,7 @@ export class MockStorageAdapter implements StorageAdapter {
     if (!rule) return Promise.reject(new Error(`Recurrence rule not found: ${id}`));
     const updated = { ...rule, rruleExdates: rule.rruleExdates.filter((d) => d !== date) };
     this.rules.set(id, updated);
+    this.recomputeHead(rule.pageId);
     return Promise.resolve(updated);
   }
 
@@ -539,57 +548,148 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve([...this.rules.values()].filter((r) => !this.softDeleted.has(r.pageId)));
   }
 
+  /** Re-derives `head.scheduledStart` (or terminal `done`) from truth — the rule
+   * base minus the exclusion union (completed ∪ skip ∪ rruleExdates) — mirroring
+   * the Rust `recompute_recurring_schedule`. The single writer of a recurring
+   * head's cache; every set-changing op calls it. Returns whether anything changed. */
+  private recomputeHead(pageId: string): boolean {
+    const head = this.pages.get(pageId);
+    const rule = [...this.rules.values()].find((r) => r.pageId === pageId);
+    if (!head || !rule) return false;
+    const exclusions = [
+      ...rule.rruleExdates,
+      ...Object.keys(head.completedOccurrences ?? {}),
+      ...(head.skippedOccurrences ?? []),
+    ];
+    // Oldest-open = first occurrence not excluded, on/after the base: seek strictly
+    // after the day before the base (nextOccurrenceAfter is day-level strict-after).
+    const base = parseLocalISO(rule.scheduledStart);
+    const next = nextOccurrenceAfter(rule.rrule, rule.scheduledStart, subDays(base, 1), exclusions);
+    const before = { end: head.scheduledEnd, start: head.scheduledStart, status: head.status };
+    if (next) {
+      const scheduledEnd = rule.scheduledEnd
+        ? computeNextEnd(rule.scheduledEnd, next.scheduledStart)
+        : null;
+      this.pages.set(pageId, {
+        ...head,
+        completedAt: head.status === "done" ? null : (head.completedAt ?? null),
+        scheduledEnd,
+        scheduledStart: next.scheduledStart,
+        status: head.status === "done" ? "not_started" : head.status,
+        updatedAt: now(),
+      });
+    } else {
+      this.pages.set(pageId, {
+        ...head,
+        completedAt: head.status === "done" ? (head.completedAt ?? null) : nowLocalISO(),
+        status: "done",
+        updatedAt: now(),
+      });
+    }
+    const after = this.pages.get(pageId)!;
+    return (
+      before.start !== after.scheduledStart ||
+      before.end !== after.scheduledEnd ||
+      before.status !== after.status
+    );
+  }
+
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult> {
     const head = this.pages.get(data.pageId);
     if (!head) throw new Error(`Page not found: ${data.pageId}`);
 
+    const occurrenceDate = head.scheduledStart?.slice(0, 10);
+    if (!occurrenceDate)
+      throw new Error(`Recurring page has no scheduled occurrence: ${data.pageId}`);
+
+    // Idempotency: a repeat completion of the same occurrence returns the existing
+    // live clone rather than minting a duplicate (mirrors the Rust guard).
+    const existingId = head.completedOccurrences?.[occurrenceDate];
+    const existing = existingId ? this.pages.get(existingId) : undefined;
+    if (existing) {
+      return Promise.resolve({ clone: toSummary(existing), head: toSummary(head) });
+    }
+
     const cloneId = uuid();
     const timestamp = now();
-    // `completedAt` follows the local-wall-clock convention (date-compared
-    // against the local day in the Completed view), unlike created/updated_at
-    // which are UTC. Mirrors the Rust adapter's now_local_iso(). Using the UTC
-    // `now()` here would hide the clone from Today's Completed section whenever
-    // UTC's date differs from the local date.
-    const completedAt = nowLocalISO();
+    // `completedAt` follows the local-wall-clock convention (date-compared against
+    // the local day in the Completed view), unlike created/updated_at which are UTC.
     const clone: Page = {
       ...head,
-      completedAt,
+      completedAt: nowLocalISO(),
+      completedOccurrences: null,
       content: head.content,
       createdAt: timestamp,
       id: cloneId,
+      skippedOccurrences: null,
       sortOrder: nextSortOrder([...this.pages.values()]),
       status: "done",
       updatedAt: timestamp,
     };
     this.pages.set(cloneId, clone);
 
-    if (data.nextScheduledStart) {
-      head.scheduledStart = data.nextScheduledStart;
-      head.scheduledEnd = data.nextScheduledEnd;
-      head.updatedAt = timestamp;
-    } else {
-      head.status = "done";
-      head.completedAt = completedAt;
-      head.updatedAt = timestamp;
-    }
+    // Record the completion + any gap skips on the head, then recompute it onto the
+    // next open occurrence (or done). No head-advance/exdate-merge sent by the client.
+    const completedOccurrences = {
+      ...(head.completedOccurrences ?? {}),
+      [occurrenceDate]: cloneId,
+    };
+    const skippedOccurrences = [...(head.skippedOccurrences ?? []), ...(data.skipDates ?? [])];
+    this.pages.set(head.id, { ...head, completedOccurrences, skippedOccurrences });
+    this.recomputeHead(head.id);
 
-    // Exdate update folded into the same call and MERGED into the current row
-    // (mirrors the Rust adapter's in-transaction read-merge-write), so exdates
-    // persisted after the caller's snapshot survive the completion.
-    let ruleExdates: string[] | null = null;
-    if (data.ruleId && data.addExdates) {
-      const rule = this.rules.get(data.ruleId);
-      if (rule) {
-        const merged = [...rule.rruleExdates];
-        for (const d of data.addExdates) {
-          if (!merged.includes(d)) merged.push(d);
-        }
-        this.rules.set(data.ruleId, { ...rule, rruleExdates: merged });
-        ruleExdates = merged;
+    return Promise.resolve({ clone: toSummary(clone), head: toSummary(this.pages.get(head.id)!) });
+  }
+
+  uncompleteRecurringOccurrence(data: UncompleteRecurringInput): Promise<void> {
+    const head = this.pages.get(data.pageId);
+    const cloneId = head?.completedOccurrences?.[data.occurrenceDate];
+    if (!head || !cloneId) return Promise.resolve();
+    this.pages.delete(cloneId);
+    const { [data.occurrenceDate]: _removed, ...rest } = head.completedOccurrences ?? {};
+    this.pages.set(head.id, {
+      ...head,
+      completedOccurrences: Object.keys(rest).length > 0 ? rest : null,
+    });
+    this.recomputeHead(head.id);
+    return Promise.resolve();
+  }
+
+  skipOccurrence(data: SkipOccurrenceInput): Promise<void> {
+    const head = this.pages.get(data.pageId);
+    if (!head) return Promise.reject(new Error(`Page not found: ${data.pageId}`));
+    const skippedOccurrences = [...(head.skippedOccurrences ?? [])];
+    if (!skippedOccurrences.includes(data.occurrenceDate))
+      skippedOccurrences.push(data.occurrenceDate);
+    this.pages.set(head.id, { ...head, skippedOccurrences });
+    this.recomputeHead(head.id);
+    return Promise.resolve();
+  }
+
+  undoSkipOccurrence(data: SkipOccurrenceInput): Promise<void> {
+    const head = this.pages.get(data.pageId);
+    if (!head?.skippedOccurrences) return Promise.resolve();
+    const skippedOccurrences = head.skippedOccurrences.filter((d) => d !== data.occurrenceDate);
+    this.pages.set(head.id, {
+      ...head,
+      skippedOccurrences: skippedOccurrences.length > 0 ? skippedOccurrences : null,
+    });
+    this.recomputeHead(head.id);
+    return Promise.resolve();
+  }
+
+  recomputeRecurringSchedules(): Promise<PageSummary[]> {
+    const changed: PageSummary[] = [];
+    for (const rule of this.rules.values()) {
+      if (this.softDeleted.has(rule.pageId)) continue;
+      // Synced series are reconciler-owned — never recompute their head.
+      if (this.pages.get(rule.pageId)?.scheduleLocked) continue;
+      if (this.recomputeHead(rule.pageId)) {
+        const head = this.pages.get(rule.pageId);
+        if (head) changed.push(toSummary(head));
       }
     }
-
-    return Promise.resolve({ clone: toSummary(clone), head: toSummary(head), ruleExdates });
+    return Promise.resolve(changed);
   }
 
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult> {
@@ -629,6 +729,7 @@ export class MockStorageAdapter implements StorageAdapter {
       ? [...rule.rruleExdates]
       : [...rule.rruleExdates, data.originalDate];
     this.rules.set(data.ruleId, { ...rule, rruleExdates: ruleExdates });
+    this.recomputeHead(rule.pageId);
 
     return Promise.resolve({ clone: toSummary(clone), ruleExdates });
   }
@@ -636,6 +737,13 @@ export class MockStorageAdapter implements StorageAdapter {
   completeSyncedOccurrence(data: CompleteSyncedOccurrenceInput): Promise<PageSummary> {
     const head = this.pages.get(data.pageId);
     if (!head) return Promise.reject(new Error(`Page not found: ${data.pageId}`));
+    // Idempotency (mirrors the Rust guard); a trashed clone falls through so the
+    // map re-points to a fresh one.
+    const existingId = head.completedOccurrences?.[data.occurrenceDate];
+    if (existingId && !this.softDeleted.has(existingId)) {
+      const existing = this.pages.get(existingId);
+      if (existing) return Promise.resolve(toSummary(existing));
+    }
     const cloneId = uuid();
     const timestamp = now();
     const clone: Page = {
@@ -648,6 +756,7 @@ export class MockStorageAdapter implements StorageAdapter {
       scheduledEnd: data.scheduledEnd ?? null,
       scheduledStart: data.scheduledStart,
       scheduleLocked: false,
+      skippedOccurrences: null,
       sortOrder: nextSortOrder([...this.pages.values()]),
       status: "done",
       syncState: null,

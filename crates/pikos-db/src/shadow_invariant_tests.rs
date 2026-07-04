@@ -1,18 +1,12 @@
 //! Shadow-invariant harness — ACTIVE (the permanent `cache == f(truth)` gate for
 //! the native head).
 //!
-//! Pins the load-bearing fact that lets native head-advance be replaced by the
-//! stateless backend derivation without a behavior change: after any sequence of
-//! completions and skips, the stored native head (`pages.scheduled_start`)
+//! Pins the load-bearing fact behind the occurrence-sets swap: after any sequence
+//! of completions and skips, the stored native head (`pages.scheduled_start`)
 //! equals `oldest_open_for_page` derived from scratch over `(base anchor, rrule,
-//! exclusion union)`. The current model advances the head imperatively on each
-//! completion; this asserts that cumulative result matches the stateless
-//! derivation the unification swaps in.
-//!
-//! The derivation reads truth via the production [`oldest_open_for_page`], which
-//! expands from the base — a different engine entrypoint than the seek-past-head
-//! (`next_occurrence_after`) used to drive completion's `next`, so agreement is
-//! not tautological.
+//! exclusion union)`. Completion now recomputes the head from truth; this gates
+//! the whole path (completion → recompute → cache, plus every skip/exdate trigger)
+//! end-to-end across the corpus, so a missed trigger or a union bug desyncs it.
 
 use super::*;
 use crate::pool::{insert_test_page, test_pool, TestPage};
@@ -34,8 +28,7 @@ async fn head_status(pool: &sqlx::SqlitePool) -> String {
 /// Drives a fresh series through `skip_indices` (future occurrences skipped
 /// up-front, like a user dismissing them) then `completions` head completions,
 /// asserting `head == oldest_open(base, rrule, completed ∪ skipped)` at every
-/// step. Each completion supplies the next date the way the frontend does
-/// (rrule.js next, which the conformance corpus pins equal to this engine).
+/// step. Completion derives its own advance via recompute — no client next date.
 async fn assert_invariant(rrule: &str, base_start: &str, base_end: Option<&str>, skip_indices: &[usize], completions: usize) {
     let pool = test_pool().await;
     insert_test_page(
@@ -85,21 +78,12 @@ async fn assert_invariant(rrule: &str, base_start: &str, base_end: Option<&str>,
             "invariant before step {step}: rrule={rrule}, exdates={exdates:?}"
         );
 
+        // Track the completed date for the error context; the backend records it in
+        // completed_set and recomputes the head — no client-supplied next date.
         exdates.push(head_occ.original_date.clone());
-        // Compute `next` the way the frontend does — seek past the head's day,
-        // skipping exclusions — then hand it to the backend verbatim. This is a
-        // distinct engine path from the expand-from-base oldest_open above.
-        let next = pikos_recurrence::next_occurrence_after(rrule, base_start, &head_occ.scheduled_start, &exdates)
-            .expect("corpus rules are in the engine's supported envelope");
         complete_recurring_page_impl(
             &pool,
-            CompleteRecurringInput {
-                page_id: "head".into(),
-                next_scheduled_start: next.as_ref().map(|(start, _)| start.clone()),
-                next_scheduled_end: next.as_ref().and_then(|(_, end)| end.clone()),
-                rule_id: Some(rule.id.clone()),
-                add_exdates: Some(vec![head_occ.original_date.clone()]),
-            },
+            CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![] },
         )
         .await
         .unwrap();

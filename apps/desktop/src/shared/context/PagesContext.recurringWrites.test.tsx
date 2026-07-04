@@ -83,11 +83,9 @@ describe("completeRecurringPage idempotency", () => {
   });
 });
 
-describe("completeRecurringPage policy inputs (characterization — pins the current native-completion path)", () => {
-  // These assert the EXACT adapter payload per policy/gap so a later swap onto
-  // occurrence-sets is a provable behavior change, not a silent one. Date is
-  // faked (only Date, so promises/act are untouched) to make the gap
-  // deterministic; the head sits 5 days before "today" on a daily rule.
+describe("completeRecurringPage policy inputs (occurrence-sets payload)", () => {
+  // Date is faked (only Date) to make the gap deterministic; the head sits 5 days
+  // before "today" on a daily rule.
   const NOW = "2099-01-10T12:00:00";
 
   beforeEach(() => {
@@ -98,9 +96,9 @@ describe("completeRecurringPage policy inputs (characterization — pins the cur
     vi.useRealTimers();
   });
 
-  it("no gap (future head) → advance adds only the head's date and steps one occurrence", async () => {
+  it("no gap (future head) → advance sends just the page id", async () => {
     vi.setSystemTime(new Date("2099-01-01T12:00:00")); // before the 2099-01-05 head
-    const { hook, pageId, ruleId } = await setupRecurringPage();
+    const { hook, pageId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
@@ -108,47 +106,32 @@ describe("completeRecurringPage policy inputs (characterization — pins the cur
     });
 
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.calls[0]![0]).toEqual({
-      addExdates: ["2099-01-05"],
-      nextScheduledEnd: null,
-      nextScheduledStart: "2099-01-06T09:00:00",
-      pageId,
-      ruleId,
-    });
+    expect(spy.mock.calls[0]![0]).toEqual({ pageId });
   });
 
-  it("overdue head → advance leaves the gap alone (exdates the head date only)", async () => {
-    const { hook, pageId, ruleId } = await setupRecurringPage();
+  it("overdue head → advance leaves the gap open (no skipDates)", async () => {
+    const { hook, pageId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
       await hook.result.current.pages.completeRecurringPage(pageId, "advance");
     });
 
-    expect(spy.mock.calls[0]![0]).toEqual({
-      addExdates: ["2099-01-05"],
-      nextScheduledEnd: null,
-      nextScheduledStart: "2099-01-06T09:00:00",
-      pageId,
-      ruleId,
-    });
+    expect(spy.mock.calls[0]![0]).toEqual({ pageId });
   });
 
-  it("overdue head → skip exdates the whole gap and lands on today's occurrence", async () => {
-    const { hook, pageId, ruleId } = await setupRecurringPage();
+  it("overdue head → skip dismisses the whole gap to skipDates", async () => {
+    const { hook, pageId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
       await hook.result.current.pages.completeRecurringPage(pageId, "skip");
     });
 
-    // Head 2099-01-05, today 2099-01-10 → gap = 06,07,08,09; skip lands on today.
+    // Head 2099-01-05 (completed server-side), today 2099-01-10 → gap = 06..09 skipped.
     expect(spy.mock.calls[0]![0]).toEqual({
-      addExdates: ["2099-01-05", "2099-01-06", "2099-01-07", "2099-01-08", "2099-01-09"],
-      nextScheduledEnd: null,
-      nextScheduledStart: "2099-01-10T09:00:00",
       pageId,
-      ruleId,
+      skipDates: ["2099-01-06", "2099-01-07", "2099-01-08", "2099-01-09"],
     });
   });
 });
@@ -270,17 +253,17 @@ describe("synced recurring completion routing", () => {
 });
 
 describe("skipOccurrence undo", () => {
-  // The undo closure used to restore the exdate array captured at skip time —
-  // erasing any exdate persisted inside the undo-toast window and resurrecting
-  // that occurrence. It must remove only its own date from the CURRENT row.
-  it("preserves exdates written between the skip and its undo", async () => {
-    const { hook, ruleId } = await setupRecurringPage();
+  // A skip is per-occurrence state in the skip-set (page.skippedOccurrences), not
+  // a rule EXDATE. Undo removes only its own date, leaving a skip written inside
+  // the undo-toast window intact.
+  it("preserves a skip written between the skip and its undo", async () => {
+    const { hook, pageId } = await setupRecurringPage();
 
     let undo!: () => void;
     await act(async () => {
-      undo = await hook.result.current.pages.skipOccurrence(ruleId, "2099-01-12");
+      undo = await hook.result.current.pages.skipOccurrence(pageId, "2099-01-12");
       // Interleaved writer inside the undo window: a second skip.
-      await hook.result.current.pages.skipOccurrence(ruleId, "2099-01-19");
+      await hook.result.current.pages.skipOccurrence(pageId, "2099-01-19");
     });
     await act(async () => {
       undo();
@@ -288,8 +271,8 @@ describe("skipOccurrence undo", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    const rule = hook.result.current.pages.recurrenceRules.find((r) => r.id === ruleId);
-    expect(rule?.rruleExdates).toEqual(["2099-01-19"]);
+    const page = hook.result.current.pages.pages.find((p) => p.id === pageId);
+    expect(page?.skippedOccurrences).toEqual(["2099-01-19"]);
   });
 });
 
@@ -323,6 +306,7 @@ async function setupSyncedRecurring(
       pageId: p.id,
       rrule: "FREQ=DAILY",
       scheduledStart,
+      ...(scheduledEnd !== undefined && { scheduledEnd }),
       timezone,
     });
   });
@@ -418,6 +402,28 @@ describe("maybeToggleSyncedOccurrence", () => {
     expect(doneClones).toHaveLength(1);
   });
 
+  it("a settled re-completion of the same occurrence replaces the clone in state — no duplicate row", async () => {
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
+
+    // Two separate gestures, each settled before the next — the user re-clicking
+    // a head row that gave no completion feedback.
+    await act(async () => {
+      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      await Promise.resolve();
+    });
+    await act(async () => {
+      hook.result.current.pages.maybeToggleSyncedOccurrence(head(hook, pageId), "done");
+      await Promise.resolve();
+    });
+
+    expect(completeSpy).toHaveBeenCalledTimes(2);
+    const pages = hook.result.current.pages.pages;
+    expect(new Set(pages.map((p) => p.id)).size).toBe(pages.length);
+    const doneClones = pages.filter((p) => p.title === "Synced standup" && p.status === "done");
+    expect(doneClones).toHaveLength(1);
+  });
+
   it("returns false for a malformed synced row with no scheduledStart so the native path surfaces the error", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeSyncedOccurrence");
@@ -474,5 +480,110 @@ describe("cloneWallClock (via maybeToggleSyncedOccurrence)", () => {
       occurrenceDate: "2099-01-05",
       scheduledStart: "2099-01-05",
     });
+  });
+});
+
+// ─── U6-F1: off-pattern head-drag snapping ──────────────────────────────────
+// 2099-01-05 = Mon, 06 = Tue, 07 = Wed. A head dragged onto Tue (a day M/W/F
+// can't yield) must land on the next rule day (Wed) and survive an on-load heal —
+// in 0.3.x the recompute silently reverted the drag.
+describe("scheduleOnce head-drag snapping (U6-F1)", () => {
+  async function setupWeeklyMWF() {
+    const hook = renderHookWithProviders(() => ({
+      pages: usePages(),
+      workspace: useWorkspace(),
+    }));
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "Gym" });
+      pageId = p.id;
+      await hook.result.current.pages.scheduleOnce(p.id, "2099-01-05T10:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule: "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+        scheduledStart: "2099-01-05T10:00:00",
+        timezone: "America/New_York",
+      });
+    });
+    return { hook, pageId };
+  }
+
+  it("snaps an off-pattern drop (Tue) forward to the nearest rule day (Wed)", async () => {
+    const { hook, pageId } = await setupWeeklyMWF();
+    await act(async () => {
+      await hook.result.current.pages.scheduleOnce(pageId, "2099-01-06T10:00:00");
+    });
+    expect(head(hook, pageId).scheduledStart).toBe("2099-01-07T10:00:00");
+  });
+
+  it("the snapped head survives an on-load heal unchanged", async () => {
+    const { hook, pageId } = await setupWeeklyMWF();
+    await act(async () => {
+      await hook.result.current.pages.scheduleOnce(pageId, "2099-01-06T10:00:00");
+    });
+    await act(async () => {
+      await hook.result.current.workspace.reload();
+    });
+    expect(head(hook, pageId).scheduledStart).toBe("2099-01-07T10:00:00");
+  });
+});
+
+// ─── U6-F2: un-done of a recurring head routes through uncomplete ────────────
+describe("uncompleteRecurringHead (U6-F2)", () => {
+  async function setupFiniteSeries() {
+    const hook = renderHookWithProviders(() => ({
+      pages: usePages(),
+      workspace: useWorkspace(),
+    }));
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "One-shot" });
+      pageId = p.id;
+      await hook.result.current.pages.scheduleOnce(p.id, "2099-01-05T09:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule: "FREQ=DAILY;COUNT=1",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+    return { hook, pageId };
+  }
+
+  it("un-marks an exhausted head and the un-done survives a heal", async () => {
+    const { hook, pageId } = await setupFiniteSeries();
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+    });
+    expect(head(hook, pageId).status).toBe("done");
+
+    let handled!: boolean;
+    await act(async () => {
+      handled = await hook.result.current.pages.uncompleteRecurringHead(pageId);
+    });
+    expect(handled).toBe(true);
+    expect(head(hook, pageId).status).toBe("not_started");
+    expect(head(hook, pageId).scheduledStart).toBe("2099-01-05T09:00:00");
+
+    await act(async () => {
+      await hook.result.current.workspace.reload();
+    });
+    // The heal must NOT re-mark the head done — the completed-set entry is gone.
+    expect(head(hook, pageId).status).toBe("not_started");
+  });
+
+  it("falls back (returns false) for a head with no completed-set entry", async () => {
+    const { hook, pageId } = await setupFiniteSeries();
+    let handled!: boolean;
+    await act(async () => {
+      handled = await hook.result.current.pages.uncompleteRecurringHead(pageId);
+    });
+    expect(handled).toBe(false);
   });
 });

@@ -52,7 +52,13 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     setRenamingId,
     visiblePages,
   } = usePageList();
-  const { clearSchedule, completeRecurringPage, recurrenceRules, setPagesStatus } = usePages();
+  const {
+    clearSchedule,
+    completeRecurringPage,
+    recurrenceRules,
+    setPagesStatus,
+    uncompleteRecurringHead,
+  } = usePages();
   const {
     activeViewId,
     getSortMode,
@@ -252,10 +258,13 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     // flip. Complete each one at a time — awaited, never concurrently — so the
     // writers don't race the WAL pool, and never through the gap dialog (its
     // single pending slot would drop all but the last of a bulk selection).
-    // Bulk uses the default "advance" policy; un-completing is a plain flip.
+    // Bulk uses the default "advance" policy; un-done routes through uncomplete
+    // (see uncompleteRecurringHead).
     for (const p of recurring) {
-      if (p.status === "done") await setPagesStatus([p.id], "not_started", null);
-      else await completeRecurringPage(p.id, "advance");
+      if (p.status === "done") {
+        if (!(await uncompleteRecurringHead(p.id)))
+          await setPagesStatus([p.id], "not_started", null);
+      } else await completeRecurringPage(p.id, "advance");
     }
   }
   useKeyboardShortcut(

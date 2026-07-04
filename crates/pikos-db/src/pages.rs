@@ -40,6 +40,7 @@ struct PageRow {
     sync_state: Option<String>,
     timezone: Option<String>,
     completed_occurrences: Option<String>,
+    skipped_occurrences: Option<String>,
 }
 
 // ─── Output type (camelCase for TypeScript) ───────────────────────────────────
@@ -80,6 +81,9 @@ pub struct Page {
     /// occurrence (expansion skip + head suppression) and routes an uncomplete by
     /// the clone id. `None` when the series has no completions.
     pub completed_occurrences: Option<std::collections::HashMap<String, String>>,
+    /// Dismissed occurrence dates for a recurring series, from the `skip_set` table.
+    /// Excluded from expansion (both native + synced). `None` when nothing skipped.
+    pub skipped_occurrences: Option<Vec<String>>,
 }
 
 impl From<PageRow> for Page {
@@ -113,6 +117,7 @@ impl From<PageRow> for Page {
             sync_state: row.sync_state,
             timezone: row.timezone,
             completed_occurrences: parse_completed_occurrences(row.completed_occurrences),
+            skipped_occurrences: parse_skipped_occurrences(row.skipped_occurrences),
         }
     }
 }
@@ -122,6 +127,12 @@ impl From<PageRow> for Page {
 fn parse_completed_occurrences(
     raw: Option<String>,
 ) -> Option<std::collections::HashMap<String, String>> {
+    raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
+}
+
+/// Parse the `skipped_occurrences` JSON array built by `json_group_array` over
+/// `skip_set`; `NULLIF(..., '[]')` already maps an empty set to `None`.
+fn parse_skipped_occurrences(raw: Option<String>) -> Option<Vec<String>> {
     raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
 }
 
@@ -149,6 +160,7 @@ struct PageSummaryRow {
     sync_state: Option<String>,
     timezone: Option<String>,
     completed_occurrences: Option<String>,
+    skipped_occurrences: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -178,6 +190,8 @@ pub struct PageSummary {
     pub timezone: Option<String>,
     /// See `Page::completed_occurrences`.
     pub completed_occurrences: Option<std::collections::HashMap<String, String>>,
+    /// See `Page::skipped_occurrences`.
+    pub skipped_occurrences: Option<Vec<String>>,
 }
 
 impl From<PageSummaryRow> for PageSummary {
@@ -209,6 +223,7 @@ impl From<PageSummaryRow> for PageSummary {
             sync_state: row.sync_state,
             timezone: row.timezone,
             completed_occurrences: parse_completed_occurrences(row.completed_occurrences),
+            skipped_occurrences: parse_skipped_occurrences(row.skipped_occurrences),
         }
     }
 }
@@ -230,6 +245,8 @@ const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      , (SELECT sync_state FROM page_sync WHERE page_sync.page_id = pages.id) AS sync_state\
      , NULLIF((SELECT json_group_object(occurrence_date, clone_id) FROM completed_set \
          WHERE completed_set.page_id = pages.id), '{}') AS completed_occurrences\
+     , NULLIF((SELECT json_group_array(occurrence_date) FROM skip_set \
+         WHERE skip_set.page_id = pages.id), '[]') AS skipped_occurrences\
      , COALESCE(\
          (SELECT timezone FROM page_recurrence_rules WHERE page_recurrence_rules.page_id = pages.id LIMIT 1), \
          (SELECT timezone FROM page_schedules WHERE page_schedules.page_id = pages.id LIMIT 1)) \
@@ -689,6 +706,14 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
     .bind(id)
     .execute(&mut *tx)
     .await?;
+    // Sets survive soft-delete, so a restored recurring head must re-derive from
+    // the preserved completed/skip state (no-op for a non-recurring page). Skip
+    // active-synced heads: their cache is reconciler-owned, and the restore above
+    // may have just reactivated the sync link — mirror the foreground heal's
+    // synced exclusion so we don't clobber a pinned provider head.
+    if !is_active_synced(&mut tx, id).await? {
+        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, id).await?;
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -969,24 +994,12 @@ pub async fn list_completed_pages_impl(
 #[serde(rename_all = "camelCase")]
 pub struct CompleteRecurringInput {
     pub page_id: String,
-    /// The next occurrence's scheduled start (ISO date or datetime).
-    /// None = series is finished, mark head as done.
-    pub next_scheduled_start: Option<String>,
-    /// The next occurrence's scheduled end (ISO datetime), if timed.
-    pub next_scheduled_end: Option<String>,
-    /// Recurrence rule to advance, when the completion should also update the
-    /// rule's exdates (e.g. exclude the just-completed date / skipped gap).
-    /// Folded into the completion transaction so it's atomic AND so the caller
-    /// doesn't issue a *second, concurrent* write — two writes racing the same
-    /// WAL pool deadlock with SQLITE_BUSY (code 517) and the completion is lost.
+    /// Missed-occurrence dates (YYYY-MM-DD) the "advance to today" gap dialog
+    /// dismisses — written to the skip-set. Empty for a plain completion. The
+    /// completed occurrence itself is the head's own date, derived server-side,
+    /// never sent by the client.
     #[serde(default)]
-    pub rule_id: Option<String>,
-    /// Dates to ADD to `rule_id`'s exdates, merged into the current row inside
-    /// the transaction (see merge_rule_exdates_tx). A full replacement array is
-    /// deliberately not accepted: it would clobber exdates persisted after the
-    /// caller's snapshot was taken. Ignored unless `rule_id` is also set.
-    #[serde(default)]
-    pub add_exdates: Option<Vec<String>>,
+    pub skip_dates: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -994,26 +1007,24 @@ pub struct CompleteRecurringInput {
 pub struct CompleteRecurringResult {
     /// The newly created completed clone page.
     pub clone: PageSummary,
-    /// The updated head page (advanced to next occurrence, or done).
+    /// The head after recompute — advanced to the next open occurrence, or `done`
+    /// when the series is exhausted.
     pub head: PageSummary,
-    /// Post-merge exdates when `rule_id` was supplied — callers sync their local
-    /// rule state from this rather than from their pre-call computation.
-    pub rule_exdates: Option<Vec<String>>,
 }
 
-/// Atomically completes a recurring page:
-/// 1. Clones the head as a done page (snapshot of current state)
-/// 2. Advances the head to the next occurrence, or marks it done if series is finished
+/// Atomically completes the head occurrence of a native recurring page onto the
+/// occurrence-sets model:
+/// 1. Clones the head as a done page at its current occurrence (snapshot).
+/// 2. Records `(page_id, occurrence_date) → clone_id` in `completed_set`, and any
+///    gap `skip_dates` in `skip_set` — no head-advance, no EXDATE merge.
+/// 3. Recomputes `pages.scheduled_start` from truth (`recompute_recurring_schedule`),
+///    which advances the head to the next open occurrence or marks it `done`.
 ///
-/// Entire flow — including the head read and sort_order allocation — runs inside
-/// a single transaction so a mid-flight crash can't leave the workspace with a
-/// clone but no head advance (double-counted completion) or a head advance
-/// without a clone (lost completion history), and so concurrent completions
-/// can't allocate the same sort_order.
-///
-/// The head's `pages.scheduled_start` is advanced directly here and is NOT
-/// re-derived from `page_schedules` — `refresh_schedule_denorm` deliberately
-/// skips rrule-backed pages for exactly this reason.
+/// Entire flow runs in one transaction: a mid-flight crash can't leave a clone
+/// without its set entry (lost history) or a set entry without a recompute (stale
+/// head), and concurrent completions can't allocate the same sort_order. The
+/// head's denorm is owned by the recompute, not `refresh_schedule_denorm`, which
+/// deliberately skips rrule-backed pages.
 pub async fn complete_recurring_page_impl(
     pool: &sqlx::SqlitePool,
     data: CompleteRecurringInput,
@@ -1112,10 +1123,10 @@ async fn complete_recurring_page_once(
 
     let mut tx = pool.begin().await?;
 
-    // 1. Fetch the head page (full content for cloning) inside the tx, rejecting
-    // soft-deleted pages: completing a trashed recurring page must not resurrect
-    // it as a visible "done" clone. The sort_order read also lives inside the tx
-    // so two concurrent completions can't allocate the same value.
+    // Fetch the head inside the tx, rejecting soft-deleted pages: completing a
+    // trashed recurring page must not resurrect it as a visible "done" clone. The
+    // sort_order read also lives inside the tx so two concurrent completions can't
+    // allocate the same value.
     let head =
         sqlx::query_as::<_, PageRow>(&format!(
             "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
@@ -1127,15 +1138,35 @@ async fn complete_recurring_page_once(
             .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", data.page_id)))?;
 
     // Safety net for any non-UI caller (CLI, a missed frontend branch): synced
-    // recurring completion must route to `complete_synced_occurrence_impl`.
+    // recurring completion must route to `complete_synced_occurrence_impl` — the
+    // reconciler owns the head + the locked rule.
     if head.schedule_locked {
         return Err(AppError::Conflict(
             "Synced recurring events complete per-occurrence — not via head advance.".to_string(),
         ));
     }
 
-    // 2. Create the completed clone — it gets the occurrence date being
-    // completed, and completed_at in local wall-clock (see above).
+    // The head sits on the occurrence being completed (oldest-open): its own
+    // wall-clock is the clone's schedule and the completed-set key (day-level).
+    let occurrence_start = head.scheduled_start.clone().ok_or_else(|| {
+        AppError::Conflict("Recurring page has no scheduled occurrence to complete.".to_string())
+    })?;
+    let occurrence_date = occurrence_start[..occurrence_start.len().min(10)].to_string();
+
+    // Idempotency: a double-click or post-`SQLITE_BUSY_SNAPSHOT` retry must not mint
+    // a second clone for the same occurrence. A live clone → return it unchanged;
+    // a trashed one falls through so the OR REPLACE below re-points the set row.
+    if let Some(clone) = existing_completed_clone(&mut tx, &data.page_id, &occurrence_date).await? {
+        let head_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
+            // sql-ok: SUMMARY_COLUMNS is a compile-time constant
+            "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
+        ))
+        .bind(&data.page_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        return Ok(CompleteRecurringResult { clone, head: PageSummary::from(head_row) });
+    }
+
     insert_head_clone_tx(
         &mut tx,
         &head,
@@ -1143,52 +1174,38 @@ async fn complete_recurring_page_once(
             clone_id: &clone_id,
             status: "done",
             completed_at: Some(&completed),
-            scheduled_start: head.scheduled_start.as_deref(),
+            scheduled_start: Some(&occurrence_start),
             scheduled_end: head.scheduled_end.as_deref(),
         },
         &now,
     )
     .await?;
 
-    // 3. Advance the head (or mark done if series finished)
-    if let Some(ref next_start) = data.next_scheduled_start {
-        sqlx::query(
-            "UPDATE pages SET scheduled_start = ?, scheduled_end = ?, updated_at = ? WHERE id = ?",
-        )
-        .bind(next_start)
-        .bind(&data.next_scheduled_end)
-        .bind(&now)
-        .bind(&data.page_id)
-        .execute(&mut *tx)
-        .await?;
-    } else {
-        sqlx::query(
-            "UPDATE pages SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?",
-        )
-        .bind(&completed) // local wall-clock (see above)
-        .bind(&now)
-        .bind(&data.page_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "INSERT OR REPLACE INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, ?)",
+    )
+    .bind(&data.page_id)
+    .bind(&occurrence_date)
+    .bind(&clone_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Gap "advance to today" dismisses the in-between occurrences to the skip-set.
+    for date in &data.skip_dates {
+        sqlx::query("INSERT OR IGNORE INTO skip_set (page_id, occurrence_date) VALUES (?, ?)")
+            .bind(&data.page_id)
+            .bind(date)
+            .execute(&mut *tx)
+            .await?;
     }
 
-    // 4. Advance the rule's exdates in the SAME tx (e.g. exclude the completed
-    // date and any skipped gap). Doing it here — rather than as a separate
-    // concurrent update_recurrence_rule call on the client — keeps the whole
-    // completion atomic and avoids the write-write SQLITE_BUSY deadlock. The
-    // dates are MERGED into the current row, not written as a replacement, so
-    // an exdate persisted after the caller's snapshot (a skip, a CLI write)
-    // survives the completion.
-    let rule_exdates = match (&data.rule_id, &data.add_exdates) {
-        (Some(rule_id), Some(add)) => {
-            Some(crate::schedules::merge_rule_exdates_tx(&mut tx, rule_id, add).await?)
-        }
-        _ => None,
-    };
+    // Advance the head off the completed + skipped dates (or mark done if the
+    // series is exhausted) from truth, in the same tx.
+    crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &data.page_id).await?;
 
     tx.commit().await?;
 
-    // 5. Fetch updated results (post-commit so any FTS triggers have fired)
+    // Fetch updated results (post-commit so any FTS triggers have fired).
     let clone_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
         // sql-ok: SUMMARY_COLUMNS is a compile-time constant
         "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
@@ -1208,8 +1225,36 @@ async fn complete_recurring_page_once(
     Ok(CompleteRecurringResult {
         clone: PageSummary::from(clone_row),
         head: PageSummary::from(head_row),
-        rule_exdates,
     })
+}
+
+/// The live done clone already recorded for `(page_id, occurrence_date)`, if any —
+/// the completion idempotency check shared by the native and synced paths. Returns
+/// `None` when no set row exists or its clone was trashed out of band (the caller
+/// then re-points the set row to a fresh clone).
+async fn existing_completed_clone(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    occurrence_date: &str,
+) -> AppResult<Option<PageSummary>> {
+    let clone_id: Option<String> = sqlx::query_scalar(
+        "SELECT clone_id FROM completed_set WHERE page_id = ? AND occurrence_date = ?",
+    )
+    .bind(page_id)
+    .bind(occurrence_date)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(clone_id) = clone_id else {
+        return Ok(None);
+    };
+    let row = sqlx::query_as::<_, PageSummaryRow>(&format!(
+        // sql-ok: SUMMARY_COLUMNS is a compile-time constant
+        "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
+    ))
+    .bind(&clone_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row.map(PageSummary::from))
 }
 
 // ─── Synced recurring occurrence completion ──────────────────────────────────
@@ -1304,27 +1349,12 @@ async fn complete_synced_occurrence_once(
     // Idempotency guard: a double-click or a post-`SQLITE_BUSY_SNAPSHOT` retry must
     // not mint a second clone. `INSERT OR REPLACE` below would overwrite the
     // completed_set clone_id and orphan the first clone's page — a permanent
-    // duplicate "done" ghost in search/exports. If a live clone already exists for
-    // this occurrence, return it unchanged; if it was trashed out of band, fall
-    // through and let the OR REPLACE re-point the set row.
-    let existing_clone: Option<String> = sqlx::query_scalar(
-        "SELECT clone_id FROM completed_set WHERE page_id = ? AND occurrence_date = ?",
-    )
-    .bind(&data.page_id)
-    .bind(&data.occurrence_date)
-    .fetch_optional(&mut *tx)
-    .await?;
-    if let Some(existing_clone) = existing_clone {
-        let existing = sqlx::query_as::<_, PageSummaryRow>(&format!(
-            // sql-ok: SUMMARY_COLUMNS is a compile-time constant
-            "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
-        ))
-        .bind(&existing_clone)
-        .fetch_optional(&mut *tx)
-        .await?;
-        if let Some(existing) = existing {
-            return Ok(PageSummary::from(existing));
-        }
+    // duplicate "done" ghost in search/exports. A live clone → return it unchanged;
+    // a trashed one falls through so the OR REPLACE re-points the set row.
+    if let Some(existing) =
+        existing_completed_clone(&mut tx, &data.page_id, &data.occurrence_date).await?
+    {
+        return Ok(existing);
     }
 
     insert_head_clone_tx(
@@ -1384,26 +1414,188 @@ async fn uncomplete_synced_occurrence_once(
     data: &UncompleteSyncedOccurrenceInput,
 ) -> AppResult<()> {
     let mut tx = pool.begin().await?;
+    // No recompute: the reconciler owns a synced series' head + locked rule.
+    drop_completed_occurrence_tx(&mut tx, &data.page_id, &data.occurrence_date).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Removes a completed occurrence: drop its `completed_set` row and hard-delete
+/// the done clone via the back-link. Returns whether a row was removed (`false` =
+/// the date wasn't completed, a no-op). Shared by native + synced uncomplete; the
+/// native caller additionally recomputes the head.
+async fn drop_completed_occurrence_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    occurrence_date: &str,
+) -> AppResult<bool> {
     let clone_id: Option<String> = sqlx::query_scalar(
         "SELECT clone_id FROM completed_set WHERE page_id = ? AND occurrence_date = ?",
     )
-    .bind(&data.page_id)
-    .bind(&data.occurrence_date)
-    .fetch_optional(&mut *tx)
+    .bind(page_id)
+    .bind(occurrence_date)
+    .fetch_optional(&mut **tx)
     .await?;
-    if let Some(clone_id) = clone_id {
-        sqlx::query("DELETE FROM completed_set WHERE page_id = ? AND occurrence_date = ?")
+    let Some(clone_id) = clone_id else {
+        return Ok(false);
+    };
+    sqlx::query("DELETE FROM completed_set WHERE page_id = ? AND occurrence_date = ?")
+        .bind(page_id)
+        .bind(occurrence_date)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query("DELETE FROM pages WHERE id = ?")
+        .bind(&clone_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(true)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UncompleteRecurringInput {
+    pub page_id: String,
+    pub occurrence_date: String,
+}
+
+/// Reverses a native recurring completion: drop the completed-set entry, delete
+/// the done clone via its back-link, and recompute the head — which un-marks a
+/// `done` head when the series yields the occurrence again. No-op if the date
+/// isn't completed. Pre-swap native completions have no back-link, so they are
+/// not uncompletable.
+pub async fn uncomplete_recurring_occurrence_impl(
+    pool: &sqlx::SqlitePool,
+    data: UncompleteRecurringInput,
+) -> AppResult<()> {
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        if is_active_synced(&mut tx, &data.page_id).await? {
+            return Err(AppError::Conflict(
+                "Synced occurrences are uncompleted upstream, not via the completed-set."
+                    .to_string(),
+            ));
+        }
+        drop_completed_occurrence_tx(&mut tx, &data.page_id, &data.occurrence_date).await?;
+        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &data.page_id).await?;
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkipOccurrenceInput {
+    pub page_id: String,
+    /// The rrule occurrence date to dismiss (YYYY-MM-DD).
+    pub occurrence_date: String,
+}
+
+/// Dismisses one occurrence of a native recurring series to the skip-set, then
+/// recomputes the head. Rejects a synced series (the provider owns its EXDATEs).
+/// A dismissal is distinct from a *moved* occurrence (a `page_schedules` override)
+/// — the two are mutually exclusive. Undo is [`undo_skip_occurrence_impl`].
+pub async fn skip_occurrence_impl(
+    pool: &sqlx::SqlitePool,
+    data: SkipOccurrenceInput,
+) -> AppResult<()> {
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        if is_active_synced(&mut tx, &data.page_id).await? {
+            return Err(AppError::Conflict(
+                "Synced occurrences are dismissed upstream, not via the skip-set.".to_string(),
+            ));
+        }
+        sqlx::query("INSERT OR IGNORE INTO skip_set (page_id, occurrence_date) VALUES (?, ?)")
             .bind(&data.page_id)
             .bind(&data.occurrence_date)
             .execute(&mut *tx)
             .await?;
-        sqlx::query("DELETE FROM pages WHERE id = ?")
-            .bind(&clone_id)
+        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &data.page_id).await?;
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
+}
+
+/// Reverses a skip: drop the skip-set entry and recompute. No-op if the date
+/// wasn't skipped.
+pub async fn undo_skip_occurrence_impl(
+    pool: &sqlx::SqlitePool,
+    data: SkipOccurrenceInput,
+) -> AppResult<()> {
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        if is_active_synced(&mut tx, &data.page_id).await? {
+            return Err(AppError::Conflict(
+                "Synced occurrences are dismissed upstream, not via the skip-set.".to_string(),
+            ));
+        }
+        sqlx::query("DELETE FROM skip_set WHERE page_id = ? AND occurrence_date = ?")
+            .bind(&data.page_id)
+            .bind(&data.occurrence_date)
             .execute(&mut *tx)
             .await?;
+        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &data.page_id).await?;
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
+}
+
+/// Heals the display cache for every native recurring series on foreground load,
+/// returning only the summaries whose head materially changed (`scheduled_start`
+/// or `status`) so the caller patches the minimum. Guards against a cache left
+/// stale by an out-of-process writer (CLI/mobile) or a prior bug — the in-session
+/// path keeps the cache fresh on every write, so the steady-state result is empty.
+/// Synced series are reconciler-owned and skipped.
+pub async fn recompute_recurring_schedules_impl(
+    pool: &sqlx::SqlitePool,
+) -> AppResult<Vec<PageSummary>> {
+    let page_ids: Vec<String> = sqlx::query_scalar(
+        "SELECT r.page_id FROM page_recurrence_rules r
+         JOIN pages p ON p.id = r.page_id
+         WHERE p.deleted_at IS NULL
+           AND NOT EXISTS(SELECT 1 FROM page_sync s
+             WHERE s.page_id = r.page_id AND s.sync_state = 'active')",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut changed_ids = Vec::new();
+    for pid in page_ids {
+        let before: Option<(Option<String>, String)> =
+            sqlx::query_as("SELECT scheduled_start, status FROM pages WHERE id = ?")
+                .bind(&pid)
+                .fetch_optional(pool)
+                .await?;
+        crate::recurrence_derive::recompute_recurring_schedule_pool(pool, &pid).await?;
+        let after: Option<(Option<String>, String)> =
+            sqlx::query_as("SELECT scheduled_start, status FROM pages WHERE id = ?")
+                .bind(&pid)
+                .fetch_optional(pool)
+                .await?;
+        if before != after {
+            changed_ids.push(pid);
+        }
     }
-    tx.commit().await?;
-    Ok(())
+    if changed_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(&format!(
+        "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id IN ("
+    ));
+    let mut sep = builder.separated(", ");
+    for id in &changed_ids {
+        sep.push_bind(id);
+    }
+    sep.push_unseparated(")");
+    let rows = builder
+        .build_query_as::<PageSummaryRow>()
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(PageSummary::from).collect())
 }
 
 #[derive(Debug, Deserialize)]
@@ -1517,6 +1709,11 @@ async fn reschedule_virtual_occurrence_once(
         std::slice::from_ref(&data.original_date),
     )
     .await?;
+
+    // The exclusion set grew (the detached date), so re-derive the head. A no-op
+    // when the moved occurrence is a future virtual (head unaffected), but the
+    // trigger surface must be exhaustive — the CI shadow invariant is the backstop.
+    crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id).await?;
 
     tx.commit().await?;
 

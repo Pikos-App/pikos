@@ -337,7 +337,7 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
     )
     .await
     .unwrap();
-    let target_rule = create_recurrence_rule_impl(
+    create_recurrence_rule_impl(
         &pool,
         NewRecurrenceRule {
             page_id: "target".into(),
@@ -366,13 +366,7 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
         async move {
             complete_recurring_page_impl(
                 &pool,
-                CompleteRecurringInput {
-                    page_id: "target".into(),
-                    next_scheduled_start: Some("2026-05-22T09:00:00".into()),
-                    next_scheduled_end: None,
-                    rule_id: Some(target_rule.id.clone()),
-                    add_exdates: Some(vec!["2026-05-21".into()]),
-                },
+                CompleteRecurringInput { page_id: "target".into(), skip_dates: vec![] },
             )
             .await
         }

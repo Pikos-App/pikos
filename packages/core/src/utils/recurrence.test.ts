@@ -101,10 +101,9 @@ describe("expandRecurrenceForRange", () => {
     expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
   });
 
-  it("excludes dates completed on an active synced series (completedOccurrences)", () => {
-    // An active synced recurring occurrence is hidden once completed — its
-    // done clone renders in its place. Expansion skips the completed date's
-    // virtual. Gated on scheduleLocked (active synced).
+  it("excludes dates completed on a recurring series (completedOccurrences)", () => {
+    // A completed recurring occurrence is hidden — its done clone renders in its
+    // place. Applies to both native and synced under the unified sets model.
     const page = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
       scheduleLocked: true,
@@ -139,9 +138,10 @@ describe("expandRecurrenceForRange", () => {
     expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-23"]);
   });
 
-  it("ignores completedOccurrences once detached (scheduleLocked false)", () => {
-    // A detached series is native (EXDATE-driven) — a stale completion map must
-    // not keep suppressing occurrences, or they vanish with no live block.
+  it("excludes completedOccurrences on a native/detached series too", () => {
+    // Under the unified sets model the completion map is keyed by page and
+    // survives detach — a detached series' completed occurrence stays hidden
+    // (its done clone renders), no longer gated on scheduleLocked.
     const page = makePage({
       completedOccurrences: { "2026-03-09": "clone-1" },
       scheduleLocked: false,
@@ -155,11 +155,22 @@ describe("expandRecurrenceForRange", () => {
       new Date(2026, 2, 23)
     );
 
-    expect(occurrences.map((o) => o.originalDate)).toEqual([
-      "2026-03-02",
-      "2026-03-09",
-      "2026-03-16",
-    ]);
+    expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
+  });
+
+  it("excludes skippedOccurrences from expansion", () => {
+    // A user-dismissed occurrence lives in skip_set, surfaced as skippedOccurrences.
+    const page = makePage({ scheduleLocked: false, skippedOccurrences: ["2026-03-09"] });
+    const rule = makeRule();
+
+    const occurrences = expandRecurrenceForRange(
+      rule,
+      page,
+      new Date(2026, 2, 2),
+      new Date(2026, 2, 23)
+    );
+
+    expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
   });
 
   it("excludes dates with materialised override schedules", () => {

@@ -569,11 +569,7 @@ describe("completeRecurringPage", () => {
       timezone: "America/New_York",
     });
 
-    const result = await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-03-23T09:00:00",
-      pageId: head.id,
-    });
+    const result = await adapter.completeRecurringPage({ pageId: head.id });
 
     // Clone should be done with the completed occurrence date
     expect(result.clone.status).toBe("done");
@@ -584,22 +580,25 @@ describe("completeRecurringPage", () => {
     expect(result.clone.completedAt).toBeDefined();
     expect(result.clone.id).not.toBe(head.id);
 
-    // Head should be advanced
+    // Head recomputes to the next Monday.
     expect(result.head.id).toBe(head.id);
     expect(result.head.status).toBe("not_started");
     expect(result.head.scheduledStart).toBe("2026-03-23T09:00:00");
     expect(result.head.title).toBe("Standup");
   });
 
-  it("marks head as done when no next occurrence (series finished)", async () => {
+  it("marks head as done when the series is exhausted", async () => {
     const head = await createTestPage({ title: "Limited series" });
     await adapter.updatePage(head.id, { scheduledStart: "2026-03-16T09:00:00" });
-
-    const result = await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: null, // no next occurrence
+    // A single-occurrence series: completing it leaves no next occurrence.
+    await adapter.createRecurrenceRule({
       pageId: head.id,
+      rrule: "FREQ=DAILY;COUNT=1",
+      scheduledStart: "2026-03-16T09:00:00",
+      timezone: "America/New_York",
     });
+
+    const result = await adapter.completeRecurringPage({ pageId: head.id });
 
     expect(result.head.status).toBe("done");
     expect(result.head.completedAt).toBeDefined();
@@ -609,12 +608,15 @@ describe("completeRecurringPage", () => {
     const content =
       '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Meeting notes"}]}]}';
     const head = await createTestPage({ content, title: "Weekly sync" });
-
-    const result = await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-03-23",
+    await adapter.updatePage(head.id, { scheduledStart: "2026-03-22" });
+    await adapter.createRecurrenceRule({
       pageId: head.id,
+      rrule: "FREQ=DAILY",
+      scheduledStart: "2026-03-22",
+      timezone: "America/New_York",
     });
+
+    const result = await adapter.completeRecurringPage({ pageId: head.id });
 
     // Clone should have the content snapshot
     const cloneFull = await adapter.getPage(result.clone.id);
@@ -625,23 +627,17 @@ describe("completeRecurringPage", () => {
     const head = await createTestPage({ title: "Recurring" });
     await adapter.updatePage(head.id, { scheduledStart: "2026-03-16" });
     const originalId = head.id;
+    await adapter.createRecurrenceRule({
+      pageId: head.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledStart: "2026-03-16",
+      timezone: "America/New_York",
+    });
 
-    // Complete 3 times
-    await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-03-23",
-      pageId: originalId,
-    });
-    await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-03-30",
-      pageId: originalId,
-    });
-    const result3 = await adapter.completeRecurringPage({
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-04-06",
-      pageId: originalId,
-    });
+    // Complete 3 times — the head recomputes one Monday forward each time.
+    await adapter.completeRecurringPage({ pageId: originalId });
+    await adapter.completeRecurringPage({ pageId: originalId });
+    const result3 = await adapter.completeRecurringPage({ pageId: originalId });
 
     // Head ID unchanged
     expect(result3.head.id).toBe(originalId);
@@ -654,13 +650,9 @@ describe("completeRecurringPage", () => {
   });
 
   it("throws when page not found", () => {
-    expect(() =>
-      adapter.completeRecurringPage({
-        nextScheduledEnd: null,
-        nextScheduledStart: "2026-03-23",
-        pageId: "nonexistent",
-      })
-    ).toThrow("Page not found");
+    expect(() => adapter.completeRecurringPage({ pageId: "nonexistent" })).toThrow(
+      "Page not found"
+    );
   });
 });
 
@@ -1162,32 +1154,27 @@ describe("schedule and rule updates", () => {
     expect(await adapter.getRecurrenceRule(page.id)).toBeNull();
   });
 
-  it("completeRecurringPage merges added exdates into the rule's current row", async () => {
+  it("completeRecurringPage records the set and leaves rule exdates untouched", async () => {
     const page = await createTestPage();
+    await adapter.updatePage(page.id, { scheduledStart: "2026-01-01T09:00:00" });
     const rule = await adapter.createRecurrenceRule({
       pageId: page.id,
       rrule: "FREQ=DAILY",
       scheduledStart: "2026-01-01T09:00:00",
       timezone: "America/Los_Angeles",
     });
-
-    // An exdate written after the caller computed its completion input (e.g.
-    // an interleaved skip) must survive the completion's merge.
+    // A pre-existing provider/legacy exdate must survive — native completion
+    // records the completed date in the set, never in rrule_exdates.
     await adapter.addRuleExdates(rule.id, ["2026-01-05"]);
 
-    const result = await adapter.completeRecurringPage({
-      addExdates: ["2026-01-01"],
-      nextScheduledEnd: null,
-      nextScheduledStart: "2026-01-02T09:00:00",
-      pageId: page.id,
-      ruleId: rule.id,
-    });
+    const result = await adapter.completeRecurringPage({ pageId: page.id });
 
-    expect(result.ruleExdates).toEqual(["2026-01-05", "2026-01-01"]);
-    expect((await adapter.getRecurrenceRule(page.id))?.rruleExdates).toEqual([
-      "2026-01-05",
-      "2026-01-01",
-    ]);
+    expect((await adapter.getRecurrenceRule(page.id))?.rruleExdates).toEqual(["2026-01-05"]);
+    expect((await adapter.getPage(page.id))?.completedOccurrences).toEqual({
+      "2026-01-01": result.clone.id,
+    });
+    // Head advanced past the completed date and the legacy exdate.
+    expect((await adapter.getPage(page.id))?.scheduledStart).toBe("2026-01-02T09:00:00");
   });
 
   it("addRuleExdates dedups and removeRuleExdate removes only its date", async () => {
@@ -1261,6 +1248,28 @@ describe("synced occurrence completion", () => {
     // The series records the completion (date → clone id).
     const updatedSeries = await adapter.getPage(series.id);
     expect(updatedSeries?.completedOccurrences).toEqual({ "2026-03-09": clone.id });
+  });
+
+  it("a repeat completion of the same occurrence returns the existing clone, not a second one", async () => {
+    const series = await createTestPage({ title: "Weekly 1:1" });
+    adapter.markPageSynced(series.id, { state: "active", timezone: "Europe/London" });
+    const first = await adapter.completeSyncedOccurrence({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+
+    const second = await adapter.completeSyncedOccurrence({
+      occurrenceDate: "2026-03-09",
+      pageId: series.id,
+      scheduledStart: "2026-03-09T14:00:00",
+    });
+
+    expect(second.id).toBe(first.id);
+    const done = await adapter.listPages({ status: "done" });
+    expect(done.filter((p) => p.title === "Weekly 1:1")).toHaveLength(1);
+    const updatedSeries = await adapter.getPage(series.id);
+    expect(updatedSeries?.completedOccurrences).toEqual({ "2026-03-09": first.id });
   });
 
   it("uncomplete deletes the clone and drops the date", async () => {

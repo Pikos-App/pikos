@@ -490,7 +490,21 @@ pub async fn create_recurrence_rule_impl(
     .execute(pool)
     .await?;
 
+    // Ownership handoff: the derivation now owns `pages.scheduled_start`. Materialise
+    // the oldest-open occurrence so the head reflects the rule immediately (before
+    // this, the page carried the pre-rule scheduleOnce anchor).
+    crate::recurrence_derive::recompute_recurring_schedule_pool(pool, &data.page_id).await?;
+
     fetch_rule(pool, &id).await
+}
+
+/// The page a rule belongs to — needed to target the recompute after a rule edit.
+async fn rule_page_id(pool: &sqlx::SqlitePool, rule_id: &str) -> AppResult<String> {
+    sqlx::query_scalar("SELECT page_id FROM page_recurrence_rules WHERE id = ?")
+        .bind(rule_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Recurrence rule not found: {rule_id}")))
 }
 
 pub async fn update_recurrence_rule_impl(
@@ -544,6 +558,10 @@ pub async fn update_recurrence_rule_impl(
 
     builder.build().execute(pool).await?;
 
+    // The rule (rrule/base/exdates) changed — re-derive the head from truth.
+    let page_id = rule_page_id(pool, &id).await?;
+    crate::recurrence_derive::recompute_recurring_schedule_pool(pool, &page_id).await?;
+
     fetch_rule(pool, &id).await
 }
 
@@ -579,17 +597,21 @@ pub(crate) async fn merge_rule_exdates_tx(
     Ok(exdates)
 }
 
-/// Adds dates to a rule's exdates (skip an occurrence). Merge happens DB-side —
+/// Adds dates to a rule's EXDATEs and recomputes the head. Merge happens DB-side —
 /// see merge_rule_exdates_tx for why callers must not send a replacement array.
+/// Native user dismissals now live in the skip-set ([`crate::pages::skip_occurrence_impl`]);
+/// this remains for provider/manual EXDATE writes.
 pub async fn add_rule_exdates_impl(
     pool: &sqlx::SqlitePool,
     id: String,
     dates: Vec<String>,
 ) -> AppResult<PageRecurrenceRule> {
     ensure_rule_row_unlocked(pool, &id).await?;
+    let page_id = rule_page_id(pool, &id).await?;
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
         merge_rule_exdates_tx(&mut tx, &id, &dates).await?;
+        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id).await?;
         tx.commit().await?;
         Ok(())
     })
@@ -597,14 +619,15 @@ pub async fn add_rule_exdates_impl(
     fetch_rule(pool, &id).await
 }
 
-/// Removes a single date from a rule's exdates (undo a skip). Removes ONLY that
-/// date from the current row — exdates added since the skip survive.
+/// Removes a single date from a rule's EXDATEs and recomputes the head. Removes
+/// ONLY that date from the current row — exdates added since survive.
 pub async fn remove_rule_exdate_impl(
     pool: &sqlx::SqlitePool,
     id: String,
     date: String,
 ) -> AppResult<PageRecurrenceRule> {
     ensure_rule_row_unlocked(pool, &id).await?;
+    let page_id = rule_page_id(pool, &id).await?;
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
         let current: String =
@@ -624,6 +647,7 @@ pub async fn remove_rule_exdate_impl(
             .bind(&id)
             .execute(&mut *tx)
             .await?;
+        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id).await?;
         tx.commit().await?;
         Ok(())
     })
@@ -631,14 +655,49 @@ pub async fn remove_rule_exdate_impl(
     fetch_rule(pool, &id).await
 }
 
+/// Deletes a recurrence rule and hands `pages.scheduled_start` back to the one-off
+/// denorm — in ONE transaction. Ownership handoff: the derivation owned the head
+/// while the rule existed; after the delete, `refresh_schedule_denorm` re-derives
+/// from `page_schedules`. Splitting the two lets a concurrent denorm refresh read
+/// the lingering rule row (`has_rule` still true) and skip the refresh, leaving the
+/// head pinned at the now-orphaned past rule anchor.
 pub async fn delete_recurrence_rule_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
     ensure_rule_row_unlocked(pool, id).await?;
-    // Cascades to page_schedules rows with rule_id = id
-    sqlx::query("DELETE FROM page_recurrence_rules WHERE id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
+    let page_id = rule_page_id(pool, id).await?;
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        // The head cache (owned by the derivation while the rule existed) holds the
+        // current occurrence; the surviving non-rule anchor row still holds the
+        // creation/last-drag date, which completion never advanced. Carry the head
+        // forward onto that anchor before refresh_schedule_denorm re-derives from
+        // it, or removing recurrence from a long-running series rewinds the task to
+        // a months-old date.
+        let head: Option<(Option<String>, Option<String>)> =
+            sqlx::query_as("SELECT scheduled_start, scheduled_end FROM pages WHERE id = ?")
+                .bind(&page_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        // Cascades to page_schedules rows with rule_id = id.
+        sqlx::query("DELETE FROM page_recurrence_rules WHERE id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        if let Some((Some(start), end)) = head {
+            sqlx::query(
+                "UPDATE page_schedules SET scheduled_start = ?, scheduled_end = ?
+                 WHERE page_id = ? AND rule_id IS NULL",
+            )
+            .bind(&start)
+            .bind(&end)
+            .bind(&page_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        refresh_schedule_denorm_conn(&mut tx, &page_id).await?;
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 pub async fn list_recurrence_rules_impl(

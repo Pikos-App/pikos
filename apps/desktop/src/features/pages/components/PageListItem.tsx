@@ -212,6 +212,8 @@ export function PageListItem({
           onClick={isRenaming ? undefined : onSelect}
           onDoubleClick={(e) => {
             e.stopPropagation();
+            // Synced mirror: title is calendar-owned; the backend rejects the write.
+            if (page.scheduleLocked) return;
             onRenameStart();
           }}
           onKeyDown={(e) => {
@@ -369,9 +371,11 @@ export function PageListItem({
       </ContextMenuTrigger>
 
       <ContextMenuContent {...contextMenuContentProps}>
-        <ContextMenuItem onSelect={() => prepareRenameFromMenu(onRenameStart)}>
-          Rename
-        </ContextMenuItem>
+        {!page.scheduleLocked && (
+          <ContextMenuItem onSelect={() => prepareRenameFromMenu(onRenameStart)}>
+            Rename
+          </ContextMenuItem>
+        )}
         <ContextMenuSub>
           <ContextMenuSubTrigger>Move to Folder</ContextMenuSubTrigger>
           <ContextMenuSubContent>

@@ -89,9 +89,25 @@ pub async fn recompute_recurring_schedule(
         return Ok(());
     };
     let excl = exclusion_union(tx, page_id, &rule.id, &rule.rrule_exdates).await?;
+
+    // An out-of-envelope rule (a provider shape the engine rejects) must not fail
+    // the enclosing write — leave the cache as-is and skip, matching the reminder
+    // enumeration's per-series isolation.
+    let derived = match pikos_recurrence::oldest_open_occurrence(
+        &rule.rrule,
+        &rule.base_start,
+        rule.base_end.as_deref(),
+        &excl,
+    ) {
+        Ok(derived) => derived,
+        Err(e) => {
+            warn_unsupported_series_once(&rule.id, &e);
+            return Ok(());
+        }
+    };
     let now = now_iso();
 
-    match derive_oldest_open(&rule, &excl)? {
+    match derived {
         // Head sits on the oldest open occurrence; un-mark `done` if the series
         // yields again (both CASE arms read the pre-update status).
         Some(occ) => {
@@ -126,6 +142,20 @@ pub async fn recompute_recurring_schedule(
         }
     }
     Ok(())
+}
+
+/// Pool-level [`recompute_recurring_schedule`] in its own transaction, retrying on
+/// `SQLITE_BUSY_SNAPSHOT`. For callers with no ambient transaction — the foreground
+/// load/time-tick heal and the rule-add handoff — where the recompute is the whole
+/// write, not a step folded into a larger one.
+pub async fn recompute_recurring_schedule_pool(pool: &SqlitePool, page_id: &str) -> AppResult<()> {
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        recompute_recurring_schedule(&mut tx, page_id).await?;
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 /// The stateless display derivation for one page, read-only — the `cache ==

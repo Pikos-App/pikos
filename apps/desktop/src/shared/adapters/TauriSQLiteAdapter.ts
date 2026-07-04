@@ -17,7 +17,9 @@ import type {
   RescheduleVirtualInput,
   RescheduleVirtualResult,
   SearchResponse,
+  SkipOccurrenceInput,
   SyncCalendar,
+  UncompleteRecurringInput,
   UncompleteSyncedOccurrenceInput,
 } from "@pikos/core";
 import type {
@@ -284,6 +286,22 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult> {
     return invoke<CompleteRecurringResult>("complete_recurring_page", { data });
+  }
+
+  uncompleteRecurringOccurrence(data: UncompleteRecurringInput): Promise<void> {
+    return invoke<void>("uncomplete_recurring_occurrence", { data });
+  }
+
+  skipOccurrence(data: SkipOccurrenceInput): Promise<void> {
+    return invoke<void>("skip_occurrence", { data });
+  }
+
+  undoSkipOccurrence(data: SkipOccurrenceInput): Promise<void> {
+    return invoke<void>("undo_skip_occurrence", { data });
+  }
+
+  recomputeRecurringSchedules(): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("recompute_recurring_schedules");
   }
 
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult> {
