@@ -1,12 +1,36 @@
 // useRecurrenceExpansion — verifies the calendar's hook for merging virtual
 // rrule occurrences into the rendered page list. Covers head-deduplication,
-// override exclusion, multi-rule expansion, and the empty-rules short-circuit.
+// override exclusion, multi-rule expansion, the empty-rules short-circuit, and
+// both engine paths (Rust-via-IPC default + the rrule.js kill-switch).
 
-import type { PageRecurrenceRule, PageSchedule, PageSummary, VirtualOccurrence } from "@pikos/core";
+import type {
+  PageRecurrenceRule,
+  PageSchedule,
+  PageSummary,
+  RawRuleExpansion,
+  VirtualOccurrence,
+} from "@pikos/core";
+import { parseLocalISO, rawExpandRule } from "@pikos/core";
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { useRecurrenceExpansion } from "./useRecurrenceExpansion";
+
+// Stand-in for the batched Rust command: delegates to the same `rawExpandRule`
+// the backend mirrors (raw per-rule occurrences, rule EXDATEs only). The page
+// only satisfies the helper's signature — the raw fields are rule-derived.
+const DUMMY_PAGE = makePage();
+const EXPAND = (
+  rules: PageRecurrenceRule[],
+  startStr: string,
+  endStr: string
+): Promise<RawRuleExpansion[]> =>
+  Promise.resolve(
+    rules.map((rule) => ({
+      occurrences: rawExpandRule(rule, DUMMY_PAGE, parseLocalISO(startStr), parseLocalISO(endStr)),
+      ruleId: rule.id,
+    }))
+  );
 
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
@@ -56,6 +80,7 @@ describe("useRecurrenceExpansion", () => {
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days: weekDays(new Date(2026, 2, 2)),
+        expandRecurrenceRange: EXPAND,
         listSchedulesRange: NOOP_LIST_SCHEDULES,
         pages,
         recurrenceRules: [],
@@ -72,6 +97,7 @@ describe("useRecurrenceExpansion", () => {
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days,
+        expandRecurrenceRange: EXPAND,
         listSchedulesRange: NOOP_LIST_SCHEDULES,
         pages,
         recurrenceRules: [rule],
@@ -97,6 +123,7 @@ describe("useRecurrenceExpansion", () => {
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days,
+        expandRecurrenceRange: EXPAND,
         listSchedulesRange: NOOP_LIST_SCHEDULES,
         pages: [head],
         recurrenceRules: [rule],
@@ -112,13 +139,17 @@ describe("useRecurrenceExpansion", () => {
     });
   });
 
-  it("hides virtuals on or before the head's date so virtuals visibly track when the head moves", async () => {
-    // Daily anchor at Mar 2 (Mon). Head currently sits at Mar 11 (Wed) —
-    // the user moved it forward via drag. The visible week is Mar 9–15.
-    // Without the "<= headDate" filter, virtuals for Mar 9 and Mar 10
-    // would appear (the rule still emits them and they're not exdate'd),
-    // resurrecting dates that visually predate the head.
-    const head = makePage({ scheduledStart: "2026-03-11T09:00:00" });
+  it("suppresses only the head's own-date virtual — a pre-head open gap still renders", async () => {
+    // Daily anchor at Mar 2. Head has advanced to Mar 11: Mar 9 was completed
+    // (its clone renders instead), but Mar 10 is an open gap — neither completed
+    // nor skipped (an "advance, gap stays open" outcome). Visible week Mar 9–15.
+    // Only Mar 11 (the head's own date) is filtered here; Mar 9 drops via the
+    // completed exclusion union, and Mar 10 must survive — the gap stays visible.
+    // (The old "<= headDate" filter wrongly hid Mar 10.)
+    const head = makePage({
+      completedOccurrences: { "2026-03-09": "clone-1" },
+      scheduledStart: "2026-03-11T09:00:00",
+    });
     const rule = makeRule({
       rrule: "FREQ=DAILY",
       scheduledEnd: "2026-03-02T10:00:00",
@@ -129,6 +160,7 @@ describe("useRecurrenceExpansion", () => {
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days,
+        expandRecurrenceRange: EXPAND,
         listSchedulesRange: NOOP_LIST_SCHEDULES,
         pages: [head],
         recurrenceRules: [rule],
@@ -137,12 +169,13 @@ describe("useRecurrenceExpansion", () => {
 
     await waitFor(() => {
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
-      // Mar 9, 10, 11 — none of these should appear as virtuals.
-      // Mar 11 is excluded as headDate; Mar 9–10 are excluded as <= headDate.
+      // Mar 9 — completed, dropped by the exclusion union (not this filter).
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
-      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-10"))).toBeUndefined();
+      // Mar 10 — open gap before the head; must render under own-date-only.
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-10"))).toBeDefined();
+      // Mar 11 — the head's own date; suppressed so the real head isn't doubled.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-11"))).toBeUndefined();
-      // Mar 12+ should still appear.
+      // Mar 12+ still appear.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-12"))).toBeDefined();
     });
   });
@@ -168,6 +201,7 @@ describe("useRecurrenceExpansion", () => {
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days,
+        expandRecurrenceRange: EXPAND,
         listSchedulesRange,
         pages,
         recurrenceRules: [rule],
@@ -190,14 +224,21 @@ describe("useRecurrenceExpansion", () => {
       scheduledStart: "2026-03-09T09:00:00",
       scheduleLocked: true,
     });
+    const clone = makePage({
+      id: "clone-1",
+      scheduledStart: "2026-03-09T09:00:00",
+      status: "done",
+      title: "Standup (done)",
+    });
     const rule = makeRule({ scheduledStart: "2026-03-09T09:00:00" });
     const days = weekDays(new Date(2026, 2, 9));
 
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days,
+        expandRecurrenceRange: EXPAND,
         listSchedulesRange: NOOP_LIST_SCHEDULES,
-        pages: [head],
+        pages: [head, clone],
         recurrenceRules: [rule],
       })
     );
@@ -205,7 +246,47 @@ describe("useRecurrenceExpansion", () => {
     await waitFor(() => {
       // The head (real page at the completed base date) is gone.
       expect(result.current.find((p) => p.id === head.id && !("isVirtual" in p))).toBeUndefined();
+      expect(result.current.find((p) => p.id === "clone-1")).toBeDefined();
       // No virtual resurrects the completed base date either.
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
+    });
+  });
+
+  it("suppresses a native head on a completed base too (out-of-envelope rule) while its clone renders", async () => {
+    // An engine-rejected (out-of-envelope) rule never advances its head, so a
+    // native page (scheduleLocked: false) can sit on a completed base just like
+    // a synced one. The un-gated headCompleted must drop it — proving the
+    // dropped scheduleLocked gate — while its done clone (a separate page) stays.
+    const head = makePage({
+      completedOccurrences: { "2026-03-09": "clone-1" },
+      scheduledStart: "2026-03-09T09:00:00",
+      scheduleLocked: false,
+    });
+    const clone = makePage({
+      id: "clone-1",
+      scheduledStart: "2026-03-09T09:00:00",
+      status: "done",
+      title: "Standup (done)",
+    });
+    const rule = makeRule({ scheduledStart: "2026-03-09T09:00:00" });
+    const days = weekDays(new Date(2026, 2, 9));
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days,
+        expandRecurrenceRange: EXPAND,
+        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        pages: [head, clone],
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      // The head (real recurring page on the completed base) is gone.
+      expect(result.current.find((p) => p.id === head.id && !("isVirtual" in p))).toBeUndefined();
+      expect(result.current.find((p) => p.id === "clone-1")).toBeDefined();
+      // No virtual resurrects the completed base date.
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
     });
@@ -231,6 +312,7 @@ describe("useRecurrenceExpansion", () => {
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days,
+        expandRecurrenceRange: EXPAND,
         listSchedulesRange: NOOP_LIST_SCHEDULES,
         pages: [pageA, pageB],
         recurrenceRules: [ruleA, ruleB],
@@ -247,5 +329,54 @@ describe("useRecurrenceExpansion", () => {
         "2026-03-11T15:00:00"
       );
     });
+  });
+
+  it("falls back to rrule.js for a rule the Rust engine omitted (out-of-envelope)", async () => {
+    // The IPC batch omits any rule its stricter engine can't parse. Here the
+    // expander returns an empty batch (the rule is absent), so the hook must fall
+    // back to the in-process rrule.js expansion — the occurrence still renders.
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+    const rule = makeRule();
+    const omitAll = (): Promise<RawRuleExpansion[]> => Promise.resolve([]);
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: omitAll,
+        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        pages,
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+      expect(virtual).toHaveLength(1);
+      expect(virtual[0]?.scheduledStart).toBe("2026-03-09T09:00:00");
+    });
+  });
+
+  it("kill-switch (useRustEngine: false) expands via rrule.js, never touching IPC", async () => {
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+    const rule = makeRule();
+    const expandSpy = vi.fn(() => Promise.reject(new Error("IPC must not be called")));
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: expandSpy,
+        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        pages,
+        recurrenceRules: [rule],
+        useRustEngine: false,
+      })
+    );
+
+    await waitFor(() => {
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+      expect(virtual).toHaveLength(1);
+      expect(virtual[0]?.scheduledStart).toBe("2026-03-09T09:00:00");
+    });
+    expect(expandSpy).not.toHaveBeenCalled();
   });
 });

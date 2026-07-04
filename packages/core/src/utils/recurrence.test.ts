@@ -9,6 +9,7 @@ import {
   nextOccurrenceAfter,
   optionsForFreq,
   parseRrule,
+  rruleHasBydayOrdinal,
   rruleToLabel,
   rruleToShortLabel,
   snapAnchorToRule,
@@ -643,6 +644,28 @@ describe("rruleToLabel", () => {
 
   it("falls back to raw string on invalid input", () => {
     expect(rruleToLabel("INVALID_RRULE")).toBe("INVALID_RRULE");
+  });
+});
+
+describe("rruleHasBydayOrdinal", () => {
+  it("detects a positional ordinal (3rd Tuesday)", () => {
+    expect(rruleHasBydayOrdinal("FREQ=MONTHLY;BYDAY=3TU")).toBe(true);
+  });
+
+  it("detects a from-end ordinal (last Friday)", () => {
+    expect(rruleHasBydayOrdinal("FREQ=MONTHLY;BYDAY=-1FR")).toBe(true);
+  });
+
+  it("detects an ordinal in any BYDAY token", () => {
+    expect(rruleHasBydayOrdinal("FREQ=MONTHLY;BYDAY=MO,2WE")).toBe(true);
+  });
+
+  it("is false for a plain weekday BYDAY", () => {
+    expect(rruleHasBydayOrdinal("FREQ=WEEKLY;BYDAY=MO,WE,FR")).toBe(false);
+  });
+
+  it("is false when there is no BYDAY", () => {
+    expect(rruleHasBydayOrdinal("FREQ=MONTHLY;BYMONTHDAY=15")).toBe(false);
   });
 });
 

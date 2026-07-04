@@ -718,6 +718,62 @@ describe("recurrence exdates (skip occurrence)", () => {
   });
 });
 
+describe("expandRecurrenceRange (batched raw expansion)", () => {
+  it("expands multiple rules keyed by id, honoring rule EXDATEs only", async () => {
+    const a = await createTestPage({ title: "A" });
+    const b = await createTestPage({ title: "B" });
+    const ruleA = await adapter.createRecurrenceRule({
+      pageId: a.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledStart: "2026-03-02T09:00:00",
+      timezone: "America/New_York",
+    });
+    const ruleB = await adapter.createRecurrenceRule({
+      pageId: b.id,
+      rrule: "FREQ=WEEKLY;BYDAY=WE",
+      scheduledStart: "2026-03-04T15:00:00",
+      timezone: "America/New_York",
+    });
+    const ruleBWithExdate = await adapter.addRuleExdates(ruleB.id, ["2026-03-11"]);
+
+    const out = await adapter.expandRecurrenceRange(
+      [ruleA, ruleBWithExdate],
+      "2026-03-09",
+      "2026-03-16"
+    );
+
+    const forA = out.find((r) => r.ruleId === ruleA.id);
+    expect(forA?.occurrences.map((o) => o.originalDate)).toEqual(["2026-03-09"]);
+    // Rule B's only in-range occurrence (Mar 11) is EXDATE'd, so it expands to nothing.
+    const forB = out.find((r) => r.ruleId === ruleB.id);
+    expect(forB?.occurrences).toEqual([]);
+  });
+
+  it("does NOT apply the completed/skip union — that stays a client concern", async () => {
+    const page = await createTestPage({ title: "Daily" });
+    await adapter.updatePage(page.id, { scheduledStart: "2026-03-09T09:00:00" });
+    const rule = await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=DAILY",
+      scheduledStart: "2026-03-09T09:00:00",
+      timezone: "America/New_York",
+    });
+    // Complete Mar 9 → it lands in the completed set, NOT in rrule_exdates, so the
+    // rule row passed here still carries no EXDATEs.
+    await adapter.completeRecurringPage({ pageId: page.id });
+
+    const out = await adapter.expandRecurrenceRange([rule], "2026-03-09", "2026-03-12");
+
+    // The completed Mar 9 still appears in the RAW expansion — the union is applied
+    // later, client-side. Only rule EXDATEs (none here) would remove it.
+    expect(out[0]?.occurrences.map((o) => o.originalDate)).toEqual([
+      "2026-03-09",
+      "2026-03-10",
+      "2026-03-11",
+    ]);
+  });
+});
+
 // ─── Page reminders ─────────────────────────────────────────────────────────
 
 describe("page reminders", () => {

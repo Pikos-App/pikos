@@ -33,6 +33,7 @@ serde_json = "1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
 pikos-db = { path = "../../../crates/pikos-db" }
 pikos-calendar-sync = { path = "../../../crates/pikos-calendar-sync" }
+pikos-recurrence = { path = "../../../crates/pikos-recurrence" }
 notify = "6"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }

@@ -30,6 +30,7 @@ import type {
   PageSchedule,
   PageStatus,
   PageSummary,
+  RawRuleExpansion,
   RescheduleVirtualInput,
   RescheduleVirtualResult,
   SearchResponse,
@@ -42,7 +43,7 @@ import type {
 import { nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
-import { computeNextEnd, nextOccurrenceAfter } from "../utils/recurrence";
+import { computeNextEnd, nextOccurrenceAfter, rawExpandRule } from "../utils/recurrence";
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -544,6 +545,21 @@ export class MockStorageAdapter implements StorageAdapter {
     // same state in the in-memory Set, so check there — `p.deletedAt` is never
     // set by softDeletePage and reading it here was always returning everything.
     return Promise.resolve([...this.rules.values()].filter((r) => !this.softDeleted.has(r.pageId)));
+  }
+
+  expandRecurrenceRange(
+    rules: PageRecurrenceRule[],
+    rangeStart: string,
+    rangeEnd: string
+  ): Promise<RawRuleExpansion[]> {
+    const start = parseLocalISO(rangeStart);
+    const end = parseLocalISO(rangeEnd);
+    const result = rules.flatMap((rule) => {
+      const page = this.pages.get(rule.pageId);
+      if (!page) return [];
+      return [{ occurrences: rawExpandRule(rule, page, start, end), ruleId: rule.id }];
+    });
+    return Promise.resolve(result);
   }
 
   /** Re-derives `head.scheduledStart` (or terminal `done`) from truth — the rule

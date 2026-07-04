@@ -107,6 +107,13 @@ export interface PagesContextValue {
   deleteRecurrence: (ruleId: string) => Promise<void>;
   /** List all materialised schedule rows in a date range (for rrule override filtering). */
   listSchedulesRange: (start: string, end: string) => Promise<import("@pikos/core").PageSchedule[]>;
+  /** Batched raw rrule expansion for a range via the Rust engine (rule EXDATEs
+   * applied; completed/skip union stays client-side). */
+  expandRecurrenceRange: (
+    rules: PageRecurrenceRule[],
+    rangeStart: string,
+    rangeEnd: string
+  ) => Promise<import("@pikos/core").RawRuleExpansion[]>;
   /** Materialise a virtual rrule occurrence as an independent real page. */
   rescheduleVirtualOccurrence: (
     ruleId: string,
@@ -747,6 +754,14 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     return adapter.listPageSchedulesRange(start, end);
   }
 
+  function expandRecurrenceRange(
+    rules: PageRecurrenceRule[],
+    rangeStart: string,
+    rangeEnd: string
+  ) {
+    return adapter.expandRecurrenceRange(rules, rangeStart, rangeEnd);
+  }
+
   async function completeRecurringPage(
     pageId: string,
     missedPolicy: MissedOccurrencePolicy = "advance"
@@ -1078,6 +1093,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     deleteFolder,
     deletePage,
     deleteRecurrence,
+    expandRecurrenceRange,
     flushPage,
     folders,
     getPage,

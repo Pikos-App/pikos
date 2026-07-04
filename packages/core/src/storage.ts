@@ -13,6 +13,7 @@ import type {
   PageSchedule,
   PageStatus,
   PageSummary,
+  RawRuleExpansion,
   RescheduleVirtualInput,
   RescheduleVirtualResult,
   SearchResponse,
@@ -172,6 +173,14 @@ export interface StorageAdapter {
   getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null>;
   /** All recurrence rules (for non-deleted pages). */
   listRecurrenceRules(): Promise<PageRecurrenceRule[]>;
+  /** Batched raw rrule expansion for the visible range via the Rust engine — see
+   * {@link RawRuleExpansion}. The completed/skip exclusion union is applied by the
+   * caller, not here. */
+  expandRecurrenceRange(
+    rules: PageRecurrenceRule[],
+    rangeStart: string,
+    rangeEnd: string
+  ): Promise<RawRuleExpansion[]>;
 
   // Recurring completion
   /** Complete one occurrence of a recurring page (native or synced): done clone +

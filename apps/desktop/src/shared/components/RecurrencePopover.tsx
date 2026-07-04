@@ -7,6 +7,7 @@ import {
   type RecurrenceFreq,
   type RecurrenceOptions,
   type RecurrenceWeekday,
+  rruleHasBydayOrdinal,
   rruleToLabel,
   rruleToShortLabel,
 } from "@pikos/core";
@@ -90,6 +91,12 @@ export function RecurrencePopover({
 
   const options = rrule ? parseRrule(rrule) : null;
   const hasRule = options !== null;
+  // A BYDAY ordinal ("3rd Tuesday") can't survive this editor's RecurrenceOptions
+  // round-trip — the ordinal is dropped, degrading the rule to a plain weekly — so
+  // lock it read-only. Native rules never carry ordinals; this only trips for a
+  // detached provider rule.
+  const ordinalLocked = !!rrule && rruleHasBydayOrdinal(rrule);
+  const effectiveReadOnly = readOnly || ordinalLocked;
   const triggerLabel = hasRule
     ? formatTriggerLabel(rrule, /* short */ true)
     : (overrideLabel ?? formatTriggerLabel(rrule, /* short */ true));
@@ -230,7 +237,7 @@ export function RecurrencePopover({
   }
 
   function handleOpenChange(next: boolean) {
-    if (readOnly || disabled) return;
+    if (effectiveReadOnly || disabled) return;
     if (!next) {
       setCountDraft("");
       setIntervalDraft("");
@@ -260,9 +267,11 @@ export function RecurrencePopover({
   const isIconOnly = variant === "icon" || !showLabel;
   const iconTooltipText = disabled
     ? (disabledHint ?? "Set a date first")
-    : hasLabelContent
-      ? triggerLabel
-      : "Set recurrence";
+    : ordinalLocked
+      ? "This repeat can't be edited here"
+      : hasLabelContent
+        ? triggerLabel
+        : "Set recurrence";
 
   const triggerButton = (
     <button
@@ -277,7 +286,7 @@ export function RecurrencePopover({
             "min-w-0 text-sm",
         disabled
           ? "cursor-not-allowed text-muted-foreground/30"
-          : readOnly
+          : effectiveReadOnly
             ? "text-muted-foreground"
             : hasLabelContent
               ? "text-muted-foreground hover:text-foreground"
@@ -290,8 +299,10 @@ export function RecurrencePopover({
     </button>
   );
 
-  if (disabled || readOnly) {
-    if (isIconOnly) {
+  if (disabled || effectiveReadOnly) {
+    // Ordinal-locked chips get a tooltip even in label mode so the disabled edit
+    // has an explanation; plain read-only label chips stay bare as before.
+    if (isIconOnly || ordinalLocked) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>

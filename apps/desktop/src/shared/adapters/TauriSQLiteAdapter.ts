@@ -30,6 +30,7 @@ import type {
   NewRecurrenceRule,
   PageScheduleUpdate,
   PageUpdate,
+  RawRuleExpansion,
   RecurrenceRuleUpdate,
   StorageAdapter,
 } from "@pikos/core";
@@ -281,6 +282,24 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   listRecurrenceRules(): Promise<PageRecurrenceRule[]> {
     return invoke<PageRecurrenceRule[]>("list_recurrence_rules");
+  }
+
+  expandRecurrenceRange(
+    rules: PageRecurrenceRule[],
+    rangeStart: string,
+    rangeEnd: string
+  ): Promise<RawRuleExpansion[]> {
+    return invoke<RawRuleExpansion[]>("expand_recurrence_range", {
+      rangeEnd,
+      rangeStart,
+      rules: rules.map((r) => ({
+        rrule: r.rrule,
+        rruleExdates: r.rruleExdates,
+        ruleId: r.id,
+        scheduledEnd: r.scheduledEnd,
+        scheduledStart: r.scheduledStart,
+      })),
+    });
   }
 
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult> {

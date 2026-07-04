@@ -104,6 +104,22 @@ export interface PageRecurrenceRule {
   createdAt: string; // ISO 8601
 }
 
+/** One raw rrule occurrence from a batched engine expansion — rule-level EXDATEs
+ * applied, but NOT the completed/skip exclusion union (that stays client-side). */
+export interface RawOccurrence {
+  originalDate: string;
+  scheduledStart: string;
+  scheduledEnd: string | null;
+}
+
+/** A rule's raw occurrences for a range, keyed by rule id. A rule the engine
+ * can't parse is absent from the batch — the caller falls back to the rrule.js
+ * expansion for it. */
+export interface RawRuleExpansion {
+  ruleId: string;
+  occurrences: RawOccurrence[];
+}
+
 // ─── PageReminder ────────────────────────────────────────────────────────────
 
 export interface PageReminder {

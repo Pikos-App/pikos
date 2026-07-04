@@ -35,7 +35,7 @@ use db::{
     },
     schedules::{
         add_rule_exdates, create_page_schedule, create_recurrence_rule, delete_page_schedule,
-        delete_recurrence_rule, get_recurrence_rule, list_page_schedules,
+        delete_recurrence_rule, expand_recurrence_range, get_recurrence_rule, list_page_schedules,
         list_page_schedules_range, list_recurrence_rules, remove_rule_exdate, update_page_schedule,
         update_recurrence_rule,
     },
@@ -358,6 +358,7 @@ pub fn run() {
             delete_recurrence_rule,
             get_recurrence_rule,
             list_recurrence_rules,
+            expand_recurrence_range,
             // Search
             search_pages,
             // Tags

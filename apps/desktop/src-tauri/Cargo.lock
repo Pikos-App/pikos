@@ -3254,6 +3254,7 @@ dependencies = [
  "objc2-user-notifications",
  "pikos-calendar-sync",
  "pikos-db",
+ "pikos-recurrence",
  "serde",
  "serde_json",
  "sqlx",

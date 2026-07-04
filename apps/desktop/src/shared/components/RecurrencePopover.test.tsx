@@ -60,3 +60,30 @@ describe("RecurrencePopover freq re-click", () => {
     expect(onChange).toHaveBeenCalledWith(expect.stringContaining("FREQ=WEEKLY"));
   });
 });
+
+describe("RecurrencePopover BYDAY-ordinal lock", () => {
+  // A BYDAY ordinal (BYDAY=3TU) is dropped by the RecurrenceOptions round-trip, so
+  // editing it here would silently degrade "3rd Tuesday" to a plain weekly. The
+  // chip is locked read-only instead. (Contrast: the BYSETPOS form above round-
+  // trips cleanly and stays editable — proven by the freq-menu tests.)
+  it("does not open the editor for a BYDAY-ordinal rule", () => {
+    const onChange = vi.fn();
+    render(
+      <AppSettingsProvider>
+        <TooltipProvider>
+          <RecurrencePopover
+            anchorDate="2026-07-06T09:00:00"
+            onChange={onChange}
+            rrule="FREQ=MONTHLY;BYDAY=3TU"
+          />
+        </TooltipProvider>
+      </AppSettingsProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Recurrence:/ }));
+
+    expect(screen.queryByRole("button", { name: "Month" })).toBeNull();
+    expect(screen.queryByText("Stop repeating")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});

@@ -24,7 +24,7 @@ import {
 } from "date-fns";
 import { RRule } from "rrule";
 
-import type { PageRecurrenceRule, PageSchedule, PageSummary } from "../types";
+import type { PageRecurrenceRule, PageSchedule, PageSummary, RawOccurrence } from "../types";
 import { formatDateOnly, formatLocalISO, isAllDayIso, parseLocalISO } from "./dates";
 
 export interface VirtualOccurrence extends PageSummary {
@@ -127,6 +127,32 @@ export function expandRecurrenceForRange(
   }
 
   return results;
+}
+
+/**
+ * Raw expansion mirroring the Rust `expand_range` command: every rule date in
+ * range minus rule-level EXDATEs, WITHOUT the completed/skip exclusion union
+ * (callers apply that themselves). The page only satisfies `expandRecurrenceForRange`'s
+ * signature — the raw fields are rule-derived — so its union is stripped here.
+ * Shared by MockStorageAdapter and the calendar hook's rrule.js fallback.
+ */
+export function rawExpandRule(
+  rule: PageRecurrenceRule,
+  page: PageSummary,
+  rangeStart: Date,
+  rangeEnd: Date
+): RawOccurrence[] {
+  const rawPage: PageSummary = { ...page, completedOccurrences: null, skippedOccurrences: null };
+  const out: RawOccurrence[] = [];
+  for (const o of expandRecurrenceForRange(rule, rawPage, rangeStart, rangeEnd, [])) {
+    if (o.scheduledStart == null) continue;
+    out.push({
+      originalDate: o.originalDate,
+      scheduledEnd: o.scheduledEnd ?? null,
+      scheduledStart: o.scheduledStart,
+    });
+  }
+  return out;
 }
 
 /**
@@ -355,6 +381,18 @@ export function computeNextEnd(baseEnd: string, nextStart: string): string | nul
     nextEndDate = addDays(nextEndDate, 1);
   }
   return formatLocalISO(nextEndDate);
+}
+
+/**
+ * True when the rule's BYDAY carries an ordinal (e.g. `BYDAY=3TU` = "3rd
+ * Tuesday", `BYDAY=-1FR` = "last Friday"). The `RecurrenceOptions` round-trip
+ * (`parseRrule`/`buildRrule`) drops the ordinal, so any editor that saves through
+ * it degrades such a rule to a plain weekly — callers use this to lock editing.
+ */
+export function rruleHasBydayOrdinal(rruleStr: string): boolean {
+  const match = /(?:^|;)BYDAY=([^;]+)/i.exec(rruleStr);
+  if (!match) return false;
+  return match[1]!.split(",").some((token) => /^\s*[+-]?\d/.test(token));
 }
 
 /**

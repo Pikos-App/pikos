@@ -28,6 +28,8 @@ export {
   nextOccurrenceAfter,
   optionsForFreq,
   parseRrule,
+  rawExpandRule,
+  rruleHasBydayOrdinal,
   rruleToLabel,
   rruleToShortLabel,
   snapAnchorToRule,
