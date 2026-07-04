@@ -501,6 +501,241 @@ async fn native_default_path_fires_a_recurring_override_row() {
     assert_eq!(via_schedule[0].schedule_id, "ov");
 }
 
+// ─── synced recurring per-instance override reminders ────────────────────────
+//
+// A moved/single-edited synced occurrence (RECURRENCE-ID) is a materialized
+// page_schedules row that no other reminder path fires: the enumeration excludes
+// its original_date, and the native `due_*` paths drop rule-backed active-synced
+// rows. `due_synced_override_reminders` fires it at its own moved absolute instant.
+
+/// Zoned materialized override row for the page's rule.
+async fn insert_override_tz(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    page_id: &str,
+    scheduled_start: &str,
+    original_date: &str,
+    timezone: &str,
+    status: &str,
+) {
+    sqlx::query(
+        "INSERT INTO page_schedules
+         (id, page_id, scheduled_start, timezone, rule_id, original_date, status, created_at)
+         VALUES (?, ?, ?, ?, (SELECT id FROM page_recurrence_rules WHERE page_id = ?), ?, ?,
+                 '2026-05-01T00:00:00')",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(scheduled_start)
+    .bind(timezone)
+    .bind(page_id)
+    .bind(original_date)
+    .bind(status)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn mark_synced_override(pool: &sqlx::SqlitePool, page_id: &str) {
+    insert_page(pool, page_id, "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(pool, page_id, "2026-05-25T09:00:00").await;
+    crate::pool::insert_test_page_sync(pool, page_id, "active")
+        .await
+        .unwrap();
+}
+
+async fn set_completed(pool: &sqlx::SqlitePool, page_id: &str, occurrence_date: &str) {
+    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c')")
+        .bind(page_id)
+        .bind(occurrence_date)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn set_skipped(pool: &sqlx::SqlitePool, page_id: &str, occurrence_date: &str) {
+    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES (?, ?)")
+        .bind(page_id)
+        .bind(occurrence_date)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+// 09:00 America/New_York (EDT, UTC−4) − 10 min lead = 08:50 EDT = 12:50 UTC.
+fn override_now() -> chrono::DateTime<chrono::Utc> {
+    naive("2026-05-25T12:50:00").and_utc()
+}
+
+#[tokio::test]
+async fn synced_override_fires_at_moved_absolute_instant_with_default_lead() {
+    let pool = test_pool().await;
+    mark_synced_override(&pool, "rec").await;
+    insert_override_tz(
+        &pool,
+        "ov",
+        "rec",
+        "2026-05-25T09:00:00",
+        "2026-05-25T09:00:00",
+        "America/New_York",
+        "not_started",
+    )
+    .await;
+
+    let due = due_synced_override_reminders(&pool, override_now(), 10)
+        .await
+        .unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].schedule_id, "ov");
+    assert_eq!(due[0].minutes_before, 10);
+}
+
+#[tokio::test]
+async fn synced_override_uses_explicit_reminder_over_default() {
+    let pool = test_pool().await;
+    mark_synced_override(&pool, "rec").await;
+    insert_override_tz(
+        &pool,
+        "ov",
+        "rec",
+        "2026-05-25T09:00:00",
+        "2026-05-25T09:00:00",
+        "America/New_York",
+        "not_started",
+    )
+    .await;
+    insert_reminder(&pool, "rec", 30).await; // 09:00 EDT − 30 = 12:30 UTC
+
+    // The default-lead instant (12:50) must NOT fire once an explicit lead exists.
+    assert!(due_synced_override_reminders(&pool, override_now(), 10)
+        .await
+        .unwrap()
+        .is_empty());
+    let due = due_synced_override_reminders(&pool, naive("2026-05-25T12:30:00").and_utc(), 10)
+        .await
+        .unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].minutes_before, 30);
+}
+
+#[tokio::test]
+async fn completed_or_skipped_synced_override_is_silent() {
+    let pool = test_pool().await;
+    mark_synced_override(&pool, "done_ov").await;
+    insert_override_tz(
+        &pool,
+        "ov_done",
+        "done_ov",
+        "2026-05-25T09:00:00",
+        "2026-05-25T09:00:00",
+        "America/New_York",
+        "not_started",
+    )
+    .await;
+    set_completed(&pool, "done_ov", "2026-05-25").await;
+
+    mark_synced_override(&pool, "skip_ov").await;
+    insert_override_tz(
+        &pool,
+        "ov_skip",
+        "skip_ov",
+        "2026-05-25T09:00:00",
+        "2026-05-25T09:00:00",
+        "America/New_York",
+        "not_started",
+    )
+    .await;
+    set_skipped(&pool, "skip_ov", "2026-05-25").await;
+
+    assert!(due_synced_override_reminders(&pool, override_now(), 10)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn already_fired_synced_override_is_silent() {
+    let pool = test_pool().await;
+    mark_synced_override(&pool, "rec").await;
+    insert_override_tz(
+        &pool,
+        "ov",
+        "rec",
+        "2026-05-25T09:00:00",
+        "2026-05-25T09:00:00",
+        "America/New_York",
+        "not_started",
+    )
+    .await;
+    log_reminder_fired(&pool, "rec", "ov", "2026-05-25T12:50:00").await.unwrap();
+
+    assert!(due_synced_override_reminders(&pool, override_now(), 10)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn synced_override_path_ignores_floating_and_unsynced_rows() {
+    let pool = test_pool().await;
+    // Floating (tz NULL) override on a synced series → device-local, served by
+    // the native path, not this one.
+    mark_synced_override(&pool, "float").await;
+    insert_override(&pool, "ov_float", "float", "2026-05-25T09:00:00", "not_started").await;
+
+    // Zoned override but the page isn't actively synced → native path owns it.
+    insert_page(&pool, "native", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "native", "2026-05-25T09:00:00").await;
+    insert_override_tz(
+        &pool,
+        "ov_native",
+        "native",
+        "2026-05-25T09:00:00",
+        "2026-05-25T09:00:00",
+        "America/New_York",
+        "not_started",
+    )
+    .await;
+
+    assert!(due_synced_override_reminders(&pool, override_now(), 10)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn synced_override_fires_only_the_in_window_sibling() {
+    let pool = test_pool().await;
+    mark_synced_override(&pool, "rec").await;
+    // Two moved instances of the same series; only the 09:00 one is in-window.
+    insert_override_tz(
+        &pool,
+        "ov_early",
+        "rec",
+        "2026-05-25T09:00:00",
+        "2026-05-25T09:00:00",
+        "America/New_York",
+        "not_started",
+    )
+    .await;
+    insert_override_tz(
+        &pool,
+        "ov_late",
+        "rec",
+        "2026-05-25T20:00:00",
+        "2026-05-26T09:00:00",
+        "America/New_York",
+        "not_started",
+    )
+    .await;
+
+    let due = due_synced_override_reminders(&pool, override_now(), 10)
+        .await
+        .unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].schedule_id, "ov_early");
+}
+
 // ─── prune ───────────────────────────────────────────────────────────────────
 
 #[tokio::test]

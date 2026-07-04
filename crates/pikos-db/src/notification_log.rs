@@ -120,10 +120,12 @@ pub async fn due_default_reminders(
 // `due_*` queries above interpret `scheduled_start` as device-local, so they
 // exclude active-synced pages and this path handles them instead.
 //
-// Only **explicit** (user-added) reminders apply — synced pages get no default
-// reminder (a user reminder is what marks the page owned). This path is one-off
-// only; synced *recurring* occurrences fire through `due_recurring_reminders`
-// (which resolves the same source-zone → absolute instant per occurrence).
+// Only **explicit** (user-added) reminders apply to a synced *one-off* — those
+// pages get no default reminder (a user reminder is what marks the page owned).
+// Synced *recurring* occurrences fire through `due_recurring_reminders` (rule
+// enumeration) and their per-instance overrides through
+// `due_synced_override_reminders` (materialized rows) — both resolve the same
+// source-zone → absolute instant and both take the series' default lead.
 //
 // SQLite can't resolve IANA zones, so the SQL is only a coarse ±15h prefilter
 // (covers every real zone offset) and the exact absolute-window check runs in
@@ -191,6 +193,84 @@ pub async fn due_synced_reminders(
              WHERE nl.schedule_id = ps.id AND nl.type = 'reminder'
            )",
     )
+    .bind(&lo)
+    .bind(&hi)
+    .fetch_all(pool)
+    .await?;
+
+    let window_lo = now_utc - chrono::Duration::seconds(60);
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let fire = synced_fire_instant(&row.scheduled_start, &row.timezone, row.minutes_before)?;
+            (fire > window_lo && fire <= now_utc).then_some(DueReminder {
+                schedule_id: row.schedule_id,
+                page_id: row.page_id,
+                title: row.title,
+                scheduled_start: row.scheduled_start,
+                minutes_before: row.minutes_before,
+            })
+        })
+        .collect())
+}
+
+/// Synced recurring **per-instance overrides** (a moved instance or a
+/// single-instance edit — RECURRENCE-ID) materialize as `page_schedules` rows
+/// carrying the series `rule_id` + a source zone. They are not rule occurrences,
+/// so the recurring enumeration never emits them (it excludes their
+/// `original_date`) and every other `due_*` path drops them (rule-backed +
+/// active-synced). Fire each at its own moved instant on the same source-zone →
+/// absolute basis as a synced one-off, with the series' explicit reminders or —
+/// when it has none — the global `default_minutes` lead (matching the
+/// enumeration's synced-default). Completed/skipped occurrences are keyed on the
+/// override's `original_date`. Dedups on the real row id like
+/// `due_synced_reminders`, so it can't collide with the enumeration's synthetic
+/// keys. Zoned only — a floating synced override with a device-local reminder is
+/// already served by `due_explicit_reminders`.
+pub async fn due_synced_override_reminders(
+    pool: &SqlitePool,
+    now_utc: chrono::DateTime<chrono::Utc>,
+    default_minutes: i64,
+) -> Result<Vec<DueReminder>, sqlx::Error> {
+    let lo = (now_utc - chrono::Duration::hours(15))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let hi = (now_utc + chrono::Duration::hours(15))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let rows: Vec<SyncedReminderRow> = sqlx::query_as(
+        "SELECT ps.id AS schedule_id, ps.page_id, p.title, ps.scheduled_start,
+                COALESCE(pr.minutes_before, ?1) AS minutes_before, ps.timezone
+         FROM page_schedules ps
+         JOIN pages p ON p.id = ps.page_id
+         JOIN page_sync sy ON sy.page_id = ps.page_id AND sy.sync_state = 'active'
+         LEFT JOIN page_reminders pr ON pr.page_id = ps.page_id
+         WHERE p.status != 'done'
+           AND p.deleted_at IS NULL
+           AND ps.status != 'done'
+           AND ps.scheduled_start LIKE '%T%'
+           AND ps.timezone IS NOT NULL
+           AND ps.rule_id IS NOT NULL
+           AND ps.original_date IS NOT NULL
+           AND COALESCE(pr.minutes_before, ?1) >= 0
+           AND datetime(ps.scheduled_start, '-' || COALESCE(pr.minutes_before, ?1) || ' minutes')
+               BETWEEN ?2 AND ?3
+           AND NOT EXISTS (
+             SELECT 1 FROM completed_set cs
+             WHERE cs.page_id = ps.page_id
+               AND cs.occurrence_date = substr(ps.original_date, 1, 10)
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM skip_set sk
+             WHERE sk.page_id = ps.page_id
+               AND sk.occurrence_date = substr(ps.original_date, 1, 10)
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM notification_log nl
+             WHERE nl.schedule_id = ps.id AND nl.type = 'reminder'
+           )",
+    )
+    .bind(default_minutes)
     .bind(&lo)
     .bind(&hi)
     .fetch_all(pool)

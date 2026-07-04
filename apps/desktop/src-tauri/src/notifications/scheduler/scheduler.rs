@@ -297,6 +297,7 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
     fire_default_reminders(app, &pool, &settings, &window_start, &now_ts).await?;
     fire_recurring_reminders(app, &pool, &settings, now.naive_local(), now.to_utc()).await?;
     fire_synced_reminders(app, &pool, now.to_utc()).await?;
+    fire_synced_override_reminders(app, &pool, &settings, now.to_utc()).await?;
 
     Ok(())
 }
@@ -310,6 +311,23 @@ async fn fire_synced_reminders(
     now_utc: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), sqlx::Error> {
     let due = pikos_db::due_synced_reminders(pool, now_utc).await?;
+    for row in due {
+        fire_reminder(app, pool, &row).await?;
+    }
+    Ok(())
+}
+
+/// Fires a moved/single-edited synced occurrence at its absolute instant; see
+/// `due_synced_override_reminders`.
+async fn fire_synced_override_reminders(
+    app: &AppHandle,
+    pool: &SqlitePool,
+    settings: &NotificationSettings,
+    now_utc: chrono::DateTime<chrono::Utc>,
+) -> Result<(), sqlx::Error> {
+    let due =
+        pikos_db::due_synced_override_reminders(pool, now_utc, settings.default_minutes_before)
+            .await?;
     for row in due {
         fire_reminder(app, pool, &row).await?;
     }
