@@ -3,7 +3,7 @@ import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
 
 const title = "Connect an external calendar to Pikos";
-const description = "Pull your calendar into Pikos over CalDAV. Works with iCloud and any standard CalDAV server. Your events become real pages you can take notes on.";
+const description = "Pull your calendar into Pikos. Works with iCloud, Google Calendar, and any standard CalDAV server. Your events become real pages you can take notes on.";
 ---
 
 <Base title={title} description={description}>
@@ -22,7 +22,7 @@ const description = "Pull your calendar into Pikos over CalDAV. Works with iClou
       <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
 
         <p>
-          Pikos reads your calendar over CalDAV, the open standard behind iCloud and most calendar providers that aren't Google. Your events show up in the Pikos calendar as real pages. You can write notes on them, tag them, and find them in search. The schedule stays owned by your calendar, so an event always reflects what's actually on it.
+          Pikos reads your calendar over CalDAV (the open standard behind iCloud and most other providers) or straight from Google Calendar. Your events show up in the Pikos calendar as real pages. You can write notes on them, tag them, and find them in search. The schedule stays owned by your calendar, so an event always reflects what's actually on it.
         </p>
 
         <p>
@@ -80,10 +80,10 @@ const description = "Pull your calendar into Pikos over CalDAV. Works with iClou
           <li><strong>Removing a calendar is clean.</strong> Disable it and the mirror events go with it. Anything you took notes on or marked done is kept, so you never lose your own work.</li>
         </ul>
 
-        <h2>What about Google?</h2>
+        <h2>Connecting Google Calendar</h2>
 
         <p>
-          Google Calendar is coming next. It needs a different sign-in flow than CalDAV, so it's a separate piece of work that's already underway. CalDAV ships first because it works the day it's built, with no approval gate in the way.
+          Google skips all of the above. There's no server URL or app password; you sign in with Google instead. Click <strong>Add account</strong>, choose <strong>Google</strong>, and approve read-only access in your browser. Pikos asks for read-only access to your calendars, and disconnecting revokes it.
         </p>
 
         <p>

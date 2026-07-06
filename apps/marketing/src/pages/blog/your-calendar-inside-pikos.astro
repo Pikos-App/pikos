@@ -1,0 +1,63 @@
+---
+import BlogPost from "../../layouts/BlogPost.astro";
+---
+
+<BlogPost
+  title="Your Calendar, Inside Pikos"
+  description="Pikos 0.4.0 syncs your calendar in: iCloud, Google, or any CalDAV server. Read-only, opt-in, and your notes stay on your device."
+  date="2026-07-05"
+>
+
+  <p>
+    Pikos 0.4.0 connects to your real calendar. iCloud, Google Calendar, or any server that speaks CalDAV. Your events show up in the Pikos calendar as actual pages you can write notes on, tag, and mark done.
+  </p>
+
+  <p>
+    This closes the biggest gap in the app. Pikos puts notes, tasks, and calendar in one place, but until now the calendar only knew about things you created in Pikos. Your actual schedule lived somewhere else. Now it's on the same screen as the work it relates to.
+  </p>
+
+  <h2>Read-only, on purpose</h2>
+
+  <p>
+    Sync is one-way: your calendar comes in, nothing goes out. The title, time, and repeat rule of a synced event are locked in Pikos, so what you see always matches what's on your calendar. Everything you add on top is yours. Notes, tags, reminders, completions. They live on your device and never sync back.
+  </p>
+
+  <p>
+    Two-way sync sounds better until you think about what a bug in it does: it rewrites your meetings. Read-only gives you most of the value, meeting notes next to the meeting, with none of that risk.
+  </p>
+
+  <h2>Two ways to connect</h2>
+
+  <p>
+    <strong>CalDAV</strong> covers iCloud and most providers that aren't Google. You enter a server URL, your username, and an app-specific password, and Pikos discovers your calendars from there. The <a href="/calendar-sync">setup guide</a> walks through it, including where to get an app password.
+  </p>
+
+  <p>
+    <strong>Google Calendar</strong> uses Google sign-in. Click Add account, choose Google, and approve read-only access in your browser. Pikos asks for read-only access to your calendars and events.
+  </p>
+
+  <p>
+    Either way, your credentials go straight into the system keychain, never the Pikos database. Disconnecting deletes them, and for Google it also revokes Pikos's access.
+  </p>
+
+  <h2>The details</h2>
+
+  <ul>
+    <li>Recurring events come across properly: repeats, exceptions, moved and cancelled occurrences.</li>
+    <li>Reminders fire at the right moment, even for events in another time zone.</li>
+    <li>Everything works offline. Events are stored locally and refresh when you're back online.</li>
+    <li>Each calendar gets its own folder and color, and you choose exactly which calendars sync.</li>
+    <li>Turning a calendar off removes its events but keeps every page you wrote notes on.</li>
+  </ul>
+
+  <h2>What this means for privacy</h2>
+
+  <p>
+    The only network traffic is your device talking to your calendar provider. There's no Pikos server in the middle; there's no Pikos server at all. Sync is off by default and nothing connects until you set it up. The <a href="/privacy">privacy policy</a> has the full picture.
+  </p>
+
+  <p>
+    <a href="/download">Download Pikos</a>, open Settings, and find the Calendar Sync tab. Setup takes about two minutes.
+  </p>
+
+</BlogPost>
