@@ -338,6 +338,18 @@ impl DavTransport for StatusOnly {
 }
 
 #[tokio::test]
+async fn backfill_maps_non_207_status() {
+    // A backfill (no cursor) enters via sync_calendar(None). 401/403 → Unauthorized
+    // (reconnect); any other non-207 → UnexpectedStatus, so the poll fails loudly
+    // rather than treating an error body as an empty authoritative set (which would
+    // sweep every stored page).
+    let err = sync_calendar(&StatusOnly(500), CAL, None).await.unwrap_err();
+    assert!(matches!(err, CaldavError::UnexpectedStatus(500)));
+    let err = sync_calendar(&StatusOnly(403), CAL, None).await.unwrap_err();
+    assert!(matches!(err, CaldavError::Unauthorized), "backfill maps 403 to reconnect, not re-enumerate");
+}
+
+#[tokio::test]
 async fn current_sync_token_is_none_when_server_lacks_sync_collection() {
     for status in [403u16, 405, 501] {
         let tok = current_sync_token(&StatusOnly(status), CAL).await.unwrap();

@@ -102,6 +102,16 @@ const EXPAND_CASES: ExpandCase[] = [
     start: "2026-03-02T09:00:00",
   },
   {
+    // BYSETPOS beyond the period's candidate count selects nothing (no month has a
+    // 10th Monday) — the empty-period path, terminating rather than looping.
+    end: "2026-03-02T10:00:00",
+    name: "monthly BYSETPOS out of range yields nothing",
+    rangeEnd: "2026-06-01T00:00:00",
+    rangeStart: "2026-03-01T00:00:00",
+    rrule: "FREQ=MONTHLY;BYDAY=MO;BYSETPOS=10",
+    start: "2026-03-02T09:00:00",
+  },
+  {
     end: "2026-03-02T10:00:00",
     name: "weekly multi BYDAY",
     rangeEnd: "2026-03-15T00:00:00",
@@ -400,6 +410,26 @@ const NEXT_CASES: NextCase[] = [
     name: "far-future seek (no drop under 500-cap)",
     rrule: "FREQ=DAILY",
     start: "2026-01-01T08:00:00",
+  },
+  // Far-future seek for the non-daily frequencies — bases years before `after`,
+  // so seek_near's WEEKLY/MONTHLY/YEARLY period approximation is load-bearing.
+  {
+    after: "2027-06-01T00:00:00",
+    name: "far-future seek WEEKLY;INTERVAL=2;WKST=SU",
+    rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;WKST=SU",
+    start: "2020-01-01T08:00:00",
+  },
+  {
+    after: "2027-06-01T00:00:00",
+    name: "far-future seek MONTHLY BYSETPOS=-1 last weekday",
+    rrule: "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
+    start: "2020-01-01T08:00:00",
+  },
+  {
+    after: "2027-06-01T00:00:00",
+    name: "far-future seek YEARLY;INTERVAL=2",
+    rrule: "FREQ=YEARLY;INTERVAL=2",
+    start: "2020-03-15T08:00:00",
   },
 ];
 

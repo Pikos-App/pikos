@@ -11,7 +11,7 @@ import type {
   VirtualOccurrence,
 } from "@pikos/core";
 import { parseLocalISO, rawExpandRule } from "@pikos/core";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { useRecurrenceExpansion } from "./useRecurrenceExpansion";
@@ -378,5 +378,188 @@ describe("useRecurrenceExpansion", () => {
       expect(virtual[0]?.scheduledStart).toBe("2026-03-09T09:00:00");
     });
     expect(expandSpy).not.toHaveBeenCalled();
+  });
+});
+
+// The IPC path is stale-while-revalidate: every batch resolves asynchronously and
+// out-of-order arrivals are token-guarded. The default EXPAND above resolves
+// synchronously, so it can't exercise the in-flight machinery — these hold the
+// promise open by hand and assert each intermediate frame.
+describe("useRecurrenceExpansion — async in-flight", () => {
+  const isVirtual = (p: PageSummary | VirtualOccurrence): p is VirtualOccurrence =>
+    "isVirtual" in p;
+
+  // Settle a captured promise and let the hook's `.then` state update land, all
+  // inside act so React flushes before the assertions.
+  const flush = async (settle: () => void): Promise<void> => {
+    await act(async () => {
+      settle();
+      await Promise.resolve();
+    });
+  };
+
+  /** An expander that never resolves on its own; each call is captured so the test
+   * settles it explicitly. `resolveReal` mirrors the real batch for the call's range. */
+  function controllableExpand() {
+    const calls: {
+      rules: PageRecurrenceRule[];
+      start: string;
+      end: string;
+      settle: (r: RawRuleExpansion[]) => void;
+    }[] = [];
+    const fn = vi.fn(
+      (rules: PageRecurrenceRule[], start: string, end: string): Promise<RawRuleExpansion[]> =>
+        new Promise((settle) => calls.push({ end, rules, settle, start }))
+    );
+    const resolveReal = (i: number): void => {
+      const c = calls[i]!;
+      c.settle(
+        c.rules.map((rule) => ({
+          occurrences: rawExpandRule(
+            rule,
+            DUMMY_PAGE,
+            parseLocalISO(c.start),
+            parseLocalISO(c.end)
+          ),
+          ruleId: rule.id,
+        }))
+      );
+    };
+    return { calls, fn, resolveReal };
+  }
+
+  it("renders pages-only before the first batch resolves, then adds virtuals (cold mount)", async () => {
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+    const { calls, fn, resolveReal } = controllableExpand();
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: fn,
+        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        pages,
+        recurrenceRules: [makeRule()],
+      })
+    );
+
+    // rawExpansion === null this frame → pages only, no virtuals yet.
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(result.current.filter(isVirtual)).toHaveLength(0);
+    expect(result.current).toEqual(pages);
+
+    await flush(() => resolveReal(0));
+    expect(result.current.filter(isVirtual)).toHaveLength(1);
+  });
+
+  it("discards a superseded batch that resolves after the current one (token guard)", async () => {
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+    const { calls, fn, resolveReal } = controllableExpand();
+
+    const { rerender, result } = renderHook(
+      (props: { days: Date[] }) =>
+        useRecurrenceExpansion({
+          days: props.days,
+          expandRecurrenceRange: fn,
+          listSchedulesRange: NOOP_LIST_SCHEDULES,
+          pages,
+          recurrenceRules: [makeRule()],
+        }),
+      { initialProps: { days: weekDays(new Date(2026, 2, 2)) } }
+    );
+    await waitFor(() => expect(calls).toHaveLength(1)); // stale batch (week of Mar 2)
+
+    rerender({ days: weekDays(new Date(2026, 2, 9)) });
+    await waitFor(() => expect(calls).toHaveLength(2)); // current batch (week of Mar 9)
+
+    // Current resolves first, then the stale earlier-week batch lands late.
+    await flush(() => resolveReal(1));
+    await flush(() =>
+      calls[0]!.settle([
+        {
+          occurrences: [
+            {
+              originalDate: "2020-01-06",
+              scheduledEnd: null,
+              scheduledStart: "2020-01-06T09:00:00",
+            },
+          ],
+          ruleId: "rule-1",
+        },
+      ])
+    );
+
+    const virtual = result.current.filter(isVirtual);
+    expect(virtual).toHaveLength(1);
+    expect(virtual[0]?.scheduledStart).toBe("2026-03-09T09:00:00");
+    expect(virtual.some((v) => v.scheduledStart?.startsWith("2020"))).toBe(false);
+  });
+
+  it("retains the prior batch's virtuals across a range change until the next resolves", async () => {
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+    const { calls, fn, resolveReal } = controllableExpand();
+
+    const { rerender, result } = renderHook(
+      (props: { days: Date[] }) =>
+        useRecurrenceExpansion({
+          days: props.days,
+          expandRecurrenceRange: fn,
+          listSchedulesRange: NOOP_LIST_SCHEDULES,
+          pages,
+          recurrenceRules: [makeRule()],
+        }),
+      { initialProps: { days: weekDays(new Date(2026, 2, 9)) } }
+    );
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await flush(() => resolveReal(0));
+    expect(result.current.filter(isVirtual)).toHaveLength(1);
+
+    // Day-step nav (Mar 10–16 overlaps Mar 9–15). rawExpansion is NOT reset to
+    // null, so the retained map keeps rendering virtuals while the new batch is
+    // in flight — no empty frame.
+    rerender({ days: weekDays(new Date(2026, 2, 10)) });
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(result.current.filter(isVirtual)).toHaveLength(1);
+
+    await flush(() => resolveReal(1));
+    expect(result.current.filter(isVirtual)).toHaveLength(1);
+  });
+
+  it("reflects an optimistic completion with no extra expand call (pages change, range/rules unchanged)", async () => {
+    const rule = makeRule();
+    const { calls, fn, resolveReal } = controllableExpand();
+    const basePages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+
+    const { rerender, result } = renderHook(
+      (props: { pages: PageSummary[] }) =>
+        useRecurrenceExpansion({
+          days: weekDays(new Date(2026, 2, 9)),
+          expandRecurrenceRange: fn,
+          listSchedulesRange: NOOP_LIST_SCHEDULES,
+          pages: props.pages,
+          recurrenceRules: [rule],
+        }),
+      { initialProps: { pages: basePages } }
+    );
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await flush(() => resolveReal(0));
+    expect(result.current.filter(isVirtual)).toHaveLength(1);
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    // Optimistic completion of the Mar 9 virtual: the page gains a
+    // completedOccurrences entry. The virtual must drop synchronously, with zero
+    // new expand round-trips (pages isn't in the effect's dep set).
+    rerender({
+      pages: [
+        makePage({
+          completedOccurrences: { "2026-03-09": "clone-1" },
+          scheduledStart: "2026-03-02T09:00:00",
+        }),
+      ],
+    });
+
+    expect(result.current.filter(isVirtual)).toHaveLength(0);
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });

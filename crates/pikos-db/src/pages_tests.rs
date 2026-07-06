@@ -1939,12 +1939,24 @@ async fn today_view_carries_schedule_locked() {
 /// weekly-Monday rule from 2026-06-01 (so 06-01, 06-08, 06-15… are occurrences and
 /// e.g. 06-03 is not, which the occurrence-validation guard rejects).
 async fn synced_recurring_series(pool: &sqlx::SqlitePool) {
+    synced_recurring_series_with(pool, "FREQ=WEEKLY", "2026-06-01T09:00:00", "Europe/London").await;
+}
+
+/// Active synced series "head" with a caller-chosen rule/start/zone, for the
+/// occurrence-validation cases that exercise non-weekly rules and off-source-zone
+/// keys.
+async fn synced_recurring_series_with(
+    pool: &sqlx::SqlitePool,
+    rrule: &str,
+    start: &str,
+    timezone: &str,
+) {
     insert_test_page(
         pool,
         TestPage {
-            scheduled_start: Some("2026-06-01T09:00:00"),
-            scheduled_end: Some("2026-06-01T09:30:00"),
-            ..TestPage::new("head", "Weekly 1:1")
+            scheduled_start: Some(start),
+            scheduled_end: None,
+            ..TestPage::new("head", "Synced series")
         },
     )
     .await
@@ -1953,11 +1965,11 @@ async fn synced_recurring_series(pool: &sqlx::SqlitePool) {
         pool,
         crate::NewRecurrenceRule {
             page_id: "head".into(),
-            rrule: "FREQ=WEEKLY".into(),
+            rrule: rrule.into(),
             rrule_exdates: vec![],
-            scheduled_start: "2026-06-01T09:00:00".into(),
-            scheduled_end: Some("2026-06-01T09:30:00".into()),
-            timezone: "Europe/London".into(),
+            scheduled_start: start.into(),
+            scheduled_end: None,
+            timezone: timezone.into(),
         },
     )
     .await
@@ -2091,6 +2103,53 @@ async fn synced_completion_rejects_an_occurrence_not_in_the_rule() {
             .await
             .unwrap();
     assert_eq!(set_count, 0, "no phantom completed-set entry written");
+}
+
+#[tokio::test]
+async fn synced_completion_validates_a_monthly_bysetpos_occurrence() {
+    // The validity guard is tested weekly-only elsewhere; BYSETPOS enumeration is a
+    // distinct engine path. Rule = last weekday of the month. 2026-06-30 (Tue) is the
+    // June occurrence; its neighbour 2026-06-29 (Mon) is a weekday but NOT the last —
+    // it must be rejected as a phantom key.
+    let pool = test_pool().await;
+    synced_recurring_series_with(
+        &pool,
+        "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
+        "2026-06-30T09:00:00",
+        "America/Los_Angeles",
+    )
+    .await;
+
+    let ok = complete_recurring_page_impl(&pool, synced_complete("2026-06-30", "2026-06-30T09:00:00"))
+        .await;
+    assert!(ok.is_ok(), "last-weekday occurrence accepted");
+
+    let err = complete_recurring_page_impl(&pool, synced_complete("2026-06-29", "2026-06-29T09:00:00"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, AppError::Conflict(_)), "the non-last weekday neighbour rejected");
+}
+
+#[tokio::test]
+async fn synced_completion_keys_a_2330_occurrence_by_source_zone_date() {
+    // A 23:30 source-zone occurrence renders on the NEXT calendar day for an eastward
+    // viewer. The completed_set key must be the source-zone wall-clock date — validity
+    // enumerates raw wall-clock, so keying on the viewer-shifted day would be rejected.
+    let pool = test_pool().await;
+    synced_recurring_series_with(&pool, "FREQ=WEEKLY", "2026-06-01T23:30:00", "America/Los_Angeles")
+        .await;
+
+    let ok = complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T23:30:00"))
+        .await;
+    assert!(ok.is_ok(), "source-zone Monday 23:30 occurrence accepted");
+
+    let err = complete_recurring_page_impl(&pool, synced_complete("2026-06-02", "2026-06-02T01:00:00"))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, AppError::Conflict(_)),
+        "the viewer-zone-shifted next day is not an occurrence"
+    );
 }
 
 #[tokio::test]

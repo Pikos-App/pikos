@@ -58,6 +58,10 @@ impl Scripted {
         self.bootstrap.borrow_mut().push_back(Ok(Some(t)));
         self
     }
+    fn with_bootstrap_err(self) -> Self {
+        self.bootstrap.borrow_mut().push_back(Err(AppError::Internal("bootstrap down".into())));
+        self
+    }
     fn with_ctag(self, c: Option<&str>) -> Self {
         self.ctag.borrow_mut().push_back(Ok(c.map(String::from)));
         self
@@ -406,6 +410,36 @@ async fn reconnect_needed_on_invalid() {
     assert_eq!(run(&pool, &provider).await, SyncOutcome::ReconnectNeeded);
 }
 
+/// A reconnect-needed poll must not touch the stored cursor — the next sync after
+/// the user re-auths resumes incrementally instead of a full re-enumerate.
+#[tokio::test]
+async fn reconnect_needed_preserves_the_cursor() {
+    let pool = test_pool().await;
+    seed(&pool, Some("t-keep")).await;
+
+    let provider = Scripted::default().with_sync(Err(AppError::Invalid("creds".into())));
+    assert_eq!(run(&pool, &provider).await, SyncOutcome::ReconnectNeeded);
+    assert_eq!(stored_token(&pool).await.as_deref(), Some("t-keep"), "cursor preserved");
+}
+
+/// A full backfill (no delta token) bootstraps the incremental cursor afterward. If
+/// that bootstrap REPORT fails, the sync still succeeds with the events committed —
+/// the cursor just stays null, so the next poll re-enumerates. Best-effort, never wrong.
+#[tokio::test]
+async fn post_backfill_bootstrap_token_failure_leaves_cursor_null() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+
+    let provider = Scripted::default()
+        .with_sync(Ok(delta(vec![event("/e1.ics", "u1", "v1", "Lunch")], None)))
+        .with_bootstrap_err();
+
+    let outcome = run(&pool, &provider).await;
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    assert_eq!(page_count(&pool).await, 1, "the backfill still committed");
+    assert_eq!(stored_token(&pool).await, None, "failed bootstrap → cursor null → re-enumerate next poll");
+}
+
 /// An occurrence delta with no stored master triggers a targeted `fetch_event`;
 /// the master is applied first, then the override lands.
 #[tokio::test]
@@ -612,6 +646,65 @@ async fn backfill_throughput() {
         SyncOutcome::Synced { full_resync: false, changed: true }
     );
     assert_eq!(page_count(&pool).await, N as i64);
+}
+
+/// The >200 tail sub-delta the only other large test skips. `backfill_throughput`
+/// has 0 occurrences/removals so it hits `reconcile_batched`'s early return; a real
+/// poll can deliver >200 mixed changes. Here the tail's orphan occurrence's master
+/// sits in an EARLIER event batch (committed to the DB before the tail runs), so it
+/// resolves from storage — no cross-delta missing-master fetch — and a removal in
+/// the same tail detaches its owned page.
+#[tokio::test]
+async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_removal() {
+    let pool = test_pool().await;
+    seed(&pool, None).await;
+
+    // A pre-existing owned page the big delta removes → detach, not hard-delete.
+    let provider =
+        Scripted::default().with_sync(Ok(delta(vec![event("/rm.ics", "u-rm", "v1", "Old")], Some("t1"))));
+    run(&pool, &provider).await;
+    sqlx::query("UPDATE page_sync SET user_modified = 1 WHERE ical_uid = 'u-rm'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // 251 upserts (> RECONCILE_BATCH) = 249 plain events + the recurring master the
+    // tail's occurrence references + that orphan occurrence; plus one removal. The
+    // master lands in the second event batch, before the occurrence+removal tail.
+    const N: usize = 249;
+    let mut upserts: Vec<UpsertItem> = (0..N)
+        .map(|i| event(&format!("/e{i}.ics"), &format!("u{i}"), "v1", "Event"))
+        .collect();
+    upserts.push(UpsertItem::Event(master("/series.ics", "u-series")));
+    upserts.push(orphan_occurrence("u-series", "series-ref-1"));
+
+    // A scripted fetch that MUST go unconsumed: consuming it would mean the tail
+    // couldn't see the just-committed master and fell back to a targeted re-fetch.
+    let provider = Scripted::default()
+        .with_sync(Ok(SyncDelta {
+            upserts,
+            removals: vec![Removal { external_id: "/rm.ics".into() }],
+            next_token: Some(SyncToken("t2".into())),
+            ..Default::default()
+        }))
+        .with_fetch(Ok(master("/UNEXPECTED.ics", "u-series")));
+
+    let outcome = run(&pool, &provider).await;
+    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+
+    assert_eq!(provider.fetch.borrow().len(), 1, "no missing-master fetch fired");
+    assert_eq!(
+        override_count(&pool, "2026-06-21T09:00:00").await,
+        1,
+        "override resolved against the in-delta master"
+    );
+    assert_eq!(
+        sync_state_by_uid(&pool, "u-rm").await.as_deref(),
+        Some("detached"),
+        "owned page removed in the tail detached, not deleted",
+    );
+    // 249 plain + 1 master + 1 detached-but-kept owned page.
+    assert_eq!(page_count(&pool).await, N as i64 + 2);
 }
 
 /// A large backfill commits in batches, so a user edit issued mid-ingest slips

@@ -249,6 +249,71 @@ async fn completed_occurrence_is_silent() {
 }
 
 #[tokio::test]
+async fn skipped_occurrence_is_silent() {
+    // The skip-set arm of the exclusion union (only the completed arm was pinned).
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
+    add_reminder(&pool, "head", 30).await;
+    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES ('head', '2026-05-25')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let now = local("2026-05-25T08:30:00");
+
+    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+        .await
+        .unwrap();
+    assert!(due.is_empty(), "a skipped occurrence must not fire a reminder");
+}
+
+#[tokio::test]
+async fn legacy_rrule_exdate_occurrence_is_silent() {
+    // The provider-EXDATE arm (stored on the rule row as JSON), distinct from the
+    // completed/skip/override sets.
+    let pool = test_pool().await;
+    let rule_id = seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
+    add_reminder(&pool, "head", 30).await;
+    sqlx::query("UPDATE page_recurrence_rules SET rrule_exdates = '[\"2026-05-25\"]' WHERE id = ?")
+        .bind(&rule_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let now = local("2026-05-25T08:30:00");
+
+    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+        .await
+        .unwrap();
+    assert!(due.is_empty(), "an rrule_exdate occurrence must not fire a reminder");
+}
+
+#[tokio::test]
+async fn materialized_override_original_date_is_excluded_from_enumeration() {
+    // A moved/edited occurrence lives as a page_schedules override that
+    // `due_synced_override_reminders` fires at its own instant. The enumeration must
+    // exclude the override's original_date, or the occurrence double-fires
+    // (enumeration + override). Asserts the partition from the enumeration side.
+    let pool = test_pool().await;
+    let rule_id = seed_series(&pool, "head", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
+    add_reminder(&pool, "head", 30).await;
+    sqlx::query(
+        "INSERT INTO page_schedules
+         (id, page_id, scheduled_start, rule_id, original_date, status, created_at)
+         VALUES ('ov', 'head', '2026-05-25T15:00:00', ?, '2026-05-25T09:00:00', 'not_started', ?)",
+    )
+    .bind(&rule_id)
+    .bind(now_iso())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let now = local("2026-05-25T08:30:00");
+
+    let due = occurrences_with_open_reminder_window(&pool, now, now.and_utc(), 15, 60)
+        .await
+        .unwrap();
+    assert!(due.is_empty(), "the overridden occurrence must not fire via enumeration");
+}
+
+#[tokio::test]
 async fn synced_series_fires_at_the_absolute_instant_seeking_from_a_far_base() {
     let pool = test_pool().await;
     // Base six years before "now" — enumeration must seek to now, not scan from
@@ -298,6 +363,51 @@ async fn synced_reminder_lead_straddling_a_spring_forward_still_fires_once() {
     assert_eq!(due.len(), 1, "the boundary occurrence must fire exactly once");
     assert_eq!(due[0].scheduled_start, "2026-03-08T03:30:00");
     assert_eq!(due[0].minutes_before, 60);
+}
+
+#[tokio::test]
+async fn synced_reminder_in_the_spring_forward_gap_is_accepted_dropped() {
+    // A synced occurrence whose wall-clock lands IN the spring-forward gap (a
+    // nonexistent local time) has no absolute instant, so its reminder is
+    // accepted-dropped rather than fired at an invented time — a once-a-year miss on
+    // a reminder, not the event. The primitive is pinned by
+    // `synced_fire_instant_spring_forward_gap_never_fires`; this pins the enumeration
+    // level and that the series stays live the next day.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T02:30:00", None).await;
+    insert_test_page_sync(&pool, "head", "active").await.unwrap();
+    sqlx::query("UPDATE page_recurrence_rules SET timezone = 'America/New_York' WHERE page_id = 'head'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    add_reminder(&pool, "head", 0).await;
+
+    // 2026-03-08 02:30 NY doesn't exist (02:00 EST → 03:00 EDT). now_utc = 06:30Z =
+    // 01:30 EST, so the gap occurrence is enumerated in-window yet resolves to no
+    // instant → no fire.
+    let gap_tick = occurrences_with_open_reminder_window(
+        &pool,
+        local("2026-03-08T01:30:00"),
+        utc("2026-03-08T06:30:00Z"),
+        15,
+        60,
+    )
+    .await
+    .unwrap();
+    assert!(gap_tick.is_empty(), "the gap occurrence has no instant → accepted drop");
+
+    // The next day's 02:30 EDT (UTC-4) = 06:30Z fires normally — only the gap drops.
+    let next_day = occurrences_with_open_reminder_window(
+        &pool,
+        local("2026-03-09T02:30:00"),
+        utc("2026-03-09T06:30:00Z"),
+        15,
+        60,
+    )
+    .await
+    .unwrap();
+    assert_eq!(next_day.len(), 1, "the series stays live the next day");
+    assert_eq!(next_day[0].scheduled_start, "2026-03-09T02:30:00");
 }
 
 #[tokio::test]

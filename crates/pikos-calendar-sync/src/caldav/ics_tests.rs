@@ -194,6 +194,48 @@ END:VEVENT\r\n";
     assert_eq!(ov.original_date, "2026-06-08T09:00:00");
 }
 
+/// A `RECURRENCE-ID` carried as a NUMERIC UTC offset (`+0530`/`-0800`, iCloud /
+/// Fastmail exports) must resolve with the correct sign and normalize to the
+/// series' source-zone wall-clock — `convert_to_zone`'s offset arithmetic is
+/// otherwise only exercised via `Z` (offset 0) and named TZIDs.
+#[test]
+fn numeric_utc_offset_recurrence_id_normalizes_to_source_zone() {
+    // Both overrides resolve to 13:00Z = 09:00 EDT (the series basis): +0530 from
+    // 18:30 local, -0800 from 05:00 local. A sign flip would shift either off-day.
+    let body = "BEGIN:VEVENT\r\n\
+UID:s\r\n\
+DTSTART;TZID=America/New_York:20260601T090000\r\n\
+DTEND;TZID=America/New_York:20260601T093000\r\n\
+RRULE:FREQ=WEEKLY;BYDAY=MO\r\n\
+SUMMARY:Standup\r\n\
+END:VEVENT\r\n\
+BEGIN:VEVENT\r\n\
+UID:s\r\n\
+RECURRENCE-ID:20260608T183000+0530\r\n\
+DTSTART;TZID=America/New_York:20260608T110000\r\n\
+DTEND;TZID=America/New_York:20260608T113000\r\n\
+SUMMARY:moved (+0530)\r\n\
+END:VEVENT\r\n\
+BEGIN:VEVENT\r\n\
+UID:s\r\n\
+RECURRENCE-ID:20260615T050000-0800\r\n\
+DTSTART;TZID=America/New_York:20260615T110000\r\n\
+DTEND;TZID=America/New_York:20260615T113000\r\n\
+SUMMARY:moved (-0800)\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/n.ics", Some("v1"), &ics(body)).unwrap();
+    let mut dates: Vec<&str> = ev
+        .recurrence
+        .as_ref()
+        .unwrap()
+        .overrides
+        .iter()
+        .map(|o| o.original_date.as_str())
+        .collect();
+    dates.sort_unstable();
+    assert_eq!(dates, vec!["2026-06-08T09:00:00", "2026-06-15T09:00:00"]);
+}
+
 // ─── cross-zone degradation (pins the current silent fallbacks) ─────────────────
 
 /// A non-IANA `TZID` with no `VTIMEZONE` to resolve it is genuinely unresolvable,
@@ -234,6 +276,65 @@ END:VEVENT\r\n";
     assert_eq!(ev.recurrence.unwrap().exdates, vec!["2026-03-08T02:30:00"]);
 }
 
+/// An override whose `RECURRENCE-ID` is in a DIFFERENT zone than its master must
+/// still normalize its `original_date` to the master's source zone, or it won't
+/// string-match the expansion (double-render / orphan).
+#[test]
+fn override_recurrence_id_in_a_foreign_tzid_normalizes_to_the_master_zone() {
+    // Master weekly Mon 09:00 NY. Override RECURRENCE-ID 06:00 LA = 09:00 NY — the
+    // Jun 8 occurrence. The override's own moved DTSTART stays in its LA basis.
+    let body = "BEGIN:VEVENT\r\n\
+UID:s\r\n\
+DTSTART;TZID=America/New_York:20260601T090000\r\n\
+DTEND;TZID=America/New_York:20260601T093000\r\n\
+RRULE:FREQ=WEEKLY;BYDAY=MO\r\n\
+SUMMARY:Standup\r\n\
+END:VEVENT\r\n\
+BEGIN:VEVENT\r\n\
+UID:s\r\n\
+RECURRENCE-ID;TZID=America/Los_Angeles:20260608T060000\r\n\
+DTSTART;TZID=America/Los_Angeles:20260608T080000\r\n\
+DTEND;TZID=America/Los_Angeles:20260608T083000\r\n\
+SUMMARY:Standup (moved)\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/s.ics", Some("v1"), &ics(body)).unwrap();
+    let ov = &ev.recurrence.as_ref().unwrap().overrides[0];
+    assert_eq!(ov.original_date, "2026-06-08T09:00:00", "RECURRENCE-ID normalizes to the master zone");
+}
+
+/// iCloud / Fastmail split exclusions across multiple `EXDATE` lines rather than one
+/// comma-joined line. All of them must land in the series' exdate set.
+#[test]
+fn multiple_exdate_lines_all_land_in_the_set() {
+    let body = "BEGIN:VEVENT\r\n\
+UID:s\r\n\
+DTSTART;TZID=America/New_York:20260601T090000\r\n\
+DTEND;TZID=America/New_York:20260601T093000\r\n\
+RRULE:FREQ=WEEKLY;BYDAY=MO\r\n\
+EXDATE;TZID=America/New_York:20260608T090000\r\n\
+EXDATE;TZID=America/New_York:20260615T090000\r\n\
+SUMMARY:Standup\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/s.ics", Some("v1"), &ics(body)).unwrap();
+    let mut exdates = ev.recurrence.unwrap().exdates;
+    exdates.sort();
+    assert_eq!(exdates, vec!["2026-06-08T09:00:00", "2026-06-15T09:00:00"]);
+}
+
+/// A VEVENT with no `UID` doesn't panic — `ical_uid` degrades to empty (per-calendar
+/// dedup still keys on the href/external_id). Some exporters omit it on one-offs.
+#[test]
+fn vevent_without_uid_yields_empty_ical_uid() {
+    let body = "BEGIN:VEVENT\r\n\
+DTSTART;TZID=America/New_York:20260615T090000\r\n\
+DTEND;TZID=America/New_York:20260615T100000\r\n\
+SUMMARY:No UID\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/no-uid.ics", Some("v1"), &ics(body)).unwrap();
+    assert_eq!(ev.core.ical_uid, "");
+    assert_eq!(ev.core.external_id, "/no-uid.ics", "identity falls back to the href");
+}
+
 // ─── malformed / non-VEVENT ─────────────────────────────────────────────────────
 
 #[test]
@@ -247,6 +348,28 @@ fn resource_without_vevent_errs() {
 #[test]
 fn empty_body_errs() {
     assert!(parse_resource("/e.ics", Some("v1"), "not a calendar at all").is_err());
+}
+
+/// Two VEVENTs share a UID and neither carries a RECURRENCE-ID (malformed). Pins the
+/// deterministic first-wins pick; the why lives at `parse_resource`.
+#[test]
+fn multiple_masters_sharing_a_uid_keep_the_first() {
+    let body = "BEGIN:VEVENT\r\n\
+UID:dup\r\n\
+DTSTART;TZID=America/New_York:20260601T090000\r\n\
+DTEND;TZID=America/New_York:20260601T100000\r\n\
+SUMMARY:First\r\n\
+END:VEVENT\r\n\
+BEGIN:VEVENT\r\n\
+UID:dup\r\n\
+DTSTART;TZID=America/New_York:20260602T090000\r\n\
+DTEND;TZID=America/New_York:20260602T100000\r\n\
+SUMMARY:Second\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/dup.ics", Some("v1"), &ics(body)).unwrap();
+    assert_eq!(ev.core.title, "First", "the first VEVENT wins");
+    assert_eq!(ev.schedule.start, "2026-06-01T09:00:00");
+    assert!(ev.recurrence.is_none(), "neither VEVENT carries an RRULE");
 }
 
 // ─── EXDATE normalization ─────────────────────────────────────────────────────────

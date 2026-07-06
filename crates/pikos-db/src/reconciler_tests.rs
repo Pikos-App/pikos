@@ -529,6 +529,87 @@ async fn occurrence_modify_against_stored_rule() {
     assert_eq!(ov.unwrap().0, "2026-06-08T14:00:00");
 }
 
+// ─── single ⇄ recurring transitions ─────────────────────────────────────────────
+
+async fn page_scheduled_start(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String> {
+    sqlx::query_scalar("SELECT scheduled_start FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// Standalone (non-rule) schedule rows for a page — the shape a single event
+/// leaves behind, which the transition to recurring must clear.
+async fn standalone_schedule_count(pool: &sqlx::SqlitePool, page_id: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM page_schedules WHERE page_id = ? AND rule_id IS NULL")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+fn single_1x1(etag: &str) -> UpsertItem {
+    single(
+        core("/e.ics", "uid-1", etag, "1:1"),
+        timed("2026-06-01T09:00:00", Some("2026-06-01T09:30:00"), "America/New_York"),
+    )
+}
+
+fn recurring_1x1(etag: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core("/e.ics", "uid-1", etag, "1:1"),
+        schedule: timed("2026-06-01T09:00:00", Some("2026-06-01T09:30:00"), "America/New_York"),
+        recurrence: Some(Recurrence {
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            exdates: vec![],
+            overrides: vec![],
+        }),
+    })
+}
+
+#[tokio::test]
+async fn single_synced_page_gaining_an_rrule_transitions_cleanly() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![single_1x1("v1")])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(rule_count(&pool).await, 0);
+    assert_eq!(standalone_schedule_count(&pool, &page_id).await, 1, "single leaves a standalone row");
+
+    reconcile(&pool, &ctx(), &delta(vec![recurring_1x1("v2")])).await.unwrap();
+
+    assert_eq!(page_count(&pool).await, 1, "no duplicate page");
+    assert_eq!(rule_count(&pool).await, 1, "exactly one rule");
+    assert_eq!(
+        standalone_schedule_count(&pool, &page_id).await,
+        0,
+        "the old standalone row is gone, not left beside the rule"
+    );
+    assert_eq!(
+        page_scheduled_start(&pool, &page_id).await.as_deref(),
+        Some("2026-06-01T09:00:00"),
+        "head recomputes to the oldest open occurrence"
+    );
+    assert_eq!(page_status(&pool, &page_id).await.0, "not_started");
+}
+
+#[tokio::test]
+async fn completed_single_gaining_an_rrule_unmarks_done() {
+    // A completed single that turns recurring upstream must not stay stuck `done`
+    // (invisible + reminder-excluded). The recompute un-marks it once the new series
+    // yields an open occurrence.
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![single_1x1("v1")])).await.unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    force_terminal_done(&pool, &page_id).await;
+
+    reconcile(&pool, &ctx(), &delta(vec![recurring_1x1("v2")])).await.unwrap();
+
+    let (status, completed_at) = page_status(&pool, &page_id).await;
+    assert_eq!(status, "not_started", "the completed single is un-done once it yields occurrences");
+    assert!(completed_at.is_none());
+}
+
 #[tokio::test]
 async fn occurrence_cancel_adds_exdate() {
     let pool = setup().await;

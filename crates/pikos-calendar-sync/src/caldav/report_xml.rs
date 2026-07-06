@@ -279,4 +279,28 @@ END:VCALENDAR</C:calendar-data>
         assert_eq!(full.etag.as_deref(), Some("\"etag-2\""));
         assert_eq!(full.calendar_data.as_deref(), Some("BEGIN:VCALENDAR\nEND:VCALENDAR"));
     }
+
+    /// Some servers wrap the ICS body in a CDATA section. The `Event::CData` arm
+    /// must capture it identically to plain text, or the resource parses to an
+    /// empty body and its event silently drops.
+    #[test]
+    fn calendar_data_in_a_cdata_section_is_captured() {
+        let xml = r#"<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <response>
+    <href>/cal/cdata.ics</href>
+    <propstat>
+      <prop>
+        <getetag>"etag-c"</getetag>
+        <C:calendar-data><![CDATA[BEGIN:VCALENDAR
+END:VCALENDAR]]></C:calendar-data>
+      </prop>
+      <status>HTTP/1.1 200 OK</status>
+    </propstat>
+  </response>
+</multistatus>"#;
+
+        let result = parse_report(xml).unwrap();
+        let entry = &result.entries[0];
+        assert_eq!(entry.calendar_data.as_deref(), Some("BEGIN:VCALENDAR\nEND:VCALENDAR"));
+    }
 }

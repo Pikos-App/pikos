@@ -55,6 +55,16 @@ pub(crate) fn parse_resource(
         .or_else(|| events.first().copied())
         .ok_or_else(|| CaldavError::Protocol("resource has no VEVENT".into()))?;
 
+    // A UID names one recurrence set, so a well-formed resource has exactly one
+    // master (VEVENT without RECURRENCE-ID). Two+ is malformed; one resource is one
+    // page identity, so the extras can't become their own pages — keep the first
+    // (document order, chosen above) and log the drop rather than lose it silently.
+    if events.iter().filter(|c| c.property(&ICalendarProperty::RecurrenceId).is_none()).count() > 1 {
+        log::warn!(
+            "caldav ics: resource {href} carries multiple VEVENTs without RECURRENCE-ID (malformed shared UID); keeping the first, dropping the rest"
+        );
+    }
+
     let source = source_zone(master, &resolver);
     let schedule = schedule_of(master, &resolver, source.as_ref())?;
     let core = core_of(master, href, etag);

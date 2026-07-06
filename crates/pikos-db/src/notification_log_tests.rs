@@ -254,6 +254,100 @@ async fn zoned_synced_oneoff_is_excluded_from_native_path() {
     );
 }
 
+// ─── due_synced_reminders (zoned one-off, absolute-instant path) ──────────────
+//
+// The counterpart to the native explicit path for a *zoned* synced one-off: it
+// resolves source-zone wall-clock + lead → the absolute UTC instant and fires in
+// the fixed 60-second window. Only explicit (user-added) reminders apply — a synced
+// one-off gets no default lead.
+
+// 09:00 America/New_York (EDT, UTC−4) − 10 min = 08:50 EDT = 12:50 UTC. Reuses the
+// override-section basis; defined locally so this section reads standalone.
+fn synced_oneoff_now() -> chrono::DateTime<chrono::Utc> {
+    naive("2026-05-25T12:50:00").and_utc()
+}
+
+async fn seed_synced_oneoff(pool: &sqlx::SqlitePool, page_id: &str, schedule_id: &str) {
+    insert_page(pool, page_id, "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule_tz(pool, schedule_id, page_id, "2026-05-25T09:00:00", "America/New_York").await;
+    crate::pool::insert_test_page_sync(pool, page_id, "active").await.unwrap();
+}
+
+#[tokio::test]
+async fn synced_oneoff_explicit_fires_at_the_absolute_instant() {
+    let pool = test_pool().await;
+    seed_synced_oneoff(&pool, "p1", "s1").await;
+    insert_reminder(&pool, "p1", 10).await;
+
+    let due = due_synced_reminders(&pool, synced_oneoff_now()).await.unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].schedule_id, "s1#10"); // schedule id + reminder lead
+    assert_eq!(due[0].minutes_before, 10);
+}
+
+#[tokio::test]
+async fn synced_oneoff_without_explicit_reminder_is_silent() {
+    // Explicit-only: a synced one-off gets no default reminder, so with no
+    // page_reminders row the INNER JOIN yields nothing.
+    let pool = test_pool().await;
+    seed_synced_oneoff(&pool, "p1", "s1").await;
+
+    assert!(due_synced_reminders(&pool, synced_oneoff_now()).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn synced_oneoff_excludes_all_day_done_and_already_fired() {
+    let pool = test_pool().await;
+    // All-day (date-only start, no 'T') → excluded by the LIKE '%T%' timed guard.
+    insert_page(&pool, "allday", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule_tz(&pool, "sa", "allday", "2026-05-25", "America/New_York").await;
+    crate::pool::insert_test_page_sync(&pool, "allday", "active").await.unwrap();
+    insert_reminder(&pool, "allday", 10).await;
+    // Done page.
+    seed_synced_oneoff(&pool, "done", "sd").await;
+    sqlx::query("UPDATE pages SET status = 'done' WHERE id = 'done'").execute(&pool).await.unwrap();
+    insert_reminder(&pool, "done", 10).await;
+    // Already fired this lead.
+    seed_synced_oneoff(&pool, "fired", "sf").await;
+    insert_reminder(&pool, "fired", 10).await;
+    log_reminder_fired(&pool, "fired", "sf#10", "2026-05-25T12:50:00").await.unwrap();
+
+    assert!(due_synced_reminders(&pool, synced_oneoff_now()).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn synced_oneoff_does_not_catch_up_a_past_instant() {
+    // Forward-only: an instant more than 60s in the past must not backfill, even
+    // though the coarse SQL ±15h prefilter still returns the row.
+    let pool = test_pool().await;
+    seed_synced_oneoff(&pool, "p1", "s1").await;
+    insert_reminder(&pool, "p1", 10).await;
+
+    let ten_min_late = naive("2026-05-25T13:00:00").and_utc(); // fire was 12:50
+    assert!(due_synced_reminders(&pool, ten_min_late).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn synced_oneoff_multi_lead_second_fires_in_a_later_tick() {
+    // Two explicit leads on one zoned one-off fire in two ticks; the second must
+    // still be due after the first fired — per-lead dedup, mirroring the native pin.
+    let pool = test_pool().await;
+    seed_synced_oneoff(&pool, "p1", "s1").await; // 09:00 EDT = 13:00 UTC
+    insert_reminder(&pool, "p1", 70).await; // fires 11:50 UTC
+    insert_reminder(&pool, "p1", 10).await; // fires 12:50 UTC
+
+    let tick_a = due_synced_reminders(&pool, naive("2026-05-25T11:50:00").and_utc()).await.unwrap();
+    assert_eq!(tick_a.len(), 1);
+    assert_eq!(tick_a[0].minutes_before, 70);
+    log_reminder_fired(&pool, &tick_a[0].page_id, &tick_a[0].schedule_id, "2026-05-25T11:50:00")
+        .await
+        .unwrap();
+
+    let tick_b = due_synced_reminders(&pool, synced_oneoff_now()).await.unwrap();
+    assert_eq!(tick_b.len(), 1, "second lead fires in its own tick");
+    assert_eq!(tick_b[0].minutes_before, 10);
+}
+
 // ─── due_default_reminders ───────────────────────────────────────────────────
 
 #[tokio::test]
@@ -804,6 +898,14 @@ fn synced_fire_instant_spring_forward_gap_never_fires() {
         synced_fire_instant("2026-03-08T02:30:00", "America/New_York", 0),
         None
     );
+}
+
+#[test]
+fn synced_fire_instant_is_none_on_bad_zone_or_timestamp() {
+    // The two guard branches: an unresolvable IANA zone and an unparseable
+    // wall-clock both yield None (the reminder is skipped, never fired at a guess).
+    assert_eq!(synced_fire_instant("2026-05-25T09:00:00", "Not/AZone", 0), None);
+    assert_eq!(synced_fire_instant("not-a-timestamp", "America/New_York", 0), None);
 }
 
 #[test]
