@@ -134,6 +134,39 @@ END:VEVENT\r\n";
     assert!(rec.overrides.is_empty());
 }
 
+// ─── malformed override doesn't sink the series ─────────────────────────────────
+
+/// A non-cancelled override VEVENT missing `DTSTART` must drop only that instance,
+/// not the whole resource. Regression for the `?`-propagation in `build_recurrence`
+/// that returned Err for the entire series (master + all valid overrides lost).
+#[test]
+fn override_missing_dtstart_skips_the_instance_not_the_series() {
+    let body = "BEGIN:VEVENT\r\n\
+UID:series-1\r\n\
+DTSTART;TZID=America/New_York:20260601T090000\r\n\
+DTEND;TZID=America/New_York:20260601T093000\r\n\
+RRULE:FREQ=WEEKLY;BYDAY=MO\r\n\
+SUMMARY:Standup\r\n\
+END:VEVENT\r\n\
+BEGIN:VEVENT\r\n\
+UID:series-1\r\n\
+RECURRENCE-ID;TZID=America/New_York:20260608T090000\r\n\
+SUMMARY:Standup (no start)\r\n\
+END:VEVENT\r\n\
+BEGIN:VEVENT\r\n\
+UID:series-1\r\n\
+RECURRENCE-ID;TZID=America/New_York:20260615T090000\r\n\
+DTSTART;TZID=America/New_York:20260615T110000\r\n\
+DTEND;TZID=America/New_York:20260615T113000\r\n\
+SUMMARY:Standup (moved)\r\n\
+END:VEVENT\r\n";
+    let ev = parse_resource("/s.ics", Some("v1"), &ics(body)).unwrap();
+    let rec = ev.recurrence.as_ref().expect("recurring");
+    // The master + the well-formed override survive; the DTSTART-less one is dropped.
+    assert_eq!(rec.overrides.len(), 1, "only the valid override is kept");
+    assert_eq!(rec.overrides[0].schedule.start, "2026-06-15T11:00:00");
+}
+
 // ─── RECURRENCE-ID in UTC ───────────────────────────────────────────────────────
 
 /// A `RECURRENCE-ID` carried in UTC against a zoned series must normalize to the

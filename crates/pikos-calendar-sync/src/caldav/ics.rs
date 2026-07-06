@@ -221,10 +221,12 @@ fn build_recurrence(
             exdates.push(original_date);
             continue;
         }
-        overrides.push(OccurrenceOverride {
-            original_date,
-            schedule: schedule_of(ov, resolver, source_zone(ov, resolver).as_ref().or(source))?,
-        });
+        // Drop only the bad instance on a malformed override (e.g. missing DTSTART) —
+        // one broken VEVENT must not sink the whole series via `?`-propagation.
+        match schedule_of(ov, resolver, source_zone(ov, resolver).as_ref().or(source)) {
+            Ok(schedule) => overrides.push(OccurrenceOverride { original_date, schedule }),
+            Err(e) => log::warn!("caldav ics: skipping malformed override in series: {e}"),
+        }
     }
 
     Ok(Recurrence { rrule, exdates, overrides })
