@@ -105,7 +105,7 @@ async fn explicit_reminder_due_in_window_is_returned() {
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
-    assert_eq!(due[0].schedule_id, "s1");
+    assert_eq!(due[0].schedule_id, "s1#10"); // schedule id + reminder lead
     assert_eq!(due[0].page_id, "p1");
     assert_eq!(due[0].title, "p1");
     assert_eq!(due[0].minutes_before, 10);
@@ -159,7 +159,7 @@ async fn explicit_reminder_excludes_done_and_deleted_and_already_fired() {
     insert_page(&pool, "fired", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "sf", "fired", "2026-05-25T09:10:00", "not_started").await;
     insert_reminder(&pool, "fired", 10).await;
-    log_reminder_fired(&pool, "fired", "sf", NOW_TS)
+    log_reminder_fired(&pool, "fired", "sf#10", NOW_TS)
         .await
         .unwrap();
 
@@ -167,6 +167,36 @@ async fn explicit_reminder_excludes_done_and_deleted_and_already_fired() {
         .await
         .unwrap()
         .is_empty());
+}
+
+#[tokio::test]
+async fn explicit_multi_lead_second_reminder_fires_in_a_later_tick() {
+    // Two reminder leads on one page (70 min + 10 min before) fire in two different
+    // ticks. The scheduler logs each fire keyed on the schedule row id; the second
+    // lead must still be due after the first has fired — the dedup is per-lead, not
+    // per-schedule-row. (Repro for the bare-`ps.id` dedup collision.)
+    let pool = test_pool().await;
+    insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
+    insert_reminder(&pool, "p1", 70).await; // fires 08:00
+    insert_reminder(&pool, "p1", 10).await; // fires 09:00
+
+    // Tick A around 08:00 → only the 70-min lead is due; the scheduler logs it.
+    let tick_a = due_explicit_reminders(&pool, "2026-05-25 07:59:00", "2026-05-25 08:00:00")
+        .await
+        .unwrap();
+    assert_eq!(tick_a.len(), 1);
+    assert_eq!(tick_a[0].minutes_before, 70);
+    log_reminder_fired(&pool, &tick_a[0].page_id, &tick_a[0].schedule_id, "2026-05-25 08:00:00")
+        .await
+        .unwrap();
+
+    // Tick B around 09:00 → the 10-min lead must still fire.
+    let tick_b = due_explicit_reminders(&pool, "2026-05-25 08:59:00", "2026-05-25 09:00:00")
+        .await
+        .unwrap();
+    assert_eq!(tick_b.len(), 1, "second reminder lead should fire in its own tick");
+    assert_eq!(tick_b[0].minutes_before, 10);
 }
 
 #[tokio::test]
@@ -200,7 +230,7 @@ async fn floating_synced_oneoff_explicit_reminder_fires_on_native_path() {
         .await
         .unwrap();
     assert_eq!(due.len(), 1, "floating synced one-off should fire on native path");
-    assert_eq!(due[0].schedule_id, "s1");
+    assert_eq!(due[0].schedule_id, "s1#10");
 }
 
 #[tokio::test]
@@ -586,7 +616,7 @@ async fn synced_override_fires_at_moved_absolute_instant_with_default_lead() {
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
-    assert_eq!(due[0].schedule_id, "ov");
+    assert_eq!(due[0].schedule_id, "ov#10"); // schedule id + default lead
     assert_eq!(due[0].minutes_before, 10);
 }
 
@@ -667,7 +697,7 @@ async fn already_fired_synced_override_is_silent() {
         "not_started",
     )
     .await;
-    log_reminder_fired(&pool, "rec", "ov", "2026-05-25T12:50:00").await.unwrap();
+    log_reminder_fired(&pool, "rec", "ov#10", "2026-05-25T12:50:00").await.unwrap();
 
     assert!(due_synced_override_reminders(&pool, override_now(), 10)
         .await
@@ -733,7 +763,7 @@ async fn synced_override_fires_only_the_in_window_sibling() {
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
-    assert_eq!(due[0].schedule_id, "ov_early");
+    assert_eq!(due[0].schedule_id, "ov_early#10");
 }
 
 // ─── prune ───────────────────────────────────────────────────────────────────

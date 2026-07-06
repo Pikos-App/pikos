@@ -32,8 +32,13 @@ pub async fn due_explicit_reminders(
     window_start: &str,
     now_ts: &str,
 ) -> Result<Vec<DueReminder>, sqlx::Error> {
+    // A page can carry several reminder leads; the dedup key is per-(schedule, lead),
+    // not per-schedule — otherwise the first lead to fire logs the schedule id and
+    // suppresses every other lead. Encode the lead into schedule_id (`<id>#<minutes>`),
+    // matching the recurring enumeration path's `page_id@start#lead` scheme; the
+    // scheduler logs this composite verbatim, so the NOT EXISTS below matches per-lead.
     sqlx::query_as(
-        "SELECT ps.id AS schedule_id, ps.page_id, p.title,
+        "SELECT ps.id || '#' || pr.minutes_before AS schedule_id, ps.page_id, p.title,
                 ps.scheduled_start, pr.minutes_before
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
@@ -58,7 +63,7 @@ pub async fn due_explicit_reminders(
            )
            AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
-             WHERE nl.schedule_id = ps.id
+             WHERE nl.schedule_id = ps.id || '#' || pr.minutes_before
                AND nl.type = 'reminder'
            )",
     )
@@ -172,7 +177,8 @@ pub async fn due_synced_reminders(
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
     let rows: Vec<SyncedReminderRow> = sqlx::query_as(
-        "SELECT ps.id AS schedule_id, ps.page_id, p.title,
+        // Per-lead dedup key (`<id>#<minutes>`) — see due_explicit_reminders.
+        "SELECT ps.id || '#' || pr.minutes_before AS schedule_id, ps.page_id, p.title,
                 ps.scheduled_start, pr.minutes_before, ps.timezone
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
@@ -190,7 +196,7 @@ pub async fn due_synced_reminders(
                BETWEEN ? AND ?
            AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
-             WHERE nl.schedule_id = ps.id AND nl.type = 'reminder'
+             WHERE nl.schedule_id = ps.id || '#' || pr.minutes_before AND nl.type = 'reminder'
            )",
     )
     .bind(&lo)
@@ -239,7 +245,8 @@ pub async fn due_synced_override_reminders(
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
     let rows: Vec<SyncedReminderRow> = sqlx::query_as(
-        "SELECT ps.id AS schedule_id, ps.page_id, p.title, ps.scheduled_start,
+        // Per-lead dedup key (`<id>#<minutes>`) — see due_explicit_reminders.
+        "SELECT ps.id || '#' || COALESCE(pr.minutes_before, ?1) AS schedule_id, ps.page_id, p.title, ps.scheduled_start,
                 COALESCE(pr.minutes_before, ?1) AS minutes_before, ps.timezone
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
@@ -267,7 +274,8 @@ pub async fn due_synced_override_reminders(
            )
            AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
-             WHERE nl.schedule_id = ps.id AND nl.type = 'reminder'
+             WHERE nl.schedule_id = ps.id || '#' || COALESCE(pr.minutes_before, ?1)
+               AND nl.type = 'reminder'
            )",
     )
     .bind(default_minutes)
