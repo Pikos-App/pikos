@@ -69,21 +69,56 @@ pub async fn insert_sync_account_impl(
     fetch_account(pool, &id).await
 }
 
-/// Remove the account and everything under it. `page_sync` / `sync_calendar`
-/// cascade (FK `ON DELETE CASCADE`); the caller (pikos-calendar-sync) tears down
-/// each enabled calendar's folder + pages and clears the keychain first.
-pub async fn delete_sync_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
-    sqlx::query("DELETE FROM sync_account WHERE id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
+/// Mark an account dormant (disconnected) rather than deleting it, so its calendars
+/// and detached `page_sync` rows survive for a later reconnect to re-link. Clears
+/// `reconnect_needed` — a dormant account isn't polled (its calendars are disabled),
+/// so the stale-credential flag no longer applies.
+pub async fn mark_account_disconnected_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
+    sqlx::query(
+        "UPDATE sync_account SET disconnected = 1, reconnect_needed = 0, updated_at = ? WHERE id = ?",
+    )
+    .bind(now_iso())
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Find a dormant account to reuse on reconnect, matched by the stable
+/// provider+display_name identity (`display_name` embeds `username · base_url`).
+pub async fn find_dormant_account_impl(
+    pool: &sqlx::SqlitePool,
+    provider: &str,
+    display_name: &str,
+) -> AppResult<Option<SyncAccount>> {
+    Ok(sqlx::query_as::<_, SyncAccount>(
+        "SELECT id, provider, display_name, auth_kind, created_at FROM sync_account
+         WHERE provider = ? AND display_name = ? AND disconnected = 1 LIMIT 1",
+    )
+    .bind(provider)
+    .bind(display_name)
+    .fetch_optional(pool)
+    .await?)
+}
+
+/// Clear the dormant flag when a reconnect reuses the account.
+pub async fn reactivate_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
+    sqlx::query(
+        "UPDATE sync_account SET disconnected = 0, reconnect_needed = 0, updated_at = ? WHERE id = ?",
+    )
+    .bind(now_iso())
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
 pub async fn get_sync_status_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<AccountWithCalendars>> {
+    // Dormant (disconnected) accounts are hidden — disconnect reads as removal in
+    // the panel even though the row survives for reconnect re-link.
     let accounts = sqlx::query_as::<_, SyncAccount>(
         "SELECT id, provider, display_name, auth_kind, created_at
-         FROM sync_account ORDER BY created_at ASC",
+         FROM sync_account WHERE disconnected = 0 ORDER BY created_at ASC",
     )
     .fetch_all(pool)
     .await?;

@@ -21,6 +21,7 @@ import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
 import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
+import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
 import { TagsPopover } from "@/shared/components/TagsPopover";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
@@ -30,6 +31,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
 
+import { CalendarDescriptionNotice } from "./CalendarDescriptionNotice";
 import { DateSchedulePopover } from "./DateSchedulePopover";
 
 function BylineSeparator() {
@@ -393,6 +395,8 @@ export function MetadataHeader({
   const titleLocked = page.scheduleLocked;
   const detached = page.syncState === "detached";
   const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "the calendar";
+  // Only a locked (active-sync) page ever carries a withheld upstream description.
+  const showDescriptionNotice = titleLocked && !!page.pendingDescription;
 
   return (
     <div className="shrink-0">
@@ -405,7 +409,8 @@ export function MetadataHeader({
             </span>
           </div>
         )}
-        <div className={detached ? "pt-2 pb-1" : "pt-12 pb-1"}>
+        {showDescriptionNotice && <CalendarDescriptionNotice text={page.pendingDescription!} />}
+        <div className={detached || showDescriptionNotice ? "pt-2 pb-1" : "pt-12 pb-1"}>
           {titleFocused && !titleLocked ? (
             <textarea
               aria-label="Page title"
@@ -521,6 +526,14 @@ export function MetadataHeader({
           page={page}
           saveError={hasError ? (errorMessage ?? "Save failed") : null}
         />
+
+        {titleLocked && (
+          <SyncedEventDetails
+            attendees={page.mirrorAttendees}
+            className="pb-4"
+            location={page.mirrorLocation}
+          />
+        )}
       </div>
     </div>
   );

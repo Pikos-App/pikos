@@ -39,6 +39,59 @@ async fn status_lists_accounts_with_their_calendars() {
 }
 
 #[tokio::test]
+async fn dormant_account_is_hidden_and_reused_by_provider_and_name() {
+    let pool = test_pool().await;
+    let acc = insert_sync_account_impl(&pool, "caldav", "you · https://x", "basic")
+        .await
+        .unwrap()
+        .id;
+    let other = insert_sync_account_impl(&pool, "caldav", "someone · https://y", "basic")
+        .await
+        .unwrap()
+        .id;
+
+    // A live account never matches the dormant-reuse lookup.
+    assert!(
+        find_dormant_account_impl(&pool, "caldav", "you · https://x")
+            .await
+            .unwrap()
+            .is_none(),
+        "an active account is not a reuse target"
+    );
+
+    mark_account_disconnected_impl(&pool, &acc).await.unwrap();
+
+    // Hidden from the panel, but still matchable for reconnect — by exact
+    // provider+display_name only (the other account and a wrong name miss).
+    let visible = get_sync_status_impl(&pool).await.unwrap();
+    assert_eq!(visible.len(), 1, "dormant account hidden; the live one remains");
+    assert_eq!(visible[0].account.id, other);
+    assert!(find_dormant_account_impl(&pool, "caldav", "nope")
+        .await
+        .unwrap()
+        .is_none());
+    let matched = find_dormant_account_impl(&pool, "caldav", "you · https://x")
+        .await
+        .unwrap()
+        .expect("dormant account found by provider+display_name");
+    assert_eq!(matched.id, acc);
+
+    reactivate_account_impl(&pool, &acc).await.unwrap();
+    assert_eq!(
+        get_sync_status_impl(&pool).await.unwrap().len(),
+        2,
+        "reactivated account reappears in the panel"
+    );
+    assert!(
+        find_dormant_account_impl(&pool, "caldav", "you · https://x")
+            .await
+            .unwrap()
+            .is_none(),
+        "reactivated account is no longer a reuse target"
+    );
+}
+
+#[tokio::test]
 async fn upsert_calendar_is_idempotent_on_keys() {
     let pool = test_pool().await;
     let acc = account(&pool).await;
@@ -175,22 +228,4 @@ async fn re_enable_reflags_the_same_folder() {
         .await
         .unwrap();
     assert_eq!(folder_count, 1, "no duplicate folder");
-}
-
-#[tokio::test]
-async fn delete_account_cascades_calendars() {
-    let pool = test_pool().await;
-    let acc = account(&pool).await;
-    upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work", None)
-        .await
-        .unwrap();
-
-    delete_sync_account_impl(&pool, &acc).await.unwrap();
-
-    assert!(get_sync_status_impl(&pool).await.unwrap().is_empty());
-    let cals: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_calendar")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(cals, 0, "FK cascade removed the calendars");
 }

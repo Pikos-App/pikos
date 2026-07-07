@@ -8,6 +8,7 @@ import { FolderChip } from "@/shared/components/FolderChip";
 import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
 import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
+import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { usePages } from "@/shared/context/PagesContext";
@@ -266,6 +267,10 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
             variant="byline"
           />
         </div>
+
+        {locked && (
+          <SyncedEventDetails attendees={page.mirrorAttendees} location={page.mirrorLocation} />
+        )}
       </div>
 
       <div className="flex items-center justify-between border-t border-border/40 pt-1">

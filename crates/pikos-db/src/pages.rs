@@ -41,6 +41,9 @@ struct PageRow {
     timezone: Option<String>,
     completed_occurrences: Option<String>,
     skipped_occurrences: Option<String>,
+    mirror_location: Option<String>,
+    mirror_attendees: Option<String>,
+    pending_description: Option<String>,
 }
 
 // ─── Output type (camelCase for TypeScript) ───────────────────────────────────
@@ -84,6 +87,17 @@ pub struct Page {
     /// Dismissed occurrence dates for a recurring series, from the `skip_set` table.
     /// Excluded from expansion (both native + synced). `None` when nothing skipped.
     pub skipped_occurrences: Option<Vec<String>>,
+    /// Calendar-owned location, a read-only mirror field. `None` for native pages
+    /// or a synced event with no location; the frontend renders it only while the
+    /// page is locked (active sync).
+    pub mirror_location: Option<String>,
+    /// Calendar-owned attendee list (emails), a read-only mirror field. `None` when
+    /// the event has no attendees or the page is native.
+    pub mirror_attendees: Option<Vec<String>>,
+    /// Upstream description change withheld because the user already edited the
+    /// body (see `page_sync.pending_description`); drives the editor's passive
+    /// "calendar description changed" notice. `None` = nothing pending.
+    pub pending_description: Option<String>,
 }
 
 impl From<PageRow> for Page {
@@ -118,8 +132,17 @@ impl From<PageRow> for Page {
             timezone: row.timezone,
             completed_occurrences: parse_completed_occurrences(row.completed_occurrences),
             skipped_occurrences: parse_skipped_occurrences(row.skipped_occurrences),
+            mirror_location: row.mirror_location,
+            mirror_attendees: parse_attendees(row.mirror_attendees),
+            pending_description: row.pending_description,
         }
     }
+}
+
+/// Parse the `mirror_attendees` JSON array the reconciler stores; both `None`
+/// (no attendees) and malformed JSON yield `None`.
+fn parse_attendees(raw: Option<String>) -> Option<Vec<String>> {
+    raw.as_deref().and_then(|s| serde_json::from_str(s).ok())
 }
 
 /// Parse the `completed_occurrences` JSON object built by `json_group_object` over
@@ -161,6 +184,9 @@ struct PageSummaryRow {
     timezone: Option<String>,
     completed_occurrences: Option<String>,
     skipped_occurrences: Option<String>,
+    mirror_location: Option<String>,
+    mirror_attendees: Option<String>,
+    pending_description: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -192,6 +218,12 @@ pub struct PageSummary {
     pub completed_occurrences: Option<std::collections::HashMap<String, String>>,
     /// See `Page::skipped_occurrences`.
     pub skipped_occurrences: Option<Vec<String>>,
+    /// See `Page::mirror_location`.
+    pub mirror_location: Option<String>,
+    /// See `Page::mirror_attendees`.
+    pub mirror_attendees: Option<Vec<String>>,
+    /// See `Page::pending_description`.
+    pub pending_description: Option<String>,
 }
 
 impl From<PageSummaryRow> for PageSummary {
@@ -224,6 +256,9 @@ impl From<PageSummaryRow> for PageSummary {
             timezone: row.timezone,
             completed_occurrences: parse_completed_occurrences(row.completed_occurrences),
             skipped_occurrences: parse_skipped_occurrences(row.skipped_occurrences),
+            mirror_location: row.mirror_location,
+            mirror_attendees: parse_attendees(row.mirror_attendees),
+            pending_description: row.pending_description,
         }
     }
 }
@@ -250,7 +285,10 @@ const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      , COALESCE(\
          (SELECT timezone FROM page_recurrence_rules WHERE page_recurrence_rules.page_id = pages.id LIMIT 1), \
          (SELECT timezone FROM page_schedules WHERE page_schedules.page_id = pages.id LIMIT 1)) \
-     AS timezone";
+     AS timezone\
+     , (SELECT mirror_location FROM page_sync WHERE page_sync.page_id = pages.id) AS mirror_location\
+     , (SELECT mirror_attendees FROM page_sync WHERE page_sync.page_id = pages.id) AS mirror_attendees\
+     , (SELECT pending_description FROM page_sync WHERE page_sync.page_id = pages.id) AS pending_description";
 
 // ─── Input types ──────────────────────────────────────────────────────────────
 

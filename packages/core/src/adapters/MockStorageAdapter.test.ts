@@ -1552,4 +1552,64 @@ describe("markPageSynced (test seam)", () => {
     expect(d?.scheduleLocked).toBe(false);
     expect(d?.syncState).toBe("detached");
   });
+
+  it("stamps read-only mirror metadata + a withheld description", async () => {
+    const page = await createTestPage();
+    adapter.markPageSynced(page.id, {
+      attendees: ["a@x.com", "b@x.com"],
+      location: "Zoom",
+      pendingDescription: "new agenda",
+      state: "active",
+    });
+    const p = await adapter.getPage(page.id);
+    expect(p?.mirrorLocation).toBe("Zoom");
+    expect(p?.mirrorAttendees).toEqual(["a@x.com", "b@x.com"]);
+    expect(p?.pendingDescription).toBe("new agenda");
+  });
+});
+
+describe("calendar sync — connect / disconnect dormancy", () => {
+  const conn = (displayName: string) => ({
+    baseUrl: "https://x",
+    displayName,
+    password: "pw",
+    username: "me",
+  });
+
+  it("connect returns canned calendars and lists the account", async () => {
+    const acc = await adapter.connectCaldavAccount(conn("me · https://x"));
+    expect(acc.calendars.map((c) => c.displayName)).toEqual(["Personal", "Work"]);
+    const status = await adapter.getSyncStatus();
+    expect(status).toHaveLength(1);
+    expect(status[0]?.id).toBe(acc.id);
+  });
+
+  it("disconnect goes dormant — hidden from status, not deleted", async () => {
+    const acc = await adapter.connectCaldavAccount(conn("me · https://x"));
+    await adapter.disconnectSyncAccount(acc.id);
+    expect(await adapter.getSyncStatus()).toHaveLength(0);
+  });
+
+  it("reconnecting the same account reuses the dormant row — no duplicate", async () => {
+    const first = await adapter.connectCaldavAccount(conn("me · https://x"));
+    await adapter.disconnectSyncAccount(first.id);
+
+    const again = await adapter.connectCaldavAccount(conn("me · https://x"));
+    expect(again.id).toBe(first.id);
+    expect(again.calendars).toHaveLength(2); // reused, not a fresh discovery
+    const status = await adapter.getSyncStatus();
+    expect(status).toHaveLength(1);
+    expect(status[0]?.id).toBe(first.id);
+  });
+
+  it("a different account after a disconnect is a new row, not the dormant one", async () => {
+    const first = await adapter.connectCaldavAccount(conn("me · https://x"));
+    await adapter.disconnectSyncAccount(first.id);
+
+    const other = await adapter.connectCaldavAccount(conn("someone · https://y"));
+    expect(other.id).not.toBe(first.id);
+    const status = await adapter.getSyncStatus();
+    expect(status).toHaveLength(1);
+    expect(status[0]?.id).toBe(other.id);
+  });
 });

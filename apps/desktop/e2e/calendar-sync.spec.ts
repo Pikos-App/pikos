@@ -275,6 +275,33 @@ appTest("unchecking a synced recurring done clone restores the occurrence @tier2
   ).toHaveCount(1);
 });
 
+// ─── tier2: description-changed notice + read-only mirror metadata (B1) ───────
+//
+// When an event's upstream description changes after the user has edited the body,
+// the reconciler parks the new text in pending_description rather than clobbering.
+// The editor surfaces it as a passive, offline notice (rendered from the parked
+// text, no re-fetch) — the user folds it in by hand; sync never overwrites. The
+// same page shows its calendar-owned location + attendees read-only. The seed's
+// "Team standup" carries all three.
+appTest("a synced event shows the description-changed notice + read-only location/attendees @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
+  await app.locator("[data-page-list-item]").getByText("Team standup").click();
+
+  // Read-only mirror metadata renders in the editor header.
+  await expect(app.getByText("Zoom")).toBeVisible();
+  await expect(app.getByText("3 guests")).toBeVisible();
+
+  // The notice is present; the parked upstream text stays hidden until opened
+  // (exact "View" avoids the byline's "View in calendar" button).
+  await expect(app.getByText(/calendar description changed/i)).toBeVisible();
+  await expect(app.getByText(/demo the new sync panel/i)).toHaveCount(0);
+  await app.getByRole("button", { name: "View", exact: true }).click();
+  await expect(app.getByText(/demo the new sync panel/i)).toBeVisible();
+});
+
 // ─── tier2: FTS search finds a synced page ───────────────────────────────────
 
 appTest("search finds a synced page @tier2", async ({ app }) => {

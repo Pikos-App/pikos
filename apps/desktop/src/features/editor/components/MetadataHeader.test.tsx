@@ -115,6 +115,58 @@ describe("MetadataHeader — detached notice", () => {
   });
 });
 
+describe("MetadataHeader — read-only mirror metadata", () => {
+  it("renders location + attendees read-only on a locked page", async () => {
+    await renderHeader(
+      makePage({
+        mirrorAttendees: ["alex@example.com", "sam@example.com"],
+        mirrorLocation: "Room 4B",
+        scheduleLocked: true,
+        syncState: "active",
+      })
+    );
+    expect(screen.getByText("Room 4B")).toBeInTheDocument();
+    // Multiple attendees collapse to a count.
+    expect(screen.getByText("2 guests")).toBeInTheDocument();
+  });
+
+  it("omits mirror metadata on a native (unlocked) page", async () => {
+    await renderHeader(
+      makePage({ mirrorAttendees: ["alex@example.com"], mirrorLocation: "Room 4B" })
+    );
+    expect(screen.queryByText("Room 4B")).not.toBeInTheDocument();
+  });
+});
+
+describe("MetadataHeader — calendar description-changed notice", () => {
+  it("shows the notice on a locked page with a pending description, revealing the text on View", async () => {
+    await renderHeader(
+      makePage({
+        pendingDescription: "New agenda for the meeting.",
+        scheduleLocked: true,
+        syncState: "active",
+      })
+    );
+    expect(screen.getByText(/calendar description changed/i)).toBeInTheDocument();
+    // Parked text is hidden until the user opens it.
+    expect(screen.queryByText("New agenda for the meeting.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    expect(screen.getByText("New agenda for the meeting.")).toBeInTheDocument();
+  });
+
+  it("omits the notice when pendingDescription is null", async () => {
+    await renderHeader(
+      makePage({ pendingDescription: null, scheduleLocked: true, syncState: "active" })
+    );
+    expect(screen.queryByText(/calendar description changed/i)).not.toBeInTheDocument();
+  });
+
+  it("omits the notice on a native page even if a stale pendingDescription is present", async () => {
+    await renderHeader(makePage({ pendingDescription: "stale", scheduleLocked: false }));
+    expect(screen.queryByText(/calendar description changed/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("MetadataHeader — reminder bell on locked pages", () => {
   it("shows the reminder bell on a locked RECURRING series", async () => {
     const page = makePage({ id: "rec1", scheduleLocked: true, syncState: "active" });

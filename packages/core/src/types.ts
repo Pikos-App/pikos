@@ -67,6 +67,13 @@ export interface Page {
   // Dismissed occurrence dates (YYYY-MM-DD) for a recurring series, from skip_set.
   // Excluded from expansion. Null/absent when nothing is skipped.
   skippedOccurrences?: string[] | null;
+  // Calendar-owned read-only mirror metadata (from page_sync). Rendered only while
+  // the page is locked (active sync); null/absent for native pages.
+  mirrorLocation?: string | null;
+  mirrorAttendees?: string[] | null; // attendee emails
+  // Upstream description change withheld because the user edited the body; drives
+  // the editor's passive "calendar description changed" notice. Null = nothing pending.
+  pendingDescription?: string | null;
 }
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────

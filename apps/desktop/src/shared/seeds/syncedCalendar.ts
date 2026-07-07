@@ -45,10 +45,17 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
     scheduledStart: string,
     scheduledEnd: string | undefined,
     timezone: string | undefined,
-    state: "active" | "detached"
+    state: "active" | "detached",
+    mirror: {
+      location?: string;
+      attendees?: string[];
+      pendingDescription?: string;
+      body?: string;
+    } = {}
   ): Promise<void> => {
+    const { body, ...mirrorMeta } = mirror;
     const page = await adapter.createPage({
-      content: "",
+      content: body ?? "",
       folderId,
       priority: 0,
       scheduledStart,
@@ -57,17 +64,25 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
       title,
       ...(scheduledEnd ? { scheduledEnd } : {}),
     });
-    mock.markPageSynced(page.id, { state, ...(timezone ? { timezone } : {}) });
+    mock.markPageSynced(page.id, { state, ...(timezone ? { timezone } : {}), ...mirrorMeta });
   };
 
   // Personal: same-day (NY), cross-zone (LA), all-day, weekly recurring (London).
+  // "Team standup" carries the full B1 read-only mirror surface: location, attendees,
+  // a user-edited body, and a withheld upstream description → shows the notice.
   await synced(
     personal,
     "Team standup",
     at(today, 0, 9, 0),
     at(today, 0, 9, 30),
     "America/New_York",
-    "active"
+    "active",
+    {
+      attendees: ["alex@example.com", "sam@example.com", "jordan@example.com"],
+      body: '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"My prep: land the calendar-sync PR before we demo."}]}]}',
+      location: "Zoom",
+      pendingDescription: "Agenda updated: demo the new sync panel, then round-table blockers.",
+    }
   );
   await synced(
     personal,
@@ -75,7 +90,8 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
     at(today, 0, 15, 0),
     at(today, 0, 16, 0),
     "America/Los_Angeles",
-    "active"
+    "active",
+    { attendees: ["design@example.com"], location: "Room 4B" }
   );
   await synced(personal, "Company offsite", formatDateOnly(today), undefined, undefined, "active");
 

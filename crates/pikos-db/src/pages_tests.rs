@@ -1581,6 +1581,39 @@ async fn schedule_locked_true_only_for_active_synced_pages() {
 }
 
 #[tokio::test]
+async fn read_only_mirror_metadata_surfaces_on_page_and_summary() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("synced", "Event")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("native", "Native")).await.unwrap();
+    mark_synced(&pool, "synced", "active").await;
+    sqlx::query(
+        "UPDATE page_sync SET mirror_location = 'Room 4B',
+         mirror_attendees = '[\"a@x.com\",\"b@x.com\"]', pending_description = 'new agenda'
+         WHERE page_id = 'synced'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let page = get_page(&pool, "synced").await.unwrap().unwrap();
+    assert_eq!(page.mirror_location.as_deref(), Some("Room 4B"));
+    assert_eq!(page.mirror_attendees, Some(vec!["a@x.com".into(), "b@x.com".into()]));
+    assert_eq!(page.pending_description.as_deref(), Some("new agenda"));
+
+    // Native page carries none of it.
+    let native = get_page(&pool, "native").await.unwrap().unwrap();
+    assert!(native.mirror_location.is_none());
+    assert!(native.mirror_attendees.is_none());
+    assert!(native.pending_description.is_none());
+
+    // PageSummary agrees with the full Page.
+    let summaries = list_pages_impl(&pool, None).await.unwrap();
+    let summary = summaries.iter().find(|p| p.id == "synced").unwrap();
+    assert_eq!(summary.mirror_location.as_deref(), Some("Room 4B"));
+    assert_eq!(summary.mirror_attendees, Some(vec!["a@x.com".into(), "b@x.com".into()]));
+}
+
+#[tokio::test]
 async fn editing_a_synced_page_marks_it_user_modified() {
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p", "Event")).await.unwrap();

@@ -9,10 +9,10 @@ use sqlx::SqlitePool;
 use pikos_db::error::{AppError, AppResult};
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
 use pikos_db::sync_commands::{
-    delete_sync_account_impl, insert_sync_account_impl, list_sync_calendars_impl,
+    find_dormant_account_impl, insert_sync_account_impl, list_sync_calendars_impl,
+    mark_account_disconnected_impl, reactivate_account_impl, toggle_sync_calendar_impl,
     upsert_sync_calendar_impl, AccountWithCalendars,
 };
-use pikos_db::reconciler::teardown_calendar;
 use pikos_db::sync_delta::CalendarProvider;
 
 use crate::caldav::{CaldavCredentials, CaldavProvider};
@@ -52,6 +52,11 @@ impl CalendarSyncResult {
 /// then persist the account + its (disabled) calendars and stash the credentials
 /// in the keychain. Validation runs **first** so a wrong URL/password fails
 /// without leaving a half-built account behind.
+///
+/// A prior disconnect of the same account left it dormant (see `disconnect_account`);
+/// reconnecting reuses that row so its detached pages re-link on the next resync
+/// instead of duplicating. The idempotent calendar upsert refreshes the dormant
+/// (disabled) calendars in place; the user re-enables the ones they want.
 pub async fn connect_caldav(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -66,7 +71,13 @@ pub async fn connect_caldav(
         .to_blob()
         .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
 
-    let account = insert_sync_account_impl(pool, "caldav", &display_name, "basic").await?;
+    let account = match find_dormant_account_impl(pool, "caldav", &display_name).await? {
+        Some(existing) => {
+            reactivate_account_impl(pool, &existing.id).await?;
+            existing
+        }
+        None => insert_sync_account_impl(pool, "caldav", &display_name, "basic").await?,
+    };
     keychain
         .store(&account.id, &blob)
         .map_err(|e| AppError::Internal(format!("keychain store: {e}")))?;
@@ -87,21 +98,24 @@ pub async fn connect_caldav(
     Ok(AccountWithCalendars { account, calendars })
 }
 
-/// Disconnect an account: tear down each calendar's folder + pages (detach owned,
-/// delete bare mirrors), drop the account row (cascading the rest), and clear the
-/// keychain. The credential delete is idempotent and best-effort — a keychain
-/// hiccup must not block removing the account from the DB.
+/// Disconnect an account: unsync each calendar (detach owned pages, delete bare
+/// mirrors, disable + clear its cursor), then mark the account dormant and clear
+/// the keychain. The row, its calendars, and the detached `page_sync` identities
+/// are **kept** — a reconnect (`connect_caldav`) reuses them and re-links by
+/// `ical_uid` with no duplicate, the same path a calendar unsync already uses.
+/// The credential delete is idempotent and best-effort — a keychain hiccup must
+/// not block going dormant.
 pub async fn disconnect_account(
     pool: &SqlitePool,
     keychain: Keychain,
     account_id: &str,
 ) -> AppResult<()> {
     for cal in list_sync_calendars_impl(pool, account_id).await? {
-        if let Some(folder_id) = &cal.folder_id {
-            teardown_calendar(pool, &cal.account_id, &cal.calendar_id, folder_id).await?;
+        if cal.enabled {
+            toggle_sync_calendar_impl(pool, &cal.id, false, None).await?;
         }
     }
-    delete_sync_account_impl(pool, account_id).await?;
+    mark_account_disconnected_impl(pool, account_id).await?;
     let _ = keychain.delete(account_id);
     Ok(())
 }

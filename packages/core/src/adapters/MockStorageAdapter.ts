@@ -119,6 +119,8 @@ export class MockStorageAdapter implements StorageAdapter {
   private softDeletedFolders = new Set<string>();
   private syncAccounts = new Map<string, SyncAccount>();
   private syncCalendars = new Map<string, SyncCalendar>();
+  // Disconnected (dormant) accounts: kept for reconnect re-link, hidden from status.
+  private dormantAccounts = new Set<string>();
 
   clear(): void {
     this.pages.clear();
@@ -130,6 +132,7 @@ export class MockStorageAdapter implements StorageAdapter {
     this.softDeletedFolders.clear();
     this.syncAccounts.clear();
     this.syncCalendars.clear();
+    this.dormantAccounts.clear();
   }
 
   // ─── Command-layer guards ────────────────────────────────────────────────────
@@ -180,19 +183,30 @@ export class MockStorageAdapter implements StorageAdapter {
   /**
    * Test/seed-only (NOT on `StorageAdapter`): stamp a page with the synced
    * provenance a real `page_sync` row would derive — `scheduleLocked`,
-   * `syncState`, and the source `timezone`. Lets the synced-pages seed + Layer-4
-   * tests exercise the locked/zoned/detached treatment without a reconciler.
+   * `syncState`, the source `timezone`, and the read-only mirror metadata
+   * (`mirrorLocation`, `mirrorAttendees`, `pendingDescription`). Lets the
+   * synced-pages seed + Layer-4 tests exercise the locked/zoned/detached
+   * treatment and the description-changed notice without a reconciler.
    * `active` locks the schedule; `detached`/`tombstoned` leave it editable.
    */
   markPageSynced(
     pageId: string,
-    opts: { timezone?: string; state?: "active" | "detached" | "tombstoned" } = {}
+    opts: {
+      timezone?: string;
+      state?: "active" | "detached" | "tombstoned";
+      location?: string | null;
+      attendees?: string[] | null;
+      pendingDescription?: string | null;
+    } = {}
   ): void {
     const page = this.pages.get(pageId);
     if (!page) return;
     const state = opts.state ?? "active";
     this.pages.set(pageId, {
       ...page,
+      mirrorAttendees: opts.attendees ?? page.mirrorAttendees ?? null,
+      mirrorLocation: opts.location ?? page.mirrorLocation ?? null,
+      pendingDescription: opts.pendingDescription ?? page.pendingDescription ?? null,
       scheduleLocked: state === "active",
       syncState: state,
       timezone: opts.timezone ?? page.timezone ?? null,
@@ -921,6 +935,19 @@ export class MockStorageAdapter implements StorageAdapter {
   // ─── Calendar sync ────────────────────────────────────────────────────────────
 
   connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars> {
+    // Reconnect reuses a dormant account (matched by provider+displayName) so its
+    // dormant calendars/pages re-link rather than duplicate — mirrors connect_caldav.
+    const dormant = [...this.syncAccounts.values()].find(
+      (a) =>
+        this.dormantAccounts.has(a.id) &&
+        a.provider === "caldav" &&
+        a.displayName === data.displayName
+    );
+    if (dormant) {
+      this.dormantAccounts.delete(dormant.id);
+      return Promise.resolve({ ...dormant, calendars: this._calendarsFor(dormant.id) });
+    }
+
     const account: SyncAccount = {
       authKind: "basic",
       createdAt: now(),
@@ -947,11 +974,13 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   disconnectSyncAccount(accountId: string): Promise<void> {
+    // Dormant, not deleted: disable each calendar (drop its folder) but keep the
+    // account + calendar rows so a reconnect re-links them. Hidden from getSyncStatus.
     for (const cal of this._calendarsFor(accountId)) {
       if (cal.folderId) this.folders.delete(cal.folderId);
-      this.syncCalendars.delete(cal.id);
+      this.syncCalendars.set(cal.id, { ...cal, enabled: false, folderId: null });
     }
-    this.syncAccounts.delete(accountId);
+    this.dormantAccounts.add(accountId);
     return Promise.resolve();
   }
 
@@ -998,10 +1027,12 @@ export class MockStorageAdapter implements StorageAdapter {
 
   getSyncStatus(): Promise<AccountWithCalendars[]> {
     return Promise.resolve(
-      [...this.syncAccounts.values()].map((a) => ({
-        ...a,
-        calendars: this._calendarsFor(a.id),
-      }))
+      [...this.syncAccounts.values()]
+        .filter((a) => !this.dormantAccounts.has(a.id))
+        .map((a) => ({
+          ...a,
+          calendars: this._calendarsFor(a.id),
+        }))
     );
   }
 

@@ -47,6 +47,13 @@ CREATE TABLE IF NOT EXISTS sync_account (
   -- background scheduler stops polling the account until a manual resync clears it,
   -- so a dead credential can't hammer a provider's failed-login throttle every pass.
   reconnect_needed INTEGER NOT NULL DEFAULT 0,
+  -- Disconnect is a dormant state, not a delete: it detaches owned pages, clears the
+  -- keychain, and disables every calendar, but keeps this row (and its calendars +
+  -- detached page_sync rows) so a later reconnect re-links them by ical_uid with no
+  -- duplicate — the same dormant-identity path as a calendar unsync. Hidden from the
+  -- settings list while set; a reconnect with the same provider+display_name reuses
+  -- and clears it. A true purge is a full account removal (cascades everything).
+  disconnected  INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
 );
