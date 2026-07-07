@@ -240,8 +240,8 @@ END:VEVENT\r\n";
 
 /// A non-IANA `TZID` with no `VTIMEZONE` to resolve it is genuinely unresolvable,
 /// so `source_zone` yields nothing and the event degrades to a zoneless, literal
-/// wall-clock. Acceptable fallback, but silent — a cross-zone viewer sees the time
-/// unshifted with no badge.
+/// wall-clock. Acceptable fallback — a cross-zone viewer sees the time unshifted
+/// with no badge — but `source_zone` now logs a warning so it isn't traceless.
 #[test]
 fn unresolvable_tzid_without_vtimezone_degrades_to_zoneless() {
     let body = "BEGIN:VEVENT\r\n\

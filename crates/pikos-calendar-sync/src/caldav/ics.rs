@@ -146,7 +146,16 @@ fn source_zone(master: &ICalendarComponent, resolver: &TzResolver<&str>) -> Opti
         return None; // all-day
     }
     let iana = if let Some(tzid) = dtstart.tz_id() {
-        resolver.resolve(tzid).and_then(|t| t.name())?.into_owned()
+        match resolver.resolve(tzid).and_then(|t| t.name()) {
+            Some(name) => name.into_owned(),
+            // Behaviour unchanged (degrade to floating) — logged so it isn't traceless.
+            None => {
+                log::warn!(
+                    "caldav ics: DTSTART TZID did not resolve to an IANA zone; treating event as floating"
+                );
+                return None;
+            }
+        }
     } else if pdt.has_zone() {
         "UTC".to_string() // DTSTART…Z
     } else {

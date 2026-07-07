@@ -1,7 +1,8 @@
 import { act, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePages } from "@/shared/context/PagesContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
 
 import { useCalendarSync } from "./useCalendarSync";
@@ -178,5 +179,97 @@ describe("useCalendarSync", () => {
     });
 
     expect(hook.result.current.accounts).toEqual([]);
+  });
+
+  describe("surfaces action failures instead of swallowing them", () => {
+    // Why these need catching (unlike connect): see actionError in useCalendarSync.ts.
+    function setupWithWorkspace() {
+      return renderHookWithProviders(() => ({
+        sync: useCalendarSync(),
+        ws: useWorkspace(),
+      }));
+    }
+
+    async function connectedAccount(hook: ReturnType<typeof setupWithWorkspace>) {
+      await waitFor(() => expect(hook.result.current.sync.loading).toBe(false));
+      await act(async () => {
+        await hook.result.current.sync.connect(CONN);
+      });
+      return hook.result.current.sync.accounts[0]!;
+    }
+
+    it("disconnect failure surfaces as error, keeps the account", async () => {
+      const hook = setupWithWorkspace();
+      const account = await connectedAccount(hook);
+      vi.spyOn(hook.result.current.ws.storage!, "disconnectSyncAccount").mockRejectedValueOnce(
+        new Error("keychain locked")
+      );
+
+      await act(async () => {
+        await hook.result.current.sync.disconnect(account.id);
+      });
+
+      expect(hook.result.current.sync.error).toBe("keychain locked");
+      expect(hook.result.current.sync.accounts).toHaveLength(1);
+    });
+
+    it("toggleCalendar failure surfaces as error", async () => {
+      const hook = setupWithWorkspace();
+      const account = await connectedAccount(hook);
+      const cal = account.calendars[0]!;
+      vi.spyOn(hook.result.current.ws.storage!, "toggleSyncCalendar").mockRejectedValueOnce(
+        new Error("folder write failed")
+      );
+
+      await act(async () => {
+        await hook.result.current.sync.toggleCalendar(cal.id, true, "#A8CDB4");
+      });
+
+      expect(hook.result.current.sync.error).toBe("folder write failed");
+    });
+
+    it("resync failure surfaces as error and still clears the busy flag", async () => {
+      const hook = setupWithWorkspace();
+      const account = await connectedAccount(hook);
+      vi.spyOn(hook.result.current.ws.storage!, "resyncSyncAccount").mockRejectedValueOnce(
+        new Error("network down")
+      );
+
+      await act(async () => {
+        await hook.result.current.sync.resync(account.id);
+      });
+
+      expect(hook.result.current.sync.error).toBe("network down");
+      expect(hook.result.current.sync.busyAccountId).toBeNull();
+    });
+
+    it("a non-Error rejection falls back to a friendly message", async () => {
+      const hook = setupWithWorkspace();
+      const account = await connectedAccount(hook);
+      vi.spyOn(hook.result.current.ws.storage!, "resyncSyncAccount").mockRejectedValueOnce("boom");
+
+      await act(async () => {
+        await hook.result.current.sync.resync(account.id);
+      });
+
+      expect(hook.result.current.sync.error).toMatch(/couldn't sync/i);
+    });
+
+    it("a later successful action clears a stale error", async () => {
+      const hook = setupWithWorkspace();
+      const account = await connectedAccount(hook);
+      vi.spyOn(hook.result.current.ws.storage!, "resyncSyncAccount").mockRejectedValueOnce(
+        new Error("network down")
+      );
+      await act(async () => {
+        await hook.result.current.sync.resync(account.id);
+      });
+      expect(hook.result.current.sync.error).toBe("network down");
+
+      await act(async () => {
+        await hook.result.current.sync.resync(account.id);
+      });
+      expect(hook.result.current.sync.error).toBeNull();
+    });
   });
 });

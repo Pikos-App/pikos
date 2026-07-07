@@ -14,6 +14,7 @@ export function CalendarSyncSettings() {
     busyAccountId,
     connect,
     disconnect,
+    error,
     loading,
     recolorCalendar,
     results,
@@ -47,6 +48,8 @@ export function CalendarSyncSettings() {
               results={results}
             />
           ))}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
           <div>
             <Button onClick={() => setAddOpen(true)} size="sm" variant="outline">

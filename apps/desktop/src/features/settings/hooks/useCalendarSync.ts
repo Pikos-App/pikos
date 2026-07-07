@@ -16,11 +16,20 @@ function prune(results: ResultMap, rowIds: string[]): ResultMap {
   return next;
 }
 
+// Connect surfaces its own failure inline in AddAccountDialog. The other actions
+// fire from menu items / toggles with no local error path, so a rejected
+// disconnect/toggle/resync would otherwise look like nothing happened — the hook
+// catches them and exposes `error` for the settings panel to render.
+function actionError(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+
 export interface CalendarSyncState {
   accounts: AccountWithCalendars[];
   results: ResultMap;
   loading: boolean;
   busyAccountId: string | null;
+  error: string | null;
   connect: (data: NewCaldavConnection) => Promise<void>;
   disconnect: (accountId: string) => Promise<void>;
   toggleCalendar: (calendarRowId: string, enabled: boolean, color: string | null) => Promise<void>;
@@ -35,6 +44,7 @@ export function useCalendarSync(): CalendarSyncState {
   const [results, setResults] = useState<ResultMap>({});
   const [loading, setLoading] = useState(true);
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!storage) return;
@@ -56,14 +66,21 @@ export function useCalendarSync(): CalendarSyncState {
 
   async function connect(data: NewCaldavConnection) {
     if (!storage) return;
+    setError(null);
     await storage.connectCaldavAccount(data);
     await refresh();
   }
 
   async function disconnect(accountId: string) {
     if (!storage) return;
+    setError(null);
     const rowIds = accounts.find((a) => a.id === accountId)?.calendars.map((c) => c.id) ?? [];
-    await storage.disconnectSyncAccount(accountId);
+    try {
+      await storage.disconnectSyncAccount(accountId);
+    } catch (e) {
+      setError(actionError(e, "Couldn't disconnect the account. Try again."));
+      return;
+    }
     setResults((prev) => prune(prev, rowIds));
     await refresh();
     // Sidebar folders/pages live in PagesContext, not this hook — reload so the
@@ -76,7 +93,13 @@ export function useCalendarSync(): CalendarSyncState {
   // dead verdict from before it was disabled.
   async function toggleCalendar(calendarRowId: string, enabled: boolean, color: string | null) {
     if (!storage) return;
-    await storage.toggleSyncCalendar(calendarRowId, enabled, color);
+    setError(null);
+    try {
+      await storage.toggleSyncCalendar(calendarRowId, enabled, color);
+    } catch (e) {
+      setError(actionError(e, "Couldn't update the calendar. Try again."));
+      return;
+    }
     setResults((prev) => prune(prev, [calendarRowId]));
     await refresh();
     // Enabling creates the external folder; disabling removes/de-flags it —
@@ -87,16 +110,23 @@ export function useCalendarSync(): CalendarSyncState {
   // An enabled calendar's folder already exists; a disabled one has none to repaint.
   async function recolorCalendar(calendarRowId: string, enabled: boolean, color: string) {
     if (!storage) return;
+    setError(null);
     const folderId = accounts
       .flatMap((a) => a.calendars)
       .find((c) => c.id === calendarRowId)?.folderId;
-    await storage.toggleSyncCalendar(calendarRowId, enabled, color);
+    try {
+      await storage.toggleSyncCalendar(calendarRowId, enabled, color);
+    } catch (e) {
+      setError(actionError(e, "Couldn't update the calendar colour. Try again."));
+      return;
+    }
     await refresh();
     if (folderId) patchFolderColor(folderId, color);
   }
 
   async function resync(accountId: string) {
     if (!storage) return;
+    setError(null);
     setBusyAccountId(accountId);
     try {
       const outcomes = await storage.resyncSyncAccount(accountId);
@@ -115,6 +145,8 @@ export function useCalendarSync(): CalendarSyncState {
       // A resync can upsert/remove pages — reload PagesContext so the calendar
       // reflects the result without waiting for the next background pass.
       await reload();
+    } catch (e) {
+      setError(actionError(e, "Couldn't sync right now. Check your connection and try again."));
     } finally {
       setBusyAccountId(null);
     }
@@ -125,6 +157,7 @@ export function useCalendarSync(): CalendarSyncState {
     busyAccountId,
     connect,
     disconnect,
+    error,
     loading,
     recolorCalendar,
     results,
