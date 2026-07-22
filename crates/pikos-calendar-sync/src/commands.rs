@@ -7,7 +7,7 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 
 use pikos_db::error::{AppError, AppResult};
-use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
+use pikos_db::sync::{SyncAccountRow, SyncCalendarRow, PROVIDER_CALDAV, PROVIDER_GOOGLE};
 use pikos_db::sync_commands::{
     find_dormant_account_impl, insert_sync_account_impl, list_sync_calendars_impl,
     mark_account_disconnected_impl, reactivate_account_impl, toggle_sync_calendar_impl,
@@ -35,7 +35,10 @@ pub struct CalendarSyncResult {
 impl CalendarSyncResult {
     fn new(calendar_id: &str, outcome: SyncOutcome) -> Self {
         let (status, full_resync, changed) = match outcome {
-            SyncOutcome::Synced { full_resync, changed } => ("synced", full_resync, changed),
+            SyncOutcome::Synced {
+                full_resync,
+                changed,
+            } => ("synced", full_resync, changed),
             SyncOutcome::Offline => ("offline", false, false),
             SyncOutcome::ReconnectNeeded => ("reconnectNeeded", false, false),
         };
@@ -65,18 +68,22 @@ pub async fn connect_caldav(
     password: String,
     display_name: String,
 ) -> AppResult<AccountWithCalendars> {
-    let creds = CaldavCredentials { base_url, username, password };
+    let creds = CaldavCredentials {
+        base_url,
+        username,
+        password,
+    };
     let remote = CaldavProvider::discover_with(&creds).await?;
     let blob = creds
         .to_blob()
         .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
 
-    let account = match find_dormant_account_impl(pool, "caldav", &display_name).await? {
+    let account = match find_dormant_account_impl(pool, PROVIDER_CALDAV, &display_name).await? {
         Some(existing) => {
             reactivate_account_impl(pool, &existing.id).await?;
             existing
         }
-        None => insert_sync_account_impl(pool, "caldav", &display_name, "basic").await?,
+        None => insert_sync_account_impl(pool, PROVIDER_CALDAV, &display_name, "basic").await?,
     };
     keychain
         .store(&account.id, &blob)
@@ -103,8 +110,10 @@ pub async fn connect_caldav(
 /// the keychain. The row, its calendars, and the detached `page_sync` identities
 /// are **kept** — a reconnect (`connect_caldav`) reuses them and re-links by
 /// `ical_uid` with no duplicate, the same path a calendar unsync already uses.
-/// The credential delete is idempotent and best-effort — a keychain hiccup must
-/// not block going dormant.
+/// An OAuth grant is handed back to the provider first, so the account also
+/// disappears from the user's connected-apps list rather than lingering there
+/// with a token Pikos has thrown away. Both the revoke and the credential delete
+/// are best-effort and idempotent — neither may block going dormant.
 pub async fn disconnect_account(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -116,8 +125,22 @@ pub async fn disconnect_account(
         }
     }
     mark_account_disconnected_impl(pool, account_id).await?;
+    if provider_of(pool, account_id).await?.as_deref() == Some(PROVIDER_GOOGLE) {
+        if let Err(e) = crate::google::revoke(&keychain, account_id).await {
+            log::warn!("sync: could not revoke the Google grant for {account_id}: {e}");
+        }
+    }
     let _ = keychain.delete(account_id);
     Ok(())
+}
+
+async fn provider_of(pool: &SqlitePool, account_id: &str) -> AppResult<Option<String>> {
+    Ok(
+        sqlx::query_scalar::<_, String>("SELECT provider FROM sync_account WHERE id = ?")
+            .bind(account_id)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 /// Resync every enabled calendar on an account through the poll engine. Generic
@@ -185,14 +208,12 @@ async fn load_enabled_calendar_rows(
     pool: &SqlitePool,
     account_id: &str,
 ) -> AppResult<Vec<SyncCalendarRow>> {
-    Ok(
-        sqlx::query_as::<_, SyncCalendarRow>(
-            "SELECT * FROM sync_calendar WHERE account_id = ? AND enabled = 1",
-        )
-        .bind(account_id)
-        .fetch_all(pool)
-        .await?,
+    Ok(sqlx::query_as::<_, SyncCalendarRow>(
+        "SELECT * FROM sync_calendar WHERE account_id = ? AND enabled = 1",
     )
+    .bind(account_id)
+    .fetch_all(pool)
+    .await?)
 }
 
 #[cfg(test)]

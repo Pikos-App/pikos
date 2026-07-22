@@ -1,37 +1,5 @@
 use super::*;
-use std::collections::HashMap;
-use std::sync::Mutex;
-
-/// In-memory stand-in for the OS keychain — exercises the wrapper without the real backend.
-#[derive(Default)]
-struct MemoryStore {
-    map: Mutex<HashMap<String, String>>,
-}
-
-impl CredentialStore for MemoryStore {
-    fn set(&self, key: &str, secret: &str) -> Result<(), KeychainError> {
-        self.map.lock().unwrap().insert(key.to_string(), secret.to_string());
-        Ok(())
-    }
-
-    fn get(&self, key: &str) -> Result<String, KeychainError> {
-        self.map
-            .lock()
-            .unwrap()
-            .get(key)
-            .cloned()
-            .ok_or(KeychainError::NotFound)
-    }
-
-    fn delete(&self, key: &str) -> Result<(), KeychainError> {
-        self.map.lock().unwrap().remove(key);
-        Ok(())
-    }
-}
-
-fn keychain() -> Keychain {
-    Keychain::with_store(Box::new(MemoryStore::default()))
-}
+use crate::test_support::memory_keychain as keychain;
 
 #[test]
 fn store_then_load_round_trips() {
@@ -92,7 +60,10 @@ fn backend_error_is_not_reconnect_needed() {
 #[test]
 fn keyring_no_entry_maps_to_not_found() {
     // The reconnect-needed primitive hinges on this mapping from the real backend.
-    assert!(matches!(map_err(keyring::Error::NoEntry), KeychainError::NotFound));
+    assert!(matches!(
+        map_err(keyring::Error::NoEntry),
+        KeychainError::NotFound
+    ));
     assert!(matches!(
         map_err(keyring::Error::BadEncoding(vec![0xff])),
         KeychainError::Backend(_)

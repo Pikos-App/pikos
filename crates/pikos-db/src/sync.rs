@@ -6,12 +6,17 @@
 //! output DTOs (camelCase, for Tauri) come with the command layer, matching the
 //! `FolderRow`→`Folder` split elsewhere in the crate.
 
+/// The `sync_account.provider` tags. An open set validated app-side (no DB
+/// CHECK), so the stored strings live here rather than as literals per call site.
+pub const PROVIDER_CALDAV: &str = "caldav";
+pub const PROVIDER_GOOGLE: &str = "google";
+
 /// `sync_account` row — one connected account. Secrets are NOT here; only a
 /// stable handle (`auth_kind` + the row id as the keychain key).
 #[derive(Debug, sqlx::FromRow)]
 pub struct SyncAccountRow {
     pub id: String,
-    /// e.g. 'google', 'caldav' — open set, validated app-side (no DB CHECK).
+    /// One of [`PROVIDER_CALDAV`] / [`PROVIDER_GOOGLE`].
     pub provider: String,
     pub display_name: String,
     /// 'basic' (CalDAV app password) | 'oauth' (Google)
@@ -120,7 +125,9 @@ pub(crate) async fn ensure_page_schedule_unlocked(
     page_id: &str,
 ) -> crate::error::AppResult<()> {
     if page_schedule_locked(pool, page_id).await? {
-        return Err(crate::error::AppError::Conflict(SYNCED_READONLY_MSG.to_string()));
+        return Err(crate::error::AppError::Conflict(
+            SYNCED_READONLY_MSG.to_string(),
+        ));
     }
     Ok(())
 }

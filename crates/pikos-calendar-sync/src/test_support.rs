@@ -1,6 +1,9 @@
 //! Shared `#[cfg(test)]` builders for the Layer-3 engine and scheduler tests:
-//! the `event`/`delta` value constructors and the account+calendar seed SQL that
-//! otherwise lived in a copy per test file.
+//! the `event`/`delta` value constructors, the account+calendar seed SQL, and the
+//! in-memory keychain that otherwise lived in a copy per test file.
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use sqlx::SqlitePool;
 
@@ -8,6 +11,43 @@ use pikos_db::sync_delta::{
     EventCore, EventSchedule, EventUpsert, SyncDelta, SyncToken, UpsertItem,
 };
 use pikos_db::{insert_test_folder, now_iso};
+
+use crate::keychain::{CredentialStore, Keychain, KeychainError};
+
+/// In-memory stand-in for the OS keychain. keyring's own mock backend can't be
+/// used: it doesn't share state across `Entry` instances, so a store-then-load
+/// round-trip never sees its own write. Cloneable so a test can still inspect the
+/// backing map after `Keychain` has taken ownership of its box.
+#[derive(Clone, Default)]
+pub(crate) struct MemoryStore(Arc<Mutex<HashMap<String, String>>>);
+
+impl CredentialStore for MemoryStore {
+    fn set(&self, key: &str, secret: &str) -> Result<(), KeychainError> {
+        self.0
+            .lock()
+            .unwrap()
+            .insert(key.to_string(), secret.to_string());
+        Ok(())
+    }
+
+    fn get(&self, key: &str) -> Result<String, KeychainError> {
+        self.0
+            .lock()
+            .unwrap()
+            .get(key)
+            .cloned()
+            .ok_or(KeychainError::NotFound)
+    }
+
+    fn delete(&self, key: &str) -> Result<(), KeychainError> {
+        self.0.lock().unwrap().remove(key);
+        Ok(())
+    }
+}
+
+pub(crate) fn memory_keychain() -> Keychain {
+    Keychain::with_store(Box::new(MemoryStore::default()))
+}
 
 pub(crate) fn event(external_id: &str, uid: &str, etag: &str, title: &str) -> UpsertItem {
     UpsertItem::Event(EventUpsert {
@@ -30,7 +70,11 @@ pub(crate) fn event(external_id: &str, uid: &str, etag: &str, title: &str) -> Up
 }
 
 pub(crate) fn delta(upserts: Vec<UpsertItem>, token: Option<&str>) -> SyncDelta {
-    SyncDelta { upserts, next_token: token.map(|t| SyncToken(t.into())), ..Default::default() }
+    SyncDelta {
+        upserts,
+        next_token: token.map(|t| SyncToken(t.into())),
+        ..Default::default()
+    }
 }
 
 /// One account + one enabled calendar (and its folder). `link_folder` sets the
@@ -48,7 +92,9 @@ pub(crate) struct CalSeed<'a> {
 }
 
 pub(crate) async fn seed_calendar(pool: &SqlitePool, s: CalSeed<'_>) {
-    insert_test_folder(pool, s.folder_id, s.folder_name).await.unwrap();
+    insert_test_folder(pool, s.folder_id, s.folder_name)
+        .await
+        .unwrap();
     let now = now_iso();
     sqlx::query(
         "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)

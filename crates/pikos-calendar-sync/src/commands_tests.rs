@@ -3,9 +3,6 @@
 //! calendars through the engine, driven by a scripted provider). `connect_caldav`
 //! is a live discovery seam, exercised manually.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
 use pikos_db::sync_commands::{
     find_dormant_account_impl, get_sync_status_impl, insert_sync_account_impl,
@@ -18,31 +15,8 @@ use pikos_db::sync_delta::{
 use pikos_db::test_pool;
 
 use super::*;
-use crate::keychain::{CredentialStore, Keychain, KeychainError};
-
-// ─── in-memory keychain ─────────────────────────────────────────────────────────
-
-#[derive(Clone, Default)]
-struct MemStore(Arc<Mutex<HashMap<String, String>>>);
-
-impl CredentialStore for MemStore {
-    fn set(&self, key: &str, secret: &str) -> Result<(), KeychainError> {
-        self.0.lock().unwrap().insert(key.into(), secret.into());
-        Ok(())
-    }
-    fn get(&self, key: &str) -> Result<String, KeychainError> {
-        self.0
-            .lock()
-            .unwrap()
-            .get(key)
-            .cloned()
-            .ok_or(KeychainError::NotFound)
-    }
-    fn delete(&self, key: &str) -> Result<(), KeychainError> {
-        self.0.lock().unwrap().remove(key);
-        Ok(())
-    }
-}
+use crate::keychain::{CredentialStore, Keychain};
+use crate::test_support::MemoryStore;
 
 // ─── scripted provider (sync returns a trivial backfill) ────────────────────────
 
@@ -51,7 +25,10 @@ struct OneShot {
 }
 
 impl CalendarProvider for OneShot {
-    async fn list_calendars(&self, _a: &SyncAccountRow) -> pikos_db::AppResult<Vec<RemoteCalendar>> {
+    async fn list_calendars(
+        &self,
+        _a: &SyncAccountRow,
+    ) -> pikos_db::AppResult<Vec<RemoteCalendar>> {
         unreachable!("resync never discovers")
     }
     async fn sync(
@@ -61,7 +38,11 @@ impl CalendarProvider for OneShot {
     ) -> pikos_db::AppResult<SyncDelta> {
         Ok(SyncDelta::default())
     }
-    async fn fetch_event(&self, _c: &SyncCalendarRow, _r: &str) -> pikos_db::AppResult<EventUpsert> {
+    async fn fetch_event(
+        &self,
+        _c: &SyncCalendarRow,
+        _r: &str,
+    ) -> pikos_db::AppResult<EventUpsert> {
         unreachable!("no orphans in an empty delta")
     }
     async fn current_sync_token(
@@ -87,7 +68,7 @@ async fn disconnect_goes_dormant_and_hides_the_account() {
         .await
         .unwrap();
 
-    let backing = MemStore::default();
+    let backing = MemoryStore::default();
     backing.set(&acc.id, "secret-blob").unwrap();
     let keychain = Keychain::with_store(Box::new(backing.clone()));
 
@@ -123,6 +104,38 @@ async fn disconnect_goes_dormant_and_hides_the_account() {
     );
 }
 
+// Revoking a Google grant is a network call that can fail — unreachable, already
+// revoked, or (here) a build carrying no OAuth client at all. The account must
+// still go dormant and lose its credential, or a user who can't reach Google
+// could never disconnect.
+#[tokio::test]
+async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
+    let pool = test_pool().await;
+    let acc = insert_sync_account_impl(&pool, PROVIDER_GOOGLE, "me@gmail.com", "oauth")
+        .await
+        .unwrap();
+
+    let backing = MemoryStore::default();
+    backing.set(&acc.id, "token-blob").unwrap();
+
+    disconnect_account(
+        &pool,
+        Keychain::with_store(Box::new(backing.clone())),
+        &acc.id,
+    )
+    .await
+    .unwrap();
+
+    let disconnected: bool =
+        sqlx::query_scalar("SELECT disconnected FROM sync_account WHERE id = ?")
+            .bind(&acc.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(disconnected);
+    assert!(backing.get(&acc.id).is_err());
+}
+
 /// Scripted provider that hands back a fixed one-event delta on every sync — enough
 /// to create then re-link a mirror page across a disconnect/reconnect.
 struct Scripted {
@@ -130,7 +143,10 @@ struct Scripted {
 }
 
 impl CalendarProvider for Scripted {
-    async fn list_calendars(&self, _a: &SyncAccountRow) -> pikos_db::AppResult<Vec<RemoteCalendar>> {
+    async fn list_calendars(
+        &self,
+        _a: &SyncAccountRow,
+    ) -> pikos_db::AppResult<Vec<RemoteCalendar>> {
         unreachable!("resync never discovers")
     }
     async fn sync(
@@ -140,7 +156,11 @@ impl CalendarProvider for Scripted {
     ) -> pikos_db::AppResult<SyncDelta> {
         Ok(self.delta.clone())
     }
-    async fn fetch_event(&self, _c: &SyncCalendarRow, _r: &str) -> pikos_db::AppResult<EventUpsert> {
+    async fn fetch_event(
+        &self,
+        _c: &SyncCalendarRow,
+        _r: &str,
+    ) -> pikos_db::AppResult<EventUpsert> {
         unreachable!("no orphans in this delta")
     }
     async fn current_sync_token(
@@ -189,7 +209,9 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
         .unwrap();
 
     // First sync creates the mirror page.
-    let provider = Scripted { delta: one_event_delta("href-1", "uid-1", "Standup", "tok-1") };
+    let provider = Scripted {
+        delta: one_event_delta("href-1", "uid-1", "Standup", "tok-1"),
+    };
     resync_account(&pool, &provider, &acc.id).await.unwrap();
     let page_id: String =
         sqlx::query_scalar("SELECT page_id FROM page_sync WHERE ical_uid = 'uid-1'")
@@ -210,11 +232,15 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
         .unwrap();
 
     // Disconnect → dormant; the owned page keeps its detached identity.
-    let backing = MemStore::default();
+    let backing = MemoryStore::default();
     backing.set(&acc.id, "blob").unwrap();
-    disconnect_account(&pool, Keychain::with_store(Box::new(backing.clone())), &acc.id)
-        .await
-        .unwrap();
+    disconnect_account(
+        &pool,
+        Keychain::with_store(Box::new(backing.clone())),
+        &acc.id,
+    )
+    .await
+    .unwrap();
     let state: String = sqlx::query_scalar("SELECT sync_state FROM page_sync WHERE page_id = ?")
         .bind(&page_id)
         .fetch_one(&pool)
@@ -233,7 +259,9 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
     toggle_sync_calendar_impl(&pool, &cal.id, true, None)
         .await
         .unwrap();
-    let provider2 = Scripted { delta: one_event_delta("href-2", "uid-1", "Standup", "tok-2") };
+    let provider2 = Scripted {
+        delta: one_event_delta("href-2", "uid-1", "Standup", "tok-2"),
+    };
     resync_account(&pool, &provider2, &acc.id).await.unwrap();
 
     // Exactly one page for the series — re-linked, not duplicated — user layer intact.
@@ -255,7 +283,10 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(content, "{\"edited\":true}", "user body preserved across reconnect");
+    assert_eq!(
+        content, "{\"edited\":true}",
+        "user body preserved across reconnect"
+    );
 }
 
 #[tokio::test]
@@ -274,7 +305,9 @@ async fn resync_syncs_only_enabled_calendars() {
         .await
         .unwrap();
 
-    let provider = OneShot { token: "tok-1".into() };
+    let provider = OneShot {
+        token: "tok-1".into(),
+    };
     let results = resync_account(&pool, &provider, &acc.id).await.unwrap();
 
     assert_eq!(results.len(), 1, "only the enabled calendar synced");
@@ -297,7 +330,7 @@ async fn connect_caldav_persists_nothing_when_discovery_fails() {
     // half-built account or keychain entry. A malformed URL fails discovery at the
     // parse step (no network), exercising that ordering without a live server.
     let pool = test_pool().await;
-    let keychain = Keychain::with_store(Box::new(MemStore::default()));
+    let keychain = Keychain::with_store(Box::new(MemoryStore::default()));
 
     let err = connect_caldav(
         &pool,
@@ -310,10 +343,16 @@ async fn connect_caldav_persists_nothing_when_discovery_fails() {
     .await
     .unwrap_err();
 
-    assert!(matches!(err, AppError::Invalid(_)), "bad URL surfaces as user-actionable");
+    assert!(
+        matches!(err, AppError::Invalid(_)),
+        "bad URL surfaces as user-actionable"
+    );
     let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_account")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(accounts, 0, "no account row written before discovery succeeds");
+    assert_eq!(
+        accounts, 0,
+        "no account row written before discovery succeeds"
+    );
 }
