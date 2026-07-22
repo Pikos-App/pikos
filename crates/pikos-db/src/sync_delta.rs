@@ -183,10 +183,7 @@ pub trait CalendarProvider {
     /// separate cursor to fetch — Google's backfill already carries
     /// `nextSyncToken`, and a server without `sync-collection` has none at all
     /// (the engine then keeps re-enumerating until the ctag path lands).
-    async fn current_sync_token(
-        &self,
-        calendar: &SyncCalendarRow,
-    ) -> AppResult<Option<SyncToken>>;
+    async fn current_sync_token(&self, calendar: &SyncCalendarRow) -> AppResult<Option<SyncToken>>;
 
     /// The collection's opaque change-tag (CalDAV `getctag`), for token-less
     /// servers that lack `sync-collection`. Unchanged since the last full

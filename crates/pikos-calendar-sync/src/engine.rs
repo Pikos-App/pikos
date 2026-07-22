@@ -111,7 +111,10 @@ async fn run<P: CalendarProvider>(
     };
     if !had_cursor && can_skip_enumerate(calendar, ctag.as_deref()) {
         persist_skip(pool, &calendar.id).await?;
-        return Ok(SyncOutcome::Synced { full_resync: false, changed: false });
+        return Ok(SyncOutcome::Synced {
+            full_resync: false,
+            changed: false,
+        });
     }
 
     let delta = provider.sync(calendar, since).await?;
@@ -124,7 +127,12 @@ async fn run<P: CalendarProvider>(
 
     let outcome = reconcile_batched(pool, &ctx, &delta).await?;
     let resolved_masters = resolve_missing_masters(
-        pool, provider, &ctx, calendar, &delta, &outcome.missing_masters,
+        pool,
+        provider,
+        &ctx,
+        calendar,
+        &delta,
+        &outcome.missing_masters,
     )
     .await?;
     let swept = sweep_absent_events(pool, &ctx, &delta, &resolved_masters).await?;
@@ -138,7 +146,10 @@ async fn run<P: CalendarProvider>(
     };
     persist_progress(pool, &calendar.id, next.as_ref(), was_full, ctag.as_deref()).await?;
 
-    Ok(SyncOutcome::Synced { full_resync: was_full && had_cursor, changed })
+    Ok(SyncOutcome::Synced {
+        full_resync: was_full && had_cursor,
+        changed,
+    })
 }
 
 /// Drive `reconciler::sweep_absent` on a full authoritative enumerate; no-op
@@ -167,10 +178,7 @@ async fn sweep_absent_events(
     // series' external_id but never appear in `upserts`, so they'd otherwise be
     // detached/deleted in the same pass that created them.
     present.extend(resolved_masters.iter().cloned());
-    retry_on_busy(|| {
-        pikos_db::reconciler::sweep_absent(pool, ctx, &present, window_start)
-    })
-    .await
+    retry_on_busy(|| pikos_db::reconciler::sweep_absent(pool, ctx, &present, window_start)).await
 }
 
 /// Above this many delta items, commit the upserts in batches instead of one
@@ -212,15 +220,25 @@ async fn reconcile_batched(
 
     let mut applied = 0;
     for batch in events.chunks(RECONCILE_BATCH) {
-        let sub = SyncDelta { upserts: batch.to_vec(), ..Default::default() };
+        let sub = SyncDelta {
+            upserts: batch.to_vec(),
+            ..Default::default()
+        };
         applied += reconcile_safe(pool, ctx, &sub).await?.applied;
     }
 
     if tail.is_empty() && delta.removals.is_empty() {
-        return Ok(ReconcileOutcome { missing_masters: vec![], applied });
+        return Ok(ReconcileOutcome {
+            missing_masters: vec![],
+            applied,
+        });
     }
     // Occurrences + removals, once every master in this delta is stored.
-    let sub = SyncDelta { upserts: tail, removals: delta.removals.clone(), ..Default::default() };
+    let sub = SyncDelta {
+        upserts: tail,
+        removals: delta.removals.clone(),
+        ..Default::default()
+    };
     let mut outcome = reconcile_safe(pool, ctx, &sub).await?;
     outcome.applied += applied;
     Ok(outcome)

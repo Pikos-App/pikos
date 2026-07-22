@@ -64,7 +64,11 @@ async fn dormant_account_is_hidden_and_reused_by_provider_and_name() {
     // Hidden from the panel, but still matchable for reconnect — by exact
     // provider+display_name only (the other account and a wrong name miss).
     let visible = get_sync_status_impl(&pool).await.unwrap();
-    assert_eq!(visible.len(), 1, "dormant account hidden; the live one remains");
+    assert_eq!(
+        visible.len(),
+        1,
+        "dormant account hidden; the live one remains"
+    );
     assert_eq!(visible[0].account.id, other);
     assert!(find_dormant_account_impl(&pool, "caldav", "nope")
         .await
@@ -149,13 +153,17 @@ async fn disable_tears_down_bare_folder_and_clears_cursor() {
         .unwrap();
 
     assert!(!disabled.enabled);
-    assert_eq!(disabled.folder_id, None, "bare folder removed → link cleared");
+    assert_eq!(
+        disabled.folder_id, None,
+        "bare folder removed → link cleared"
+    );
     assert_eq!(folder_flag(&pool, &folder_id).await, None, "folder deleted");
-    let token: Option<String> = sqlx::query_scalar("SELECT sync_token FROM sync_calendar WHERE id = ?")
-        .bind(&cal.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let token: Option<String> =
+        sqlx::query_scalar("SELECT sync_token FROM sync_calendar WHERE id = ?")
+            .bind(&cal.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(token, None, "cursor cleared so re-enable backfills fresh");
 }
 
@@ -186,7 +194,11 @@ async fn disable_keeps_and_deflags_folder_with_a_survivor() {
         .unwrap();
 
     assert_eq!(disabled.folder_id.as_deref(), Some(folder_id.as_str()));
-    assert_eq!(folder_flag(&pool, &folder_id).await, Some(0), "de-flagged, kept");
+    assert_eq!(
+        folder_flag(&pool, &folder_id).await,
+        Some(0),
+        "de-flagged, kept"
+    );
 }
 
 #[tokio::test]
@@ -222,7 +234,11 @@ async fn re_enable_reflags_the_same_folder() {
         Some(folder_id.as_str()),
         "re-link the same folder, not a new one"
     );
-    assert_eq!(folder_flag(&pool, &folder_id).await, Some(1), "re-flagged external");
+    assert_eq!(
+        folder_flag(&pool, &folder_id).await,
+        Some(1),
+        "re-flagged external"
+    );
     let folder_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders")
         .fetch_one(&pool)
         .await

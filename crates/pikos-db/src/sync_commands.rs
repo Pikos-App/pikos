@@ -217,9 +217,7 @@ async fn enable_sync_calendar(
     let folder_id = match &cal.folder_id {
         // Re-enable: the de-flagged folder still exists → re-flag it in place so its
         // surviving owned pages rejoin a live sync folder.
-        Some(fid)
-            if folder_exists(&mut tx, fid).await? =>
-        {
+        Some(fid) if folder_exists(&mut tx, fid).await? => {
             sqlx::query("UPDATE folders SET is_external_calendar = 1, color = ?, updated_at = ? WHERE id = ?")
                 .bind(color)
                 .bind(&now)
@@ -285,10 +283,11 @@ async fn create_external_folder(
     now: &str,
 ) -> AppResult<String> {
     let id = uuid::Uuid::new_v4().to_string();
-    let sort_order: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(sort_order) + 1, 0) FROM folders")
-        .fetch_one(&mut **tx)
-        .await
-        .unwrap_or(0);
+    let sort_order: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(sort_order) + 1, 0) FROM folders")
+            .fetch_one(&mut **tx)
+            .await
+            .unwrap_or(0);
     sqlx::query(
         "INSERT INTO folders (id, name, sort_order, color, is_external_calendar, created_at, updated_at)
          VALUES (?, ?, ?, ?, 1, ?, ?)",

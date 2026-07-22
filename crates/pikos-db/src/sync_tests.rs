@@ -1,6 +1,6 @@
 use super::*;
-use crate::pool::{insert_test_folder, insert_test_page, test_pool, TestPage};
 use crate::now_iso;
+use crate::pool::{insert_test_folder, insert_test_page, test_pool, TestPage};
 
 // ─── helpers — raw inserts (no writers exist yet) ─────────────────────────────
 
@@ -72,7 +72,9 @@ async fn insert_page_sync(
 async fn row_structs_round_trip() {
     let pool = test_pool().await;
     insert_test_folder(&pool, "f1", "Cal").await.unwrap();
-    insert_test_page(&pool, TestPage::new("p1", "Event")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "Event"))
+        .await
+        .unwrap();
     insert_account(&pool, "a1", "caldav", "basic").await;
     insert_calendar(&pool, "c1", "a1", "calhref").await;
     insert_page_sync(&pool, "ps1", "p1", "a1", "calhref", "/dav/ev1.ics", "uid-1")
@@ -112,20 +114,23 @@ async fn row_structs_round_trip() {
 async fn folders_default_to_non_external() {
     let pool = test_pool().await;
     insert_test_folder(&pool, "f1", "Regular").await.unwrap();
-    let flag: bool =
-        sqlx::query_scalar("SELECT is_external_calendar FROM folders WHERE id = ?")
-            .bind("f1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let flag: bool = sqlx::query_scalar("SELECT is_external_calendar FROM folders WHERE id = ?")
+        .bind("f1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert!(!flag, "existing/new folders must default to non-external");
 }
 
 #[tokio::test]
 async fn per_calendar_dedup_unique_holds() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p1", "A")).await.unwrap();
-    insert_test_page(&pool, TestPage::new("p2", "B")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "A"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("p2", "B"))
+        .await
+        .unwrap();
     insert_account(&pool, "a1", "caldav", "basic").await;
 
     insert_page_sync(&pool, "ps1", "p1", "a1", "cal", "/ev.ics", "uid-1")
@@ -139,8 +144,12 @@ async fn per_calendar_dedup_unique_holds() {
 #[tokio::test]
 async fn same_uid_across_calendars_is_allowed() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p1", "A")).await.unwrap();
-    insert_test_page(&pool, TestPage::new("p2", "B")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "A"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("p2", "B"))
+        .await
+        .unwrap();
     insert_account(&pool, "a1", "caldav", "basic").await;
 
     // Same meeting (same ical_uid) on two calendars = two pages, not merged.
@@ -162,7 +171,9 @@ async fn same_uid_across_calendars_is_allowed() {
 #[tokio::test]
 async fn page_hard_delete_cascades_link() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p1", "A")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "A"))
+        .await
+        .unwrap();
     insert_account(&pool, "a1", "caldav", "basic").await;
     insert_page_sync(&pool, "ps1", "p1", "a1", "cal", "/ev.ics", "uid-1")
         .await
@@ -178,7 +189,10 @@ async fn page_hard_delete_cascades_link() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(count, 0, "hard-deleting a page must clear its page_sync row");
+    assert_eq!(
+        count, 0,
+        "hard-deleting a page must clear its page_sync row"
+    );
 }
 
 /// The migration must apply cleanly on a database that already holds recurrence
@@ -235,7 +249,9 @@ async fn coexists_with_populated_recurrence_data() {
 #[tokio::test]
 async fn account_removal_cascades_sync_rows() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p1", "A")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p1", "A"))
+        .await
+        .unwrap();
     insert_account(&pool, "a1", "caldav", "basic").await;
     insert_calendar(&pool, "c1", "a1", "cal").await;
     insert_page_sync(&pool, "ps1", "p1", "a1", "cal", "/ev.ics", "uid-1")

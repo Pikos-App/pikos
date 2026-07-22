@@ -123,7 +123,9 @@ fn candidates_for(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDat
 }
 
 fn daily_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
-    add_days_signed(dtstart, m * rule.interval as i64).into_iter().collect()
+    add_days_signed(dtstart, m * rule.interval as i64)
+        .into_iter()
+        .collect()
 }
 
 fn weekly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
@@ -148,11 +150,19 @@ fn weekly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<Naive
 fn monthly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
     let (year, month) = add_months(dtstart.year(), dtstart.month(), m * rule.interval as i64);
     let mut dates: Vec<NaiveDate> = if !rule.bymonthday.is_empty() {
-        rule.bymonthday.iter().filter_map(|&md| resolve_monthday(year, month, md)).collect()
+        rule.bymonthday
+            .iter()
+            .filter_map(|&md| resolve_monthday(year, month, md))
+            .collect()
     } else if !rule.byday.is_empty() {
-        rule.byday.iter().flat_map(|b| byday_in_month(year, month, b)).collect()
+        rule.byday
+            .iter()
+            .flat_map(|b| byday_in_month(year, month, b))
+            .collect()
     } else {
-        resolve_monthday(year, month, dtstart.day() as i32).into_iter().collect()
+        resolve_monthday(year, month, dtstart.day() as i32)
+            .into_iter()
+            .collect()
     };
     dates.sort_unstable();
     dates.dedup();
@@ -164,7 +174,9 @@ fn monthly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<Naiv
 
 fn yearly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
     let year = dtstart.year() + (m * rule.interval as i64) as i32;
-    NaiveDate::from_ymd_opt(year, dtstart.month(), dtstart.day()).into_iter().collect()
+    NaiveDate::from_ymd_opt(year, dtstart.month(), dtstart.day())
+        .into_iter()
+        .collect()
 }
 
 /// Picks BYSETPOS positions (1-based; negative from the end) out of the sorted
@@ -192,7 +204,9 @@ fn byday_in_month(year: i32, month: u32, b: &ByDay) -> Vec<NaiveDate> {
         if weekday_index(day) == b.weekday {
             all.push(day);
         }
-        let Some(next) = day.checked_add_days(Days::new(1)) else { break };
+        let Some(next) = day.checked_add_days(Days::new(1)) else {
+            break;
+        };
         day = next;
     }
     match b.ordinal {
@@ -200,7 +214,11 @@ fn byday_in_month(year: i32, month: u32, b: &ByDay) -> Vec<NaiveDate> {
         Some(n) if n > 0 => all.get((n - 1) as usize).copied().into_iter().collect(),
         Some(n) => {
             let idx = all.len() as i32 + n;
-            (idx >= 0).then(|| all.get(idx as usize).copied()).flatten().into_iter().collect()
+            (idx >= 0)
+                .then(|| all.get(idx as usize).copied())
+                .flatten()
+                .into_iter()
+                .collect()
         }
     }
 }
@@ -208,7 +226,9 @@ fn byday_in_month(year: i32, month: u32, b: &ByDay) -> Vec<NaiveDate> {
 fn resolve_monthday(year: i32, month: u32, md: i32) -> Option<NaiveDate> {
     let dim = days_in_month(year, month) as i32;
     let day = if md > 0 { md } else { dim + md + 1 };
-    (day >= 1 && day <= dim).then(|| NaiveDate::from_ymd_opt(year, month, day as u32)).flatten()
+    (day >= 1 && day <= dim)
+        .then(|| NaiveDate::from_ymd_opt(year, month, day as u32))
+        .flatten()
 }
 
 // ─── Public operations (mirrors of recurrence.ts) ────────────────────────────
@@ -224,7 +244,8 @@ pub fn expand_range(
     exdates: &[String],
 ) -> Result<Vec<Occurrence>, RecurrenceError> {
     let rule = ParsedRule::parse(rrule)?;
-    let anchor = WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
+    let anchor =
+        WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
     let range_start = parse_dt(range_start)?;
     let range_end = parse_dt(range_end)?;
     let duration = timed_duration(&anchor, end);
@@ -263,7 +284,8 @@ pub fn next_occurrence_after(
     exdates: &[String],
 ) -> Result<Option<(String, Option<String>)>, RecurrenceError> {
     let rule = ParsedRule::parse(rrule)?;
-    let anchor = WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
+    let anchor =
+        WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
     let after_date = parse_dt(after)?.date();
     let cursor = after_date.and_hms_opt(23, 59, 59).unwrap();
     let excluded: HashSet<&str> = exdates.iter().map(String::as_str).collect();
@@ -305,7 +327,10 @@ pub fn align_weekly_rule_to_anchor(rrule: &str, anchor_start: &str) -> String {
     if byweekday == anchor_weekday {
         return rrule.to_string();
     }
-    build_rrule(&crate::rule::RecurrenceOptions { byweekday: Some(vec![anchor_weekday]), ..opts })
+    build_rrule(&crate::rule::RecurrenceOptions {
+        byweekday: Some(vec![anchor_weekday]),
+        ..opts
+    })
 }
 
 /// `YYYY-MM-DD` for every occurrence strictly after `after` and strictly before
@@ -323,7 +348,8 @@ pub fn missed_occurrences_between(
         return Ok(vec![]);
     }
     let rule = ParsedRule::parse(rrule)?;
-    let anchor = WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
+    let anchor =
+        WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
     let excluded: HashSet<&str> = exdates.iter().map(String::as_str).collect();
     let anchor_time = anchor.time.unwrap_or(NaiveTime::MIN);
 
@@ -362,7 +388,8 @@ pub fn oldest_open_occurrence(
     exclusions: &[String],
 ) -> Result<Option<Occurrence>, RecurrenceError> {
     let rule = ParsedRule::parse(rrule)?;
-    let anchor = WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
+    let anchor =
+        WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
     let duration = timed_duration(&anchor, end);
     let excluded: HashSet<&str> = exclusions.iter().map(|s| date_key(s)).collect();
     let anchor_time = anchor.time.unwrap_or(NaiveTime::MIN);
@@ -397,7 +424,8 @@ pub fn occurrences_in_window(
     exclusions: &[String],
 ) -> Result<Vec<Occurrence>, RecurrenceError> {
     let rule = ParsedRule::parse(rrule)?;
-    let anchor = WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
+    let anchor =
+        WallClock::parse(start).ok_or_else(|| RecurrenceError::Parse(start.to_string()))?;
     let lo_dt = parse_dt(lo)?;
     let hi_dt = parse_dt(hi)?;
     let duration = timed_duration(&anchor, end);
@@ -448,7 +476,13 @@ pub fn compute_next_end(base_end: &str, next_start: &str) -> Option<String> {
     if end <= next.date.and_time(next_time) {
         end = end.checked_add_days(Days::new(1))?;
     }
-    Some(WallClock { date: end.date(), time: Some(end.time()) }.format())
+    Some(
+        WallClock {
+            date: end.date(),
+            time: Some(end.time()),
+        }
+        .format(),
+    )
 }
 
 // ─── Enumeration helpers ─────────────────────────────────────────────────────
@@ -485,7 +519,10 @@ fn seek_after(
 /// The occurrence on `date` carrying the anchor's time (or all-day when the
 /// anchor is date-only).
 fn occ_wallclock(anchor: &WallClock, date: NaiveDate) -> WallClock {
-    WallClock { date, time: anchor.time }
+    WallClock {
+        date,
+        time: anchor.time,
+    }
 }
 
 /// Duration in minutes for a timed anchor with an end; `None` for all-day or
@@ -500,11 +537,17 @@ fn timed_duration(anchor: &WallClock, end: Option<&str>) -> Option<i64> {
 
 fn occ_end(start: &WallClock, minutes: i64) -> String {
     let end = start.as_datetime() + chrono::Duration::minutes(minutes);
-    WallClock { date: end.date(), time: Some(end.time()) }.format()
+    WallClock {
+        date: end.date(),
+        time: Some(end.time()),
+    }
+    .format()
 }
 
 fn parse_dt(s: &str) -> Result<NaiveDateTime, RecurrenceError> {
-    WallClock::parse(s).map(|w| w.as_datetime()).ok_or_else(|| RecurrenceError::Parse(s.to_string()))
+    WallClock::parse(s)
+        .map(|w| w.as_datetime())
+        .ok_or_else(|| RecurrenceError::Parse(s.to_string()))
 }
 
 // ─── Date arithmetic (rrule.js weekday convention: 0 = Monday) ───────────────
@@ -542,7 +585,11 @@ fn add_months(year: i32, month: u32, delta: i64) -> (i32, u32) {
 }
 
 fn days_in_month(year: i32, month: u32) -> u32 {
-    let (ny, nm) = if month == 12 { (year + 1, 1) } else { (year, month + 1) };
+    let (ny, nm) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
     let first_next = NaiveDate::from_ymd_opt(ny, nm, 1).unwrap();
     first_next.pred_opt().unwrap().day()
 }

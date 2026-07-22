@@ -4,8 +4,9 @@
 //! test is hermetic — no Node at test time.
 
 use pikos_recurrence::{
-    align_weekly_rule_to_anchor, build_rrule, compute_next_end, expand_range, missed_occurrences_between,
-    next_occurrence_after, parse_rrule, rrule_to_short_label, snap_anchor_to_rule, RecurrenceOptions,
+    align_weekly_rule_to_anchor, build_rrule, compute_next_end, expand_range,
+    missed_occurrences_between, next_occurrence_after, parse_rrule, rrule_to_short_label,
+    snap_anchor_to_rule, RecurrenceOptions,
 };
 use serde::Deserialize;
 
@@ -168,8 +169,15 @@ fn corpus() -> Corpus {
 #[test]
 fn expand_range_matches() {
     for c in corpus().expand_range {
-        let got = expand_range(&c.rrule, &c.start, c.end.as_deref(), &c.range_start, &c.range_end, &c.exdates)
-            .unwrap_or_else(|e| panic!("[{}] {e}", c.name));
+        let got = expand_range(
+            &c.rrule,
+            &c.start,
+            c.end.as_deref(),
+            &c.range_start,
+            &c.range_end,
+            &c.exdates,
+        )
+        .unwrap_or_else(|e| panic!("[{}] {e}", c.name));
         let got: Vec<ExpectedOcc> = got
             .into_iter()
             .map(|o| ExpectedOcc {
@@ -187,7 +195,10 @@ fn next_occurrence_after_matches() {
     for c in corpus().next_after {
         let got = next_occurrence_after(&c.rrule, &c.start, &c.after, &c.exdates)
             .unwrap_or_else(|e| panic!("[{}] {e}", c.name));
-        let got = got.map(|(start, end)| NextExpected { scheduled_start: start, scheduled_end: end });
+        let got = got.map(|(start, end)| NextExpected {
+            scheduled_start: start,
+            scheduled_end: end,
+        });
         assert_eq!(got, c.expected, "next_occurrence_after: {}", c.name);
     }
 }
@@ -195,14 +206,24 @@ fn next_occurrence_after_matches() {
 #[test]
 fn snap_anchor_matches() {
     for c in corpus().snap_anchor {
-        assert_eq!(snap_anchor_to_rule(&c.rrule, &c.anchor), c.expected, "snap_anchor: {}", c.name);
+        assert_eq!(
+            snap_anchor_to_rule(&c.rrule, &c.anchor),
+            c.expected,
+            "snap_anchor: {}",
+            c.name
+        );
     }
 }
 
 #[test]
 fn align_weekly_matches() {
     for c in corpus().align_weekly {
-        assert_eq!(align_weekly_rule_to_anchor(&c.rrule, &c.anchor), c.expected, "align_weekly: {}", c.name);
+        assert_eq!(
+            align_weekly_rule_to_anchor(&c.rrule, &c.anchor),
+            c.expected,
+            "align_weekly: {}",
+            c.name
+        );
     }
 }
 
@@ -218,14 +239,24 @@ fn missed_between_matches() {
 #[test]
 fn compute_next_end_matches() {
     for c in corpus().compute_next_end {
-        assert_eq!(compute_next_end(&c.base_end, &c.next_start), c.expected, "compute_next_end: {}", c.name);
+        assert_eq!(
+            compute_next_end(&c.base_end, &c.next_start),
+            c.expected,
+            "compute_next_end: {}",
+            c.name
+        );
     }
 }
 
 #[test]
 fn short_label_matches() {
     for c in corpus().short_label {
-        assert_eq!(rrule_to_short_label(&c.rrule), c.expected, "short_label: {}", c.rrule);
+        assert_eq!(
+            rrule_to_short_label(&c.rrule),
+            c.expected,
+            "short_label: {}",
+            c.rrule
+        );
     }
 }
 
@@ -234,7 +265,11 @@ fn property_expand_matches() {
     for c in corpus().property_expand {
         let got = expand_range(&c.rrule, &c.start, None, &c.range_start, &c.range_end, &[])
             .unwrap_or_else(|e| panic!("[{}] {e}", c.rrule));
-        let got = got.into_iter().map(|o| o.original_date).collect::<Vec<_>>().join(",");
+        let got = got
+            .into_iter()
+            .map(|o| o.original_date)
+            .collect::<Vec<_>>()
+            .join(",");
         assert_eq!(got, c.dates, "property_expand: {}", c.rrule);
     }
 }
@@ -245,7 +280,8 @@ fn roundtrip_matches() {
         let parsed = parse_rrule(&c.rrule).unwrap_or_else(|| panic!("parse {}", c.rrule));
         assert_eq!(to_corpus(&parsed), c.options, "parse parity: {}", c.rrule);
         // Build must round-trip through parse (byte-parity with rrule.js is not required).
-        let rebuilt = parse_rrule(&build_rrule(&parsed)).unwrap_or_else(|| panic!("reparse {}", c.rrule));
+        let rebuilt =
+            parse_rrule(&build_rrule(&parsed)).unwrap_or_else(|| panic!("reparse {}", c.rrule));
         assert_eq!(rebuilt, parsed, "build round-trip: {}", c.rrule);
     }
 }

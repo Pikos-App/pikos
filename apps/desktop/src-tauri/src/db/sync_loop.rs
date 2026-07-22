@@ -117,4 +117,3 @@ pub async fn run(app: AppHandle, rx: mpsc::Receiver<SyncTrigger>) {
     )
     .await;
 }
-

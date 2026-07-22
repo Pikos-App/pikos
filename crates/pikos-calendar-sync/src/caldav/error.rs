@@ -33,7 +33,9 @@ impl From<CaldavError> for AppError {
     fn from(e: CaldavError) -> Self {
         match e {
             // Both surface as user-actionable input problems at connect time.
-            CaldavError::Unauthorized | CaldavError::NotCaldav(_) => AppError::Invalid(e.to_string()),
+            CaldavError::Unauthorized | CaldavError::NotCaldav(_) => {
+                AppError::Invalid(e.to_string())
+            }
             CaldavError::Network(_) | CaldavError::UnexpectedStatus(_) => {
                 AppError::Network(e.to_string())
             }
@@ -56,18 +58,33 @@ mod tests {
     // "reconnect needed" or a wrong password as a transient blip.
     #[test]
     fn auth_and_not_caldav_are_user_actionable_invalid() {
-        assert!(matches!(mapped(CaldavError::Unauthorized), AppError::Invalid(_)));
-        assert!(matches!(mapped(CaldavError::NotCaldav("x".into())), AppError::Invalid(_)));
+        assert!(matches!(
+            mapped(CaldavError::Unauthorized),
+            AppError::Invalid(_)
+        ));
+        assert!(matches!(
+            mapped(CaldavError::NotCaldav("x".into())),
+            AppError::Invalid(_)
+        ));
     }
 
     #[test]
     fn network_and_unexpected_status_are_network() {
-        assert!(matches!(mapped(CaldavError::Network("x".into())), AppError::Network(_)));
-        assert!(matches!(mapped(CaldavError::UnexpectedStatus(500)), AppError::Network(_)));
+        assert!(matches!(
+            mapped(CaldavError::Network("x".into())),
+            AppError::Network(_)
+        ));
+        assert!(matches!(
+            mapped(CaldavError::UnexpectedStatus(500)),
+            AppError::Network(_)
+        ));
     }
 
     #[test]
     fn protocol_is_internal() {
-        assert!(matches!(mapped(CaldavError::Protocol("x".into())), AppError::Internal(_)));
+        assert!(matches!(
+            mapped(CaldavError::Protocol("x".into())),
+            AppError::Internal(_)
+        ));
     }
 }

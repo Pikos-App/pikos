@@ -8,10 +8,12 @@ use super::super::transport::{DavResponse, DavTransport};
 use super::{discover_calendars, propfind_follow, resolve};
 use url::Url;
 
-const PRINCIPAL: &str = include_str!("../../tests/fixtures/caldav/discovery/01_current_user_principal.xml");
+const PRINCIPAL: &str =
+    include_str!("../../tests/fixtures/caldav/discovery/01_current_user_principal.xml");
 const HOME: &str = include_str!("../../tests/fixtures/caldav/discovery/02_calendar_home_set.xml");
 const ENUM: &str = include_str!("../../tests/fixtures/caldav/discovery/03_enumerate_calendars.xml");
-const HOME_REMOTE: &str = include_str!("../../tests/fixtures/caldav/discovery/04_calendar_home_set_remote.xml");
+const HOME_REMOTE: &str =
+    include_str!("../../tests/fixtures/caldav/discovery/04_calendar_home_set_remote.xml");
 const UNAUTH: &str = include_str!("../../tests/fixtures/caldav/discovery/00_unauthorized.txt");
 
 #[derive(Debug)]
@@ -54,25 +56,46 @@ impl DavTransport for FixtureTransport {
         Ok(resp)
     }
 
-    async fn report(&self, url: &str, _depth: &str, _body: &str) -> Result<DavResponse, CaldavError> {
+    async fn report(
+        &self,
+        url: &str,
+        _depth: &str,
+        _body: &str,
+    ) -> Result<DavResponse, CaldavError> {
         panic!("discovery never issues a REPORT (got {url})");
     }
 }
 
 fn ok(body: &str) -> DavResponse {
-    DavResponse { status: 207, location: None, body: body.into() }
+    DavResponse {
+        status: 207,
+        location: None,
+        body: body.into(),
+    }
 }
 
 fn status(status: u16) -> DavResponse {
-    DavResponse { status, location: None, body: String::new() }
+    DavResponse {
+        status,
+        location: None,
+        body: String::new(),
+    }
 }
 
 fn redirect(location: &str) -> DavResponse {
-    DavResponse { status: 301, location: Some(location.into()), body: String::new() }
+    DavResponse {
+        status: 301,
+        location: Some(location.into()),
+        body: String::new(),
+    }
 }
 
 fn unauthorized() -> DavResponse {
-    DavResponse { status: 401, location: None, body: UNAUTH.into() }
+    DavResponse {
+        status: 401,
+        location: None,
+        body: UNAUTH.into(),
+    }
 }
 
 async fn discover(mode: Mode) -> Result<Vec<pikos_db::sync_delta::RemoteCalendar>, CaldavError> {
@@ -131,7 +154,10 @@ fn resolve_does_not_downgrade_https_to_http() {
     let base = Url::parse("https://caldav.example.com/").unwrap();
     let from = Url::parse("https://caldav.example.com/principals/me/").unwrap();
     let resolved = resolve(&base, &from, "http://caldav.example.com/calendars/me/").unwrap();
-    assert_eq!(resolved.as_str(), "https://caldav.example.com/calendars/me/");
+    assert_eq!(
+        resolved.as_str(),
+        "https://caldav.example.com/calendars/me/"
+    );
 }
 
 // ─── propfind_follow redirect machinery ───────────────────────────────────────
@@ -143,7 +169,11 @@ struct FixedResponse {
 }
 impl DavTransport for FixedResponse {
     async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
-        Ok(DavResponse { status: self.status, location: self.location.clone(), body: String::new() })
+        Ok(DavResponse {
+            status: self.status,
+            location: self.location.clone(),
+            body: String::new(),
+        })
     }
     async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
         panic!("discovery never issues a REPORT");
@@ -153,7 +183,10 @@ impl DavTransport for FixedResponse {
 #[tokio::test]
 async fn redirect_without_a_location_is_a_protocol_error() {
     let base = Url::parse("https://caldav.example.com/").unwrap();
-    let t = FixedResponse { status: 302, location: None };
+    let t = FixedResponse {
+        status: 302,
+        location: None,
+    };
     let result = propfind_follow(&t, &base, base.clone(), "0", "<b/>").await;
     assert!(
         matches!(result, Err(CaldavError::Protocol(_))),
@@ -165,7 +198,10 @@ async fn redirect_without_a_location_is_a_protocol_error() {
 async fn a_redirect_loop_stops_after_the_cap() {
     let base = Url::parse("https://caldav.example.com/").unwrap();
     // Always bounces to a new path → never resolves to a 207.
-    let t = FixedResponse { status: 301, location: Some("/next".into()) };
+    let t = FixedResponse {
+        status: 301,
+        location: Some("/next".into()),
+    };
     match propfind_follow(&t, &base, base.clone(), "0", "<b/>").await {
         Err(CaldavError::Protocol(m)) => assert!(m.contains("too many redirects"), "got: {m}"),
         _ => panic!("expected a too-many-redirects Protocol error"),
@@ -187,7 +223,11 @@ impl DavTransport for DowngradeThenOk {
                 body: String::new(),
             })
         } else {
-            Ok(DavResponse { status: 207, location: None, body: "<ok/>".into() })
+            Ok(DavResponse {
+                status: 207,
+                location: None,
+                body: "<ok/>".into(),
+            })
         }
     }
     async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
@@ -198,8 +238,13 @@ impl DavTransport for DowngradeThenOk {
 #[tokio::test]
 async fn a_redirect_that_downgrades_to_http_is_re_upgraded() {
     let base = Url::parse("https://caldav.example.com/").unwrap();
-    let t = DowngradeThenOk { hits: std::sync::Mutex::new(0) };
-    let followed = propfind_follow(&t, &base, base.clone(), "0", "<b/>").await.unwrap().unwrap();
+    let t = DowngradeThenOk {
+        hits: std::sync::Mutex::new(0),
+    };
+    let followed = propfind_follow(&t, &base, base.clone(), "0", "<b/>")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
         followed.final_url.as_str(),
         "https://caldav.example.com/principal/",

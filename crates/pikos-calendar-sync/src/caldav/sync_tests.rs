@@ -11,12 +11,16 @@ use super::super::transport::{DavResponse, DavTransport};
 use super::*;
 use pikos_db::sync_delta::{EventUpsert, UpsertItem};
 
-const INITIAL: &str = include_str!("../../tests/fixtures/caldav/sync/00_sync_collection_initial.xml");
+const INITIAL: &str =
+    include_str!("../../tests/fixtures/caldav/sync/00_sync_collection_initial.xml");
 const MULTIGET_ALL: &str = include_str!("../../tests/fixtures/caldav/sync/01_multiget_all.xml");
-const BACKFILL: &str = include_str!("../../tests/fixtures/caldav/sync/02_calendar_query_backfill.xml");
+const BACKFILL: &str =
+    include_str!("../../tests/fixtures/caldav/sync/02_calendar_query_backfill.xml");
 const DELTA: &str = include_str!("../../tests/fixtures/caldav/sync/03_sync_collection_delta.xml");
-const MULTIGET_CHANGED: &str = include_str!("../../tests/fixtures/caldav/sync/04_multiget_changed.xml");
-const STALE: &str = include_str!("../../tests/fixtures/caldav/sync/05_sync_collection_stale_token.xml");
+const MULTIGET_CHANGED: &str =
+    include_str!("../../tests/fixtures/caldav/sync/04_multiget_changed.xml");
+const STALE: &str =
+    include_str!("../../tests/fixtures/caldav/sync/05_sync_collection_stale_token.xml");
 
 const CAL: &str = "http://127.0.0.1:5232/testuser/work-calendar/";
 
@@ -39,7 +43,12 @@ impl DavTransport for FixtureTransport {
         panic!("sync never issues a PROPFIND (got {url})");
     }
 
-    async fn report(&self, _url: &str, _depth: &str, body: &str) -> Result<DavResponse, CaldavError> {
+    async fn report(
+        &self,
+        _url: &str,
+        _depth: &str,
+        body: &str,
+    ) -> Result<DavResponse, CaldavError> {
         let resp = if body.contains("calendar-multiget") {
             match self.mode {
                 Mode::Delta => ok(MULTIGET_CHANGED),
@@ -51,7 +60,11 @@ impl DavTransport for FixtureTransport {
             match self.mode {
                 Mode::Full => ok(INITIAL),
                 Mode::Delta => ok(DELTA),
-                Mode::Stale => DavResponse { status: 403, location: None, body: STALE.into() },
+                Mode::Stale => DavResponse {
+                    status: 403,
+                    location: None,
+                    body: STALE.into(),
+                },
             }
         } else {
             panic!("unexpected REPORT body: {body}");
@@ -61,7 +74,11 @@ impl DavTransport for FixtureTransport {
 }
 
 fn ok(body: &str) -> DavResponse {
-    DavResponse { status: 207, location: None, body: body.into() }
+    DavResponse {
+        status: 207,
+        location: None,
+        body: body.into(),
+    }
 }
 
 async fn run(mode: Mode, since: Option<&str>) -> SyncDelta {
@@ -97,19 +114,35 @@ fn by_uid<'a>(delta: &'a SyncDelta, uid: &str) -> &'a EventUpsert {
 async fn backfill_enumerates_the_window_with_no_token_or_removals() {
     let delta = run(Mode::Full, None).await;
     assert_eq!(events(&delta).len(), 4, "all four seeded resources");
-    assert!(delta.removals.is_empty(), "a full enumerate has no removals");
-    assert!(delta.next_token.is_none(), "backfill leaves token bootstrap to the engine");
+    assert!(
+        delta.removals.is_empty(),
+        "a full enumerate has no removals"
+    );
+    assert!(
+        delta.next_token.is_none(),
+        "backfill leaves token bootstrap to the engine"
+    );
 }
 
 #[tokio::test]
 async fn timed_event_maps_identity_schedule_and_mirror_fields() {
     let delta = run(Mode::Full, None).await;
     let m = by_uid(&delta, "meeting-1@pikos.test");
-    assert_eq!(m.core.external_id, "/testuser/work-calendar/meeting.ics", "href is the dedup id");
+    assert_eq!(
+        m.core.external_id, "/testuser/work-calendar/meeting.ics",
+        "href is the dedup id"
+    );
     assert_eq!(m.core.title, "Product sync");
-    assert_eq!(m.core.description.as_deref(), Some("Bring the roadmap drafts."));
+    assert_eq!(
+        m.core.description.as_deref(),
+        Some("Bring the roadmap drafts.")
+    );
     assert_eq!(m.core.location.as_deref(), Some("Room 4B"));
-    assert_eq!(m.core.attendees, vec!["alex@pikos.test", "sam@pikos.test"], "mailto: stripped");
+    assert_eq!(
+        m.core.attendees,
+        vec!["alex@pikos.test", "sam@pikos.test"],
+        "mailto: stripped"
+    );
     assert_eq!(m.schedule.start, "2026-06-15T09:00:00");
     assert_eq!(m.schedule.end.as_deref(), Some("2026-06-15T09:30:00"));
     assert_eq!(m.schedule.timezone.as_deref(), Some("America/New_York"));
@@ -124,12 +157,19 @@ async fn all_day_end_is_carried_raw_exclusive() {
     // owns the decrement — the provider must NOT pre-subtract.
     let h = by_uid(&delta, "holiday-1@pikos.test");
     assert_eq!(h.schedule.start, "2026-06-15");
-    assert_eq!(h.schedule.end.as_deref(), Some("2026-06-16"), "raw exclusive, not decremented");
+    assert_eq!(
+        h.schedule.end.as_deref(),
+        Some("2026-06-16"),
+        "raw exclusive, not decremented"
+    );
     assert_eq!(h.schedule.timezone, None, "all-day carries no zone");
 
     // Multi-day span: Jun 15–17 inclusive arrives as DTEND Jun 18, carried raw.
     let t = by_uid(&delta, "trip-1@pikos.test");
-    assert_eq!((t.schedule.start.as_str(), t.schedule.end.as_deref()), ("2026-06-15", Some("2026-06-18")));
+    assert_eq!(
+        (t.schedule.start.as_str(), t.schedule.end.as_deref()),
+        ("2026-06-15", Some("2026-06-18"))
+    );
 }
 
 #[tokio::test]
@@ -144,8 +184,16 @@ async fn recurring_series_folds_master_overrides_and_cancellation() {
     // Raw RRULE: every field preserved (no lossy round-trip) and UNTIL kept as the
     // wire UTC token — the reconciler, not the provider, rewrites it to wall-clock.
     assert!(rec.rrule.contains("FREQ=WEEKLY"), "got {}", rec.rrule);
-    assert!(rec.rrule.contains("BYDAY=MO"), "BYDAY preserved: {}", rec.rrule);
-    assert!(rec.rrule.contains("UNTIL=20260831T130000Z"), "UNTIL kept raw with Z: {}", rec.rrule);
+    assert!(
+        rec.rrule.contains("BYDAY=MO"),
+        "BYDAY preserved: {}",
+        rec.rrule
+    );
+    assert!(
+        rec.rrule.contains("UNTIL=20260831T130000Z"),
+        "UNTIL kept raw with Z: {}",
+        rec.rrule
+    );
 
     // One moved override (RECURRENCE-ID), keyed by the original wall-clock date.
     assert_eq!(rec.overrides.len(), 1);
@@ -163,7 +211,11 @@ async fn recurring_series_folds_master_overrides_and_cancellation() {
     exdates.sort();
     assert_eq!(
         exdates,
-        vec!["2026-06-15T09:00:00", "2026-06-22T09:00:00", "2026-07-06T09:00:00"],
+        vec![
+            "2026-06-15T09:00:00",
+            "2026-06-22T09:00:00",
+            "2026-07-06T09:00:00"
+        ],
         "TZID literal + UTC-converted + cancelled override, all bare wall-clock"
     );
 }
@@ -180,15 +232,25 @@ async fn incremental_delta_applies_change_removal_and_advances_token() {
     let m = evs[0];
     assert_eq!(m.core.ical_uid, "meeting-1@pikos.test");
     assert_eq!(m.core.title, "Product sync (rescheduled)");
-    assert_eq!(m.schedule.start, "2026-06-15T10:00:00", "rescheduled time picked up");
+    assert_eq!(
+        m.schedule.start, "2026-06-15T10:00:00",
+        "rescheduled time picked up"
+    );
 
     // The 404'd href is a whole-event removal.
     assert_eq!(delta.removals.len(), 1);
-    assert_eq!(delta.removals[0].external_id, "/testuser/work-calendar/trip.ics");
+    assert_eq!(
+        delta.removals[0].external_id,
+        "/testuser/work-calendar/trip.ics"
+    );
 
     // The trailing sync-token becomes the next cursor.
     let token = delta.next_token.as_ref().expect("delta advances the token");
-    assert!(token.0.contains("30f466c6"), "next sync-token stored: {}", token.0);
+    assert!(
+        token.0.contains("30f466c6"),
+        "next sync-token stored: {}",
+        token.0
+    );
 }
 
 #[tokio::test]
@@ -197,7 +259,10 @@ async fn full_via_sync_collection_multigets_all_changed_hrefs() {
     let delta = run(Mode::Full, Some("http://radicale.org/ns/sync/SOME")).await;
     assert_eq!(events(&delta).len(), 4);
     assert!(delta.removals.is_empty());
-    assert!(delta.next_token.is_some(), "incremental carries the token forward");
+    assert!(
+        delta.next_token.is_some(),
+        "incremental carries the token forward"
+    );
 }
 
 #[tokio::test]
@@ -206,7 +271,10 @@ async fn stale_token_falls_back_to_full_reenumerate() {
     let delta = run(Mode::Stale, Some("http://radicale.org/ns/sync/STALE")).await;
     assert_eq!(events(&delta).len(), 4, "recovered the full window");
     assert!(delta.removals.is_empty());
-    assert!(delta.next_token.is_none(), "re-enumerate re-bootstraps the token");
+    assert!(
+        delta.next_token.is_none(),
+        "re-enumerate re-bootstraps the token"
+    );
 }
 
 // ─── sync-collection multistatus shape ──────────────────────────────────────────
@@ -220,7 +288,11 @@ async fn report_parser_splits_changes_from_deletions() {
         .filter(|e| e.response_status == Some(404))
         .map(|e| e.href.as_str())
         .collect();
-    assert_eq!(deleted, vec!["/testuser/work-calendar/trip.ics"], "404 is a deletion");
+    assert_eq!(
+        deleted,
+        vec!["/testuser/work-calendar/trip.ics"],
+        "404 is a deletion"
+    );
     let changed: Vec<_> = report
         .entries
         .iter()
@@ -236,7 +308,9 @@ async fn report_parser_splits_changes_from_deletions() {
 #[tokio::test]
 async fn fetch_one_refetches_a_single_resource() {
     let t = FixtureTransport { mode: Mode::Delta };
-    let ev = fetch_one(&t, CAL, "/testuser/work-calendar/meeting.ics").await.unwrap();
+    let ev = fetch_one(&t, CAL, "/testuser/work-calendar/meeting.ics")
+        .await
+        .unwrap();
     assert_eq!(ev.core.ical_uid, "meeting-1@pikos.test");
     assert_eq!(ev.schedule.start, "2026-06-15T10:00:00");
 }
@@ -277,9 +351,19 @@ DTSTART;TZID=America/New_York:20260615T090000\r\nSUMMARY:Good\r\nEND:VEVENT\r\nE
         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:bad\r\nEND:VTODO\r\nEND:VCALENDAR\r\n",
     );
 
-    let (upserts, unresolved) = resolve_upserts(&NoNetwork, CAL, vec![good, bad]).await.unwrap();
-    assert_eq!(upserts.len(), 1, "one bad body is skipped, the good one survives");
-    assert_eq!(unresolved, vec!["/bad.ics"], "the skipped href is tracked so the sweep spares it");
+    let (upserts, unresolved) = resolve_upserts(&NoNetwork, CAL, vec![good, bad])
+        .await
+        .unwrap();
+    assert_eq!(
+        upserts.len(),
+        1,
+        "one bad body is skipped, the good one survives"
+    );
+    assert_eq!(
+        unresolved,
+        vec!["/bad.ics"],
+        "the skipped href is tracked so the sweep spares it"
+    );
 }
 
 /// A partial 207: the multiget responds for the href but omits `calendar-data`
@@ -295,9 +379,15 @@ async fn resolve_upserts_tracks_a_bodyless_multiget_entry() {
         calendar_data: None,
     }];
 
-    let (upserts, unresolved) = resolve_upserts(&BodylessMultiget, CAL, present).await.unwrap();
+    let (upserts, unresolved) = resolve_upserts(&BodylessMultiget, CAL, present)
+        .await
+        .unwrap();
     assert!(upserts.is_empty(), "no body → no upsert");
-    assert_eq!(unresolved, vec!["/nodata.ics"], "the bodyless href is tracked, not dropped");
+    assert_eq!(
+        unresolved,
+        vec!["/nodata.ics"],
+        "the bodyless href is tracked, not dropped"
+    );
 }
 
 /// Answers a multiget with the requested hrefs but no `calendar-data` element.
@@ -309,8 +399,10 @@ impl DavTransport for BodylessMultiget {
     async fn report(&self, _: &str, _: &str, body: &str) -> Result<DavResponse, CaldavError> {
         let mut xml = String::from("<multistatus xmlns=\"DAV:\">");
         for line in body.lines() {
-            let Some(href) =
-                line.trim().strip_prefix("<d:href>").and_then(|s| s.strip_suffix("</d:href>"))
+            let Some(href) = line
+                .trim()
+                .strip_prefix("<d:href>")
+                .and_then(|s| s.strip_suffix("</d:href>"))
             else {
                 continue;
             };
@@ -320,7 +412,11 @@ impl DavTransport for BodylessMultiget {
             ));
         }
         xml.push_str("</multistatus>");
-        Ok(DavResponse { status: 207, location: None, body: xml })
+        Ok(DavResponse {
+            status: 207,
+            location: None,
+            body: xml,
+        })
     }
 }
 
@@ -333,7 +429,11 @@ impl DavTransport for StatusOnly {
         panic!("no PROPFIND expected");
     }
     async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
-        Ok(DavResponse { status: self.0, location: None, body: String::new() })
+        Ok(DavResponse {
+            status: self.0,
+            location: None,
+            body: String::new(),
+        })
     }
 }
 
@@ -343,17 +443,27 @@ async fn backfill_maps_non_207_status() {
     // (reconnect); any other non-207 → UnexpectedStatus, so the poll fails loudly
     // rather than treating an error body as an empty authoritative set (which would
     // sweep every stored page).
-    let err = sync_calendar(&StatusOnly(500), CAL, None).await.unwrap_err();
+    let err = sync_calendar(&StatusOnly(500), CAL, None)
+        .await
+        .unwrap_err();
     assert!(matches!(err, CaldavError::UnexpectedStatus(500)));
-    let err = sync_calendar(&StatusOnly(403), CAL, None).await.unwrap_err();
-    assert!(matches!(err, CaldavError::Unauthorized), "backfill maps 403 to reconnect, not re-enumerate");
+    let err = sync_calendar(&StatusOnly(403), CAL, None)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, CaldavError::Unauthorized),
+        "backfill maps 403 to reconnect, not re-enumerate"
+    );
 }
 
 #[tokio::test]
 async fn current_sync_token_is_none_when_server_lacks_sync_collection() {
     for status in [403u16, 405, 501] {
         let tok = current_sync_token(&StatusOnly(status), CAL).await.unwrap();
-        assert!(tok.is_none(), "status {status} → no cursor, fall back to re-enumerate");
+        assert!(
+            tok.is_none(),
+            "status {status} → no cursor, fall back to re-enumerate"
+        );
     }
 }
 
@@ -362,7 +472,10 @@ async fn current_sync_token_captures_the_cursor_on_207() {
     // A 207 sync-collection (the INITIAL fixture) carries the next token.
     let t = FixtureTransport { mode: Mode::Full };
     let tok = current_sync_token(&t, CAL).await.unwrap();
-    assert!(tok.is_some(), "a 207 sync-collection yields the incremental cursor");
+    assert!(
+        tok.is_some(),
+        "a 207 sync-collection yields the incremental cursor"
+    );
 }
 
 /// 207 for sync-collection, but 401 for the follow-up multiget — an app password
@@ -374,7 +487,11 @@ impl DavTransport for AuthFailsOnMultiget {
     }
     async fn report(&self, _: &str, _: &str, body: &str) -> Result<DavResponse, CaldavError> {
         if body.contains("calendar-multiget") {
-            Ok(DavResponse { status: 401, location: None, body: String::new() })
+            Ok(DavResponse {
+                status: 401,
+                location: None,
+                body: String::new(),
+            })
         } else {
             Ok(ok(INITIAL))
         }
@@ -408,8 +525,10 @@ impl DavTransport for EchoMultiget {
         let mut xml =
             String::from("<multistatus xmlns=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\">");
         for line in body.lines() {
-            let Some(href) =
-                line.trim().strip_prefix("<d:href>").and_then(|s| s.strip_suffix("</d:href>"))
+            let Some(href) = line
+                .trim()
+                .strip_prefix("<d:href>")
+                .and_then(|s| s.strip_suffix("</d:href>"))
             else {
                 continue;
             };
@@ -422,7 +541,11 @@ DTSTART;TZID=America/New_York:20260615T090000\r\nSUMMARY:E\r\nEND:VEVENT\r\nEND:
             ));
         }
         xml.push_str("</multistatus>");
-        Ok(DavResponse { status: 207, location: None, body: xml })
+        Ok(DavResponse {
+            status: 207,
+            location: None,
+            body: xml,
+        })
     }
 }
 
@@ -436,7 +559,9 @@ async fn multiget_batches_above_seventy_five_hrefs() {
             calendar_data: None,
         })
         .collect();
-    let t = EchoMultiget { calls: std::sync::atomic::AtomicUsize::new(0) };
+    let t = EchoMultiget {
+        calls: std::sync::atomic::AtomicUsize::new(0),
+    };
 
     let (upserts, unresolved) = resolve_upserts(&t, CAL, present).await.unwrap();
 
@@ -479,7 +604,11 @@ struct PropfindResponse {
 }
 impl DavTransport for PropfindResponse {
     async fn propfind(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
-        Ok(DavResponse { status: self.status, location: None, body: self.body.clone() })
+        Ok(DavResponse {
+            status: self.status,
+            location: None,
+            body: self.body.clone(),
+        })
     }
     async fn report(&self, _: &str, _: &str, _: &str) -> Result<DavResponse, CaldavError> {
         panic!("no REPORT expected");
@@ -495,8 +624,14 @@ async fn current_ctag_parses_getctag_from_a_207() {
     <d:status>HTTP/1.1 200 OK</d:status>
   </d:propstat></d:response>
 </d:multistatus>"#;
-    let t = PropfindResponse { status: 207, body: body.into() };
-    assert_eq!(current_ctag(&t, CAL).await.unwrap().as_deref(), Some("abc-123"));
+    let t = PropfindResponse {
+        status: 207,
+        body: body.into(),
+    };
+    assert_eq!(
+        current_ctag(&t, CAL).await.unwrap().as_deref(),
+        Some("abc-123")
+    );
 }
 
 #[tokio::test]
@@ -510,14 +645,26 @@ async fn current_ctag_ignores_a_getctag_in_a_404_propstat() {
     <d:status>HTTP/1.1 404 Not Found</d:status>
   </d:propstat></d:response>
 </d:multistatus>"#;
-    let t = PropfindResponse { status: 207, body: body.into() };
-    assert!(current_ctag(&t, CAL).await.unwrap().is_none(), "404 propstat → no ctag");
+    let t = PropfindResponse {
+        status: 207,
+        body: body.into(),
+    };
+    assert!(
+        current_ctag(&t, CAL).await.unwrap().is_none(),
+        "404 propstat → no ctag"
+    );
 }
 
 #[tokio::test]
 async fn current_ctag_is_none_on_unsupported_status() {
     for status in [403u16, 404, 405, 501] {
-        let t = PropfindResponse { status, body: String::new() };
-        assert!(current_ctag(&t, CAL).await.unwrap().is_none(), "status {status} → no ctag");
+        let t = PropfindResponse {
+            status,
+            body: String::new(),
+        };
+        assert!(
+            current_ctag(&t, CAL).await.unwrap().is_none(),
+            "status {status} → no ctag"
+        );
     }
 }

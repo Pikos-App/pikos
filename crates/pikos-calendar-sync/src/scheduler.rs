@@ -51,7 +51,9 @@ pub struct SchedulerConfig {
 
 impl Default for SchedulerConfig {
     fn default() -> Self {
-        Self { min_focus_gap: Duration::from_secs(60) }
+        Self {
+            min_focus_gap: Duration::from_secs(60),
+        }
     }
 }
 
@@ -140,8 +142,10 @@ where
 /// (a rejected credential); a manual resync clears the flag and re-includes them.
 async fn load_accounts(pool: &SqlitePool) -> Result<Vec<SyncAccountRow>, AppError> {
     Ok(
-        sqlx::query_as::<_, SyncAccountRow>("SELECT * FROM sync_account WHERE reconnect_needed = 0")
-            .fetch_all(pool)
-            .await?,
+        sqlx::query_as::<_, SyncAccountRow>(
+            "SELECT * FROM sync_account WHERE reconnect_needed = 0",
+        )
+        .fetch_all(pool)
+        .await?,
     )
 }

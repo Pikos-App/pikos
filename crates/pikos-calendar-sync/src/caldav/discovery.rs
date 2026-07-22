@@ -125,7 +125,10 @@ async fn propfind_follow<T: DavTransport>(
         let resp = transport.propfind(current.as_str(), depth, body).await?;
         match resp.status {
             207 => {
-                return Ok(Some(Followed { final_url: current, body: resp.body }));
+                return Ok(Some(Followed {
+                    final_url: current,
+                    body: resp.body,
+                }));
             }
             404 | 405 => return Ok(None),
             301 | 302 | 307 | 308 => {
@@ -144,7 +147,9 @@ async fn propfind_follow<T: DavTransport>(
             other => return Err(CaldavError::UnexpectedStatus(other)),
         }
     }
-    Err(CaldavError::Protocol("too many redirects during discovery".into()))
+    Err(CaldavError::Protocol(
+        "too many redirects during discovery".into(),
+    ))
 }
 
 /// Resolve an href (absolute URL or origin-relative path) from a response against
@@ -163,7 +168,9 @@ fn last_segment(url: &Url) -> String {
     url.path_segments()
         .and_then(|mut s| {
             // Collections end in '/', so the last non-empty segment is the name.
-            s.next_back().filter(|s| !s.is_empty()).or_else(|| s.next_back())
+            s.next_back()
+                .filter(|s| !s.is_empty())
+                .or_else(|| s.next_back())
         })
         .unwrap_or("Calendar")
         .to_string()

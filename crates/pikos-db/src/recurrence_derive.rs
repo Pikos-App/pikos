@@ -237,7 +237,9 @@ pub async fn occurrences_with_open_reminder_window(
         // Widen the upper bound by an hour so a DST shift on the synced wall→instant
         // mapping can't drop a boundary occurrence; the exact fire check filters the
         // over-enumeration.
-        let lo = (zone_now - Duration::seconds(60)).format(WALL_FMT).to_string();
+        let lo = (zone_now - Duration::seconds(60))
+            .format(WALL_FMT)
+            .to_string();
         let hi = (zone_now + Duration::minutes(max_lead) + Duration::hours(1))
             .format(WALL_FMT)
             .to_string();
@@ -357,14 +359,20 @@ async fn reminder_leads(
             .await?;
     let leads = if configured.is_empty() {
         (default_minutes >= 0)
-            .then_some(Lead { minutes: default_minutes, explicit: false })
+            .then_some(Lead {
+                minutes: default_minutes,
+                explicit: false,
+            })
             .into_iter()
             .collect()
     } else {
         configured
             .into_iter()
             .filter(|m| *m >= 0)
-            .map(|minutes| Lead { minutes, explicit: true })
+            .map(|minutes| Lead {
+                minutes,
+                explicit: true,
+            })
             .collect()
     };
     Ok(leads)

@@ -39,9 +39,7 @@ pub fn now_iso() -> String {
 /// `completed_at.slice(0,10) === localToday()` comparison fail whenever the UTC
 /// date differs from the local date (i.e. for much of every day off-UTC).
 pub fn now_local_iso() -> String {
-    chrono::Local::now()
-        .format("%Y-%m-%dT%H:%M:%S")
-        .to_string()
+    chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
 }
 
 /// Open (or create) the SQLite workspace at `path`, apply migrations, and run
@@ -127,20 +125,22 @@ async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppRes
     }
 
     // Up to date => no pending migrations => no risk worth snapshotting.
-    let applied_max: i64 = sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(version) FROM _sqlx_migrations")
-        .fetch_one(pool)
-        .await?
-        .unwrap_or(0);
+    let applied_max: i64 =
+        sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(version) FROM _sqlx_migrations")
+            .fetch_one(pool)
+            .await?
+            .unwrap_or(0);
     if applied_max >= known_max {
         return Ok(());
     }
 
     // Empty workspace => nothing to lose.
-    let has_data: bool =
-        sqlx::query_scalar::<_, i64>("SELECT EXISTS(SELECT 1 FROM pages) OR EXISTS(SELECT 1 FROM folders)")
-            .fetch_one(pool)
-            .await?
-            != 0;
+    let has_data: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM pages) OR EXISTS(SELECT 1 FROM folders)",
+    )
+    .fetch_one(pool)
+    .await?
+        != 0;
     if !has_data {
         return Ok(());
     }
@@ -152,12 +152,7 @@ async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppRes
 /// to the newest [`MAX_MIGRATION_BACKUPS`]. VACUUM INTO yields a consistent
 /// single-file copy even with the WAL open, avoiding the torn-copy risk of a raw
 /// `fs::copy` on a live database.
-async fn backup_for_migration(
-    pool: &SqlitePool,
-    path: &str,
-    from: i64,
-    to: i64,
-) -> AppResult<()> {
+async fn backup_for_migration(pool: &SqlitePool, path: &str, from: i64, to: i64) -> AppResult<()> {
     let backup_dir = Path::new(path)
         .parent()
         .unwrap_or_else(|| Path::new("."))

@@ -307,7 +307,9 @@ async fn external_folder_cannot_be_deleted() {
         AppError::Conflict(_)
     ));
     assert!(matches!(
-        soft_delete_folder_impl(&pool, "ext".into()).await.unwrap_err(),
+        soft_delete_folder_impl(&pool, "ext".into())
+            .await
+            .unwrap_err(),
         AppError::Conflict(_)
     ));
 }
@@ -322,7 +324,10 @@ async fn external_folder_cannot_be_reparented_and_cannot_be_a_parent() {
     let reparent = update_folder_impl(
         &pool,
         "ext".into(),
-        FolderUpdate { parent_id: Some(serde_json::json!("user")), ..Default::default() },
+        FolderUpdate {
+            parent_id: Some(serde_json::json!("user")),
+            ..Default::default()
+        },
     )
     .await
     .unwrap_err();
@@ -332,7 +337,10 @@ async fn external_folder_cannot_be_reparented_and_cannot_be_a_parent() {
     let nest = update_folder_impl(
         &pool,
         "user".into(),
-        FolderUpdate { parent_id: Some(serde_json::json!("ext")), ..Default::default() },
+        FolderUpdate {
+            parent_id: Some(serde_json::json!("ext")),
+            ..Default::default()
+        },
     )
     .await
     .unwrap_err();
@@ -346,7 +354,10 @@ async fn external_folder_recolor_is_allowed() {
     let updated = update_folder_impl(
         &pool,
         "ext".into(),
-        FolderUpdate { color: Some(serde_json::json!("#A6C8E8")), ..Default::default() },
+        FolderUpdate {
+            color: Some(serde_json::json!("#A6C8E8")),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();

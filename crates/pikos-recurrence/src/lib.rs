@@ -23,7 +23,7 @@ pub use engine::{
     Occurrence,
 };
 pub use label::rrule_to_short_label;
-pub use rule::{build_rrule, extract_until, parse_rrule, Freq, RecurrenceOptions, RecurrenceError};
+pub use rule::{build_rrule, extract_until, parse_rrule, Freq, RecurrenceError, RecurrenceOptions};
 
 /// A naive wall-clock value: a date, optionally with a time. Time-less values are
 /// all-day (rendered `YYYY-MM-DD`); timed values render `YYYY-MM-DDTHH:MM:SS`.
@@ -44,7 +44,10 @@ impl WallClock {
         } else {
             NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S")
                 .ok()
-                .map(|dt| WallClock { date: dt.date(), time: Some(dt.time()) })
+                .map(|dt| WallClock {
+                    date: dt.date(),
+                    time: Some(dt.time()),
+                })
         }
     }
 

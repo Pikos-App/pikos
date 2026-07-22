@@ -5,8 +5,15 @@
 use pikos_recurrence::{expand_range, RecurrenceError};
 
 fn parse_result(rrule: &str) -> Result<(), RecurrenceError> {
-    expand_range(rrule, "2026-01-01T09:00:00", None, "2026-01-01T00:00:00", "2027-01-01T00:00:00", &[])
-        .map(|_| ())
+    expand_range(
+        rrule,
+        "2026-01-01T09:00:00",
+        None,
+        "2026-01-01T00:00:00",
+        "2027-01-01T00:00:00",
+        &[],
+    )
+    .map(|_| ())
 }
 
 fn assert_unsupported(rrule: &str) {
@@ -17,7 +24,10 @@ fn assert_unsupported(rrule: &str) {
 }
 
 fn assert_ok(rrule: &str) {
-    assert!(parse_result(rrule).is_ok(), "expected `{rrule}` to be in-envelope");
+    assert!(
+        parse_result(rrule).is_ok(),
+        "expected `{rrule}` to be in-envelope"
+    );
 }
 
 #[test]

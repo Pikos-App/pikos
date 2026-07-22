@@ -71,7 +71,9 @@ pub struct Keychain {
 impl Keychain {
     /// The real OS keychain. Use everywhere outside tests.
     pub fn system() -> Self {
-        Self { store: Box::new(KeyringStore) }
+        Self {
+            store: Box::new(KeyringStore),
+        }
     }
 
     #[cfg(test)]

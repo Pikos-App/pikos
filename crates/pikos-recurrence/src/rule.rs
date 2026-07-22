@@ -55,7 +55,10 @@ impl Freq {
 const WEEKDAY_CODES: [&str; 7] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
 fn weekday_from_code(code: &str) -> Option<u8> {
-    WEEKDAY_CODES.iter().position(|c| *c == code).map(|i| i as u8)
+    WEEKDAY_CODES
+        .iter()
+        .position(|c| *c == code)
+        .map(|i| i as u8)
 }
 
 /// Typed round-trip options, mirroring `RecurrenceOptions` in `recurrence.ts`.
@@ -82,7 +85,10 @@ fn parts(rrule: &str) -> impl Iterator<Item = (&str, &str)> {
 /// Parses an RRULE into the editor round-trip options. Returns `None` (not an
 /// error) on unparseable input or unsupported FREQ, matching `parseRrule`.
 pub fn parse_rrule(rrule: &str) -> Option<RecurrenceOptions> {
-    let mut opts = RecurrenceOptions { interval: 1, ..Default::default() };
+    let mut opts = RecurrenceOptions {
+        interval: 1,
+        ..Default::default()
+    };
     let mut saw_freq = false;
     for (key, value) in parts(rrule) {
         match key {
@@ -105,7 +111,9 @@ pub fn parse_rrule(rrule: &str) -> Option<RecurrenceOptions> {
             "BYMONTHDAY" => opts.bymonthday = parse_int_list(value),
             "WKST" => opts.wkst = weekday_from_code(value),
             "COUNT" => opts.count = value.parse().ok(),
-            "UNTIL" => opts.until = parse_until(value).map(|dt| dt.date().format("%Y-%m-%d").to_string()),
+            "UNTIL" => {
+                opts.until = parse_until(value).map(|dt| dt.date().format("%Y-%m-%d").to_string())
+            }
             _ => {}
         }
     }
@@ -159,7 +167,10 @@ fn parse_int_list(value: &str) -> Option<Vec<i32>> {
 }
 
 fn join_ints(list: &[i32]) -> String {
-    list.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(",")
+    list.iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// Parses an RRULE `UNTIL` token (`YYYYMMDD` or `YYYYMMDDTHHMMSS[Z]`) as a naive
@@ -228,10 +239,10 @@ impl ParsedRule {
         for (key, value) in parts(rrule) {
             match key {
                 "FREQ" => {
-                    freq = Some(
-                        Freq::from_str(value)
-                            .ok_or_else(|| RecurrenceError::Unsupported(format!("FREQ={value}")))?,
-                    );
+                    freq =
+                        Some(Freq::from_str(value).ok_or_else(|| {
+                            RecurrenceError::Unsupported(format!("FREQ={value}"))
+                        })?);
                 }
                 "INTERVAL" => interval = value.parse().unwrap_or(1),
                 "BYDAY" => {
@@ -239,7 +250,11 @@ impl ParsedRule {
                         let code = strip_ordinal(term);
                         if let Some(weekday) = weekday_from_code(code) {
                             let ord_str = &term[..term.len() - code.len()];
-                            let ordinal = if ord_str.is_empty() { None } else { ord_str.parse().ok() };
+                            let ordinal = if ord_str.is_empty() {
+                                None
+                            } else {
+                                ord_str.parse().ok()
+                            };
                             byday.push(ByDay { ordinal, weekday });
                         }
                     }
@@ -253,7 +268,16 @@ impl ParsedRule {
             }
         }
         let freq = freq.ok_or_else(|| RecurrenceError::Parse(rrule.to_string()))?;
-        let rule = ParsedRule { freq, interval: interval.max(1), byday, bymonthday, bysetpos, wkst, count, until };
+        let rule = ParsedRule {
+            freq,
+            interval: interval.max(1),
+            byday,
+            bymonthday,
+            bysetpos,
+            wkst,
+            count,
+            until,
+        };
         rule.validate_envelope()?;
         Ok(rule)
     }
@@ -264,13 +288,19 @@ impl ParsedRule {
     /// collapse to the anchor's month/day). Unknown keys are already rejected in
     /// [`ParsedRule::parse`]; this covers known keys misapplied to a FREQ.
     fn validate_envelope(&self) -> Result<(), RecurrenceError> {
-        let unsupported =
-            |what: &str| Err(RecurrenceError::Unsupported(format!("{what} for FREQ={}", self.freq.as_str())));
+        let unsupported = |what: &str| {
+            Err(RecurrenceError::Unsupported(format!(
+                "{what} for FREQ={}",
+                self.freq.as_str()
+            )))
+        };
         // RFC 5545 forbids COUNT and UNTIL together. The enumerator applies both
         // (COUNT first, then UNTIL), so a malformed feed carrying both would enumerate
         // to whichever bound is tighter with no signal — reject it loudly instead.
         if self.count.is_some() && self.until.is_some() {
-            return Err(RecurrenceError::Unsupported("COUNT combined with UNTIL".into()));
+            return Err(RecurrenceError::Unsupported(
+                "COUNT combined with UNTIL".into(),
+            ));
         }
         match self.freq {
             Freq::Daily | Freq::Yearly => {
@@ -299,7 +329,9 @@ impl ParsedRule {
             // silently drop the BYDAY term.
             Freq::Monthly => {
                 if !self.byday.is_empty() && !self.bymonthday.is_empty() {
-                    return Err(RecurrenceError::Unsupported("BYDAY combined with BYMONTHDAY".into()));
+                    return Err(RecurrenceError::Unsupported(
+                        "BYDAY combined with BYMONTHDAY".into(),
+                    ));
                 }
             }
         }

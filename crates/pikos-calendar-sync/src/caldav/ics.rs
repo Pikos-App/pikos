@@ -13,18 +13,16 @@
 //! (incl. a `UNTIL=…Z`) is preserved verbatim for the reconciler to rewrite.
 
 use calcard::common::PartialDateTime;
+use calcard::icalendar::timezone::TzResolver;
 use calcard::icalendar::{
     ICalendar, ICalendarComponent, ICalendarComponentType, ICalendarProperty, ICalendarStatus,
     ICalendarValue, Uri,
 };
-use calcard::icalendar::timezone::TzResolver;
 use calcard::{Entry, Parser};
 use chrono::{FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz as ChronoTz;
 
-use pikos_db::sync_delta::{
-    EventCore, EventSchedule, EventUpsert, OccurrenceOverride, Recurrence,
-};
+use pikos_db::sync_delta::{EventCore, EventSchedule, EventUpsert, OccurrenceOverride, Recurrence};
 
 use super::error::CaldavError;
 
@@ -59,7 +57,12 @@ pub(crate) fn parse_resource(
     // master (VEVENT without RECURRENCE-ID). Two+ is malformed; one resource is one
     // page identity, so the extras can't become their own pages — keep the first
     // (document order, chosen above) and log the drop rather than lose it silently.
-    if events.iter().filter(|c| c.property(&ICalendarProperty::RecurrenceId).is_none()).count() > 1 {
+    if events
+        .iter()
+        .filter(|c| c.property(&ICalendarProperty::RecurrenceId).is_none())
+        .count()
+        > 1
+    {
         log::warn!(
             "caldav ics: resource {href} carries multiple VEVENTs without RECURRENCE-ID (malformed shared UID); keeping the first, dropping the rest"
         );
@@ -71,12 +74,21 @@ pub(crate) fn parse_resource(
 
     let has_rrule = master.property(&ICalendarProperty::Rrule).is_some();
     let recurrence = if has_rrule {
-        Some(build_recurrence(master, &events, &resolver, source.as_ref())?)
+        Some(build_recurrence(
+            master,
+            &events,
+            &resolver,
+            source.as_ref(),
+        )?)
     } else {
         None
     };
 
-    Ok(EventUpsert { core, schedule, recurrence })
+    Ok(EventUpsert {
+        core,
+        schedule,
+        recurrence,
+    })
 }
 
 fn parse_calendar(ics: &str) -> Result<ICalendar, CaldavError> {
@@ -174,14 +186,24 @@ fn schedule_of(
 ) -> Result<EventSchedule, CaldavError> {
     let dtstart = comp
         .property(&ICalendarProperty::Dtstart)
-        .and_then(|e| e.values.first().and_then(|v| v.as_partial_date_time()).map(|p| (e, p)))
+        .and_then(|e| {
+            e.values
+                .first()
+                .and_then(|v| v.as_partial_date_time())
+                .map(|p| (e, p))
+        })
         .ok_or_else(|| CaldavError::Protocol("VEVENT without DTSTART".into()))?;
     let all_day = !dtstart.1.has_time();
 
     let start = instant_wall_clock(dtstart.1, dtstart.0.tz_id(), resolver, source);
     let end = comp
         .property(&ICalendarProperty::Dtend)
-        .and_then(|e| e.values.first().and_then(|v| v.as_partial_date_time()).map(|p| (e, p)))
+        .and_then(|e| {
+            e.values
+                .first()
+                .and_then(|v| v.as_partial_date_time())
+                .map(|p| (e, p))
+        })
         .map(|(e, p)| instant_wall_clock(p, e.tz_id(), resolver, source))
         // No DTEND → derive the end from a DURATION (start + nominal length), so an
         // event written `DTSTART`+`DURATION` keeps its span instead of collapsing to
@@ -192,7 +214,11 @@ fn schedule_of(
     Ok(EventSchedule {
         start,
         end,
-        timezone: if all_day { None } else { source.map(|s| s.iana.clone()) },
+        timezone: if all_day {
+            None
+        } else {
+            source.map(|s| s.iana.clone())
+        },
     })
 }
 
@@ -206,7 +232,10 @@ fn build_recurrence(
 ) -> Result<Recurrence, CaldavError> {
     // Raw RRULE value, kept verbatim (UNTIL=…Z included) so no field is dropped;
     // the reconciler rewrites only the UNTIL token to wall-clock.
-    let rrule = match master.property(&ICalendarProperty::Rrule).and_then(|e| e.values.first()) {
+    let rrule = match master
+        .property(&ICalendarProperty::Rrule)
+        .and_then(|e| e.values.first())
+    {
         Some(ICalendarValue::RecurrenceRule(r)) => r.to_string(),
         _ => return Err(CaldavError::Protocol("RRULE present but unparsed".into())),
     };
@@ -231,7 +260,12 @@ fn build_recurrence(
     {
         let recid = ov
             .property(&ICalendarProperty::RecurrenceId)
-            .and_then(|e| e.values.first().and_then(|v| v.as_partial_date_time()).map(|p| (e, p)))
+            .and_then(|e| {
+                e.values
+                    .first()
+                    .and_then(|v| v.as_partial_date_time())
+                    .map(|p| (e, p))
+            })
             .ok_or_else(|| CaldavError::Protocol("override without RECURRENCE-ID".into()))?;
         let original_date = instant_wall_clock(recid.1, recid.0.tz_id(), resolver, source);
 
@@ -243,12 +277,19 @@ fn build_recurrence(
         // Drop only the bad instance on a malformed override (e.g. missing DTSTART) —
         // one broken VEVENT must not sink the whole series via `?`-propagation.
         match schedule_of(ov, resolver, source_zone(ov, resolver).as_ref().or(source)) {
-            Ok(schedule) => overrides.push(OccurrenceOverride { original_date, schedule }),
+            Ok(schedule) => overrides.push(OccurrenceOverride {
+                original_date,
+                schedule,
+            }),
             Err(e) => log::warn!("caldav ics: skipping malformed override in series: {e}"),
         }
     }
 
-    Ok(Recurrence { rrule, exdates, overrides })
+    Ok(Recurrence {
+        rrule,
+        exdates,
+        overrides,
+    })
 }
 
 // ─── instant normalization ──────────────────────────────────────────────────────
@@ -294,24 +335,42 @@ fn convert_to_zone(
     let naive = naive_dt(pdt)?;
 
     let instant = if pdt.has_zone() {
-        let secs = (pdt.tz_hour.unwrap_or(0) as i32 * 3600) + (pdt.tz_minute.unwrap_or(0) as i32 * 60);
+        let secs =
+            (pdt.tz_hour.unwrap_or(0) as i32 * 3600) + (pdt.tz_minute.unwrap_or(0) as i32 * 60);
         let offset = FixedOffset::east_opt(if pdt.tz_minus { -secs } else { secs })?;
-        offset.from_local_datetime(&naive).single()?.with_timezone(&Utc)
+        offset
+            .from_local_datetime(&naive)
+            .single()?
+            .with_timezone(&Utc)
     } else {
         let zone: ChronoTz = tzid
             .and_then(|id| resolver.resolve(id))
             .and_then(|t| t.name())
             .and_then(|n| n.parse().ok())?;
-        zone.from_local_datetime(&naive).single()?.with_timezone(&Utc)
+        zone.from_local_datetime(&naive)
+            .single()?
+            .with_timezone(&Utc)
     };
-    Some(instant.with_timezone(&src.chrono).format("%Y-%m-%dT%H:%M:%S").to_string())
+    Some(
+        instant
+            .with_timezone(&src.chrono)
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string(),
+    )
 }
 
 /// `start + DURATION` → an end wall-clock string, or `None` when the event has no
 /// DURATION. A date-only start formats a date end (raw-exclusive, like DTEND); a
 /// timed start formats a date-time end.
-fn duration_end(comp: &ICalendarComponent, start: &PartialDateTime, all_day: bool) -> Option<String> {
-    let delta = match comp.property(&ICalendarProperty::Duration).and_then(|e| e.values.first()) {
+fn duration_end(
+    comp: &ICalendarComponent,
+    start: &PartialDateTime,
+    all_day: bool,
+) -> Option<String> {
+    let delta = match comp
+        .property(&ICalendarProperty::Duration)
+        .and_then(|e| e.values.first())
+    {
         Some(ICalendarValue::Duration(d)) => d.to_time_delta()?,
         _ => return None,
     };

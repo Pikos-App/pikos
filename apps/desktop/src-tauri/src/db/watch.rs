@@ -41,7 +41,8 @@ pub fn suppress_end(tail: Duration) {
 }
 
 fn suppressed() -> bool {
-    SUPPRESS_DEPTH.load(Ordering::Relaxed) > 0 || now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::Relaxed)
+    SUPPRESS_DEPTH.load(Ordering::Relaxed) > 0
+        || now_ms() < SUPPRESS_UNTIL_MS.load(Ordering::Relaxed)
 }
 
 fn now_ms() -> u64 {
@@ -341,19 +342,33 @@ mod tests {
         // Inside the bracket with zero time-based cover, depth alone suppresses —
         // pass length is irrelevant.
         suppress_begin();
-        tx.send(synthetic(EventKind::Modify(notify::event::ModifyKind::Any), vec![db.clone()]))
-            .unwrap();
+        tx.send(synthetic(
+            EventKind::Modify(notify::event::ModifyKind::Any),
+            vec![db.clone()],
+        ))
+        .unwrap();
         thread::sleep(Duration::from_millis(150));
-        assert_eq!(*count.lock().unwrap(), 0, "write inside the bracket is suppressed");
+        assert_eq!(
+            *count.lock().unwrap(),
+            0,
+            "write inside the bracket is suppressed"
+        );
 
         // Close the bracket with a short tail, let it lapse, then an external write
         // reloads.
         suppress_end(Duration::from_millis(40));
         thread::sleep(Duration::from_millis(100));
-        tx.send(synthetic(EventKind::Modify(notify::event::ModifyKind::Any), vec![db.clone()]))
-            .unwrap();
+        tx.send(synthetic(
+            EventKind::Modify(notify::event::ModifyKind::Any),
+            vec![db.clone()],
+        ))
+        .unwrap();
         thread::sleep(Duration::from_millis(150));
-        assert_eq!(*count.lock().unwrap(), 1, "post-release external write reloads");
+        assert_eq!(
+            *count.lock().unwrap(),
+            1,
+            "post-release external write reloads"
+        );
 
         drain(tx);
         h.join().unwrap();

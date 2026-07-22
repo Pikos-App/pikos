@@ -29,9 +29,9 @@ pub use error::{AppError, AppResult};
 pub use folders::*;
 pub use notification_log::*;
 pub use pages::*;
-pub use pool::{now_iso, now_local_iso, open_pool};
 #[cfg(any(test, feature = "test-support"))]
 pub use pool::{insert_test_folder, insert_test_page, test_pool, TestPage};
+pub use pool::{now_iso, now_local_iso, open_pool};
 pub use reconciler::*;
 pub use recurrence_derive::*;
 pub use reminders::*;

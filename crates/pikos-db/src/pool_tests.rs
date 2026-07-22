@@ -280,10 +280,12 @@ fn migration_backup_count(backup_dir: &Path) -> usize {
 /// Drop the highest-version row from `_sqlx_migrations` so the workspace looks
 /// one migration behind the binary — i.e. has a pending migration.
 async fn simulate_pending_migration(pool: &SqlitePool) {
-    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = (SELECT MAX(version) FROM _sqlx_migrations)")
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "DELETE FROM _sqlx_migrations WHERE version = (SELECT MAX(version) FROM _sqlx_migrations)",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
@@ -366,7 +368,10 @@ async fn snapshot_is_a_valid_restorable_copy() {
             .fetch_one(&restored)
             .await
             .unwrap();
-    assert_eq!(hits, 1, "snapshot's FTS index should be intact and searchable");
+    assert_eq!(
+        hits, 1,
+        "snapshot's FTS index should be intact and searchable"
+    );
 
     restored.close().await;
     let _ = std::fs::remove_dir_all(&dir);
@@ -427,8 +432,17 @@ fn prune_keeps_newest_n_and_ignores_other_files() {
     let dir = unique_tmp_dir();
 
     // Timestamp-first names: lexical order == chronological order.
-    for ts in ["20260101T000000000Z", "20260102T000000000Z", "20260103T000000000Z", "20260104T000000000Z"] {
-        std::fs::write(dir.join(format!("pre-migration-{ts}-v8-to-v9.sqlite")), b"x").unwrap();
+    for ts in [
+        "20260101T000000000Z",
+        "20260102T000000000Z",
+        "20260103T000000000Z",
+        "20260104T000000000Z",
+    ] {
+        std::fs::write(
+            dir.join(format!("pre-migration-{ts}-v8-to-v9.sqlite")),
+            b"x",
+        )
+        .unwrap();
     }
     // Unrelated files must be left alone.
     std::fs::write(dir.join("pre-import-20260101T000000Z.sqlite"), b"x").unwrap();
@@ -442,8 +456,12 @@ fn prune_keeps_newest_n_and_ignores_other_files() {
         "prune should keep exactly the newest 3 migration snapshots"
     );
     // Oldest removed, newest kept.
-    assert!(!dir.join("pre-migration-20260101T000000000Z-v8-to-v9.sqlite").exists());
-    assert!(dir.join("pre-migration-20260104T000000000Z-v8-to-v9.sqlite").exists());
+    assert!(!dir
+        .join("pre-migration-20260101T000000000Z-v8-to-v9.sqlite")
+        .exists());
+    assert!(dir
+        .join("pre-migration-20260104T000000000Z-v8-to-v9.sqlite")
+        .exists());
     // Non-migration files untouched.
     assert!(dir.join("pre-import-20260101T000000Z.sqlite").exists());
     assert!(dir.join("notes.txt").exists());

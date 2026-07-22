@@ -10,8 +10,8 @@ use pikos_calendar_sync::{
     Keychain,
 };
 use pikos_db::sync_commands::{
-    get_sync_status_impl, list_sync_calendars_impl, toggle_sync_calendar_impl, AccountWithCalendars,
-    SyncCalendar,
+    get_sync_status_impl, list_sync_calendars_impl, toggle_sync_calendar_impl,
+    AccountWithCalendars, SyncCalendar,
 };
 
 use super::DbState;
@@ -64,7 +64,8 @@ pub async fn toggle_sync_calendar(
     color: Option<String>,
 ) -> AppResult<SyncCalendar> {
     let pool = state.get_pool().await?;
-    let cal = toggle_sync_calendar_impl(&pool, &sync_calendar_id, enabled, color.as_deref()).await?;
+    let cal =
+        toggle_sync_calendar_impl(&pool, &sync_calendar_id, enabled, color.as_deref()).await?;
     if enabled {
         crate::db::sync_loop::poke(&app);
     }

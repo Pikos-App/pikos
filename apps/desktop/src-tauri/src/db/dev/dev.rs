@@ -536,14 +536,108 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
     // "Team standup" carries the full B1 read-only mirror surface: location, attendees,
     // a user-edited body, and a withheld upstream description → shows the notice.
     let standup_body = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"My prep: land the calendar-sync PR before we demo."}]}]}"#;
-    insert_synced_page(&mut tx, personal, &account_id, personal_cal, "Team standup", &at(0, "09:00"), Some(&at(0, "09:30")), Some("America/New_York"), "active", 0, SyncedMirror { location: Some("Zoom"), attendees: Some(r#"["alex@example.com","sam@example.com","jordan@example.com"]"#), pending_description: Some("Agenda updated: demo the new sync panel, then round-table blockers."), body: Some(standup_body) }, &now).await?;
-    insert_synced_page(&mut tx, personal, &account_id, personal_cal, "Design review (LA team)", &at(0, "15:00"), Some(&at(0, "16:00")), Some("America/Los_Angeles"), "active", 1, SyncedMirror { location: Some("Room 4B"), attendees: Some(r#"["design@example.com"]"#), ..SyncedMirror::default() }, &now).await?;
-    insert_synced_page(&mut tx, personal, &account_id, personal_cal, "Company offsite", &day(0), None, None, "active", 2, SyncedMirror::default(), &now).await?;
-    insert_synced_recurring(&mut tx, personal, &account_id, personal_cal, "Weekly 1:1 (London)", &at(0, "14:00"), &at(0, "14:30"), "Europe/London", "FREQ=WEEKLY", 3, &now).await?;
+    insert_synced_page(
+        &mut tx,
+        personal,
+        &account_id,
+        personal_cal,
+        "Team standup",
+        &at(0, "09:00"),
+        Some(&at(0, "09:30")),
+        Some("America/New_York"),
+        "active",
+        0,
+        SyncedMirror {
+            location: Some("Zoom"),
+            attendees: Some(r#"["alex@example.com","sam@example.com","jordan@example.com"]"#),
+            pending_description: Some(
+                "Agenda updated: demo the new sync panel, then round-table blockers.",
+            ),
+            body: Some(standup_body),
+        },
+        &now,
+    )
+    .await?;
+    insert_synced_page(
+        &mut tx,
+        personal,
+        &account_id,
+        personal_cal,
+        "Design review (LA team)",
+        &at(0, "15:00"),
+        Some(&at(0, "16:00")),
+        Some("America/Los_Angeles"),
+        "active",
+        1,
+        SyncedMirror {
+            location: Some("Room 4B"),
+            attendees: Some(r#"["design@example.com"]"#),
+            ..SyncedMirror::default()
+        },
+        &now,
+    )
+    .await?;
+    insert_synced_page(
+        &mut tx,
+        personal,
+        &account_id,
+        personal_cal,
+        "Company offsite",
+        &day(0),
+        None,
+        None,
+        "active",
+        2,
+        SyncedMirror::default(),
+        &now,
+    )
+    .await?;
+    insert_synced_recurring(
+        &mut tx,
+        personal,
+        &account_id,
+        personal_cal,
+        "Weekly 1:1 (London)",
+        &at(0, "14:00"),
+        &at(0, "14:30"),
+        "Europe/London",
+        "FREQ=WEEKLY",
+        3,
+        &now,
+    )
+    .await?;
 
     // Work: cross-zone (Tokyo) + a detached page (sync severed → editable, broken-sync icon).
-    insert_synced_page(&mut tx, work, &account_id, work_cal, "Tokyo sync", &at(1, "08:00"), Some(&at(1, "08:30")), Some("Asia/Tokyo"), "active", 0, SyncedMirror::default(), &now).await?;
-    insert_synced_page(&mut tx, work, &account_id, work_cal, "Old planning (detached)", &at(0, "17:00"), Some(&at(0, "17:30")), Some("America/New_York"), "detached", 1, SyncedMirror::default(), &now).await?;
+    insert_synced_page(
+        &mut tx,
+        work,
+        &account_id,
+        work_cal,
+        "Tokyo sync",
+        &at(1, "08:00"),
+        Some(&at(1, "08:30")),
+        Some("Asia/Tokyo"),
+        "active",
+        0,
+        SyncedMirror::default(),
+        &now,
+    )
+    .await?;
+    insert_synced_page(
+        &mut tx,
+        work,
+        &account_id,
+        work_cal,
+        "Old planning (detached)",
+        &at(0, "17:00"),
+        Some(&at(0, "17:30")),
+        Some("America/New_York"),
+        "detached",
+        1,
+        SyncedMirror::default(),
+        &now,
+    )
+    .await?;
 
     tx.commit().await?;
     log::info!("dev_seed_synced_calendar: seeded mock account + 2 calendars + 6 pages");

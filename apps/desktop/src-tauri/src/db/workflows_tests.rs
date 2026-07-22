@@ -123,7 +123,13 @@ async fn recurring_completion_clone_is_searchable() {
     // then advances the head to the next open occurrence.
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: head.id.clone(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: head.id.clone(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap();

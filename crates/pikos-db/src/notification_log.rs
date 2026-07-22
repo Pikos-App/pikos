@@ -159,7 +159,10 @@ pub(crate) fn synced_fire_instant(
     use chrono::TimeZone;
     let naive = chrono::NaiveDateTime::parse_from_str(wall_clock, "%Y-%m-%dT%H:%M:%S").ok()?;
     let zone: chrono_tz::Tz = timezone.parse().ok()?;
-    let instant = zone.from_local_datetime(&naive).earliest()?.with_timezone(&chrono::Utc);
+    let instant = zone
+        .from_local_datetime(&naive)
+        .earliest()?
+        .with_timezone(&chrono::Utc);
     Some(instant - chrono::Duration::minutes(minutes_before))
 }
 
@@ -208,7 +211,8 @@ pub async fn due_synced_reminders(
     Ok(rows
         .into_iter()
         .filter_map(|row| {
-            let fire = synced_fire_instant(&row.scheduled_start, &row.timezone, row.minutes_before)?;
+            let fire =
+                synced_fire_instant(&row.scheduled_start, &row.timezone, row.minutes_before)?;
             (fire > window_lo && fire <= now_utc).then_some(DueReminder {
                 schedule_id: row.schedule_id,
                 page_id: row.page_id,
@@ -288,7 +292,8 @@ pub async fn due_synced_override_reminders(
     Ok(rows
         .into_iter()
         .filter_map(|row| {
-            let fire = synced_fire_instant(&row.scheduled_start, &row.timezone, row.minutes_before)?;
+            let fire =
+                synced_fire_instant(&row.scheduled_start, &row.timezone, row.minutes_before)?;
             (fire > window_lo && fire <= now_utc).then_some(DueReminder {
                 schedule_id: row.schedule_id,
                 page_id: row.page_id,

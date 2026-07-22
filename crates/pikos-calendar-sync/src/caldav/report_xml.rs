@@ -109,7 +109,10 @@ impl Parse {
     fn text(&mut self, raw: &str) {
         match self.capture {
             // The ICS body must survive verbatim — no trim, accumulate as-is.
-            Capture::CalendarData => self.pstat_data.get_or_insert_with(String::new).push_str(raw),
+            Capture::CalendarData => self
+                .pstat_data
+                .get_or_insert_with(String::new)
+                .push_str(raw),
             Capture::None => {}
             _ => {
                 let t = raw.trim();
@@ -216,7 +219,10 @@ pub(crate) fn parse_report(xml: &str) -> Result<ReportResult, CaldavError> {
         }
     }
 
-    Ok(ReportResult { entries: p.entries, sync_token: p.sync_token })
+    Ok(ReportResult {
+        entries: p.entries,
+        sync_token: p.sync_token,
+    })
 }
 
 fn parse_status_code(s: &str) -> Option<u16> {
@@ -277,7 +283,10 @@ END:VCALENDAR</C:calendar-data>
         // A sibling 404 propstat must not discard the 2xx block's props.
         let full = by_href("/cal/full.ics");
         assert_eq!(full.etag.as_deref(), Some("\"etag-2\""));
-        assert_eq!(full.calendar_data.as_deref(), Some("BEGIN:VCALENDAR\nEND:VCALENDAR"));
+        assert_eq!(
+            full.calendar_data.as_deref(),
+            Some("BEGIN:VCALENDAR\nEND:VCALENDAR")
+        );
     }
 
     /// Some servers wrap the ICS body in a CDATA section. The `Event::CData` arm
@@ -301,6 +310,9 @@ END:VCALENDAR]]></C:calendar-data>
 
         let result = parse_report(xml).unwrap();
         let entry = &result.entries[0];
-        assert_eq!(entry.calendar_data.as_deref(), Some("BEGIN:VCALENDAR\nEND:VCALENDAR"));
+        assert_eq!(
+            entry.calendar_data.as_deref(),
+            Some("BEGIN:VCALENDAR\nEND:VCALENDAR")
+        );
     }
 }

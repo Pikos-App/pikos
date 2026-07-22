@@ -206,9 +206,21 @@ mod expand_recurrence_range_tests {
 
         assert_eq!(out.len(), 2);
         let a = out.iter().find(|r| r.rule_id == "rule-a").unwrap();
-        assert_eq!(a.occurrences.iter().map(|o| o.original_date.as_str()).collect::<Vec<_>>(), ["2026-03-09"]);
+        assert_eq!(
+            a.occurrences
+                .iter()
+                .map(|o| o.original_date.as_str())
+                .collect::<Vec<_>>(),
+            ["2026-03-09"]
+        );
         let b = out.iter().find(|r| r.rule_id == "rule-b").unwrap();
-        assert_eq!(b.occurrences.iter().map(|o| o.original_date.as_str()).collect::<Vec<_>>(), ["2026-03-11"]);
+        assert_eq!(
+            b.occurrences
+                .iter()
+                .map(|o| o.original_date.as_str())
+                .collect::<Vec<_>>(),
+            ["2026-03-11"]
+        );
     }
 
     #[tokio::test]
@@ -221,7 +233,11 @@ mod expand_recurrence_range_tests {
             expand_recurrence_range(vec![r], "2026-03-09".to_string(), "2026-03-13".to_string())
                 .await;
 
-        let dates: Vec<_> = out[0].occurrences.iter().map(|o| o.original_date.as_str()).collect();
+        let dates: Vec<_> = out[0]
+            .occurrences
+            .iter()
+            .map(|o| o.original_date.as_str())
+            .collect();
         assert_eq!(dates, ["2026-03-09", "2026-03-11", "2026-03-12"]);
     }
 

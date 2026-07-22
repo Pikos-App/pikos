@@ -79,7 +79,10 @@ impl CalendarProvider for Shared {
         unreachable!("no orphan masters scripted")
     }
 
-    async fn current_sync_token(&self, _calendar: &SyncCalendarRow) -> AppResult<Option<SyncToken>> {
+    async fn current_sync_token(
+        &self,
+        _calendar: &SyncCalendarRow,
+    ) -> AppResult<Option<SyncToken>> {
         Ok(None)
     }
 }
@@ -182,8 +185,13 @@ async fn focus_debounced_within_gap() {
     seed_account(&pool, "acc1", "f1").await;
 
     let provider = Shared::default().with_sync(Ok(delta(vec![])));
-    let (starts, ..) =
-        drive(&pool, &[SyncTrigger::Focus, SyncTrigger::Focus], &provider, GAP).await;
+    let (starts, ..) = drive(
+        &pool,
+        &[SyncTrigger::Focus, SyncTrigger::Focus],
+        &provider,
+        GAP,
+    )
+    .await;
 
     assert_eq!(starts, 1, "second focus inside the gap must be skipped");
     assert_eq!(provider.calls.get(), 1);
@@ -199,8 +207,13 @@ async fn poke_bypasses_focus_gap() {
     let provider = Shared::default()
         .with_sync(Ok(delta(vec![])))
         .with_sync(Ok(delta(vec![event("/e1.ics", "u1")])));
-    let (starts, changed, _) =
-        drive(&pool, &[SyncTrigger::Focus, SyncTrigger::Poke], &provider, GAP).await;
+    let (starts, changed, _) = drive(
+        &pool,
+        &[SyncTrigger::Focus, SyncTrigger::Poke],
+        &provider,
+        GAP,
+    )
+    .await;
 
     assert_eq!(starts, 2);
     assert_eq!(changed, vec![false, true]);
@@ -215,8 +228,13 @@ async fn interval_bypasses_focus_gap() {
     let provider = Shared::default()
         .with_sync(Ok(delta(vec![])))
         .with_sync(Ok(delta(vec![])));
-    let (starts, ..) =
-        drive(&pool, &[SyncTrigger::Focus, SyncTrigger::Interval], &provider, GAP).await;
+    let (starts, ..) = drive(
+        &pool,
+        &[SyncTrigger::Focus, SyncTrigger::Interval],
+        &provider,
+        GAP,
+    )
+    .await;
 
     assert_eq!(starts, 2);
 }
@@ -253,7 +271,11 @@ async fn account_error_does_not_abort_pass() {
     )
     .await;
 
-    assert_eq!(changed.into_inner(), vec![true], "healthy account still syncs");
+    assert_eq!(
+        changed.into_inner(),
+        vec![true],
+        "healthy account still syncs"
+    );
     assert_eq!(errors.into_inner(), vec![1]);
     assert_eq!(healthy.calls.get(), 1);
     assert_eq!(page_count(&pool).await, 1);
@@ -278,9 +300,15 @@ async fn reconnect_needed_account_is_skipped_until_manual_resync() {
     // which flags the account (an outcome, not a reported error).
     let provider = Shared::default().with_sync(Err(AppError::Invalid("revoked".into())));
     let report = super::run_pass(&pool, &|_: &SyncAccountRow| provider.clone()).await;
-    assert!(report.errors.is_empty(), "reconnect-needed is an outcome, not an error");
+    assert!(
+        report.errors.is_empty(),
+        "reconnect-needed is an outcome, not an error"
+    );
     assert_eq!(provider.calls.get(), 1, "polled once");
-    assert!(reconnect_needed(&pool, "acc1").await, "flagged after the rejection");
+    assert!(
+        reconnect_needed(&pool, "acc1").await,
+        "flagged after the rejection"
+    );
 
     // Pass 2: the flagged account is skipped — no provider call (its scripted queue
     // is empty, so a stray poll would panic).
@@ -289,13 +317,22 @@ async fn reconnect_needed_account_is_skipped_until_manual_resync() {
 
     // Manual resync with working creds clears the flag — the re-inclusion path.
     let good = Shared::default().with_sync(Ok(delta(vec![event("/e1.ics", "u1")])));
-    crate::commands::resync_account(&pool, &good, "acc1").await.unwrap();
-    assert!(!reconnect_needed(&pool, "acc1").await, "a clean resync cleared the flag");
+    crate::commands::resync_account(&pool, &good, "acc1")
+        .await
+        .unwrap();
+    assert!(
+        !reconnect_needed(&pool, "acc1").await,
+        "a clean resync cleared the flag"
+    );
 
     // The next background pass includes the account again.
     let provider = Shared::default().with_sync(Ok(delta(vec![])));
     super::run_pass(&pool, &|_: &SyncAccountRow| provider.clone()).await;
-    assert_eq!(provider.calls.get(), 1, "account polled again after reconnect");
+    assert_eq!(
+        provider.calls.get(),
+        1,
+        "account polled again after reconnect"
+    );
 }
 
 /// No pool (app not connected yet / mid workspace-switch) → the trigger is
@@ -323,6 +360,10 @@ async fn missing_pool_skips_pass() {
     )
     .await;
 
-    assert_eq!(starts.get(), 1, "first trigger dropped, second runs once connected");
+    assert_eq!(
+        starts.get(),
+        1,
+        "first trigger dropped, second runs once connected"
+    );
     assert_eq!(page_count(&pool).await, 1);
 }

@@ -172,8 +172,16 @@ async fn apply_event(
         (page_id, false)
     } else {
         let page_id = insert_synced_page(tx, ctx, &ev.core.title, &now).await?;
-        insert_page_sync(tx, ctx, &page_id, &ev.core, &mirror_location, &mirror_attendees, &now)
-            .await?;
+        insert_page_sync(
+            tx,
+            ctx,
+            &page_id,
+            &ev.core,
+            &mirror_location,
+            &mirror_attendees,
+            &now,
+        )
+        .await?;
         (page_id, true)
     };
 
@@ -223,12 +231,11 @@ async fn write_schedule(
     ev: &EventUpsert,
     now: &str,
 ) -> AppResult<()> {
-    let had_rule: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_id = ?)",
-    )
-    .bind(page_id)
-    .fetch_one(&mut **tx)
-    .await?;
+    let had_rule: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_id = ?)")
+            .bind(page_id)
+            .fetch_one(&mut **tx)
+            .await?;
 
     sqlx::query("DELETE FROM page_recurrence_rules WHERE page_id = ?")
         .bind(page_id)
@@ -455,7 +462,17 @@ pub async fn sweep_absent(
 
     // One SELECT joins each active link's rule + head schedule, so the pre-window
     // check is a pure comparison per row instead of 1–2 queries inside the tx.
-    let rows = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>, Option<String>)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
+    >(
         "SELECT ps.id, ps.page_id, ps.external_id, r.rrule, p.scheduled_start, p.scheduled_end
          FROM page_sync ps
          JOIN pages p ON p.id = ps.page_id
@@ -473,7 +490,12 @@ pub async fn sweep_absent(
         if present_ids.contains(&external_id) {
             continue;
         }
-        if is_pre_window(rrule.as_deref(), start.as_deref(), end.as_deref(), &window_key) {
+        if is_pre_window(
+            rrule.as_deref(),
+            start.as_deref(),
+            end.as_deref(),
+            &window_key,
+        ) {
             continue;
         }
         detach_or_delete(&mut tx, &page_sync_id, &page_id).await?;
@@ -611,10 +633,7 @@ async fn teardown_calendar_once(
 /// completed or skipped occurrences would classify non-owned and hard-delete on
 /// upstream removal — losing the completion/dismissal history and resurrecting
 /// dismissed occurrences on reconnect.
-async fn is_owned(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    page_id: &str,
-) -> AppResult<bool> {
+async fn is_owned(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, page_id: &str) -> AppResult<bool> {
     let owned: bool = sqlx::query_scalar(
         "SELECT p.completed_at IS NOT NULL
               OR ps.user_modified
@@ -677,11 +696,12 @@ async fn insert_synced_page(
     now: &str,
 ) -> AppResult<String> {
     let id = uuid::Uuid::new_v4().to_string();
-    let sort_order: i64 =
-        sqlx::query_scalar("SELECT COALESCE(MAX(sort_order) + 1, 0) FROM pages WHERE folder_id = ?")
-            .bind(&ctx.folder_id)
-            .fetch_one(&mut **tx)
-            .await?;
+    let sort_order: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM pages WHERE folder_id = ?",
+    )
+    .bind(&ctx.folder_id)
+    .fetch_one(&mut **tx)
+    .await?;
     sqlx::query(
         "INSERT INTO pages
          (id, folder_id, title, content, content_text, status, priority, tags, sort_order, created_at, updated_at)

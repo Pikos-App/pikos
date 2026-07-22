@@ -59,7 +59,9 @@ impl Scripted {
         self
     }
     fn with_bootstrap_err(self) -> Self {
-        self.bootstrap.borrow_mut().push_back(Err(AppError::Internal("bootstrap down".into())));
+        self.bootstrap
+            .borrow_mut()
+            .push_back(Err(AppError::Internal("bootstrap down".into())));
         self
     }
     fn with_ctag(self, c: Option<&str>) -> Self {
@@ -192,7 +194,11 @@ fn orphan_occurrence(uid: &str, series_ref: &str) -> UpsertItem {
 /// A full authoritative enumerate: no cursor, and `authoritative_from` set so the
 /// engine sweeps stored pages absent from `upserts`.
 fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
-    SyncDelta { upserts, authoritative_from: Some(window_start.into()), ..Default::default() }
+    SyncDelta {
+        upserts,
+        authoritative_from: Some(window_start.into()),
+        ..Default::default()
+    }
 }
 
 // ─── DB setup + queries ─────────────────────────────────────────────────────────
@@ -309,7 +315,13 @@ async fn incremental_loop_stores_cursor() {
         .with_bootstrap(SyncToken("tok-A".into()));
 
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
+    );
     assert_eq!(page_count(&pool).await, 1);
     assert_eq!(stored_token(&pool).await.as_deref(), Some("tok-A"));
     assert!(last_synced(&pool).await.is_some());
@@ -322,8 +334,18 @@ async fn incremental_loop_stores_cursor() {
         Some("tok-B"),
     )));
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
-    assert_eq!(page_count(&pool).await, 1, "same event updates, never dupes");
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
+    );
+    assert_eq!(
+        page_count(&pool).await,
+        1,
+        "same event updates, never dupes"
+    );
     assert_eq!(stored_token(&pool).await.as_deref(), Some("tok-B"));
     // The incremental sync was driven from the bootstrapped cursor.
     assert_eq!(
@@ -343,7 +365,13 @@ async fn empty_incremental_delta_reports_unchanged() {
     let provider = Scripted::default().with_sync(Ok(delta(vec![], Some("t1"))));
     let outcome = run(&pool, &provider).await;
 
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: false });
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: false
+        }
+    );
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
     assert!(last_synced(&pool).await.is_some());
 }
@@ -356,8 +384,10 @@ async fn token_reject_full_resync_converges() {
     let pool = test_pool().await;
     seed(&pool, Some("stale")).await;
     // Prime an existing page so the re-enumerate must converge, not duplicate.
-    let provider = Scripted::default()
-        .with_sync(Ok(delta(vec![event("/e1.ics", "u1", "v1", "Lunch")], Some("t0"))));
+    let provider = Scripted::default().with_sync(Ok(delta(
+        vec![event("/e1.ics", "u1", "v1", "Lunch")],
+        Some("t0"),
+    )));
     run(&pool, &provider).await;
     assert_eq!(page_count(&pool).await, 1);
     let updated_before = page_updated_at(&pool).await;
@@ -371,8 +401,18 @@ async fn token_reject_full_resync_converges() {
 
     // Every etag no-ops, so the re-enumerate applied zero writes → `changed:false`,
     // even though the delta carried an item. No spurious frontend reload each poll.
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: false });
-    assert_eq!(page_count(&pool).await, 1, "re-enumerate converges, no dupe");
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: true,
+            changed: false
+        }
+    );
+    assert_eq!(
+        page_count(&pool).await,
+        1,
+        "re-enumerate converges, no dupe"
+    );
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t-new"));
     // Idempotency invariant: unchanged etag → no write, so the re-enumerate doesn't
     // churn updated_at and refloat the page as "recently edited".
@@ -419,7 +459,11 @@ async fn reconnect_needed_preserves_the_cursor() {
 
     let provider = Scripted::default().with_sync(Err(AppError::Invalid("creds".into())));
     assert_eq!(run(&pool, &provider).await, SyncOutcome::ReconnectNeeded);
-    assert_eq!(stored_token(&pool).await.as_deref(), Some("t-keep"), "cursor preserved");
+    assert_eq!(
+        stored_token(&pool).await.as_deref(),
+        Some("t-keep"),
+        "cursor preserved"
+    );
 }
 
 /// A full backfill (no delta token) bootstraps the incremental cursor afterward. If
@@ -435,9 +479,19 @@ async fn post_backfill_bootstrap_token_failure_leaves_cursor_null() {
         .with_bootstrap_err();
 
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
+    );
     assert_eq!(page_count(&pool).await, 1, "the backfill still committed");
-    assert_eq!(stored_token(&pool).await, None, "failed bootstrap → cursor null → re-enumerate next poll");
+    assert_eq!(
+        stored_token(&pool).await,
+        None,
+        "failed bootstrap → cursor null → re-enumerate next poll"
+    );
 }
 
 /// An occurrence delta with no stored master triggers a targeted `fetch_event`;
@@ -455,7 +509,13 @@ async fn orphan_master_fetched_and_applied() {
         .with_fetch(Ok(master("/series.ics", "u-series")));
 
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
+    );
     assert_eq!(page_count(&pool).await, 1, "the series master page");
     assert_eq!(override_count(&pool, "2026-06-21T09:00:00").await, 1);
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
@@ -477,7 +537,13 @@ async fn orphan_master_404_dropped() {
 
     let outcome = run(&pool, &provider).await;
     // The orphan was dropped and nothing else applied → no real write → unchanged.
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: false });
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: false
+        }
+    );
     assert_eq!(page_count(&pool).await, 0, "no synthesized page");
     assert_eq!(override_count(&pool, "2026-06-21T09:00:00").await, 0);
     assert_eq!(stored_token(&pool).await.as_deref(), Some("t1"));
@@ -502,14 +568,28 @@ async fn full_enumerate_spares_a_resolved_orphan_master_from_the_sweep() {
 
     let outcome = run(&pool, &provider).await;
 
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
-    assert_eq!(page_count(&pool).await, 1, "the fetched master survives its own pass");
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
+    );
+    assert_eq!(
+        page_count(&pool).await,
+        1,
+        "the fetched master survives its own pass"
+    );
     assert_eq!(
         sync_state_by_uid(&pool, "u-series").await.as_deref(),
         Some("active"),
         "resolved master not swept",
     );
-    assert_eq!(override_count(&pool, "2026-06-21T09:00:00").await, 1, "the override landed");
+    assert_eq!(
+        override_count(&pool, "2026-06-21T09:00:00").await,
+        1,
+        "the override landed"
+    );
 }
 
 /// A transient orphan-fetch failure must not advance the cursor; the next poll
@@ -548,7 +628,10 @@ async fn partial_failure_is_idempotent() {
         .with_fetch(Ok(master("/series.ics", "u-series")));
     assert_eq!(
         run(&pool, &provider).await,
-        SyncOutcome::Synced { full_resync: false, changed: true }
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
     );
     assert_eq!(
         page_count(&pool).await,
@@ -575,9 +658,13 @@ async fn write_contention_converges() {
         provider: "caldav".into(),
         folder_id: FOLDER.into(),
     };
-    reconcile(pool, &ctx, &delta(vec![event("/e1.ics", "u1", "v1", "Title")], None))
-        .await
-        .unwrap();
+    reconcile(
+        pool,
+        &ctx,
+        &delta(vec![event("/e1.ics", "u1", "v1", "Title")], None),
+    )
+    .await
+    .unwrap();
     let page_id: String = sqlx::query_scalar("SELECT id FROM pages LIMIT 1")
         .fetch_one(pool)
         .await
@@ -643,7 +730,10 @@ async fn backfill_throughput() {
 
     assert_eq!(
         run(&pool, &provider).await,
-        SyncOutcome::Synced { full_resync: false, changed: true }
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
     );
     assert_eq!(page_count(&pool).await, N as i64);
 }
@@ -660,8 +750,10 @@ async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_remova
     seed(&pool, None).await;
 
     // A pre-existing owned page the big delta removes → detach, not hard-delete.
-    let provider =
-        Scripted::default().with_sync(Ok(delta(vec![event("/rm.ics", "u-rm", "v1", "Old")], Some("t1"))));
+    let provider = Scripted::default().with_sync(Ok(delta(
+        vec![event("/rm.ics", "u-rm", "v1", "Old")],
+        Some("t1"),
+    )));
     run(&pool, &provider).await;
     sqlx::query("UPDATE page_sync SET user_modified = 1 WHERE ical_uid = 'u-rm'")
         .execute(&pool)
@@ -683,16 +775,28 @@ async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_remova
     let provider = Scripted::default()
         .with_sync(Ok(SyncDelta {
             upserts,
-            removals: vec![Removal { external_id: "/rm.ics".into() }],
+            removals: vec![Removal {
+                external_id: "/rm.ics".into(),
+            }],
             next_token: Some(SyncToken("t2".into())),
             ..Default::default()
         }))
         .with_fetch(Ok(master("/UNEXPECTED.ics", "u-series")));
 
     let outcome = run(&pool, &provider).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
+    );
 
-    assert_eq!(provider.fetch.borrow().len(), 1, "no missing-master fetch fired");
+    assert_eq!(
+        provider.fetch.borrow().len(),
+        1,
+        "no missing-master fetch fired"
+    );
     assert_eq!(
         override_count(&pool, "2026-06-21T09:00:00").await,
         1,
@@ -767,7 +871,13 @@ async fn backfill_does_not_block_interactive_writes() {
     let (outcome, ()) = tokio::join!(backfill, edit);
     let backfill_elapsed = started.elapsed();
 
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
+    );
     assert_eq!(page_count(pool).await, N as i64 + 1);
     assert!(
         edit_elapsed * 2 < backfill_elapsed,
@@ -783,13 +893,17 @@ async fn backfill_does_not_block_interactive_writes() {
 async fn removal_flows_through() {
     let pool = test_pool().await;
     seed(&pool, None).await;
-    let provider = Scripted::default()
-        .with_sync(Ok(delta(vec![event("/e1.ics", "u1", "v1", "Lunch")], Some("t1"))));
+    let provider = Scripted::default().with_sync(Ok(delta(
+        vec![event("/e1.ics", "u1", "v1", "Lunch")],
+        Some("t1"),
+    )));
     run(&pool, &provider).await;
     assert_eq!(page_count(&pool).await, 1);
 
     let provider = Scripted::default().with_sync(Ok(SyncDelta {
-        removals: vec![Removal { external_id: "/e1.ics".into() }],
+        removals: vec![Removal {
+            external_id: "/e1.ics".into(),
+        }],
         next_token: Some(SyncToken("t2".into())),
         ..Default::default()
     }));
@@ -812,8 +926,20 @@ async fn full_resync_sweeps_deleted_but_spares_pre_window() {
     let provider = Scripted::default()
         .with_sync(Ok(full_enumerate(
             vec![
-                dated_event("/live.ics", "live", "Team lunch", "2026-06-28T12:00:00", "2026-06-28T13:00:00"),
-                dated_event("/old.ics", "old", "Q1 kickoff", "2026-05-01T09:00:00", "2026-05-01T10:00:00"),
+                dated_event(
+                    "/live.ics",
+                    "live",
+                    "Team lunch",
+                    "2026-06-28T12:00:00",
+                    "2026-06-28T13:00:00",
+                ),
+                dated_event(
+                    "/old.ics",
+                    "old",
+                    "Q1 kickoff",
+                    "2026-05-01T09:00:00",
+                    "2026-05-01T10:00:00",
+                ),
             ],
             "2026-06-24",
         )))
@@ -832,9 +958,23 @@ async fn full_resync_sweeps_deleted_but_spares_pre_window() {
     // Sweep-only pass: no upserts, no explicit removals, yet a page was deleted →
     // `changed:true` so the scheduler emits the reload (else a ghost until an
     // unrelated resync).
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: true });
-    assert_eq!(page_count(&pool).await, 1, "deleted event swept, pre-window kept");
-    assert_eq!(sync_state_by_uid(&pool, "live").await, None, "deleted mirror gone");
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: true,
+            changed: true
+        }
+    );
+    assert_eq!(
+        page_count(&pool).await,
+        1,
+        "deleted event swept, pre-window kept"
+    );
+    assert_eq!(
+        sync_state_by_uid(&pool, "live").await,
+        None,
+        "deleted mirror gone"
+    );
     assert_eq!(
         sync_state_by_uid(&pool, "old").await.as_deref(),
         Some("active"),
@@ -852,7 +992,13 @@ async fn full_resync_sweep_detaches_owned_page() {
 
     let provider = Scripted::default()
         .with_sync(Ok(full_enumerate(
-            vec![dated_event("/mine.ics", "mine", "Planning", "2026-06-28T09:00:00", "2026-06-28T10:00:00")],
+            vec![dated_event(
+                "/mine.ics",
+                "mine",
+                "Planning",
+                "2026-06-28T09:00:00",
+                "2026-06-28T10:00:00",
+            )],
             "2026-06-24",
         )))
         .with_bootstrap(SyncToken("tok-A".into()));
@@ -887,7 +1033,13 @@ async fn full_enumerate_spares_unresolved_pages_from_the_sweep() {
 
     let provider = Scripted::default()
         .with_sync(Ok(full_enumerate(
-            vec![dated_event("/ev.ics", "ev", "Standup", "2026-06-28T09:00:00", "2026-06-28T10:00:00")],
+            vec![dated_event(
+                "/ev.ics",
+                "ev",
+                "Standup",
+                "2026-06-28T09:00:00",
+                "2026-06-28T10:00:00",
+            )],
             "2026-06-24",
         )))
         .with_bootstrap(SyncToken("tok-A".into()));
@@ -898,13 +1050,28 @@ async fn full_enumerate_spares_unresolved_pages_from_the_sweep() {
     // absent from upserts yet listed in unresolved_present.
     let mut enumerate = full_enumerate(vec![], "2026-06-24");
     enumerate.unresolved_present = vec!["/ev.ics".into()];
-    let provider =
-        Scripted::default().with_sync(Ok(enumerate)).with_bootstrap(SyncToken("tok-B".into()));
+    let provider = Scripted::default()
+        .with_sync(Ok(enumerate))
+        .with_bootstrap(SyncToken("tok-B".into()));
     let outcome = run(&pool, &provider).await;
 
-    assert_eq!(page_count(&pool).await, 1, "unparseable-but-live event spared, not swept");
-    assert_eq!(sync_state_by_uid(&pool, "ev").await.as_deref(), Some("active"), "mirror intact");
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: false });
+    assert_eq!(
+        page_count(&pool).await,
+        1,
+        "unparseable-but-live event spared, not swept"
+    );
+    assert_eq!(
+        sync_state_by_uid(&pool, "ev").await.as_deref(),
+        Some("active"),
+        "mirror intact"
+    );
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: true,
+            changed: false
+        }
+    );
 }
 
 /// A full authoritative enumerate whose single event is unchanged (same etag) and
@@ -919,7 +1086,13 @@ async fn all_etag_noop_full_enumerate_reports_unchanged() {
     let enumerate = || {
         Scripted::default()
             .with_sync(Ok(full_enumerate(
-                vec![dated_event("/e1.ics", "u1", "Lunch", "2026-06-28T12:00:00", "2026-06-28T13:00:00")],
+                vec![dated_event(
+                    "/e1.ics",
+                    "u1",
+                    "Lunch",
+                    "2026-06-28T12:00:00",
+                    "2026-06-28T13:00:00",
+                )],
                 "2026-06-24",
             )))
             .with_bootstrap(SyncToken("tok".into()))
@@ -927,7 +1100,13 @@ async fn all_etag_noop_full_enumerate_reports_unchanged() {
     run(&pool, &enumerate()).await;
 
     let outcome = run(&pool, &enumerate()).await;
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: true, changed: false });
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: true,
+            changed: false
+        }
+    );
     assert_eq!(page_count(&pool).await, 1, "no dupe, no churn");
 }
 
@@ -943,8 +1122,18 @@ async fn unchanged_ctag_skips_the_enumerate() {
     let provider = Scripted::default().with_ctag(Some("ctag-1"));
     let outcome = run(&pool, &provider).await;
 
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: false });
-    assert_eq!(provider.sync_calls(), 0, "an unchanged ctag must not enumerate");
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: false
+        }
+    );
+    assert_eq!(
+        provider.sync_calls(),
+        0,
+        "an unchanged ctag must not enumerate"
+    );
     assert_eq!(page_count(&pool).await, 0);
 }
 
@@ -954,16 +1143,34 @@ async fn changed_ctag_enumerates_and_stores_the_new_ctag() {
     seed(&pool, None).await;
     set_ctag_state(&pool, "ctag-1", 0).await;
 
-    let provider = Scripted::default().with_ctag(Some("ctag-2")).with_sync(Ok(full_enumerate(
-        vec![dated_event("/e1.ics", "u1", "Lunch", "2026-06-28T12:00:00", "2026-06-28T13:00:00")],
-        "2026-06-24",
-    )));
+    let provider = Scripted::default()
+        .with_ctag(Some("ctag-2"))
+        .with_sync(Ok(full_enumerate(
+            vec![dated_event(
+                "/e1.ics",
+                "u1",
+                "Lunch",
+                "2026-06-28T12:00:00",
+                "2026-06-28T13:00:00",
+            )],
+            "2026-06-24",
+        )));
     let outcome = run(&pool, &provider).await;
 
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: true });
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: true
+        }
+    );
     assert_eq!(provider.sync_calls(), 1, "a moved ctag must enumerate");
     assert_eq!(page_count(&pool).await, 1);
-    assert_eq!(stored_ctag(&pool).await.as_deref(), Some("ctag-2"), "the new ctag is persisted");
+    assert_eq!(
+        stored_ctag(&pool).await.as_deref(),
+        Some("ctag-2"),
+        "the new ctag is persisted"
+    );
 }
 
 #[tokio::test]
@@ -973,12 +1180,23 @@ async fn periodic_backstop_enumerates_despite_a_matching_ctag() {
     // Ctag matches, but the last full sync is older than the safety interval.
     set_ctag_state(&pool, "ctag-1", FORCE_FULL_INTERVAL_HOURS + 1).await;
 
-    let provider =
-        Scripted::default().with_ctag(Some("ctag-1")).with_sync(Ok(full_enumerate(vec![], "2026-06-24")));
+    let provider = Scripted::default()
+        .with_ctag(Some("ctag-1"))
+        .with_sync(Ok(full_enumerate(vec![], "2026-06-24")));
     let outcome = run(&pool, &provider).await;
 
-    assert_eq!(provider.sync_calls(), 1, "an overdue full sync enumerates even on a matching ctag");
-    assert_eq!(outcome, SyncOutcome::Synced { full_resync: false, changed: false });
+    assert_eq!(
+        provider.sync_calls(),
+        1,
+        "an overdue full sync enumerates even on a matching ctag"
+    );
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: false,
+            changed: false
+        }
+    );
 }
 
 #[tokio::test]
@@ -986,12 +1204,17 @@ async fn first_poll_without_a_stored_ctag_enumerates_and_captures_it() {
     let pool = test_pool().await;
     seed(&pool, None).await; // ctag + last_full_sync_at both NULL
 
-    let provider =
-        Scripted::default().with_ctag(Some("ctag-1")).with_sync(Ok(full_enumerate(vec![], "2026-06-24")));
+    let provider = Scripted::default()
+        .with_ctag(Some("ctag-1"))
+        .with_sync(Ok(full_enumerate(vec![], "2026-06-24")));
     run(&pool, &provider).await;
 
     assert_eq!(provider.sync_calls(), 1, "no stored ctag → must enumerate");
-    assert_eq!(stored_ctag(&pool).await.as_deref(), Some("ctag-1"), "first ctag captured");
+    assert_eq!(
+        stored_ctag(&pool).await.as_deref(),
+        Some("ctag-1"),
+        "first ctag captured"
+    );
 }
 
 // ─── temp WAL pool ──────────────────────────────────────────────────────────────
@@ -1015,8 +1238,7 @@ impl Drop for TempDb {
 async fn wal_db() -> TempDb {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path =
-        std::env::temp_dir().join(format!("pikos-engine-{}-{n}.sqlite", std::process::id()));
+    let path = std::env::temp_dir().join(format!("pikos-engine-{}-{n}.sqlite", std::process::id()));
     let _ = std::fs::remove_file(&path);
     let pool = pikos_db::open_pool(path.to_str().unwrap())
         .await

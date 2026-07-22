@@ -420,12 +420,14 @@ async fn upsert_page_tags_tx(
 }
 
 async fn fetch_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Page> {
-    sqlx::query_as::<_, PageRow>(&format!("SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"))
-        .bind(id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("Page not found: {id}")))
-        .map(Page::from)
+    sqlx::query_as::<_, PageRow>(&format!(
+        "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
+    ))
+    .bind(id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("Page not found: {id}")))
+    .map(Page::from)
 }
 
 async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> AppResult<i64> {
@@ -668,10 +670,12 @@ pub async fn update_page_impl(
 
     if marks_ownership {
         // No page_sync row for native pages → no-op.
-        sqlx::query("UPDATE page_sync SET user_modified = 1 WHERE page_id = ? AND user_modified = 0")
-            .bind(&id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "UPDATE page_sync SET user_modified = 1 WHERE page_id = ? AND user_modified = 0",
+        )
+        .bind(&id)
+        .execute(&mut *tx)
+        .await?;
     }
 
     if let Some(tags) = updated_tags {
@@ -710,12 +714,14 @@ pub async fn soft_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResu
     // Guard on deleted_at IS NULL (mirrors soft_delete_folder_impl) so a second
     // delete can't overwrite the original trash timestamp and reset the
     // auto-purge clock.
-    sqlx::query("UPDATE pages SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
-        .bind(&now)
-        .bind(&now)
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "UPDATE pages SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+    )
+    .bind(&now)
+    .bind(&now)
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
     // Tombstone the sync link so the next poll doesn't resurrect a deleted synced
     // page. Only an active link: a detached row (sync severed) must keep that state
     // through trash → restore, else restore would wrongly reactivate it. No-op for
@@ -1179,24 +1185,22 @@ async fn complete_recurring_page_once(
     // trashed recurring page must not resurrect it as a visible "done" clone. The
     // sort_order read also lives inside the tx so two concurrent completions can't
     // allocate the same value.
-    let head =
-        sqlx::query_as::<_, PageRow>(&format!(
-            "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
-        ))
-            .bind(&data.page_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .map(Page::from)
-            .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", data.page_id)))?;
+    let head = sqlx::query_as::<_, PageRow>(&format!(
+        "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
+    ))
+    .bind(&data.page_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .map(Page::from)
+    .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", data.page_id)))?;
 
     // Occurrence completion is set-only, so a misroute to a non-recurring page would
     // mint a clone no series can ever suppress. Reject it (both kinds).
-    let is_recurring: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_id = ?)",
-    )
-    .bind(&data.page_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    let is_recurring: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM page_recurrence_rules WHERE page_id = ?)")
+            .bind(&data.page_id)
+            .fetch_one(&mut *tx)
+            .await?;
     if !is_recurring {
         return Err(AppError::Conflict(
             "Occurrence completion applies only to a recurring series.".to_string(),
@@ -1210,10 +1214,14 @@ async fn complete_recurring_page_once(
     // write a set entry that matches no occurrence (an unsuppressable open occurrence).
     let (occurrence_date, occurrence_start, occurrence_end) = if head.schedule_locked {
         let occurrence_date = data.occurrence_date.clone().ok_or_else(|| {
-            AppError::Conflict("Synced occurrence completion requires an occurrence date.".to_string())
+            AppError::Conflict(
+                "Synced occurrence completion requires an occurrence date.".to_string(),
+            )
         })?;
         let start = data.scheduled_start.clone().ok_or_else(|| {
-            AppError::Conflict("Synced occurrence completion requires the occurrence start.".to_string())
+            AppError::Conflict(
+                "Synced occurrence completion requires the occurrence start.".to_string(),
+            )
         })?;
         if !synced_occurrence_is_valid(&mut tx, &data.page_id, &occurrence_date).await? {
             return Err(AppError::Conflict(
@@ -1223,10 +1231,16 @@ async fn complete_recurring_page_once(
         (occurrence_date, start, data.scheduled_end.clone())
     } else {
         let occurrence_start = head.scheduled_start.clone().ok_or_else(|| {
-            AppError::Conflict("Recurring page has no scheduled occurrence to complete.".to_string())
+            AppError::Conflict(
+                "Recurring page has no scheduled occurrence to complete.".to_string(),
+            )
         })?;
         let occurrence_date = occurrence_start[..occurrence_start.len().min(10)].to_string();
-        (occurrence_date, occurrence_start, head.scheduled_end.clone())
+        (
+            occurrence_date,
+            occurrence_start,
+            head.scheduled_end.clone(),
+        )
     };
 
     // Idempotency: a double-click or post-`SQLITE_BUSY_SNAPSHOT` retry must not mint
@@ -1240,7 +1254,10 @@ async fn complete_recurring_page_once(
         .bind(&data.page_id)
         .fetch_one(&mut *tx)
         .await?;
-        return Ok(CompleteRecurringResult { clone, head: PageSummary::from(head_row) });
+        return Ok(CompleteRecurringResult {
+            clone,
+            head: PageSummary::from(head_row),
+        });
     }
 
     insert_head_clone_tx(
@@ -1611,15 +1628,14 @@ async fn reschedule_virtual_occurrence_once(
 
     // Reject soft-deleted heads: rescheduling an occurrence of a trashed series
     // must not resurrect its content as a visible page.
-    let head =
-        sqlx::query_as::<_, PageRow>(&format!(
-            "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
-        ))
-            .bind(&page_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .map(Page::from)
-            .ok_or_else(|| AppError::NotFound(format!("Page not found: {page_id}")))?;
+    let head = sqlx::query_as::<_, PageRow>(&format!(
+        "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
+    ))
+    .bind(&page_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .map(Page::from)
+    .ok_or_else(|| AppError::NotFound(format!("Page not found: {page_id}")))?;
 
     insert_head_clone_tx(
         &mut tx,
@@ -1687,8 +1703,8 @@ pub async fn get_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<Pag
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
     ))
     .bind(id)
-        .fetch_optional(pool)
-        .await?;
+    .fetch_optional(pool)
+    .await?;
     Ok(row.map(Page::from))
 }
 

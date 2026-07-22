@@ -8,7 +8,9 @@
 use super::parse_resource;
 
 fn ics(body: &str) -> String {
-    format!("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Pikos//Test//EN\r\n{body}END:VCALENDAR\r\n")
+    format!(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Pikos//Test//EN\r\n{body}END:VCALENDAR\r\n"
+    )
 }
 
 // ─── TZID → IANA via VTIMEZONE ──────────────────────────────────────────────────
@@ -127,7 +129,10 @@ SUMMARY:New Year's Day\r\n\
 END:VEVENT\r\n";
     let ev = parse_resource("/h.ics", Some("v1"), &ics(body)).unwrap();
     assert_eq!(ev.schedule.start, "2026-01-01");
-    assert_eq!(ev.schedule.timezone, None, "all-day recurrence has no meaningful zone");
+    assert_eq!(
+        ev.schedule.timezone, None,
+        "all-day recurrence has no meaningful zone"
+    );
     let rec = ev.recurrence.as_ref().expect("recurring");
     assert!(rec.rrule.contains("FREQ=YEARLY"));
     assert!(rec.exdates.is_empty());
@@ -251,7 +256,10 @@ DTEND;TZID=Middle-earth/Shire:20260615T100000\r\n\
 SUMMARY:Unresolvable zone\r\n\
 END:VEVENT\r\n";
     let ev = parse_resource("/bad.ics", Some("v1"), &ics(body)).unwrap();
-    assert_eq!(ev.schedule.start, "2026-06-15T09:00:00", "literal wall-clock, unshifted");
+    assert_eq!(
+        ev.schedule.start, "2026-06-15T09:00:00",
+        "literal wall-clock, unshifted"
+    );
     assert_eq!(ev.schedule.timezone, None, "the zone is silently dropped");
 }
 
@@ -299,7 +307,10 @@ SUMMARY:Standup (moved)\r\n\
 END:VEVENT\r\n";
     let ev = parse_resource("/s.ics", Some("v1"), &ics(body)).unwrap();
     let ov = &ev.recurrence.as_ref().unwrap().overrides[0];
-    assert_eq!(ov.original_date, "2026-06-08T09:00:00", "RECURRENCE-ID normalizes to the master zone");
+    assert_eq!(
+        ov.original_date, "2026-06-08T09:00:00",
+        "RECURRENCE-ID normalizes to the master zone"
+    );
 }
 
 /// iCloud / Fastmail split exclusions across multiple `EXDATE` lines rather than one
@@ -332,7 +343,10 @@ SUMMARY:No UID\r\n\
 END:VEVENT\r\n";
     let ev = parse_resource("/no-uid.ics", Some("v1"), &ics(body)).unwrap();
     assert_eq!(ev.core.ical_uid, "");
-    assert_eq!(ev.core.external_id, "/no-uid.ics", "identity falls back to the href");
+    assert_eq!(
+        ev.core.external_id, "/no-uid.ics",
+        "identity falls back to the href"
+    );
 }
 
 // ─── malformed / non-VEVENT ─────────────────────────────────────────────────────
@@ -407,7 +421,11 @@ END:VEVENT\r\n";
     let ev = parse_resource("/s.ics", Some("v1"), &ics(body)).unwrap();
     assert_eq!(
         ev.recurrence.unwrap().exdates,
-        vec!["2026-06-15T09:00:00", "2026-06-22T09:00:00", "2026-06-29T09:00:00"]
+        vec![
+            "2026-06-15T09:00:00",
+            "2026-06-22T09:00:00",
+            "2026-06-29T09:00:00"
+        ]
     );
 }
 

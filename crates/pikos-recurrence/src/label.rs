@@ -8,8 +8,9 @@ use chrono::{Datelike, NaiveDate};
 
 use crate::rule::{parse_rrule, Freq};
 
-const MONTH_ABBR: [&str; 12] =
-    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_ABBR: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
 
 /// Compact label for space-constrained bylines (e.g. the quick-add dialog).
 /// Returns the raw RRULE on parse failure, matching the wrapper's fallback.
@@ -29,7 +30,11 @@ pub fn rrule_to_short_label(rrule: &str) -> String {
         return format!("{base} × {count}");
     }
     if let Some(until) = opts.until.as_deref().and_then(parse_ymd) {
-        return format!("{base} thru {} {}", MONTH_ABBR[(until.month() - 1) as usize], until.day());
+        return format!(
+            "{base} thru {} {}",
+            MONTH_ABBR[(until.month() - 1) as usize],
+            until.day()
+        );
     }
     base
 }

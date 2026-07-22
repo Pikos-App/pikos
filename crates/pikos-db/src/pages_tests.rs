@@ -59,7 +59,13 @@ async fn series_advances_to_next_open_occurrence() {
 
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap();
@@ -141,7 +147,13 @@ async fn completion_records_the_set_and_leaves_rule_exdates_untouched() {
 
     complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap();
@@ -202,7 +214,13 @@ async fn series_marks_head_done_when_exhausted() {
 
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap();
@@ -237,7 +255,13 @@ async fn syncs_normalized_tag_tables_on_clone() {
 
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap();
@@ -256,7 +280,13 @@ async fn missing_head_returns_not_found() {
     let pool = test_pool().await;
     let err = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "nope".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: "nope".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap_err();
@@ -283,7 +313,13 @@ async fn rejects_soft_deleted_head() {
 
     let err = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap_err();
@@ -351,7 +387,13 @@ async fn advanced_head_survives_later_denorm_refresh() {
     // Complete the 05-21 occurrence; the recompute advances the head to 05-28.
     complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap();
@@ -378,7 +420,10 @@ async fn uncomplete_reverses_a_native_completion() {
     let pool = test_pool().await;
     insert_test_page(
         &pool,
-        TestPage { scheduled_start: Some("2026-05-21"), ..TestPage::new("head", "Daily") },
+        TestPage {
+            scheduled_start: Some("2026-05-21"),
+            ..TestPage::new("head", "Daily")
+        },
     )
     .await
     .unwrap();
@@ -386,15 +431,27 @@ async fn uncomplete_reverses_a_native_completion() {
 
     let result = complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap();
-    assert_eq!(fetch_scheduled_start(&pool, "head").await.as_deref(), Some("2026-05-22"));
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-05-22")
+    );
 
     uncomplete_recurring_occurrence_impl(
         &pool,
-        UncompleteRecurringInput { page_id: "head".into(), occurrence_date: "2026-05-21".into() },
+        UncompleteRecurringInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-05-21".into(),
+        },
     )
     .await
     .unwrap();
@@ -407,7 +464,10 @@ async fn uncomplete_reverses_a_native_completion() {
             .await
             .unwrap();
     assert_eq!(set_count, 0, "completed-set entry dropped");
-    assert_eq!(fetch_scheduled_start(&pool, "head").await.as_deref(), Some("2026-05-21"));
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-05-21")
+    );
     assert_eq!(fetch_status(&pool, "head").await, "not_started");
 }
 
@@ -416,7 +476,10 @@ async fn exhausted_series_uncomplete_unmarks_done() {
     let pool = test_pool().await;
     insert_test_page(
         &pool,
-        TestPage { scheduled_start: Some("2026-05-21"), ..TestPage::new("head", "Once") },
+        TestPage {
+            scheduled_start: Some("2026-05-21"),
+            ..TestPage::new("head", "Once")
+        },
     )
     .await
     .unwrap();
@@ -436,21 +499,41 @@ async fn exhausted_series_uncomplete_unmarks_done() {
 
     complete_recurring_page_impl(
         &pool,
-        CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            skip_dates: vec![],
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
     )
     .await
     .unwrap();
-    assert_eq!(fetch_status(&pool, "head").await, "done", "exhausted → done");
+    assert_eq!(
+        fetch_status(&pool, "head").await,
+        "done",
+        "exhausted → done"
+    );
 
     // Uncomplete the only occurrence: it yields again, so the head un-marks done.
     uncomplete_recurring_occurrence_impl(
         &pool,
-        UncompleteRecurringInput { page_id: "head".into(), occurrence_date: "2026-05-21".into() },
+        UncompleteRecurringInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-05-21".into(),
+        },
     )
     .await
     .unwrap();
-    assert_eq!(fetch_status(&pool, "head").await, "not_started", "un-marked done");
-    assert_eq!(fetch_scheduled_start(&pool, "head").await.as_deref(), Some("2026-05-21"));
+    assert_eq!(
+        fetch_status(&pool, "head").await,
+        "not_started",
+        "un-marked done"
+    );
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-05-21")
+    );
 }
 
 #[tokio::test]
@@ -458,7 +541,10 @@ async fn skip_advances_head_and_undo_restores_it() {
     let pool = test_pool().await;
     insert_test_page(
         &pool,
-        TestPage { scheduled_start: Some("2026-05-21"), ..TestPage::new("head", "Daily") },
+        TestPage {
+            scheduled_start: Some("2026-05-21"),
+            ..TestPage::new("head", "Daily")
+        },
     )
     .await
     .unwrap();
@@ -467,19 +553,31 @@ async fn skip_advances_head_and_undo_restores_it() {
     // Dismiss the head occurrence → recompute advances past it.
     skip_occurrence_impl(
         &pool,
-        SkipOccurrenceInput { page_id: "head".into(), occurrence_date: "2026-05-21".into() },
+        SkipOccurrenceInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-05-21".into(),
+        },
     )
     .await
     .unwrap();
-    assert_eq!(fetch_scheduled_start(&pool, "head").await.as_deref(), Some("2026-05-22"));
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-05-22")
+    );
 
     undo_skip_occurrence_impl(
         &pool,
-        SkipOccurrenceInput { page_id: "head".into(), occurrence_date: "2026-05-21".into() },
+        SkipOccurrenceInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-05-21".into(),
+        },
     )
     .await
     .unwrap();
-    assert_eq!(fetch_scheduled_start(&pool, "head").await.as_deref(), Some("2026-05-21"));
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-05-21")
+    );
 }
 
 #[tokio::test]
@@ -496,7 +594,10 @@ async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
     let pool = test_pool().await;
     insert_test_page(
         &pool,
-        TestPage { scheduled_start: Some("2026-05-21"), ..TestPage::new("head", "Daily") },
+        TestPage {
+            scheduled_start: Some("2026-05-21"),
+            ..TestPage::new("head", "Daily")
+        },
     )
     .await
     .unwrap();
@@ -533,12 +634,21 @@ async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
     for _ in 0..2 {
         complete_recurring_page_impl(
             &pool,
-            CompleteRecurringInput { page_id: "head".into(), skip_dates: vec![], occurrence_date: None, scheduled_start: None, scheduled_end: None },
+            CompleteRecurringInput {
+                page_id: "head".into(),
+                skip_dates: vec![],
+                occurrence_date: None,
+                scheduled_start: None,
+                scheduled_end: None,
+            },
         )
         .await
         .unwrap();
     }
-    assert_eq!(fetch_scheduled_start(&pool, "head").await.as_deref(), Some("2026-05-23"));
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-05-23")
+    );
 
     delete_recurrence_rule_impl(&pool, &rule.id).await.unwrap();
 
@@ -1306,7 +1416,9 @@ async fn fts_index_drops_page_after_hard_delete() {
 async fn set_pages_status_completes_all_in_one_call() {
     let pool = test_pool().await;
     for id in ["a", "b", "c"] {
-        insert_test_page(&pool, TestPage::new(id, id)).await.unwrap();
+        insert_test_page(&pool, TestPage::new(id, id))
+            .await
+            .unwrap();
     }
 
     let ids = vec!["a".to_string(), "b".to_string(), "c".to_string()];
@@ -1359,8 +1471,12 @@ async fn set_pages_status_uncomplete_clears_completed_at() {
 #[tokio::test]
 async fn set_pages_status_skips_soft_deleted_rows() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("a", "A")).await.unwrap();
-    insert_test_page(&pool, TestPage::new("b", "B")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("a", "A"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("b", "B"))
+        .await
+        .unwrap();
     soft_delete_page_impl(&pool, "b").await.unwrap();
 
     let ids = vec!["a".to_string(), "b".to_string()];
@@ -1379,7 +1495,9 @@ async fn set_pages_status_skips_soft_deleted_rows() {
 #[tokio::test]
 async fn set_pages_status_empty_ids_is_noop() {
     let pool = test_pool().await;
-    let updated = set_pages_status_impl(&pool, &[], "done", None).await.unwrap();
+    let updated = set_pages_status_impl(&pool, &[], "done", None)
+        .await
+        .unwrap();
     assert!(updated.is_empty());
 }
 
@@ -1518,7 +1636,10 @@ async fn reschedule_virtual_rejects_trashed_head_with_no_partial_writes() {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(exdates_json, "[]", "exdate not written for a failed reschedule");
+    assert_eq!(
+        exdates_json, "[]",
+        "exdate not written for a failed reschedule"
+    );
 }
 
 // ─── schedule_locked / user_modified / placement-lock ────────────────────────
@@ -1556,10 +1677,18 @@ async fn user_modified(pool: &sqlx::SqlitePool, page_id: &str) -> bool {
 #[tokio::test]
 async fn schedule_locked_true_only_for_active_synced_pages() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("native", "Native")).await.unwrap();
-    insert_test_page(&pool, TestPage::new("active", "Active")).await.unwrap();
-    insert_test_page(&pool, TestPage::new("detached", "Detached")).await.unwrap();
-    insert_test_page(&pool, TestPage::new("tombstoned", "Tombstoned")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("native", "Native"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("active", "Active"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("detached", "Detached"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("tombstoned", "Tombstoned"))
+        .await
+        .unwrap();
     mark_synced(&pool, "active", "active").await;
     mark_synced(&pool, "detached", "detached").await;
     mark_synced(&pool, "tombstoned", "tombstoned").await;
@@ -1575,16 +1704,29 @@ async fn schedule_locked_true_only_for_active_synced_pages() {
     assert!(!locked("tombstoned").await, "tombstoned page unlocks");
 
     let summaries = list_pages_impl(&pool, None).await.unwrap();
-    let by_id = |id: &str| summaries.iter().find(|p| p.id == id).unwrap().schedule_locked;
-    assert!(by_id("active"), "PageSummary mirrors get_page for the active page");
+    let by_id = |id: &str| {
+        summaries
+            .iter()
+            .find(|p| p.id == id)
+            .unwrap()
+            .schedule_locked
+    };
+    assert!(
+        by_id("active"),
+        "PageSummary mirrors get_page for the active page"
+    );
     assert!(!by_id("native"));
 }
 
 #[tokio::test]
 async fn read_only_mirror_metadata_surfaces_on_page_and_summary() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("synced", "Event")).await.unwrap();
-    insert_test_page(&pool, TestPage::new("native", "Native")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("synced", "Event"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("native", "Native"))
+        .await
+        .unwrap();
     mark_synced(&pool, "synced", "active").await;
     sqlx::query(
         "UPDATE page_sync SET mirror_location = 'Room 4B',
@@ -1597,7 +1739,10 @@ async fn read_only_mirror_metadata_surfaces_on_page_and_summary() {
 
     let page = get_page(&pool, "synced").await.unwrap().unwrap();
     assert_eq!(page.mirror_location.as_deref(), Some("Room 4B"));
-    assert_eq!(page.mirror_attendees, Some(vec!["a@x.com".into(), "b@x.com".into()]));
+    assert_eq!(
+        page.mirror_attendees,
+        Some(vec!["a@x.com".into(), "b@x.com".into()])
+    );
     assert_eq!(page.pending_description.as_deref(), Some("new agenda"));
 
     // Native page carries none of it.
@@ -1610,13 +1755,18 @@ async fn read_only_mirror_metadata_surfaces_on_page_and_summary() {
     let summaries = list_pages_impl(&pool, None).await.unwrap();
     let summary = summaries.iter().find(|p| p.id == "synced").unwrap();
     assert_eq!(summary.mirror_location.as_deref(), Some("Room 4B"));
-    assert_eq!(summary.mirror_attendees, Some(vec!["a@x.com".into(), "b@x.com".into()]));
+    assert_eq!(
+        summary.mirror_attendees,
+        Some(vec!["a@x.com".into(), "b@x.com".into()])
+    );
 }
 
 #[tokio::test]
 async fn editing_a_synced_page_marks_it_user_modified() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Event")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Event"))
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "active").await;
     assert!(!user_modified(&pool, "p").await, "starts clean");
 
@@ -1630,13 +1780,18 @@ async fn editing_a_synced_page_marks_it_user_modified() {
     )
     .await
     .unwrap();
-    assert!(user_modified(&pool, "p").await, "editing the body sets ownership");
+    assert!(
+        user_modified(&pool, "p").await,
+        "editing the body sets ownership"
+    );
 }
 
 #[tokio::test]
 async fn opening_a_synced_page_does_not_mark_it_user_modified() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Event")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Event"))
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "active").await;
 
     // A lone last_opened_at write is "open", not "author" — reading ≠ ownership.
@@ -1650,18 +1805,26 @@ async fn opening_a_synced_page_does_not_mark_it_user_modified() {
     )
     .await
     .unwrap();
-    assert!(!user_modified(&pool, "p").await, "opening must not set ownership");
+    assert!(
+        !user_modified(&pool, "p").await,
+        "opening must not set ownership"
+    );
 }
 
 #[tokio::test]
 async fn updating_a_native_page_never_touches_page_sync() {
     // No page_sync row exists — the user_modified write must be a harmless no-op.
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Native")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Native"))
+        .await
+        .unwrap();
     let updated = update_page_impl(
         &pool,
         "p".into(),
-        PageUpdate { title: Some("Renamed".into()), ..Default::default() },
+        PageUpdate {
+            title: Some("Renamed".into()),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -1680,14 +1843,21 @@ async fn flag_external(pool: &sqlx::SqlitePool, folder_id: &str) {
 #[tokio::test]
 async fn moving_a_page_into_an_external_folder_is_rejected() {
     let pool = test_pool().await;
-    crate::pool::insert_test_folder(&pool, "ext", "Synced").await.unwrap();
+    crate::pool::insert_test_folder(&pool, "ext", "Synced")
+        .await
+        .unwrap();
     flag_external(&pool, "ext").await;
-    insert_test_page(&pool, TestPage::new("p", "Native")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Native"))
+        .await
+        .unwrap();
 
     let err = update_page_impl(
         &pool,
         "p".into(),
-        PageUpdate { folder_id: Some(serde_json::json!("ext")), ..Default::default() },
+        PageUpdate {
+            folder_id: Some(serde_json::json!("ext")),
+            ..Default::default()
+        },
     )
     .await
     .unwrap_err();
@@ -1697,12 +1867,19 @@ async fn moving_a_page_into_an_external_folder_is_rejected() {
 #[tokio::test]
 async fn moving_a_page_out_of_an_external_folder_is_rejected() {
     let pool = test_pool().await;
-    crate::pool::insert_test_folder(&pool, "ext", "Synced").await.unwrap();
-    crate::pool::insert_test_folder(&pool, "regular", "Regular").await.unwrap();
+    crate::pool::insert_test_folder(&pool, "ext", "Synced")
+        .await
+        .unwrap();
+    crate::pool::insert_test_folder(&pool, "regular", "Regular")
+        .await
+        .unwrap();
     flag_external(&pool, "ext").await;
     insert_test_page(
         &pool,
-        TestPage { folder_id: Some("ext"), ..TestPage::new("p", "Synced event") },
+        TestPage {
+            folder_id: Some("ext"),
+            ..TestPage::new("p", "Synced event")
+        },
     )
     .await
     .unwrap();
@@ -1711,7 +1888,10 @@ async fn moving_a_page_out_of_an_external_folder_is_rejected() {
     let to_regular = update_page_impl(
         &pool,
         "p".into(),
-        PageUpdate { folder_id: Some(serde_json::json!("regular")), ..Default::default() },
+        PageUpdate {
+            folder_id: Some(serde_json::json!("regular")),
+            ..Default::default()
+        },
     )
     .await
     .unwrap_err();
@@ -1721,7 +1901,10 @@ async fn moving_a_page_out_of_an_external_folder_is_rejected() {
     let to_inbox = update_page_impl(
         &pool,
         "p".into(),
-        PageUpdate { folder_id: Some(serde_json::Value::Null), ..Default::default() },
+        PageUpdate {
+            folder_id: Some(serde_json::Value::Null),
+            ..Default::default()
+        },
     )
     .await
     .unwrap_err();
@@ -1731,11 +1914,18 @@ async fn moving_a_page_out_of_an_external_folder_is_rejected() {
 #[tokio::test]
 async fn moving_a_page_between_regular_folders_is_allowed() {
     let pool = test_pool().await;
-    crate::pool::insert_test_folder(&pool, "a", "A").await.unwrap();
-    crate::pool::insert_test_folder(&pool, "b", "B").await.unwrap();
+    crate::pool::insert_test_folder(&pool, "a", "A")
+        .await
+        .unwrap();
+    crate::pool::insert_test_folder(&pool, "b", "B")
+        .await
+        .unwrap();
     insert_test_page(
         &pool,
-        TestPage { folder_id: Some("a"), ..TestPage::new("p", "Note") },
+        TestPage {
+            folder_id: Some("a"),
+            ..TestPage::new("p", "Note")
+        },
     )
     .await
     .unwrap();
@@ -1743,7 +1933,10 @@ async fn moving_a_page_between_regular_folders_is_allowed() {
     let moved = update_page_impl(
         &pool,
         "p".into(),
-        PageUpdate { folder_id: Some(serde_json::json!("b")), ..Default::default() },
+        PageUpdate {
+            folder_id: Some(serde_json::json!("b")),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -1755,13 +1948,18 @@ async fn moving_a_page_between_regular_folders_is_allowed() {
 #[tokio::test]
 async fn editing_title_or_schedule_of_a_synced_page_is_rejected() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Synced event")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Synced event"))
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "active").await;
 
     let title = update_page_impl(
         &pool,
         "p".into(),
-        PageUpdate { title: Some("Renamed".into()), ..Default::default() },
+        PageUpdate {
+            title: Some("Renamed".into()),
+            ..Default::default()
+        },
     )
     .await
     .unwrap_err();
@@ -1770,7 +1968,10 @@ async fn editing_title_or_schedule_of_a_synced_page_is_rejected() {
     let start = update_page_impl(
         &pool,
         "p".into(),
-        PageUpdate { scheduled_start: Some(serde_json::json!("2026-07-01T09:00:00")), ..Default::default() },
+        PageUpdate {
+            scheduled_start: Some(serde_json::json!("2026-07-01T09:00:00")),
+            ..Default::default()
+        },
     )
     .await
     .unwrap_err();
@@ -1780,7 +1981,9 @@ async fn editing_title_or_schedule_of_a_synced_page_is_rejected() {
 #[tokio::test]
 async fn editing_body_or_status_of_a_synced_page_is_allowed() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Synced event")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Synced event"))
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "active").await;
 
     // Body + completion are user-layer / ownership actions, never locked.
@@ -1802,14 +2005,19 @@ async fn editing_body_or_status_of_a_synced_page_is_allowed() {
 #[tokio::test]
 async fn detached_page_title_and_schedule_unlock() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Was synced")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Was synced"))
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "detached").await;
 
     // Detach unlocks the mirror — the page is now a normal local record.
     let updated = update_page_impl(
         &pool,
         "p".into(),
-        PageUpdate { title: Some("Edited after detach".into()), ..Default::default() },
+        PageUpdate {
+            title: Some("Edited after detach".into()),
+            ..Default::default()
+        },
     )
     .await
     .unwrap();
@@ -1819,7 +2027,9 @@ async fn detached_page_title_and_schedule_unlock() {
 #[tokio::test]
 async fn creating_a_page_in_an_external_folder_is_rejected() {
     let pool = test_pool().await;
-    crate::pool::insert_test_folder(&pool, "ext", "Synced").await.unwrap();
+    crate::pool::insert_test_folder(&pool, "ext", "Synced")
+        .await
+        .unwrap();
     flag_external(&pool, "ext").await;
 
     let err = create_page_impl(
@@ -1851,13 +2061,18 @@ async fn creating_a_page_in_an_external_folder_is_rejected() {
 #[tokio::test]
 async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Synced event")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Synced event"))
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "active").await;
 
     // Hard-delete path (calendar block delete / CLI rm) must NOT cascade the row
     // away — it would resurrect on the next poll. Soft-delete + tombstone instead.
     delete_page_impl(&pool, "p").await.unwrap();
-    assert!(page_exists(&pool, "p").await, "row kept (recoverable from trash)");
+    assert!(
+        page_exists(&pool, "p").await,
+        "row kept (recoverable from trash)"
+    );
     assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("tombstoned"));
 
     // Restore resumes syncing.
@@ -1868,9 +2083,14 @@ async fn deleting_a_synced_page_soft_deletes_and_tombstones() {
 #[tokio::test]
 async fn deleting_a_native_page_still_hard_deletes() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Native")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Native"))
+        .await
+        .unwrap();
     delete_page_impl(&pool, "p").await.unwrap();
-    assert!(!page_exists(&pool, "p").await, "native page is hard-deleted");
+    assert!(
+        !page_exists(&pool, "p").await,
+        "native page is hard-deleted"
+    );
 }
 
 #[tokio::test]
@@ -1880,7 +2100,9 @@ async fn restore_only_reactivates_a_tombstone_not_a_detached_link() {
     // the restore query's `sync_state = 'tombstoned'` filter — the normal soft
     // delete would tombstone first, masking the guard.
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Detached synced")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Detached synced"))
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "detached").await;
     sqlx::query("UPDATE pages SET deleted_at = ? WHERE id = 'p'")
         .bind(now_iso())
@@ -1890,7 +2112,11 @@ async fn restore_only_reactivates_a_tombstone_not_a_detached_link() {
 
     restore_page_impl(&pool, "p").await.unwrap();
 
-    assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("detached"), "stays severed");
+    assert_eq!(
+        sync_state(&pool, "p").await.as_deref(),
+        Some("detached"),
+        "stays severed"
+    );
 }
 
 #[tokio::test]
@@ -1898,20 +2124,32 @@ async fn trashing_and_restoring_a_detached_page_keeps_it_detached() {
     // A detached link must not be tombstoned on trash, or restore reactivates it
     // (schedule re-locks, the broken-sync notice vanishes) with no upstream event.
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Detached synced")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Detached synced"))
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "detached").await;
 
     soft_delete_page_impl(&pool, "p").await.unwrap();
-    assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("detached"), "trash leaves it severed");
+    assert_eq!(
+        sync_state(&pool, "p").await.as_deref(),
+        Some("detached"),
+        "trash leaves it severed"
+    );
 
     restore_page_impl(&pool, "p").await.unwrap();
-    assert_eq!(sync_state(&pool, "p").await.as_deref(), Some("detached"), "restore keeps it severed");
+    assert_eq!(
+        sync_state(&pool, "p").await.as_deref(),
+        Some("detached"),
+        "restore keeps it severed"
+    );
 }
 
 #[tokio::test]
 async fn rescheduling_an_occurrence_of_a_synced_series_is_rejected() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Recurring synced")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Recurring synced"))
+        .await
+        .unwrap();
     let rule = crate::create_recurrence_rule_impl(
         &pool,
         crate::NewRecurrenceRule {
@@ -1949,7 +2187,9 @@ async fn today_view_carries_schedule_locked() {
     // list_pages_today builds its SELECT with per-column `pages.` prefixing, a
     // different path than list_pages — confirm the derived flag is wired there too.
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Synced standup")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Synced standup"))
+        .await
+        .unwrap();
     mark_synced(&pool, "p", "active").await;
     // Schedule it for today via raw SQL — the command-layer writer is now locked.
     let now = now_iso();
@@ -1964,7 +2204,10 @@ async fn today_view_carries_schedule_locked() {
     .unwrap();
 
     let today = list_pages_today_impl(&pool).await.unwrap();
-    let p = today.iter().find(|p| p.id == "p").expect("synced page in Today");
+    let p = today
+        .iter()
+        .find(|p| p.id == "p")
+        .expect("synced page in Today");
     assert!(p.schedule_locked, "Today view must carry schedule_locked");
 }
 
@@ -2043,7 +2286,10 @@ async fn unified_completion_rejects_a_non_recurring_synced_page() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, AppError::Conflict(_)), "non-recurring synced page rejected");
+    assert!(
+        matches!(err, AppError::Conflict(_)),
+        "non-recurring synced page rejected"
+    );
 }
 
 #[tokio::test]
@@ -2052,14 +2298,18 @@ async fn synced_completion_inserts_clone_and_records_map() {
     synced_recurring_series(&pool).await;
 
     // Completing a FUTURE occurrence (06-08) leaves the oldest-open head (06-01) put.
-    let result = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
-        .await
-        .unwrap();
+    let result =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
+            .await
+            .unwrap();
     let clone = result.clone;
 
     // The clone is a durable native done page at the occurrence — no sync link.
     assert_eq!(clone.status, "done");
-    assert_eq!(clone.scheduled_start.as_deref(), Some("2026-06-08T09:00:00"));
+    assert_eq!(
+        clone.scheduled_start.as_deref(),
+        Some("2026-06-08T09:00:00")
+    );
     assert!(!clone.schedule_locked, "clone is native, not sync-locked");
     assert!(clone.sync_state.is_none());
 
@@ -2084,11 +2334,15 @@ async fn synced_completion_of_the_oldest_open_advances_the_head() {
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
 
-    let result = complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T09:00:00"))
-        .await
-        .unwrap();
+    let result =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T09:00:00"))
+            .await
+            .unwrap();
 
-    assert_eq!(result.head.scheduled_start.as_deref(), Some("2026-06-08T09:00:00"));
+    assert_eq!(
+        result.head.scheduled_start.as_deref(),
+        Some("2026-06-08T09:00:00")
+    );
     assert_eq!(
         fetch_scheduled_start(&pool, "head").await.as_deref(),
         Some("2026-06-08T09:00:00"),
@@ -2102,19 +2356,25 @@ async fn synced_completion_twice_is_idempotent() {
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
 
-    let first = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
-        .await
-        .unwrap();
-    let second = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
-        .await
-        .unwrap();
-
-    assert_eq!(second.clone.id, first.clone.id, "second completion returns the same clone");
-    let clone_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE status = 'done' AND deleted_at IS NULL")
-            .fetch_one(&pool)
+    let first =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
             .await
             .unwrap();
+    let second =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
+            .await
+            .unwrap();
+
+    assert_eq!(
+        second.clone.id, first.clone.id,
+        "second completion returns the same clone"
+    );
+    let clone_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pages WHERE status = 'done' AND deleted_at IS NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(clone_count, 1, "exactly one done clone — no orphan");
 }
 
@@ -2126,10 +2386,14 @@ async fn synced_completion_rejects_an_occurrence_not_in_the_rule() {
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
 
-    let err = complete_recurring_page_impl(&pool, synced_complete("2026-06-03", "2026-06-03T09:00:00"))
-        .await
-        .unwrap_err();
-    assert!(matches!(err, AppError::Conflict(_)), "off-rule occurrence rejected");
+    let err =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-03", "2026-06-03T09:00:00"))
+            .await
+            .unwrap_err();
+    assert!(
+        matches!(err, AppError::Conflict(_)),
+        "off-rule occurrence rejected"
+    );
     let set_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM completed_set WHERE page_id = 'head'")
             .fetch_one(&pool)
@@ -2153,14 +2417,19 @@ async fn synced_completion_validates_a_monthly_bysetpos_occurrence() {
     )
     .await;
 
-    let ok = complete_recurring_page_impl(&pool, synced_complete("2026-06-30", "2026-06-30T09:00:00"))
-        .await;
+    let ok =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-30", "2026-06-30T09:00:00"))
+            .await;
     assert!(ok.is_ok(), "last-weekday occurrence accepted");
 
-    let err = complete_recurring_page_impl(&pool, synced_complete("2026-06-29", "2026-06-29T09:00:00"))
-        .await
-        .unwrap_err();
-    assert!(matches!(err, AppError::Conflict(_)), "the non-last weekday neighbour rejected");
+    let err =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-29", "2026-06-29T09:00:00"))
+            .await
+            .unwrap_err();
+    assert!(
+        matches!(err, AppError::Conflict(_)),
+        "the non-last weekday neighbour rejected"
+    );
 }
 
 #[tokio::test]
@@ -2169,16 +2438,23 @@ async fn synced_completion_keys_a_2330_occurrence_by_source_zone_date() {
     // viewer. The completed_set key must be the source-zone wall-clock date — validity
     // enumerates raw wall-clock, so keying on the viewer-shifted day would be rejected.
     let pool = test_pool().await;
-    synced_recurring_series_with(&pool, "FREQ=WEEKLY", "2026-06-01T23:30:00", "America/Los_Angeles")
-        .await;
+    synced_recurring_series_with(
+        &pool,
+        "FREQ=WEEKLY",
+        "2026-06-01T23:30:00",
+        "America/Los_Angeles",
+    )
+    .await;
 
-    let ok = complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T23:30:00"))
-        .await;
+    let ok =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T23:30:00"))
+            .await;
     assert!(ok.is_ok(), "source-zone Monday 23:30 occurrence accepted");
 
-    let err = complete_recurring_page_impl(&pool, synced_complete("2026-06-02", "2026-06-02T01:00:00"))
-        .await
-        .unwrap_err();
+    let err =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-02", "2026-06-02T01:00:00"))
+            .await
+            .unwrap_err();
     assert!(
         matches!(err, AppError::Conflict(_)),
         "the viewer-zone-shifted next day is not an occurrence"
@@ -2204,7 +2480,10 @@ async fn unified_completion_requires_an_occurrence_for_a_synced_series() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, AppError::Conflict(_)), "synced series needs an occurrence");
+    assert!(
+        matches!(err, AppError::Conflict(_)),
+        "synced series needs an occurrence"
+    );
 }
 
 #[tokio::test]
@@ -2212,14 +2491,18 @@ async fn synced_uncomplete_deletes_clone_and_rewinds_the_head() {
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
     // Complete the oldest-open occurrence → head advances to 06-08.
-    let clone = complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T09:00:00"))
-        .await
-        .unwrap()
-        .clone;
+    let clone =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T09:00:00"))
+            .await
+            .unwrap()
+            .clone;
 
     uncomplete_recurring_occurrence_impl(
         &pool,
-        UncompleteRecurringInput { page_id: "head".into(), occurrence_date: "2026-06-01".into() },
+        UncompleteRecurringInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-06-01".into(),
+        },
     )
     .await
     .unwrap();
@@ -2248,13 +2531,19 @@ async fn synced_uncomplete_and_undo_skip_no_longer_reject_synced() {
 
     uncomplete_recurring_occurrence_impl(
         &pool,
-        UncompleteRecurringInput { page_id: "head".into(), occurrence_date: "2026-06-01".into() },
+        UncompleteRecurringInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-06-01".into(),
+        },
     )
     .await
     .expect("synced uncomplete no longer rejected");
     undo_skip_occurrence_impl(
         &pool,
-        SkipOccurrenceInput { page_id: "head".into(), occurrence_date: "2026-06-01".into() },
+        SkipOccurrenceInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-06-01".into(),
+        },
     )
     .await
     .expect("synced undo-skip no longer rejected");
@@ -2270,7 +2559,10 @@ async fn synced_skip_is_allowed_and_recomputes() {
 
     skip_occurrence_impl(
         &pool,
-        SkipOccurrenceInput { page_id: "head".into(), occurrence_date: "2026-06-01".into() },
+        SkipOccurrenceInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-06-01".into(),
+        },
     )
     .await
     .expect("synced skip allowed");
@@ -2316,23 +2608,26 @@ async fn restore_skips_recompute_for_an_active_synced_series() {
 async fn synced_completion_leaves_rule_exdates_untouched() {
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
-    let exdates_before: String =
-        sqlx::query_scalar("SELECT rrule_exdates FROM page_recurrence_rules WHERE page_id = 'head'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let exdates_before: String = sqlx::query_scalar(
+        "SELECT rrule_exdates FROM page_recurrence_rules WHERE page_id = 'head'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
 
-    let clone = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
-        .await
-        .unwrap()
-        .clone;
+    let clone =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
+            .await
+            .unwrap()
+            .clone;
 
     // Completion lives only in completed_set — the reconciler-owned EXDATEs are untouched.
-    let exdates_after: String =
-        sqlx::query_scalar("SELECT rrule_exdates FROM page_recurrence_rules WHERE page_id = 'head'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let exdates_after: String = sqlx::query_scalar(
+        "SELECT rrule_exdates FROM page_recurrence_rules WHERE page_id = 'head'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(exdates_before, exdates_after, "rule EXDATEs untouched");
     let clone_link: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE page_id = ?")
         .bind(&clone.id)
@@ -2346,21 +2641,28 @@ async fn synced_completion_leaves_rule_exdates_untouched() {
 async fn synced_uncomplete_is_a_noop_for_a_different_date() {
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
-    let clone = complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
-        .await
-        .unwrap()
-        .clone;
+    let clone =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
+            .await
+            .unwrap()
+            .clone;
 
     // Uncompleting an occurrence that was never completed must not delete the
     // existing clone or disturb the map.
     uncomplete_recurring_occurrence_impl(
         &pool,
-        UncompleteRecurringInput { page_id: "head".into(), occurrence_date: "2026-06-15".into() },
+        UncompleteRecurringInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-06-15".into(),
+        },
     )
     .await
     .unwrap();
 
-    assert!(page_exists(&pool, &clone.id).await, "unrelated clone survives");
+    assert!(
+        page_exists(&pool, &clone.id).await,
+        "unrelated clone survives"
+    );
     let kept: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-06-08'",
     )

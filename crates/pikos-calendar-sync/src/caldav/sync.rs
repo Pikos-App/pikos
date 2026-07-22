@@ -157,7 +157,9 @@ fn split_present(entries: Vec<ReportEntry>) -> (Vec<ReportEntry>, Vec<Removal>) 
     let mut removals = Vec::new();
     for e in entries {
         if e.response_status == Some(DELETED) {
-            removals.push(Removal { external_id: e.href });
+            removals.push(Removal {
+                external_id: e.href,
+            });
         } else {
             present.push(e);
         }

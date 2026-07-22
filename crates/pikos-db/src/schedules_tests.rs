@@ -781,10 +781,13 @@ async fn exdate_merge_ops_preserve_interleaved_writes() {
     .await
     .unwrap();
 
-    let after_skip =
-        add_rule_exdates_impl(&pool, rule.id.clone(), vec!["2026-06-10".into(), "2026-06-10".into()])
-            .await
-            .unwrap();
+    let after_skip = add_rule_exdates_impl(
+        &pool,
+        rule.id.clone(),
+        vec!["2026-06-10".into(), "2026-06-10".into()],
+    )
+    .await
+    .unwrap();
     assert_eq!(
         after_skip.rrule_exdates,
         vec!["2026-06-10".to_string()],
@@ -822,8 +825,12 @@ async fn exdate_ops_error_on_missing_rule() {
 // ─── schedule/recurrence writers reject synced pages ──────────────────────────
 
 async fn synced_page(pool: &sqlx::SqlitePool, id: &str) {
-    insert_test_page(pool, TestPage::new(id, "Synced event")).await.unwrap();
-    crate::pool::insert_test_page_sync(pool, id, "active").await.unwrap();
+    insert_test_page(pool, TestPage::new(id, "Synced event"))
+        .await
+        .unwrap();
+    crate::pool::insert_test_page_sync(pool, id, "active")
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -844,7 +851,10 @@ async fn schedule_writers_reject_a_synced_page() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(created, AppError::Conflict(_)), "create_page_schedule locked");
+    assert!(
+        matches!(created, AppError::Conflict(_)),
+        "create_page_schedule locked"
+    );
 }
 
 #[tokio::test]
@@ -865,13 +875,18 @@ async fn recurrence_writers_reject_a_synced_page() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(created, AppError::Conflict(_)), "create_recurrence_rule locked");
+    assert!(
+        matches!(created, AppError::Conflict(_)),
+        "create_recurrence_rule locked"
+    );
 }
 
 #[tokio::test]
 async fn update_and_delete_schedule_reject_when_page_becomes_synced() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Event")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Event"))
+        .await
+        .unwrap();
     // Schedule created while native, then the page is linked to sync.
     let sched = create_page_schedule_impl(
         &pool,
@@ -886,7 +901,9 @@ async fn update_and_delete_schedule_reject_when_page_becomes_synced() {
     )
     .await
     .unwrap();
-    crate::pool::insert_test_page_sync(&pool, "p", "active").await.unwrap();
+    crate::pool::insert_test_page_sync(&pool, "p", "active")
+        .await
+        .unwrap();
 
     let updated = update_page_schedule_impl(
         &pool,
@@ -901,14 +918,18 @@ async fn update_and_delete_schedule_reject_when_page_becomes_synced() {
     .unwrap_err();
     assert!(matches!(updated, AppError::Conflict(_)));
 
-    let deleted = delete_page_schedule_impl(&pool, sched.id).await.unwrap_err();
+    let deleted = delete_page_schedule_impl(&pool, sched.id)
+        .await
+        .unwrap_err();
     assert!(matches!(deleted, AppError::Conflict(_)));
 }
 
 #[tokio::test]
 async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Recurring event")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("p", "Recurring event"))
+        .await
+        .unwrap();
     // Rule created while native, then the page is linked to sync.
     let rule = create_recurrence_rule_impl(
         &pool,
@@ -923,23 +944,34 @@ async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
     )
     .await
     .unwrap();
-    crate::pool::insert_test_page_sync(&pool, "p", "active").await.unwrap();
+    crate::pool::insert_test_page_sync(&pool, "p", "active")
+        .await
+        .unwrap();
 
     // Edit recurrence → rejected.
     let edit = update_recurrence_rule_impl(
         &pool,
         rule.id.clone(),
-        RecurrenceRuleUpdate { rrule: Some("FREQ=DAILY".into()), ..Default::default() },
+        RecurrenceRuleUpdate {
+            rrule: Some("FREQ=DAILY".into()),
+            ..Default::default()
+        },
     )
     .await
     .unwrap_err();
-    assert!(matches!(edit, AppError::Conflict(_)), "edit recurrence locked");
+    assert!(
+        matches!(edit, AppError::Conflict(_)),
+        "edit recurrence locked"
+    );
 
     // Skip an occurrence (add exdate) → rejected.
     let skip = add_rule_exdates_impl(&pool, rule.id.clone(), vec!["2026-07-13".into()])
         .await
         .unwrap_err();
-    assert!(matches!(skip, AppError::Conflict(_)), "skip occurrence locked");
+    assert!(
+        matches!(skip, AppError::Conflict(_)),
+        "skip occurrence locked"
+    );
 
     // Undo-skip (remove exdate) → rejected, symmetric with the add-exdate guard.
     let unskip = remove_rule_exdate_impl(&pool, rule.id.clone(), "2026-07-13".into())
@@ -948,6 +980,11 @@ async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
     assert!(matches!(unskip, AppError::Conflict(_)), "undo-skip locked");
 
     // Delete recurrence → rejected.
-    let del = delete_recurrence_rule_impl(&pool, &rule.id).await.unwrap_err();
-    assert!(matches!(del, AppError::Conflict(_)), "delete recurrence locked");
+    let del = delete_recurrence_rule_impl(&pool, &rule.id)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(del, AppError::Conflict(_)),
+        "delete recurrence locked"
+    );
 }

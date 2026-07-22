@@ -17,13 +17,16 @@ pub(crate) struct DavResponse {
 #[allow(async_fn_in_trait)]
 pub(crate) trait DavTransport {
     /// Issue a PROPFIND with the given `Depth` and XML body.
-    async fn propfind(&self, url: &str, depth: &str, body: &str)
-        -> Result<DavResponse, CaldavError>;
+    async fn propfind(
+        &self,
+        url: &str,
+        depth: &str,
+        body: &str,
+    ) -> Result<DavResponse, CaldavError>;
 
     /// Issue a REPORT with the given `Depth` and XML body — the verb behind
     /// `sync-collection`, `calendar-query`, and `calendar-multiget`.
-    async fn report(&self, url: &str, depth: &str, body: &str)
-        -> Result<DavResponse, CaldavError>;
+    async fn report(&self, url: &str, depth: &str, body: &str) -> Result<DavResponse, CaldavError>;
 }
 
 /// Production transport: preemptive Basic auth over a no-redirect client.
@@ -60,7 +63,10 @@ impl ReqwestDav {
             // Sent preemptively — iCloud/Fastmail expect Basic without a challenge round-trip.
             .basic_auth(&self.username, Some(&self.password))
             .header("Depth", depth)
-            .header(reqwest::header::CONTENT_TYPE, "application/xml; charset=utf-8")
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                "application/xml; charset=utf-8",
+            )
             .body(body.to_owned())
             .send()
             .await
@@ -77,7 +83,11 @@ impl ReqwestDav {
             .await
             .map_err(|e| CaldavError::Network(e.to_string()))?;
 
-        Ok(DavResponse { status, location, body })
+        Ok(DavResponse {
+            status,
+            location,
+            body,
+        })
     }
 }
 
@@ -91,12 +101,7 @@ impl DavTransport for ReqwestDav {
         self.send(b"PROPFIND", url, depth, body).await
     }
 
-    async fn report(
-        &self,
-        url: &str,
-        depth: &str,
-        body: &str,
-    ) -> Result<DavResponse, CaldavError> {
+    async fn report(&self, url: &str, depth: &str, body: &str) -> Result<DavResponse, CaldavError> {
         self.send(b"REPORT", url, depth, body).await
     }
 }

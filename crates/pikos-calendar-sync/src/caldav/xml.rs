@@ -52,7 +52,9 @@ pub(crate) fn parse_principal_href(xml: &str) -> Result<Option<String>, CaldavEr
 }
 
 pub(crate) fn parse_home_set_href(xml: &str) -> Result<Option<String>, CaldavError> {
-    Ok(parse_multistatus(xml)?.into_iter().find_map(|r| r.home_href))
+    Ok(parse_multistatus(xml)?
+        .into_iter()
+        .find_map(|r| r.home_href))
 }
 
 /// The collection's `getctag`, taken only from a 2xx propstat (an unsupported

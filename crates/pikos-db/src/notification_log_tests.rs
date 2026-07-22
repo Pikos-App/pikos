@@ -187,15 +187,24 @@ async fn explicit_multi_lead_second_reminder_fires_in_a_later_tick() {
         .unwrap();
     assert_eq!(tick_a.len(), 1);
     assert_eq!(tick_a[0].minutes_before, 70);
-    log_reminder_fired(&pool, &tick_a[0].page_id, &tick_a[0].schedule_id, "2026-05-25 08:00:00")
-        .await
-        .unwrap();
+    log_reminder_fired(
+        &pool,
+        &tick_a[0].page_id,
+        &tick_a[0].schedule_id,
+        "2026-05-25 08:00:00",
+    )
+    .await
+    .unwrap();
 
     // Tick B around 09:00 → the 10-min lead must still fire.
     let tick_b = due_explicit_reminders(&pool, "2026-05-25 08:59:00", "2026-05-25 09:00:00")
         .await
         .unwrap();
-    assert_eq!(tick_b.len(), 1, "second reminder lead should fire in its own tick");
+    assert_eq!(
+        tick_b.len(),
+        1,
+        "second reminder lead should fire in its own tick"
+    );
     assert_eq!(tick_b[0].minutes_before, 10);
 }
 
@@ -229,7 +238,11 @@ async fn floating_synced_oneoff_explicit_reminder_fires_on_native_path() {
     let due = due_explicit_reminders(&pool, WINDOW_START, NOW_TS)
         .await
         .unwrap();
-    assert_eq!(due.len(), 1, "floating synced one-off should fire on native path");
+    assert_eq!(
+        due.len(),
+        1,
+        "floating synced one-off should fire on native path"
+    );
     assert_eq!(due[0].schedule_id, "s1#10");
 }
 
@@ -269,8 +282,17 @@ fn synced_oneoff_now() -> chrono::DateTime<chrono::Utc> {
 
 async fn seed_synced_oneoff(pool: &sqlx::SqlitePool, page_id: &str, schedule_id: &str) {
     insert_page(pool, page_id, "not_started", "2026-05-01T00:00:00").await;
-    insert_schedule_tz(pool, schedule_id, page_id, "2026-05-25T09:00:00", "America/New_York").await;
-    crate::pool::insert_test_page_sync(pool, page_id, "active").await.unwrap();
+    insert_schedule_tz(
+        pool,
+        schedule_id,
+        page_id,
+        "2026-05-25T09:00:00",
+        "America/New_York",
+    )
+    .await;
+    crate::pool::insert_test_page_sync(pool, page_id, "active")
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -279,7 +301,9 @@ async fn synced_oneoff_explicit_fires_at_the_absolute_instant() {
     seed_synced_oneoff(&pool, "p1", "s1").await;
     insert_reminder(&pool, "p1", 10).await;
 
-    let due = due_synced_reminders(&pool, synced_oneoff_now()).await.unwrap();
+    let due = due_synced_reminders(&pool, synced_oneoff_now())
+        .await
+        .unwrap();
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].schedule_id, "s1#10"); // schedule id + reminder lead
     assert_eq!(due[0].minutes_before, 10);
@@ -292,7 +316,10 @@ async fn synced_oneoff_without_explicit_reminder_is_silent() {
     let pool = test_pool().await;
     seed_synced_oneoff(&pool, "p1", "s1").await;
 
-    assert!(due_synced_reminders(&pool, synced_oneoff_now()).await.unwrap().is_empty());
+    assert!(due_synced_reminders(&pool, synced_oneoff_now())
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -301,18 +328,28 @@ async fn synced_oneoff_excludes_all_day_done_and_already_fired() {
     // All-day (date-only start, no 'T') → excluded by the LIKE '%T%' timed guard.
     insert_page(&pool, "allday", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule_tz(&pool, "sa", "allday", "2026-05-25", "America/New_York").await;
-    crate::pool::insert_test_page_sync(&pool, "allday", "active").await.unwrap();
+    crate::pool::insert_test_page_sync(&pool, "allday", "active")
+        .await
+        .unwrap();
     insert_reminder(&pool, "allday", 10).await;
     // Done page.
     seed_synced_oneoff(&pool, "done", "sd").await;
-    sqlx::query("UPDATE pages SET status = 'done' WHERE id = 'done'").execute(&pool).await.unwrap();
+    sqlx::query("UPDATE pages SET status = 'done' WHERE id = 'done'")
+        .execute(&pool)
+        .await
+        .unwrap();
     insert_reminder(&pool, "done", 10).await;
     // Already fired this lead.
     seed_synced_oneoff(&pool, "fired", "sf").await;
     insert_reminder(&pool, "fired", 10).await;
-    log_reminder_fired(&pool, "fired", "sf#10", "2026-05-25T12:50:00").await.unwrap();
+    log_reminder_fired(&pool, "fired", "sf#10", "2026-05-25T12:50:00")
+        .await
+        .unwrap();
 
-    assert!(due_synced_reminders(&pool, synced_oneoff_now()).await.unwrap().is_empty());
+    assert!(due_synced_reminders(&pool, synced_oneoff_now())
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -324,7 +361,10 @@ async fn synced_oneoff_does_not_catch_up_a_past_instant() {
     insert_reminder(&pool, "p1", 10).await;
 
     let ten_min_late = naive("2026-05-25T13:00:00").and_utc(); // fire was 12:50
-    assert!(due_synced_reminders(&pool, ten_min_late).await.unwrap().is_empty());
+    assert!(due_synced_reminders(&pool, ten_min_late)
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -336,14 +376,23 @@ async fn synced_oneoff_multi_lead_second_fires_in_a_later_tick() {
     insert_reminder(&pool, "p1", 70).await; // fires 11:50 UTC
     insert_reminder(&pool, "p1", 10).await; // fires 12:50 UTC
 
-    let tick_a = due_synced_reminders(&pool, naive("2026-05-25T11:50:00").and_utc()).await.unwrap();
-    assert_eq!(tick_a.len(), 1);
-    assert_eq!(tick_a[0].minutes_before, 70);
-    log_reminder_fired(&pool, &tick_a[0].page_id, &tick_a[0].schedule_id, "2026-05-25T11:50:00")
+    let tick_a = due_synced_reminders(&pool, naive("2026-05-25T11:50:00").and_utc())
         .await
         .unwrap();
+    assert_eq!(tick_a.len(), 1);
+    assert_eq!(tick_a[0].minutes_before, 70);
+    log_reminder_fired(
+        &pool,
+        &tick_a[0].page_id,
+        &tick_a[0].schedule_id,
+        "2026-05-25T11:50:00",
+    )
+    .await
+    .unwrap();
 
-    let tick_b = due_synced_reminders(&pool, synced_oneoff_now()).await.unwrap();
+    let tick_b = due_synced_reminders(&pool, synced_oneoff_now())
+        .await
+        .unwrap();
     assert_eq!(tick_b.len(), 1, "second lead fires in its own tick");
     assert_eq!(tick_b[0].minutes_before, 10);
 }
@@ -669,12 +718,14 @@ async fn mark_synced_override(pool: &sqlx::SqlitePool, page_id: &str) {
 }
 
 async fn set_completed(pool: &sqlx::SqlitePool, page_id: &str, occurrence_date: &str) {
-    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c')")
-        .bind(page_id)
-        .bind(occurrence_date)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c')",
+    )
+    .bind(page_id)
+    .bind(occurrence_date)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 async fn set_skipped(pool: &sqlx::SqlitePool, page_id: &str, occurrence_date: &str) {
@@ -791,7 +842,9 @@ async fn already_fired_synced_override_is_silent() {
         "not_started",
     )
     .await;
-    log_reminder_fired(&pool, "rec", "ov#10", "2026-05-25T12:50:00").await.unwrap();
+    log_reminder_fired(&pool, "rec", "ov#10", "2026-05-25T12:50:00")
+        .await
+        .unwrap();
 
     assert!(due_synced_override_reminders(&pool, override_now(), 10)
         .await
@@ -805,7 +858,14 @@ async fn synced_override_path_ignores_floating_and_unsynced_rows() {
     // Floating (tz NULL) override on a synced series → device-local, served by
     // the native path, not this one.
     mark_synced_override(&pool, "float").await;
-    insert_override(&pool, "ov_float", "float", "2026-05-25T09:00:00", "not_started").await;
+    insert_override(
+        &pool,
+        "ov_float",
+        "float",
+        "2026-05-25T09:00:00",
+        "not_started",
+    )
+    .await;
 
     // Zoned override but the page isn't actively synced → native path owns it.
     insert_page(&pool, "native", "not_started", "2026-05-01T00:00:00").await;
@@ -904,8 +964,14 @@ fn synced_fire_instant_spring_forward_gap_never_fires() {
 fn synced_fire_instant_is_none_on_bad_zone_or_timestamp() {
     // The two guard branches: an unresolvable IANA zone and an unparseable
     // wall-clock both yield None (the reminder is skipped, never fired at a guess).
-    assert_eq!(synced_fire_instant("2026-05-25T09:00:00", "Not/AZone", 0), None);
-    assert_eq!(synced_fire_instant("not-a-timestamp", "America/New_York", 0), None);
+    assert_eq!(
+        synced_fire_instant("2026-05-25T09:00:00", "Not/AZone", 0),
+        None
+    );
+    assert_eq!(
+        synced_fire_instant("not-a-timestamp", "America/New_York", 0),
+        None
+    );
 }
 
 #[test]
@@ -916,6 +982,10 @@ fn synced_fire_instant_fall_back_ambiguous_picks_the_earlier_offset() {
     let fire = synced_fire_instant("2026-11-01T01:30:00", "America/New_York", 0);
     assert_eq!(
         fire,
-        Some("2026-11-01T05:30:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap())
+        Some(
+            "2026-11-01T05:30:00Z"
+                .parse::<chrono::DateTime<chrono::Utc>>()
+                .unwrap()
+        )
     );
 }

@@ -11,7 +11,10 @@ fn until_ymd(rrule: &str) -> Option<String> {
 
 #[test]
 fn reads_date_and_datetime_forms() {
-    assert_eq!(until_ymd("FREQ=WEEKLY;UNTIL=20260201").as_deref(), Some("2026-02-01T00:00:00"));
+    assert_eq!(
+        until_ymd("FREQ=WEEKLY;UNTIL=20260201").as_deref(),
+        Some("2026-02-01T00:00:00")
+    );
     assert_eq!(
         until_ymd("FREQ=WEEKLY;BYDAY=MO;UNTIL=20260201T100000Z").as_deref(),
         Some("2026-02-01T10:00:00"),

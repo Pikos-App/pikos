@@ -17,9 +17,7 @@ pub use error::CaldavError;
 
 use pikos_db::error::{AppError, AppResult};
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
-use pikos_db::sync_delta::{
-    CalendarProvider, EventUpsert, RemoteCalendar, SyncDelta, SyncToken,
-};
+use pikos_db::sync_delta::{CalendarProvider, EventUpsert, RemoteCalendar, SyncDelta, SyncToken};
 
 use crate::keychain::Keychain;
 use transport::ReqwestDav;
@@ -88,10 +86,7 @@ impl CalendarProvider for CaldavProvider {
         Ok(sync::fetch_one(&transport, &calendar.calendar_id, event_ref).await?)
     }
 
-    async fn current_sync_token(
-        &self,
-        calendar: &SyncCalendarRow,
-    ) -> AppResult<Option<SyncToken>> {
+    async fn current_sync_token(&self, calendar: &SyncCalendarRow) -> AppResult<Option<SyncToken>> {
         let creds = self.credentials_by_id(&calendar.account_id)?;
         let transport = ReqwestDav::new(creds.username, creds.password);
         Ok(sync::current_sync_token(&transport, &calendar.calendar_id).await?)
