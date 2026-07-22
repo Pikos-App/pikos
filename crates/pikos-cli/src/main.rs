@@ -1,7 +1,9 @@
 //! Pikos CLI — headless access to the local workspace, over the shared
-//! `pikos-db` writer. DB work is pure Rust; the parser and recurrence math are
-//! bridged to the TS core via a one-shot `node` subprocess (parse / next-occurrence),
-//! so NLP+recurrence stay single-sourced in TS and the writer in pikos-db.
+//! `pikos-db` writer. DB work is pure Rust; only the natural-language parser is
+//! bridged to the TS core via a one-shot `node` subprocess, so NLP stays
+//! single-sourced in TS and the writer in pikos-db. Recurrence math is not
+//! bridged — the occurrence-sets model derives the completed occurrence and the
+//! next head server-side, in the same transaction as the write.
 
 use std::path::{Path, PathBuf};
 use std::process::Command as Proc;
@@ -25,7 +27,11 @@ const DB_FILENAME: &str = "default.sqlite";
 // ─── CLI definition ───────────────────────────────────────────────────────────
 
 #[derive(Parser)]
-#[command(name = "pikos", version, about = "Headless access to your local Pikos workspace.")]
+#[command(
+    name = "pikos",
+    version,
+    about = "Headless access to your local Pikos workspace."
+)]
 struct Cli {
     #[arg(long, global = true, help = "Output machine-readable JSON")]
     json: bool,
@@ -99,13 +105,20 @@ struct CliError {
 
 impl CliError {
     fn new(kind: &'static str, message: impl Into<String>, code: i32) -> Self {
-        CliError { kind, message: message.into(), code }
+        CliError {
+            kind,
+            message: message.into(),
+            code,
+        }
     }
     fn usage(m: impl Into<String>) -> Self {
         Self::new("Usage", m, 2)
     }
     fn not_found(m: impl Into<String>) -> Self {
         Self::new("NotFound", m, 3)
+    }
+    fn conflict(m: impl Into<String>) -> Self {
+        Self::new("Conflict", m, 4)
     }
     fn workspace(m: impl Into<String>) -> Self {
         Self::new("Workspace", m, 5)
@@ -136,7 +149,7 @@ fn classify(err: AppError) -> CliError {
     }
     match err {
         AppError::NotFound(m) => CliError::not_found(m),
-        AppError::Conflict(m) => CliError::new("Conflict", m, 4),
+        AppError::Conflict(m) => CliError::conflict(m),
         AppError::Invalid(m) => CliError::usage(m),
         AppError::Db(_) => CliError::new("Db", "a database error occurred", 1),
         AppError::Io(_) => CliError::internal("an I/O error occurred"),
@@ -155,7 +168,9 @@ fn platform_data_dir() -> PathBuf {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(&home).join("AppData").join("Roaming"))
     } else if cfg!(target_os = "macos") {
-        PathBuf::from(&home).join("Library").join("Application Support")
+        PathBuf::from(&home)
+            .join("Library")
+            .join("Application Support")
     } else {
         std::env::var("XDG_DATA_HOME")
             .map(PathBuf::from)
@@ -189,14 +204,9 @@ fn bridge_js() -> Result<PathBuf, CliError> {
         }
     }
     candidates.push(PathBuf::from("packages/pikos-bridge/dist/bridge.mjs"));
-    candidates
-        .into_iter()
-        .find(|p| p.exists())
-        .ok_or_else(|| {
-            CliError::internal(
-                "parser bridge (bridge.mjs) not found; set PIKOS_BRIDGE_JS to its path",
-            )
-        })
+    candidates.into_iter().find(|p| p.exists()).ok_or_else(|| {
+        CliError::internal("parser bridge (bridge.mjs) not found; set PIKOS_BRIDGE_JS to its path")
+    })
 }
 
 fn run_bridge(cmd: &str, payload: &str) -> Result<Value, CliError> {
@@ -207,15 +217,14 @@ fn run_bridge(cmd: &str, payload: &str) -> Result<Value, CliError> {
         .arg(payload)
         .output()
         .map_err(|e| {
-            // ENOENT means `node` isn't on PATH. Only `add` and recurring `done`
-            // hit this path — DB-only commands (list/today/search/read/status/rm)
-            // work without Node, so steer the user toward those + an install hint.
+            // ENOENT means `node` isn't on PATH. Only `add` hits this path — every
+            // other command is DB-only, so steer the user toward those + an install hint.
             if e.kind() == std::io::ErrorKind::NotFound {
                 CliError::missing_node(
                     "this command needs Node.js (the NLP parser runs in a one-shot \
                      node subprocess). Install from https://nodejs.org or `brew install node`. \
-                     DB-only commands (list, today, search, read, status, rm, done on \
-                     non-recurring pages) work without Node.",
+                     Every other command (list, today, search, read, status, rm, done) \
+                     works without Node.",
                 )
             } else {
                 CliError::internal(format!("failed to run node for the parser bridge: {e}"))
@@ -278,7 +287,11 @@ fn status_box(status: &str) -> &'static str {
 }
 
 fn render_summary(p: &PageSummary) -> String {
-    let title = if p.title.is_empty() { "(untitled)" } else { &p.title };
+    let title = if p.title.is_empty() {
+        "(untitled)"
+    } else {
+        &p.title
+    };
     let mut meta: Vec<String> = Vec::new();
     if let Some(d) = &p.scheduled_start {
         meta.push(format!("due:{d}"));
@@ -287,9 +300,19 @@ fn render_summary(p: &PageSummary) -> String {
         meta.push(format!("p:{}", priority_label(p.priority)));
     }
     if !p.tags.is_empty() {
-        meta.push(p.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(" "));
+        meta.push(
+            p.tags
+                .iter()
+                .map(|t| format!("#{t}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
     }
-    let tail = if meta.is_empty() { String::new() } else { format!("   {}", meta.join("  ")) };
+    let tail = if meta.is_empty() {
+        String::new()
+    } else {
+        format!("   {}", meta.join("  "))
+    };
     format!("{} {title}{tail}   id:{}", status_box(&p.status), p.id)
 }
 
@@ -297,11 +320,19 @@ fn render_summary_list(pages: &[PageSummary], empty: &str) -> String {
     if pages.is_empty() {
         return empty.to_string();
     }
-    pages.iter().map(render_summary).collect::<Vec<_>>().join("\n")
+    pages
+        .iter()
+        .map(render_summary)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn render_page(page: &Page) -> String {
-    let title = if page.title.is_empty() { "(untitled)" } else { &page.title };
+    let title = if page.title.is_empty() {
+        "(untitled)"
+    } else {
+        &page.title
+    };
     let mut lines = vec![title.to_string()];
     let mut meta = vec![
         format!("status:{}", page.status),
@@ -311,11 +342,20 @@ fn render_page(page: &Page) -> String {
         meta.push(format!("due:{d}"));
     }
     if !page.tags.is_empty() {
-        meta.push(page.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(" "));
+        meta.push(
+            page.tags
+                .iter()
+                .map(|t| format!("#{t}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
     }
     lines.push(meta.join("  "));
     lines.push(format!("id:{}", page.id));
-    lines.push(format!("created:{}  updated:{}", page.created_at, page.updated_at));
+    lines.push(format!(
+        "created:{}  updated:{}",
+        page.created_at, page.updated_at
+    ));
     if let Some(body) = page.content_text.as_deref() {
         let body = body.trim();
         if !body.is_empty() {
@@ -329,7 +369,10 @@ fn render_page(page: &Page) -> String {
 fn render_search(resp: &SearchResponse) -> String {
     if resp.results.is_empty() {
         let note = if resp.completed_count > 0 {
-            format!(" ({} completed hidden — use --include-completed)", resp.completed_count)
+            format!(
+                " ({} completed hidden — use --include-completed)",
+                resp.completed_count
+            )
         } else {
             String::new()
         };
@@ -339,9 +382,22 @@ fn render_search(resp: &SearchResponse) -> String {
         .results
         .iter()
         .map(|r| {
-            let title = if r.title.is_empty() { "(untitled)" } else { &r.title };
-            let snippet = if r.excerpt.is_empty() { &r.content_preview } else { &r.excerpt };
-            let head = format!("{} {title}  ({})   id:{}", status_box(&r.status), r.match_source, r.id);
+            let title = if r.title.is_empty() {
+                "(untitled)"
+            } else {
+                &r.title
+            };
+            let snippet = if r.excerpt.is_empty() {
+                &r.content_preview
+            } else {
+                &r.excerpt
+            };
+            let head = format!(
+                "{} {title}  ({})   id:{}",
+                status_box(&r.status),
+                r.match_source,
+                r.id
+            );
             if snippet.is_empty() {
                 head
             } else {
@@ -359,7 +415,10 @@ fn render_search(resp: &SearchResponse) -> String {
 }
 
 fn print_json<T: serde::Serialize>(value: &T) {
-    println!("{}", serde_json::to_string_pretty(value).expect("serialize output"));
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).expect("serialize output")
+    );
 }
 
 // ─── Write helpers (mirror the app's persistence path) ────────────────────────
@@ -399,7 +458,12 @@ fn priority_num(word: &Option<String>) -> i64 {
     }
 }
 
-async fn apply_patch(pool: &SqlitePool, id: &str, priority: i64, tags: &[String]) -> Result<(), AppError> {
+async fn apply_patch(
+    pool: &SqlitePool,
+    id: &str,
+    priority: i64,
+    tags: &[String],
+) -> Result<(), AppError> {
     let mut patch = PageUpdate::default();
     let mut touched = false;
     if priority != 0 {
@@ -416,7 +480,10 @@ async fn apply_patch(pool: &SqlitePool, id: &str, priority: i64, tags: &[String]
     Ok(())
 }
 
-async fn resolve_folder(pool: &SqlitePool, folder_query: &Option<String>) -> Result<Option<String>, AppError> {
+async fn resolve_folder(
+    pool: &SqlitePool,
+    folder_query: &Option<String>,
+) -> Result<Option<String>, AppError> {
     let q = match folder_query {
         Some(q) if !q.is_empty() => q,
         _ => return Ok(None),
@@ -441,7 +508,10 @@ async fn schedule_once(
     if let Some(existing) = schedules.iter().find(|s| s.rule_id.is_none()) {
         let upd = pikos_db::PageScheduleUpdate {
             scheduled_start: Some(start.to_string()),
-            scheduled_end: Some(end.map(|e| Value::String(e.to_string())).unwrap_or(Value::Null)),
+            scheduled_end: Some(
+                end.map(|e| Value::String(e.to_string()))
+                    .unwrap_or(Value::Null),
+            ),
             ..Default::default()
         };
         update_page_schedule_impl(pool, existing.id.clone(), upd).await?;
@@ -491,12 +561,16 @@ fn parse_due(due: &str) -> Result<(String, String), CliError> {
     let end_of = |d: &str| format!("{d}T23:59:59");
     if let Some((a, b)) = due.split_once("..") {
         if !is_date(a) || !is_date(b) {
-            return Err(CliError::usage(format!("--due range must be YYYY-MM-DD..YYYY-MM-DD (got \"{due}\")")));
+            return Err(CliError::usage(format!(
+                "--due range must be YYYY-MM-DD..YYYY-MM-DD (got \"{due}\")"
+            )));
         }
         return Ok((a.to_string(), end_of(b)));
     }
     if !is_date(due) {
-        return Err(CliError::usage(format!("--due must be YYYY-MM-DD or YYYY-MM-DD..YYYY-MM-DD (got \"{due}\")")));
+        return Err(CliError::usage(format!(
+            "--due must be YYYY-MM-DD or YYYY-MM-DD..YYYY-MM-DD (got \"{due}\")"
+        )));
     }
     Ok((due.to_string(), end_of(due)))
 }
@@ -509,9 +583,15 @@ async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
     let mut created: Vec<Page> = Vec::new();
     match result {
         ParseResult::Recurring { input, rrule } => {
-            let folder = resolve_folder(pool, &input.folder_query).await.map_err(classify)?;
-            let page = create_page_impl(pool, base_page(folder, input.title.clone())).await.map_err(classify)?;
-            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags).await.map_err(classify)?;
+            let folder = resolve_folder(pool, &input.folder_query)
+                .await
+                .map_err(classify)?;
+            let page = create_page_impl(pool, base_page(folder, input.title.clone()))
+                .await
+                .map_err(classify)?;
+            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
+                .await
+                .map_err(classify)?;
             let rule_start = input.scheduled_start.clone().unwrap_or_else(local_today);
             create_recurrence_rule_impl(
                 pool,
@@ -528,29 +608,50 @@ async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
             .map_err(classify)?;
             let denorm = PageUpdate {
                 scheduled_start: Some(Value::String(rule_start)),
-                scheduled_end: input.scheduled_end.as_ref().map(|e| Value::String(e.clone())),
+                scheduled_end: input
+                    .scheduled_end
+                    .as_ref()
+                    .map(|e| Value::String(e.clone())),
                 ..Default::default()
             };
-            update_page_impl(pool, page.id.clone(), denorm).await.map_err(classify)?;
+            update_page_impl(pool, page.id.clone(), denorm)
+                .await
+                .map_err(classify)?;
             created.push(require_page(pool, &page.id).await?);
         }
         ParseResult::Finite { inputs } => {
             for inp in inputs {
-                let folder = resolve_folder(pool, &inp.folder_query).await.map_err(classify)?;
-                let page = create_page_impl(pool, base_page(folder, inp.title.clone())).await.map_err(classify)?;
-                apply_patch(pool, &page.id, priority_num(&inp.priority), &inp.tags).await.map_err(classify)?;
+                let folder = resolve_folder(pool, &inp.folder_query)
+                    .await
+                    .map_err(classify)?;
+                let page = create_page_impl(pool, base_page(folder, inp.title.clone()))
+                    .await
+                    .map_err(classify)?;
+                apply_patch(pool, &page.id, priority_num(&inp.priority), &inp.tags)
+                    .await
+                    .map_err(classify)?;
                 if let Some(start) = &inp.scheduled_start {
-                    schedule_once(pool, &page.id, start, inp.scheduled_end.as_deref()).await.map_err(classify)?;
+                    schedule_once(pool, &page.id, start, inp.scheduled_end.as_deref())
+                        .await
+                        .map_err(classify)?;
                 }
                 created.push(require_page(pool, &page.id).await?);
             }
         }
         ParseResult::Single { input } => {
-            let folder = resolve_folder(pool, &input.folder_query).await.map_err(classify)?;
-            let page = create_page_impl(pool, base_page(folder, input.title.clone())).await.map_err(classify)?;
-            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags).await.map_err(classify)?;
+            let folder = resolve_folder(pool, &input.folder_query)
+                .await
+                .map_err(classify)?;
+            let page = create_page_impl(pool, base_page(folder, input.title.clone()))
+                .await
+                .map_err(classify)?;
+            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
+                .await
+                .map_err(classify)?;
             if let Some(start) = &input.scheduled_start {
-                schedule_once(pool, &page.id, start, input.scheduled_end.as_deref()).await.map_err(classify)?;
+                schedule_once(pool, &page.id, start, input.scheduled_end.as_deref())
+                    .await
+                    .map_err(classify)?;
             }
             created.push(require_page(pool, &page.id).await?);
         }
@@ -569,43 +670,37 @@ async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
         return Ok(page);
     }
     let rule = get_recurrence_rule_impl(pool, id).await.map_err(classify)?;
-    let Some(rule) = rule else {
+    if rule.is_none() {
         let upd = PageUpdate {
             status: Some("done".to_string()),
             completed_at: Some(Value::String(now_iso())),
             ..Default::default()
         };
-        return update_page_impl(pool, id.to_string(), upd).await.map_err(classify);
-    };
-
-    // "advance" policy via the bridge's recurrence math.
-    let head_date = page.scheduled_start.clone().unwrap_or_else(now_iso);
-    let completed_date = page.scheduled_start.as_ref().map(|s| s[..10.min(s.len())].to_string());
-    let mut exdates = rule.rrule_exdates.clone();
-    if let Some(d) = &completed_date {
-        exdates.push(d.clone());
+        return update_page_impl(pool, id.to_string(), upd)
+            .await
+            .map_err(classify);
     }
-    let req = json!({
-        "rrule": rule.rrule,
-        "scheduledStart": rule.scheduled_start,
-        "afterDate": head_date,
-        "exdates": exdates,
-        "scheduledEnd": rule.scheduled_end,
-    });
-    let resp = run_bridge("next-occurrence", &req.to_string())?;
-    let next_start = resp["next"].get("scheduledStart").and_then(Value::as_str).map(str::to_string);
-    let next_end = resp["nextEnd"].as_str().map(str::to_string);
 
+    // A synced series' head is pinned at the series base, so the occurrence being
+    // completed only exists as a client-rendered virtual — which the CLI has no
+    // recurrence engine to enumerate. Say so rather than let the backend reject it
+    // with a message written for the desktop caller.
+    if page.schedule_locked {
+        return Err(CliError::conflict(
+            "This event comes from a connected calendar — complete it in the Pikos app.",
+        ));
+    }
+
+    // The occurrence, the exclusion and the next head are all derived server-side
+    // from the occurrence-sets; the CLI supplies only which series to advance.
     complete_recurring_page_impl(
         pool,
         CompleteRecurringInput {
             page_id: id.to_string(),
-            next_scheduled_start: next_start,
-            next_scheduled_end: next_end,
-            // Folded into the completion tx; the backend MERGES the date into
-            // the current exdates, so a concurrent desktop write survives.
-            rule_id: Some(rule.id.clone()),
-            add_exdates: completed_date.map(|d| vec![d]),
+            skip_dates: Vec::new(),
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
         },
     )
     .await
@@ -641,7 +736,11 @@ async fn run(cli: Cli) -> Result<(), CliError> {
     let pool = open_pool(&path).await.map_err(classify)?;
 
     match cli.command {
-        CliCommand::Search { query, include_completed, limit } => {
+        CliCommand::Search {
+            query,
+            include_completed,
+            limit,
+        } => {
             let mut resp = search_pages_impl(&pool, query.join(" "), Some(include_completed))
                 .await
                 .map_err(classify)?;
@@ -662,11 +761,19 @@ async fn run(cli: Cli) -> Result<(), CliError> {
                 println!("{}", render_page(&page));
             }
         }
-        CliCommand::List { status, due, tag, modified, limit } => {
+        CliCommand::List {
+            status,
+            due,
+            tag,
+            modified,
+            limit,
+        } => {
             let mut filter = PageFilter::default();
             if let Some(s) = &status {
                 if s != "not_started" && s != "done" {
-                    return Err(CliError::usage(format!("--status must be \"not_started\" or \"done\" (got \"{s}\")")));
+                    return Err(CliError::usage(format!(
+                        "--status must be \"not_started\" or \"done\" (got \"{s}\")"
+                    )));
                 }
                 filter.status = Some(s.clone());
             }
@@ -678,7 +785,9 @@ async fn run(cli: Cli) -> Result<(), CliError> {
             if !tag.is_empty() {
                 filter.tags = Some(tag);
             }
-            let mut pages = list_pages_impl(&pool, Some(filter)).await.map_err(classify)?;
+            let mut pages = list_pages_impl(&pool, Some(filter))
+                .await
+                .map_err(classify)?;
             if modified {
                 pages.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
             }
@@ -696,7 +805,10 @@ async fn run(cli: Cli) -> Result<(), CliError> {
             if json {
                 print_json(&pages);
             } else {
-                println!("{}", render_summary_list(&pages, "Nothing scheduled for today."));
+                println!(
+                    "{}",
+                    render_summary_list(&pages, "Nothing scheduled for today.")
+                );
             }
         }
         CliCommand::Add { text } => {
@@ -705,11 +817,26 @@ async fn run(cli: Cli) -> Result<(), CliError> {
                 print_json(&json!({ "created": created }));
             } else {
                 for p in &created {
-                    println!("Created {}: {}", p.id, if p.title.is_empty() { "(untitled)" } else { &p.title });
+                    println!(
+                        "Created {}: {}",
+                        p.id,
+                        if p.title.is_empty() {
+                            "(untitled)"
+                        } else {
+                            &p.title
+                        }
+                    );
                 }
             }
         }
-        CliCommand::Update { id, title, content, status, due, priority } => {
+        CliCommand::Update {
+            id,
+            title,
+            content,
+            status,
+            due,
+            priority,
+        } => {
             require_page(&pool, &id).await?;
             let mut upd = PageUpdate::default();
             if let Some(t) = title {
@@ -722,10 +849,16 @@ async fn run(cli: Cli) -> Result<(), CliError> {
             }
             if let Some(s) = &status {
                 if s != "not_started" && s != "done" {
-                    return Err(CliError::usage(format!("--status must be \"not_started\" or \"done\" (got \"{s}\")")));
+                    return Err(CliError::usage(format!(
+                        "--status must be \"not_started\" or \"done\" (got \"{s}\")"
+                    )));
                 }
                 upd.status = Some(s.clone());
-                upd.completed_at = Some(if s == "done" { Value::String(now_iso()) } else { Value::Null });
+                upd.completed_at = Some(if s == "done" {
+                    Value::String(now_iso())
+                } else {
+                    Value::Null
+                });
             }
             if let Some(p) = priority {
                 if !(0..=4).contains(&p) {
@@ -733,7 +866,9 @@ async fn run(cli: Cli) -> Result<(), CliError> {
                 }
                 upd.priority = Some(p);
             }
-            update_page_impl(&pool, id.clone(), upd).await.map_err(classify)?;
+            update_page_impl(&pool, id.clone(), upd)
+                .await
+                .map_err(classify)?;
             if let Some(d) = &due {
                 schedule_once(&pool, &id, d, None).await.map_err(classify)?;
             }
@@ -762,10 +897,14 @@ async fn run(cli: Cli) -> Result<(), CliError> {
                         completed_at: Some(Value::Null),
                         ..Default::default()
                     };
-                    update_page_impl(&pool, id.clone(), upd).await.map_err(classify)?
+                    update_page_impl(&pool, id.clone(), upd)
+                        .await
+                        .map_err(classify)?
                 }
                 other => {
-                    return Err(CliError::usage(format!("state must be \"done\" or \"not_started\" (got \"{other}\")")))
+                    return Err(CliError::usage(format!(
+                        "state must be \"done\" or \"not_started\" (got \"{other}\")"
+                    )))
                 }
             };
             if json {
@@ -778,9 +917,15 @@ async fn run(cli: Cli) -> Result<(), CliError> {
             let page = require_page(&pool, &id).await?;
             if !cli.yes {
                 if json {
-                    return Err(CliError::usage("refusing to delete without --yes in --json mode"));
+                    return Err(CliError::usage(
+                        "refusing to delete without --yes in --json mode",
+                    ));
                 }
-                let title = if page.title.is_empty() { "(untitled)".to_string() } else { page.title.clone() };
+                let title = if page.title.is_empty() {
+                    "(untitled)".to_string()
+                } else {
+                    page.title.clone()
+                };
                 if !confirm(&format!("Delete \"{title}\" ({id})?")).await {
                     eprintln!("Aborted.");
                     return Ok(());
@@ -803,7 +948,10 @@ async fn main() {
     let json = cli.json;
     if let Err(e) = run(cli).await {
         if json {
-            eprintln!("{}", json!({ "error": { "kind": e.kind, "message": e.message } }));
+            eprintln!(
+                "{}",
+                json!({ "error": { "kind": e.kind, "message": e.message } })
+            );
         } else {
             eprintln!("pikos: {} ({})", e.message, e.kind);
         }
@@ -879,5 +1027,4 @@ mod tests {
         assert_eq!(cli.kind, "SchemaTooNew");
         assert_eq!(cli.code, 6);
     }
-
 }
