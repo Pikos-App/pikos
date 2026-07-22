@@ -31,6 +31,9 @@ export interface CalendarSyncState {
   busyAccountId: string | null;
   error: string | null;
   connect: (data: NewCaldavConnection) => Promise<void>;
+  connectGoogle: () => Promise<void>;
+  /** False in a build without the Google OAuth client — the picker hides it. */
+  googleAvailable: boolean;
   disconnect: (accountId: string) => Promise<void>;
   toggleCalendar: (calendarRowId: string, enabled: boolean, color: string | null) => Promise<void>;
   recolorCalendar: (calendarRowId: string, enabled: boolean, color: string) => Promise<void>;
@@ -45,6 +48,7 @@ export function useCalendarSync(): CalendarSyncState {
   const [loading, setLoading] = useState(true);
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [googleAvailable, setGoogleAvailable] = useState(false);
 
   useEffect(() => {
     if (!storage) return;
@@ -53,6 +57,9 @@ export function useCalendarSync(): CalendarSyncState {
       if (cancelled) return;
       setAccounts(next);
       setLoading(false);
+    });
+    void storage.googleSyncAvailable().then((next) => {
+      if (!cancelled) setGoogleAvailable(next);
     });
     return () => {
       cancelled = true;
@@ -68,6 +75,15 @@ export function useCalendarSync(): CalendarSyncState {
     if (!storage) return;
     setError(null);
     await storage.connectCaldavAccount(data);
+    await refresh();
+  }
+
+  // Rejections propagate to AddAccountDialog, which owns the inline error for
+  // both connect paths — same contract as `connect`.
+  async function connectGoogle() {
+    if (!storage) return;
+    setError(null);
+    await storage.connectGoogleAccount();
     await refresh();
   }
 
@@ -156,8 +172,10 @@ export function useCalendarSync(): CalendarSyncState {
     accounts,
     busyAccountId,
     connect,
+    connectGoogle,
     disconnect,
     error,
+    googleAvailable,
     loading,
     recolorCalendar,
     results,

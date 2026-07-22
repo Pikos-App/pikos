@@ -1,5 +1,5 @@
 import type { NewCaldavConnection } from "@pikos/core";
-import { Server } from "lucide-react";
+import { CalendarDays, Server } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,13 +17,21 @@ interface AddAccountDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConnect: (data: NewCaldavConnection) => Promise<void>;
+  onConnectGoogle: () => Promise<void>;
+  googleAvailable: boolean;
 }
 
 const FORM_INPUT =
   "w-full rounded border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-text-tertiary focus-visible:border-ring focus-visible:outline-none";
 
-export function AddAccountDialog({ onConnect, onOpenChange, open }: AddAccountDialogProps) {
-  const [provider, setProvider] = useState<"pick" | "caldav">("pick");
+export function AddAccountDialog({
+  googleAvailable,
+  onConnect,
+  onConnectGoogle,
+  onOpenChange,
+  open,
+}: AddAccountDialogProps) {
+  const [provider, setProvider] = useState<"caldav" | "pick">("pick");
   const [serverUrl, setServerUrl] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -69,6 +77,22 @@ export function AddAccountDialog({ onConnect, onOpenChange, open }: AddAccountDi
     }
   }
 
+  // The grant only resolves once the user finishes in their browser, so this can
+  // sit pending for a long time — the picker shows a waiting state rather than
+  // looking like the click did nothing.
+  async function submitGoogle() {
+    setBusy(true);
+    setError(null);
+    try {
+      await onConnectGoogle();
+      reset();
+      onOpenChange(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not connect to Google. Try again.");
+      setBusy(false);
+    }
+  }
+
   const canSubmit = serverUrl.trim() && username.trim() && password && !busy;
 
   return (
@@ -77,16 +101,17 @@ export function AddAccountDialog({ onConnect, onOpenChange, open }: AddAccountDi
         <DialogHeader>
           <DialogTitle>Add calendar account</DialogTitle>
           <DialogDescription>
-            {provider === "pick"
-              ? "Connect an external calendar to see its events in Pikos."
-              : "Pikos reads your calendar over CalDAV. Your password is stored in the system keychain, never in the database."}
+            {provider === "caldav"
+              ? "Pikos reads your calendar over CalDAV. Your password is stored in the system keychain, never in the database."
+              : "Connect an external calendar to see its events in Pikos."}
           </DialogDescription>
         </DialogHeader>
 
         {provider === "pick" ? (
           <div className="flex flex-col gap-2">
             <button
-              className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors hover:bg-accent"
+              className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={busy}
               onClick={() => setProvider("caldav")}
             >
               <Server className="size-4 text-muted-foreground" />
@@ -96,14 +121,24 @@ export function AddAccountDialog({ onConnect, onOpenChange, open }: AddAccountDi
               </div>
             </button>
             <button
-              className="flex cursor-not-allowed items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left opacity-50"
-              disabled
+              className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+              disabled={!googleAvailable || busy}
+              onClick={() => void submitGoogle()}
             >
+              <CalendarDays className="size-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">Google Calendar</p>
-                <p className="text-xs text-muted-foreground">Coming soon</p>
+                <p className="text-xs text-muted-foreground">
+                  {!googleAvailable
+                    ? "Not available in this build"
+                    : busy
+                      ? "Waiting for you to finish in your browser…"
+                      : "Sign in with your Google account"}
+                </p>
               </div>
             </button>
+
+            {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
         ) : (
           <div className="flex flex-col gap-3">

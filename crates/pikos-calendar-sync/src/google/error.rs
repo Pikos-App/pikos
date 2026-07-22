@@ -29,6 +29,21 @@ pub enum GoogleError {
     #[error("Google network error: {0}")]
     Network(String),
 
+    /// The event is gone upstream (`404`). Terminal for a targeted fetch: the
+    /// engine drops the occurrence delta that asked for it instead of retrying
+    /// against a master that will never come back.
+    #[error("Google event not found")]
+    NotFound,
+
+    /// Quota or per-user rate limit. Transient by definition — the cursor is kept
+    /// and the next scheduled poll retries.
+    #[error("Google rate limit reached — backing off")]
+    RateLimited,
+
+    /// Reached Google but it answered with a status sync doesn't handle.
+    #[error("unexpected Google status {0}")]
+    UnexpectedStatus(u16),
+
     /// Reached Google but couldn't make sense of the exchange — a malformed
     /// token response, a rejected client_id, or a redirect that didn't carry
     /// the state we issued.
@@ -45,7 +60,14 @@ impl From<GoogleError> for AppError {
             | GoogleError::Cancelled
             | GoogleError::ScopesWithheld
             | GoogleError::NotConfigured => AppError::Invalid(e.to_string()),
-            GoogleError::Network(_) => AppError::Network(e.to_string()),
+            // Terminal-but-expected: the engine drops the orphan and advances.
+            GoogleError::NotFound => AppError::NotFound(e.to_string()),
+            // Transient: the engine turns these into `Offline`, which keeps the
+            // cursor and surfaces nothing louder than the stale dot. An unhandled
+            // status lands here too, rather than pushing the user to reconnect.
+            GoogleError::Network(_)
+            | GoogleError::RateLimited
+            | GoogleError::UnexpectedStatus(_) => AppError::Network(e.to_string()),
             GoogleError::Protocol(_) => AppError::Internal(e.to_string()),
         }
     }
@@ -84,6 +106,17 @@ mod tests {
     fn network_is_network() {
         assert!(matches!(
             mapped(GoogleError::Network("x".into())),
+            AppError::Network(_)
+        ));
+    }
+
+    // A rate limit must read as transient, not as a bad credential: Invalid would
+    // set reconnect_needed, drop the account out of the background pass, and ask
+    // the user to re-auth over a quota blip that clears itself.
+    #[test]
+    fn rate_limited_is_transient_not_a_reconnect_prompt() {
+        assert!(matches!(
+            mapped(GoogleError::RateLimited),
             AppError::Network(_)
         ));
     }

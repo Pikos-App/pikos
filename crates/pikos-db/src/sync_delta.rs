@@ -56,6 +56,24 @@ pub struct EventSchedule {
     pub timezone: Option<String>,
 }
 
+/// Whether a bundle's `exdates` + `overrides` are the series' whole truth, or
+/// only the slice this one resource could see. Decides whether the reconciler may
+/// rewrite the series' occurrence deltas wholesale or must carry the stored ones
+/// forward — get it wrong for Google and every cancelled occurrence resurrects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OccurrenceFidelity {
+    /// The bundle carries the complete set. CalDAV always (one href holds the
+    /// master plus every RECURRENCE-ID override under one UID); Google only on a
+    /// full enumerate, where the master and all its child events arrive together.
+    Complete,
+    /// A master-only view. Google's cancellations and moved instances are separate
+    /// child event resources, so an incremental delta carrying just the master —
+    /// or a targeted `fetch_event` for orphan resolution — sees none of them.
+    /// Stored exdates and overrides must survive the rewrite; the next full
+    /// enumerate is what restores truth if the two ever drift.
+    MasterOnly,
+}
+
 /// The recurrence half of a series bundle. Absent on a single event.
 #[derive(Debug, Clone)]
 pub struct Recurrence {
@@ -65,6 +83,8 @@ pub struct Recurrence {
     pub exdates: Vec<String>,
     /// Modified instances, keyed by the original rrule date they replace.
     pub overrides: Vec<OccurrenceOverride>,
+    /// How much of the series' occurrence deltas the two fields above represent.
+    pub fidelity: OccurrenceFidelity,
 }
 
 /// A modified instance inside a series bundle.

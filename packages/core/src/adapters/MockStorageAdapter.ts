@@ -935,32 +935,51 @@ export class MockStorageAdapter implements StorageAdapter {
   // ─── Calendar sync ────────────────────────────────────────────────────────────
 
   connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars> {
+    return Promise.resolve(
+      this._connectAccount("caldav", data.displayName, "basic", ["Personal", "Work"])
+    );
+  }
+
+  connectGoogleAccount(): Promise<AccountWithCalendars> {
+    return Promise.resolve(
+      this._connectAccount("google", "you@gmail.com", "oauth", ["you@gmail.com", "Team"])
+    );
+  }
+
+  googleSyncAvailable(): Promise<boolean> {
+    return Promise.resolve(true);
+  }
+
+  private _connectAccount(
+    provider: string,
+    displayName: string,
+    authKind: string,
+    calendarNames: string[]
+  ): AccountWithCalendars {
     // Reconnect reuses a dormant account (matched by provider+displayName) so its
-    // dormant calendars/pages re-link rather than duplicate — mirrors connect_caldav.
+    // dormant calendars/pages re-link rather than duplicate — mirrors claim_account.
     const dormant = [...this.syncAccounts.values()].find(
       (a) =>
-        this.dormantAccounts.has(a.id) &&
-        a.provider === "caldav" &&
-        a.displayName === data.displayName
+        this.dormantAccounts.has(a.id) && a.provider === provider && a.displayName === displayName
     );
     if (dormant) {
       this.dormantAccounts.delete(dormant.id);
-      return Promise.resolve({ ...dormant, calendars: this._calendarsFor(dormant.id) });
+      return { ...dormant, calendars: this._calendarsFor(dormant.id) };
     }
 
     const account: SyncAccount = {
-      authKind: "basic",
+      authKind,
       createdAt: now(),
-      displayName: data.displayName,
+      displayName,
       id: uuid(),
-      provider: "caldav",
+      provider,
     };
     this.syncAccounts.set(account.id, account);
     // Canned discovery so test mode has calendars to toggle.
-    for (const name of ["Personal", "Work"]) {
+    for (const name of calendarNames) {
       const cal: SyncCalendar = {
         accountId: account.id,
-        calendarId: `${name.toLowerCase()}-cal`,
+        calendarId: `${provider}-${name.toLowerCase()}-cal`,
         color: null,
         displayName: name,
         enabled: false,
@@ -970,7 +989,7 @@ export class MockStorageAdapter implements StorageAdapter {
       };
       this.syncCalendars.set(cal.id, cal);
     }
-    return Promise.resolve({ ...account, calendars: this._calendarsFor(account.id) });
+    return { ...account, calendars: this._calendarsFor(account.id) };
   }
 
   disconnectSyncAccount(accountId: string): Promise<void> {

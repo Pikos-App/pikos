@@ -125,6 +125,17 @@ pub(crate) async fn seed_calendar(pool: &SqlitePool, s: CalSeed<'_>) {
     .unwrap();
 }
 
+/// Retag a seeded account's provider. [`seed_calendar`] creates CalDAV accounts;
+/// multi-provider tests flip one afterwards rather than widening `CalSeed`.
+pub(crate) async fn set_account_provider(pool: &SqlitePool, account_id: &str, provider: &str) {
+    sqlx::query("UPDATE sync_account SET provider = ? WHERE id = ?")
+        .bind(provider)
+        .bind(account_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
 pub(crate) async fn page_count(pool: &SqlitePool) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM pages")
         .fetch_one(pool)

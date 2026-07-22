@@ -9,12 +9,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AddAccountDialog } from "./AddAccountDialog";
 
 function render(props?: {
+  googleAvailable?: boolean;
   onConnect?: (data: unknown) => Promise<void>;
+  onConnectGoogle?: () => Promise<void>;
   onOpenChange?: (open: boolean) => void;
 }) {
   return rtlRender(
     <AddAccountDialog
+      googleAvailable={props?.googleAvailable ?? true}
       onConnect={props?.onConnect ?? (() => Promise.resolve())}
+      onConnectGoogle={props?.onConnectGoogle ?? (() => Promise.resolve())}
       onOpenChange={props?.onOpenChange ?? (() => {})}
       open
     />
@@ -32,11 +36,46 @@ function fillForm() {
 }
 
 describe("AddAccountDialog", () => {
-  it("offers CalDAV and a disabled Google option", () => {
+  it("offers both providers", () => {
     render();
     expect(screen.getByText("CalDAV")).toBeInTheDocument();
-    expect(screen.getByText("Coming soon")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Google Calendar/ })).toBeEnabled();
+  });
+
+  // A build without the OAuth client can't complete a grant, so the option is
+  // shown-but-disabled rather than offering a connect that always fails.
+  it("disables Google when the build carries no OAuth client", () => {
+    render({ googleAvailable: false });
     expect(screen.getByRole("button", { name: /Google Calendar/ })).toBeDisabled();
+    expect(screen.getByText("Not available in this build")).toBeInTheDocument();
+  });
+
+  it("starts the Google grant and waits on the browser", async () => {
+    let finish: () => void = () => {};
+    const onConnectGoogle = vi.fn(() => new Promise<void>((r) => (finish = r)));
+    const onOpenChange = vi.fn();
+    render({ onConnectGoogle, onOpenChange });
+    fireEvent.click(screen.getByRole("button", { name: /Google Calendar/ }));
+
+    expect(onConnectGoogle).toHaveBeenCalled();
+    // The grant can sit pending for minutes; without this the click looks inert.
+    expect(
+      await screen.findByText("Waiting for you to finish in your browser…")
+    ).toBeInTheDocument();
+
+    finish();
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it("returns to the picker with an error when the Google grant fails", async () => {
+    const onConnectGoogle = vi.fn().mockRejectedValue(new Error("Authorization was cancelled"));
+    const onOpenChange = vi.fn();
+    render({ onConnectGoogle, onOpenChange });
+    fireEvent.click(screen.getByRole("button", { name: /Google Calendar/ }));
+
+    expect(await screen.findByText("Authorization was cancelled")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByRole("button", { name: /Google Calendar/ })).toBeEnabled();
   });
 
   it("keeps Connect disabled until every field is filled", () => {

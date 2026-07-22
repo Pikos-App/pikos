@@ -350,6 +350,14 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<AccountWithCalendars>("connect_caldav_account", { ...data });
   }
 
+  connectGoogleAccount(): Promise<AccountWithCalendars> {
+    return invoke<AccountWithCalendars>("connect_google_account");
+  }
+
+  googleSyncAvailable(): Promise<boolean> {
+    return invoke<boolean>("google_sync_available");
+  }
+
   disconnectSyncAccount(accountId: string): Promise<void> {
     return invoke<void>("disconnect_sync_account", { accountId });
   }

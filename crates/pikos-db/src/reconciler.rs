@@ -16,7 +16,8 @@ use chrono_tz::Tz;
 use crate::error::AppResult;
 use crate::now_iso;
 use crate::sync_delta::{
-    EventCore, EventUpsert, OccurrenceDelta, OccurrenceKind, Removal, SyncDelta, UpsertItem,
+    EventCore, EventUpsert, OccurrenceDelta, OccurrenceFidelity, OccurrenceKind, Removal,
+    SyncDelta, UpsertItem,
 };
 
 /// All-day recurring events have no meaningful zone, but
@@ -216,6 +217,12 @@ async fn find_relink(
 /// reconciler-owned for a synced page, so a clean delete-and-reinsert is the
 /// simplest idempotent write — re-running yields the same rows.
 ///
+/// A [`OccurrenceFidelity::MasterOnly`] bundle is the exception: it can't see the
+/// series' exdates and overrides (see the enum), so those are read back before the
+/// delete and re-applied under the new rule — union for exdates, incoming-wins by
+/// `original_date` for overrides, and only while the pattern still matches (see
+/// [`load_carried_occurrences`]).
+///
 /// A recurring page's head is then recomputed to its oldest-open occurrence
 /// (completed/skip sets, keyed by `page_id`, survive the rule rewrite and may push
 /// it past the raw base) with the derivation owning terminal status both
@@ -237,6 +244,21 @@ async fn write_schedule(
             .fetch_one(&mut **tx)
             .await?;
 
+    let tz = ev.schedule.timezone.as_deref().unwrap_or(SENTINEL_TZ);
+    // Only UNTIL still carries a zone — dtstart/EXDATE/original_date arrive
+    // already wall-clock from the provider. Keep the whole rule on one basis.
+    let rrule = ev
+        .recurrence
+        .as_ref()
+        .map(|rec| rewrite_until_to_wall_clock(&rec.rrule, tz));
+
+    let carried = match (&ev.recurrence, rrule.as_deref()) {
+        (Some(rec), Some(rrule)) if rec.fidelity == OccurrenceFidelity::MasterOnly => {
+            load_carried_occurrences(tx, page_id, rrule, &ev.schedule.start).await?
+        }
+        _ => CarriedOccurrences::default(),
+    };
+
     sqlx::query("DELETE FROM page_recurrence_rules WHERE page_id = ?")
         .bind(page_id)
         .execute(&mut **tx)
@@ -248,13 +270,15 @@ async fn write_schedule(
 
     let base_end = to_inclusive_end(ev.schedule.end.as_deref());
 
-    if let Some(rec) = &ev.recurrence {
+    if let (Some(rec), Some(rrule)) = (&ev.recurrence, &rrule) {
         let rule_id = uuid::Uuid::new_v4().to_string();
-        let exdates_json = serde_json::to_string(&rec.exdates).unwrap_or_else(|_| "[]".to_string());
-        let tz = ev.schedule.timezone.as_deref().unwrap_or(SENTINEL_TZ);
-        // Only UNTIL still carries a zone — dtstart/EXDATE/original_date arrive
-        // already wall-clock from the provider. Keep the whole rule on one basis.
-        let rrule = rewrite_until_to_wall_clock(&rec.rrule, tz);
+        let mut exdates = carried.exdates;
+        for d in &rec.exdates {
+            if !exdates.contains(d) {
+                exdates.push(d.clone());
+            }
+        }
+        let exdates_json = serde_json::to_string(&exdates).unwrap_or_else(|_| "[]".to_string());
         sqlx::query(
             "INSERT INTO page_recurrence_rules
              (id, page_id, rrule, rrule_exdates, scheduled_start, scheduled_end, timezone, created_at)
@@ -262,7 +286,7 @@ async fn write_schedule(
         )
         .bind(&rule_id)
         .bind(page_id)
-        .bind(&rrule)
+        .bind(rrule)
         .bind(&exdates_json)
         .bind(&ev.schedule.start)
         .bind(&base_end)
@@ -280,6 +304,30 @@ async fn write_schedule(
                 ov.schedule.timezone.as_deref(),
                 Some(&rule_id),
                 Some(&ov.original_date),
+                now,
+            )
+            .await?;
+        }
+
+        for (start, end, timezone, original_date) in &carried.overrides {
+            if rec
+                .overrides
+                .iter()
+                .any(|ov| &ov.original_date == original_date)
+            {
+                continue;
+            }
+            // Stored ends are already Pikos-inclusive — re-insert raw, never
+            // through to_inclusive_end, or a carried all-day span loses a day
+            // per rewrite.
+            insert_schedule_row(
+                tx,
+                page_id,
+                start,
+                end.as_deref(),
+                timezone.as_deref(),
+                Some(&rule_id),
+                Some(original_date),
                 now,
             )
             .await?;
@@ -320,6 +368,61 @@ async fn write_schedule(
         crate::recurrence_derive::recompute_recurring_schedule(tx, page_id).await?;
     }
     Ok(())
+}
+
+/// A series' stored occurrence deltas, read back so a `MasterOnly` rewrite can
+/// carry them across. Empty when the page has no rule yet.
+#[derive(Default)]
+struct CarriedOccurrences {
+    exdates: Vec<String>,
+    /// `(start, end, timezone, original_date)`.
+    overrides: Vec<(String, Option<String>, Option<String>, String)>,
+}
+
+/// Carry forward only while the series' pattern is untouched. A changed RRULE or
+/// base start shifts every occurrence date, so exdates and overrides keyed to the
+/// old dates describe a pattern that no longer exists — carrying them would strand
+/// a ghost occurrence the user can't move or delete (the mirror schedule is locked)
+/// and can't stop from firing a reminder. Dropping them is correct rather than
+/// lossy: nothing here is user-authored, and the provider's own occurrence deltas
+/// plus the next full enumerate rebuild the live set.
+///
+/// `incoming_rrule` must already be UNTIL-rewritten, or a `UNTIL=…Z` rule reads as
+/// changed on every poll and never carries anything.
+async fn load_carried_occurrences(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    incoming_rrule: &str,
+    incoming_start: &str,
+) -> AppResult<CarriedOccurrences> {
+    let Some((rule_id, exdates_json, stored_rrule, stored_start)) =
+        sqlx::query_as::<_, (String, String, String, String)>(
+            "SELECT id, rrule_exdates, rrule, scheduled_start
+             FROM page_recurrence_rules WHERE page_id = ?",
+        )
+        .bind(page_id)
+        .fetch_optional(&mut **tx)
+        .await?
+    else {
+        return Ok(CarriedOccurrences::default());
+    };
+
+    if stored_rrule != incoming_rrule || stored_start != incoming_start {
+        return Ok(CarriedOccurrences::default());
+    }
+
+    let overrides = sqlx::query_as(
+        "SELECT scheduled_start, scheduled_end, timezone, original_date FROM page_schedules
+         WHERE rule_id = ? AND original_date IS NOT NULL",
+    )
+    .bind(&rule_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    Ok(CarriedOccurrences {
+        exdates: serde_json::from_str(&exdates_json).unwrap_or_default(),
+        overrides,
+    })
 }
 
 /// Apply a lone occurrence change against the already-stored series. Returns a

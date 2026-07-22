@@ -16,8 +16,8 @@ use pikos_db::error::{AppError, AppResult};
 use pikos_db::reconciler::{reconcile, ReconcileContext};
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
 use pikos_db::sync_delta::{
-    CalendarProvider, EventCore, EventSchedule, EventUpsert, OccurrenceDelta, OccurrenceKind,
-    Recurrence, Removal, SyncDelta, SyncToken, UpsertItem,
+    CalendarProvider, EventCore, EventSchedule, EventUpsert, OccurrenceDelta, OccurrenceFidelity,
+    OccurrenceKind, Recurrence, Removal, SyncDelta, SyncToken, UpsertItem,
 };
 use pikos_db::{insert_test_page, now_iso, test_pool, PageUpdate, TestPage};
 
@@ -170,6 +170,7 @@ fn master(external_id: &str, uid: &str) -> EventUpsert {
             timezone: Some("America/New_York".into()),
         },
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: "FREQ=DAILY;COUNT=5".into(),
             exdates: vec![],
             overrides: vec![],

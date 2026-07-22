@@ -1,0 +1,19 @@
+{
+  "kind": "calendar#events",
+  "timeZone": "America/New_York",
+  "nextSyncToken": "TOKEN-PAGED",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "ev-series_20260608T130000Z",
+      "iCalUID": "uid-series@google.com",
+      "etag": "\"series-ov-v1\"",
+      "status": "confirmed",
+      "summary": "Weekly sync",
+      "recurringEventId": "ev-series",
+      "originalStartTime": { "dateTime": "2026-06-08T09:00:00-04:00", "timeZone": "America/New_York" },
+      "start": { "dateTime": "2026-06-08T11:00:00-04:00", "timeZone": "America/New_York" },
+      "end": { "dateTime": "2026-06-08T11:30:00-04:00", "timeZone": "America/New_York" }
+    }
+  ]
+}

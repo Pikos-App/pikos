@@ -13,8 +13,10 @@ export function CalendarSyncSettings() {
     accounts,
     busyAccountId,
     connect,
+    connectGoogle,
     disconnect,
     error,
+    googleAvailable,
     loading,
     recolorCalendar,
     results,
@@ -59,7 +61,13 @@ export function CalendarSyncSettings() {
           </div>
         </div>
 
-        <AddAccountDialog onConnect={connect} onOpenChange={setAddOpen} open={addOpen} />
+        <AddAccountDialog
+          googleAvailable={googleAvailable}
+          onConnect={connect}
+          onConnectGoogle={connectGoogle}
+          onOpenChange={setAddOpen}
+          open={addOpen}
+        />
       </SettingsSection>
     </div>
   );

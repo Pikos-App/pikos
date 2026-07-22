@@ -73,8 +73,8 @@ pub struct PassReport {
 ///
 /// - `pool_for_pass` re-resolves the DB pool per pass (`None` = not connected
 ///   yet / mid workspace-switch → the trigger is dropped, no pass runs).
-/// - `provider_for` constructs the account's provider (CalDAV today; Google
-///   branches on `account.provider` when it lands).
+/// - `provider_for` constructs the account's provider — it takes the whole
+///   account row so it can branch on `provider` (see [`crate::AnyProvider`]).
 /// - `on_pass_start` / `on_pass_end` bracket every pass — the desktop driver
 ///   uses them to suppress its DB-file watcher around the engine's writes and
 ///   to emit the frontend reload signal.

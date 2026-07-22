@@ -6,8 +6,8 @@
 use tauri::State;
 
 use pikos_calendar_sync::{
-    connect_caldav, disconnect_account, resync_account, CaldavProvider, CalendarSyncResult,
-    Keychain,
+    connect_caldav, connect_google, disconnect_account, google, resync_account_auto,
+    CalendarSyncResult, Keychain,
 };
 use pikos_db::sync_commands::{
     get_sync_status_impl, list_sync_calendars_impl, toggle_sync_calendar_impl,
@@ -34,6 +34,24 @@ pub async fn connect_caldav_account(
         password,
         display_name,
     )
+    .await
+}
+
+/// Whether this build carries the Google OAuth client. The panel hides the Google
+/// option when it doesn't, rather than offering a connect that can only fail.
+#[tauri::command]
+pub fn google_sync_available() -> bool {
+    google::is_available()
+}
+
+#[tauri::command]
+pub async fn connect_google_account(state: State<'_, DbState>) -> AppResult<AccountWithCalendars> {
+    let pool = state.get_pool().await?;
+    connect_google(&pool, Keychain::system(), |url| {
+        tauri_plugin_opener::open_url(url, None::<&str>)
+            .map_err(|e| pikos_db::error::AppError::Internal(format!("open browser: {e}")))?;
+        Ok(())
+    })
     .await
 }
 
@@ -78,10 +96,7 @@ pub async fn resync_sync_account(
     account_id: String,
 ) -> AppResult<Vec<CalendarSyncResult>> {
     let pool = state.get_pool().await?;
-    // CalDAV is the only provider today; a second provider would branch here on
-    // the account's `provider`.
-    let provider = CaldavProvider::new(Keychain::system());
-    resync_account(&pool, &provider, &account_id).await
+    resync_account_auto(&pool, Keychain::system(), &account_id).await
 }
 
 #[tauri::command]

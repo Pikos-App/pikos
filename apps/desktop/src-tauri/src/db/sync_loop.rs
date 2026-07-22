@@ -10,8 +10,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 
 use pikos_calendar_sync::{
-    run_sync_loop, CaldavProvider, Keychain, PassReport, SchedulerConfig, SyncTrigger,
-    TriggerSource,
+    run_sync_loop, AnyProvider, Keychain, PassReport, SchedulerConfig, SyncTrigger, TriggerSource,
 };
 
 use super::DbState;
@@ -94,9 +93,7 @@ pub async fn run(app: AppHandle, rx: mpsc::Receiver<SyncTrigger>) {
             let app = pool_app.clone();
             async move { app.state::<DbState>().get_pool().await.ok() }
         },
-        // CalDAV is the only provider today; Google branches on
-        // `account.provider` when it lands.
-        |_account| CaldavProvider::new(Keychain::system()),
+        |account| AnyProvider::for_account(account, Keychain::system()),
         SchedulerConfig::default(),
         super::watch::suppress_begin,
         move |report: &PassReport| {

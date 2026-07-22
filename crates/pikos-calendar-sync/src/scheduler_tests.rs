@@ -19,7 +19,7 @@ use pikos_db::sync_delta::{
 use pikos_db::test_pool;
 
 use super::{run_sync_loop, SchedulerConfig, SyncTrigger, TriggerSource};
-use crate::test_support::{self, page_count, seed_calendar, CalSeed};
+use crate::test_support::{self, page_count, seed_calendar, set_account_provider, CalSeed};
 
 // ─── scripted trigger source ────────────────────────────────────────────────────
 
@@ -366,4 +366,47 @@ async fn missing_pool_skips_pass() {
         "first trigger dropped, second runs once connected"
     );
     assert_eq!(page_count(&pool).await, 1);
+}
+
+// ─── multi-provider ─────────────────────────────────────────────────────────────
+
+/// One pass polls a CalDAV and a Google account, and the factory is handed each
+/// account so it can pick the matching impl. Before this the driver constructed a
+/// `CaldavProvider` unconditionally, which would have spoken CalDAV at Google.
+#[tokio::test]
+async fn every_account_is_polled_through_its_own_provider() {
+    let pool = test_pool().await;
+    seed_account(&pool, "a-dav", "f-dav").await;
+    seed_account(&pool, "a-goog", "f-goog").await;
+    set_account_provider(&pool, "a-goog", pikos_db::sync::PROVIDER_GOOGLE).await;
+
+    let provider = Shared::default()
+        .with_sync(Ok(delta(vec![event("/one.ics", "uid-1")])))
+        .with_sync(Ok(delta(vec![event("/two.ics", "uid-2")])));
+    let seen: RefCell<Vec<(String, String)>> = RefCell::new(vec![]);
+
+    run_sync_loop(
+        triggers(&[SyncTrigger::Interval]),
+        || async { Some(pool.clone()) },
+        |account| {
+            seen.borrow_mut()
+                .push((account.id.clone(), account.provider.clone()));
+            provider.clone()
+        },
+        SchedulerConfig { min_focus_gap: GAP },
+        || {},
+        |_| {},
+    )
+    .await;
+
+    let mut seen = seen.into_inner();
+    seen.sort();
+    assert_eq!(
+        seen,
+        vec![
+            ("a-dav".to_string(), "caldav".to_string()),
+            ("a-goog".to_string(), "google".to_string()),
+        ]
+    );
+    assert_eq!(page_count(&pool).await, 2, "both accounts synced");
 }

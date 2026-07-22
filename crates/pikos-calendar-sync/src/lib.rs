@@ -10,6 +10,7 @@ pub mod engine;
 pub mod google;
 pub mod http;
 pub mod keychain;
+pub mod provider;
 pub mod scheduler;
 
 #[cfg(test)]
@@ -17,8 +18,12 @@ pub mod scheduler;
 mod test_support;
 
 pub use caldav::{CaldavCredentials, CaldavError, CaldavProvider};
-pub use commands::{connect_caldav, disconnect_account, resync_account, CalendarSyncResult};
+pub use commands::{
+    connect_caldav, connect_google, disconnect_account, resync_account, resync_account_auto,
+    CalendarSyncResult,
+};
 pub use engine::{sync_calendar, SyncOutcome};
-pub use google::{GoogleCredentials, GoogleError};
+pub use google::{GoogleCredentials, GoogleError, GoogleProvider};
 pub use keychain::{Keychain, KeychainError};
+pub use provider::AnyProvider;
 pub use scheduler::{run_sync_loop, PassReport, SchedulerConfig, SyncTrigger, TriggerSource};

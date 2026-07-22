@@ -216,6 +216,13 @@ export interface StorageAdapter {
   /** Validate a CalDAV connection (autodiscovery), then persist the account +
    * its discovered (disabled) calendars; credentials go to the OS keychain. */
   connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars>;
+  /** Run the Google OAuth grant (opens the user's browser) and persist the
+   * account + its discovered (disabled) calendars. Resolves only once the user
+   * finishes in the browser, so callers must show a waiting state. */
+  connectGoogleAccount(): Promise<AccountWithCalendars>;
+  /** Whether this build ships the Google OAuth client. False hides the option
+   * rather than offering a connect that can only fail. */
+  googleSyncAvailable(): Promise<boolean>;
   /** Tear down the account's synced pages/folders and remove its keychain entry. */
   disconnectSyncAccount(accountId: string): Promise<void>;
   listSyncCalendars(accountId: string): Promise<SyncCalendar[]>;

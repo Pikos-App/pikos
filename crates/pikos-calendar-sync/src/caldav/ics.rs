@@ -22,7 +22,9 @@ use calcard::{Entry, Parser};
 use chrono::{FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz as ChronoTz;
 
-use pikos_db::sync_delta::{EventCore, EventSchedule, EventUpsert, OccurrenceOverride, Recurrence};
+use pikos_db::sync_delta::{
+    EventCore, EventSchedule, EventUpsert, OccurrenceFidelity, OccurrenceOverride, Recurrence,
+};
 
 use super::error::CaldavError;
 
@@ -289,6 +291,7 @@ fn build_recurrence(
         rrule,
         exdates,
         overrides,
+        fidelity: OccurrenceFidelity::Complete,
     })
 }
 

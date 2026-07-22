@@ -18,6 +18,7 @@ use pikos_db::sync_delta::CalendarProvider;
 use crate::caldav::{CaldavCredentials, CaldavProvider};
 use crate::engine::{sync_calendar, SyncOutcome};
 use crate::keychain::Keychain;
+use crate::provider::AnyProvider;
 
 /// One calendar's resync result, flattened for the frontend status display.
 #[derive(Debug, Serialize)]
@@ -78,23 +79,75 @@ pub async fn connect_caldav(
         .to_blob()
         .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
 
-    let account = match find_dormant_account_impl(pool, PROVIDER_CALDAV, &display_name).await? {
-        Some(existing) => {
-            reactivate_account_impl(pool, &existing.id).await?;
-            existing
-        }
-        None => insert_sync_account_impl(pool, PROVIDER_CALDAV, &display_name, "basic").await?,
-    };
+    let account = claim_account(pool, PROVIDER_CALDAV, &display_name, "basic").await?;
     keychain
         .store(&account.id, &blob)
         .map_err(|e| AppError::Internal(format!("keychain store: {e}")))?;
 
+    let calendars = upsert_calendars(pool, &account.id, &remote).await?;
+    Ok(AccountWithCalendars { account, calendars })
+}
+
+/// Connect a Google account: run the OAuth grant, label the account with the
+/// primary calendar's id (the signed-in email), then persist it and its
+/// (disabled) calendars. `open_browser` is handed the consent URL between binding
+/// the loopback listener and waiting on it — Google's Desktop client type
+/// requires a real browser, and opening one is the caller's concern.
+///
+/// Same dormant-reuse as [`connect_caldav`]: reconnecting an account disconnected
+/// earlier reuses its row so detached pages re-link instead of duplicating.
+pub async fn connect_google<F>(
+    pool: &SqlitePool,
+    keychain: Keychain,
+    open_browser: F,
+) -> AppResult<AccountWithCalendars>
+where
+    F: FnOnce(&str) -> AppResult<()>,
+{
+    let pending = crate::google::begin_authorization().await?;
+    open_browser(pending.authorize_url())?;
+    let credentials = pending.complete().await?;
+
+    // Proves the grant actually reads calendars before anything is persisted —
+    // the same validate-first order connect_caldav uses.
+    let (remote, primary) = crate::google::GoogleProvider::list_with(&credentials).await?;
+    let display_name = primary.unwrap_or_else(|| "Google Calendar".to_string());
+
+    let account = claim_account(pool, PROVIDER_GOOGLE, &display_name, "oauth").await?;
+    crate::google::store(&keychain, &account.id, &credentials)?;
+
+    let calendars = upsert_calendars(pool, &account.id, &remote).await?;
+    Ok(AccountWithCalendars { account, calendars })
+}
+
+/// Reuse the dormant row left by a previous disconnect, else create one. Shared by
+/// both connect paths so reconnect semantics can't drift between providers.
+async fn claim_account(
+    pool: &SqlitePool,
+    provider: &str,
+    display_name: &str,
+    auth_kind: &str,
+) -> AppResult<pikos_db::sync_commands::SyncAccount> {
+    match find_dormant_account_impl(pool, provider, display_name).await? {
+        Some(existing) => {
+            reactivate_account_impl(pool, &existing.id).await?;
+            Ok(existing)
+        }
+        None => insert_sync_account_impl(pool, provider, display_name, auth_kind).await,
+    }
+}
+
+async fn upsert_calendars(
+    pool: &SqlitePool,
+    account_id: &str,
+    remote: &[pikos_db::sync_delta::RemoteCalendar],
+) -> AppResult<Vec<pikos_db::sync_commands::SyncCalendar>> {
     let mut calendars = Vec::with_capacity(remote.len());
-    for rc in &remote {
+    for rc in remote {
         calendars.push(
             upsert_sync_calendar_impl(
                 pool,
-                &account.id,
+                account_id,
                 &rc.calendar_id,
                 &rc.display_name,
                 rc.color.as_deref(),
@@ -102,7 +155,7 @@ pub async fn connect_caldav(
             .await?,
         );
     }
-    Ok(AccountWithCalendars { account, calendars })
+    Ok(calendars)
 }
 
 /// Disconnect an account: unsync each calendar (detach owned pages, delete bare
@@ -143,10 +196,23 @@ async fn provider_of(pool: &SqlitePool, account_id: &str) -> AppResult<Option<St
     )
 }
 
+/// Resync an account through whichever provider its `provider` column names.
+/// The manual-resync entry point; the scheduler resolves the provider itself so
+/// it can reuse one per pass.
+pub async fn resync_account_auto(
+    pool: &SqlitePool,
+    keychain: Keychain,
+    account_id: &str,
+) -> AppResult<Vec<CalendarSyncResult>> {
+    let account = load_account_row(pool, account_id).await?;
+    let provider = AnyProvider::for_account(&account, keychain);
+    resync_account(pool, &provider, account_id).await
+}
+
 /// Resync every enabled calendar on an account through the poll engine. Generic
-/// over the provider so the caller constructs the right one (CalDAV today) and
-/// tests inject a scripted one. Per-calendar transport/credential failures surface
-/// as `offline`/`reconnectNeeded` results rather than aborting the whole account.
+/// over the provider so the caller constructs the right one and tests inject a
+/// scripted one. Per-calendar transport/credential failures surface as
+/// `offline`/`reconnectNeeded` results rather than aborting the whole account.
 pub async fn resync_account<P: CalendarProvider>(
     pool: &SqlitePool,
     provider: &P,

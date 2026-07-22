@@ -24,6 +24,11 @@ async function connectAccount() {
   fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 }
 
+async function connectGoogleAccount() {
+  fireEvent.click(await screen.findByRole("button", { name: "Add account" }));
+  fireEvent.click(await screen.findByRole("button", { name: /Google Calendar/ }));
+}
+
 describe("CalendarSyncSettings", () => {
   it("shows the empty state before any account is connected", async () => {
     renderWithProviders(<CalendarSyncSettings />);
@@ -37,6 +42,33 @@ describe("CalendarSyncSettings", () => {
     expect(await screen.findByText("Personal")).toBeInTheDocument();
     expect(screen.getByText("Work")).toBeInTheDocument();
     // Discovered calendars start disabled → status dot reads "Off".
+    expect(screen.getByLabelText("Personal: Off")).toBeInTheDocument();
+    expect(screen.getByLabelText("Work: Off")).toBeInTheDocument();
+  });
+
+  // Two providers on one account list is the 0.4.0 shape; each keeps its own
+  // calendars and its own disable scope, so neither can shadow the other.
+  it("shows a CalDAV and a Google account side by side", async () => {
+    renderWithProviders(<CalendarSyncSettings />);
+    await connectAccount();
+    expect(await screen.findByText("Personal")).toBeInTheDocument();
+
+    await connectGoogleAccount();
+    expect(await screen.findByText("Team")).toBeInTheDocument();
+    expect(screen.getByText("Personal")).toBeInTheDocument();
+    expect(screen.getByText("Work")).toBeInTheDocument();
+  });
+
+  it("disabling one account's calendar leaves the other account's alone", async () => {
+    renderWithProviders(<CalendarSyncSettings />);
+    await connectAccount();
+    expect(await screen.findByText("Personal")).toBeInTheDocument();
+    await connectGoogleAccount();
+    expect(await screen.findByText("Team")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Sync Team" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Team: Stale")).toBeInTheDocument());
     expect(screen.getByLabelText("Personal: Off")).toBeInTheDocument();
     expect(screen.getByLabelText("Work: Off")).toBeInTheDocument();
   });

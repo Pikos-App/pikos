@@ -5,8 +5,8 @@
 use super::*;
 use crate::pool::test_pool;
 use crate::sync_delta::{
-    EventCore, EventSchedule, EventUpsert, OccurrenceDelta, OccurrenceKind, OccurrenceOverride,
-    Recurrence, Removal, SyncDelta, UpsertItem,
+    EventCore, EventSchedule, EventUpsert, OccurrenceDelta, OccurrenceFidelity, OccurrenceKind,
+    OccurrenceOverride, Recurrence, Removal, SyncDelta, UpsertItem,
 };
 
 // ─── builders ─────────────────────────────────────────────────────────────────
@@ -432,6 +432,7 @@ fn weekly_series() -> UpsertItem {
             "America/New_York",
         ),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
             exdates: vec!["2026-06-15T09:00:00".into()],
             overrides: vec![OccurrenceOverride {
@@ -496,6 +497,7 @@ fn series_v(etag: &str, rrule: &str) -> UpsertItem {
             "America/New_York",
         ),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -545,6 +547,7 @@ async fn occurrence_modify_against_stored_rule() {
         core: core("/series.ics", "uid-series", "v1", "Weekly"),
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: "FREQ=WEEKLY".into(),
             exdates: vec![],
             overrides: vec![],
@@ -609,6 +612,7 @@ fn recurring_1x1(etag: &str) -> UpsertItem {
             "America/New_York",
         ),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
             exdates: vec![],
             overrides: vec![],
@@ -680,6 +684,7 @@ async fn occurrence_cancel_adds_exdate() {
         core: core("/series.ics", "uid-series", "v1", "Weekly"),
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: "FREQ=WEEKLY".into(),
             exdates: vec![],
             overrides: vec![],
@@ -712,6 +717,7 @@ fn series_with_rrule(rrule: &str, tz: &str) -> UpsertItem {
         core: core("/series.ics", "uid-series", "v1", "Standup"),
         schedule: timed("2026-06-01T09:00:00", Some("2026-06-01T09:30:00"), tz),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -789,6 +795,7 @@ async fn floating_and_date_only_until_pass_through() {
             core: core("/allday.ics", "uid-allday", "v1", "Allday"),
             schedule: all_day("2026-06-01", Some("2026-06-02")),
             recurrence: Some(Recurrence {
+                fidelity: OccurrenceFidelity::Complete,
                 rrule: "FREQ=WEEKLY;UNTIL=20260315".into(),
                 exdates: vec![],
                 overrides: vec![],
@@ -822,6 +829,7 @@ async fn every_recurrence_instant_is_wall_clock() {
             "America/New_York",
         ),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260831T130000Z".into(),
             exdates: vec!["2026-06-15T09:00:00".into()],
             overrides: vec![OccurrenceOverride {
@@ -1216,6 +1224,7 @@ async fn occurrence_before_master_in_same_batch_resolves() {
         core: core("/series.ics", "uid-series", "v1", "Weekly"),
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: "FREQ=WEEKLY".into(),
             exdates: vec![],
             overrides: vec![],
@@ -1337,6 +1346,7 @@ fn series(etag: &str, exdates: Vec<String>, overrides: Vec<OccurrenceOverride>) 
         core: core("/series.ics", "uid-series", etag, "Weekly"),
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: "FREQ=WEEKLY".into(),
             exdates,
             overrides,
@@ -1415,6 +1425,253 @@ async fn series_update_drops_a_stale_override() {
     assert!(override_row(&pool, &page_id, "2026-06-15T09:00:00")
         .await
         .is_some());
+}
+
+// ─── bundle rewrite after an occurrence delta (Google's master-only view) ──────
+
+/// The same series as [`series`], delivered as a master-only bundle
+/// (see [`OccurrenceFidelity::MasterOnly`]).
+fn master_only(etag: &str, exdates: Vec<String>, overrides: Vec<OccurrenceOverride>) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core("/series.ics", "uid-series", etag, "Weekly"),
+        schedule: timed("2026-06-01T09:00:00", None, "UTC"),
+        recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::MasterOnly,
+            rrule: "FREQ=WEEKLY".into(),
+            exdates,
+            overrides,
+        }),
+    })
+}
+
+/// A master-only bundle at an explicit pattern, for the carry-forward guard.
+fn master_only_at(etag: &str, rrule: &str, start: &str, tz: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core("/series.ics", "uid-series", etag, "Weekly"),
+        schedule: timed(start, None, tz),
+        recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::MasterOnly,
+            rrule: rrule.into(),
+            exdates: vec![],
+            overrides: vec![],
+        }),
+    })
+}
+
+fn cancel_occurrence(original_date: &str) -> UpsertItem {
+    UpsertItem::Occurrence(OccurrenceDelta {
+        ical_uid: "uid-series".into(),
+        series_ref: "uid-series".into(),
+        original_date: original_date.into(),
+        kind: OccurrenceKind::Cancel,
+    })
+}
+
+fn modify_occurrence(original_date: &str, start: &str) -> UpsertItem {
+    UpsertItem::Occurrence(OccurrenceDelta {
+        ical_uid: "uid-series".into(),
+        series_ref: "uid-series".into(),
+        original_date: original_date.into(),
+        kind: OccurrenceKind::Modify(timed(start, None, "UTC")),
+    })
+}
+
+#[tokio::test]
+async fn master_only_rewrite_preserves_applied_occurrence_deltas() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![master_only("v1", vec![], vec![])]),
+    )
+    .await
+    .unwrap();
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![
+            cancel_occurrence("2026-06-15T09:00:00"),
+            modify_occurrence("2026-06-08T09:00:00", "2026-06-08T11:00:00"),
+        ]),
+    )
+    .await
+    .unwrap();
+
+    // A later master-only change (the title edit case) carries neither the exdate
+    // nor the override. A wholesale rewrite here resurrects every cancellation.
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![master_only("v2", vec![], vec![])]),
+    )
+    .await
+    .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(
+        rule_exdates(&pool, &page_id).await,
+        vec!["2026-06-15T09:00:00"],
+        "cancelled occurrence must not resurrect"
+    );
+    assert_eq!(
+        override_row(&pool, &page_id, "2026-06-08T09:00:00").await,
+        Some(("2026-06-08T11:00:00".into(), None, Some("UTC".into()))),
+        "moved occurrence must survive the rewrite"
+    );
+}
+
+#[tokio::test]
+async fn master_only_rewrite_takes_incoming_over_carried() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![master_only("v1", vec![], vec![])]),
+    )
+    .await
+    .unwrap();
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![
+            cancel_occurrence("2026-06-15T09:00:00"),
+            modify_occurrence("2026-06-08T09:00:00", "2026-06-08T11:00:00"),
+        ]),
+    )
+    .await
+    .unwrap();
+
+    // The bundle carries its own view of the same two occurrences — one already
+    // known exdate plus a new one, and the same override at a different time.
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![master_only(
+            "v2",
+            vec!["2026-06-15T09:00:00".into(), "2026-06-22T09:00:00".into()],
+            vec![ov("2026-06-08T09:00:00", "2026-06-08T14:00:00")],
+        )]),
+    )
+    .await
+    .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(
+        rule_exdates(&pool, &page_id).await,
+        vec!["2026-06-15T09:00:00", "2026-06-22T09:00:00"],
+        "union, deduped"
+    );
+    assert_eq!(override_count(&pool).await, 1, "one row per original_date");
+    assert_eq!(
+        override_row(&pool, &page_id, "2026-06-08T09:00:00").await,
+        Some(("2026-06-08T14:00:00".into(), None, Some("UTC".into())))
+    );
+}
+
+/// Seeds the series then applies one cancellation and one moved occurrence,
+/// leaving exactly the state a later master-only rewrite has to decide about.
+async fn seed_series_with_occurrence_deltas(pool: &sqlx::SqlitePool, seed: UpsertItem) {
+    reconcile(pool, &ctx(), &delta(vec![seed])).await.unwrap();
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![
+            cancel_occurrence("2026-06-15T09:00:00"),
+            modify_occurrence("2026-06-08T09:00:00", "2026-06-08T11:00:00"),
+        ]),
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn master_only_rewrite_drops_carried_when_the_rrule_changes() {
+    let pool = setup().await;
+    seed_series_with_occurrence_deltas(&pool, master_only("v1", vec![], vec![])).await;
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![master_only_at(
+            "v2",
+            "FREQ=WEEKLY;BYDAY=TU",
+            "2026-06-01T09:00:00",
+            "UTC",
+        )]),
+    )
+    .await
+    .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert!(rule_exdates(&pool, &page_id).await.is_empty());
+    assert_eq!(override_count(&pool).await, 0);
+}
+
+#[tokio::test]
+async fn master_only_rewrite_drops_carried_when_the_base_start_moves() {
+    let pool = setup().await;
+    seed_series_with_occurrence_deltas(&pool, master_only("v1", vec![], vec![])).await;
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![master_only_at(
+            "v2",
+            "FREQ=WEEKLY",
+            "2026-06-01T14:00:00",
+            "UTC",
+        )]),
+    )
+    .await
+    .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert!(rule_exdates(&pool, &page_id).await.is_empty());
+    assert_eq!(override_count(&pool).await, 0);
+}
+
+#[tokio::test]
+async fn master_only_rewrite_carries_across_an_until_rewrite() {
+    let pool = setup().await;
+    let rule = "FREQ=WEEKLY;UNTIL=20261231T235959Z";
+    let unchanged =
+        |etag: &str| master_only_at(etag, rule, "2026-06-01T09:00:00", "America/New_York");
+    seed_series_with_occurrence_deltas(&pool, unchanged("v1")).await;
+
+    reconcile(&pool, &ctx(), &delta(vec![unchanged("v2")]))
+        .await
+        .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(
+        rule_exdates(&pool, &page_id).await,
+        vec!["2026-06-15T09:00:00"]
+    );
+    assert_eq!(override_count(&pool).await, 1);
+}
+
+#[tokio::test]
+async fn complete_rewrite_still_clears_a_dropped_exdate() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![series(
+            "v1",
+            vec!["2026-06-15T09:00:00".into()],
+            vec![],
+        )]),
+    )
+    .await
+    .unwrap();
+    // CalDAV's bundle is the whole truth, so an EXDATE it no longer carries was
+    // genuinely un-cancelled upstream — the merge must not leak into this branch.
+    reconcile(&pool, &ctx(), &delta(vec![series("v2", vec![], vec![])]))
+        .await
+        .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert!(rule_exdates(&pool, &page_id).await.is_empty());
 }
 
 #[tokio::test]
@@ -1885,6 +2142,7 @@ fn series_recurring(href: &str, uid: &str, rrule: &str) -> UpsertItem {
             "America/New_York",
         ),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
@@ -2576,6 +2834,7 @@ fn weekly(etag: &str, rrule: &str) -> UpsertItem {
         core: core("/series.ics", "uid-series", etag, "Weekly"),
         schedule: timed("2026-06-01T09:00:00", None, "UTC"),
         recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
             rrule: rrule.into(),
             exdates: vec![],
             overrides: vec![],
