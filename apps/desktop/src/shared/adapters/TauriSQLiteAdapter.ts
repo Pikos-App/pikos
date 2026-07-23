@@ -250,8 +250,8 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<PageSchedule[]>("list_page_schedules", { pageId });
   }
 
-  listPageSchedulesRange(start: string, end: string): Promise<PageSchedule[]> {
-    return invoke<PageSchedule[]>("list_page_schedules_range", { end, start });
+  listPageSchedulesForRules(ruleIds: string[]): Promise<PageSchedule[]> {
+    return invoke<PageSchedule[]>("list_page_schedules_for_rules", { ruleIds });
   }
 
   // ─── Recurrence rules ────────────────────────────────────────────────────────

@@ -155,8 +155,9 @@ export interface StorageAdapter {
   deletePageSchedule(id: string): Promise<void>;
   /** All explicit blocks for a page (no virtual rrule occurrences). */
   listPageSchedules(pageId: string): Promise<PageSchedule[]>;
-  /** All blocks whose date range overlaps [start, end] (YYYY-MM-DD). */
-  listPageSchedulesRange(start: string, end: string): Promise<PageSchedule[]>;
+  /** The given rules' override rows (`ruleId` set), regardless of moved position
+   *  — feeds the calendar's occurrence-exclusion set for cross-week moves. */
+  listPageSchedulesForRules(ruleIds: string[]): Promise<PageSchedule[]>;
 
   // Recurrence rules
   /** A page has at most one rule. Errors if a rule already exists — call getRecurrenceRule first. */

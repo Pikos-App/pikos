@@ -514,15 +514,15 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve(results);
   }
 
-  listPageSchedulesRange(start: string, end: string): Promise<PageSchedule[]> {
+  listPageSchedulesForRules(ruleIds: string[]): Promise<PageSchedule[]> {
+    if (ruleIds.length === 0) return Promise.resolve([]);
+    const wanted = new Set(ruleIds);
     const results = [...this.schedules.values()].filter((s) => {
-      // Match Rust's range query: schedules belonging to a soft-deleted page
-      // are excluded (the SQL joins pages and filters `deleted_at IS NULL`).
+      // Match Rust's query: override rows (rule_id set) for the given rules,
+      // regardless of moved position; schedules of a soft-deleted page excluded
+      // (the SQL joins pages and filters `deleted_at IS NULL`).
       if (this.softDeleted.has(s.pageId)) return false;
-      const sDate = s.scheduledStart.slice(0, 10);
-      const eDate = s.scheduledEnd ? s.scheduledEnd.slice(0, 10) : null;
-      if (eDate === null) return sDate >= start && sDate <= end;
-      return sDate <= end && eDate >= start;
+      return s.ruleId !== undefined && wanted.has(s.ruleId);
     });
     return Promise.resolve(
       results.sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart))

@@ -102,6 +102,22 @@ describe("expandRecurrenceForRange", () => {
     expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
   });
 
+  it("excludes a synced timed exdate stored as full wall-clock (day-keyed)", () => {
+    // A synced cancelled instance stores its exdate as '...THH:MM:SS'; occurrences
+    // key by day, so it must be day-keyed to match — else Mar 9 ghosts.
+    const page = makePage();
+    const rule = makeRule({ rruleExdates: ["2026-03-09T09:00:00"] });
+
+    const occurrences = expandRecurrenceForRange(
+      rule,
+      page,
+      new Date(2026, 2, 2),
+      new Date(2026, 2, 23)
+    );
+
+    expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
+  });
+
   it("excludes dates completed on a recurring series (completedOccurrences)", () => {
     // A completed recurring occurrence is hidden — its done clone renders in its
     // place. Applies to both native and synced under the unified sets model.
@@ -198,6 +214,34 @@ describe("expandRecurrenceForRange", () => {
     ]);
 
     expect(occurrences).toHaveLength(2);
+    expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
+  });
+
+  it("excludes a synced override whose original_date is full wall-clock (day-keyed)", () => {
+    // A synced moved instance stores original_date as '...THH:MM:SS'; day-keying
+    // it is what excludes the original Mar 9 slot beside the moved block.
+    const page = makePage();
+    const rule = makeRule();
+    const overrideSchedule: PageSchedule = {
+      createdAt: "2026-01-01T00:00:00",
+      id: "sched-override-timed",
+      originalDate: "2026-03-09T09:00:00",
+      pageId: "page-1",
+      ruleId: "rule-1",
+      scheduledEnd: "2026-03-16T12:00:00",
+      scheduledStart: "2026-03-16T11:00:00",
+      status: "not_started",
+      timezone: "America/New_York",
+    };
+
+    const occurrences = expandRecurrenceForRange(
+      rule,
+      page,
+      new Date(2026, 2, 2),
+      new Date(2026, 2, 23),
+      [overrideSchedule]
+    );
+
     expect(occurrences.map((o) => o.originalDate)).toEqual(["2026-03-02", "2026-03-16"]);
   });
 

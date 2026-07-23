@@ -275,6 +275,57 @@ appTest("unchecking a synced recurring done clone restores the occurrence @tier2
   ).toHaveCount(1);
 });
 
+// ─── tier2: a moved synced occurrence renders at its new slot + completes ──────
+//
+// The reconciler stores an upstream-moved instance as an override row keyed to
+// its original date; before this, nothing rendered it (an all-day move vanished,
+// a timed move showed only a ghost at the old slot). Now the moved instance
+// renders at its new time as a locked, completable block, and completing it
+// records the ORIGINAL occurrence so the reminder derivation agrees. The seed's
+// "Recurring review" moves one instance ~3 weeks out — past the dense current-week
+// seed, so the block is unobstructed there. (Current-week synced recurring blocks
+// collapse into overflow pills, so grid rendering is otherwise pinned at the
+// useRecurrenceExpansion unit layer.)
+
+/** Page forward until the moved override block (its new slot is 4 PM) renders. */
+async function gotoMovedOverride(app: Page) {
+  const moved = app.getByRole("button", { name: /Recurring review, 4/ });
+  for (let i = 0; i < 6 && (await moved.count()) === 0; i++) {
+    await app.getByRole("button", { name: "Next week" }).click();
+    await app.waitForTimeout(400);
+  }
+  await expect(moved).toBeVisible();
+  return moved;
+}
+
+appTest("a moved synced occurrence renders at its new slot, locked, and completes the original @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openCalendarMode(app);
+
+  const moved = await gotoMovedOverride(app);
+
+  // Locked mirror: opening it shows the read-only synced schedule (a native moved
+  // block would be editable) — the block inherits the series page's lock.
+  await moved.click();
+  const title = app.getByPlaceholder("Untitled");
+  await expect(title).toHaveValue("Recurring review");
+  await expect(title).toHaveAttribute("readonly", "");
+
+  // Complete via the popover's status toggle: routes through the unified
+  // completeSyncedOccurrence keyed on the ORIGINAL occurrence — never a bare
+  // updatePage(status) that the locked mirror rejects with a read-only error.
+  await app.getByRole("button", { name: "Mark done" }).click();
+  await expect(app.getByText(/read-only/i)).toHaveCount(0);
+
+  // The done clone lands at the moved slot (the override drops out once its
+  // original occurrence is completed) — re-open it; its status now reads Done. A
+  // mis-keyed occurrence would reject with no clone, leaving the slot open.
+  await app.getByRole("button", { name: /Recurring review, 4/ }).click();
+  await expect(app.getByRole("button", { name: "Mark not done" })).toBeVisible();
+});
+
 // ─── tier2: description-changed notice + read-only mirror metadata (B1) ───────
 //
 // When an event's upstream description changes after the user has edited the body,

@@ -194,6 +194,15 @@
       ]
     },
     {
+      "end": "2026-03-02T10:00:00", "exdates": ["2026-03-16T09:00:00"], "name": "weekly timed exdate (full wall-clock)", "rangeEnd": "2026-03-31T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=MO", "start": "2026-03-02T09:00:00",
+      "expected": [
+        { "originalDate": "2026-03-02", "scheduledEnd": "2026-03-02T10:00:00", "scheduledStart": "2026-03-02T09:00:00" },
+        { "originalDate": "2026-03-09", "scheduledEnd": "2026-03-09T10:00:00", "scheduledStart": "2026-03-09T09:00:00" },
+        { "originalDate": "2026-03-23", "scheduledEnd": "2026-03-23T10:00:00", "scheduledStart": "2026-03-23T09:00:00" },
+        { "originalDate": "2026-03-30", "scheduledEnd": "2026-03-30T10:00:00", "scheduledStart": "2026-03-30T09:00:00" }
+      ]
+    },
+    {
       "end": null, "name": "all-day weekly", "rangeEnd": "2026-03-31T00:00:00", "rangeStart": "2026-03-01T00:00:00", "rrule": "FREQ=WEEKLY;BYDAY=MO", "start": "2026-03-02", "exdates": [],
       "expected": [
         { "originalDate": "2026-03-02", "scheduledEnd": null, "scheduledStart": "2026-03-02" },

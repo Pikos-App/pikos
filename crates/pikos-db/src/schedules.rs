@@ -422,7 +422,7 @@ pub async fn list_page_schedules_impl(
     pool: &sqlx::SqlitePool,
     page_id: &str,
 ) -> AppResult<Vec<PageSchedule>> {
-    // Filter trashed pages (mirrors list_page_schedules_range_impl). Desktop
+    // Filter trashed pages (mirrors list_page_schedules_for_rules_impl). Desktop
     // calls this from scheduleOnce / clearSchedule / rescheduleVirtualOccurrence —
     // without the guard a trashed page's schedules leak back into the UI.
     let rows = sqlx::query_as::<_, PageScheduleRow>(
@@ -437,30 +437,33 @@ pub async fn list_page_schedules_impl(
     Ok(rows.into_iter().map(PageSchedule::from).collect())
 }
 
-/// Returns all schedule rows that overlap [start, end] (YYYY-MM-DD).
-/// All-day single: scheduled_end IS NULL, start must be within range.
-/// Multi-day / timed with end: overlaps if start <= range_end AND end >= range_start.
-pub async fn list_page_schedules_range_impl(
+/// Returns the override rows (`rule_id` set) for the given recurrence rules,
+/// regardless of where each occurrence was moved. The calendar's exclusion set
+/// needs an override's `original_date` even when its moved `scheduled_start`
+/// lands in another week — a range query keyed on the moved position misses it,
+/// ghost-rendering the original slot. Trashed pages excluded (mirrors
+/// `list_page_schedules_impl`).
+pub async fn list_page_schedules_for_rules_impl(
     pool: &sqlx::SqlitePool,
-    start: &str,
-    end: &str,
+    rule_ids: &[String],
 ) -> AppResult<Vec<PageSchedule>> {
-    let rows = sqlx::query_as::<_, PageScheduleRow>(
+    if rule_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
         "SELECT page_schedules.* FROM page_schedules
          JOIN pages ON pages.id = page_schedules.page_id
-         WHERE pages.deleted_at IS NULL
-           AND ((page_schedules.scheduled_end IS NULL AND date(page_schedules.scheduled_start) BETWEEN ? AND ?)
-             OR (page_schedules.scheduled_end IS NOT NULL
-                 AND date(page_schedules.scheduled_start) <= ?
-                 AND date(page_schedules.scheduled_end)   >= ?))
-         ORDER BY page_schedules.scheduled_start ASC",
-    )
-    .bind(start)
-    .bind(end)
-    .bind(end)
-    .bind(start)
-    .fetch_all(pool)
-    .await?;
+         WHERE pages.deleted_at IS NULL AND page_schedules.rule_id IN (",
+    );
+    let mut ids = builder.separated(", ");
+    for id in rule_ids {
+        ids.push_bind(id);
+    }
+    ids.push_unseparated(") ORDER BY page_schedules.scheduled_start ASC");
+    let rows = builder
+        .build_query_as::<PageScheduleRow>()
+        .fetch_all(pool)
+        .await?;
     Ok(rows.into_iter().map(PageSchedule::from).collect())
 }
 

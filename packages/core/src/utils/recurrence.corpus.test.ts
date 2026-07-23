@@ -244,6 +244,17 @@ const EXPAND_CASES: ExpandCase[] = [
     start: "2026-03-02T09:00:00",
   },
   {
+    // A synced cancelled instance: the exdate is stored as full wall-clock, but
+    // occurrences match by day. Both engines must day-key it and drop Mar 16.
+    end: "2026-03-02T10:00:00",
+    exdates: ["2026-03-16T09:00:00"],
+    name: "weekly timed exdate (full wall-clock)",
+    rangeEnd: "2026-03-31T00:00:00",
+    rangeStart: "2026-03-01T00:00:00",
+    rrule: "FREQ=WEEKLY;BYDAY=MO",
+    start: "2026-03-02T09:00:00",
+  },
+  {
     end: null,
     name: "all-day weekly",
     rangeEnd: "2026-03-31T00:00:00",

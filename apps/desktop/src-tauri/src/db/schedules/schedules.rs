@@ -42,13 +42,12 @@ pub async fn list_page_schedules(
 }
 
 #[tauri::command]
-pub async fn list_page_schedules_range(
+pub async fn list_page_schedules_for_rules(
     state: State<'_, DbState>,
-    start: String,
-    end: String,
+    rule_ids: Vec<String>,
 ) -> AppResult<Vec<PageSchedule>> {
     let pool = state.get_pool().await?;
-    list_page_schedules_range_impl(&pool, &start, &end).await
+    list_page_schedules_for_rules_impl(&pool, &rule_ids).await
 }
 
 #[tauri::command]

@@ -535,73 +535,101 @@ async fn list_page_schedules_returns_in_chronological_order() {
     assert_eq!(schedules[1].scheduled_start, "2026-05-22T09:00:00");
 }
 
-#[tokio::test]
-async fn list_page_schedules_range_excludes_soft_deleted_pages() {
-    let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("alive", "Alive"))
-        .await
-        .unwrap();
-    insert_test_page(&pool, TestPage::new("dead", "Dead"))
-        .await
-        .unwrap();
+/// Inserts a bare recurrence rule (FK target for override rows).
+async fn insert_test_rule(pool: &sqlx::SqlitePool, id: &str, page_id: &str) {
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules
+         (id, page_id, rrule, rrule_exdates, scheduled_start, timezone, created_at)
+         VALUES (?, ?, 'FREQ=WEEKLY;BYDAY=MO', '[]', '2026-05-04T09:00:00', 'UTC', '2026-01-01T00:00:00')",
+    )
+    .bind(id)
+    .bind(page_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
 
+#[tokio::test]
+async fn list_page_schedules_for_rules_excludes_soft_deleted_pages() {
+    let pool = test_pool().await;
     for id in ["alive", "dead"] {
+        insert_test_page(&pool, TestPage::new(id, id)).await.unwrap();
+        insert_test_rule(&pool, &format!("rule-{id}"), id).await;
         create_page_schedule_impl(
             &pool,
             NewPageSchedule {
                 page_id: id.into(),
-                scheduled_start: "2026-05-21T10:00:00".into(),
+                scheduled_start: "2026-05-11T10:00:00".into(),
                 scheduled_end: None,
                 timezone: None,
-                rule_id: None,
-                original_date: None,
+                rule_id: Some(format!("rule-{id}")),
+                original_date: Some("2026-05-11T09:00:00".into()),
             },
         )
         .await
         .unwrap();
     }
 
-    // Soft-delete the second page.
     sqlx::query("UPDATE pages SET deleted_at = datetime('now') WHERE id = 'dead'")
         .execute(&pool)
         .await
         .unwrap();
 
-    let in_range = list_page_schedules_range_impl(&pool, "2026-05-21", "2026-05-21")
+    let rows = list_page_schedules_for_rules_impl(&pool, &["rule-alive".into(), "rule-dead".into()])
         .await
         .unwrap();
-    assert_eq!(in_range.len(), 1, "soft-deleted page must be filtered out");
-    assert_eq!(in_range[0].page_id, "alive");
+    assert_eq!(rows.len(), 1, "soft-deleted page's override must be filtered");
+    assert_eq!(rows[0].page_id, "alive");
 }
 
 #[tokio::test]
-async fn list_page_schedules_range_filters_window() {
+async fn list_page_schedules_for_rules_returns_moved_override_regardless_of_position() {
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p1", "P1"))
         .await
         .unwrap();
+    insert_test_rule(&pool, "rule-a", "p1").await;
 
-    for date in ["2026-05-01", "2026-05-15", "2026-05-30"] {
+    // Two overrides of rule-a: one in-week, one moved months out. Both must
+    // return — the calendar excludes an original slot even when the instance
+    // moved to another week. The plain (non-override) block is filtered out.
+    for (original, moved) in [
+        ("2026-05-11T09:00:00", "2026-05-11T11:00:00"),
+        ("2026-05-18T09:00:00", "2026-09-01T11:00:00"),
+    ] {
         create_page_schedule_impl(
             &pool,
             NewPageSchedule {
                 page_id: "p1".into(),
-                scheduled_start: format!("{date}T09:00:00"),
+                scheduled_start: moved.into(),
                 scheduled_end: None,
                 timezone: None,
-                rule_id: None,
-                original_date: None,
+                rule_id: Some("rule-a".into()),
+                original_date: Some(original.into()),
             },
         )
         .await
         .unwrap();
     }
+    create_page_schedule_impl(
+        &pool,
+        NewPageSchedule {
+            page_id: "p1".into(),
+            scheduled_start: "2026-05-04T10:00:00".into(),
+            scheduled_end: None,
+            timezone: None,
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
 
-    let window = list_page_schedules_range_impl(&pool, "2026-05-10", "2026-05-20")
+    let rows = list_page_schedules_for_rules_impl(&pool, &["rule-a".into()])
         .await
         .unwrap();
-    assert_eq!(window.len(), 1, "only the 2026-05-15 schedule overlaps");
-    assert_eq!(window[0].scheduled_start, "2026-05-15T09:00:00");
+    let originals: Vec<_> = rows.iter().filter_map(|r| r.original_date.clone()).collect();
+    assert_eq!(originals, ["2026-05-11T09:00:00", "2026-05-18T09:00:00"]);
 }
 
 #[tokio::test]

@@ -116,6 +116,40 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
   });
   mock.markPageSynced(recurring.id, { state: "active", timezone: "Europe/London" });
 
+  // A synced series with a cancelled instance (a timed EXDATE) and one moved to a
+  // later week (an override row with a timed original_date), both stored as full
+  // wall-clock — exercises the day-keyed exclusion so neither ghosts at its
+  // original slot. Exceptions are seeded before markPageSynced locks the mirror.
+  const reviewStart = at(today, 0, 14, 0);
+  const reviewEnd = at(today, 0, 14, 30);
+  const review = await adapter.createPage({
+    content: "",
+    folderId: personal,
+    priority: 0,
+    scheduledEnd: reviewEnd,
+    scheduledStart: reviewStart,
+    status: "not_started",
+    tags: [],
+    title: "Recurring review",
+  });
+  const reviewRule = await adapter.createRecurrenceRule({
+    pageId: review.id,
+    rrule: "FREQ=WEEKLY",
+    scheduledEnd: reviewEnd,
+    scheduledStart: reviewStart,
+    timezone: "America/New_York",
+  });
+  await adapter.addRuleExdates(reviewRule.id, [at(today, 7, 14, 0)]);
+  await adapter.createPageSchedule({
+    originalDate: at(today, 14, 14, 0),
+    pageId: review.id,
+    ruleId: reviewRule.id,
+    scheduledEnd: at(today, 24, 16, 30),
+    scheduledStart: at(today, 24, 16, 0),
+    timezone: "America/New_York",
+  });
+  mock.markPageSynced(review.id, { state: "active", timezone: "America/New_York" });
+
   // Work: cross-zone (Tokyo) + a detached page (editable, broken-sync icon).
   await synced(work, "Tokyo sync", at(today, 1, 8, 0), at(today, 1, 8, 30), "Asia/Tokyo", "active");
   await synced(

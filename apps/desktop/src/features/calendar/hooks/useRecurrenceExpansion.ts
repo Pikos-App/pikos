@@ -6,7 +6,7 @@ import type {
   RawRuleExpansion,
   VirtualOccurrence,
 } from "@pikos/core";
-import { formatDateOnly, rawExpandRule } from "@pikos/core";
+import { dateKey, formatDateOnly, rawExpandRule } from "@pikos/core";
 import { addDays } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -15,8 +15,10 @@ interface UseRecurrenceExpansionParams {
   recurrenceRules: PageRecurrenceRule[];
   /** The days currently visible in the week grid. */
   days: Date[];
-  /** Fetch materialised schedule rows for a date range. */
-  listSchedulesRange: (start: string, end: string) => Promise<PageSchedule[]>;
+  /** Fetch the given rules' materialised override rows, regardless of where each
+   *  was moved. Keyed by rule (not range) so an override moved out of the visible
+   *  week still excludes its original slot — a range fetch misses it entirely. */
+  listOverridesForRules: (ruleIds: string[]) => Promise<PageSchedule[]>;
   /** Batched raw rrule expansion via the Rust engine (rule EXDATEs applied;
    * completed/skip union NOT applied — that stays here, client-side). */
   expandRecurrenceRange: (
@@ -29,6 +31,17 @@ interface UseRecurrenceExpansionParams {
   useRustEngine?: boolean;
 }
 
+/** Day-keyed union of a series' completed and skipped occurrence dates. A synced
+ * timed entry is stored as full wall-clock, so it must be day-keyed to match the
+ * day-only occurrence key (see dateKey). */
+function completedOrSkippedKeys(page: PageSummary): Set<string> {
+  return new Set(
+    [...Object.keys(page.completedOccurrences ?? {}), ...(page.skippedOccurrences ?? [])].map(
+      dateKey
+    )
+  );
+}
+
 /** Applies the client-side exclusion union (completed ∪ skip ∪ materialised
  * overrides) and the own-date head suppression to a rule's raw occurrences,
  * shaping each survivor into a VirtualOccurrence. */
@@ -36,15 +49,12 @@ function toVirtuals(
   raw: RawOccurrence[],
   page: PageSummary,
   rule: PageRecurrenceRule,
-  rangeSchedules: PageSchedule[]
+  overrideSchedules: PageSchedule[]
 ): VirtualOccurrence[] {
-  const excluded = new Set<string>([
-    ...Object.keys(page.completedOccurrences ?? {}),
-    ...(page.skippedOccurrences ?? []),
-    ...rangeSchedules
-      .filter((s) => s.ruleId === rule.id && s.originalDate)
-      .map((s) => s.originalDate!),
-  ]);
+  const excluded = completedOrSkippedKeys(page);
+  for (const s of overrideSchedules) {
+    if (s.ruleId === rule.id && s.originalDate) excluded.add(dateKey(s.originalDate));
+  }
   // Only the head's own-date virtual is suppressed (the real head block renders
   // it). Vacated dates need no filter: a head move shifts the rule anchor in
   // lockstep so pre-head dates stop being emitted, and a completion/skip advance
@@ -67,6 +77,50 @@ function toVirtuals(
   return out;
 }
 
+/** A moved synced occurrence, shaped from its series page + the override row's
+ * zoned schedule. Deliberately NOT a `VirtualOccurrence`: it carries no
+ * `isVirtual`, so the block renders the page's synced treatment (checkbox +
+ * sync icon + `PageBlockPopover`, schedule locked) rather than the recurring
+ * repeat-glyph — the moved instance reads as a real event the user can complete.
+ * `originalDate` (day-key) is the completion key, so checking it records the
+ * *original* occurrence (agreeing with the reminder derivation), not the day it
+ * was moved to. */
+type OverrideBlock = PageSummary & { originalDate: string };
+
+/** Shapes each synced override row into a locked, completable block at its moved
+ * time. Excludes overrides whose original occurrence is already completed or
+ * skipped — its done clone renders instead, and a rendered override beside it
+ * would double the slot. Synced-only: a native reschedule re-homes via a clone +
+ * exdate, never an override row (`ruleId` is only set for synced series), and the
+ * `scheduleLocked` gate skips a detached series that has unlocked again. */
+function toOverrideBlocks(
+  rules: PageRecurrenceRule[],
+  pages: PageSummary[],
+  overrideSchedules: PageSchedule[]
+): OverrideBlock[] {
+  const rulePage = new Map<string, PageSummary>();
+  for (const rule of rules) {
+    const page = pages.find((p) => p.id === rule.pageId);
+    if (page) rulePage.set(rule.id, page);
+  }
+
+  const out: OverrideBlock[] = [];
+  for (const s of overrideSchedules) {
+    if (!s.ruleId || !s.originalDate) continue;
+    const page = rulePage.get(s.ruleId);
+    if (!page || !page.scheduleLocked) continue;
+    const originalKey = dateKey(s.originalDate);
+    if (completedOrSkippedKeys(page).has(originalKey)) continue;
+    out.push({
+      ...page,
+      originalDate: originalKey,
+      scheduledEnd: s.scheduledEnd ?? null,
+      scheduledStart: s.scheduledStart,
+    });
+  }
+  return out;
+}
+
 /**
  * Returns pages merged with virtual rrule occurrences for the visible range, so
  * the calendar renders both identically. Expansion runs in the Rust engine over
@@ -78,12 +132,12 @@ function toVirtuals(
 export function useRecurrenceExpansion({
   days,
   expandRecurrenceRange,
-  listSchedulesRange,
+  listOverridesForRules,
   pages,
   recurrenceRules,
   useRustEngine = true,
 }: UseRecurrenceExpansionParams): (PageSummary | VirtualOccurrence)[] {
-  const [rangeSchedules, setRangeSchedules] = useState<PageSchedule[]>([]);
+  const [overrideSchedules, setOverrideSchedules] = useState<PageSchedule[]>([]);
   const schedulesAbortRef = useRef(0);
 
   // null until the first IPC batch resolves; a Map (rule id → raw occurrences)
@@ -109,20 +163,24 @@ export function useRecurrenceExpansion({
     )
     .join("|");
 
+  // Fetch depends only on the rule set (position-independent), so `rulesKey`
+  // drives it. Range stays in the deps as a cheap refetch-on-nav safety net for
+  // an override changed out-of-band since the last rule edit — one batched call.
   useEffect(() => {
     if (!startStr || !endStr || ruleCount === 0) return;
 
+    const ruleIds = recurrenceRules.map((r) => r.id);
     const token = ++schedulesAbortRef.current;
-    void listSchedulesRange(startStr, endStr).then((schedules) => {
+    void listOverridesForRules(ruleIds).then((schedules) => {
       if (token !== schedulesAbortRef.current) return;
-      setRangeSchedules((prev) => {
+      setOverrideSchedules((prev) => {
         if (prev.length === schedules.length && prev.every((p, i) => p.id === schedules[i]?.id)) {
           return prev;
         }
         return schedules;
       });
     });
-  }, [startStr, endStr, ruleCount]);
+  }, [startStr, endStr, rulesKey]);
 
   useEffect(() => {
     if (!useRustEngine || !startStr || !endStr || ruleCount === 0) return;
@@ -168,9 +226,13 @@ export function useRecurrenceExpansion({
     // rrule.js for every rule.
     const ipcRaw = useRustEngine ? rawExpansion?.get(rule.id) : undefined;
     const raw = ipcRaw ?? rawExpandRule(rule, page, rangeStart, rangeEnd);
-    allVirtual.push(...toVirtuals(raw, page, rule, rangeSchedules));
+    allVirtual.push(...toVirtuals(raw, page, rule, overrideSchedules));
   }
 
-  if (allVirtual.length === 0) return visiblePages;
-  return [...visiblePages, ...allVirtual];
+  // A synced override's original slot is already excluded from the virtuals
+  // above; render the moved instance at its new slot beside them.
+  const overrideBlocks = toOverrideBlocks(recurrenceRules, pages, overrideSchedules);
+
+  if (allVirtual.length === 0 && overrideBlocks.length === 0) return visiblePages;
+  return [...visiblePages, ...allVirtual, ...overrideBlocks];
 }

@@ -451,6 +451,12 @@ export function DayColumn({
               ? Math.max(resizeGhost.bottom - block.top, 0)
               : undefined;
 
+          // Virtual/override occurrences share the series page id, so a moved
+          // override and a same-day occurrence of the same series would collide
+          // on a bare id key — disambiguate by occurrence date.
+          const occDate = (block.page as { originalDate?: string }).originalDate;
+          const blockKey = occDate ? `${block.page.id}:${occDate}` : block.page.id;
+
           return (
             <PageBlock
               autoOpenPopover={autoOpen}
@@ -458,7 +464,7 @@ export function DayColumn({
               folderColor={folderColor}
               isCompactWidth={isCompactWidth}
               isDragging={isBeingDragged}
-              key={block.page.id}
+              key={blockKey}
               onAutoOpenConsumed={onAutoOpenConsumed}
               onDoubleClick={onPageDoubleClick}
               onDragStart={(_clientX, clientY) => {

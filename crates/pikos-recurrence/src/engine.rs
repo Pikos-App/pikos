@@ -249,7 +249,10 @@ pub fn expand_range(
     let range_start = parse_dt(range_start)?;
     let range_end = parse_dt(range_end)?;
     let duration = timed_duration(&anchor, end);
-    let excluded: HashSet<&str> = exdates.iter().map(String::as_str).collect();
+    // Day-key the exdates (like `oldest_open_occurrence`/`occurrences_in_window`):
+    // a synced timed exdate is stored as full wall-clock, but occurrences match by
+    // their day-only key, so an un-keyed timed exdate never matches and ghosts.
+    let excluded: HashSet<&str> = exdates.iter().map(|s| date_key(s)).collect();
 
     let anchor_time = anchor.time.unwrap_or(NaiveTime::MIN);
     let mut out = Vec::new();

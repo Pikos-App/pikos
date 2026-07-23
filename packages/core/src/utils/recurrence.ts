@@ -25,7 +25,7 @@ import {
 import { RRule } from "rrule";
 
 import type { PageRecurrenceRule, PageSchedule, PageSummary, RawOccurrence } from "../types";
-import { formatDateOnly, formatLocalISO, isAllDayIso, parseLocalISO } from "./dates";
+import { dateKey, formatDateOnly, formatLocalISO, isAllDayIso, parseLocalISO } from "./dates";
 
 export interface VirtualOccurrence extends PageSummary {
   /** True for virtual rrule-expanded occurrences (not materialised in page_schedules). */
@@ -57,14 +57,18 @@ export function expandRecurrenceForRange(
   // (its done clone renders in its place) and skipped (dismissed). Sets apply to
   // BOTH native and synced series under the unified model; the base occurrence (the
   // head) is suppressed separately in `useRecurrenceExpansion`.
-  const excludedDates = new Set<string>([
-    ...rule.rruleExdates,
-    ...existingSchedules
-      .filter((s) => s.ruleId === rule.id && s.originalDate)
-      .map((s) => s.originalDate!),
-    ...(page.completedOccurrences ? Object.keys(page.completedOccurrences) : []),
-    ...(page.skippedOccurrences ?? []),
-  ]);
+  // Day-key every entry — a synced timed exdate/override is full wall-clock and
+  // must match the day-only occurrence key below (see dateKey).
+  const excludedDates = new Set<string>(
+    [
+      ...rule.rruleExdates,
+      ...existingSchedules
+        .filter((s) => s.ruleId === rule.id && s.originalDate)
+        .map((s) => s.originalDate!),
+      ...(page.completedOccurrences ? Object.keys(page.completedOccurrences) : []),
+      ...(page.skippedOccurrences ?? []),
+    ].map(dateKey)
+  );
 
   // Parse the base occurrence times to compute duration offset.
   const baseStart = parseLocalISO(rule.scheduledStart);

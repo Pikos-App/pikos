@@ -8,6 +8,7 @@ export type { ParseResult, ParsedInput } from "./nlp/parser";
 export * from "./storage";
 export * from "./types";
 export {
+  dateKey,
   formatDateOnly,
   formatLocalISO,
   getLocalTimezone,

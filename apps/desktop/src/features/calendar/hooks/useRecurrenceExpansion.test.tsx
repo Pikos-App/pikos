@@ -64,6 +64,33 @@ function makeRule(overrides: Partial<PageRecurrenceRule> = {}): PageRecurrenceRu
   };
 }
 
+function makeOverride(
+  originalDate: string,
+  scheduledStart: string,
+  scheduledEnd?: string
+): PageSchedule {
+  return {
+    createdAt: "2026-01-01T00:00:00",
+    id: `sched-${originalDate}-${scheduledStart}`,
+    originalDate,
+    pageId: "page-1",
+    ruleId: "rule-1",
+    scheduledStart,
+    ...(scheduledEnd ? { scheduledEnd } : {}),
+    status: "not_started",
+    timezone: "America/New_York",
+  };
+}
+
+/** The non-virtual (real, completable) block rendered at `scheduledStart` — a
+ * moved synced override, distinct from a recurring virtual. */
+function movedBlock(
+  list: (PageSummary | VirtualOccurrence)[],
+  scheduledStart: string
+): PageSummary | VirtualOccurrence | undefined {
+  return list.find((p) => !("isVirtual" in p) && p.scheduledStart === scheduledStart);
+}
+
 function weekDays(start: Date): Date[] {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(start);
@@ -81,7 +108,7 @@ describe("useRecurrenceExpansion", () => {
       useRecurrenceExpansion({
         days: weekDays(new Date(2026, 2, 2)),
         expandRecurrenceRange: EXPAND,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages,
         recurrenceRules: [],
       })
@@ -98,13 +125,13 @@ describe("useRecurrenceExpansion", () => {
       useRecurrenceExpansion({
         days,
         expandRecurrenceRange: EXPAND,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages,
         recurrenceRules: [rule],
       })
     );
 
-    // No async fetches needed since listSchedulesRange returns []
+    // No async fetches needed since listOverridesForRules returns []
     await waitFor(() => {
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       expect(virtual).toHaveLength(1);
@@ -124,7 +151,7 @@ describe("useRecurrenceExpansion", () => {
       useRecurrenceExpansion({
         days,
         expandRecurrenceRange: EXPAND,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages: [head],
         recurrenceRules: [rule],
       })
@@ -161,7 +188,7 @@ describe("useRecurrenceExpansion", () => {
       useRecurrenceExpansion({
         days,
         expandRecurrenceRange: EXPAND,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages: [head],
         recurrenceRules: [rule],
       })
@@ -196,13 +223,13 @@ describe("useRecurrenceExpansion", () => {
       timezone: "America/New_York",
     };
 
-    const listSchedulesRange = vi.fn().mockResolvedValue([overrideSchedule]);
+    const listOverridesForRules = vi.fn().mockResolvedValue([overrideSchedule]);
 
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days,
         expandRecurrenceRange: EXPAND,
-        listSchedulesRange,
+        listOverridesForRules,
         pages,
         recurrenceRules: [rule],
       })
@@ -213,6 +240,247 @@ describe("useRecurrenceExpansion", () => {
       // No virtual on Mar 9 — there's a materialised override row for it.
       expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
     });
+  });
+
+  it("excludes a synced override stored as full wall-clock (day-keyed)", async () => {
+    // A synced timed override stores its original_date as '...THH:MM:SS', but the
+    // occurrence key is day-only — the exclusion set must day-key it to match,
+    // else Mar 9 ghosts beside the moved instance.
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+    const rule = makeRule();
+    const overrideSchedule: PageSchedule = {
+      createdAt: "2026-01-01T00:00:00",
+      id: "sched-override-timed",
+      originalDate: "2026-03-09T09:00:00",
+      pageId: "page-1",
+      ruleId: "rule-1",
+      scheduledEnd: "2026-03-09T12:00:00",
+      scheduledStart: "2026-03-09T11:00:00",
+      status: "not_started",
+      timezone: "America/New_York",
+    };
+    const listOverridesForRules = vi.fn().mockResolvedValue([overrideSchedule]);
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules,
+        pages,
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
+    });
+  });
+
+  it("excludes the original slot of an override moved out of the visible week (cross-week)", async () => {
+    // The override's moved scheduledStart lands weeks away, so a range fetch keyed
+    // on that position would never return it — but listOverridesForRules is keyed
+    // by rule, so the original Mar 9 slot still excludes.
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
+    const rule = makeRule();
+    const movedOverride: PageSchedule = {
+      createdAt: "2026-01-01T00:00:00",
+      id: "sched-override-moved",
+      originalDate: "2026-03-09T09:00:00",
+      pageId: "page-1",
+      ruleId: "rule-1",
+      scheduledEnd: "2026-05-01T12:00:00",
+      scheduledStart: "2026-05-01T11:00:00",
+      status: "not_started",
+      timezone: "America/New_York",
+    };
+    const listOverridesForRules = vi.fn().mockResolvedValue([movedOverride]);
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules,
+        pages,
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
+    });
+    expect(listOverridesForRules).toHaveBeenCalledWith(["rule-1"]);
+  });
+
+  it("renders a synced override at its moved slot as a locked, completable block (not a virtual)", async () => {
+    // A synced weekly series whose Mar 9 occurrence was moved upstream to Mar 11
+    // 11am. Mar 9's original slot is excluded from the virtuals; the moved instance
+    // renders at Mar 11 as a plain (non-virtual) block that inherits the page's
+    // synced lock and carries the original occurrence's day-key.
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00", scheduleLocked: true })];
+    const rule = makeRule();
+    const movedOverride: PageSchedule = {
+      createdAt: "2026-01-01T00:00:00",
+      id: "sched-override-moved",
+      originalDate: "2026-03-09T09:00:00",
+      pageId: "page-1",
+      ruleId: "rule-1",
+      scheduledEnd: "2026-03-11T12:00:00",
+      scheduledStart: "2026-03-11T11:00:00",
+      status: "not_started",
+      timezone: "America/New_York",
+    };
+    const listOverridesForRules = vi.fn().mockResolvedValue([movedOverride]);
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)), // Mar 9–15
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules,
+        pages,
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      const moved = result.current.find(
+        (p) => !("isVirtual" in p) && p.scheduledStart === "2026-03-11T11:00:00"
+      );
+      expect(moved).toBeDefined();
+      expect(moved?.id).toBe("page-1");
+      // Inherits the page's synced lock (drag/resize suppressed downstream).
+      expect(moved?.scheduleLocked).toBe(true);
+      // Keyed to the ORIGINAL occurrence day so completing it records that date.
+      expect((moved as { originalDate?: string }).originalDate).toBe("2026-03-09");
+    });
+    // No virtual resurrects the original Mar 9 slot.
+    const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+    expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
+  });
+
+  it("renders a moved all-day synced override at its new date", async () => {
+    const pages = [makePage({ scheduledStart: "2026-03-02", scheduleLocked: true })];
+    const rule = makeRule({ rrule: "FREQ=WEEKLY;BYDAY=MO", scheduledStart: "2026-03-02" });
+    const movedOverride: PageSchedule = {
+      createdAt: "2026-01-01T00:00:00",
+      id: "sched-allday-moved",
+      originalDate: "2026-03-09",
+      pageId: "page-1",
+      ruleId: "rule-1",
+      scheduledStart: "2026-03-11",
+      status: "not_started",
+      timezone: "America/New_York",
+    };
+    const listOverridesForRules = vi.fn().mockResolvedValue([movedOverride]);
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules,
+        pages,
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      const moved = result.current.find(
+        (p) => !("isVirtual" in p) && p.scheduledStart === "2026-03-11"
+      );
+      expect(moved).toBeDefined();
+      expect((moved as { originalDate?: string }).originalDate).toBe("2026-03-09");
+    });
+  });
+
+  it("excludes a synced override whose original occurrence is completed", async () => {
+    // Daily series. Mar 10 is done (its clone renders), so its moved override at
+    // Mar 11 5pm must NOT render — else the completed occurrence shows twice. A
+    // second override (Mar 12 → Mar 13 5pm, still open) is the positive anchor:
+    // once it renders, the whole batch was applied, so the excluded slot's
+    // absence is real and not just an unresolved fetch.
+    const pages = [
+      makePage({
+        completedOccurrences: { "2026-03-10": "clone-1" },
+        scheduledStart: "2026-03-02T09:00:00",
+        scheduleLocked: true,
+      }),
+    ];
+    const rule = makeRule({ rrule: "FREQ=DAILY" });
+    const overrides: PageSchedule[] = [
+      makeOverride("2026-03-10T09:00:00", "2026-03-11T17:00:00"),
+      makeOverride("2026-03-12T09:00:00", "2026-03-13T17:00:00"),
+    ];
+    const listOverridesForRules = vi.fn().mockResolvedValue(overrides);
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules,
+        pages,
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => expect(movedBlock(result.current, "2026-03-13T17:00:00")).toBeDefined());
+    expect(movedBlock(result.current, "2026-03-11T17:00:00")).toBeUndefined();
+  });
+
+  it("excludes a synced override whose original occurrence is skipped", async () => {
+    const pages = [
+      makePage({
+        scheduledStart: "2026-03-02T09:00:00",
+        scheduleLocked: true,
+        skippedOccurrences: ["2026-03-10"],
+      }),
+    ];
+    const rule = makeRule({ rrule: "FREQ=DAILY" });
+    const overrides: PageSchedule[] = [
+      makeOverride("2026-03-10T09:00:00", "2026-03-11T17:00:00"), // skipped → excluded
+      makeOverride("2026-03-12T09:00:00", "2026-03-13T17:00:00"), // anchor
+    ];
+    const listOverridesForRules = vi.fn().mockResolvedValue(overrides);
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules,
+        pages,
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => expect(movedBlock(result.current, "2026-03-13T17:00:00")).toBeDefined());
+    expect(movedBlock(result.current, "2026-03-11T17:00:00")).toBeUndefined();
+  });
+
+  it("does not render an override block for a non-synced (unlocked) series", async () => {
+    // Guards toOverrideBlocks' scheduleLocked gate (override rows are synced-only).
+    // Signal that the fetch applied via the Mar 9 virtual dropping out — the override
+    // excludes its own slot locked or not — then assert no moved block rendered.
+    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })]; // scheduleLocked: false
+    const rule = makeRule();
+    const listOverridesForRules = vi
+      .fn()
+      .mockResolvedValue([makeOverride("2026-03-09T09:00:00", "2026-03-11T11:00:00")]);
+
+    const { result } = renderHook(() =>
+      useRecurrenceExpansion({
+        days: weekDays(new Date(2026, 2, 9)),
+        expandRecurrenceRange: EXPAND,
+        listOverridesForRules,
+        pages,
+        recurrenceRules: [rule],
+      })
+    );
+
+    await waitFor(() => {
+      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+      expect(virtual.find((v) => v.scheduledStart?.startsWith("2026-03-09"))).toBeUndefined();
+    });
+    expect(movedBlock(result.current, "2026-03-11T11:00:00")).toBeUndefined();
   });
 
   it("suppresses a synced series' head when its base occurrence is completed", async () => {
@@ -237,7 +505,7 @@ describe("useRecurrenceExpansion", () => {
       useRecurrenceExpansion({
         days,
         expandRecurrenceRange: EXPAND,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages: [head, clone],
         recurrenceRules: [rule],
       })
@@ -276,7 +544,7 @@ describe("useRecurrenceExpansion", () => {
       useRecurrenceExpansion({
         days,
         expandRecurrenceRange: EXPAND,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages: [head, clone],
         recurrenceRules: [rule],
       })
@@ -313,7 +581,7 @@ describe("useRecurrenceExpansion", () => {
       useRecurrenceExpansion({
         days,
         expandRecurrenceRange: EXPAND,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages: [pageA, pageB],
         recurrenceRules: [ruleA, ruleB],
       })
@@ -343,7 +611,7 @@ describe("useRecurrenceExpansion", () => {
       useRecurrenceExpansion({
         days: weekDays(new Date(2026, 2, 9)),
         expandRecurrenceRange: omitAll,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages,
         recurrenceRules: [rule],
       })
@@ -365,7 +633,7 @@ describe("useRecurrenceExpansion", () => {
       useRecurrenceExpansion({
         days: weekDays(new Date(2026, 2, 9)),
         expandRecurrenceRange: expandSpy,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages,
         recurrenceRules: [rule],
         useRustEngine: false,
@@ -436,7 +704,7 @@ describe("useRecurrenceExpansion — async in-flight", () => {
       useRecurrenceExpansion({
         days: weekDays(new Date(2026, 2, 9)),
         expandRecurrenceRange: fn,
-        listSchedulesRange: NOOP_LIST_SCHEDULES,
+        listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages,
         recurrenceRules: [makeRule()],
       })
@@ -460,7 +728,7 @@ describe("useRecurrenceExpansion — async in-flight", () => {
         useRecurrenceExpansion({
           days: props.days,
           expandRecurrenceRange: fn,
-          listSchedulesRange: NOOP_LIST_SCHEDULES,
+          listOverridesForRules: NOOP_LIST_SCHEDULES,
           pages,
           recurrenceRules: [makeRule()],
         }),
@@ -503,7 +771,7 @@ describe("useRecurrenceExpansion — async in-flight", () => {
         useRecurrenceExpansion({
           days: props.days,
           expandRecurrenceRange: fn,
-          listSchedulesRange: NOOP_LIST_SCHEDULES,
+          listOverridesForRules: NOOP_LIST_SCHEDULES,
           pages,
           recurrenceRules: [makeRule()],
         }),
@@ -535,7 +803,7 @@ describe("useRecurrenceExpansion — async in-flight", () => {
         useRecurrenceExpansion({
           days: weekDays(new Date(2026, 2, 9)),
           expandRecurrenceRange: fn,
-          listSchedulesRange: NOOP_LIST_SCHEDULES,
+          listOverridesForRules: NOOP_LIST_SCHEDULES,
           pages: props.pages,
           recurrenceRules: [rule],
         }),

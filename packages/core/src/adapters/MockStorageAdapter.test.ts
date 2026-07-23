@@ -208,50 +208,51 @@ describe("listPagesToday", () => {
   });
 });
 
-// ─── listPageSchedulesRange ──────────────────────────────────────────────────
+// ─── listPageSchedulesForRules ───────────────────────────────────────────────
 
-describe("listPageSchedulesRange", () => {
-  it("returns schedules within the date range", async () => {
+describe("listPageSchedulesForRules", () => {
+  it("returns a rule's override rows regardless of moved position", async () => {
     const page = await createTestPage();
+    // Two overrides for rule-A: one in-week, one moved months away — the
+    // exclusion set needs both, so position must not filter the moved one out.
     await adapter.createPageSchedule({
+      originalDate: "2026-03-16T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-03-15T10:00:00",
+      ruleId: "rule-A",
+      scheduledStart: "2026-03-16T11:00:00",
     });
     await adapter.createPageSchedule({
+      originalDate: "2026-03-23T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-03-20T10:00:00",
+      ruleId: "rule-A",
+      scheduledStart: "2026-09-01T11:00:00",
     });
+    // A plain (non-override) block and another rule's override are both excluded.
+    await adapter.createPageSchedule({ pageId: page.id, scheduledStart: "2026-03-10T10:00:00" });
     await adapter.createPageSchedule({
+      originalDate: "2026-03-17T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-04-01T10:00:00",
+      ruleId: "rule-B",
+      scheduledStart: "2026-03-17T11:00:00",
     });
 
-    const results = await adapter.listPageSchedulesRange("2026-03-14", "2026-03-21");
-    expect(results).toHaveLength(2);
+    const results = await adapter.listPageSchedulesForRules(["rule-A"]);
+    expect(results.map((s) => s.originalDate)).toEqual([
+      "2026-03-16T09:00:00",
+      "2026-03-23T09:00:00",
+    ]);
   });
 
-  it("excludes schedules outside the range", async () => {
+  it("returns [] for an empty rule list", async () => {
     const page = await createTestPage();
     await adapter.createPageSchedule({
+      originalDate: "2026-03-16T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-04-01T10:00:00",
+      ruleId: "rule-A",
+      scheduledStart: "2026-03-16T11:00:00",
     });
 
-    const results = await adapter.listPageSchedulesRange("2026-03-01", "2026-03-31");
-    expect(results).toHaveLength(0);
-  });
-
-  it("includes multi-day events that overlap the range boundary", async () => {
-    const page = await createTestPage();
-    await adapter.createPageSchedule({
-      pageId: page.id,
-      scheduledEnd: "2026-03-17T12:00:00",
-      scheduledStart: "2026-03-13T10:00:00",
-    });
-
-    // Range starts after scheduledStart but before scheduledEnd
-    const results = await adapter.listPageSchedulesRange("2026-03-15", "2026-03-20");
-    expect(results).toHaveLength(1);
+    expect(await adapter.listPageSchedulesForRules([])).toEqual([]);
   });
 });
 
@@ -1008,18 +1009,20 @@ describe("parity: createRecurrenceRule enforces UNIQUE(page_id)", () => {
 });
 
 describe("parity: soft-delete cascades to schedules and rules", () => {
-  it("listPageSchedulesRange excludes schedules of soft-deleted pages", async () => {
+  it("listPageSchedulesForRules excludes overrides of soft-deleted pages", async () => {
     const page = await createTestPage({ title: "Hidden" });
     await adapter.createPageSchedule({
+      originalDate: "2026-03-16T09:00:00",
       pageId: page.id,
-      scheduledStart: "2026-03-15T10:00:00",
+      ruleId: "rule-A",
+      scheduledStart: "2026-03-16T11:00:00",
     });
 
-    const before = await adapter.listPageSchedulesRange("2026-03-01", "2026-03-31");
+    const before = await adapter.listPageSchedulesForRules(["rule-A"]);
     expect(before).toHaveLength(1);
 
     await adapter.softDeletePage(page.id);
-    const after = await adapter.listPageSchedulesRange("2026-03-01", "2026-03-31");
+    const after = await adapter.listPageSchedulesForRules(["rule-A"]);
     expect(after).toHaveLength(0);
   });
 

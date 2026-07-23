@@ -105,8 +105,9 @@ export interface PagesContextValue {
   updateRecurrence: (ruleId: string, updates: RecurrenceRuleUpdate) => Promise<PageRecurrenceRule>;
   /** Cascades to materialised page_schedules overrides. */
   deleteRecurrence: (ruleId: string) => Promise<void>;
-  /** List all materialised schedule rows in a date range (for rrule override filtering). */
-  listSchedulesRange: (start: string, end: string) => Promise<import("@pikos/core").PageSchedule[]>;
+  /** The given rules' override rows, regardless of moved position (for rrule
+   *  occurrence-exclusion, incl. a cross-week move). */
+  listOverridesForRules: (ruleIds: string[]) => Promise<import("@pikos/core").PageSchedule[]>;
   /** Batched raw rrule expansion for a range via the Rust engine (rule EXDATEs
    * applied; completed/skip union stays client-side). */
   expandRecurrenceRange: (
@@ -750,8 +751,8 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function listSchedulesRange(start: string, end: string) {
-    return adapter.listPageSchedulesRange(start, end);
+  function listOverridesForRules(ruleIds: string[]) {
+    return adapter.listPageSchedulesForRules(ruleIds);
   }
 
   function expandRecurrenceRange(
@@ -1097,7 +1098,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     folders,
     getPage,
     listCompletedPages,
-    listSchedulesRange,
+    listOverridesForRules,
     maybeToggleRecurringOccurrence,
     mergePages,
     pageErrors,

@@ -35,7 +35,7 @@ export function CalendarView() {
     expandRecurrenceRange,
     flushPage,
     getPage,
-    listSchedulesRange,
+    listOverridesForRules,
     mergePages,
     pages,
     recurrenceRules,
@@ -101,7 +101,7 @@ export function CalendarView() {
   const expandedPages = useRecurrenceExpansion({
     days,
     expandRecurrenceRange,
-    listSchedulesRange,
+    listOverridesForRules,
     pages: visiblePages,
     recurrenceRules,
     useRustEngine: rustRecurrenceEngine,
