@@ -134,6 +134,10 @@ async fn no_google_delta_ever_arms_the_sweep() {
     for delta in [&full, &incremental] {
         assert!(delta.authoritative_from.is_none());
     }
+    // Google's full enumerate sets `full_enumerate` but NOT `authoritative_from` —
+    // the two markers are distinct (one drives the resync label, the other the
+    // sweep), and Google opts out of only the sweep.
+    assert!(full.full_enumerate && !incremental.full_enumerate);
     assert!(
         full.removals.is_empty() && incremental.removals.len() == 1,
         "removals are the deletion signal, not absence from an enumerate"
@@ -289,6 +293,9 @@ async fn a_gone_token_falls_back_to_a_full_enumerate() {
         delta.next_token.as_ref().map(|t| t.0.as_str()),
         Some("TOKEN-1")
     );
+    // The recovery carries a fresh cursor AND is a full enumerate — the exact
+    // combination that `next_token.is_none()` couldn't detect.
+    assert!(delta.full_enumerate);
 }
 
 #[tokio::test]

@@ -192,12 +192,14 @@ fn orphan_occurrence(uid: &str, series_ref: &str) -> UpsertItem {
     })
 }
 
-/// A full authoritative enumerate: no cursor, and `authoritative_from` set so the
-/// engine sweeps stored pages absent from `upserts`.
+/// A full authoritative enumerate: no cursor, `full_enumerate` set (drives the
+/// `full_resync` signal + `last_full_sync_at` stamp), and `authoritative_from` set
+/// so the engine sweeps stored pages absent from `upserts`.
 fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
     SyncDelta {
         upserts,
         authoritative_from: Some(window_start.into()),
+        full_enumerate: true,
         ..Default::default()
     }
 }
@@ -295,6 +297,14 @@ async fn page_updated_at(pool: &SqlitePool) -> String {
 
 async fn last_synced(pool: &SqlitePool) -> Option<String> {
     sqlx::query_scalar("SELECT last_synced_at FROM sync_calendar WHERE id = ?")
+        .bind(CAL)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn stored_full_sync_at(pool: &SqlitePool) -> Option<String> {
+    sqlx::query_scalar("SELECT last_full_sync_at FROM sync_calendar WHERE id = ?")
         .bind(CAL)
         .fetch_one(pool)
         .await
@@ -422,6 +432,46 @@ async fn token_reject_full_resync_converges() {
         updated_before,
         "unchanged-etag re-sync must not touch updated_at"
     );
+}
+
+/// Google's `410 Gone` recovery re-enumerates the whole window but — unlike CalDAV
+/// — its backfill hands back a fresh `nextSyncToken`. Deriving "was this full" from
+/// the cursor (`next_token.is_none()`) mislabeled it incremental: `full_resync`
+/// read false and `last_full_sync_at` never got stamped. The explicit
+/// `full_enumerate` marker fixes both, and the cursor still comes from the delta —
+/// no bootstrap call, since Google already returned one.
+#[tokio::test]
+async fn full_enumerate_carrying_a_cursor_labels_full_resync_and_stamps() {
+    let pool = test_pool().await;
+    seed(&pool, Some("stale")).await; // a stored cursor the 410 rejected upstream
+
+    let recovery = SyncDelta {
+        upserts: vec![event("g-ev-1", "u1", "v1", "Standup")],
+        next_token: Some(SyncToken("healed".into())),
+        full_enumerate: true,
+        ..Default::default()
+    };
+    let provider = Scripted::default().with_sync(Ok(recovery));
+    let outcome = run(&pool, &provider).await;
+
+    assert_eq!(
+        outcome,
+        SyncOutcome::Synced {
+            full_resync: true,
+            changed: true,
+        },
+        "a full enumerate off a stored cursor is a re-sync, even carrying a token",
+    );
+    assert_eq!(
+        stored_token(&pool).await.as_deref(),
+        Some("healed"),
+        "cursor taken from the delta itself — no bootstrap, unlike CalDAV",
+    );
+    assert!(
+        stored_full_sync_at(&pool).await.is_some(),
+        "last_full_sync_at stamped on the full enumerate (was NULL before)",
+    );
+    assert_eq!(provider.sync_calls(), 1);
 }
 
 /// A transport failure is not an error — it surfaces as `Offline`, leaves the

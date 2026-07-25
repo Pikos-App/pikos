@@ -154,6 +154,14 @@ pub struct SyncDelta {
     pub upserts: Vec<UpsertItem>,
     pub removals: Vec<Removal>,
     pub next_token: Option<SyncToken>,
+    /// True when this delta is a full re-enumerate of the collection (initial
+    /// backfill, or a self-healed token rejection — CalDAV `403`, Google `410`).
+    /// Drives the `full_resync` UI signal and the `last_full_sync_at` stamp. Can't
+    /// be derived from its siblings: a CalDAV full enumerate has `next_token =
+    /// None` but a Google one has `Some` (it carries `nextSyncToken`), and
+    /// Google's full enumerate deliberately leaves `authoritative_from` unset —
+    /// so neither can stand in for "was this full."
+    pub full_enumerate: bool,
     /// Query window-start date (`YYYY-MM-DD`), set only by a full authoritative
     /// enumerate; its presence marks `upserts` the complete set for `[start, ∞)`
     /// and tells the engine to sweep absent pages (see `reconciler::sweep_absent`).

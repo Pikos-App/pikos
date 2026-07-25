@@ -145,6 +145,7 @@ async fn backfill<T: DavTransport>(
         upserts,
         authoritative_from: Some(window_start.format("%Y-%m-%d").to_string()),
         unresolved_present,
+        full_enumerate: true,
         ..Default::default()
     })
 }

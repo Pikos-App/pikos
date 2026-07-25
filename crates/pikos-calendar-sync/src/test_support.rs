@@ -69,9 +69,13 @@ pub(crate) fn event(external_id: &str, uid: &str, etag: &str, title: &str) -> Up
     })
 }
 
+/// Mirrors the real providers: a `None` token marks the delta a full enumerate
+/// (CalDAV-style backfill, no `sync-token`), so the engine's `full_resync` and
+/// `last_full_sync_at` logic sees the same shape production code produces.
 pub(crate) fn delta(upserts: Vec<UpsertItem>, token: Option<&str>) -> SyncDelta {
     SyncDelta {
         upserts,
+        full_enumerate: token.is_none(),
         next_token: token.map(|t| SyncToken(t.into())),
         ..Default::default()
     }

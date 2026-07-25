@@ -77,7 +77,7 @@ pub(crate) async fn sync_calendar<T: GoogleTransport>(
 
     // Incremental bundles are master-only: a series' cancellations and moved
     // instances are separate resources that need not be in this delta.
-    Ok(reduce(pages, OccurrenceFidelity::MasterOnly))
+    Ok(reduce(pages, OccurrenceFidelity::MasterOnly, false))
 }
 
 /// Full re-enumerate of the visible window. `showDeleted` is what makes this
@@ -108,7 +108,7 @@ async fn backfill<T: GoogleTransport>(
     ];
     let pages = collect_pages(transport, &events_path(calendar_id), base).await?;
 
-    Ok(reduce(pages, OccurrenceFidelity::Complete))
+    Ok(reduce(pages, OccurrenceFidelity::Complete, true))
 }
 
 /// Targeted single-event fetch for orphan-master resolution — one `events.get`,
@@ -232,7 +232,11 @@ async fn collect_pages<T: GoogleTransport>(
 /// Flatten drained pages into one delta. Grouping runs across the whole set, not
 /// per page, so a master and an instance that landed on different pages still fold
 /// into one bundle instead of producing a spurious orphan.
-fn reduce(pages: Vec<EventsResponse>, fidelity: OccurrenceFidelity) -> SyncDelta {
+fn reduce(
+    pages: Vec<EventsResponse>,
+    fidelity: OccurrenceFidelity,
+    full_enumerate: bool,
+) -> SyncDelta {
     let next_token = pages
         .last()
         .and_then(|p| p.next_sync_token.clone())
@@ -247,6 +251,7 @@ fn reduce(pages: Vec<EventsResponse>, fidelity: OccurrenceFidelity) -> SyncDelta
         next_token,
         authoritative_from: None,
         unresolved_present: grouped.unresolved_present,
+        full_enumerate,
     }
 }
 

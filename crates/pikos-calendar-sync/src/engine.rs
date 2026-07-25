@@ -119,11 +119,9 @@ async fn run<P: CalendarProvider>(
 
     let delta = provider.sync(calendar, since).await?;
 
-    // A provider returns no cursor only from a full enumerate — the initial
-    // backfill, or a self-healed token rejection (CalDAV `403 valid-sync-token`
-    // falls back to `calendar-query` internally). Both need a bootstrap; only the
-    // latter is a "re-sync" for the UI.
-    let was_full = delta.next_token.is_none();
+    // See `SyncDelta::full_enumerate` — `next_token.is_none()` can't stand in,
+    // since Google's full enumerate still carries a `nextSyncToken`.
+    let was_full = delta.full_enumerate;
 
     let outcome = reconcile_batched(pool, &ctx, &delta).await?;
     let resolved_masters = resolve_missing_masters(

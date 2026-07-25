@@ -122,6 +122,7 @@ async fn backfill_enumerates_the_window_with_no_token_or_removals() {
         delta.next_token.is_none(),
         "backfill leaves token bootstrap to the engine"
     );
+    assert!(delta.full_enumerate, "a backfill is a full enumerate");
 }
 
 #[tokio::test]
@@ -263,6 +264,10 @@ async fn full_via_sync_collection_multigets_all_changed_hrefs() {
         delta.next_token.is_some(),
         "incremental carries the token forward"
     );
+    assert!(
+        !delta.full_enumerate,
+        "a sync-collection delta is incremental, not a full enumerate"
+    );
 }
 
 #[tokio::test]
@@ -275,6 +280,7 @@ async fn stale_token_falls_back_to_full_reenumerate() {
         delta.next_token.is_none(),
         "re-enumerate re-bootstraps the token"
     );
+    assert!(delta.full_enumerate, "a 403 recovery is a full enumerate");
 }
 
 // ─── sync-collection multistatus shape ──────────────────────────────────────────
