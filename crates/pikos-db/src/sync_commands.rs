@@ -84,16 +84,21 @@ pub async fn mark_account_disconnected_impl(pool: &sqlx::SqlitePool, id: &str) -
     Ok(())
 }
 
-/// Find a dormant account to reuse on reconnect, matched by the stable
-/// provider+display_name identity (`display_name` embeds `username · base_url`).
-pub async fn find_dormant_account_impl(
+/// Find an existing account to reuse on (re)connect, matched by the stable
+/// provider+display_name identity (`display_name` embeds `username · base_url` for
+/// CalDAV, the signed-in email for Google). Matches whether the row is dormant *or*
+/// still active: reconnecting an already-connected account must refresh it in place,
+/// never insert a second row — a duplicate account re-syncs every event twice (dedup
+/// is per-account). An active row wins the tiebreak in the unlikely event both exist.
+pub async fn find_account_by_identity_impl(
     pool: &sqlx::SqlitePool,
     provider: &str,
     display_name: &str,
 ) -> AppResult<Option<SyncAccount>> {
     Ok(sqlx::query_as::<_, SyncAccount>(
         "SELECT id, provider, display_name, auth_kind, created_at FROM sync_account
-         WHERE provider = ? AND display_name = ? AND disconnected = 1 LIMIT 1",
+         WHERE provider = ? AND display_name = ?
+         ORDER BY disconnected ASC, created_at ASC LIMIT 1",
     )
     .bind(provider)
     .bind(display_name)

@@ -39,7 +39,7 @@ async fn status_lists_accounts_with_their_calendars() {
 }
 
 #[tokio::test]
-async fn dormant_account_is_hidden_and_reused_by_provider_and_name() {
+async fn account_is_reused_by_identity_whether_dormant_or_active() {
     let pool = test_pool().await;
     let acc = insert_sync_account_impl(&pool, "caldav", "you · https://x", "basic")
         .await
@@ -50,19 +50,22 @@ async fn dormant_account_is_hidden_and_reused_by_provider_and_name() {
         .unwrap()
         .id;
 
-    // A live account never matches the dormant-reuse lookup.
-    assert!(
-        find_dormant_account_impl(&pool, "caldav", "you · https://x")
-            .await
-            .unwrap()
-            .is_none(),
-        "an active account is not a reuse target"
-    );
+    // An *active* account is a reuse target too — reconnecting it refreshes in place
+    // instead of inserting a duplicate. Matched by exact provider+display_name;
+    // the other account and a wrong name miss.
+    let matched = find_account_by_identity_impl(&pool, "caldav", "you · https://x")
+        .await
+        .unwrap()
+        .expect("active account matched by provider+display_name");
+    assert_eq!(matched.id, acc);
+    assert!(find_account_by_identity_impl(&pool, "caldav", "nope")
+        .await
+        .unwrap()
+        .is_none());
 
     mark_account_disconnected_impl(&pool, &acc).await.unwrap();
 
-    // Hidden from the panel, but still matchable for reconnect — by exact
-    // provider+display_name only (the other account and a wrong name miss).
+    // Dormant: hidden from the panel, but still matchable for reconnect.
     let visible = get_sync_status_impl(&pool).await.unwrap();
     assert_eq!(
         visible.len(),
@@ -70,11 +73,7 @@ async fn dormant_account_is_hidden_and_reused_by_provider_and_name() {
         "dormant account hidden; the live one remains"
     );
     assert_eq!(visible[0].account.id, other);
-    assert!(find_dormant_account_impl(&pool, "caldav", "nope")
-        .await
-        .unwrap()
-        .is_none());
-    let matched = find_dormant_account_impl(&pool, "caldav", "you · https://x")
+    let matched = find_account_by_identity_impl(&pool, "caldav", "you · https://x")
         .await
         .unwrap()
         .expect("dormant account found by provider+display_name");
@@ -85,13 +84,6 @@ async fn dormant_account_is_hidden_and_reused_by_provider_and_name() {
         get_sync_status_impl(&pool).await.unwrap().len(),
         2,
         "reactivated account reappears in the panel"
-    );
-    assert!(
-        find_dormant_account_impl(&pool, "caldav", "you · https://x")
-            .await
-            .unwrap()
-            .is_none(),
-        "reactivated account is no longer a reuse target"
     );
 }
 

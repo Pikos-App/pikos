@@ -9,7 +9,7 @@ use sqlx::SqlitePool;
 use pikos_db::error::{AppError, AppResult};
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow, PROVIDER_CALDAV, PROVIDER_GOOGLE};
 use pikos_db::sync_commands::{
-    find_dormant_account_impl, insert_sync_account_impl, list_sync_calendars_impl,
+    find_account_by_identity_impl, insert_sync_account_impl, list_sync_calendars_impl,
     mark_account_disconnected_impl, reactivate_account_impl, toggle_sync_calendar_impl,
     upsert_sync_calendar_impl, AccountWithCalendars,
 };
@@ -57,10 +57,11 @@ impl CalendarSyncResult {
 /// in the keychain. Validation runs **first** so a wrong URL/password fails
 /// without leaving a half-built account behind.
 ///
-/// A prior disconnect of the same account left it dormant (see `disconnect_account`);
-/// reconnecting reuses that row so its detached pages re-link on the next resync
-/// instead of duplicating. The idempotent calendar upsert refreshes the dormant
-/// (disabled) calendars in place; the user re-enables the ones they want.
+/// Reconnecting an account already known by (provider, display_name) — whether it
+/// went dormant via `disconnect_account` or is still active — reuses its row rather
+/// than inserting a duplicate: the dormant case re-links detached pages, the active
+/// case avoids re-syncing every event twice. The idempotent calendar upsert refreshes
+/// each calendar in place, leaving its enabled/folder/cursor untouched.
 pub async fn connect_caldav(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -94,8 +95,8 @@ pub async fn connect_caldav(
 /// the loopback listener and waiting on it — Google's Desktop client type
 /// requires a real browser, and opening one is the caller's concern.
 ///
-/// Same dormant-reuse as [`connect_caldav`]: reconnecting an account disconnected
-/// earlier reuses its row so detached pages re-link instead of duplicating.
+/// Same reuse-by-identity as [`connect_caldav`]: reconnecting a known account —
+/// dormant or active — refreshes its row instead of duplicating it.
 pub async fn connect_google<F>(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -120,15 +121,17 @@ where
     Ok(AccountWithCalendars { account, calendars })
 }
 
-/// Reuse the dormant row left by a previous disconnect, else create one. Shared by
-/// both connect paths so reconnect semantics can't drift between providers.
+/// Reuse an existing account row on (re)connect, else create one. Shared by both
+/// connect paths so reconnect semantics can't drift between providers (see
+/// [`connect_caldav`] for why reuse matters). Reactivate is idempotent, so it's a
+/// no-op cost on an already-active row.
 async fn claim_account(
     pool: &SqlitePool,
     provider: &str,
     display_name: &str,
     auth_kind: &str,
 ) -> AppResult<pikos_db::sync_commands::SyncAccount> {
-    match find_dormant_account_impl(pool, provider, display_name).await? {
+    match find_account_by_identity_impl(pool, provider, display_name).await? {
         Some(existing) => {
             reactivate_account_impl(pool, &existing.id).await?;
             Ok(existing)

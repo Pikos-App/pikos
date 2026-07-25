@@ -5,7 +5,7 @@
 
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
 use pikos_db::sync_commands::{
-    find_dormant_account_impl, get_sync_status_impl, insert_sync_account_impl,
+    find_account_by_identity_impl, get_sync_status_impl, insert_sync_account_impl,
     reactivate_account_impl, toggle_sync_calendar_impl, upsert_sync_calendar_impl,
 };
 use pikos_db::sync_delta::{
@@ -250,7 +250,7 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
 
     // Reconnect = connect_caldav's reuse branch (minus the live discovery): match the
     // dormant row, reactivate, re-enable the calendar, resync the same UID (new href).
-    let dormant = find_dormant_account_impl(&pool, "caldav", "you · https://x")
+    let dormant = find_account_by_identity_impl(&pool, "caldav", "you · https://x")
         .await
         .unwrap()
         .expect("dormant account found by provider+display_name");
@@ -287,6 +287,69 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
         content, "{\"edited\":true}",
         "user body preserved across reconnect"
     );
+}
+
+// Reconnecting an account that's still active (never disconnected) must refresh
+// its row, not insert a second one — a duplicate account gives every event a second
+// folder and a second page (dedup is per-account). Drives claim_account + the
+// idempotent calendar upsert the connect paths use, skipping only the live discovery.
+#[tokio::test]
+async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
+    let pool = test_pool().await;
+
+    // First connect: account + calendar, enabled (materializes a folder), one sync so
+    // a mirror page exists — the state a live account carries.
+    let acc = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    let cal = upsert_sync_calendar_impl(&pool, &acc.id, "cal-a", "Work", None)
+        .await
+        .unwrap();
+    toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+        .await
+        .unwrap();
+    let provider = Scripted {
+        delta: one_event_delta("href-1", "uid-1", "Standup", "tok-1"),
+    };
+    resync_account(&pool, &provider, &acc.id).await.unwrap();
+
+    // Second connect of the SAME still-active account, re-upserting the same calendar.
+    let acc2 = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    assert_eq!(acc2.id, acc.id, "reconnect reuses the active row, no new account");
+    upsert_sync_calendar_impl(&pool, &acc2.id, "cal-a", "Work", None)
+        .await
+        .unwrap();
+
+    // Nothing doubled: one account, one calendar, one folder.
+    let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_account")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(accounts, 1, "no duplicate account");
+    let cals: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_calendar")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(cals, 1, "no duplicate calendar");
+    let folders: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(folders, 1, "no duplicate folder");
+
+    // Resync through the reused calendar → still one page, event not doubled.
+    let provider2 = Scripted {
+        delta: one_event_delta("href-1", "uid-1", "Standup", "tok-2"),
+    };
+    resync_account(&pool, &provider2, &acc.id).await.unwrap();
+    let pages: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE ical_uid = 'uid-1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(pages, 1, "event not duplicated across reconnect");
 }
 
 #[tokio::test]
