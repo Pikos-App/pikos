@@ -10,6 +10,7 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { normalizeEndInput } from "@/shared/utils/schedule";
+import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
 
 interface VirtualPageBlockPopoverProps {
   page: VirtualOccurrence;
@@ -24,7 +25,9 @@ interface VirtualPageBlockPopoverProps {
  * entirely: a virtual is always "Open" by definition. Everything except Date
  * is read-only: a virtual is just an rrule expansion of the head, so editing
  * Folder/Priority would silently mutate every occurrence — picking a new Date
- * materialises a per-occurrence override instead.
+ * materialises a per-occurrence override instead. On a synced series the Date is
+ * read-only too — the backend rejects the reschedule, so a picker could only
+ * produce an error.
  */
 export function VirtualPageBlockPopover({ onClose, onSkip, page }: VirtualPageBlockPopoverProps) {
   const { folders, recurrenceRules, rescheduleVirtualOccurrence } = usePages();
@@ -67,6 +70,8 @@ export function VirtualPageBlockPopover({ onClose, onSkip, page }: VirtualPageBl
 
   const rule = recurrenceRules.find((r) => r.id === page.ruleId);
   const folder = folders.find((f) => f.id === page.folderId);
+  const locked = page.scheduleLocked;
+  const lockedSchedule = locked ? syncedScheduleLabel(page) : null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -82,13 +87,19 @@ export function VirtualPageBlockPopover({ onClose, onSkip, page }: VirtualPageBl
 
         <div className="flex items-center gap-3">
           <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Date</span>
-          <DateTimePicker
-            endValue={page.scheduledEnd ?? null}
-            isDone={isDone(page)}
-            onChange={handleDateChange}
-            onEndChange={handleEndChange}
-            value={page.scheduledStart ?? null}
-          />
+          {locked ? (
+            lockedSchedule && (
+              <span className="text-sm text-muted-foreground">{lockedSchedule}</span>
+            )
+          ) : (
+            <DateTimePicker
+              endValue={page.scheduledEnd ?? null}
+              isDone={isDone(page)}
+              onChange={handleDateChange}
+              onEndChange={handleEndChange}
+              value={page.scheduledStart ?? null}
+            />
+          )}
         </div>
 
         {rule && (

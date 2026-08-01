@@ -1,10 +1,9 @@
-// PageBlockPopover — read-only mirror metadata on a synced (locked) event.
-// Verifies location + attendees render for a locked page and are absent on a
-// native one.
+// PageBlockPopover — read-only mirror metadata on a synced (locked) event, and
+// the reminder bell's one real boundary (timed vs all-day, on every origin).
 
-import type { PageSummary } from "@pikos/core";
+import type { PageRecurrenceRule, PageSummary } from "@pikos/core";
 import { cleanup, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
@@ -12,8 +11,31 @@ import { renderWithProviders } from "@/test/renderWithProviders";
 
 import { PageBlockPopover } from "./PageBlockPopover";
 
+const mocks = vi.hoisted(() => ({ recurrenceRules: [] as PageRecurrenceRule[] }));
+
+vi.mock("@/shared/context/PagesContext", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/context/PagesContext")>()),
+  usePages: () => ({
+    clearSchedule: vi.fn(),
+    createFolder: vi.fn(),
+    createRecurrence: vi.fn(),
+    deleteRecurrence: vi.fn(),
+    folders: [],
+    maybeToggleRecurringOccurrence: vi.fn(),
+    recurrenceRules: mocks.recurrenceRules,
+    scheduleOnce: vi.fn(),
+    uncompleteRecurringOrFlip: vi.fn(),
+    updatePage: vi.fn(),
+    updateRecurrence: vi.fn(),
+  }),
+}));
+
 // globals: false in vitest config → @testing-library's auto-cleanup never runs.
 afterEach(cleanup);
+
+beforeEach(() => {
+  mocks.recurrenceRules = [];
+});
 
 function makePage(over: Partial<PageSummary>): PageSummary {
   return {
@@ -60,5 +82,30 @@ describe("PageBlockPopover — mirror metadata", () => {
   it("omits mirror metadata on a native (unlocked) page", () => {
     renderPopover(makePage({ mirrorAttendees: ["alex@example.com"], mirrorLocation: "Zoom" }));
     expect(screen.queryByText("Zoom")).not.toBeInTheDocument();
+  });
+});
+
+describe("PageBlockPopover — reminder bell", () => {
+  const rule = { id: "r1", pageId: "p1" } as PageRecurrenceRule;
+
+  it("offers reminders on a locked timed recurring series", () => {
+    mocks.recurrenceRules = [rule];
+    renderPopover(
+      makePage({ scheduleLocked: true, syncState: "active", timezone: "Europe/Berlin" })
+    );
+    expect(screen.getByLabelText("Page reminders")).toBeInTheDocument();
+  });
+
+  it("hides the bell on a locked all-day recurring series", () => {
+    mocks.recurrenceRules = [rule];
+    renderPopover(
+      makePage({
+        scheduledEnd: "2099-01-06",
+        scheduledStart: "2099-01-05",
+        scheduleLocked: true,
+        syncState: "active",
+      })
+    );
+    expect(screen.queryByLabelText("Page reminders")).not.toBeInTheDocument();
   });
 });

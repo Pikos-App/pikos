@@ -525,15 +525,15 @@ pub async fn update_page_impl(
 ) -> AppResult<Page> {
     // A synced page becomes user-owned the moment the user edits any authored
     // field through this command path (the reconciler writes raw SQL and never
-    // calls here, so sync can't trip this). A lone `last_opened_at` write —
-    // opening the page — is explicitly NOT ownership, so it's excluded.
+    // calls here, so sync can't trip this). `last_opened_at` and `sort_order` are
+    // excluded: reading and arranging author nothing, and ownership decides whether
+    // an upstream delete removes the page or detaches it permanently.
     let marks_ownership = updates.title.is_some()
         || updates.content.is_some()
         || updates.content_text.is_some()
         || updates.status.is_some()
         || updates.priority.is_some()
         || updates.tags.is_some()
-        || updates.sort_order.is_some()
         || updates.links.is_some()
         || updates.folder_id.is_some()
         || updates.subtitle.is_some()

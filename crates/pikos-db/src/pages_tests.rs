@@ -1812,6 +1812,48 @@ async fn opening_a_synced_page_does_not_mark_it_user_modified() {
 }
 
 #[tokio::test]
+async fn reordering_a_synced_page_does_not_mark_it_user_modified() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Event"))
+        .await
+        .unwrap();
+    mark_synced(&pool, "p", "active").await;
+
+    // Dragging a synced event within its folder list is arrangement, not authoring.
+    update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            sort_order: Some(5),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert!(
+        !user_modified(&pool, "p").await,
+        "reordering must not set ownership"
+    );
+
+    // Title is the natural counterpart but an active-synced page rejects it —
+    // the mirror lock fires before the ownership check.
+    update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            content: Some(r#"{"type":"doc"}"#.into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert!(
+        user_modified(&pool, "p").await,
+        "editing the body still sets ownership"
+    );
+}
+
+#[tokio::test]
 async fn updating_a_native_page_never_touches_page_sync() {
     // No page_sync row exists — the user_modified write must be a harmless no-op.
     let pool = test_pool().await;

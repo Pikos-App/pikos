@@ -68,8 +68,9 @@ appTest("Calendar Sync panel adds a CalDAV account, calendars start off @tier1",
 
   await app.getByRole("button", { name: "Add account" }).click();
   await expect(app.getByRole("dialog", { name: "Add calendar account" })).toBeVisible();
-  // Google is the next provider — present but gated.
-  await expect(app.getByRole("button", { name: /Google/ })).toBeDisabled();
+  // Both providers ship in 0.4.0; the mock adapter reports an OAuth client, so
+  // Google is offered rather than showing the not-available-in-this-build state.
+  await expect(app.getByRole("button", { name: /Google/ })).toBeEnabled();
 
   await app.getByRole("button", { name: /CalDAV/ }).click();
 
@@ -324,6 +325,39 @@ appTest("a moved synced occurrence renders at its new slot, locked, and complete
   // mis-keyed occurrence would reject with no clone, leaving the slot open.
   await app.getByRole("button", { name: /Recurring review, 4/ }).click();
   await expect(app.getByRole("button", { name: "Mark not done" })).toBeVisible();
+});
+
+// ─── tier2: a synced virtual occurrence's date is read-only ──────────────────
+//
+// Drag and resize are suppressed on a locked block, so the occurrence popover is
+// the only surface left that can reach a locked series' reschedule. The seed's
+// "Recurring review" is a synced weekly at 2 PM; the current week's block is the
+// series head (a real page block), day+7 is an EXDATE and day+14 moved to an
+// override — so the first plain virtual is day+21. Page forward before matching.
+
+appTest("a synced recurring occurrence's popover offers no editable date @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openCalendarMode(app);
+
+  const occurrence = app.getByRole("button", { name: /Recurring review, 2/ });
+  await app.getByRole("button", { name: "Next week" }).click();
+  await app.waitForTimeout(400);
+  for (let i = 0; i < 6 && (await occurrence.count()) === 0; i++) {
+    await app.getByRole("button", { name: "Next week" }).click();
+    await app.waitForTimeout(400);
+  }
+  await expect(occurrence).toBeVisible();
+
+  await occurrence.click();
+  // The virtual popover, not the page one: it has a Skip action and no title input.
+  await expect(app.getByRole("button", { name: "Skip this occurrence" })).toBeVisible();
+  await expect(app.getByPlaceholder("Untitled")).toHaveCount(0);
+
+  // Date renders as the read-only synced label — neither picker trigger is present.
+  await expect(app.getByRole("button", { name: /^Scheduled:/ })).toHaveCount(0);
+  await expect(app.getByRole("button", { name: "Set schedule" })).toHaveCount(0);
 });
 
 // ─── tier2: description-changed notice + read-only mirror metadata (B1) ───────

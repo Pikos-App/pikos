@@ -235,12 +235,10 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
               />
             )}
             {/* Timed events only — all-day schedules don't fire reminders, so
-                hide the bell (matches notifications/scheduler behaviour). Synced
-                one-offs keep it; a synced recurring series has no per-occurrence
-                reminder path yet, so hide the bell rather than offer a dead one. */}
-            {page.scheduledStart &&
-              isTimedIso(page.scheduledStart) &&
-              !(locked && recurrenceRule) && <ReminderDropdown iconSize={12} pageId={page.id} />}
+                hide the bell (matches notifications/scheduler behaviour). */}
+            {page.scheduledStart && isTimedIso(page.scheduledStart) && (
+              <ReminderDropdown iconSize={12} pageId={page.id} />
+            )}
           </div>
         </div>
 
