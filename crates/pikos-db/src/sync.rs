@@ -105,6 +105,12 @@ pub struct PageSyncRow {
 pub(crate) const SYNCED_READONLY_MSG: &str =
     "This event is synced from an external calendar — its title and schedule are read-only.";
 
+/// User-facing message when a writer rejects moving a still-synced page out of
+/// its calendar folder. Separate from [`SYNCED_READONLY_MSG`] because placement
+/// isn't part of the locked mirror — it comes back the moment the page detaches.
+pub(crate) const SYNCED_PLACEMENT_MSG: &str =
+    "This event is synced from an external calendar — it stays in its calendar folder.";
+
 /// True when an active `page_sync` row owns this page (its schedule is locked).
 /// Detached/tombstoned pages are unlocked.
 pub(crate) async fn page_schedule_locked(

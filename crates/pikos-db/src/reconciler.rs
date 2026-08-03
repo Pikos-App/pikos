@@ -186,9 +186,32 @@ async fn apply_event(
         (page_id, true)
     };
 
+    if !is_new {
+        reclaim_calendar_folder(tx, &page_id, &ctx.folder_id).await?;
+    }
     write_schedule(tx, &page_id, ev, &now).await?;
     apply_seeded_description(tx, &page_id, ev.core.description.as_deref(), is_new, &now).await?;
     Ok(true)
+}
+
+/// Move a reactivated page back into its calendar folder. A detached page is
+/// freely filable, so it may sit anywhere by the time the calendar reclaims it —
+/// and once re-linked it is locked again, which every other surface reads as
+/// "lives in its calendar folder". Deliberately does not touch `updated_at`: the
+/// page didn't change, its placement was overruled. No-op for a page already
+/// there, which is every ordinary poll.
+async fn reclaim_calendar_folder(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    folder_id: &str,
+) -> AppResult<()> {
+    sqlx::query("UPDATE pages SET folder_id = ? WHERE id = ? AND folder_id IS NOT ?")
+        .bind(folder_id)
+        .bind(page_id)
+        .bind(folder_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 /// Find a re-linkable page by `ical_uid`, scoped to this calendar (never across
@@ -772,8 +795,210 @@ async fn detach_sync(
         .bind(page_sync_id)
         .execute(&mut **tx)
         .await?;
+    float_wall_clock(tx, page_id).await?;
     crate::recurrence_derive::recompute_recurring_schedule(tx, page_id).await?;
     Ok(())
+}
+
+/// Spend the source-zone stamp instead of dropping it: rewrite every stored
+/// wall-clock into the device's zone and clear the stamp, so a page that was
+/// rendered at its absolute instant keeps that instant when it starts floating.
+/// Without this a detached 3pm Berlin event becomes 3pm wherever the user is —
+/// the block moves and the reminder (which falls back to the naive device-local
+/// path once the page is no longer active-synced) fires at the wrong time.
+///
+/// **Refused when a recurring series' base start changes date.** Every occurrence
+/// date derives from that base, and those dates key `completed_set`, `skip_set`,
+/// `rrule_exdates` and each override's `original_date`, while the rule's BYDAY
+/// names the base's weekday — shifting it means rewriting five things in step, and
+/// a partial rewrite silently moves the series to a different day of the week.
+/// Such a series keeps its raw wall-clock. It takes a non-local calendar *and* a
+/// start within the zone offset of midnight to reach.
+///
+/// All-day rows carry no zone (a date has none) and are left alone throughout.
+async fn float_wall_clock(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+) -> AppResult<()> {
+    let rule: Option<(String, String, String, Option<String>, String)> = sqlx::query_as(
+        "SELECT id, rrule, scheduled_start, scheduled_end, timezone
+         FROM page_recurrence_rules WHERE page_id = ?",
+    )
+    .bind(page_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let schedules: Vec<(String, String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT id, scheduled_start, scheduled_end, timezone
+         FROM page_schedules WHERE page_id = ?",
+    )
+    .bind(page_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let source = rule
+        .as_ref()
+        .map(|(_, _, _, _, tz)| tz.clone())
+        .or_else(|| schedules.iter().find_map(|(_, _, _, tz)| tz.clone()));
+    let Some(source) = source.and_then(|tz| tz.parse::<Tz>().ok()) else {
+        return Ok(());
+    };
+    let device = device_zone();
+    if source == device {
+        return Ok(());
+    }
+
+    if let Some((rule_id, rrule, base_start, base_end, _)) = &rule {
+        let Some(start) = to_device_wall_clock(base_start, source, device) else {
+            return Ok(());
+        };
+        if start[..10] != base_start[..10] {
+            return Ok(());
+        }
+        let end = base_end
+            .as_deref()
+            .and_then(|e| to_device_wall_clock(e, source, device));
+        sqlx::query(
+            "UPDATE page_recurrence_rules
+             SET rrule = ?, scheduled_start = ?, scheduled_end = COALESCE(?, scheduled_end),
+                 timezone = ?
+             WHERE id = ?",
+        )
+        .bind(shift_until_to_device(rrule, source, device))
+        .bind(&start)
+        .bind(end)
+        .bind(device.name())
+        .bind(rule_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    // Override rows included: a moved instance renders and fires on its own row,
+    // so leaving it source-zoned would strand it an offset away from the series it
+    // belongs to. Each row converts from **its own** stamp — a provider can move an
+    // instance into a different zone from the master's.
+    for (schedule_id, start, end, tz) in &schedules {
+        let Some(row_source) = tz.as_ref().and_then(|tz| tz.parse::<Tz>().ok()) else {
+            continue;
+        };
+        let converted_start = to_device_wall_clock(start, row_source, device);
+        let converted_end = end
+            .as_deref()
+            .and_then(|e| to_device_wall_clock(e, row_source, device));
+        sqlx::query(
+            "UPDATE page_schedules
+             SET scheduled_start = COALESCE(?, scheduled_start),
+                 scheduled_end = COALESCE(?, scheduled_end), timezone = NULL
+             WHERE id = ?",
+        )
+        .bind(converted_start)
+        .bind(converted_end)
+        .bind(schedule_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    // A recurring page's denorm is rewritten by the recompute that follows; a
+    // one-off's is a plain copy of the row just converted, so convert it in step.
+    if rule.is_none() {
+        let denorm: Option<(Option<String>, Option<String>)> =
+            sqlx::query_as("SELECT scheduled_start, scheduled_end FROM pages WHERE id = ?")
+                .bind(page_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+        if let Some((start, end)) = denorm {
+            sqlx::query(
+                "UPDATE pages
+                 SET scheduled_start = COALESCE(?, scheduled_start),
+                     scheduled_end = COALESCE(?, scheduled_end)
+                 WHERE id = ?",
+            )
+            .bind(
+                start
+                    .as_deref()
+                    .and_then(|s| to_device_wall_clock(s, source, device)),
+            )
+            .bind(
+                end.as_deref()
+                    .and_then(|e| to_device_wall_clock(e, source, device)),
+            )
+            .bind(page_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// `2026-03-15T15:00:00` in `source` → the same instant as device-local
+/// wall-clock, DST-correct per instant. `None` for a date-only value (all-day
+/// floats already) or anything unparseable, and for a wall-clock that doesn't
+/// exist in the source zone (spring-forward gap) — the caller keeps the original
+/// rather than inventing a time.
+fn to_device_wall_clock(wall_clock: &str, source: Tz, device: Tz) -> Option<String> {
+    Some(
+        convert_instant(wall_clock, "%Y-%m-%dT%H:%M:%S", source, device)?
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string(),
+    )
+}
+
+/// Shift a source-zone `UNTIL` token to device-local so the series' bound floats
+/// with the occurrences it bounds. The reconciler already rewrote any UTC `UNTIL`
+/// to source-zone wall-clock on ingest, so there is no `Z` left to handle; a
+/// date-only bound needs no shift. Surgical edit for the same reason as
+/// [`rewrite_until_to_wall_clock`] — a parse round-trip drops rule fields.
+fn shift_until_to_device(rrule: &str, source: Tz, device: Tz) -> String {
+    rrule
+        .split(';')
+        .map(|part| match part.split_once('=') {
+            Some((key, value)) if key.eq_ignore_ascii_case("UNTIL") => {
+                match convert_instant(value, "%Y%m%dT%H%M%S", source, device) {
+                    Some(shifted) => format!("{key}={}", shifted.format("%Y%m%dT%H%M%S")),
+                    None => part.to_string(),
+                }
+            }
+            _ => part.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+/// Re-express one wall-clock in another zone. `earliest()` for the same reason as
+/// [`crate::notification_log::synced_fire_instant`]: a fall-back-ambiguous hour
+/// resolves to its first pass rather than dropping the value entirely.
+fn convert_instant(value: &str, fmt: &str, source: Tz, device: Tz) -> Option<NaiveDateTime> {
+    let naive = NaiveDateTime::parse_from_str(value, fmt).ok()?;
+    Some(
+        source
+            .from_local_datetime(&naive)
+            .earliest()?
+            .with_timezone(&device)
+            .naive_local(),
+    )
+}
+
+/// The device's IANA zone, resolved once per process — the lookup reads OS config
+/// and this runs inside the detach transaction, where a per-value lookup would
+/// widen the write lock under a racing editor write. Tests pin UTC (the corpus
+/// convention), so no conversion assertion depends on the machine that ran it.
+fn device_zone() -> Tz {
+    #[cfg(test)]
+    {
+        Tz::UTC
+    }
+    #[cfg(not(test))]
+    {
+        use std::sync::OnceLock;
+        static ZONE: OnceLock<Tz> = OnceLock::new();
+        *ZONE.get_or_init(|| {
+            iana_time_zone::get_timezone()
+                .ok()
+                .and_then(|name| name.parse().ok())
+                .unwrap_or(Tz::UTC)
+        })
+    }
 }
 
 /// Destroy a non-owned synced page. The FK cascade removes its `page_sync` link,

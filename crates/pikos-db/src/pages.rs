@@ -542,17 +542,12 @@ pub async fn update_page_impl(
         || updates.completed_at.is_some()
         || updates.parent_id.is_some();
 
-    // Placement lock: external-calendar folders are system-managed. Reject moving
-    // a page into or out of one. The reconciler seeds pages into these folders via
-    // raw SQL (it never calls this command), so seeding is unaffected.
+    // Placement lock, keyed on the live link rather than on the folder: nothing
+    // moves into a system-managed calendar folder, and a page the calendar still
+    // owns stays where the calendar put it — but a detached page is the user's and
+    // files anywhere. The reconciler seeds pages into these folders via raw SQL (it
+    // never calls this command), so seeding is unaffected.
     if let Some(ref folder_val) = updates.folder_id {
-        let current_external: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM pages p JOIN folders f ON f.id = p.folder_id \
-             WHERE p.id = ? AND f.is_external_calendar = 1)",
-        )
-        .bind(&id)
-        .fetch_one(pool)
-        .await?;
         let target_external: bool = match folder_val {
             serde_json::Value::String(target) => sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ? AND is_external_calendar = 1)",
@@ -562,9 +557,14 @@ pub async fn update_page_impl(
             .await?,
             _ => false,
         };
-        if current_external || target_external {
+        if target_external {
             return Err(AppError::Conflict(
-                "Pages cannot be moved into or out of an external calendar folder".to_string(),
+                "Pages cannot be moved into an external calendar folder".to_string(),
+            ));
+        }
+        if crate::sync::page_schedule_locked(pool, &id).await? {
+            return Err(AppError::Conflict(
+                crate::sync::SYNCED_PLACEMENT_MSG.to_string(),
             ));
         }
     }

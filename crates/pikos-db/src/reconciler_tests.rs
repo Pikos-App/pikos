@@ -3018,6 +3018,323 @@ async fn detach_recomputes_head_off_completed_base() {
     );
 }
 
+// ─── detach spends the source-zone stamp ──────────────────────────────────────
+//
+// Tests pin the device zone to UTC (see `device_zone`), so a fixture in
+// Europe/Berlin is +2 in June and +1 in January — the assertions below are
+// machine-independent.
+
+/// (start, end, timezone) of a page's only schedule row.
+async fn zoned_schedule(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+) -> (String, Option<String>, Option<String>) {
+    sqlx::query_as(
+        "SELECT scheduled_start, scheduled_end, timezone FROM page_schedules WHERE page_id = ?",
+    )
+    .bind(page_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+async fn page_folder(pool: &sqlx::SqlitePool, page_id: &str) -> Option<String> {
+    sqlx::query_scalar("SELECT folder_id FROM pages WHERE id = ?")
+        .bind(page_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// An owned single event in `tz`, detached by an upstream removal.
+async fn detached_single(pool: &sqlx::SqlitePool, start: &str, end: &str, tz: &str) -> String {
+    reconcile(
+        pool,
+        &ctx(),
+        &delta(vec![single(
+            core("/ev.ics", "uid-1", "v1", "Standup"),
+            timed(start, Some(end), tz),
+        )]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(pool).await;
+    simulate_user_body_edit(pool, &page_id, "my notes").await;
+    reconcile(pool, &ctx(), &removal("/ev.ics")).await.unwrap();
+    page_id
+}
+
+#[tokio::test]
+async fn detach_converts_a_non_local_event_to_device_wall_clock() {
+    let pool = setup().await;
+    let page_id = detached_single(
+        &pool,
+        "2026-06-15T15:00:00",
+        "2026-06-15T16:00:00",
+        "Europe/Berlin",
+    )
+    .await;
+
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+    let (start, end, tz) = zoned_schedule(&pool, &page_id).await;
+    assert_eq!(start, "2026-06-15T13:00:00", "same instant, device wall-clock");
+    assert_eq!(end.as_deref(), Some("2026-06-15T14:00:00"));
+    assert_eq!(tz, None, "stamp spent, not left to contradict the wall-clock");
+    assert_eq!(
+        page_denorm(&pool, &page_id).await.0.as_deref(),
+        Some("2026-06-15T13:00:00"),
+        "the denorm the page list reads converts in step",
+    );
+}
+
+#[tokio::test]
+async fn detach_leaves_a_device_zone_event_alone() {
+    let pool = setup().await;
+    let page_id =
+        detached_single(&pool, "2026-06-15T09:00:00", "2026-06-15T10:00:00", "UTC").await;
+
+    let (start, end, tz) = zoned_schedule(&pool, &page_id).await;
+    assert_eq!(start, "2026-06-15T09:00:00");
+    assert_eq!(end.as_deref(), Some("2026-06-15T10:00:00"));
+    assert_eq!(
+        tz.as_deref(),
+        Some("UTC"),
+        "nothing converted, so nothing to restamp",
+    );
+}
+
+/// An all-day event carries no zone from either provider, so it floats already.
+#[tokio::test]
+async fn detach_leaves_an_all_day_event_alone() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(
+            core("/ev.ics", "uid-1", "v1", "Conference"),
+            all_day("2026-06-15", Some("2026-06-18")),
+        )]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await;
+    reconcile(&pool, &ctx(), &removal("/ev.ics")).await.unwrap();
+
+    let (start, end, _) = zoned_schedule(&pool, &page_id).await;
+    assert_eq!(start, "2026-06-15");
+    assert_eq!(
+        end.as_deref(),
+        Some("2026-06-17"),
+        "inclusive end survives detach untouched",
+    );
+}
+
+/// A weekly series whose conversion stays inside the day: the time moves, every
+/// occurrence date stays put, so the completed/skip sets and exdates keyed to
+/// those dates stay valid.
+#[tokio::test]
+async fn detach_converts_a_recurring_series_within_the_day() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![UpsertItem::Event(EventUpsert {
+            core: core("/series.ics", "uid-series", "v1", "Weekly 1:1"),
+            schedule: timed("2026-06-01T15:00:00", None, "Europe/Berlin"),
+            recurrence: Some(Recurrence {
+                fidelity: OccurrenceFidelity::Complete,
+                rrule: "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260629T150000".into(),
+                exdates: vec!["2026-06-08T15:00:00".into()],
+                overrides: vec![],
+            }),
+        })]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await;
+
+    reconcile(&pool, &ctx(), &removal("/series.ics"))
+        .await
+        .unwrap();
+
+    let (rrule, start, tz) = rule_row(&pool, &page_id).await;
+    assert_eq!(
+        start, "2026-06-01T13:00:00",
+        "base converts; 15:00 Berlin is 13:00 UTC in June",
+    );
+    assert_eq!(&start[..10], "2026-06-01", "occurrence dates are unchanged");
+    assert!(
+        rrule.contains("BYDAY=MO"),
+        "cadence untouched, got {rrule}"
+    );
+    assert!(
+        rrule.contains("UNTIL=20260629T130000"),
+        "the bound shifts with the occurrences it bounds, got {rrule}",
+    );
+    assert_eq!(tz, "UTC", "stamp now names the zone the wall-clock is in");
+    assert_eq!(
+        rule_exdates(&pool, &page_id).await,
+        vec!["2026-06-08T15:00:00"],
+        "exdates match by day key, so a within-day conversion leaves them valid",
+    );
+}
+
+/// A moved instance renders and fires on its own row, so it converts with the
+/// series — while `original_date`, the key that ties it back to the occurrence it
+/// replaces, stays in the basis the rule expands in.
+#[tokio::test]
+async fn detach_converts_override_rows_and_keeps_their_keys() {
+    let pool = setup().await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly_series()]))
+        .await
+        .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await;
+
+    reconcile(&pool, &ctx(), &removal("/series.ics"))
+        .await
+        .unwrap();
+
+    let (start, original_date, tz): (String, String, Option<String>) = sqlx::query_as(
+        "SELECT scheduled_start, original_date, timezone FROM page_schedules
+         WHERE page_id = ? AND original_date IS NOT NULL",
+    )
+    .bind(&page_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        start, "2026-06-08T15:00:00",
+        "11:00 New York is 15:00 UTC in June",
+    );
+    assert_eq!(
+        original_date, "2026-06-08T09:00:00",
+        "the occurrence key stays in the rule's basis",
+    );
+    assert_eq!(tz, None);
+}
+
+/// The refused case: converting the base crosses midnight, so every occurrence
+/// date would shift and the four date-keyed tables plus the rule's BYDAY would
+/// have to move with it. The series keeps its raw wall-clock instead.
+#[tokio::test]
+async fn detach_leaves_a_cross_midnight_series_untouched() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![UpsertItem::Event(EventUpsert {
+            core: core("/series.ics", "uid-series", "v1", "Late series"),
+            schedule: timed(
+                "2026-06-01T00:30:00",
+                Some("2026-06-01T01:00:00"),
+                "Europe/Berlin",
+            ),
+            recurrence: Some(Recurrence {
+                fidelity: OccurrenceFidelity::Complete,
+                rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+                exdates: vec![],
+                overrides: vec![],
+            }),
+        })]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await;
+
+    reconcile(&pool, &ctx(), &removal("/series.ics"))
+        .await
+        .unwrap();
+
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+    let (rrule, start, tz) = rule_row(&pool, &page_id).await;
+    assert_eq!(start, "2026-06-01T00:30:00", "Monday stays Monday");
+    assert_eq!(rrule, "FREQ=WEEKLY;BYDAY=MO");
+    assert_eq!(tz, "Europe/Berlin");
+}
+
+/// Re-link needs no time-side code of its own: `write_schedule` runs on every
+/// reconcile path and replaces the schedule wholesale, so the provider's values
+/// — timezone included — overwrite whatever the user set while detached.
+#[tokio::test]
+async fn relink_restores_provider_time_over_a_local_edit() {
+    let pool = setup().await;
+    let page_id = detached_single(
+        &pool,
+        "2026-06-15T15:00:00",
+        "2026-06-15T16:00:00",
+        "Europe/Berlin",
+    )
+    .await;
+    sqlx::query("UPDATE page_schedules SET scheduled_start = '2026-06-20T08:00:00' WHERE page_id = ?")
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(
+            core("/ev-new.ics", "uid-1", "v2", "Standup"),
+            timed(
+                "2026-06-15T15:00:00",
+                Some("2026-06-15T16:00:00"),
+                "Europe/Berlin",
+            ),
+        )]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(sync_state(&pool, &page_id).await, "active");
+    let (start, _, tz) = zoned_schedule(&pool, &page_id).await;
+    assert_eq!(start, "2026-06-15T15:00:00", "the user's move is overruled");
+    assert_eq!(
+        tz.as_deref(),
+        Some("Europe/Berlin"),
+        "absolute semantics come back with the lock",
+    );
+}
+
+/// The other half of the same round-trip: a detached page the user filed
+/// elsewhere returns to its calendar folder when the calendar reclaims it.
+#[tokio::test]
+async fn relink_returns_the_page_to_its_calendar_folder() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    crate::insert_test_folder(&pool, "mine", "Mine").await.unwrap();
+    let page_id = detached_single(
+        &pool,
+        "2026-06-15T09:00:00",
+        "2026-06-15T10:00:00",
+        "UTC",
+    )
+    .await;
+    sqlx::query("UPDATE pages SET folder_id = 'mine' WHERE id = ?")
+        .bind(&page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single(
+            core("/ev-new.ics", "uid-1", "v2", "Standup"),
+            timed("2026-06-15T09:00:00", Some("2026-06-15T10:00:00"), "UTC"),
+        )]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(sync_state(&pool, &page_id).await, "active");
+    assert_eq!(page_folder(&pool, &page_id).await.as_deref(), Some("f1"));
+}
+
 // ─── relink + teardown of a RECURRING series (singles-only before) ─────────────
 
 #[tokio::test]

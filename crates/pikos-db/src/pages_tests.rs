@@ -1907,7 +1907,7 @@ async fn moving_a_page_into_an_external_folder_is_rejected() {
 }
 
 #[tokio::test]
-async fn moving_a_page_out_of_an_external_folder_is_rejected() {
+async fn moving_a_synced_page_out_of_its_calendar_folder_is_rejected() {
     let pool = test_pool().await;
     crate::pool::insert_test_folder(&pool, "ext", "Synced")
         .await
@@ -1925,6 +1925,9 @@ async fn moving_a_page_out_of_an_external_folder_is_rejected() {
     )
     .await
     .unwrap();
+    crate::pool::insert_test_page_sync(&pool, "p", "active")
+        .await
+        .unwrap();
 
     // Move to a regular folder — rejected.
     let to_regular = update_page_impl(
@@ -1951,6 +1954,126 @@ async fn moving_a_page_out_of_an_external_folder_is_rejected() {
     .await
     .unwrap_err();
     assert!(matches!(to_inbox, AppError::Conflict(_)));
+}
+
+#[tokio::test]
+async fn a_detached_page_moves_out_of_its_calendar_folder() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "ext", "Synced")
+        .await
+        .unwrap();
+    crate::pool::insert_test_folder(&pool, "regular", "Regular")
+        .await
+        .unwrap();
+    flag_external(&pool, "ext").await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some("ext"),
+            ..TestPage::new("p", "Was synced")
+        },
+    )
+    .await
+    .unwrap();
+    crate::pool::insert_test_page_sync(&pool, "p", "detached")
+        .await
+        .unwrap();
+
+    let moved = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            folder_id: Some(serde_json::json!("regular")),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(moved.folder_id.as_deref(), Some("regular"));
+
+    let to_inbox = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            folder_id: Some(serde_json::Value::Null),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(to_inbox.folder_id, None);
+}
+
+/// A done clone sits in the calendar folder with no `page_sync` row of its own, so
+/// the re-keyed guard lets it move. Deliberate: it is a completed occurrence the
+/// user owns, and nothing about it is still calendar-managed.
+#[tokio::test]
+async fn a_done_clone_in_a_calendar_folder_is_filable() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "ext", "Synced")
+        .await
+        .unwrap();
+    crate::pool::insert_test_folder(&pool, "regular", "Regular")
+        .await
+        .unwrap();
+    flag_external(&pool, "ext").await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some("ext"),
+            ..TestPage::new("clone", "Standup (done)")
+        },
+    )
+    .await
+    .unwrap();
+
+    let moved = update_page_impl(
+        &pool,
+        "clone".into(),
+        PageUpdate {
+            folder_id: Some(serde_json::json!("regular")),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(moved.folder_id.as_deref(), Some("regular"));
+}
+
+#[tokio::test]
+async fn a_detached_page_cannot_move_back_into_a_calendar_folder() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "ext", "Synced")
+        .await
+        .unwrap();
+    crate::pool::insert_test_folder(&pool, "regular", "Regular")
+        .await
+        .unwrap();
+    flag_external(&pool, "ext").await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some("regular"),
+            ..TestPage::new("p", "Was synced")
+        },
+    )
+    .await
+    .unwrap();
+    crate::pool::insert_test_page_sync(&pool, "p", "detached")
+        .await
+        .unwrap();
+
+    let err = update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            folder_id: Some(serde_json::json!("ext")),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, AppError::Conflict(_)));
 }
 
 #[tokio::test]
