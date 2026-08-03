@@ -76,6 +76,22 @@ jobs:
           APPLE_API_KEY_CONTENTS: ${{ secrets.APPLE_API_KEY }}
         run: printf '%s' "$APPLE_API_KEY_CONTENTS" > "$RUNNER_TEMP/apple-api-key.p8"
 
+      # The build succeeds without these and just hides Google sync, so nothing
+      # downstream would go red — a typo'd secret name would publish a release
+      # whose headline feature is invisible. Fail here instead.
+      - name: Require Google OAuth credentials
+        env:
+          PIKOS_GOOGLE_CLIENT_ID: ${{ secrets.PIKOS_GOOGLE_CLIENT_ID }}
+          PIKOS_GOOGLE_CLIENT_SECRET: ${{ secrets.PIKOS_GOOGLE_CLIENT_SECRET }}
+        run: |
+          missing=""
+          [ -n "$PIKOS_GOOGLE_CLIENT_ID" ] || missing="PIKOS_GOOGLE_CLIENT_ID"
+          [ -n "$PIKOS_GOOGLE_CLIENT_SECRET" ] || missing="$missing PIKOS_GOOGLE_CLIENT_SECRET"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repo secret(s):$missing — this build would ship with Google sync hidden. Set them with 'gh secret set <NAME>'."
+            exit 1
+          fi
+
       - name: Build Tauri app
         run: pnpm tauri build --target ${{ matrix.target }}
         working-directory: apps/desktop
@@ -90,6 +106,10 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
+          # Google OAuth client — read via option_env!, so these are compile-time
+          # inputs, not runtime config. Guarded non-empty above.
+          PIKOS_GOOGLE_CLIENT_ID: ${{ secrets.PIKOS_GOOGLE_CLIENT_ID }}
+          PIKOS_GOOGLE_CLIENT_SECRET: ${{ secrets.PIKOS_GOOGLE_CLIENT_SECRET }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
