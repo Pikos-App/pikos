@@ -3,6 +3,7 @@ import { getLocalTimezone, isDone, isTimedIso, rruleToLabel, snapAnchorToRule } 
 import { CalendarOff, CalendarX, ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { FolderChip } from "@/shared/components/FolderChip";
 import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
@@ -176,20 +177,33 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
           <span className="truncate">Disconnected from {calendarName}</span>
         </div>
       )}
-      <input
-        autoFocus
-        className="w-full border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
-        onBlur={handleTitleBlur}
-        onChange={handleTitleChange}
-        onFocus={(e) => {
-          const el = e.currentTarget;
-          requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
-        }}
-        onKeyDown={handleTitleKeyDown}
-        placeholder="Untitled"
-        readOnly={locked}
-        value={titleValue}
-      />
+      {locked ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <input
+              className="w-full cursor-default border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
+              placeholder="Untitled"
+              readOnly
+              value={titleValue}
+            />
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Title comes from {calendarName}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <input
+          autoFocus
+          className="w-full border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
+          onBlur={handleTitleBlur}
+          onChange={handleTitleChange}
+          onFocus={(e) => {
+            const el = e.currentTarget;
+            requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
+          }}
+          onKeyDown={handleTitleKeyDown}
+          placeholder="Untitled"
+          value={titleValue}
+        />
+      )}
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
@@ -212,7 +226,9 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
         <div className="flex items-center gap-3">
           <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Folder</span>
           {locked ? (
-            <span className="truncate text-sm text-muted-foreground">{calendarName}</span>
+            <span className="cursor-default truncate text-sm text-muted-foreground">
+              {calendarName}
+            </span>
           ) : (
             <FolderChip folders={folders} onChange={handleFolderChange} value={page.folderId} />
           )}
@@ -223,7 +239,9 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
           <div className="flex items-center gap-2">
             {locked ? (
               lockedSchedule && (
-                <span className="text-sm text-muted-foreground">{lockedSchedule}</span>
+                <span className="cursor-default text-sm text-muted-foreground">
+                  {lockedSchedule}
+                </span>
               )
             ) : (
               <DateTimePicker
@@ -245,7 +263,7 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
         <div className="flex items-center gap-3">
           <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Repeats</span>
           {locked ? (
-            <span className="truncate text-sm text-muted-foreground">
+            <span className="cursor-default truncate text-sm text-muted-foreground">
               {recurrenceRule ? rruleToLabel(recurrenceRule.rrule) : "Does not repeat"}
             </span>
           ) : (

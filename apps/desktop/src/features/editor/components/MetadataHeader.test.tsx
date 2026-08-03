@@ -187,3 +187,28 @@ describe("MetadataHeader — reminder bell on locked pages", () => {
     expect(screen.getByLabelText(/reminder/i)).toBeInTheDocument();
   });
 });
+
+describe("MetadataHeader — why a locked field can't be edited", () => {
+  it("names the source calendar when hovering a locked title", async () => {
+    await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
+
+    fireEvent.pointerMove(screen.getByLabelText("Page title"), { pointerType: "mouse" });
+    expect((await screen.findAllByText(/^Title comes from /)).length).toBeGreaterThan(0);
+  });
+
+  it("names the source calendar when hovering a locked schedule", async () => {
+    await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
+
+    fireEvent.pointerMove(screen.getByLabelText(/^Scheduled:/), { pointerType: "mouse" });
+    expect((await screen.findAllByText(/^Time comes from /)).length).toBeGreaterThan(0);
+  });
+
+  it("leaves an unlocked title with no such explanation", async () => {
+    await renderHeader(makePage({ scheduleLocked: false, syncState: null }));
+
+    fireEvent.pointerMove(screen.getByRole("button", { name: "Page title" }), {
+      pointerType: "mouse",
+    });
+    expect(screen.queryByText(/comes from/)).not.toBeInTheDocument();
+  });
+});

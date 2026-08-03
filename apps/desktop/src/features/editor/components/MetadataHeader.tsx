@@ -75,6 +75,7 @@ function Byline({
   // schedule, and recurrence are read-only. Body + the rest of the byline
   // (status, reminders, priority, tags) stay user-editable.
   const locked = page.scheduleLocked;
+  const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "Calendar";
   const lockedSchedule = locked ? syncedScheduleLabel(page) : null;
   const lockedRecurrenceLabel =
     locked && recurrenceRule ? rruleToLabel(recurrenceRule.rrule) : null;
@@ -97,11 +98,9 @@ function Byline({
 
       <BylineSeparator />
       {locked ? (
-        <span className="inline-flex min-w-0 items-center gap-1 text-subtle">
+        <span className="inline-flex min-w-0 cursor-default items-center gap-1 text-subtle">
           <CalendarSync aria-hidden="true" className="shrink-0" size={13} />
-          <span className="max-w-[140px] truncate">
-            {folders.find((f) => f.id === page.folderId)?.name ?? "Calendar"}
-          </span>
+          <span className="max-w-[140px] truncate">{calendarName}</span>
         </span>
       ) : (
         <FolderChip folders={folders} onChange={onFolderChange} value={page.folderId} />
@@ -111,7 +110,14 @@ function Byline({
       <div className="inline-flex shrink-0 items-center gap-2">
         {locked ? (
           lockedSchedule && (
-            <span aria-label={`Scheduled: ${lockedSchedule}`}>{lockedSchedule}</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span aria-label={`Scheduled: ${lockedSchedule}`} className="cursor-default">
+                  {lockedSchedule}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Time comes from {calendarName}</TooltipContent>
+            </Tooltip>
           )
         ) : (
           <DateSchedulePopover page={page} />
@@ -127,7 +133,12 @@ function Byline({
         )}
         {locked ? (
           lockedRecurrenceLabel && (
-            <span className="truncate text-subtle">{lockedRecurrenceLabel}</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-default truncate text-subtle">{lockedRecurrenceLabel}</span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Repeat comes from {calendarName}</TooltipContent>
+            </Tooltip>
           )
         ) : (
           <RecurrencePopover
@@ -436,25 +447,34 @@ export function MetadataHeader({
               rows={1}
               value={titleValue}
             />
+          ) : titleLocked ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  aria-label="Page title"
+                  className="type-display line-clamp-2 w-full cursor-default bg-transparent outline-none"
+                  ref={titleDivRef}
+                >
+                  {titleValue || <span className="text-faint">Untitled</span>}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Title comes from {calendarName}</TooltipContent>
+            </Tooltip>
           ) : (
             <div
               aria-label="Page title"
-              className={`type-display line-clamp-2 w-full bg-transparent outline-none ${titleLocked ? "" : "cursor-text"}`}
-              onClick={titleLocked ? undefined : handleTitleFocus}
-              onFocus={titleLocked ? undefined : handleTitleFocus}
-              onKeyDown={
-                titleLocked
-                  ? undefined
-                  : (e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        handleTitleFocus();
-                      }
-                    }
-              }
+              className="type-display line-clamp-2 w-full cursor-text bg-transparent outline-none"
+              onClick={handleTitleFocus}
+              onFocus={handleTitleFocus}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleTitleFocus();
+                }
+              }}
               ref={titleDivRef}
-              role={titleLocked ? undefined : "button"}
-              tabIndex={titleLocked ? undefined : 0}
+              role="button"
+              tabIndex={0}
             >
               {titleValue || <span className="text-faint">Untitled</span>}
             </div>
