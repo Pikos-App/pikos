@@ -1,0 +1,146 @@
+---
+import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
+
+const title = "Connect an external calendar to Pikos";
+const description = "Pull your calendar into Pikos. Works with iCloud, Google Calendar, and any standard CalDAV server. Your events become real pages you can take notes on.";
+---
+
+<Base title={title} description={description}>
+
+  <main class="mx-auto max-w-2xl px-8 py-20">
+
+    <a href="/" class="inline-flex items-center gap-1 text-sm text-neutral-400 transition-colors hover:text-primary-500 dark:text-neutral-500 dark:hover:text-primary-400">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      Home
+    </a>
+
+    <article>
+      <h1 class="mt-8 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">Connect an external calendar</h1>
+      <p class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">Your real calendar, inside Pikos.</p>
+
+      <div class="prose mt-10 text-base leading-relaxed text-neutral-600 dark:text-neutral-300">
+
+        <p>
+          Pikos reads your calendar over CalDAV (the open standard behind iCloud and most other providers) or straight from Google Calendar. Your events show up in the Pikos calendar as real pages. You can write notes on them, tag them, and find them in search. The schedule stays owned by your calendar, so an event always reflects what's actually on it.
+        </p>
+
+        <p>
+          It's read-only and opt-in. Nothing you write in Pikos goes back out to your provider, and only the calendars you turn on ever sync. Your notes and pages stay on your device. The only thing that moves over the network is your calendar coming in.
+        </p>
+
+        <h2>What you need</h2>
+
+        <p>
+          Three things: the server URL, your username, and an app-specific password. The app password matters. Don't use your normal account password. Most providers won't accept it for CalDAV anyway, and a dedicated password is one you can revoke later without touching anything else.
+        </p>
+
+        <h2 id="app-password">Generate an app password</h2>
+
+        <p>
+          An app-specific password is a one-off password you create for a single app. It only works for that app, and you can delete it any time to cut Pikos off without changing your main login.
+        </p>
+
+        <p>
+          <strong>iCloud.</strong> Sign in at <a href="https://account.apple.com" target="_blank" rel="noreferrer">account.apple.com</a>, go to Sign-In and Security, then App-Specific Passwords. Create one, name it "Pikos", and copy the generated password. You'll need two-factor authentication on your Apple Account first.
+        </p>
+
+        <p>
+          <strong>Other providers.</strong> Look for "app password", "app-specific password", or "CalDAV access" in your provider's account or security settings. If your provider doesn't require one, your normal password will work, but a dedicated one is still the safer choice.
+        </p>
+
+        <h2>Find your server URL</h2>
+
+        <p>
+          Pikos discovers your calendars from the base server URL, so you don't have to hunt down individual calendar addresses. You just need the server itself.
+        </p>
+
+        <ul>
+          <li><strong>iCloud</strong> &mdash; <code>https://caldav.icloud.com</code></li>
+          <li><strong>Other providers</strong> &mdash; search your provider's help for "CalDAV server URL". It usually looks like <code>https://caldav.yourprovider.com</code>.</li>
+        </ul>
+
+        <h2>Connect in Pikos</h2>
+
+        <p>
+          Open Settings (<code>Cmd+,</code>) and go to the <strong>Calendar Sync</strong> tab. Click <strong>Add account</strong>, choose <strong>CalDAV</strong>, and enter your server URL, username, and the app password you just made.
+        </p>
+
+        <p>
+          Pikos connects and lists every calendar on the account. Flip on the ones you want. Each enabled calendar gets its own folder and a color you can change. Turn a calendar off and its folder disappears. Your password goes straight into the system keychain, never the Pikos database.
+        </p>
+
+        <h2>How synced events behave</h2>
+
+        <ul>
+          <li><strong>The schedule is locked.</strong> Title, time, and recurrence come from your calendar and can't be edited or dragged in Pikos. That's on purpose. It's how an event always matches the source.</li>
+          <li><strong>The notes are yours.</strong> The body, tags, reminders, and links belong to you. Write whatever you want. Sync never touches them.</li>
+          <li><strong>Recurring events just work.</strong> Repeats, exceptions, and cancelled occurrences come across and project onto the calendar.</li>
+          <li><strong>It works offline.</strong> Synced events are stored locally, so the calendar still renders with no connection. Pikos refreshes when you're back online and when the window regains focus.</li>
+          <li><strong>Removing a calendar is clean.</strong> Disable it and the mirror events go with it. Anything you took notes on or marked done is kept, so you never lose your own work.</li>
+        </ul>
+
+        <h2>Connecting Google Calendar</h2>
+
+        <p>
+          Google skips all of the above. There's no server URL or app password; you sign in with Google instead. Click <strong>Add account</strong>, choose <strong>Google</strong>, and approve read-only access in your browser. Pikos asks for read-only access to your calendars, and disconnecting revokes it.
+        </p>
+
+        <p>
+          Ready to try? <a href="/download">Download Pikos</a>, then open Settings and find Calendar Sync.
+        </p>
+
+      </div>
+    </article>
+
+  </main>
+
+  <Footer current="/calendar-sync" />
+</Base>
+
+<style>
+
+  .prose :global(h2) {
+    padding-top: 1rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--color-neutral-900);
+  }
+  :global(html.dark) .prose :global(h2) {
+    color: var(--color-neutral-100);
+  }
+
+  .prose :global(p) {
+    margin-top: 1.5rem;
+  }
+
+  .prose :global(ul) {
+    margin-top: 1rem;
+    padding-left: 1.25rem;
+    list-style-type: disc;
+  }
+
+  .prose :global(li) {
+    margin-top: 0.375rem;
+  }
+
+  .prose :global(a) {
+    color: var(--color-primary-500);
+  }
+  :global(html.dark) .prose :global(a) {
+    color: var(--color-primary-400);
+  }
+  .prose :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  .prose :global(code) {
+    border-radius: 0.25rem;
+    background-color: var(--color-neutral-150);
+    padding: 0.125rem 0.375rem;
+    font-size: 0.875rem;
+  }
+  :global(html.dark) .prose :global(code) {
+    background-color: var(--color-neutral-800);
+  }
+</style>
