@@ -31,8 +31,17 @@ favicon/
   favicon-{16,32,48,180,192,512}.png
   head-snippet.html          # Drop-in <head> tags for the marketing site
 
+oauth/
+  pikos-oauth-120.png        # Consent-screen mark — the one committed output
+
 contact-sheet.html           # Visual review page — open in a browser
 ```
+
+Only `src/`, `svg/`, and `oauth/` are tracked. `png/`, `macos/`, and `favicon/`
+are render outputs — regenerate them rather than expecting them in a fresh
+clone, and copy the ones an app consumes into that app's own asset directory.
+`oauth/` is the exception: it's uploaded to a third party and reviewed there,
+so the exact bytes stay in the repo.
 
 ## Design tokens
 
@@ -75,6 +84,10 @@ cascade (0.45 / 0.75 / 1.0) from back to front.
 - **Favicon** → `favicon/favicon.ico` + accompanying PNGs. Use `favicon/head-snippet.html`
   as a drop-in for the site's `<head>`.
 - **Apple touch icon** → `favicon/favicon-180.png`.
+- **OAuth consent screen** (Google Cloud Console → Branding) → `oauth/pikos-oauth-120.png`.
+  Google requires a square image of at least 120×120. Use the container variant, not a
+  transparent one — the consent card is white, and the mark alone reads as floating debris
+  on it.
 
 ### When to use each SVG variant
 
