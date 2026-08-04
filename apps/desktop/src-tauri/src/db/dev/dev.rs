@@ -1,5 +1,6 @@
 //! Developer/settings commands: stats, reset, export, seed helpers.
 
+use pikos_calendar_sync::Keychain;
 use serde::{Deserialize, Serialize};
 use sqlx::{Column, Row};
 use tauri::Manager;
@@ -250,9 +251,25 @@ pub(crate) async fn get_usage_stats_impl(pool: &sqlx::SqlitePool) -> AppResult<U
 
 /// Delete all user data from the workspace (keeps the DB file and schema).
 /// FK order: focus_sessions → page_schedules → page_recurrence_rules → pages → folders
+///
+/// Connected calendars are disconnected first, through the same path the settings
+/// panel uses, so the grant is revoked and the keychain entry removed rather than
+/// outliving the data. Leaving them would strand the account: its pages cascade
+/// away with `pages`, its folder link nulls out, but the row stays `enabled` with
+/// a live `sync_token` — so the next poll asks for changes *since* that token,
+/// gets none, and rebuilds nothing.
 #[tauri::command]
 pub async fn reset_db(state: tauri::State<'_, DbState>) -> AppResult<()> {
     let pool = state.get_pool().await?;
+    for account in pikos_db::sync_commands::get_sync_status_impl(&pool).await? {
+        // Best-effort: an unreachable provider must not block wiping local data.
+        if let Err(e) =
+            pikos_calendar_sync::disconnect_account(&pool, Keychain::system(), &account.account.id)
+                .await
+        {
+            log::warn!("reset_db: could not disconnect {}: {e}", account.account.id);
+        }
+    }
     reset_db_impl(&pool).await
 }
 
@@ -282,9 +299,17 @@ pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
         .await?
         .rows_affected();
 
+    // Cascades sync_calendar and any surviving page_sync. Dormant rows are kept by
+    // a normal disconnect so a reconnect can re-link detached pages, but a reset
+    // deletes those pages too — there is nothing left to re-link to.
+    let accounts = sqlx::query("DELETE FROM sync_account")
+        .execute(pool)
+        .await?
+        .rows_affected();
+
     log::info!(
         "reset_db pages={pages} folders={folders} schedules={schedules} \
-         rules={rules} sessions={sessions}"
+         rules={rules} sessions={sessions} sync_accounts={accounts}"
     );
     Ok(())
 }

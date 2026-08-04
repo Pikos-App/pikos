@@ -272,6 +272,44 @@ async fn reset_db_wipes_all_user_tables() {
     }
 }
 
+/// A surviving account would still be `enabled` with a live `sync_token`, so the
+/// next poll asks for changes since that token, gets none, and never rebuilds the
+/// folder or its events.
+#[tokio::test]
+async fn reset_db_removes_connected_calendar_accounts() {
+    let pool = test_pool().await;
+    let now = pikos_db::now_iso();
+    sqlx::query(
+        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('acct', 'google', 'a@example.com', 'oauth', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO sync_calendar
+         (id, account_id, calendar_id, display_name, enabled, sync_token, created_at, updated_at)
+         VALUES ('cal', 'acct', 'primary', 'Personal', 1, 'tok-123', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    reset_db_impl(&pool).await.unwrap();
+
+    for table in ["sync_account", "sync_calendar"] {
+        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}")) // sql-ok: table is a constant from the hardcoded list above
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "{table} survived the reset");
+    }
+}
+
 // ── build_export_json_impl ─────────────────────────────────────────────────────
 
 #[tokio::test]
