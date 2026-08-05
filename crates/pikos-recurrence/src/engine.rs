@@ -384,11 +384,19 @@ pub fn missed_occurrences_between(
 /// exclusion set, not `now`, decides where the head sits. Excludes by date-only
 /// key (a rule yields at most one occurrence per date), so a timed exclusion
 /// string still matches.
+///
+/// `floor` is a lower bound on the head's date, for a synced series whose master
+/// `DTSTART` predates the window the calendar was actually synced from: the
+/// provider hands back the series' original start (2020, say) whenever it still
+/// yields instances in the window, and nothing before the connection was ever the
+/// user's to complete. It only ever moves the head *forward*, so real completion
+/// history still advances past it. `None` for native series, which own their base.
 pub fn oldest_open_occurrence(
     rrule: &str,
     start: &str,
     end: Option<&str>,
     exclusions: &[String],
+    floor: Option<&str>,
 ) -> Result<Option<Occurrence>, RecurrenceError> {
     let rule = ParsedRule::parse(rrule)?;
     let anchor =
@@ -396,9 +404,15 @@ pub fn oldest_open_occurrence(
     let duration = timed_duration(&anchor, end);
     let excluded: HashSet<&str> = exclusions.iter().map(|s| date_key(s)).collect();
     let anchor_time = anchor.time.unwrap_or(NaiveTime::MIN);
+    // Day-keyed like `excluded`, so a floor given as full wall-clock compares
+    // against occurrence dates on the same basis.
+    let floor_key = floor.map(date_key);
 
     for date in OccurrenceIter::new(&rule, anchor.date, anchor_time) {
         let date_str = date.format("%Y-%m-%d").to_string();
+        if floor_key.is_some_and(|f| date_str.as_str() < f) {
+            continue;
+        }
         if excluded.contains(date_str.as_str()) {
             continue;
         }

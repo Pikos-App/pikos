@@ -66,14 +66,51 @@ async fn exclusion_union(
 fn derive_oldest_open(
     rule: &RuleRow,
     exclusions: &[String],
+    floor: Option<&str>,
 ) -> AppResult<Option<pikos_recurrence::Occurrence>> {
     pikos_recurrence::oldest_open_occurrence(
         &rule.rrule,
         &rule.base_start,
         rule.base_end.as_deref(),
         exclusions,
+        floor,
     )
     .map_err(|e| AppError::Internal(format!("recurrence derivation failed: {e}")))
+}
+
+/// Lower bound on a synced series' head: the backfill window that first admitted
+/// it. A provider returns the recurring master's original `DTSTART` — which can
+/// predate the connection by years — whenever the series still yields instances in
+/// the window, so without a floor the head parks on an occurrence nobody could
+/// have completed, and completing it completes the wrong instance.
+///
+/// Anchored on `page_sync.created_at` because the reconciler writes it once on
+/// first insert and never rewrites it — an etag update and a dormant re-link both
+/// leave it alone — so a `410`-triggered re-enumerate can't march the floor
+/// forward and strand a head the user had already advanced. `sync_calendar`'s
+/// `last_full_sync_at` looks like the natural anchor and is not: it restamps on
+/// every full enumerate.
+///
+/// Applies to detached rows too: detaching doesn't rewrite the provider's base, so
+/// dropping the floor there would let the head fall back to the original start.
+async fn synced_head_floor(
+    conn: &mut sqlx::SqliteConnection,
+    page_id: &str,
+) -> AppResult<Option<String>> {
+    let created: Option<String> =
+        sqlx::query_scalar("SELECT created_at FROM page_sync WHERE page_id = ?")
+            .bind(page_id)
+            .fetch_optional(&mut *conn)
+            .await?;
+    Ok(created.and_then(|c| {
+        let day = c.get(..10)?;
+        let parsed = chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d").ok()?;
+        Some(
+            (parsed - Duration::days(crate::sync::BACKFILL_DAYS))
+                .format("%Y-%m-%d")
+                .to_string(),
+        )
+    }))
 }
 
 /// Recomputes `pages.scheduled_start` for one recurring page from truth and flips
@@ -89,6 +126,7 @@ pub async fn recompute_recurring_schedule(
         return Ok(());
     };
     let excl = exclusion_union(tx, page_id, &rule.id, &rule.rrule_exdates).await?;
+    let floor = synced_head_floor(tx, page_id).await?;
 
     // An out-of-envelope rule (a provider shape the engine rejects) must not fail
     // the enclosing write — leave the cache as-is and skip, matching the reminder
@@ -98,6 +136,7 @@ pub async fn recompute_recurring_schedule(
         &rule.base_start,
         rule.base_end.as_deref(),
         &excl,
+        floor.as_deref(),
     ) {
         Ok(derived) => derived,
         Err(e) => {
@@ -170,7 +209,8 @@ pub async fn oldest_open_for_page(
         return Ok(None);
     };
     let excl = exclusion_union(&mut conn, page_id, &rule.id, &rule.rrule_exdates).await?;
-    derive_oldest_open(&rule, &excl)
+    let floor = synced_head_floor(&mut conn, page_id).await?;
+    derive_oldest_open(&rule, &excl, floor.as_deref())
 }
 
 #[derive(sqlx::FromRow)]

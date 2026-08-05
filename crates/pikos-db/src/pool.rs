@@ -393,6 +393,12 @@ pub async fn insert_test_folder(pool: &SqlitePool, id: &str, name: &str) -> AppR
     Ok(())
 }
 
+/// A connection date old enough that the synced head-floor never binds, so a
+/// fixture using any plausible occurrence date keeps testing what it meant to.
+/// Tests that exercise the floor itself pass their own date.
+#[cfg(test)]
+pub const TEST_CONNECTED_LONG_AGO: &str = "2000-01-01T00:00:00";
+
 /// Links an existing test page to a synced calendar (a `page_sync` row), creating
 /// a shared throwaway `sync_account` on first use. `sync_state` ∈ active |
 /// detached | tombstoned. Lets schedule/folder/page guard tests mark a page synced.
@@ -403,6 +409,18 @@ pub async fn insert_test_page_sync(
     pool: &SqlitePool,
     page_id: &str,
     sync_state: &str,
+) -> AppResult<()> {
+    insert_test_page_sync_connected_at(pool, page_id, sync_state, TEST_CONNECTED_LONG_AGO).await
+}
+
+/// [`insert_test_page_sync`] with an explicit `page_sync.created_at` — the anchor
+/// the head-floor derives from, i.e. when this calendar was connected.
+#[cfg(test)]
+pub async fn insert_test_page_sync_connected_at(
+    pool: &SqlitePool,
+    page_id: &str,
+    sync_state: &str,
+    connected_at: &str,
 ) -> AppResult<()> {
     let now = now_iso();
     sqlx::query(
@@ -423,7 +441,7 @@ pub async fn insert_test_page_sync(
     .bind(format!("href-{page_id}"))
     .bind(format!("uid-{page_id}"))
     .bind(sync_state)
-    .bind(&now)
+    .bind(connected_at)
     .execute(pool)
     .await?;
     Ok(())

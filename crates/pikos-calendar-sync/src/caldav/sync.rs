@@ -127,7 +127,7 @@ async fn backfill<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
 ) -> Result<SyncDelta, CaldavError> {
-    let window_start = Utc::now() - chrono::Duration::days(7);
+    let window_start = Utc::now() - chrono::Duration::days(pikos_db::sync::BACKFILL_DAYS);
     let resp = transport
         .report(calendar_url, "1", &calendar_query_body(window_start))
         .await?;

@@ -11,6 +11,12 @@
 pub const PROVIDER_CALDAV: &str = "caldav";
 pub const PROVIDER_GOOGLE: &str = "google";
 
+/// How far back a backfill reaches. Lives here, not in the provider crates, because
+/// the head-floor derivation reads it too: a synced series' head is floored at the
+/// window that first admitted it, so if a provider widened its window unilaterally
+/// the floor would silently clip occurrences the backfill had legitimately fetched.
+pub const BACKFILL_DAYS: i64 = 7;
+
 /// `sync_account` row — one connected account. Secrets are NOT here; only a
 /// stable handle (`auth_kind` + the row id as the keychain key).
 #[derive(Debug, sqlx::FromRow)]

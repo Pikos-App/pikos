@@ -627,6 +627,7 @@ async fn single_synced_page_gaining_an_rrule_transitions_cleanly() {
         .await
         .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
+    connected_long_ago(&pool, &page_id).await;
     assert_eq!(rule_count(&pool).await, 0);
     assert_eq!(
         standalone_schedule_count(&pool, &page_id).await,
@@ -2842,6 +2843,51 @@ fn weekly(etag: &str, rrule: &str) -> UpsertItem {
     })
 }
 
+/// A weekly series anchored `weeks_ago` before today, so the fixture stays fixed
+/// relative to the sync window instead of encoding a calendar date that ages.
+fn weekly_anchored_weeks_ago(etag: &str, weeks_ago: i64) -> UpsertItem {
+    let base = (chrono::Local::now() - chrono::Duration::weeks(weeks_ago))
+        .format("%Y-%m-%dT09:00:00")
+        .to_string();
+    UpsertItem::Event(EventUpsert {
+        core: core("/series.ics", "uid-series", etag, "Weekly"),
+        schedule: timed(&base, None, "UTC"),
+        recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
+            rrule: "FREQ=WEEKLY".into(),
+            exdates: vec![],
+            overrides: vec![],
+        }),
+    })
+}
+
+/// The floor: `page_sync.created_at` (stamped now, by the reconciler) minus the
+/// backfill window.
+fn window_floor() -> String {
+    (chrono::Local::now() - chrono::Duration::days(crate::sync::BACKFILL_DAYS))
+        .format("%Y-%m-%d")
+        .to_string()
+}
+
+/// Backdates `page_sync.created_at`, the anchor the synced head-floor derives
+/// from, and re-derives the head. The reconciler stamps that column at insert, so a
+/// fixture whose occurrences sit months before "now" is a C30 case and gets its
+/// head pulled forward into the sync window. The cases below assert absolute dates
+/// and are about set-carrying and status transitions, not window placement, so they
+/// declare the calendar long-connected instead of encoding today's date.
+async fn connected_long_ago(pool: &sqlx::SqlitePool, page_id: &str) {
+    sqlx::query("UPDATE page_sync SET created_at = ?")
+        .bind(crate::pool::TEST_CONNECTED_LONG_AGO)
+        .execute(pool)
+        .await
+        .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    crate::recurrence_derive::recompute_recurring_schedule(&mut tx, page_id)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+}
+
 /// (scheduled_start, status, completed_at) of the page denorm — the cache the
 /// recompute owns for a recurring page.
 async fn page_denorm(
@@ -2865,6 +2911,7 @@ async fn series_rewrite_recomputes_head_over_both_sets() {
         .await
         .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
+    connected_long_ago(&pool, &page_id).await;
     assert_eq!(
         page_denorm(&pool, &page_id).await.0.as_deref(),
         Some("2026-06-01T09:00:00")
@@ -2919,6 +2966,7 @@ async fn provider_re_extension_unmarks_exhausted_head() {
     .await
     .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
+    connected_long_ago(&pool, &page_id).await;
 
     sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-01', 'c1')")
         .bind(&page_id).execute(&pool).await.unwrap();
@@ -3001,6 +3049,7 @@ async fn detach_recomputes_head_off_completed_base() {
         .await
         .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
+    connected_long_ago(&pool, &page_id).await;
     // Completed base makes the series owned (→ detach, not hard delete) and moves
     // the recomputed head forward.
     sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-01', 'c1')")
@@ -3578,5 +3627,127 @@ async fn nonempty_body_with_no_seed_hash_parks_the_incoming_description() {
         pending.as_deref(),
         Some("Upstream notes"),
         "withheld description parked"
+    );
+}
+
+/// C30: a provider returns the recurring master's original `DTSTART` whenever the
+/// series still yields instances in the backfill window, so a series running since
+/// 2020 arrives with a 2020 base. Without a floor the head parks there — one
+/// permanently-overdue page per synced series, and completing it completes the
+/// 2020 occurrence rather than this week's.
+#[tokio::test]
+async fn a_series_predating_the_connection_heads_at_the_first_in_window_occurrence() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_anchored_weeks_ago("v1", 260)]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+
+    let head = page_denorm(&pool, &page_id).await.0.unwrap();
+    let floor = window_floor();
+    assert!(
+        head[..10] >= *floor,
+        "head {head} must not predate the sync window {floor}"
+    );
+    // Still a real occurrence of the rule, not the floor rounded up to itself.
+    let base_dow = (chrono::Local::now() - chrono::Duration::weeks(260))
+        .format("%a")
+        .to_string();
+    let head_dow = chrono::NaiveDate::parse_from_str(&head[..10], "%Y-%m-%d")
+        .unwrap()
+        .format("%a")
+        .to_string();
+    assert_eq!(head_dow, base_dow, "head stays on the series' weekday");
+}
+
+/// The floor is a lower bound, not a substitute for completion history: completing
+/// the in-window head must still advance to the next occurrence.
+#[tokio::test]
+async fn a_completed_occurrence_advances_a_floored_head_normally() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_anchored_weeks_ago("v1", 260)]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    let head = page_denorm(&pool, &page_id).await.0.unwrap();
+
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c1')",
+    )
+    .bind(&page_id)
+    .bind(&head[..10])
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    let advanced = page_denorm(&pool, &page_id).await.0.unwrap();
+    let expected = (chrono::NaiveDate::parse_from_str(&head[..10], "%Y-%m-%d").unwrap()
+        + chrono::Duration::weeks(1))
+    .format("%Y-%m-%d")
+    .to_string();
+    assert_eq!(
+        &advanced[..10],
+        expected,
+        "completion advances one week past the floored head"
+    );
+}
+
+/// A `410`-triggered re-enumerate rewrites the series wholesale. The floor anchors
+/// on `page_sync.created_at`, which the reconciler writes once and never rewrites,
+/// so an already-advanced head must not be dragged back to the window start.
+#[tokio::test]
+async fn a_re_enumerate_does_not_drag_an_advanced_head_backwards() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_anchored_weeks_ago("v1", 260)]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    let head = page_denorm(&pool, &page_id).await.0.unwrap();
+
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c1')",
+    )
+    .bind(&page_id)
+    .bind(&head[..10])
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let advanced = page_denorm(&pool, &page_id).await.0.unwrap();
+
+    // Same series, new etag → the full rewrite path a 410 takes.
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_anchored_weeks_ago("v2", 260)]),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        page_denorm(&pool, &page_id).await.0.unwrap(),
+        advanced,
+        "re-enumerate leaves the advanced head where completion put it"
     );
 }

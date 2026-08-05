@@ -24,9 +24,7 @@ use super::events;
 use super::model::{ApiErrorResponse, CalendarListResponse, Event, EventsResponse};
 use super::transport::GoogleTransport;
 
-/// How far back a backfill reaches. Matches CalDAV's window so both providers
-/// present the same history depth.
-const BACKFILL_DAYS: i64 = 7;
+use pikos_db::sync::BACKFILL_DAYS;
 
 /// Page size for the list endpoints. Google caps `events.list` at 2500; a smaller
 /// page keeps any single response bounded without adding many round-trips.
