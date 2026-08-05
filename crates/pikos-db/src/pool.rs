@@ -42,6 +42,13 @@ pub fn now_local_iso() -> String {
     chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
 }
 
+/// Today's local date, `YYYY-MM-DD` — the day key occurrence dates are compared
+/// against. Local for the same reason as [`now_local_iso`]: a UTC "today" is the
+/// wrong day for much of every day off-UTC.
+pub fn today_local() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
 /// Open (or create) the SQLite workspace at `path`, apply migrations, and run
 /// first-launch housekeeping. WAL + busy_timeout make concurrent access with
 /// the desktop app safe.

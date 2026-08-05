@@ -2383,6 +2383,29 @@ async fn synced_recurring_series(pool: &sqlx::SqlitePool) {
     synced_recurring_series_with(pool, "FREQ=WEEKLY", "2026-06-01T09:00:00", "Europe/London").await;
 }
 
+/// The occurrence `weeks` from today at 09:00, in the stored wall-clock form, and
+/// its day key.
+fn occ_start(weeks: i64) -> String {
+    (chrono::Local::now() + chrono::Duration::weeks(weeks))
+        .format("%Y-%m-%dT09:00:00")
+        .to_string()
+}
+
+fn occ_date(weeks: i64) -> String {
+    (chrono::Local::now() + chrono::Duration::weeks(weeks))
+        .format("%Y-%m-%d")
+        .to_string()
+}
+
+/// [`synced_recurring_series`] anchored on today. An active mirror's head floors
+/// at today, so only a series reaching into the present can exercise *where the
+/// head lands*; the fixed-June fixture stays for the cases that assert occurrence
+/// validation against particular weekdays and month boundaries, which need dates
+/// that don't move.
+async fn synced_series_from_today(pool: &sqlx::SqlitePool) {
+    synced_recurring_series_with(pool, "FREQ=WEEKLY", &occ_start(0), "Europe/London").await;
+}
+
 /// Active synced series "head" with a caller-chosen rule/start/zone, for the
 /// occurrence-validation cases that exercise non-weekly rules and off-source-zone
 /// keys.
@@ -2460,34 +2483,31 @@ async fn unified_completion_rejects_a_non_recurring_synced_page() {
 #[tokio::test]
 async fn synced_completion_inserts_clone_and_records_map() {
     let pool = test_pool().await;
-    synced_recurring_series(&pool).await;
+    synced_series_from_today(&pool).await;
 
-    // Completing a FUTURE occurrence (06-08) leaves the oldest-open head (06-01) put.
-    let result =
-        complete_recurring_page_impl(&pool, synced_complete("2026-06-08", "2026-06-08T09:00:00"))
-            .await
-            .unwrap();
+    // Completing a FUTURE occurrence leaves the oldest-open head put.
+    let result = complete_recurring_page_impl(&pool, synced_complete(&occ_date(1), &occ_start(1)))
+        .await
+        .unwrap();
     let clone = result.clone;
 
     // The clone is a durable native done page at the occurrence — no sync link.
     assert_eq!(clone.status, "done");
-    assert_eq!(
-        clone.scheduled_start.as_deref(),
-        Some("2026-06-08T09:00:00")
-    );
+    assert_eq!(clone.scheduled_start, Some(occ_start(1)));
     assert!(!clone.schedule_locked, "clone is native, not sync-locked");
     assert!(clone.sync_state.is_none());
 
     let recorded: String = sqlx::query_scalar(
-        "SELECT clone_id FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-06-08'",
+        "SELECT clone_id FROM completed_set WHERE page_id = 'head' AND occurrence_date = ?",
     )
+    .bind(occ_date(1))
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(recorded, clone.id);
     assert_eq!(
-        fetch_scheduled_start(&pool, "head").await.as_deref(),
-        Some("2026-06-01T09:00:00"),
+        fetch_scheduled_start(&pool, "head").await,
+        Some(occ_start(0)),
         "oldest-open head unchanged when a later occurrence is completed"
     );
 }
@@ -2497,20 +2517,16 @@ async fn synced_completion_of_the_oldest_open_advances_the_head() {
     // U9a: a synced completion now advances the head (the reconciler recomputes off
     // the same completed-set on the next sync, so the two converge).
     let pool = test_pool().await;
-    synced_recurring_series(&pool).await;
+    synced_series_from_today(&pool).await;
 
-    let result =
-        complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T09:00:00"))
-            .await
-            .unwrap();
+    let result = complete_recurring_page_impl(&pool, synced_complete(&occ_date(0), &occ_start(0)))
+        .await
+        .unwrap();
 
+    assert_eq!(result.head.scheduled_start, Some(occ_start(1)));
     assert_eq!(
-        result.head.scheduled_start.as_deref(),
-        Some("2026-06-08T09:00:00")
-    );
-    assert_eq!(
-        fetch_scheduled_start(&pool, "head").await.as_deref(),
-        Some("2026-06-08T09:00:00"),
+        fetch_scheduled_start(&pool, "head").await,
+        Some(occ_start(1)),
         "head advanced off the completed oldest-open occurrence"
     );
 }
@@ -2654,19 +2670,18 @@ async fn unified_completion_requires_an_occurrence_for_a_synced_series() {
 #[tokio::test]
 async fn synced_uncomplete_deletes_clone_and_rewinds_the_head() {
     let pool = test_pool().await;
-    synced_recurring_series(&pool).await;
-    // Complete the oldest-open occurrence → head advances to 06-08.
-    let clone =
-        complete_recurring_page_impl(&pool, synced_complete("2026-06-01", "2026-06-01T09:00:00"))
-            .await
-            .unwrap()
-            .clone;
+    synced_series_from_today(&pool).await;
+    // Complete the oldest-open occurrence → head advances a week.
+    let clone = complete_recurring_page_impl(&pool, synced_complete(&occ_date(0), &occ_start(0)))
+        .await
+        .unwrap()
+        .clone;
 
     uncomplete_recurring_occurrence_impl(
         &pool,
         UncompleteRecurringInput {
             page_id: "head".into(),
-            occurrence_date: "2026-06-01".into(),
+            occurrence_date: occ_date(0),
         },
     )
     .await
@@ -2674,15 +2689,16 @@ async fn synced_uncomplete_deletes_clone_and_rewinds_the_head() {
 
     assert!(!page_exists(&pool, &clone.id).await, "clone deleted");
     let remaining: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM completed_set WHERE page_id = 'head' AND occurrence_date = '2026-06-01'",
+        "SELECT COUNT(*) FROM completed_set WHERE page_id = 'head' AND occurrence_date = ?",
     )
+    .bind(occ_date(0))
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(remaining, 0, "date dropped from set");
     assert_eq!(
-        fetch_scheduled_start(&pool, "head").await.as_deref(),
-        Some("2026-06-01T09:00:00"),
+        fetch_scheduled_start(&pool, "head").await,
+        Some(occ_start(0)),
         "head rewound to the reopened occurrence"
     );
 }
@@ -2720,28 +2736,29 @@ async fn synced_skip_is_allowed_and_recomputes() {
     // so a synced skip is allowed and converges. Skipping the oldest-open advances
     // the head like a completion does.
     let pool = test_pool().await;
-    synced_recurring_series(&pool).await;
+    synced_series_from_today(&pool).await;
 
     skip_occurrence_impl(
         &pool,
         SkipOccurrenceInput {
             page_id: "head".into(),
-            occurrence_date: "2026-06-01".into(),
+            occurrence_date: occ_date(0),
         },
     )
     .await
     .expect("synced skip allowed");
 
     let skipped: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM skip_set WHERE page_id = 'head' AND occurrence_date = '2026-06-01'",
+        "SELECT COUNT(*) FROM skip_set WHERE page_id = 'head' AND occurrence_date = ?",
     )
+    .bind(occ_date(0))
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(skipped, 1, "skip recorded in the skip-set");
     assert_eq!(
-        fetch_scheduled_start(&pool, "head").await.as_deref(),
-        Some("2026-06-08T09:00:00"),
+        fetch_scheduled_start(&pool, "head").await,
+        Some(occ_start(1)),
         "head advanced off the skipped oldest-open occurrence"
     );
 }
@@ -2835,4 +2852,55 @@ async fn synced_uncomplete_is_a_noop_for_a_different_date() {
     .await
     .unwrap();
     assert_eq!(kept, 1, "original completion kept");
+}
+
+// ─── the foreground heal ──────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn the_foreground_heal_advances_a_stale_active_mirror() {
+    // An active mirror's head floors at today, so it goes stale by the calendar
+    // rather than by a write: nothing completed it, and the reconciler no-ops on an
+    // unchanged etag. This heal is the only thing that advances it across a day
+    // boundary, so it must not skip synced series.
+    let pool = test_pool().await;
+    synced_series_from_today(&pool).await;
+    sqlx::query("UPDATE pages SET scheduled_start = '2020-01-01T09:00:00' WHERE id = 'head'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let changed = recompute_recurring_schedules_impl(&pool).await.unwrap();
+
+    assert_eq!(
+        changed.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+        ["head"],
+        "the stale synced head is reported as changed"
+    );
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await,
+        Some(occ_start(0)),
+        "healed back onto the floor"
+    );
+}
+
+#[tokio::test]
+async fn the_foreground_heal_is_a_no_op_on_a_fresh_cache() {
+    // Runs on every load, so a steady-state pass must report nothing and write
+    // nothing — otherwise every launch floats untouched synced mirrors to the top
+    // of the recently-edited views.
+    let pool = test_pool().await;
+    synced_series_from_today(&pool).await;
+    let before: String = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = 'head'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let changed = recompute_recurring_schedules_impl(&pool).await.unwrap();
+
+    assert!(changed.is_empty(), "nothing moved");
+    let after: String = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = 'head'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after, "and nothing was rewritten");
 }

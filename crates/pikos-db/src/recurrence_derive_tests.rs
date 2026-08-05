@@ -674,3 +674,113 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
         "completion advanced the head"
     );
 }
+
+// ─── the synced head-floor ────────────────────────────────────────────────────
+
+/// Today at `time`, the wall-clock an active mirror's head floors to.
+fn today_at(time: &str) -> String {
+    format!("{}T{time}", crate::today_local())
+}
+
+#[tokio::test]
+async fn an_active_mirrors_head_floors_at_today() {
+    // The C30 shape: with `singleEvents=false` a provider returns the master's
+    // original DTSTART whenever the series still yields instances in the backfill
+    // window, so a series running since 2020 arrives carrying a 2020 base. An
+    // active mirror is read-only, so an occurrence whose time has passed is not a
+    // lapsed task the user can clear — the head floors at today rather than
+    // handing over a backlog that takes one completion per occurrence to drain.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
+    insert_test_page_sync(&pool, "head", "active")
+        .await
+        .unwrap();
+
+    recompute(&pool, "head").await;
+
+    assert_eq!(
+        head(&pool, "head").await.0,
+        Some(today_at("09:00:00")),
+        "head floors at today, not the 2020 base"
+    );
+}
+
+#[tokio::test]
+async fn a_detached_series_keeps_the_connection_window_floor() {
+    // Detaching hands the page to the user, so it keeps task semantics and a
+    // missed occurrence still nags — but the provider's base is untouched by the
+    // detach, so it still needs the connection-time floor to stop the head falling
+    // back to 2020.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
+    let connected = (chrono::Local::now() - chrono::Duration::days(30))
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string();
+    crate::pool::insert_test_page_sync_connected_at(&pool, "head", "detached", &connected)
+        .await
+        .unwrap();
+
+    recompute(&pool, "head").await;
+
+    let expected = (chrono::Local::now() - chrono::Duration::days(30 + crate::sync::BACKFILL_DAYS))
+        .format("%Y-%m-%dT09:00:00")
+        .to_string();
+    assert_eq!(
+        head(&pool, "head").await.0,
+        Some(expected),
+        "detached head sits on the connection window, still overdue and still not 2020"
+    );
+}
+
+#[tokio::test]
+async fn completion_history_advances_the_head_past_the_floor() {
+    // The floor is a lower bound, not a pin: completing today's occurrence has to
+    // move the head to tomorrow rather than leaving it stuck on the floor.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
+    insert_test_page_sync(&pool, "head", "active")
+        .await
+        .unwrap();
+    recompute(&pool, "head").await;
+
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES ('head', ?, 'c1')",
+    )
+    .bind(crate::today_local())
+    .execute(&pool)
+    .await
+    .unwrap();
+    recompute(&pool, "head").await;
+
+    let tomorrow = (chrono::Local::now() + chrono::Duration::days(1))
+        .format("%Y-%m-%dT09:00:00")
+        .to_string();
+    assert_eq!(head(&pool, "head").await.0, Some(tomorrow));
+}
+
+#[tokio::test]
+async fn a_no_op_recompute_does_not_restamp_updated_at() {
+    // The foreground heal runs the recompute over every recurring series on load,
+    // active mirrors included. An unconditional write would restamp `updated_at`
+    // each time and float untouched synced pages to the top of every
+    // recently-edited view — the churn the reconciler's unchanged-etag skip exists
+    // to prevent.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
+    insert_test_page_sync(&pool, "head", "active")
+        .await
+        .unwrap();
+    recompute(&pool, "head").await;
+
+    let before: String = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = 'head'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    recompute(&pool, "head").await;
+    let after: String = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = 'head'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(before, after, "a head that didn't move writes nothing");
+}

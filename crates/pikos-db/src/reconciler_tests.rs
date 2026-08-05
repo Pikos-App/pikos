@@ -620,6 +620,17 @@ fn recurring_1x1(etag: &str) -> UpsertItem {
     })
 }
 
+/// The first Monday on or after today at 09:00 — where an active mirror's
+/// `BYDAY=MO` head lands once the floor pulls it into the present.
+fn next_monday_occ() -> String {
+    use chrono::Datelike;
+    let mut day = chrono::Local::now().date_naive();
+    while day.weekday() != chrono::Weekday::Mon {
+        day += chrono::Duration::days(1);
+    }
+    day.format("%Y-%m-%dT09:00:00").to_string()
+}
+
 #[tokio::test]
 async fn single_synced_page_gaining_an_rrule_transitions_cleanly() {
     let pool = setup().await;
@@ -627,7 +638,6 @@ async fn single_synced_page_gaining_an_rrule_transitions_cleanly() {
         .await
         .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
-    connected_long_ago(&pool, &page_id).await;
     assert_eq!(rule_count(&pool).await, 0);
     assert_eq!(
         standalone_schedule_count(&pool, &page_id).await,
@@ -647,8 +657,8 @@ async fn single_synced_page_gaining_an_rrule_transitions_cleanly() {
         "the old standalone row is gone, not left beside the rule"
     );
     assert_eq!(
-        page_scheduled_start(&pool, &page_id).await.as_deref(),
-        Some("2026-06-01T09:00:00"),
+        page_scheduled_start(&pool, &page_id).await,
+        Some(next_monday_occ()),
         "head recomputes to the oldest open occurrence"
     );
     assert_eq!(page_status(&pool, &page_id).await.0, "not_started");
@@ -2861,20 +2871,60 @@ fn weekly_anchored_weeks_ago(etag: &str, weeks_ago: i64) -> UpsertItem {
     })
 }
 
-/// The floor: `page_sync.created_at` (stamped now, by the reconciler) minus the
-/// backfill window.
+/// The floor a *detached* series derives: `page_sync.created_at` (stamped now, by
+/// the reconciler) minus the backfill window. An active series floors at today.
 fn window_floor() -> String {
     (chrono::Local::now() - chrono::Duration::days(crate::sync::BACKFILL_DAYS))
         .format("%Y-%m-%d")
         .to_string()
 }
 
-/// Backdates `page_sync.created_at`, the anchor the synced head-floor derives
-/// from, and re-derives the head. The reconciler stamps that column at insert, so a
-/// fixture whose occurrences sit months before "now" is a C30 case and gets its
-/// head pulled forward into the sync window. The cases below assert absolute dates
-/// and are about set-carrying and status transitions, not window placement, so they
-/// declare the calendar long-connected instead of encoding today's date.
+/// The occurrence `weeks` from today at 09:00, in the stored wall-clock form, and
+/// its day key. An **active** mirror's head floors at today, so a fixture whose
+/// occurrences all sit in the past derives no open occurrence at all — a case
+/// about set-carrying or a status transition has to anchor on the window rather
+/// than encode a calendar date.
+fn week_occ(weeks: i64) -> String {
+    (chrono::Local::now() + chrono::Duration::weeks(weeks))
+        .format("%Y-%m-%dT09:00:00")
+        .to_string()
+}
+
+fn week_day(weeks: i64) -> String {
+    (chrono::Local::now() + chrono::Duration::weeks(weeks))
+        .format("%Y-%m-%d")
+        .to_string()
+}
+
+/// [`weekly`] based on today rather than a fixed June.
+fn weekly_from_today(etag: &str, rrule: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core("/series.ics", "uid-series", etag, "Weekly"),
+        schedule: timed(&week_occ(0), None, "UTC"),
+        recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::Complete,
+            rrule: rrule.into(),
+            exdates: vec![],
+            overrides: vec![],
+        }),
+    })
+}
+
+/// `FREQ=WEEKLY` ending on the occurrence `weeks` from today — a floating `UNTIL`,
+/// which passes through the reconciler untouched.
+fn weekly_until(weeks: i64) -> String {
+    format!(
+        "FREQ=WEEKLY;UNTIL={}",
+        (chrono::Local::now() + chrono::Duration::weeks(weeks)).format("%Y%m%dT090000")
+    )
+}
+
+/// Backdates `page_sync.created_at`, the anchor a **detached** series' head-floor
+/// derives from, and re-derives the head. Detaching doesn't rewrite the provider's
+/// base, so the floor is what stops the head falling back to it; a case that
+/// asserts an absolute date after a detach declares the calendar long-connected
+/// rather than encoding today's date. Inert on an active row — that floors at
+/// today regardless of when the calendar was connected.
 async fn connected_long_ago(pool: &sqlx::SqlitePool, page_id: &str) {
     sqlx::query("UPDATE page_sync SET created_at = ?")
         .bind(crate::pool::TEST_CONNECTED_LONG_AGO)
@@ -2907,28 +2957,43 @@ async fn page_denorm(
 #[tokio::test]
 async fn series_rewrite_recomputes_head_over_both_sets() {
     let pool = setup().await;
-    reconcile(&pool, &ctx(), &delta(vec![weekly("v1", "FREQ=WEEKLY")]))
-        .await
-        .unwrap();
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_from_today("v1", "FREQ=WEEKLY")]),
+    )
+    .await
+    .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
-    connected_long_ago(&pool, &page_id).await;
     assert_eq!(
-        page_denorm(&pool, &page_id).await.0.as_deref(),
-        Some("2026-06-01T09:00:00")
+        page_denorm(&pool, &page_id).await.0,
+        Some(week_occ(0)),
+        "head starts on the base"
     );
 
     // Complete the base, dismiss the next — the head should skip past both.
-    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-01', 'c1')")
-        .bind(&page_id).execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES (?, '2026-06-08')")
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c1')",
+    )
+    .bind(&page_id)
+    .bind(week_day(0))
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES (?, ?)")
         .bind(&page_id)
+        .bind(week_day(1))
         .execute(&pool)
         .await
         .unwrap();
 
-    reconcile(&pool, &ctx(), &delta(vec![weekly("v2", "FREQ=WEEKLY")]))
-        .await
-        .unwrap();
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![weekly_from_today("v2", "FREQ=WEEKLY")]),
+    )
+    .await
+    .unwrap();
 
     let completed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM completed_set WHERE page_id = ?")
         .bind(&page_id)
@@ -2946,8 +3011,8 @@ async fn series_rewrite_recomputes_head_over_both_sets() {
         "both sets survive the wholesale rewrite"
     );
     assert_eq!(
-        page_denorm(&pool, &page_id).await.0.as_deref(),
-        Some("2026-06-15T09:00:00"),
+        page_denorm(&pool, &page_id).await.0,
+        Some(week_occ(2)),
         "head recomputes past the completed base and the skipped next occurrence",
     );
 }
@@ -2957,24 +3022,29 @@ async fn series_rewrite_recomputes_head_over_both_sets() {
 #[tokio::test]
 async fn provider_re_extension_unmarks_exhausted_head() {
     let pool = setup().await;
-    // Only 2026-06-01 exists (floating UNTIL passes through untouched).
+    // Only today's occurrence exists.
     reconcile(
         &pool,
         &ctx(),
-        &delta(vec![weekly("v1", "FREQ=WEEKLY;UNTIL=20260601T090000")]),
+        &delta(vec![weekly_from_today("v1", &weekly_until(0))]),
     )
     .await
     .unwrap();
     let (page_id, _, _) = only_page_sync(&pool).await;
-    connected_long_ago(&pool, &page_id).await;
 
-    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, '2026-06-01', 'c1')")
-        .bind(&page_id).execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES (?, ?, 'c1')",
+    )
+    .bind(&page_id)
+    .bind(week_day(0))
+    .execute(&pool)
+    .await
+    .unwrap();
     // Re-sync the same one-shot rule → sole occurrence excluded → exhausted → done.
     reconcile(
         &pool,
         &ctx(),
-        &delta(vec![weekly("v2", "FREQ=WEEKLY;UNTIL=20260601T090000")]),
+        &delta(vec![weekly_from_today("v2", &weekly_until(0))]),
     )
     .await
     .unwrap();
@@ -2986,14 +3056,14 @@ async fn provider_re_extension_unmarks_exhausted_head() {
     reconcile(
         &pool,
         &ctx(),
-        &delta(vec![weekly("v3", "FREQ=WEEKLY;UNTIL=20260701T090000")]),
+        &delta(vec![weekly_from_today("v3", &weekly_until(1))]),
     )
     .await
     .unwrap();
     let (start, status, completed_at) = page_denorm(&pool, &page_id).await;
     assert_eq!(status, "not_started", "re-extension un-marks the head");
     assert_eq!(completed_at, None);
-    assert_eq!(start.as_deref(), Some("2026-06-08T09:00:00"));
+    assert_eq!(start, Some(week_occ(1)));
 }
 
 /// The provider converting an exhausted recurring series into a single event drops

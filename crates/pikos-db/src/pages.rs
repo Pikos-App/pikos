@@ -1522,21 +1522,25 @@ pub async fn undo_skip_occurrence_impl(
     .await
 }
 
-/// Heals the display cache for every native recurring series on foreground load,
+/// Heals the display cache for every recurring series on foreground load,
 /// returning only the summaries whose head materially changed (`scheduled_start`
 /// or `status`) so the caller patches the minimum. Guards against a cache left
 /// stale by an out-of-process writer (CLI/mobile) or a prior bug — the in-session
 /// path keeps the cache fresh on every write, so the steady-state result is empty.
-/// Synced series are reconciler-owned and skipped.
+///
+/// Active-synced series are included, and this is the only thing that advances
+/// them across a day boundary: their head floors at today
+/// (`recurrence_derive::synced_head_floor`), so it goes stale by the calendar
+/// rather than by a write, and the reconciler no-ops on an unchanged etag rather
+/// than recomputing. Skipping them here would put the head a day behind for every
+/// session that outlives midnight.
 pub async fn recompute_recurring_schedules_impl(
     pool: &sqlx::SqlitePool,
 ) -> AppResult<Vec<PageSummary>> {
     let page_ids: Vec<String> = sqlx::query_scalar(
         "SELECT r.page_id FROM page_recurrence_rules r
          JOIN pages p ON p.id = r.page_id
-         WHERE p.deleted_at IS NULL
-           AND NOT EXISTS(SELECT 1 FROM page_sync s
-             WHERE s.page_id = r.page_id AND s.sync_state = 'active')",
+         WHERE p.deleted_at IS NULL",
     )
     .fetch_all(pool)
     .await?;

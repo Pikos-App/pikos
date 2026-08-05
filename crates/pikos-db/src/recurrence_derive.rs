@@ -14,7 +14,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
 use crate::notification_log::{synced_fire_instant, DueReminder};
-use crate::{now_iso, now_local_iso};
+use crate::{now_iso, now_local_iso, today_local};
 
 const WALL_FMT: &str = "%Y-%m-%dT%H:%M:%S";
 
@@ -78,32 +78,44 @@ fn derive_oldest_open(
     .map_err(|e| AppError::Internal(format!("recurrence derivation failed: {e}")))
 }
 
-/// Lower bound on a synced series' head: the backfill window that first admitted
-/// it. A provider returns the recurring master's original `DTSTART` — which can
-/// predate the connection by years — whenever the series still yields instances in
-/// the window, so without a floor the head parks on an occurrence nobody could
-/// have completed, and completing it completes the wrong instance.
+/// Lower bound on a synced series' head. Without one the head parks on the
+/// master's original `DTSTART` — which a provider returns whenever the series
+/// still yields instances in the backfill window, and which can predate the
+/// connection by years — so it lands on an occurrence nobody could have
+/// completed, and completing it completes the wrong instance.
 ///
-/// Anchored on `page_sync.created_at` because the reconciler writes it once on
-/// first insert and never rewrites it — an etag update and a dormant re-link both
-/// leave it alone — so a `410`-triggered re-enumerate can't march the floor
-/// forward and strand a head the user had already advanced. `sync_calendar`'s
-/// `last_full_sync_at` looks like the natural anchor and is not: it restamps on
-/// every full enumerate.
+/// The bound differs by sync state:
 ///
-/// Applies to detached rows too: detaching doesn't rewrite the provider's base, so
-/// dropping the floor there would let the head fall back to the original start.
+/// - **active** floors at *today*. The schedule is provider-owned and read-only,
+///   so an occurrence whose time has passed is not a lapsed task — it happened,
+///   and there is no reschedule or dismiss to reach for. A further-back anchor
+///   hands a freshly connected account a backlog it clears one completion per
+///   occurrence (same reasoning spares a past synced one-off in `belongsToView`).
+/// - **detached** keeps the connection-time bound: the page is user-owned and
+///   keeps task semantics, so a missed occurrence *should* still nag, but the
+///   provider's base survives the detach and still needs flooring. The anchor is
+///   `page_sync.created_at` because the reconciler writes it once on insert and
+///   never rewrites it. `sync_calendar.last_full_sync_at` looks like the natural
+///   anchor and is not: it restamps on every full enumerate, marching the floor
+///   over occurrences the user hadn't completed yet.
+///
+/// A floor only ever moves the head forward, so completion history still wins.
 async fn synced_head_floor(
     conn: &mut sqlx::SqliteConnection,
     page_id: &str,
 ) -> AppResult<Option<String>> {
-    let created: Option<String> =
-        sqlx::query_scalar("SELECT created_at FROM page_sync WHERE page_id = ?")
+    let row: Option<(String, String)> =
+        sqlx::query_as("SELECT sync_state, created_at FROM page_sync WHERE page_id = ?")
             .bind(page_id)
             .fetch_optional(&mut *conn)
             .await?;
-    Ok(created.and_then(|c| {
-        let day = c.get(..10)?;
+    let Some((sync_state, created_at)) = row else {
+        return Ok(None);
+    };
+    if sync_state == crate::sync::SYNC_STATE_ACTIVE {
+        return Ok(Some(today_local()));
+    }
+    Ok(created_at.get(..10).and_then(|day| {
         let parsed = chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d").ok()?;
         Some(
             (parsed - Duration::days(crate::sync::BACKFILL_DAYS))
@@ -148,7 +160,11 @@ pub async fn recompute_recurring_schedule(
 
     match derived {
         // Head sits on the oldest open occurrence; un-mark `done` if the series
-        // yields again (both CASE arms read the pre-update status).
+        // yields again (both CASE arms read the pre-update status). The trailing
+        // guard makes a no-op recompute write nothing: the foreground heal runs
+        // this over every recurring series on load, and an unconditional write
+        // would restamp `updated_at` each time, floating untouched synced mirrors
+        // to the top of every recently-edited view.
         Some(occ) => {
             sqlx::query(
                 "UPDATE pages SET
@@ -157,7 +173,8 @@ pub async fn recompute_recurring_schedule(
                    status = CASE WHEN status = 'done' THEN 'not_started' ELSE status END,
                    completed_at = CASE WHEN status = 'done' THEN NULL ELSE completed_at END,
                    updated_at = ?3
-                 WHERE id = ?4",
+                 WHERE id = ?4
+                   AND (scheduled_start IS NOT ?1 OR scheduled_end IS NOT ?2 OR status = 'done')",
             )
             .bind(&occ.scheduled_start)
             .bind(&occ.scheduled_end)

@@ -11,10 +11,15 @@
 pub const PROVIDER_CALDAV: &str = "caldav";
 pub const PROVIDER_GOOGLE: &str = "google";
 
+/// The live `page_sync.sync_state` — the one value read outside SQL, where the
+/// head-floor branches on it.
+pub const SYNC_STATE_ACTIVE: &str = "active";
+
 /// How far back a backfill reaches. Lives here, not in the provider crates, because
-/// the head-floor derivation reads it too: a synced series' head is floored at the
-/// window that first admitted it, so if a provider widened its window unilaterally
-/// the floor would silently clip occurrences the backfill had legitimately fetched.
+/// a *detached* series' head floors at the window that first admitted it, so if a
+/// provider widened its window unilaterally the floor would silently clip
+/// occurrences the backfill had legitimately fetched. (An active series floors at
+/// today instead — see `recurrence_derive::synced_head_floor`.)
 pub const BACKFILL_DAYS: i64 = 7;
 
 /// `sync_account` row — one connected account. Secrets are NOT here; only a

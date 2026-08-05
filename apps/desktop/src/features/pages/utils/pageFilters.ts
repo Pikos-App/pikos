@@ -23,9 +23,11 @@ export function belongsToView(page: PageSummary, viewId: string, todayStr: strin
     // A synced one-off that has already happened is not a lapsed task: the user
     // can't reschedule it (the mirror is locked) or clear it, so leaving it here
     // would accumulate a permanent, growing backlog from the day a calendar
-    // connects. It stays on the calendar and in its folder. Recurring heads are
-    // bounded by the sync-window floor and stay; detached pages are user-owned
-    // and keep task semantics.
+    // connects. It stays on the calendar and in its folder. An active recurring
+    // head floors at today for that same reason, so it reads as past only while
+    // the cache is stale between midnight and the next load — keep it, or the
+    // series drops out of Today entirely. Detached pages are user-owned and keep
+    // task semantics.
     if (day < todayStr && page.scheduleLocked && !page.isRecurring) return false;
     return day <= todayStr;
   }
