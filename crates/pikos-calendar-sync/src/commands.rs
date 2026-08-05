@@ -153,7 +153,9 @@ async fn upsert_calendars(
                 account_id,
                 &rc.calendar_id,
                 &rc.display_name,
-                rc.color.as_deref(),
+                rc.color
+                    .as_deref()
+                    .and_then(crate::palette::nearest_palette_color),
             )
             .await?,
         );

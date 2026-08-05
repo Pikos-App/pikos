@@ -10,6 +10,7 @@ pub mod engine;
 pub mod google;
 pub mod http;
 pub mod keychain;
+pub mod palette;
 pub mod provider;
 pub mod scheduler;
 
