@@ -190,6 +190,35 @@ pub async fn disconnect_account(
     Ok(())
 }
 
+/// Revoke every OAuth grant and clear every keychain entry, for a caller about to
+/// delete the workspace wholesale. No DB writes — the rows are going away anyway.
+///
+/// The keychain lives outside `app_data_dir`, so a wipe on its own would strand a
+/// usable refresh token keyed to an account id nothing references any more. Steps
+/// are best-effort like [`disconnect_account`]'s: an offline revoke must not block
+/// a wipe the user already confirmed.
+pub async fn release_all_credentials(pool: &SqlitePool, keychain: Keychain) -> AppResult<()> {
+    for (id, provider) in all_accounts(pool).await? {
+        if provider == PROVIDER_GOOGLE {
+            if let Err(e) = crate::google::revoke(&keychain, &id).await {
+                log::warn!("sync: could not revoke the Google grant for {id}: {e}");
+            }
+        }
+        let _ = keychain.delete(&id);
+    }
+    Ok(())
+}
+
+/// Every account, dormant ones included — a dormant row's credential should
+/// already be gone, but a wipe is the last chance to be sure.
+async fn all_accounts(pool: &SqlitePool) -> AppResult<Vec<(String, String)>> {
+    Ok(
+        sqlx::query_as::<_, (String, String)>("SELECT id, provider FROM sync_account")
+            .fetch_all(pool)
+            .await?,
+    )
+}
+
 async fn provider_of(pool: &SqlitePool, account_id: &str) -> AppResult<Option<String>> {
     Ok(
         sqlx::query_scalar::<_, String>("SELECT provider FROM sync_account WHERE id = ?")

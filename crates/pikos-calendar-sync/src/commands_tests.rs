@@ -136,6 +136,45 @@ async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
     assert!(backing.get(&acc.id).is_err());
 }
 
+// The wipe deletes the DB, and the account ids in it are the keychain keys — so a
+// credential missed here can never be found again, only used. Dormant accounts are
+// swept too: their credential is normally already gone, but this is the last pass.
+#[tokio::test]
+async fn releasing_credentials_clears_every_account_including_dormant_ones() {
+    let pool = test_pool().await;
+    let caldav = insert_sync_account_impl(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    let google = insert_sync_account_impl(&pool, PROVIDER_GOOGLE, "me@gmail.com", "oauth")
+        .await
+        .unwrap();
+    let dormant = insert_sync_account_impl(&pool, PROVIDER_CALDAV, "old · https://y", "basic")
+        .await
+        .unwrap();
+    mark_account_disconnected_impl(&pool, &dormant.id)
+        .await
+        .unwrap();
+
+    let backing = MemoryStore::default();
+    for acc in [&caldav, &google, &dormant] {
+        backing.set(&acc.id, "secret-blob").unwrap();
+    }
+
+    // The Google revoke fails here (no OAuth client in a test build) and must not
+    // stop the sweep — the same best-effort contract disconnect_account has.
+    release_all_credentials(&pool, Keychain::with_store(Box::new(backing.clone())))
+        .await
+        .unwrap();
+
+    for acc in [&caldav, &google, &dormant] {
+        assert!(
+            backing.get(&acc.id).is_err(),
+            "credential left behind for {}",
+            acc.display_name
+        );
+    }
+}
+
 /// Scripted provider that hands back a fixed one-event delta on every sync — enough
 /// to create then re-link a mirror page across a disconnect/reconnect.
 struct Scripted {

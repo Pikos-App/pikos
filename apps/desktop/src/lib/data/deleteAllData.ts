@@ -6,6 +6,8 @@
 // - Rotating log file under app_log_dir.
 // - All `pikos:*` keys in localStorage (theme, calendar/editor/list
 //   preferences, skipped update version, defaults).
+// - Calendar-sync credentials in the OS keychain, and the OAuth grants they
+//   belong to. These sit outside app_data_dir, so they need their own pass.
 //
 // Relaunch is a hard process restart: in-memory caches in tauri-plugin-store,
 // the notification scheduler, and every React context all start over from
@@ -22,6 +24,15 @@ const LOCAL_STORAGE_PREFIX = "pikos:";
 const log = createLogger("deleteAllData");
 
 export async function deleteAllData(): Promise<void> {
+  // Must precede the wipe: the account ids this keys on live in the DB it deletes.
+  // Best-effort — an offline revoke can't strand the user with data they asked to
+  // delete.
+  try {
+    await invoke("release_sync_credentials");
+  } catch (e) {
+    log.error("could not release calendar-sync credentials — wiping anyway", e);
+  }
+
   // Rust side: drops the DB pool, then removes app_data_dir and app_log_dir.
   await invoke("wipe_app_data");
 

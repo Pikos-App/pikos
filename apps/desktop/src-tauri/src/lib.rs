@@ -42,7 +42,8 @@ use db::{
     switch_workspace,
     sync::{
         connect_caldav_account, connect_google_account, disconnect_sync_account, get_sync_status,
-        google_sync_available, list_sync_calendars, resync_sync_account, toggle_sync_calendar,
+        google_sync_available, list_sync_calendars, release_sync_credentials, resync_sync_account,
+        toggle_sync_calendar,
     },
     tags::search_tags,
     DbState,
@@ -371,6 +372,7 @@ pub fn run() {
             toggle_sync_calendar,
             resync_sync_account,
             get_sync_status,
+            release_sync_credentials,
             // Notifications / reminders
             create_page_reminder,
             list_page_reminders,

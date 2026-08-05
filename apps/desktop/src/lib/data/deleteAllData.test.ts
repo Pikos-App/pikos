@@ -8,11 +8,11 @@ import { deleteAllData } from "./deleteAllData";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────
 //
-// deleteAllData drives three Tauri boundaries: the wipe_app_data command, the
-// plugin-store (to neutralize the exit-save that would otherwise resurrect the
-// old workspace), and relaunch. We mock all three and assert the order of
-// effects — the store must be cleared so the relaunched app boots first-run and
-// reseeds the tutorial.
+// deleteAllData drives three Tauri boundaries: the release_sync_credentials and
+// wipe_app_data commands, the plugin-store (to neutralize the exit-save that
+// would otherwise resurrect the old workspace), and relaunch. We mock all three
+// and assert the order of effects — the store must be cleared so the relaunched
+// app boots first-run and reseeds the tutorial.
 
 const invoke = vi.fn<(cmd: string) => Promise<unknown>>();
 const relaunch = vi.fn<() => Promise<void>>();
@@ -80,8 +80,29 @@ describe("deleteAllData", () => {
     // workspace back — that's what forces the first-run tutorial reseed.
     expect(storeClear).toHaveBeenCalledTimes(1);
     expect(storeSave).toHaveBeenCalledTimes(1);
-    // Order: wipe → clear+save store → relaunch.
-    expect(order).toEqual(["invoke:wipe_app_data", "store.clear", "store.save", "relaunch"]);
+    // Order: release credentials → wipe → clear+save store → relaunch. The
+    // release runs first because the account ids it keys on live in the DB the
+    // wipe is about to delete.
+    expect(order).toEqual([
+      "invoke:release_sync_credentials",
+      "invoke:wipe_app_data",
+      "store.clear",
+      "store.save",
+      "relaunch",
+    ]);
+  });
+
+  it("still wipes when releasing sync credentials fails", async () => {
+    invoke.mockImplementation((cmd) =>
+      cmd === "release_sync_credentials"
+        ? Promise.reject(new Error("keychain unavailable"))
+        : Promise.resolve(undefined)
+    );
+
+    await deleteAllData();
+
+    expect(invoke).toHaveBeenCalledWith("wipe_app_data");
+    expect(relaunch).toHaveBeenCalledTimes(1);
   });
 
   it("clears only pikos:* localStorage keys", async () => {

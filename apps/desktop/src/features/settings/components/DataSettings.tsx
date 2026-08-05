@@ -272,8 +272,8 @@ export function DataSettings({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">Delete All Data</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Permanently deletes all pages, folders, tags, and settings on this device. This
-                cannot be undone.
+                Permanently deletes all pages, folders, tags, and settings on this device, and
+                disconnects any calendar account you've connected. This cannot be undone.
               </p>
             </div>
             <Button
@@ -294,7 +294,7 @@ export function DataSettings({
         cancelLabel="Cancel"
         confirmLabel="Delete Everything"
         confirmPhrase="delete"
-        description="This will permanently delete all pages, folders, tags, and settings on this device. Your data is stored locally and cannot be recovered after deletion."
+        description="This will permanently delete all pages, folders, tags, and settings on this device, and disconnect any calendar account you've connected. Your data is stored locally and cannot be recovered after deletion."
         onConfirm={() => void handleDeleteAll()}
         onOpenChange={setDeleteOpen}
         open={deleteOpen}

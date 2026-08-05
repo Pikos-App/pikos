@@ -6,8 +6,8 @@
 use tauri::State;
 
 use pikos_calendar_sync::{
-    connect_caldav, connect_google, disconnect_account, google, resync_account_auto,
-    CalendarSyncResult, Keychain,
+    connect_caldav, connect_google, disconnect_account, google, release_all_credentials,
+    resync_account_auto, CalendarSyncResult, Keychain,
 };
 use pikos_db::sync_commands::{
     get_sync_status_impl, list_sync_calendars_impl, toggle_sync_calendar_impl,
@@ -62,6 +62,14 @@ pub async fn disconnect_sync_account(
 ) -> AppResult<()> {
     let pool = state.get_pool().await?;
     disconnect_account(&pool, Keychain::system(), &account_id).await
+}
+
+/// Credential teardown for a full data wipe — `wipe_app_data` doesn't reach the
+/// keychain.
+#[tauri::command]
+pub async fn release_sync_credentials(state: State<'_, DbState>) -> AppResult<()> {
+    let pool = state.get_pool().await?;
+    release_all_credentials(&pool, Keychain::system()).await
 }
 
 #[tauri::command]
