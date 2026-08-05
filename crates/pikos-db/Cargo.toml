@@ -26,4 +26,5 @@ log = "0.4"
 test-support = []
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+# test-util: paused-clock tests for the write-retry deadline (see tx.rs).
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "test-util"] }
