@@ -553,7 +553,9 @@ async fn insert_test_rule(pool: &sqlx::SqlitePool, id: &str, page_id: &str) {
 async fn list_page_schedules_for_rules_excludes_soft_deleted_pages() {
     let pool = test_pool().await;
     for id in ["alive", "dead"] {
-        insert_test_page(&pool, TestPage::new(id, id)).await.unwrap();
+        insert_test_page(&pool, TestPage::new(id, id))
+            .await
+            .unwrap();
         insert_test_rule(&pool, &format!("rule-{id}"), id).await;
         create_page_schedule_impl(
             &pool,
@@ -575,10 +577,15 @@ async fn list_page_schedules_for_rules_excludes_soft_deleted_pages() {
         .await
         .unwrap();
 
-    let rows = list_page_schedules_for_rules_impl(&pool, &["rule-alive".into(), "rule-dead".into()])
-        .await
-        .unwrap();
-    assert_eq!(rows.len(), 1, "soft-deleted page's override must be filtered");
+    let rows =
+        list_page_schedules_for_rules_impl(&pool, &["rule-alive".into(), "rule-dead".into()])
+            .await
+            .unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "soft-deleted page's override must be filtered"
+    );
     assert_eq!(rows[0].page_id, "alive");
 }
 
@@ -628,7 +635,10 @@ async fn list_page_schedules_for_rules_returns_moved_override_regardless_of_posi
     let rows = list_page_schedules_for_rules_impl(&pool, &["rule-a".into()])
         .await
         .unwrap();
-    let originals: Vec<_> = rows.iter().filter_map(|r| r.original_date.clone()).collect();
+    let originals: Vec<_> = rows
+        .iter()
+        .filter_map(|r| r.original_date.clone())
+        .collect();
     assert_eq!(originals, ["2026-05-11T09:00:00", "2026-05-18T09:00:00"]);
 }
 

@@ -3077,9 +3077,15 @@ async fn detach_converts_a_non_local_event_to_device_wall_clock() {
 
     assert_eq!(sync_state(&pool, &page_id).await, "detached");
     let (start, end, tz) = zoned_schedule(&pool, &page_id).await;
-    assert_eq!(start, "2026-06-15T13:00:00", "same instant, device wall-clock");
+    assert_eq!(
+        start, "2026-06-15T13:00:00",
+        "same instant, device wall-clock"
+    );
     assert_eq!(end.as_deref(), Some("2026-06-15T14:00:00"));
-    assert_eq!(tz, None, "stamp spent, not left to contradict the wall-clock");
+    assert_eq!(
+        tz, None,
+        "stamp spent, not left to contradict the wall-clock"
+    );
     assert_eq!(
         page_denorm(&pool, &page_id).await.0.as_deref(),
         Some("2026-06-15T13:00:00"),
@@ -3090,8 +3096,7 @@ async fn detach_converts_a_non_local_event_to_device_wall_clock() {
 #[tokio::test]
 async fn detach_leaves_a_device_zone_event_alone() {
     let pool = setup().await;
-    let page_id =
-        detached_single(&pool, "2026-06-15T09:00:00", "2026-06-15T10:00:00", "UTC").await;
+    let page_id = detached_single(&pool, "2026-06-15T09:00:00", "2026-06-15T10:00:00", "UTC").await;
 
     let (start, end, tz) = zoned_schedule(&pool, &page_id).await;
     assert_eq!(start, "2026-06-15T09:00:00");
@@ -3165,10 +3170,7 @@ async fn detach_converts_a_recurring_series_within_the_day() {
         "base converts; 15:00 Berlin is 13:00 UTC in June",
     );
     assert_eq!(&start[..10], "2026-06-01", "occurrence dates are unchanged");
-    assert!(
-        rrule.contains("BYDAY=MO"),
-        "cadence untouched, got {rrule}"
-    );
+    assert!(rrule.contains("BYDAY=MO"), "cadence untouched, got {rrule}");
     assert!(
         rrule.contains("UNTIL=20260629T130000"),
         "the bound shifts with the occurrences it bounds, got {rrule}",
@@ -3269,11 +3271,13 @@ async fn relink_restores_provider_time_over_a_local_edit() {
         "Europe/Berlin",
     )
     .await;
-    sqlx::query("UPDATE page_schedules SET scheduled_start = '2026-06-20T08:00:00' WHERE page_id = ?")
-        .bind(&page_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE page_schedules SET scheduled_start = '2026-06-20T08:00:00' WHERE page_id = ?",
+    )
+    .bind(&page_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     reconcile(
         &pool,
@@ -3306,14 +3310,10 @@ async fn relink_restores_provider_time_over_a_local_edit() {
 async fn relink_returns_the_page_to_its_calendar_folder() {
     let pool = setup().await;
     flag_external(&pool, "f1").await;
-    crate::insert_test_folder(&pool, "mine", "Mine").await.unwrap();
-    let page_id = detached_single(
-        &pool,
-        "2026-06-15T09:00:00",
-        "2026-06-15T10:00:00",
-        "UTC",
-    )
-    .await;
+    crate::insert_test_folder(&pool, "mine", "Mine")
+        .await
+        .unwrap();
+    let page_id = detached_single(&pool, "2026-06-15T09:00:00", "2026-06-15T10:00:00", "UTC").await;
     sqlx::query("UPDATE pages SET folder_id = 'mine' WHERE id = ?")
         .bind(&page_id)
         .execute(&pool)

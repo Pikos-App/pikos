@@ -317,7 +317,10 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     let acc2 = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
         .unwrap();
-    assert_eq!(acc2.id, acc.id, "reconnect reuses the active row, no new account");
+    assert_eq!(
+        acc2.id, acc.id,
+        "reconnect reuses the active row, no new account"
+    );
     upsert_sync_calendar_impl(&pool, &acc2.id, "cal-a", "Work", None)
         .await
         .unwrap();
@@ -344,11 +347,10 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
         delta: one_event_delta("href-1", "uid-1", "Standup", "tok-2"),
     };
     resync_account(&pool, &provider2, &acc.id).await.unwrap();
-    let pages: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE ical_uid = 'uid-1'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let pages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE ical_uid = 'uid-1'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(pages, 1, "event not duplicated across reconnect");
 }
 
