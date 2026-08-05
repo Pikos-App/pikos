@@ -172,6 +172,7 @@ export class MockStorageAdapter implements StorageAdapter {
       contentText: data.contentText ?? deriveContentText(data.content),
       createdAt: now(),
       id: uuid(),
+      isRecurring: false,
       scheduleLocked: false,
       sortOrder: nextSortOrder([...this.pages.values()]),
       updatedAt: now(),
@@ -555,6 +556,7 @@ export class MockStorageAdapter implements StorageAdapter {
       timezone: data.timezone,
     };
     this.rules.set(rule.id, rule);
+    this.setRecurringFlag(rule.pageId, true);
     this.recomputeHead(rule.pageId);
     return Promise.resolve(rule);
   }
@@ -605,10 +607,19 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   deleteRecurrenceRule(id: string): Promise<void> {
-    const locked = this.lockedMirrorError(this.rules.get(id)?.pageId);
+    const pageId = this.rules.get(id)?.pageId;
+    const locked = this.lockedMirrorError(pageId);
     if (locked) return Promise.reject(locked);
     this.rules.delete(id);
+    if (pageId != null) this.setRecurringFlag(pageId, false);
     return Promise.resolve();
+  }
+
+  /** Mirrors the Rust `is_recurring` EXISTS projection, which the mock stores as a
+   * flag rather than deriving per read — same shape as `scheduleLocked`. */
+  private setRecurringFlag(pageId: string, value: boolean): void {
+    const page = this.pages.get(pageId);
+    if (page) this.pages.set(pageId, { ...page, isRecurring: value });
   }
 
   getRecurrenceRule(pageId: string): Promise<PageRecurrenceRule | null> {

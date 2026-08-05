@@ -989,3 +989,85 @@ fn synced_fire_instant_fall_back_ambiguous_picks_the_earlier_offset() {
         )
     );
 }
+
+/// C26: a non-recurring active-synced page whose time has passed is not overdue —
+/// a meeting happened, it didn't lapse. The mirror is locked, so the user can
+/// neither reschedule nor clear it, and the daily summary would grow by one every
+/// day from the moment a calendar connects.
+#[tokio::test]
+async fn overdue_count_ignores_a_past_synced_one_off() {
+    let pool = test_pool().await;
+    let stale_cutoff = "2026-05-24 09:00:00";
+    let recent_cutoff = "2026-05-25 08:55:00";
+
+    // Native one-off, same instant — the control: still overdue.
+    insert_page(&pool, "native", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule(
+        &pool,
+        "s_native",
+        "native",
+        "2026-05-25T07:00:00",
+        "not_started",
+    )
+    .await;
+
+    insert_page(&pool, "synced", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule(
+        &pool,
+        "s_synced",
+        "synced",
+        "2026-05-25T07:00:00",
+        "not_started",
+    )
+    .await;
+    crate::pool::insert_test_page_sync(&pool, "synced", "active")
+        .await
+        .unwrap();
+
+    let n = overdue_count(&pool, NOW_TS, stale_cutoff, recent_cutoff)
+        .await
+        .unwrap();
+    assert_eq!(n, 1, "only the native one-off counts");
+}
+
+/// The exclusion is scoped three ways, and each boundary is load-bearing: a
+/// recurring synced head is a real missed occurrence, and a detached page is
+/// user-owned and keeps task semantics.
+#[tokio::test]
+async fn overdue_count_still_counts_synced_recurring_and_detached() {
+    let pool = test_pool().await;
+    let stale_cutoff = "2026-05-24 09:00:00";
+    let recent_cutoff = "2026-05-25 08:55:00";
+
+    insert_page(&pool, "series", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule(
+        &pool,
+        "s_series",
+        "series",
+        "2026-05-25T07:00:00",
+        "not_started",
+    )
+    .await;
+    insert_rule(&pool, "series", "2026-05-25T07:00:00").await;
+    crate::pool::insert_test_page_sync(&pool, "series", "active")
+        .await
+        .unwrap();
+
+    insert_page(&pool, "detached", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule(
+        &pool,
+        "s_detached",
+        "detached",
+        "2026-05-25T07:00:00",
+        "not_started",
+    )
+    .await;
+    crate::pool::insert_test_page_sync(&pool, "detached", "detached")
+        .await
+        .unwrap();
+
+    let n = overdue_count(&pool, NOW_TS, stale_cutoff, recent_cutoff)
+        .await
+        .unwrap();
+    assert_eq!(n, 2, "recurring synced head and detached page both count");
+}

@@ -18,7 +18,16 @@ export type SortMode = "manual" | "date" | "title" | "priority";
  */
 export function belongsToView(page: PageSummary, viewId: string, todayStr: string): boolean {
   if (viewId === "today") {
-    return page.scheduledStart != null && page.scheduledStart.slice(0, 10) <= todayStr;
+    if (page.scheduledStart == null) return false;
+    const day = page.scheduledStart.slice(0, 10);
+    // A synced one-off that has already happened is not a lapsed task: the user
+    // can't reschedule it (the mirror is locked) or clear it, so leaving it here
+    // would accumulate a permanent, growing backlog from the day a calendar
+    // connects. It stays on the calendar and in its folder. Recurring heads are
+    // bounded by the sync-window floor and stay; detached pages are user-owned
+    // and keep task semantics.
+    if (day < todayStr && page.scheduleLocked && !page.isRecurring) return false;
+    return day <= todayStr;
   }
   if (viewId === "inbox") return page.folderId === null;
   return page.folderId === viewId;

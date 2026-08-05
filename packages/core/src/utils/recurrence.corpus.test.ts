@@ -41,6 +41,7 @@ function page(): PageSummary {
     createdAt: "2026-01-01T00:00:00",
     folderId: null,
     id: "page-1",
+    isRecurring: true,
     priority: 0,
     scheduledEnd: null,
     scheduledStart: null,

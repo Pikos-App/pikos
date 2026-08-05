@@ -2,6 +2,7 @@ import type { PageSummary } from "@pikos/core";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  belongsToView,
   getCompletedTodayPages,
   getCompletedViewPages,
   getVisiblePages,
@@ -16,6 +17,7 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
     createdAt: "2026-01-01T00:00:00",
     folderId: null,
     id: overrides.id ?? crypto.randomUUID(),
+    isRecurring: false,
     priority: 0,
     scheduleLocked: false,
     sortOrder: 0,
@@ -276,5 +278,50 @@ describe("getCompletedViewPages", () => {
     ];
     const result = getCompletedViewPages(pages, "f1");
     expect(result.map((p) => p.title)).toEqual(["Done f1"]);
+  });
+});
+
+describe("belongsToView — past synced events (C26)", () => {
+  const TODAY = "2026-08-04";
+  const synced = (o: Partial<PageSummary> = {}) =>
+    makePage({ scheduleLocked: true, syncState: "active", ...o });
+
+  it("drops a synced one-off whose time has passed", () => {
+    // A meeting happened; it didn't lapse. The mirror is locked, so the user can
+    // neither reschedule nor clear it — leaving it in Today accumulates forever.
+    const page = synced({ scheduledStart: "2026-07-30T09:00:00" });
+    expect(belongsToView(page, "today", TODAY)).toBe(false);
+  });
+
+  it("keeps a synced one-off scheduled today", () => {
+    const page = synced({ scheduledStart: "2026-08-04T09:00:00" });
+    expect(belongsToView(page, "today", TODAY)).toBe(true);
+  });
+
+  it("keeps a past recurring synced head", () => {
+    // Bounded by the sync-window floor, and a missed occurrence of a series is a
+    // real thing to act on — out of scope for this exclusion.
+    const page = synced({ isRecurring: true, scheduledStart: "2026-07-30T09:00:00" });
+    expect(belongsToView(page, "today", TODAY)).toBe(true);
+  });
+
+  it("keeps a past detached page — user-owned, keeps task semantics", () => {
+    const page = makePage({
+      scheduledStart: "2026-07-30T09:00:00",
+      scheduleLocked: false,
+      syncState: "detached",
+    });
+    expect(belongsToView(page, "today", TODAY)).toBe(true);
+  });
+
+  it("keeps a past native page", () => {
+    const page = makePage({ scheduledStart: "2026-07-30T09:00:00" });
+    expect(belongsToView(page, "today", TODAY)).toBe(true);
+  });
+
+  it("still excludes a synced one-off from views it never belonged to", () => {
+    const page = synced({ folderId: "f1", scheduledStart: "2026-07-30T09:00:00" });
+    expect(belongsToView(page, "inbox", TODAY)).toBe(false);
+    expect(belongsToView(page, "f1", TODAY)).toBe(true);
   });
 });

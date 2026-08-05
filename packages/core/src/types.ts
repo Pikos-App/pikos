@@ -55,6 +55,10 @@ export interface Page {
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   scheduleLocked: boolean; // derived: active page_sync row owns the schedule → render read-only
+  // Derived: this page carries a recurrence rule. Lets a one-off be told from a
+  // series without loading the rule set; the Today predicate needs it to spare a
+  // past synced one-off from overdue while leaving recurring heads alone.
+  isRecurring: boolean;
   // Derived sync provenance (null for native pages):
   syncState?: "active" | "detached" | "tombstoned" | null; // page_sync.sync_state; 'detached' → broken-sync treatment
   // Source/authoring IANA zone (from the schedule/rule). Consumed at render only

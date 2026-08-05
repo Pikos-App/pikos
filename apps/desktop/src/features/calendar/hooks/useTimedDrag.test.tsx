@@ -18,6 +18,7 @@ function makePage(scheduleLocked: boolean): PageSummary {
     createdAt: "2026-01-01T00:00:00",
     folderId: null,
     id: "p1",
+    isRecurring: false,
     priority: 0,
     scheduledEnd: "2099-01-05T10:00:00",
     scheduledStart: "2099-01-05T09:00:00",

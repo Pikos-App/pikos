@@ -37,6 +37,7 @@ function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
     createdAt: "2026-01-01T00:00:00",
     folderId: null,
     id: "page-1",
+    isRecurring: false,
     priority: 0,
     scheduledEnd: null,
     scheduledStart: null,

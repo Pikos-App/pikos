@@ -44,6 +44,7 @@ struct PageRow {
     mirror_location: Option<String>,
     mirror_attendees: Option<String>,
     pending_description: Option<String>,
+    is_recurring: bool,
 }
 
 // ─── Output type (camelCase for TypeScript) ───────────────────────────────────
@@ -98,6 +99,11 @@ pub struct Page {
     /// body (see `page_sync.pending_description`); drives the editor's passive
     /// "calendar description changed" notice. `None` = nothing pending.
     pub pending_description: Option<String>,
+    /// Derived (not a stored column): this page carries a recurrence rule. Lets the
+    /// frontend tell a one-off from a series without loading the rule set — the
+    /// Today predicate needs it to spare a past synced *one-off* from the overdue
+    /// bucket while leaving recurring heads alone.
+    pub is_recurring: bool,
 }
 
 impl From<PageRow> for Page {
@@ -135,6 +141,7 @@ impl From<PageRow> for Page {
             mirror_location: row.mirror_location,
             mirror_attendees: parse_attendees(row.mirror_attendees),
             pending_description: row.pending_description,
+            is_recurring: row.is_recurring,
         }
     }
 }
@@ -187,6 +194,7 @@ struct PageSummaryRow {
     mirror_location: Option<String>,
     mirror_attendees: Option<String>,
     pending_description: Option<String>,
+    is_recurring: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -224,6 +232,8 @@ pub struct PageSummary {
     pub mirror_attendees: Option<Vec<String>>,
     /// See `Page::pending_description`.
     pub pending_description: Option<String>,
+    /// See `Page::is_recurring`.
+    pub is_recurring: bool,
 }
 
 impl From<PageSummaryRow> for PageSummary {
@@ -259,6 +269,7 @@ impl From<PageSummaryRow> for PageSummary {
             mirror_location: row.mirror_location,
             mirror_attendees: parse_attendees(row.mirror_attendees),
             pending_description: row.pending_description,
+            is_recurring: row.is_recurring,
         }
     }
 }
@@ -288,7 +299,9 @@ const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      AS timezone\
      , (SELECT mirror_location FROM page_sync WHERE page_sync.page_id = pages.id) AS mirror_location\
      , (SELECT mirror_attendees FROM page_sync WHERE page_sync.page_id = pages.id) AS mirror_attendees\
-     , (SELECT pending_description FROM page_sync WHERE page_sync.page_id = pages.id) AS pending_description";
+     , (SELECT pending_description FROM page_sync WHERE page_sync.page_id = pages.id) AS pending_description\
+     , EXISTS(SELECT 1 FROM page_recurrence_rules \
+         WHERE page_recurrence_rules.page_id = pages.id) AS is_recurring";
 
 // ─── Input types ──────────────────────────────────────────────────────────────
 

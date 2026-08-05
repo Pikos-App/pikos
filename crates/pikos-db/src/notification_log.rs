@@ -382,6 +382,13 @@ pub async fn today_scheduled_count(pool: &SqlitePool, date: &str) -> Result<i64,
 
 /// Count of distinct timed, not-done pages overdue in `[stale_cutoff, now_ts)`,
 /// excluding pages created after `recent_cutoff` (skips fresh import batches).
+///
+/// A non-recurring **active-synced** page whose time has passed is not overdue: a
+/// meeting happened, it didn't lapse, and the user can neither reschedule it (the
+/// mirror is locked) nor stop it accumulating — so counting it would inflate the
+/// daily summary a little more every day from the moment a calendar connects.
+/// Recurring synced series are out of scope here; their heads are bounded by the
+/// sync-window floor. Detached pages keep task semantics — they're user-owned.
 pub async fn overdue_count(
     pool: &SqlitePool,
     now_ts: &str,
@@ -398,7 +405,13 @@ pub async fn overdue_count(
            AND ps.scheduled_start LIKE '%T%'
            AND datetime(ps.scheduled_start) < datetime(?)
            AND datetime(ps.scheduled_start) >= datetime(?)
-           AND datetime(p.created_at) < datetime(?)",
+           AND datetime(p.created_at) < datetime(?)
+           AND NOT (
+             EXISTS(SELECT 1 FROM page_sync
+                    WHERE page_sync.page_id = p.id AND page_sync.sync_state = 'active')
+             AND NOT EXISTS(SELECT 1 FROM page_recurrence_rules
+                            WHERE page_recurrence_rules.page_id = p.id)
+           )",
     )
     .bind(now_ts)
     .bind(stale_cutoff)
