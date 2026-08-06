@@ -125,12 +125,14 @@ pub async fn due_default_reminders(
 // `due_*` queries above interpret `scheduled_start` as device-local, so they
 // exclude active-synced pages and this path handles them instead.
 //
-// Only **explicit** (user-added) reminders apply to a synced *one-off* — those
-// pages get no default reminder (a user reminder is what marks the page owned).
+// Origin does not change the lead time: every page notifies at the user's global
+// default unless it carries an explicit reminder, and an explicit `-1` still means
+// "never". Provider alarms are deliberately never ingested — the mirror is
+// read-only, so an imported per-event lead would be one the user could not edit.
 // Synced *recurring* occurrences fire through `due_recurring_reminders` (rule
 // enumeration) and their per-instance overrides through
 // `due_synced_override_reminders` (materialized rows) — both resolve the same
-// source-zone → absolute instant and both take the series' default lead.
+// source-zone → absolute instant.
 //
 // SQLite can't resolve IANA zones, so the SQL is only a coarse ±15h prefilter
 // (covers every real zone offset) and the exact absolute-window check runs in
@@ -166,12 +168,14 @@ pub(crate) fn synced_fire_instant(
     Some(instant - chrono::Duration::minutes(minutes_before))
 }
 
-/// Synced one-off events with explicit reminders whose absolute fire instant
-/// lands in `(now_utc - 60s, now_utc]`. All-day, done, recurring, and
-/// already-fired are excluded.
+/// Synced one-off events whose absolute fire instant lands in
+/// `(now_utc - 60s, now_utc]`, at their explicit reminder lead or — when they have
+/// none — the global `default_minutes`. All-day, done, recurring, and already-fired
+/// are excluded.
 pub async fn due_synced_reminders(
     pool: &SqlitePool,
     now_utc: chrono::DateTime<chrono::Utc>,
+    default_minutes: i64,
 ) -> Result<Vec<DueReminder>, sqlx::Error> {
     let lo = (now_utc - chrono::Duration::hours(15))
         .format("%Y-%m-%d %H:%M:%S")
@@ -181,27 +185,29 @@ pub async fn due_synced_reminders(
         .to_string();
     let rows: Vec<SyncedReminderRow> = sqlx::query_as(
         // Per-lead dedup key (`<id>#<minutes>`) — see due_explicit_reminders.
-        "SELECT ps.id || '#' || pr.minutes_before AS schedule_id, ps.page_id, p.title,
-                ps.scheduled_start, pr.minutes_before, ps.timezone
+        "SELECT ps.id || '#' || COALESCE(pr.minutes_before, ?1) AS schedule_id, ps.page_id, p.title,
+                ps.scheduled_start, COALESCE(pr.minutes_before, ?1) AS minutes_before, ps.timezone
          FROM page_schedules ps
          JOIN pages p ON p.id = ps.page_id
-         JOIN page_reminders pr ON pr.page_id = ps.page_id
          JOIN page_sync sy ON sy.page_id = ps.page_id AND sy.sync_state = 'active'
+         LEFT JOIN page_reminders pr ON pr.page_id = ps.page_id
          WHERE p.status != 'done'
            AND p.deleted_at IS NULL
            AND ps.status != 'done'
-           AND pr.minutes_before >= 0
+           AND COALESCE(pr.minutes_before, ?1) >= 0
            AND ps.scheduled_start LIKE '%T%'
            AND ps.timezone IS NOT NULL
            AND ps.rule_id IS NULL
            AND NOT EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = ps.page_id)
-           AND datetime(ps.scheduled_start, '-' || pr.minutes_before || ' minutes')
-               BETWEEN ? AND ?
+           AND datetime(ps.scheduled_start, '-' || COALESCE(pr.minutes_before, ?1) || ' minutes')
+               BETWEEN ?2 AND ?3
            AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
-             WHERE nl.schedule_id = ps.id || '#' || pr.minutes_before AND nl.type = 'reminder'
+             WHERE nl.schedule_id = ps.id || '#' || COALESCE(pr.minutes_before, ?1)
+               AND nl.type = 'reminder'
            )",
     )
+    .bind(default_minutes)
     .bind(&lo)
     .bind(&hi)
     .fetch_all(pool)
@@ -364,16 +370,33 @@ pub async fn daily_summary_fired_on(pool: &SqlitePool, date: &str) -> Result<boo
 }
 
 /// Count of distinct pages scheduled on `date` (timed or all-day), not done.
+///
+/// Recurring pages carry their current occurrence on `pages.scheduled_start`
+/// (the rest are virtual and never reach `page_schedules`); their stale pre-rule
+/// anchor row is excluded so a series can't count twice. Materialised overrides
+/// (`rule_id IS NOT NULL`) still count — the user moved that occurrence here.
 pub async fn today_scheduled_count(pool: &SqlitePool, date: &str) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(DISTINCT ps.page_id)
-         FROM page_schedules ps
-         JOIN pages p ON p.id = ps.page_id
-         WHERE p.status != 'done'
-           AND p.deleted_at IS NULL
-           AND ps.status != 'done'
-           AND date(ps.scheduled_start) = ?",
+        "WITH candidate AS (
+           SELECT p.id,
+                  p.scheduled_start,
+                  EXISTS(SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = p.id) AS recurring
+           FROM pages p
+           WHERE p.status != 'done'
+             AND p.deleted_at IS NULL
+         )
+         SELECT COUNT(*)
+         FROM candidate c
+         WHERE (c.recurring AND date(c.scheduled_start) = ?)
+            OR EXISTS (
+                 SELECT 1 FROM page_schedules ps
+                 WHERE ps.page_id = c.id
+                   AND ps.status != 'done'
+                   AND date(ps.scheduled_start) = ?
+                   AND (ps.rule_id IS NOT NULL OR NOT c.recurring)
+               )",
     )
+    .bind(date)
     .bind(date)
     .fetch_one(pool)
     .await?;
@@ -383,12 +406,12 @@ pub async fn today_scheduled_count(pool: &SqlitePool, date: &str) -> Result<i64,
 /// Count of distinct timed, not-done pages overdue in `[stale_cutoff, now_ts)`,
 /// excluding pages created after `recent_cutoff` (skips fresh import batches).
 ///
-/// A non-recurring **active-synced** page whose time has passed is not overdue: a
-/// meeting happened, it didn't lapse, and the user can neither reschedule it (the
-/// mirror is locked) nor stop it accumulating — so counting it would inflate the
-/// daily summary a little more every day from the moment a calendar connects.
-/// Recurring synced series are out of scope here; their heads are bounded by the
-/// sync-window floor. Detached pages keep task semantics — they're user-owned.
+/// Origin does not enter into it: a synced page is completable like any other, so
+/// ticking it clears the count. The mirror lock blocks rescheduling, which is not
+/// what overdue measures.
+///
+/// Recurring occurrences are read off `pages.scheduled_start` for the same reason
+/// as [`today_scheduled_count`].
 pub async fn overdue_count(
     pool: &SqlitePool,
     now_ts: &str,
@@ -396,26 +419,36 @@ pub async fn overdue_count(
     recent_cutoff: &str,
 ) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(DISTINCT ps.page_id)
-         FROM page_schedules ps
-         JOIN pages p ON p.id = ps.page_id
-         WHERE p.status != 'done'
-           AND p.deleted_at IS NULL
-           AND ps.status != 'done'
-           AND ps.scheduled_start LIKE '%T%'
-           AND datetime(ps.scheduled_start) < datetime(?)
-           AND datetime(ps.scheduled_start) >= datetime(?)
-           AND datetime(p.created_at) < datetime(?)
-           AND NOT (
-             EXISTS(SELECT 1 FROM page_sync
-                    WHERE page_sync.page_id = p.id AND page_sync.sync_state = 'active')
-             AND NOT EXISTS(SELECT 1 FROM page_recurrence_rules
-                            WHERE page_recurrence_rules.page_id = p.id)
-           )",
+        "WITH candidate AS (
+           SELECT p.id,
+                  p.scheduled_start,
+                  EXISTS(SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = p.id) AS recurring
+           FROM pages p
+           WHERE p.status != 'done'
+             AND p.deleted_at IS NULL
+             AND datetime(p.created_at) < datetime(?)
+         )
+         SELECT COUNT(*)
+         FROM candidate c
+         WHERE (c.recurring
+                 AND c.scheduled_start LIKE '%T%'
+                 AND datetime(c.scheduled_start) < datetime(?)
+                 AND datetime(c.scheduled_start) >= datetime(?))
+            OR EXISTS (
+                 SELECT 1 FROM page_schedules ps
+                 WHERE ps.page_id = c.id
+                   AND ps.status != 'done'
+                   AND ps.scheduled_start LIKE '%T%'
+                   AND datetime(ps.scheduled_start) < datetime(?)
+                   AND datetime(ps.scheduled_start) >= datetime(?)
+                   AND (ps.rule_id IS NOT NULL OR NOT c.recurring)
+               )",
     )
+    .bind(recent_cutoff)
     .bind(now_ts)
     .bind(stale_cutoff)
-    .bind(recent_cutoff)
+    .bind(now_ts)
+    .bind(stale_cutoff)
     .fetch_one(pool)
     .await?;
     Ok(row.0)

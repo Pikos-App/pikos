@@ -269,10 +269,10 @@ async fn zoned_synced_oneoff_is_excluded_from_native_path() {
 
 // ─── due_synced_reminders (zoned one-off, absolute-instant path) ──────────────
 //
-// The counterpart to the native explicit path for a *zoned* synced one-off: it
-// resolves source-zone wall-clock + lead → the absolute UTC instant and fires in
-// the fixed 60-second window. Only explicit (user-added) reminders apply — a synced
-// one-off gets no default lead.
+// The counterpart to the native paths for a *zoned* synced one-off: it resolves
+// source-zone wall-clock + lead → the absolute UTC instant and fires in the fixed
+// 60-second window. Lead selection matches every other origin — explicit reminder
+// if there is one, global default otherwise, silent on the `-1` sentinel.
 
 // 09:00 America/New_York (EDT, UTC−4) − 10 min = 08:50 EDT = 12:50 UTC. Reuses the
 // override-section basis; defined locally so this section reads standalone.
@@ -301,7 +301,8 @@ async fn synced_oneoff_explicit_fires_at_the_absolute_instant() {
     seed_synced_oneoff(&pool, "p1", "s1").await;
     insert_reminder(&pool, "p1", 10).await;
 
-    let due = due_synced_reminders(&pool, synced_oneoff_now())
+    // Global default deliberately differs — the explicit lead must win.
+    let due = due_synced_reminders(&pool, synced_oneoff_now(), 5)
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
@@ -310,13 +311,26 @@ async fn synced_oneoff_explicit_fires_at_the_absolute_instant() {
 }
 
 #[tokio::test]
-async fn synced_oneoff_without_explicit_reminder_is_silent() {
-    // Explicit-only: a synced one-off gets no default reminder, so with no
-    // page_reminders row the INNER JOIN yields nothing.
+async fn synced_oneoff_without_explicit_reminder_uses_the_global_default() {
     let pool = test_pool().await;
     seed_synced_oneoff(&pool, "p1", "s1").await;
 
-    assert!(due_synced_reminders(&pool, synced_oneoff_now())
+    let due = due_synced_reminders(&pool, synced_oneoff_now(), 10)
+        .await
+        .unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].schedule_id, "s1#10");
+    assert_eq!(due[0].minutes_before, 10);
+}
+
+#[tokio::test]
+async fn synced_oneoff_none_sentinel_beats_the_global_default() {
+    // -1 means "never remind me about this page" and must survive the fallback.
+    let pool = test_pool().await;
+    seed_synced_oneoff(&pool, "p1", "s1").await;
+    insert_reminder(&pool, "p1", -1).await;
+
+    assert!(due_synced_reminders(&pool, synced_oneoff_now(), 10)
         .await
         .unwrap()
         .is_empty());
@@ -346,7 +360,7 @@ async fn synced_oneoff_excludes_all_day_done_and_already_fired() {
         .await
         .unwrap();
 
-    assert!(due_synced_reminders(&pool, synced_oneoff_now())
+    assert!(due_synced_reminders(&pool, synced_oneoff_now(), 5)
         .await
         .unwrap()
         .is_empty());
@@ -361,7 +375,7 @@ async fn synced_oneoff_does_not_catch_up_a_past_instant() {
     insert_reminder(&pool, "p1", 10).await;
 
     let ten_min_late = naive("2026-05-25T13:00:00").and_utc(); // fire was 12:50
-    assert!(due_synced_reminders(&pool, ten_min_late)
+    assert!(due_synced_reminders(&pool, ten_min_late, 5)
         .await
         .unwrap()
         .is_empty());
@@ -376,7 +390,7 @@ async fn synced_oneoff_multi_lead_second_fires_in_a_later_tick() {
     insert_reminder(&pool, "p1", 70).await; // fires 11:50 UTC
     insert_reminder(&pool, "p1", 10).await; // fires 12:50 UTC
 
-    let tick_a = due_synced_reminders(&pool, naive("2026-05-25T11:50:00").and_utc())
+    let tick_a = due_synced_reminders(&pool, naive("2026-05-25T11:50:00").and_utc(), 5)
         .await
         .unwrap();
     assert_eq!(tick_a.len(), 1);
@@ -390,7 +404,7 @@ async fn synced_oneoff_multi_lead_second_fires_in_a_later_tick() {
     .await
     .unwrap();
 
-    let tick_b = due_synced_reminders(&pool, synced_oneoff_now())
+    let tick_b = due_synced_reminders(&pool, synced_oneoff_now(), 5)
         .await
         .unwrap();
     assert_eq!(tick_b.len(), 1, "second lead fires in its own tick");
@@ -461,6 +475,57 @@ async fn today_count_dedups_pages_and_includes_all_day() {
     assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 2);
 }
 
+#[tokio::test]
+async fn today_count_reads_a_recurring_pages_occurrence_from_the_head() {
+    let pool = test_pool().await;
+    insert_page(&pool, "due_today", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "due_today", "2026-05-01T09:00:00").await;
+    set_page_start(&pool, "due_today", "2026-05-25T09:00:00").await;
+    // Same series shape, next occurrence still ahead.
+    insert_page(&pool, "due_later", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "due_later", "2026-05-01T09:00:00").await;
+    set_page_start(&pool, "due_later", "2026-05-26T09:00:00").await;
+
+    assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 1);
+}
+
+#[tokio::test]
+async fn today_count_ignores_a_recurring_pages_stale_anchor() {
+    let pool = test_pool().await;
+    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "rec", "2026-05-01T09:00:00").await;
+    // The pre-rule anchor row lingers on today; the live occurrence is tomorrow.
+    insert_schedule(&pool, "anchor", "rec", "2026-05-25T09:00:00", "not_started").await;
+    set_page_start(&pool, "rec", "2026-05-26T09:00:00").await;
+
+    assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn today_count_includes_a_materialised_override() {
+    let pool = test_pool().await;
+    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "rec", "2026-05-01T09:00:00").await;
+    set_page_start(&pool, "rec", "2026-05-27T09:00:00").await;
+    // The user moved an occurrence onto today.
+    insert_override(&pool, "ovr", "rec", "2026-05-25T15:00:00", "not_started").await;
+
+    assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 1);
+}
+
+#[tokio::test]
+async fn today_count_reads_every_schedule_of_a_non_recurring_page() {
+    let pool = test_pool().await;
+    insert_page(&pool, "two_blocks", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule(&pool, "s1", "two_blocks", "2026-05-24T09:00:00", "not_started").await;
+    insert_schedule(&pool, "s2", "two_blocks", "2026-05-25T09:00:00", "not_started").await;
+    // The denorm only refreshes on a schedule write, so it can point at the
+    // earlier block while a later one falls on `date` — count the rows, not it.
+    set_page_start(&pool, "two_blocks", "2026-05-24T09:00:00").await;
+
+    assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 1);
+}
+
 // ─── overdue_count ───────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -500,6 +565,37 @@ async fn overdue_count_window_and_recency() {
         .await
         .unwrap();
     assert_eq!(n, 1);
+}
+
+#[tokio::test]
+async fn overdue_count_includes_a_lapsed_recurring_occurrence() {
+    let pool = test_pool().await;
+    // The occurrence was 2h ago and is still not done. A recurring page holds it
+    // on the head alone — there is no page_schedules row to find it by.
+    insert_page(&pool, "lapsed", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "lapsed", "2026-05-01T07:00:00").await;
+    set_page_start(&pool, "lapsed", "2026-05-25T07:00:00").await;
+
+    let n = overdue_count(&pool, NOW_TS, "2026-05-24 09:00:00", "2026-05-25 08:55:00")
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+}
+
+#[tokio::test]
+async fn overdue_count_ignores_a_recurring_pages_stale_anchor() {
+    let pool = test_pool().await;
+    // Next occurrence is ahead; only the lingering pre-rule anchor sits in the
+    // overdue window, and it does not represent anything the user still owes.
+    insert_page(&pool, "ahead", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "ahead", "2026-05-01T07:00:00").await;
+    insert_schedule(&pool, "anchor", "ahead", "2026-05-25T07:00:00", "not_started").await;
+    set_page_start(&pool, "ahead", "2026-05-26T07:00:00").await;
+
+    let n = overdue_count(&pool, NOW_TS, "2026-05-24 09:00:00", "2026-05-25 08:55:00")
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
 }
 
 // ─── reminder_fire_diagnostics ───────────────────────────────────────────────
@@ -990,12 +1086,11 @@ fn synced_fire_instant_fall_back_ambiguous_picks_the_earlier_offset() {
     );
 }
 
-/// C26: a non-recurring active-synced page whose time has passed is not overdue —
-/// a meeting happened, it didn't lapse. The mirror is locked, so the user can
-/// neither reschedule nor clear it, and the daily summary would grow by one every
-/// day from the moment a calendar connects.
+/// Origin does not change what overdue means. A synced page is completable, so
+/// ticking it clears the count exactly as a native page does; the mirror lock only
+/// blocks rescheduling.
 #[tokio::test]
-async fn overdue_count_ignores_a_past_synced_one_off() {
+async fn overdue_count_counts_a_past_synced_one_off() {
     let pool = test_pool().await;
     let stale_cutoff = "2026-05-24 09:00:00";
     let recent_cutoff = "2026-05-25 08:55:00";
@@ -1027,28 +1122,21 @@ async fn overdue_count_ignores_a_past_synced_one_off() {
     let n = overdue_count(&pool, NOW_TS, stale_cutoff, recent_cutoff)
         .await
         .unwrap();
-    assert_eq!(n, 1, "only the native one-off counts");
+    assert_eq!(n, 2, "native and synced one-offs both count");
 }
 
-/// The exclusion is scoped three ways, and each boundary is load-bearing: a
-/// recurring synced head is a real missed occurrence, and a detached page is
-/// user-owned and keeps task semantics.
+/// A recurring synced head is a real missed occurrence, and a detached page is
+/// user-owned — both keep task semantics.
 #[tokio::test]
-async fn overdue_count_still_counts_synced_recurring_and_detached() {
+async fn overdue_count_counts_synced_recurring_and_detached() {
     let pool = test_pool().await;
     let stale_cutoff = "2026-05-24 09:00:00";
     let recent_cutoff = "2026-05-25 08:55:00";
 
     insert_page(&pool, "series", "not_started", "2026-05-01T00:00:00").await;
-    insert_schedule(
-        &pool,
-        "s_series",
-        "series",
-        "2026-05-25T07:00:00",
-        "not_started",
-    )
-    .await;
     insert_rule(&pool, "series", "2026-05-25T07:00:00").await;
+    // A series' live occurrence is the head, not a schedule row.
+    set_page_start(&pool, "series", "2026-05-25T07:00:00").await;
     crate::pool::insert_test_page_sync(&pool, "series", "active")
         .await
         .unwrap();
