@@ -12,7 +12,7 @@ import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
 import { getVisiblePages, sortPages } from "@/features/pages";
-import type { SortMode } from "@/features/pages";
+import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
@@ -34,7 +34,8 @@ function getPageDurationMs(page: PageSummary): number | undefined {
 
 export function useThreePanelDnD() {
   const { folders, pages, reorderFolders, reorderPages, scheduleOnce, updatePage } = usePages();
-  const { activeViewId, getSortMode } = useUI();
+  const { activeViewId } = useUI();
+  const sortMode = useActiveSortMode();
   const { clearSelection, selectedPageIds } = useSelection();
   const { callExternalDragUpdater, setIsDraggingOverCalendar } = useCalendarDnD();
 
@@ -123,7 +124,6 @@ export function useThreePanelDnD() {
       // If dragging a selected item, drag all selected pages (in list order).
       // If dragging an unselected item, treat as single-drag and clear selection.
       if (selectedPageIds.has(String(active.id))) {
-        const sortMode: SortMode = activeViewId === "today" ? "date" : getSortMode(activeViewId);
         const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
         const ids = visible.filter((p) => selectedPageIds.has(p.id)).map((p) => p.id);
         setDraggedPageIds(ids);
@@ -208,9 +208,8 @@ export function useThreePanelDnD() {
     if (at === "page" && ot === "page") {
       // Only reorder in manual sort mode — other modes lock DnD.
       if (activeViewId === "today") return;
-      const currentSortMode = getSortMode(activeViewId);
-      if (currentSortMode !== "manual") return;
-      const visible = sortPages(getVisiblePages(pages, activeViewId), currentSortMode);
+      if (sortMode !== "manual") return;
+      const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
       const folderId = activeViewId !== "today" && activeViewId !== "inbox" ? activeViewId : null;
 
       if (idsToMove.length > 1) {

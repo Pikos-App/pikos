@@ -55,7 +55,7 @@ export interface UIContextValue {
   pageListDrawerOpen: boolean;
   setPageListDrawerOpen: (v: boolean) => void;
   /** Per-view sort mode. Persisted to localStorage. */
-  getSortMode: (viewId: string) => SortMode;
+  getSortMode: (viewId: string, fallback?: SortMode) => SortMode;
   setSortMode: (viewId: string, mode: SortMode) => void;
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
@@ -176,8 +176,10 @@ export function UIProvider({ children }: { children: ReactNode }) {
     setPageListDrawerOpen(false);
   }
 
-  function getSortMode(viewId: string): SortMode {
-    return sortModes[viewId] ?? "manual";
+  /** `fallback` lets a caller that knows what kind of view this is pick the
+   *  starting order (see `useActiveSortMode`); a stored choice still wins. */
+  function getSortMode(viewId: string, fallback: SortMode = "manual"): SortMode {
+    return sortModes[viewId] ?? fallback;
   }
 
   function setSortMode(viewId: string, mode: SortMode) {

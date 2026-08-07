@@ -8,6 +8,7 @@ import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useActivePage } from "@/shared/hooks/useActivePage";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
+import { useActiveSortMode } from "./useActiveSortMode";
 import { useCompletedPages } from "./useCompletedPages";
 
 export const UNDO_TOAST_DURATION_MS = 8000;
@@ -15,7 +16,8 @@ export const UNDO_TOAST_DURATION_MS = 8000;
 export function usePageList() {
   const { folders, pages, updatePage } = usePages();
   const togglePageStatus = useRecurringStatusToggle();
-  const { activeViewId, getSortMode, openPage, setActivePage } = useUI();
+  const { activeViewId, openPage, setActivePage } = useUI();
+  const sortMode = useActiveSortMode();
   const { hiddenIds, requestDeletePage } = useUndoDelete();
   const activePage = useActivePage();
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -23,8 +25,7 @@ export function usePageList() {
   const completed = useCompletedPages(activeViewId);
 
   const filtered = getVisiblePages(pages, activeViewId).filter((p) => !hiddenIds.has(p.id));
-  const visiblePages =
-    activeViewId === "today" ? filtered : sortPages(filtered, getSortMode(activeViewId));
+  const visiblePages = activeViewId === "today" ? filtered : sortPages(filtered, sortMode);
 
   const completedPages = completed.completedPages.filter((p) => !hiddenIds.has(p.id));
 

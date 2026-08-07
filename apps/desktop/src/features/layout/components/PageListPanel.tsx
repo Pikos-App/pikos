@@ -8,6 +8,7 @@ import type React from "react";
 
 import { shouldHideSidebar, useLayoutMode } from "@/features/layout/breakpoints";
 import { groupTodayPages, PageListItem, usePageList } from "@/features/pages";
+import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { partitionToggleSelection } from "@/features/pages/utils/toggleSelection";
 import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
@@ -61,7 +62,6 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   } = usePages();
   const {
     activeViewId,
-    getSortMode,
     openDialog,
     openSortMenu,
     setOpenDialog,
@@ -80,7 +80,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     togglePageSelection,
   } = useSelection();
   const { isDraggingOverCalendar } = useCalendarDnD();
-  const sortMode = activeViewId !== "today" ? getSortMode(activeViewId) : "date";
+  const sortMode = useActiveSortMode();
   const sidebarHidden = shouldHideSidebar(useLayoutMode());
   const { density } = useListSettings();
   const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
