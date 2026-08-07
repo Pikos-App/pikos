@@ -1,9 +1,3 @@
-// RecurrencePopover — same-freq re-click guard.
-// A "3rd Friday" monthly rule (BYDAY=FR;BYSETPOS=3) is a custom shape, so the
-// custom editor's freq menu is visible. Re-clicking the already-selected freq
-// must be a no-op: optionsForFreq's MONTHLY whitelist keeps only bymonthday, so
-// a re-emit would silently strip BYDAY/BYSETPOS. A different freq still emits.
-
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -14,29 +8,42 @@ import { RecurrencePopover } from "./RecurrencePopover";
 
 afterEach(cleanup);
 
-function renderPopover(onChange: (rrule: string | null) => void) {
+// A Monday anchor keeps "on Fridays" / "on the 15th" off the generated presets.
+const ANCHOR = "2026-07-06T09:00:00";
+
+const MONTHLY_ON_FRIDAYS = "FREQ=MONTHLY;BYDAY=FR";
+const MONTHLY_ON_THE_15TH = "FREQ=MONTHLY;BYMONTHDAY=15";
+const THIRD_FRIDAY_BYSETPOS = "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3";
+const THIRD_TUESDAY_BYDAY = "FREQ=MONTHLY;BYDAY=3TU";
+
+const ORDINAL_SPELLINGS = [
+  ["BYDAY ordinal", THIRD_TUESDAY_BYDAY],
+  ["BYSETPOS", THIRD_FRIDAY_BYSETPOS],
+] as const;
+
+function renderPopover(rrule: string, onChange: (rrule: string | null) => void) {
   return render(
     <AppSettingsProvider>
       <TooltipProvider>
-        <RecurrencePopover
-          anchorDate="2026-07-06T09:00:00" // a Monday — keeps "3rd Friday" a custom shape
-          onChange={onChange}
-          rrule="FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3"
-        />
+        <RecurrencePopover anchorDate={ANCHOR} onChange={onChange} rrule={rrule} />
       </TooltipProvider>
     </AppSettingsProvider>
   );
 }
 
-function openFreqMenu() {
+function openTrigger() {
   fireEvent.click(screen.getByRole("button", { name: /Recurrence:/ }));
+}
+
+function openFreqMenu() {
+  openTrigger();
   fireEvent.click(screen.getByRole("button", { name: "Month" }));
 }
 
 describe("RecurrencePopover freq re-click", () => {
   it("re-clicking the current freq is a no-op", () => {
     const onChange = vi.fn();
-    renderPopover(onChange);
+    renderPopover(MONTHLY_ON_FRIDAYS, onChange);
 
     openFreqMenu();
     // Two "Month" buttons now: the menu trigger and the menu option. The option
@@ -51,7 +58,7 @@ describe("RecurrencePopover freq re-click", () => {
 
   it("selecting a different freq still emits", () => {
     const onChange = vi.fn();
-    renderPopover(onChange);
+    renderPopover(MONTHLY_ON_FRIDAYS, onChange);
 
     openFreqMenu();
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
@@ -61,29 +68,39 @@ describe("RecurrencePopover freq re-click", () => {
   });
 });
 
-describe("RecurrencePopover BYDAY-ordinal lock", () => {
-  // A BYDAY ordinal (BYDAY=3TU) is dropped by the RecurrenceOptions round-trip, so
-  // editing it here would silently degrade "3rd Tuesday" to a plain weekly. The
-  // chip is locked read-only instead. (Contrast: the BYSETPOS form above round-
-  // trips cleanly and stays editable — proven by the freq-menu tests.)
-  it("does not open the editor for a BYDAY-ordinal rule", () => {
+describe("RecurrencePopover ordinal-cadence lock", () => {
+  it.each(ORDINAL_SPELLINGS)("does not open the editor for a %s rule", (_spelling, rrule) => {
     const onChange = vi.fn();
-    render(
-      <AppSettingsProvider>
-        <TooltipProvider>
-          <RecurrencePopover
-            anchorDate="2026-07-06T09:00:00"
-            onChange={onChange}
-            rrule="FREQ=MONTHLY;BYDAY=3TU"
-          />
-        </TooltipProvider>
-      </AppSettingsProvider>
-    );
+    renderPopover(rrule, onChange);
 
-    fireEvent.click(screen.getByRole("button", { name: /Recurrence:/ }));
+    openTrigger();
 
     expect(screen.queryByRole("button", { name: "Month" })).toBeNull();
     expect(screen.queryByText("Stop repeating")).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it.each(ORDINAL_SPELLINGS)("explains the lock on a %s rule", async (_spelling, rrule) => {
+    renderPopover(rrule, vi.fn());
+
+    fireEvent.pointerMove(screen.getByRole("button", { name: /Recurrence:/ }), {
+      pointerType: "mouse",
+    });
+
+    expect((await screen.findAllByText("This repeat can't be edited here")).length).toBeGreaterThan(
+      0
+    );
+  });
+});
+
+describe("RecurrencePopover Ends editor", () => {
+  it("keeps a BYMONTHDAY cadence when the end condition changes", () => {
+    const onChange = vi.fn();
+    renderPopover(MONTHLY_ON_THE_15TH, onChange);
+
+    openTrigger();
+    fireEvent.click(screen.getByRole("button", { name: "After" }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.stringContaining("BYMONTHDAY=15"));
   });
 });

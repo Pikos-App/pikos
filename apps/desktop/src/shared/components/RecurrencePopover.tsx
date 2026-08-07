@@ -2,12 +2,13 @@ import {
   buildRrule,
   formatDateOnly,
   optionsForFreq,
+  optionsWithEnd,
   parseLocalISO,
   parseRrule,
   type RecurrenceFreq,
   type RecurrenceOptions,
   type RecurrenceWeekday,
-  rruleHasBydayOrdinal,
+  rruleHasOrdinalCadence,
   rruleToLabel,
   rruleToShortLabel,
 } from "@pikos/core";
@@ -91,11 +92,7 @@ export function RecurrencePopover({
 
   const options = rrule ? parseRrule(rrule) : null;
   const hasRule = options !== null;
-  // A BYDAY ordinal ("3rd Tuesday") can't survive this editor's RecurrenceOptions
-  // round-trip — the ordinal is dropped, degrading the rule to a plain weekly — so
-  // lock it read-only. Native rules never carry ordinals; this only trips for a
-  // detached provider rule.
-  const ordinalLocked = !!rrule && rruleHasBydayOrdinal(rrule);
+  const ordinalLocked = !!rrule && rruleHasOrdinalCadence(rrule);
   const effectiveReadOnly = readOnly || ordinalLocked;
   const triggerLabel = hasRule
     ? formatTriggerLabel(rrule, /* short */ true)
@@ -140,9 +137,9 @@ export function RecurrencePopover({
   }
 
   function handleSelectFreq(freq: RecurrenceFreq) {
-    // Re-clicking the current freq must be a no-op: optionsForFreq's MONTHLY
-    // whitelist keeps only bymonthday, so a re-emit would silently strip a
-    // "3rd Friday" rule's BYDAY/BYSETPOS down to the base date's monthday.
+    // Re-clicking the current freq must be a no-op: optionsForFreq whitelists per
+    // freq, so a re-emit strips the BY* terms that freq can't carry — a monthly
+    // "every Friday" rule would lose its BYDAY and become monthly-on-the-anchor.
     if (freq === options?.freq) return;
     emit(options ? optionsForFreq(options, freq) : { freq, interval: 1 });
   }
@@ -181,28 +178,19 @@ export function RecurrencePopover({
 
   function handleSelectEnd(type: RecurrenceEndType) {
     if (!options) return;
-    const next: RecurrenceOptions = {
-      freq: options.freq,
-      interval: options.interval,
-    };
-    if (options.byweekday) next.byweekday = options.byweekday;
     if (type === "until") {
-      next.until = options.until ?? format(addMonths(new Date(), 3), "yyyy-MM-dd");
+      const until = options.until ?? format(addMonths(new Date(), 3), "yyyy-MM-dd");
+      emit(optionsWithEnd(options, { until }));
     } else if (type === "count") {
-      next.count = options.count ?? 10;
+      emit(optionsWithEnd(options, { count: options.count ?? 10 }));
+    } else {
+      emit(optionsWithEnd(options, null));
     }
-    emit(next);
   }
 
   function handleUntilSelect(date: Date) {
     if (!options) return;
-    const next: RecurrenceOptions = {
-      freq: options.freq,
-      interval: options.interval,
-      until: formatDateOnly(date),
-    };
-    if (options.byweekday) next.byweekday = options.byweekday;
-    emit(next);
+    emit(optionsWithEnd(options, { until: formatDateOnly(date) }));
   }
 
   function handleCountCommit() {
@@ -212,15 +200,7 @@ export function RecurrencePopover({
       return;
     }
     const parsed = parseInt(countDraft, 10);
-    if (!isNaN(parsed) && parsed > 0) {
-      const next: RecurrenceOptions = {
-        count: parsed,
-        freq: options.freq,
-        interval: options.interval,
-      };
-      if (options.byweekday) next.byweekday = options.byweekday;
-      emit(next);
-    }
+    if (!isNaN(parsed) && parsed > 0) emit(optionsWithEnd(options, { count: parsed }));
     setCountDraft("");
   }
 

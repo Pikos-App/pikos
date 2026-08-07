@@ -8,8 +8,9 @@ import {
   expandRecurrenceForRange,
   nextOccurrenceAfter,
   optionsForFreq,
+  optionsWithEnd,
   parseRrule,
-  rruleHasBydayOrdinal,
+  rruleHasOrdinalCadence,
   rruleToLabel,
   rruleToShortLabel,
   snapAnchorToRule,
@@ -692,25 +693,74 @@ describe("rruleToLabel", () => {
   });
 });
 
-describe("rruleHasBydayOrdinal", () => {
+describe("rruleHasOrdinalCadence", () => {
   it("detects a positional ordinal (3rd Tuesday)", () => {
-    expect(rruleHasBydayOrdinal("FREQ=MONTHLY;BYDAY=3TU")).toBe(true);
+    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=3TU")).toBe(true);
   });
 
   it("detects a from-end ordinal (last Friday)", () => {
-    expect(rruleHasBydayOrdinal("FREQ=MONTHLY;BYDAY=-1FR")).toBe(true);
+    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=-1FR")).toBe(true);
   });
 
   it("detects an ordinal in any BYDAY token", () => {
-    expect(rruleHasBydayOrdinal("FREQ=MONTHLY;BYDAY=MO,2WE")).toBe(true);
+    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=MO,2WE")).toBe(true);
+  });
+
+  it("detects the BYSETPOS spelling of the same cadence", () => {
+    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3")).toBe(true);
+  });
+
+  it("detects a from-end BYSETPOS", () => {
+    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1")).toBe(true);
   });
 
   it("is false for a plain weekday BYDAY", () => {
-    expect(rruleHasBydayOrdinal("FREQ=WEEKLY;BYDAY=MO,WE,FR")).toBe(false);
+    expect(rruleHasOrdinalCadence("FREQ=WEEKLY;BYDAY=MO,WE,FR")).toBe(false);
   });
 
   it("is false when there is no BYDAY", () => {
-    expect(rruleHasBydayOrdinal("FREQ=MONTHLY;BYMONTHDAY=15")).toBe(false);
+    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYMONTHDAY=15")).toBe(false);
+  });
+});
+
+// ─── optionsWithEnd ───────────────────────────────────────────────────────
+
+describe("optionsWithEnd", () => {
+  it("keeps bymonthday when setting a count", () => {
+    const options = parseRrule("FREQ=MONTHLY;BYMONTHDAY=15")!;
+    expect(optionsWithEnd(options, { count: 10 })).toEqual({
+      bymonthday: [15],
+      count: 10,
+      freq: "MONTHLY",
+      interval: 1,
+    });
+  });
+
+  it("keeps bysetpos and wkst when setting an until", () => {
+    const options = parseRrule("FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3;WKST=SU")!;
+    expect(optionsWithEnd(options, { until: "2026-12-31" })).toEqual({
+      bysetpos: [3],
+      byweekday: [4],
+      freq: "MONTHLY",
+      interval: 1,
+      until: "2026-12-31",
+      wkst: 6,
+    });
+  });
+
+  it("swaps until for count rather than carrying both", () => {
+    const options = parseRrule("FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T235959Z")!;
+    const next = optionsWithEnd(options, { count: 4 });
+    expect(next.count).toBe(4);
+    expect(next.until).toBeUndefined();
+  });
+
+  it("clears both on a null end", () => {
+    const options = parseRrule("FREQ=WEEKLY;BYDAY=MO;COUNT=5")!;
+    const next = optionsWithEnd(options, null);
+    expect(next.count).toBeUndefined();
+    expect(next.until).toBeUndefined();
+    expect(buildRrule(next)).toBe("FREQ=WEEKLY;INTERVAL=1;BYDAY=MO");
   });
 });
 

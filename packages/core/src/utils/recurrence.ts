@@ -386,12 +386,15 @@ export function computeNextEnd(baseEnd: string, nextStart: string): string | nul
 }
 
 /**
- * True when the rule's BYDAY carries an ordinal (e.g. `BYDAY=3TU` = "3rd
- * Tuesday", `BYDAY=-1FR` = "last Friday"). The `RecurrenceOptions` round-trip
- * (`parseRrule`/`buildRrule`) drops the ordinal, so any editor that saves through
- * it degrades such a rule to a plain weekly — callers use this to lock editing.
+ * True when the rule pins an ordinal position ("3rd Friday"), in either spelling:
+ * a BYDAY ordinal (`BYDAY=3TU`, `BYDAY=-1FR`) or BYSETPOS (`BYDAY=FR;BYSETPOS=3`).
+ * Neither survives the editor — `parseRrule` drops the BYDAY ordinal outright, and
+ * the freq/weekday controls have no way to express a position, so any save through
+ * them degrades the rule to a plain weekly or monthly. Callers lock editing on it.
+ * Nothing in Pikos authors either form; both only arrive on a provider rule.
  */
-export function rruleHasBydayOrdinal(rruleStr: string): boolean {
+export function rruleHasOrdinalCadence(rruleStr: string): boolean {
+  if (/(?:^|;)BYSETPOS=/i.test(rruleStr)) return true;
   const match = /(?:^|;)BYDAY=([^;]+)/i.exec(rruleStr);
   if (!match) return false;
   return match[1]!.split(",").some((token) => /^\s*[+-]?\d/.test(token));
@@ -615,5 +618,23 @@ export function optionsForFreq(
   } else if (freq === "MONTHLY") {
     if (options.bymonthday) next.bymonthday = options.bymonthday;
   }
+  return next;
+}
+
+/**
+ * Replace the end condition, leaving the cadence untouched. The Ends controls used
+ * to hand-rebuild from freq/interval/byweekday, which silently dropped the
+ * `bymonthday`/`bysetpos`/`wkst` that `parseRrule` surfaces from a synced rule — so
+ * one "ends after 10 times" click turned "monthly on the 15th" into plain monthly.
+ */
+export function optionsWithEnd(
+  options: RecurrenceOptions,
+  end: { count: number } | { until: string } | null
+): RecurrenceOptions {
+  const next: RecurrenceOptions = { ...options };
+  delete next.count;
+  delete next.until;
+  if (end && "count" in end) next.count = end.count;
+  else if (end) next.until = end.until;
   return next;
 }
