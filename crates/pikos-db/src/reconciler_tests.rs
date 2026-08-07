@@ -5,8 +5,8 @@
 use super::*;
 use crate::pool::test_pool;
 use crate::sync_delta::{
-    EventCore, EventSchedule, EventUpsert, OccurrenceDelta, OccurrenceFidelity, OccurrenceKind,
-    OccurrenceOverride, Recurrence, Removal, SyncDelta, UpsertItem,
+    EventCore, EventSchedule, EventUpsert, ExclusiveEnd, OccurrenceDelta, OccurrenceFidelity,
+    OccurrenceKind, OccurrenceOverride, Recurrence, Removal, SyncDelta, UpsertItem,
 };
 
 // ─── builders ─────────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ fn core(external_id: &str, uid: &str, etag: &str, title: &str) -> EventCore {
 fn timed(start: &str, end: Option<&str>, tz: &str) -> EventSchedule {
     EventSchedule {
         start: start.into(),
-        end: end.map(Into::into),
+        end: ExclusiveEnd::new(end.map(Into::into)),
         timezone: Some(tz.into()),
     }
 }
@@ -66,7 +66,7 @@ fn timed(start: &str, end: Option<&str>, tz: &str) -> EventSchedule {
 fn all_day(start: &str, end: Option<&str>) -> EventSchedule {
     EventSchedule {
         start: start.into(),
-        end: end.map(Into::into),
+        end: ExclusiveEnd::new(end.map(Into::into)),
         timezone: None,
     }
 }

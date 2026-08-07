@@ -20,8 +20,8 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone};
 use chrono_tz::Tz;
 
 use pikos_db::sync_delta::{
-    EventCore, EventSchedule, EventUpsert, OccurrenceDelta, OccurrenceFidelity, OccurrenceKind,
-    OccurrenceOverride, Recurrence, Removal, UpsertItem,
+    EventCore, EventSchedule, EventUpsert, ExclusiveEnd, OccurrenceDelta, OccurrenceFidelity,
+    OccurrenceKind, OccurrenceOverride, Recurrence, Removal, UpsertItem,
 };
 
 use super::error::GoogleError;
@@ -272,8 +272,7 @@ fn resolve_zone(named: Option<&str>) -> Option<SourceZone> {
     }
 }
 
-/// `start`/`end` → a normalized schedule. The all-day end is carried **raw
-/// exclusive** — the reconciler is the single owner that decrements it.
+/// `start`/`end` → a normalized schedule.
 fn schedule_of(e: &Event, zone: Option<&SourceZone>) -> Result<EventSchedule, GoogleError> {
     let start_field = e
         .start
@@ -285,7 +284,7 @@ fn schedule_of(e: &Event, zone: Option<&SourceZone>) -> Result<EventSchedule, Go
 
     Ok(EventSchedule {
         start,
-        end,
+        end: ExclusiveEnd::new(end),
         // All-day carries no zone; a timed event without a resolvable one floats.
         timezone: if start_field.date.is_some() {
             None

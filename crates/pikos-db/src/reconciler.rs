@@ -10,9 +10,10 @@
 //! across a whole calendar when the user unsyncs it. The ownership decision
 //! always errs toward keeping.
 
-use chrono::{Days, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 
+use self::allday_end::InclusiveEnd;
 use crate::error::AppResult;
 use crate::now_iso;
 use crate::sync_delta::{
@@ -291,7 +292,7 @@ async fn write_schedule(
         .execute(&mut **tx)
         .await?;
 
-    let base_end = to_inclusive_end(ev.schedule.end.as_deref());
+    let base_end = InclusiveEnd::from_provider(&ev.schedule.end);
 
     if let (Some(rec), Some(rrule)) = (&ev.recurrence, &rrule) {
         let rule_id = uuid::Uuid::new_v4().to_string();
@@ -312,7 +313,7 @@ async fn write_schedule(
         .bind(rrule)
         .bind(&exdates_json)
         .bind(&ev.schedule.start)
-        .bind(&base_end)
+        .bind(base_end.as_deref())
         .bind(tz)
         .bind(now)
         .execute(&mut **tx)
@@ -323,7 +324,7 @@ async fn write_schedule(
                 tx,
                 page_id,
                 &ov.schedule.start,
-                to_inclusive_end(ov.schedule.end.as_deref()).as_deref(),
+                &InclusiveEnd::from_provider(&ov.schedule.end),
                 ov.schedule.timezone.as_deref(),
                 Some(&rule_id),
                 Some(&ov.original_date),
@@ -340,14 +341,11 @@ async fn write_schedule(
             {
                 continue;
             }
-            // Stored ends are already Pikos-inclusive — re-insert raw, never
-            // through to_inclusive_end, or a carried all-day span loses a day
-            // per rewrite.
             insert_schedule_row(
                 tx,
                 page_id,
                 start,
-                end.as_deref(),
+                &InclusiveEnd::from_stored(end.clone()),
                 timezone.as_deref(),
                 Some(&rule_id),
                 Some(original_date),
@@ -360,7 +358,7 @@ async fn write_schedule(
             tx,
             page_id,
             &ev.schedule.start,
-            base_end.as_deref(),
+            &base_end,
             ev.schedule.timezone.as_deref(),
             None,
             None,
@@ -380,7 +378,7 @@ async fn write_schedule(
          WHERE id = ?5",
     )
     .bind(&ev.schedule.start)
-    .bind(&base_end)
+    .bind(base_end.as_deref())
     .bind(clear_terminal)
     .bind(now)
     .bind(page_id)
@@ -500,7 +498,7 @@ async fn apply_occurrence(
                 tx,
                 &page_id,
                 &schedule.start,
-                to_inclusive_end(schedule.end.as_deref()).as_deref(),
+                &InclusiveEnd::from_provider(&schedule.end),
                 schedule.timezone.as_deref(),
                 Some(&rule_id),
                 Some(&occ.original_date),
@@ -1111,7 +1109,7 @@ async fn insert_schedule_row(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
     start: &str,
-    end: Option<&str>,
+    end: &InclusiveEnd,
     timezone: Option<&str>,
     rule_id: Option<&str>,
     original_date: Option<&str>,
@@ -1126,7 +1124,7 @@ async fn insert_schedule_row(
     .bind(&id)
     .bind(page_id)
     .bind(start)
-    .bind(end)
+    .bind(end.as_deref())
     .bind(timezone)
     .bind(rule_id)
     .bind(original_date)
@@ -1320,19 +1318,50 @@ fn until_utc_to_wall_clock(value: &str, zone: Tz) -> Option<String> {
     Some(local.format("%Y%m%dT%H%M%S").to_string())
 }
 
-/// Decrement a provider-native **exclusive** all-day end to Pikos's inclusive
-/// end. Only all-day (date-only) ends are exclusive; timed ends and `None` pass
-/// through untouched. Single owner of this rule — providers carry the raw end.
-fn to_inclusive_end(end: Option<&str>) -> Option<String> {
-    let end = end?;
-    if end.len() == 10 {
-        if let Ok(date) = NaiveDate::parse_from_str(end, "%Y-%m-%d") {
-            if let Some(inclusive) = date.checked_sub_days(Days::new(1)) {
-                return Some(inclusive.format("%Y-%m-%d").to_string());
+/// The storage form of an end, and the single bridge from [`ExclusiveEnd`].
+///
+/// A second decrement shortens every multi-day all-day span by another day —
+/// invisible until it's wrong everywhere — and stored ends really do re-enter
+/// this module, since a `MasterOnly` rewrite re-inserts the override rows it
+/// carried forward. The field is private to this module, so a stored value can
+/// only be rebuilt through [`InclusiveEnd::from_stored`], which cannot decrement,
+/// and the provider form has no conversion of its own. Applying it twice is a
+/// missing method rather than a review catch.
+mod allday_end {
+    use chrono::{Days, NaiveDate};
+
+    use crate::sync_delta::ExclusiveEnd;
+
+    /// A Pikos-stored end: the inclusive last covered day. The only form the
+    /// schedule writer accepts.
+    pub(super) struct InclusiveEnd(Option<String>);
+
+    impl InclusiveEnd {
+        /// Sole owner of the decrement. Only date-only (all-day) ends are
+        /// exclusive; timed ends and `None` pass through untouched.
+        pub(super) fn from_provider(end: &ExclusiveEnd) -> Self {
+            let Some(end) = end.as_deref() else {
+                return Self(None);
+            };
+            if end.len() == 10 {
+                if let Ok(date) = NaiveDate::parse_from_str(end, "%Y-%m-%d") {
+                    if let Some(inclusive) = date.checked_sub_days(Days::new(1)) {
+                        return Self(Some(inclusive.format("%Y-%m-%d").to_string()));
+                    }
+                }
             }
+            Self(Some(end.to_string()))
+        }
+
+        /// A value read back out of `page_schedules` — already inclusive.
+        pub(super) fn from_stored(end: Option<String>) -> Self {
+            Self(end)
+        }
+
+        pub(super) fn as_deref(&self) -> Option<&str> {
+            self.0.as_deref()
         }
     }
-    Some(end.to_string())
 }
 
 #[cfg(test)]

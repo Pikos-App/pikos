@@ -48,12 +48,30 @@ pub struct EventCore {
 #[derive(Debug, Clone)]
 pub struct EventSchedule {
     pub start: String,
-    /// All-day ends arrive **provider-native exclusive** (a single Jun 15 event
-    /// has `end = Jun 16`). The reconciler — the single owner — decrements to
-    /// Pikos's inclusive end. Providers must carry it raw; never decrement twice.
-    pub end: Option<String>,
+    pub end: ExclusiveEnd,
     /// IANA source zone; `None` for all-day (no meaningful zone).
     pub timezone: Option<String>,
+}
+
+/// An end exactly as the provider sent it. All-day ends are **exclusive** on the
+/// wire in both providers (RFC 5545 `DTEND`, Google `end.date`): a single Jun 15
+/// event has `end = Jun 16`. Pikos stores the *inclusive* last covered day.
+///
+/// This is a distinct type so the decrement is a type transition the compiler
+/// enforces once, not a convention held by comments. A provider's only job is to
+/// carry the raw value into here; the reconciler owns the conversion to storage
+/// form and is the only place that can perform it.
+#[derive(Debug, Clone)]
+pub struct ExclusiveEnd(Option<String>);
+
+impl ExclusiveEnd {
+    pub fn new(end: Option<String>) -> Self {
+        Self(end)
+    }
+
+    pub fn as_deref(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
 }
 
 /// Whether a bundle's `exdates` + `overrides` are the series' whole truth, or

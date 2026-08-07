@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use sqlx::SqlitePool;
 
 use pikos_db::sync_delta::{
-    EventCore, EventSchedule, EventUpsert, SyncDelta, SyncToken, UpsertItem,
+    EventCore, EventSchedule, EventUpsert, ExclusiveEnd, SyncDelta, SyncToken, UpsertItem,
 };
 use pikos_db::{insert_test_folder, now_iso};
 
@@ -62,7 +62,7 @@ pub(crate) fn event(external_id: &str, uid: &str, etag: &str, title: &str) -> Up
         },
         schedule: EventSchedule {
             start: "2026-06-20T09:00:00".into(),
-            end: Some("2026-06-20T10:00:00".into()),
+            end: ExclusiveEnd::new(Some("2026-06-20T10:00:00".into())),
             timezone: Some("America/New_York".into()),
         },
         recurrence: None,

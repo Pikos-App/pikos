@@ -9,8 +9,8 @@ use pikos_db::sync_commands::{
     reactivate_account_impl, toggle_sync_calendar_impl, upsert_sync_calendar_impl,
 };
 use pikos_db::sync_delta::{
-    CalendarProvider, EventCore, EventSchedule, EventUpsert, RemoteCalendar, SyncDelta, SyncToken,
-    UpsertItem,
+    CalendarProvider, EventCore, EventSchedule, EventUpsert, ExclusiveEnd, RemoteCalendar,
+    SyncDelta, SyncToken, UpsertItem,
 };
 use pikos_db::test_pool;
 
@@ -224,7 +224,7 @@ fn one_event_delta(href: &str, uid: &str, title: &str, token: &str) -> SyncDelta
             },
             schedule: EventSchedule {
                 start: "2026-06-15T09:00:00".into(),
-                end: None,
+                end: ExclusiveEnd::new(None),
                 timezone: Some("UTC".into()),
             },
             recurrence: None,

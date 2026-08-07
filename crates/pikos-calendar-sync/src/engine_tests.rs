@@ -16,8 +16,8 @@ use pikos_db::error::{AppError, AppResult};
 use pikos_db::reconciler::{reconcile, ReconcileContext};
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
 use pikos_db::sync_delta::{
-    CalendarProvider, EventCore, EventSchedule, EventUpsert, OccurrenceDelta, OccurrenceFidelity,
-    OccurrenceKind, Recurrence, Removal, SyncDelta, SyncToken, UpsertItem,
+    CalendarProvider, EventCore, EventSchedule, EventUpsert, ExclusiveEnd, OccurrenceDelta,
+    OccurrenceFidelity, OccurrenceKind, Recurrence, Removal, SyncDelta, SyncToken, UpsertItem,
 };
 use pikos_db::{insert_test_page, now_iso, test_pool, PageUpdate, TestPage};
 
@@ -145,7 +145,7 @@ fn dated_event(external_id: &str, uid: &str, title: &str, start: &str, end: &str
         },
         schedule: EventSchedule {
             start: start.into(),
-            end: Some(end.into()),
+            end: ExclusiveEnd::new(Some(end.into())),
             timezone: Some("America/New_York".into()),
         },
         recurrence: None,
@@ -166,7 +166,7 @@ fn master(external_id: &str, uid: &str) -> EventUpsert {
         },
         schedule: EventSchedule {
             start: "2026-06-20T09:00:00".into(),
-            end: Some("2026-06-20T09:15:00".into()),
+            end: ExclusiveEnd::new(Some("2026-06-20T09:15:00".into())),
             timezone: Some("America/New_York".into()),
         },
         recurrence: Some(Recurrence {
@@ -186,7 +186,7 @@ fn orphan_occurrence(uid: &str, series_ref: &str) -> UpsertItem {
         original_date: "2026-06-21T09:00:00".into(),
         kind: OccurrenceKind::Modify(EventSchedule {
             start: "2026-06-21T11:00:00".into(),
-            end: Some("2026-06-21T11:15:00".into()),
+            end: ExclusiveEnd::new(Some("2026-06-21T11:15:00".into())),
             timezone: Some("America/New_York".into()),
         }),
     })

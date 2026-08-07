@@ -23,7 +23,8 @@ use chrono::{FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz as ChronoTz;
 
 use pikos_db::sync_delta::{
-    EventCore, EventSchedule, EventUpsert, OccurrenceFidelity, OccurrenceOverride, Recurrence,
+    EventCore, EventSchedule, EventUpsert, ExclusiveEnd, OccurrenceFidelity, OccurrenceOverride,
+    Recurrence,
 };
 
 use super::error::CaldavError;
@@ -179,8 +180,7 @@ fn source_zone(master: &ICalendarComponent, resolver: &TzResolver<&str>) -> Opti
     Some(SourceZone { iana, chrono })
 }
 
-/// `DTSTART`/`DTEND` → a normalized [`EventSchedule`]. The all-day end is carried
-/// **raw exclusive** — the reconciler is the single owner that decrements it.
+/// `DTSTART`/`DTEND` → a normalized [`EventSchedule`].
 fn schedule_of(
     comp: &ICalendarComponent,
     resolver: &TzResolver<&str>,
@@ -215,7 +215,7 @@ fn schedule_of(
 
     Ok(EventSchedule {
         start,
-        end,
+        end: ExclusiveEnd::new(end),
         timezone: if all_day {
             None
         } else {
