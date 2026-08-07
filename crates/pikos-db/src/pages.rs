@@ -44,6 +44,7 @@ struct PageRow {
     mirror_location: Option<String>,
     mirror_attendees: Option<String>,
     pending_description: Option<String>,
+    sync_created_at: Option<String>,
     is_recurring: bool,
 }
 
@@ -95,6 +96,15 @@ pub struct Page {
     /// Upstream description change withheld because the user already edited the body
     /// (see `page_sync.pending_description`). `None` = nothing pending.
     pub pending_description: Option<String>,
+    /// Local day this page first synced, or `None` for a native page.
+    ///
+    /// The render floor for a synced series: client-side expansion is bounded
+    /// only by the visible range, so without this the calendar paints occurrences
+    /// from the master's original `DTSTART` — years before the connection, from a
+    /// period whose cancellations and moves were never fetched, and all of it
+    /// below the head floor so none of it can be actioned. Same anchor as that
+    /// floor, so what renders and what can become the head agree.
+    pub synced_since: Option<String>,
     /// Derived (not a stored column): lets the frontend tell a one-off from a series
     /// without loading the rule set.
     pub is_recurring: bool,
@@ -135,6 +145,7 @@ impl From<PageRow> for Page {
             mirror_location: row.mirror_location,
             mirror_attendees: parse_attendees(row.mirror_attendees),
             pending_description: row.pending_description,
+            synced_since: row.sync_created_at.as_deref().and_then(crate::sync::local_day_of),
             is_recurring: row.is_recurring,
         }
     }
@@ -188,6 +199,7 @@ struct PageSummaryRow {
     mirror_location: Option<String>,
     mirror_attendees: Option<String>,
     pending_description: Option<String>,
+    sync_created_at: Option<String>,
     is_recurring: bool,
 }
 
@@ -226,6 +238,8 @@ pub struct PageSummary {
     pub mirror_attendees: Option<Vec<String>>,
     /// See `Page::pending_description`.
     pub pending_description: Option<String>,
+    /// See `Page::synced_since`.
+    pub synced_since: Option<String>,
     /// See `Page::is_recurring`.
     pub is_recurring: bool,
 }
@@ -263,6 +277,7 @@ impl From<PageSummaryRow> for PageSummary {
             mirror_location: row.mirror_location,
             mirror_attendees: parse_attendees(row.mirror_attendees),
             pending_description: row.pending_description,
+            synced_since: row.sync_created_at.as_deref().and_then(crate::sync::local_day_of),
             is_recurring: row.is_recurring,
         }
     }
@@ -291,6 +306,7 @@ const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      , (SELECT mirror_location FROM page_sync WHERE page_sync.page_id = pages.id) AS mirror_location\
      , (SELECT mirror_attendees FROM page_sync WHERE page_sync.page_id = pages.id) AS mirror_attendees\
      , (SELECT pending_description FROM page_sync WHERE page_sync.page_id = pages.id) AS pending_description\
+     , (SELECT created_at FROM page_sync WHERE page_sync.page_id = pages.id) AS sync_created_at\
      , EXISTS(SELECT 1 FROM page_recurrence_rules \
          WHERE page_recurrence_rules.page_id = pages.id) AS is_recurring";
 

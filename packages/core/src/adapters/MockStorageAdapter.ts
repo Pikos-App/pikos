@@ -41,7 +41,7 @@ import type {
   SyncCalendar,
   UncompleteRecurringInput,
 } from "../types";
-import { nowLocalISO, parseLocalISO } from "../utils/dates";
+import { formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
 import { computeNextEnd, nextOccurrenceAfter, rawExpandRule } from "../utils/recurrence";
@@ -198,6 +198,8 @@ export class MockStorageAdapter implements StorageAdapter {
       location?: string | null;
       attendees?: string[] | null;
       pendingDescription?: string | null;
+      /** Local day the page first synced; defaults to today, as a fresh sync would. */
+      syncedSince?: string | null;
     } = {}
   ): void {
     const page = this.pages.get(pageId);
@@ -209,6 +211,7 @@ export class MockStorageAdapter implements StorageAdapter {
       mirrorLocation: opts.location ?? page.mirrorLocation ?? null,
       pendingDescription: opts.pendingDescription ?? page.pendingDescription ?? null,
       scheduleLocked: state === "active",
+      syncedSince: opts.syncedSince ?? page.syncedSince ?? formatDateOnly(new Date()),
       syncState: state,
       timezone: opts.timezone ?? page.timezone ?? null,
     });

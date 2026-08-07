@@ -43,8 +43,12 @@ function completedOrSkippedKeys(page: PageSummary): Set<string> {
 }
 
 /** Applies the client-side exclusion union (completed ∪ skip ∪ materialised
- * overrides) and the own-date head suppression to a rule's raw occurrences,
- * shaping each survivor into a VirtualOccurrence. */
+ * overrides), the own-date head suppression, and a synced series' render floor
+ * to a rule's raw occurrences, shaping each survivor into a VirtualOccurrence.
+ *
+ * The floor is the only bound on how far back expansion reaches — the range
+ * alone would paint a synced series into any past week the user navigates to.
+ * See `PageSummary.syncedSince`. */
 function toVirtuals(
   raw: RawOccurrence[],
   page: PageSummary,
@@ -64,6 +68,7 @@ function toVirtuals(
   for (const occ of raw) {
     if (excluded.has(occ.originalDate)) continue;
     if (headDate && occ.originalDate === headDate) continue;
+    if (page.syncedSince && occ.originalDate < page.syncedSince) continue;
     out.push({
       ...page,
       isVirtual: true,

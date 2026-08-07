@@ -715,6 +715,44 @@ async fn a_synced_head_floors_at_the_connect_day() {
 }
 
 #[tokio::test]
+async fn the_rendered_floor_matches_the_head_floor() {
+    // The calendar bounds its client-side expansion on `synced_since`, and the head
+    // on `synced_head_floor`. Both anchor on `page_sync.created_at`, so one query
+    // resolving a different day than the other would render occurrences that can
+    // never become the head — the state this floor exists to prevent.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
+    crate::pool::insert_test_page_sync_connected_at(&pool, "head", "active", &connected_days_ago(3))
+        .await
+        .unwrap();
+
+    recompute(&pool, "head").await;
+
+    let page = crate::pages::get_page(&pool, "head").await.unwrap().unwrap();
+    assert_eq!(
+        page.synced_since.as_deref(),
+        Some(day_str(-3).as_str()),
+        "render floor is the connect day, local"
+    );
+    assert_eq!(
+        head(&pool, "head").await.0.as_deref().map(|s| &s[..10]),
+        page.synced_since.as_deref(),
+        "the two floors agree"
+    );
+}
+
+#[tokio::test]
+async fn a_native_series_carries_no_render_floor() {
+    // Nothing to bound: a native rule's base is the user's own start, not a
+    // provider's, so expansion can't reach back past anything they created.
+    let pool = test_pool().await;
+    seed_series(&pool, "head", "FREQ=DAILY", "2026-01-01T09:00:00", None).await;
+
+    let page = crate::pages::get_page(&pool, "head").await.unwrap().unwrap();
+    assert_eq!(page.synced_since, None);
+}
+
+#[tokio::test]
 async fn a_detached_series_floors_the_same_way() {
     // Detaching hands the page to the user but doesn't rewrite the provider's base,
     // so the floor still applies — and at the same anchor: a detached series has no

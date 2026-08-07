@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 
-use chrono::{DateTime, Duration, Local, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
@@ -113,13 +113,7 @@ async fn synced_head_floor(
             .bind(page_id)
             .fetch_optional(&mut *conn)
             .await?;
-    // `created_at` is `now_iso()` (UTC); slicing its date prefix lands on the wrong
-    // local day off-UTC — an evening connect west of UTC would floor on tomorrow and
-    // skip today's occurrence.
-    Ok(created.and_then(|c| {
-        let utc = c.parse::<DateTime<Utc>>().ok()?;
-        Some(utc.with_timezone(&Local).format("%Y-%m-%d").to_string())
-    }))
+    Ok(created.as_deref().and_then(crate::sync::local_day_of))
 }
 
 /// Recomputes `pages.scheduled_start` for one recurring page from truth and flips

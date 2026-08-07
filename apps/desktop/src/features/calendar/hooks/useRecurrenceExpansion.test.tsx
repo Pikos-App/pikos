@@ -831,4 +831,45 @@ describe("useRecurrenceExpansion — async in-flight", () => {
     expect(result.current.filter(isVirtual)).toHaveLength(0);
     expect(fn).toHaveBeenCalledTimes(1);
   });
+  // A synced series' rule base is the provider's original DTSTART, so range-only
+  // expansion paints it into every past week the user pages back to — from a
+  // period whose cancellations were never fetched, and below the head floor so
+  // none of it can be completed. `syncedSince` bounds it at the same anchor.
+  //
+  // All three hold the rule (base Mar 2, weekly Monday) and the visible week
+  // (Mar 9) fixed, so only the floor varies.
+  describe("synced render floor", () => {
+    const virtualsFor = async (over: Partial<PageSummary>) => {
+      const { result } = renderHook(() =>
+        useRecurrenceExpansion({
+          days: weekDays(new Date(2026, 2, 9)),
+          expandRecurrenceRange: EXPAND,
+          listOverridesForRules: NOOP_LIST_SCHEDULES,
+          pages: [makePage({ scheduledStart: "2026-03-02T09:00:00", ...over })],
+          recurrenceRules: [makeRule()],
+        })
+      );
+      await waitFor(() => expect(result.current).toBeDefined());
+      return () => result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
+    };
+    const SYNCED = { scheduleLocked: true, syncState: "active" as const };
+
+    it("drops an occurrence before the day the page first synced", async () => {
+      const virtuals = await virtualsFor({ ...SYNCED, syncedSince: "2026-03-16" });
+      await waitFor(() => expect(virtuals()).toHaveLength(0));
+    });
+
+    it("keeps an occurrence on that day — the floor is inclusive", async () => {
+      const virtuals = await virtualsFor({ ...SYNCED, syncedSince: "2026-03-09" });
+      await waitFor(() => {
+        expect(virtuals()).toHaveLength(1);
+        expect(virtuals()[0]?.scheduledStart).toBe("2026-03-09T09:00:00");
+      });
+    });
+
+    it("leaves a native series alone — it carries no floor", async () => {
+      const virtuals = await virtualsFor({});
+      await waitFor(() => expect(virtuals()).toHaveLength(1));
+    });
+  });
 });

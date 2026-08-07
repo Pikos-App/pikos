@@ -77,6 +77,12 @@ export interface Page {
   // Upstream description change withheld because the user edited the body; drives
   // the editor's passive "calendar description changed" notice. Null = nothing pending.
   pendingDescription?: string | null;
+  // Local day this page first synced; absent on a native page. The render floor
+  // for a synced series — occurrences before it are expanded from the provider's
+  // original DTSTART over a period whose cancellations were never fetched, and
+  // sit below the head floor, so they can't be actioned. Same anchor as that
+  // floor, so what renders and what can become the head agree.
+  syncedSince?: string | null;
 }
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────

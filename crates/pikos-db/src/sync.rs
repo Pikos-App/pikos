@@ -17,6 +17,21 @@ pub const PROVIDER_GOOGLE: &str = "google";
 /// can't open a series as overdue.
 pub const BACKFILL_DAYS: i64 = 7;
 
+/// `page_sync.created_at` (UTC) → the local calendar day it fell on.
+///
+/// Slicing the date prefix instead lands on the wrong day for much of every day
+/// off-UTC: an evening connect west of UTC would read as tomorrow, skipping a
+/// whole occurrence. Both the head floor and the render floor key on this, so it
+/// resolves once here rather than in each.
+pub fn local_day_of(utc_iso: &str) -> Option<String> {
+    let utc = utc_iso.parse::<chrono::DateTime<chrono::Utc>>().ok()?;
+    Some(
+        utc.with_timezone(&chrono::Local)
+            .format("%Y-%m-%d")
+            .to_string(),
+    )
+}
+
 /// `sync_account` row — one connected account. Secrets are NOT here; only a
 /// stable handle (`auth_kind` + the row id as the keychain key).
 #[derive(Debug, sqlx::FromRow)]
