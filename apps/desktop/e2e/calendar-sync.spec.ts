@@ -149,6 +149,32 @@ appTest("resync then disconnect removes the account and its folder @tier2", asyn
   await expect(app.getByRole("button", { name: "Personal" })).not.toBeVisible();
 });
 
+// ─── tier2: the seed is legible on the calendar at all ───────────────────────
+//
+// The synced seed stacks onto the realistic seed's busiest day, so a slot
+// collision doesn't fail loudly — the loser cascades past the visible depth cap
+// into the day's "+N more" pill and simply stops existing for every other check
+// here. Three of the five Personal events sat in that pill for a while, which
+// is why the seed now picks its slots deliberately (see `seeds/syncedCalendar`).
+
+appTest("every seeded Personal synced event renders as its own block @tier2", async ({ app }) => {
+  await seedSynced(app);
+  await openCalendarMode(app);
+
+  // Matching "<title>, " is what proves a grid block: the trailing time is what
+  // the page-list item lacks, and a collapsed block is absent outright.
+  for (const name of [
+    /Team standup, /,
+    /Weekly 1:1 \(London\), /,
+    /Recurring review, /,
+    /Design review \(LA team\), /,
+  ]) {
+    await expect(app.getByRole("button", { name })).toBeVisible();
+  }
+  // The all-day event lives in the all-day bar, so it carries no time.
+  await expect(app.getByRole("button", { name: "Company offsite" })).toBeVisible();
+});
+
 // ─── tier2: synced-block treatment ───────────────────────────────────────────
 
 appTest("synced events render source + detached treatment, schedule read-only @tier2", async ({
@@ -166,8 +192,7 @@ appTest("synced events render source + detached treatment, schedule read-only @t
 
   // Open a synced block's popover — title is read-only (schedule_locked). The
   // block's accessible name is "<title>, <time>"; the comma distinguishes it
-  // from the like-named page-list item. The cross-zone "Design review (LA team)"
-  // is a reliable afternoon block (the ~9am events fall in the collapsed band).
+  // from the like-named page-list item.
   await app.getByRole("button", { name: /Design review \(LA team\),/ }).click();
   const title = app.getByPlaceholder("Untitled");
   await expect(title).toHaveValue("Design review (LA team)");
@@ -283,10 +308,7 @@ appTest("unchecking a synced recurring done clone restores the occurrence @tier2
 // a timed move showed only a ghost at the old slot). Now the moved instance
 // renders at its new time as a locked, completable block, and completing it
 // records the ORIGINAL occurrence so the reminder derivation agrees. The seed's
-// "Recurring review" moves one instance ~3 weeks out — past the dense current-week
-// seed, so the block is unobstructed there. (Current-week synced recurring blocks
-// collapse into overflow pills, so grid rendering is otherwise pinned at the
-// useRecurrenceExpansion unit layer.)
+// "Recurring review" moves one instance ~3 weeks out, to 4 PM.
 
 /** Page forward until the moved override block (its new slot is 4 PM) renders. */
 async function gotoMovedOverride(app: Page) {
@@ -331,7 +353,7 @@ appTest("a moved synced occurrence renders at its new slot, locked, and complete
 //
 // Drag and resize are suppressed on a locked block, so the occurrence popover is
 // the only surface left that can reach a locked series' reschedule. The seed's
-// "Recurring review" is a synced weekly at 2 PM; the current week's block is the
+// "Recurring review" is a synced weekly at 10 AM; the current week's block is the
 // series head (a real page block), day+7 is an EXDATE and day+14 moved to an
 // override — so the first plain virtual is day+21. Page forward before matching.
 
@@ -341,7 +363,7 @@ appTest("a synced recurring occurrence's popover offers no editable date @tier2"
   await seedSynced(app);
   await openCalendarMode(app);
 
-  const occurrence = app.getByRole("button", { name: /Recurring review, 2/ });
+  const occurrence = app.getByRole("button", { name: /Recurring review, 10/ });
   await app.getByRole("button", { name: "Next week" }).click();
   await app.waitForTimeout(400);
   for (let i = 0; i < 6 && (await occurrence.count()) === 0; i++) {

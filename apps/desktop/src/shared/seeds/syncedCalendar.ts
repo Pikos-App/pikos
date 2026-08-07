@@ -10,6 +10,18 @@ import { addDays, set } from "date-fns";
 // Produces the same spread as the dev command: a same-day timed event, a
 // cross-zone event (resolves to the viewer's zone, no badge), an all-day event
 // (never shifts), a weekly recurring series, and one detached page (broken-sync).
+//
+// The "synced" scenario stacks this on top of the realistic seed, whose day-0
+// slots are fixed (6:30, 8, 9, 9:15, 2–4 PM, 3–4 PM, 7 PM). Every event below is
+// timed to resolve into a lane that seed leaves free, for a New York viewer —
+// the zone the sync e2e pins. Land one on an occupied slot and it cascades past
+// MAX_VISIBLE_CASCADE_DEPTH into the day's "+N more" pill, where no
+// calendar-surface check can see it.
+//
+// A cross-zone event has to clear its lane at BOTH of its offsets: London and
+// New York run three weeks a year an hour closer than usual (their DST
+// transitions don't line up), and Tokyo keeps none at all, so each of those
+// resolves to two possible slots over a year and both must be free.
 
 function at(base: Date, offsetDays: number, hours: number, minutes: number): string {
   return formatLocalISO(
@@ -73,8 +85,8 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
   await synced(
     personal,
     "Team standup",
-    at(today, 0, 9, 0),
-    at(today, 0, 9, 30),
+    at(today, 0, 11, 0),
+    at(today, 0, 11, 30),
     "America/New_York",
     "active",
     {
@@ -95,8 +107,9 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
   );
   await synced(personal, "Company offsite", formatDateOnly(today), undefined, undefined, "active");
 
-  const recStart = at(today, 0, 14, 0);
-  const recEnd = at(today, 0, 14, 30);
+  // 5 PM London resolves to noon or 1 PM in New York.
+  const recStart = at(today, 0, 17, 0);
+  const recEnd = at(today, 0, 17, 30);
   const recurring = await adapter.createPage({
     content: "",
     folderId: personal,
@@ -120,8 +133,8 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
   // later week (an override row with a timed original_date), both stored as full
   // wall-clock — exercises the day-keyed exclusion so neither ghosts at its
   // original slot. Exceptions are seeded before markPageSynced locks the mirror.
-  const reviewStart = at(today, 0, 14, 0);
-  const reviewEnd = at(today, 0, 14, 30);
+  const reviewStart = at(today, 0, 10, 0);
+  const reviewEnd = at(today, 0, 10, 30);
   const review = await adapter.createPage({
     content: "",
     folderId: personal,
@@ -139,9 +152,9 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
     scheduledStart: reviewStart,
     timezone: "America/New_York",
   });
-  await adapter.addRuleExdates(reviewRule.id, [at(today, 7, 14, 0)]);
+  await adapter.addRuleExdates(reviewRule.id, [at(today, 7, 10, 0)]);
   await adapter.createPageSchedule({
-    originalDate: at(today, 14, 14, 0),
+    originalDate: at(today, 14, 10, 0),
     pageId: review.id,
     ruleId: reviewRule.id,
     scheduledEnd: at(today, 24, 16, 30),
@@ -151,7 +164,15 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
   mock.markPageSynced(review.id, { state: "active", timezone: "America/New_York" });
 
   // Work: cross-zone (Tokyo) + a detached page (editable, broken-sync icon).
-  await synced(work, "Tokyo sync", at(today, 1, 8, 0), at(today, 1, 8, 30), "Asia/Tokyo", "active");
+  // 10 AM tomorrow in Tokyo resolves to 8 or 9 PM tonight in New York.
+  await synced(
+    work,
+    "Tokyo sync",
+    at(today, 1, 10, 0),
+    at(today, 1, 10, 30),
+    "Asia/Tokyo",
+    "active"
+  );
   await synced(
     work,
     "Old planning (detached)",

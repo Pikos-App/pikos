@@ -560,6 +560,9 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
     // Personal: same-day timed (NY), cross-zone (LA), all-day, weekly recurring (London).
     // "Team standup" carries the full B1 read-only mirror surface: location, attendees,
     // a user-edited body, and a withheld upstream description → shows the notice.
+    //
+    // Times mirror the TS seed (`shared/seeds/syncedCalendar.ts`), which places each
+    // event in a lane the realistic seed leaves free — see the note there.
     let standup_body = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"My prep: land the calendar-sync PR before we demo."}]}]}"#;
     insert_synced_page(
         &mut tx,
@@ -567,8 +570,8 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         &account_id,
         personal_cal,
         "Team standup",
-        &at(0, "09:00"),
-        Some(&at(0, "09:30")),
+        &at(0, "11:00"),
+        Some(&at(0, "11:30")),
         Some("America/New_York"),
         "active",
         0,
@@ -623,8 +626,8 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         &account_id,
         personal_cal,
         "Weekly 1:1 (London)",
-        &at(0, "14:00"),
-        &at(0, "14:30"),
+        &at(0, "17:00"),
+        &at(0, "17:30"),
         "Europe/London",
         "FREQ=WEEKLY",
         3,
@@ -639,8 +642,8 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         &account_id,
         work_cal,
         "Tokyo sync",
-        &at(1, "08:00"),
-        Some(&at(1, "08:30")),
+        &at(1, "10:00"),
+        Some(&at(1, "10:30")),
         Some("Asia/Tokyo"),
         "active",
         0,
