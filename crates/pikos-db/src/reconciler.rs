@@ -1318,27 +1318,26 @@ fn until_utc_to_wall_clock(value: &str, zone: Tz) -> Option<String> {
     Some(local.format("%Y%m%dT%H%M%S").to_string())
 }
 
-/// The storage form of an end, and the single bridge from [`ExclusiveEnd`].
+/// The storage form of a provider [`ExclusiveEnd`], and the only bridge to it.
 ///
-/// A second decrement shortens every multi-day all-day span by another day —
-/// invisible until it's wrong everywhere — and stored ends really do re-enter
-/// this module, since a `MasterOnly` rewrite re-inserts the override rows it
-/// carried forward. The field is private to this module, so a stored value can
-/// only be rebuilt through [`InclusiveEnd::from_stored`], which cannot decrement,
-/// and the provider form has no conversion of its own. Applying it twice is a
-/// missing method rather than a review catch.
+/// Applying the decrement twice shortens every multi-day all-day span by another
+/// day — invisible until it's wrong everywhere — and stored ends really do
+/// re-enter here, since a `MasterOnly` rewrite re-inserts the override rows it
+/// carried forward. Hence the private field: a stored value can only be rebuilt
+/// through [`InclusiveEnd::from_stored`], which cannot decrement, and the
+/// provider form has no conversion of its own. A double application is a missing
+/// method, not a review catch.
 mod allday_end {
     use chrono::{Days, NaiveDate};
 
     use crate::sync_delta::ExclusiveEnd;
 
-    /// A Pikos-stored end: the inclusive last covered day. The only form the
-    /// schedule writer accepts.
+    /// The only end form `insert_schedule_row` accepts.
     pub(super) struct InclusiveEnd(Option<String>);
 
     impl InclusiveEnd {
-        /// Sole owner of the decrement. Only date-only (all-day) ends are
-        /// exclusive; timed ends and `None` pass through untouched.
+        /// Only date-only ends carry the exclusivity convention; timed ends and
+        /// `None` pass through untouched.
         pub(super) fn from_provider(end: &ExclusiveEnd) -> Self {
             let Some(end) = end.as_deref() else {
                 return Self(None);

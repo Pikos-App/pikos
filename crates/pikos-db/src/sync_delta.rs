@@ -55,12 +55,11 @@ pub struct EventSchedule {
 
 /// An end exactly as the provider sent it. All-day ends are **exclusive** on the
 /// wire in both providers (RFC 5545 `DTEND`, Google `end.date`): a single Jun 15
-/// event has `end = Jun 16`. Pikos stores the *inclusive* last covered day.
+/// event has `end = Jun 16`, where Pikos stores the inclusive last covered day.
 ///
-/// This is a distinct type so the decrement is a type transition the compiler
-/// enforces once, not a convention held by comments. A provider's only job is to
-/// carry the raw value into here; the reconciler owns the conversion to storage
-/// form and is the only place that can perform it.
+/// A distinct type so that decrement is a compiler-enforced transition rather
+/// than a convention. A provider's only job is to carry the raw value in here;
+/// the reconciler owns the conversion.
 #[derive(Debug, Clone)]
 pub struct ExclusiveEnd(Option<String>);
 
