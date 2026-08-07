@@ -487,6 +487,16 @@ button,
     background: color-mix(in srgb, var(--color-primary-400) 25%, transparent);
   }
 
+  /* Tooltips are click-through. Radix keeps its tooltip content hoverable, and
+     the positioning wrapper it portals into takes pointer events of its own —
+     so a tooltip covering a control below it eats that control's click, and
+     keeps eating it for as long as the cursor rests on the tooltip. Every
+     tooltip here is text, so nothing is lost. Targets the wrapper, not the
+     content: styling only the content leaves the wrapper intercepting. */
+  [data-radix-popper-content-wrapper]:has(> [data-slot="tooltip-content"]) {
+    pointer-events: none;
+  }
+
   /* Reduced motion preference */
   @media (prefers-reduced-motion: reduce) {
     *,
