@@ -767,13 +767,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     pageId: string,
     missedPolicy: MissedOccurrencePolicy = "advance"
   ): Promise<void> {
-    // Backstop for synced series: the native head-advance path below is rejected
-    // by the backend for an active synced page (the reconciler owns the head).
-    // Intentionally redundant with the shared toggle router — direct callers that
-    // don't go through it (bulk-select, the gap dialog's confirm) route here too,
-    // so no entry point can hit the Conflict.
     const page = pagesRef.current.find((p) => p.id === pageId);
-    if (page && maybeToggleRecurringOccurrence(page, "done")) return;
     // Re-entrancy guard: the checkbox path is fire-and-forget and not disabled
     // in flight, and the backend mints one clone + one head-advance per call —
     // a re-entrant call (or, now that completion is queued, a SERIALIZED
@@ -829,8 +823,24 @@ export function PagesProvider({ children }: { children: ReactNode }) {
           )
         : [];
 
+    // An active synced head must name the occurrence it's completing: the reconciler
+    // pins `pages.scheduled_start` at the series base, so the backend can't derive it
+    // the way it does for a native head. The wall-clocks convert out of the source
+    // zone, matching the clone a virtual completion writes.
+    const syncedHead =
+      head?.scheduleLocked && head.scheduledStart
+        ? {
+            occurrenceDate: head.scheduledStart.slice(0, 10),
+            scheduledStart: cloneWallClock(head.scheduledStart, head.timezone),
+            ...(head.scheduledEnd
+              ? { scheduledEnd: cloneWallClock(head.scheduledEnd, head.timezone) }
+              : {}),
+          }
+        : {};
+
     const result = await adapter.completeRecurringPage({
       pageId,
+      ...syncedHead,
       ...(skipDates.length > 0 ? { skipDates } : {}),
     });
 
@@ -936,20 +946,23 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   /**
    * Intercepts a status toggle that must route to occurrence-based completion, and
    * returns true ONLY when it handled it (caller must then NOT fall through). Two
-   * cases: checking an active *synced* occurrence (head or virtual) → complete it;
-   * unchecking *any* recurring done clone (native or synced) → uncomplete + restore.
-   * Returns false for everything else — including a malformed synced row with no
-   * `scheduledStart`, so the native path runs and surfaces an error rather than
-   * silently swallowing the click.
+   * cases: checking a *virtual* occurrence of an active synced series → complete
+   * that occurrence; unchecking *any* recurring done clone (native or synced) →
+   * uncomplete + restore. Returns false for everything else — including a malformed
+   * synced row with no `scheduledStart`, so the native path runs and surfaces an
+   * error rather than silently swallowing the click.
+   *
+   * A synced *head* deliberately falls through to the gap dialog rather than
+   * completing here: its floor is the connect day, so it can be genuinely overdue,
+   * and resolving that gap is the same gesture a native series offers.
    */
   function maybeToggleRecurringOccurrence(page: PageSummary, nextStatus: PageStatus): boolean {
-    const isSyncedRecurring =
-      !!page.scheduleLocked && recurrenceRulesRef.current.some((r) => r.pageId === page.id);
-    if (isSyncedRecurring && nextStatus === "done" && page.scheduledStart) {
-      const occurrenceDate =
-        "originalDate" in page
-          ? (page as VirtualOccurrence).originalDate
-          : page.scheduledStart.slice(0, 10);
+    const isSyncedVirtual =
+      !!page.scheduleLocked &&
+      "originalDate" in page &&
+      recurrenceRulesRef.current.some((r) => r.pageId === page.id);
+    if (isSyncedVirtual && nextStatus === "done" && page.scheduledStart) {
+      const occurrenceDate = (page as VirtualOccurrence).originalDate;
       const cloneEnd = page.scheduledEnd
         ? cloneWallClock(page.scheduledEnd, page.timezone)
         : undefined;

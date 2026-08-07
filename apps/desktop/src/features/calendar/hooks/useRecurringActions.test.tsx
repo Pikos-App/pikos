@@ -251,15 +251,17 @@ describe("useRecurringActions", () => {
       });
     });
 
-    // A locked (active-synced) recurring head. maybeToggleRecurringOccurrence keys
-    // off the live page's scheduleLocked + an existing rule, so set both here.
+    // A locked (active-synced) recurring head. The completion reads lockedness off
+    // the stored row, not the toggle's input page, so mark it synced for real —
+    // faking `scheduleLocked` on the target alone leaves the store native.
+    await act(async () => {
+      const storage = hook.result.current.workspace.storage as MockStorageAdapter;
+      storage.markPageSynced(pageId, { state: "active", timezone: "America/New_York" });
+      await hook.result.current.workspace.reload();
+    });
     const base = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
     act(() => {
-      hook.result.current.setTargetPage({
-        ...base,
-        scheduledStart: "2099-01-05T09:00:00",
-        scheduleLocked: true,
-      });
+      hook.result.current.setTargetPage(base);
     });
 
     await act(async () => {

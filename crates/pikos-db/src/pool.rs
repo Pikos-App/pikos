@@ -404,7 +404,7 @@ pub async fn insert_test_folder(pool: &SqlitePool, id: &str, name: &str) -> AppR
 /// fixture using any plausible occurrence date keeps testing what it meant to.
 /// Tests that exercise the floor itself pass their own date.
 #[cfg(test)]
-pub const TEST_CONNECTED_LONG_AGO: &str = "2000-01-01T00:00:00";
+pub const TEST_CONNECTED_LONG_AGO: &str = "2000-01-01T00:00:00.000Z";
 
 /// Links an existing test page to a synced calendar (a `page_sync` row), creating
 /// a shared throwaway `sync_account` on first use. `sync_state` ∈ active |
@@ -421,7 +421,9 @@ pub async fn insert_test_page_sync(
 }
 
 /// [`insert_test_page_sync`] with an explicit `page_sync.created_at` — the anchor
-/// the head-floor derives from, i.e. when this calendar was connected.
+/// the head-floor derives from, i.e. when this calendar was connected. Pass the
+/// [`now_iso`] form the reconciler writes (UTC, trailing `Z`): the floor parses it
+/// as an instant, so a local wall-clock string here yields no floor at all.
 #[cfg(test)]
 pub async fn insert_test_page_sync_connected_at(
     pool: &SqlitePool,

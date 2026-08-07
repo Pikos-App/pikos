@@ -2871,19 +2871,17 @@ fn weekly_anchored_weeks_ago(etag: &str, weeks_ago: i64) -> UpsertItem {
     })
 }
 
-/// The floor a *detached* series derives: `page_sync.created_at` (stamped now, by
-/// the reconciler) minus the backfill window. An active series floors at today.
-fn window_floor() -> String {
-    (chrono::Local::now() - chrono::Duration::days(crate::sync::BACKFILL_DAYS))
-        .format("%Y-%m-%d")
-        .to_string()
+/// The floor a synced series derives: `page_sync.created_at`, which the reconciler
+/// stamps now, so a fixture reconciled in-test floors at today.
+fn connect_floor() -> String {
+    crate::today_local()
 }
 
 /// The occurrence `weeks` from today at 09:00, in the stored wall-clock form, and
-/// its day key. An **active** mirror's head floors at today, so a fixture whose
+/// its day key. A synced head floors at the connect day, so a fixture whose
 /// occurrences all sit in the past derives no open occurrence at all — a case
-/// about set-carrying or a status transition has to anchor on the window rather
-/// than encode a calendar date.
+/// about set-carrying or a status transition has to anchor on today rather than
+/// encode a calendar date.
 fn week_occ(weeks: i64) -> String {
     (chrono::Local::now() + chrono::Duration::weeks(weeks))
         .format("%Y-%m-%dT09:00:00")
@@ -3718,10 +3716,10 @@ async fn a_series_predating_the_connection_heads_at_the_first_in_window_occurren
     let (page_id, _, _) = only_page_sync(&pool).await;
 
     let head = page_denorm(&pool, &page_id).await.0.unwrap();
-    let floor = window_floor();
+    let floor = connect_floor();
     assert!(
         head[..10] >= *floor,
-        "head {head} must not predate the sync window {floor}"
+        "head {head} must not predate the connect day {floor}"
     );
     // Still a real occurrence of the rule, not the floor rounded up to itself.
     let base_dow = (chrono::Local::now() - chrono::Duration::weeks(260))

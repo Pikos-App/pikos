@@ -387,6 +387,42 @@ appTest("a synced event shows the description-changed notice + read-only locatio
   await expect(app.getByText(/demo the new sync panel/i)).toBeVisible();
 });
 
+// ─── tier2: an overdue synced head reaches the gap dialog ────────────────────
+//
+// A synced head floors at the connect day, so occurrences that pass while the app
+// is closed leave it genuinely overdue — the same shape a native series reaches.
+// It must offer the same advance-one / skip-the-gap choice; the toggle router used
+// to intercept a synced head and silently complete one occurrence per click. Uses
+// the raw `page` fixture because clock.install must run before the first app
+// script reads Date.
+
+appTest("an overdue synced series completes through the gap dialog @tier2", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-06-08T09:00:00") });
+  await page.clock.resume();
+  await page.goto("/");
+  await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+
+  await seedSynced(page);
+
+  await openPersonalFolder(page);
+  const head = seriesRows(page).first();
+  await expect(head).toBeVisible();
+
+  // Two weeks on, last week's occurrence is missed. The mock never recomputes a
+  // locked head, so it stays on the seeded date — the state a real mirror reaches
+  // by being left closed.
+  await page.clock.setFixedTime(new Date("2026-06-22T09:00:00"));
+
+  await head.getByRole("checkbox", { name: /Mark done/i }).click();
+
+  await expect(page.getByRole("button", { name: /Advance to next page/ })).toBeVisible();
+  await page.getByRole("button", { name: /Advance to today/ }).click();
+  await expect(page.getByRole("button", { name: /Advance to today/ })).not.toBeVisible();
+  // The locked mirror accepted the completion — a mis-routed write would surface
+  // the read-only rejection instead.
+  await expect(page.getByText(/read-only/i)).toHaveCount(0);
+});
+
 // ─── tier2: FTS search finds a synced page ───────────────────────────────────
 
 appTest("search finds a synced page @tier2", async ({ app }) => {

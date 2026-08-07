@@ -9,12 +9,12 @@
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration, Local, NaiveDateTime, Utc};
 use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
 use crate::notification_log::{synced_fire_instant, DueReminder};
-use crate::{now_iso, now_local_iso, today_local};
+use crate::{now_iso, now_local_iso};
 
 const WALL_FMT: &str = "%Y-%m-%dT%H:%M:%S";
 
@@ -78,50 +78,47 @@ fn derive_oldest_open(
     .map_err(|e| AppError::Internal(format!("recurrence derivation failed: {e}")))
 }
 
-/// Lower bound on a synced series' head. Without one the head parks on the
-/// master's original `DTSTART` — which a provider returns whenever the series
-/// still yields instances in the backfill window, and which can predate the
-/// connection by years — so it lands on an occurrence nobody could have
-/// completed, and completing it completes the wrong instance.
+/// Lower bound on a synced series' head: the day the page was first synced.
+/// Without one the head parks on the master's original `DTSTART` — which a
+/// provider returns whenever the series still yields instances in the backfill
+/// window, and which can predate the connection by years — so it lands on an
+/// occurrence nobody could have completed, and completing it completes the wrong
+/// instance.
 ///
-/// The bound differs by sync state:
+/// Applies to active and detached alike: a synced series keeps task semantics, so
+/// an occurrence that passed while the user was away should still surface as the
+/// head and be resolvable through the gap dialog, exactly as a native series does.
+/// Detaching doesn't rewrite the provider's base, so dropping the floor there
+/// would let the head fall back to the original start.
 ///
-/// - **active** floors at *today*. The schedule is provider-owned and read-only,
-///   so an occurrence whose time has passed is not a lapsed task — it happened,
-///   and there is no reschedule or dismiss to reach for. A further-back anchor
-///   hands a freshly connected account a backlog it clears one completion per
-///   occurrence (same reasoning spares a past synced one-off in `belongsToView`).
-/// - **detached** keeps the connection-time bound: the page is user-owned and
-///   keeps task semantics, so a missed occurrence *should* still nag, but the
-///   provider's base survives the detach and still needs flooring. The anchor is
-///   `page_sync.created_at` because the reconciler writes it once on insert and
-///   never rewrites it. `sync_calendar.last_full_sync_at` looks like the natural
-///   anchor and is not: it restamps on every full enumerate, marching the floor
-///   over occurrences the user hadn't completed yet.
+/// The anchor is the connect *day*, not the backfill window that admitted the
+/// page. The backfill reaches [`crate::sync::BACKFILL_DAYS`] back so the current
+/// week renders on connect, but those occurrences predate the user — flooring
+/// there would open a freshly connected series already overdue on a date nobody
+/// could have acted on. They still render; they just can't become the head.
+///
+/// `page_sync.created_at` is the anchor because the reconciler writes it once on
+/// insert and never rewrites it — an etag update and a dormant re-link both leave
+/// it alone — so a `410`-triggered re-enumerate can't march the floor forward and
+/// strand a head the user had already advanced. `sync_calendar.last_full_sync_at`
+/// looks like the natural anchor and is not: it restamps on every full enumerate.
 ///
 /// A floor only ever moves the head forward, so completion history still wins.
 async fn synced_head_floor(
     conn: &mut sqlx::SqliteConnection,
     page_id: &str,
 ) -> AppResult<Option<String>> {
-    let row: Option<(String, String)> =
-        sqlx::query_as("SELECT sync_state, created_at FROM page_sync WHERE page_id = ?")
+    let created: Option<String> =
+        sqlx::query_scalar("SELECT created_at FROM page_sync WHERE page_id = ?")
             .bind(page_id)
             .fetch_optional(&mut *conn)
             .await?;
-    let Some((sync_state, created_at)) = row else {
-        return Ok(None);
-    };
-    if sync_state == crate::sync::SYNC_STATE_ACTIVE {
-        return Ok(Some(today_local()));
-    }
-    Ok(created_at.get(..10).and_then(|day| {
-        let parsed = chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d").ok()?;
-        Some(
-            (parsed - Duration::days(crate::sync::BACKFILL_DAYS))
-                .format("%Y-%m-%d")
-                .to_string(),
-        )
+    // `created_at` is `now_iso()` — UTC. Its date prefix is the wrong local day for
+    // much of every day off-UTC, and here that costs a whole occurrence: an evening
+    // connect west of UTC would floor on tomorrow and skip today's.
+    Ok(created.and_then(|c| {
+        let utc = c.parse::<DateTime<Utc>>().ok()?;
+        Some(utc.with_timezone(&Local).format("%Y-%m-%d").to_string())
     }))
 }
 
