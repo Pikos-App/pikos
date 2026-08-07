@@ -3,13 +3,13 @@ import { getLocalTimezone, isDone, isTimedIso, rruleToLabel, snapAnchorToRule } 
 import { CalendarOff, CalendarX, ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { FolderChip } from "@/shared/components/FolderChip";
 import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
 import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
+import { SyncedLockHint } from "@/shared/components/SyncedLockHint";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { usePages } from "@/shared/context/PagesContext";
@@ -178,17 +178,15 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
         </div>
       )}
       {locked ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <input
-              className="w-full cursor-default border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
-              placeholder="Untitled"
-              readOnly
-              value={titleValue}
-            />
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Title comes from {calendarName}</TooltipContent>
-        </Tooltip>
+        <div className="flex items-center gap-2">
+          <input
+            className="min-w-0 flex-1 cursor-default border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/40"
+            placeholder="Untitled"
+            readOnly
+            value={titleValue}
+          />
+          <SyncedLockHint />
+        </div>
       ) : (
         <input
           autoFocus

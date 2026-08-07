@@ -190,18 +190,24 @@ describe("MetadataHeader — reminder bell on locked pages", () => {
 });
 
 describe("MetadataHeader — why a locked field can't be edited", () => {
-  it("names the source calendar when hovering a locked title", async () => {
+  it("explains the lock from the hint beside a locked title", async () => {
+    await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
+
+    const hint = screen.getByRole("img", { name: /are read-only for synced pages/ });
+    fireEvent.pointerMove(hint, { pointerType: "mouse" });
+    expect((await screen.findAllByText(/are read-only for synced pages/)).length).toBeGreaterThan(
+      0
+    );
+  });
+
+  // The lock is the one trigger. Resting on a locked field used to pop a tooltip
+  // of its own, which then parked over whatever sat below it.
+  it("leaves the locked title and schedule themselves silent", async () => {
     await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
 
     fireEvent.pointerMove(screen.getByLabelText("Page title"), { pointerType: "mouse" });
-    expect((await screen.findAllByText(/^Title comes from /)).length).toBeGreaterThan(0);
-  });
-
-  it("names the source calendar when hovering a locked schedule", async () => {
-    await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
-
     fireEvent.pointerMove(screen.getByLabelText(/^Scheduled:/), { pointerType: "mouse" });
-    expect((await screen.findAllByText(/^Time comes from /)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/are read-only for synced pages/)).not.toBeInTheDocument();
   });
 
   it("leaves an unlocked title with no such explanation", async () => {
@@ -210,6 +216,8 @@ describe("MetadataHeader — why a locked field can't be edited", () => {
     fireEvent.pointerMove(screen.getByRole("button", { name: "Page title" }), {
       pointerType: "mouse",
     });
-    expect(screen.queryByText(/comes from/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: /are read-only for synced pages/ })
+    ).not.toBeInTheDocument();
   });
 });

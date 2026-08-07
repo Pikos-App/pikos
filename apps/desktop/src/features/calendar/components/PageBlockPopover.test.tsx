@@ -84,6 +84,20 @@ describe("PageBlockPopover — mirror metadata", () => {
     renderPopover(makePage({ mirrorAttendees: ["alex@example.com"], mirrorLocation: "Zoom" }));
     expect(screen.queryByText("Zoom")).not.toBeInTheDocument();
   });
+
+  // The lock icon is the only thing explaining the read-only title — the title
+  // itself is deliberately not a tooltip trigger, so nothing else says why.
+  it("marks a locked title with the read-only lock hint", () => {
+    renderPopover(makePage({ scheduleLocked: true, syncState: "active" }));
+    expect(screen.getByRole("img", { name: /are read-only for synced pages/ })).toBeInTheDocument();
+  });
+
+  it("leaves an unlocked title unmarked", () => {
+    renderPopover(makePage({}));
+    expect(
+      screen.queryByRole("img", { name: /are read-only for synced pages/ })
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("PageBlockPopover — reminder bell", () => {

@@ -22,6 +22,7 @@ import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
 import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
 import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
+import { SyncedLockHint } from "@/shared/components/SyncedLockHint";
 import { TagsPopover } from "@/shared/components/TagsPopover";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
@@ -110,14 +111,9 @@ function Byline({
       <div className="inline-flex shrink-0 items-center gap-2">
         {locked ? (
           lockedSchedule && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span aria-label={`Scheduled: ${lockedSchedule}`} className="cursor-default">
-                  {lockedSchedule}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Time comes from {calendarName}</TooltipContent>
-            </Tooltip>
+            <span aria-label={`Scheduled: ${lockedSchedule}`} className="cursor-default">
+              {lockedSchedule}
+            </span>
           )
         ) : (
           <DateSchedulePopover page={page} />
@@ -133,12 +129,7 @@ function Byline({
         )}
         {locked ? (
           lockedRecurrenceLabel && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="cursor-default truncate text-subtle">{lockedRecurrenceLabel}</span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Repeat comes from {calendarName}</TooltipContent>
-            </Tooltip>
+            <span className="cursor-default truncate text-subtle">{lockedRecurrenceLabel}</span>
           )
         ) : (
           <RecurrencePopover
@@ -448,18 +439,16 @@ export function MetadataHeader({
               value={titleValue}
             />
           ) : titleLocked ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
-                  aria-label="Page title"
-                  className="type-display line-clamp-2 w-full cursor-default bg-transparent outline-none"
-                  ref={titleDivRef}
-                >
-                  {titleValue || <span className="text-faint">Untitled</span>}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Title comes from {calendarName}</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-2">
+              <div
+                aria-label="Page title"
+                className="type-display line-clamp-2 min-w-0 cursor-default bg-transparent outline-none"
+                ref={titleDivRef}
+              >
+                {titleValue || <span className="text-faint">Untitled</span>}
+              </div>
+              <SyncedLockHint size={14} />
+            </div>
           ) : (
             <div
               aria-label="Page title"
