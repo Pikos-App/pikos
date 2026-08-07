@@ -701,9 +701,14 @@ async fn a_synced_head_floors_at_the_connect_day() {
     // `synced_head_floor`) — the head must floor at the connect day, not 2020.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
-    crate::pool::insert_test_page_sync_connected_at(&pool, "head", "active", &connected_days_ago(3))
-        .await
-        .unwrap();
+    crate::pool::insert_test_page_sync_connected_at(
+        &pool,
+        "head",
+        "active",
+        &connected_days_ago(3),
+    )
+    .await
+    .unwrap();
 
     recompute(&pool, "head").await;
 
@@ -722,13 +727,21 @@ async fn the_rendered_floor_matches_the_head_floor() {
     // never become the head — the state this floor exists to prevent.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
-    crate::pool::insert_test_page_sync_connected_at(&pool, "head", "active", &connected_days_ago(3))
-        .await
-        .unwrap();
+    crate::pool::insert_test_page_sync_connected_at(
+        &pool,
+        "head",
+        "active",
+        &connected_days_ago(3),
+    )
+    .await
+    .unwrap();
 
     recompute(&pool, "head").await;
 
-    let page = crate::pages::get_page(&pool, "head").await.unwrap().unwrap();
+    let page = crate::pages::get_page(&pool, "head")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
         page.synced_since.as_deref(),
         Some(day_str(-3).as_str()),
@@ -748,7 +761,10 @@ async fn a_native_series_carries_no_render_floor() {
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-01-01T09:00:00", None).await;
 
-    let page = crate::pages::get_page(&pool, "head").await.unwrap().unwrap();
+    let page = crate::pages::get_page(&pool, "head")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(page.synced_since, None);
 }
 
@@ -784,9 +800,14 @@ async fn a_pre_connection_backfilled_occurrence_never_becomes_the_head() {
     let pool = test_pool().await;
     let base = day_at(-crate::sync::BACKFILL_DAYS, "09:00:00");
     seed_series(&pool, "head", "FREQ=DAILY", &base, None).await;
-    crate::pool::insert_test_page_sync_connected_at(&pool, "head", "active", &connected_days_ago(0))
-        .await
-        .unwrap();
+    crate::pool::insert_test_page_sync_connected_at(
+        &pool,
+        "head",
+        "active",
+        &connected_days_ago(0),
+    )
+    .await
+    .unwrap();
 
     recompute(&pool, "head").await;
 
@@ -803,9 +824,14 @@ async fn completion_history_advances_the_head_past_the_floor() {
     // has to move the head forward rather than leaving it stuck on the floor.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
-    crate::pool::insert_test_page_sync_connected_at(&pool, "head", "active", &connected_days_ago(3))
-        .await
-        .unwrap();
+    crate::pool::insert_test_page_sync_connected_at(
+        &pool,
+        "head",
+        "active",
+        &connected_days_ago(3),
+    )
+    .await
+    .unwrap();
     recompute(&pool, "head").await;
 
     sqlx::query(

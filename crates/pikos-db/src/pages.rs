@@ -145,7 +145,10 @@ impl From<PageRow> for Page {
             mirror_location: row.mirror_location,
             mirror_attendees: parse_attendees(row.mirror_attendees),
             pending_description: row.pending_description,
-            synced_since: row.sync_created_at.as_deref().and_then(crate::sync::local_day_of),
+            synced_since: row
+                .sync_created_at
+                .as_deref()
+                .and_then(crate::sync::local_day_of),
             is_recurring: row.is_recurring,
         }
     }
@@ -277,7 +280,10 @@ impl From<PageSummaryRow> for PageSummary {
             mirror_location: row.mirror_location,
             mirror_attendees: parse_attendees(row.mirror_attendees),
             pending_description: row.pending_description,
-            synced_since: row.sync_created_at.as_deref().and_then(crate::sync::local_day_of),
+            synced_since: row
+                .sync_created_at
+                .as_deref()
+                .and_then(crate::sync::local_day_of),
             is_recurring: row.is_recurring,
         }
     }

@@ -514,8 +514,22 @@ async fn today_count_includes_a_materialised_override() {
 async fn today_count_reads_every_schedule_of_a_non_recurring_page() {
     let pool = test_pool().await;
     insert_page(&pool, "two_blocks", "not_started", "2026-05-01T00:00:00").await;
-    insert_schedule(&pool, "s1", "two_blocks", "2026-05-24T09:00:00", "not_started").await;
-    insert_schedule(&pool, "s2", "two_blocks", "2026-05-25T09:00:00", "not_started").await;
+    insert_schedule(
+        &pool,
+        "s1",
+        "two_blocks",
+        "2026-05-24T09:00:00",
+        "not_started",
+    )
+    .await;
+    insert_schedule(
+        &pool,
+        "s2",
+        "two_blocks",
+        "2026-05-25T09:00:00",
+        "not_started",
+    )
+    .await;
     // The denorm only refreshes on a schedule write, so it can point at the
     // earlier block while a later one falls on `date` — count the rows, not it.
     set_page_start(&pool, "two_blocks", "2026-05-24T09:00:00").await;
@@ -586,7 +600,14 @@ async fn overdue_count_ignores_a_recurring_pages_stale_anchor() {
     // overdue window, and it does not represent anything the user still owes.
     insert_page(&pool, "ahead", "not_started", "2026-05-01T00:00:00").await;
     insert_rule(&pool, "ahead", "2026-05-01T07:00:00").await;
-    insert_schedule(&pool, "anchor", "ahead", "2026-05-25T07:00:00", "not_started").await;
+    insert_schedule(
+        &pool,
+        "anchor",
+        "ahead",
+        "2026-05-25T07:00:00",
+        "not_started",
+    )
+    .await;
     set_page_start(&pool, "ahead", "2026-05-26T07:00:00").await;
 
     let n = overdue_count(&pool, NOW_TS, "2026-05-24 09:00:00", "2026-05-25 08:55:00")
