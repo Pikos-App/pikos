@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from "node:url";
-import { defineConfig } from "vitest/config";
+
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
 
 // Pin a deterministic timezone so wall-clock-sensitive logic expands identically
 // across machines and CI.
@@ -20,18 +21,13 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "jsdom",
-    env: {
-      // Routes adapters/logger/import paths to the test-mode branches so every
-      // test file gets MockStorageAdapter without stubbing the env per-file.
-      VITE_TEST_MODE: "true",
-    },
-    setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
+    // Vitest sizes its worker pool from the core count, but it never has the box
+    // to itself here: `pnpm verify` fans out two packages' suites plus lint,
+    // depcruise and two tsc passes at once, which together peg every core and
+    // leave the machine unusable while it runs. Cap the local share; CI does get
+    // the box to itself, so it keeps the default.
+    ...(process.env["CI"] ? {} : { maxWorkers: "50%" }),
     coverage: {
-      provider: "v8",
-      reporter: ["text-summary", "html", "json-summary"],
-      include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.test.{ts,tsx}",
         "src/test/**",
@@ -43,6 +39,9 @@ export default defineConfig({
         "src/main.tsx",
         "src/vite-env.d.ts",
       ],
+      include: ["src/**/*.{ts,tsx}"],
+      provider: "v8",
+      reporter: ["text-summary", "html", "json-summary"],
       // Per-directory thresholds on the load-bearing pure-logic dirs (hooks,
       // context, utils, parsers). Components and feature UI surfaces are 0% by
       // design here — they're covered by Playwright E2E, which v8 doesn't see.
@@ -50,18 +49,36 @@ export default defineConfig({
       // regressions. Aggregate global thresholds intentionally omitted: a single
       // average across tested + E2E-only files is a false signal.
       thresholds: {
-        "src/features/calendar/utils/**": { lines: 90, branches: 85, functions: 90, statements: 90 },
-        "src/features/folders/hooks/**": { lines: 90, branches: 80, functions: 90, statements: 90 },
-        "src/features/import/parsers/**": { lines: 95, branches: 90, functions: 95, statements: 95 },
-        "src/features/layout/hooks/**": { lines: 70, branches: 50, functions: 70, statements: 65 },
-        "src/features/layout/utils/**": { lines: 95, branches: 90, functions: 95, statements: 95 },
-        "src/features/pages/hooks/**": { lines: 85, branches: 75, functions: 85, statements: 85 },
-        "src/features/pages/utils/**": { lines: 85, branches: 70, functions: 85, statements: 85 },
-        "src/shared/context/**": { lines: 70, branches: 55, functions: 80, statements: 70 },
-        "src/shared/events/**": { lines: 90, branches: 45, functions: 90, statements: 90 },
-        "src/shared/keyboard/**": { lines: 70, branches: 70, functions: 55, statements: 70 },
-        "src/shared/utils/**": { lines: 95, branches: 90, functions: 95, statements: 95 },
+        "src/features/calendar/utils/**": {
+          branches: 85,
+          functions: 90,
+          lines: 90,
+          statements: 90,
+        },
+        "src/features/folders/hooks/**": { branches: 80, functions: 90, lines: 90, statements: 90 },
+        "src/features/import/parsers/**": {
+          branches: 90,
+          functions: 95,
+          lines: 95,
+          statements: 95,
+        },
+        "src/features/layout/hooks/**": { branches: 50, functions: 70, lines: 70, statements: 65 },
+        "src/features/layout/utils/**": { branches: 90, functions: 95, lines: 95, statements: 95 },
+        "src/features/pages/hooks/**": { branches: 75, functions: 85, lines: 85, statements: 85 },
+        "src/features/pages/utils/**": { branches: 70, functions: 85, lines: 85, statements: 85 },
+        "src/shared/context/**": { branches: 55, functions: 80, lines: 70, statements: 70 },
+        "src/shared/events/**": { branches: 45, functions: 90, lines: 90, statements: 90 },
+        "src/shared/keyboard/**": { branches: 70, functions: 55, lines: 70, statements: 70 },
+        "src/shared/utils/**": { branches: 90, functions: 95, lines: 95, statements: 95 },
       },
     },
+    env: {
+      // Routes adapters/logger/import paths to the test-mode branches so every
+      // test file gets MockStorageAdapter without stubbing the env per-file.
+      VITE_TEST_MODE: "true",
+    },
+    environment: "jsdom",
+    include: ["src/**/*.test.{ts,tsx}"],
+    setupFiles: ["./src/test/setup.ts"],
   },
 });

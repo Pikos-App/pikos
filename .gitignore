@@ -36,6 +36,12 @@ recordings/
 # Calendar layout screenshots (regen via pnpm --filter @pikos/desktop screenshot:calendar)
 .screenshots/
 
+# Ad-hoc screenshots land at whatever cwd a Playwright run used, which is a
+# package root. No real asset lives there — icons, favicons and brand art are
+# all in nested directories — so ignoring that one level can't hide one.
+/*.png
+/apps/*/*.png
+
 # Claude Code
 .claude/
 
