@@ -1333,13 +1333,11 @@ describe("synced occurrence completion (via unified completeRecurringPage)", () 
       scheduledStart: "2026-03-09T14:00:00",
     });
 
-    // The clone is done, scheduled at the occurrence, and NOT sync-locked.
     expect(clone.status).toBe("done");
     expect(clone.scheduledStart).toBe("2026-03-09T14:00:00");
     expect(clone.scheduleLocked).toBe(false);
     expect(clone.syncState).toBeNull();
 
-    // The series records the completion (date → clone id).
     const updatedSeries = await adapter.getPage(series.id);
     expect(updatedSeries?.completedOccurrences).toEqual({ "2026-03-09": clone.id });
   });
@@ -1385,12 +1383,10 @@ describe("synced occurrence completion (via unified completeRecurringPage)", () 
 });
 
 // ─── Command-layer guard parity ──────────────────────────────────────────────
-// The mock must reject the same command-layer ops the Rust writers do, so a
-// mis-routed write fails identically in test mode and prod (the fidelity gap
-// that let a synced completion pass green in the mock while the backend rejected
-// it). Each locked-mirror op rejects with kind "Conflict"; completeRecurringPage
-// validates the occurrence before minting a clone. See ensure_page_schedule_unlocked
-// (sync.rs) and complete_recurring_page (pages.rs).
+// Guards the fidelity gap that once let a synced completion pass green here
+// while the backend rejected it. Locked-mirror ops reject with kind "Conflict";
+// completeRecurringPage validates the occurrence before minting a clone. See
+// ensure_page_schedule_unlocked (sync.rs) and complete_recurring_page (pages.rs).
 
 describe("command-layer guard parity (locked synced mirror)", () => {
   const READONLY = /synced from an external calendar/;

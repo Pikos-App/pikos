@@ -77,9 +77,9 @@ export function AddAccountDialog({
     }
   }
 
-  // The grant only resolves once the user finishes in their browser, so this can
-  // sit pending for a long time — the picker shows a waiting state rather than
-  // looking like the click did nothing.
+  // The grant resolves only once the user finishes in their browser and can sit
+  // pending a long time — the picker shows a waiting state so the click doesn't
+  // look inert.
   async function submitGoogle() {
     setBusy(true);
     setError(null);

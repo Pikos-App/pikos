@@ -65,8 +65,8 @@ export function useFolderList(): FolderListState {
           return (pageCountByFolder[b.id] ?? 0) - (pageCountByFolder[a.id] ?? 0);
         });
 
-  // External-calendar folders live in their own sidebar area, separate from the
-  // user's regular folders (and out of the reorder/drop sortable context).
+  // Split here (not just in the component) so external folders are also excluded
+  // from the reorder/drop sortable context.
   const userFolders = sortedFolders.filter((f) => !f.isExternalCalendar);
   const externalFolders = sortedFolders.filter((f) => f.isExternalCalendar);
 

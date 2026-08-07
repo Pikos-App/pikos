@@ -106,8 +106,7 @@ async fn discover(mode: Mode) -> Result<Vec<pikos_db::sync_delta::RemoteCalendar
 async fn discovers_only_vevent_calendars() {
     let calendars = discover(Mode::Ok).await.unwrap();
 
-    // Work (VEVENT) is kept; the tasks-only (VTODO) calendar and the home
-    // collection itself are filtered out.
+    // Work (VEVENT) is kept; the VTODO calendar and the home collection are filtered out.
     assert_eq!(calendars.len(), 1, "got: {calendars:?}");
     let work = &calendars[0];
     assert_eq!(work.display_name, "Work");
@@ -127,8 +126,6 @@ async fn wrong_password_fails_cleanly() {
 
 #[tokio::test]
 async fn falls_back_to_base_url_when_well_known_absent() {
-    // A server that doesn't serve .well-known (misconfigured Nextcloud, etc.)
-    // must still discover from the entered URL.
     let calendars = discover(Mode::NoWellKnown).await.unwrap();
     assert_eq!(calendars.len(), 1, "got: {calendars:?}");
     assert_eq!(calendars[0].display_name, "Work");
@@ -136,8 +133,6 @@ async fn falls_back_to_base_url_when_well_known_absent() {
 
 #[tokio::test]
 async fn follows_cross_host_home_set() {
-    // calendar-home-set on iCloud redirects to a per-account partition host;
-    // enumeration must follow it, not stay on the bootstrap host.
     let calendars = discover(Mode::CrossHostHome).await.unwrap();
     assert_eq!(calendars.len(), 1, "got: {calendars:?}");
     let host = Url::parse(&calendars[0].calendar_id)
@@ -150,7 +145,6 @@ async fn follows_cross_host_home_set() {
 
 #[test]
 fn resolve_does_not_downgrade_https_to_http() {
-    // A server handing back an http:// absolute href must not drop us off TLS.
     let base = Url::parse("https://caldav.example.com/").unwrap();
     let from = Url::parse("https://caldav.example.com/principals/me/").unwrap();
     let resolved = resolve(&base, &from, "http://caldav.example.com/calendars/me/").unwrap();

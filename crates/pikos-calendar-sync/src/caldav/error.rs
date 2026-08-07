@@ -52,10 +52,8 @@ mod tests {
         e.into()
     }
 
-    // The boundary mapping decides how a CalDAV failure reads downstream: Invalid =
-    // user-actionable (bad creds/URL), Network = transient (calm stale indicator),
-    // Internal = a bug/contract break. A mis-map would, e.g., show a 500 as
-    // "reconnect needed" or a wrong password as a transient blip.
+    // A mis-map would show a 500 as "reconnect needed" or a wrong password as a
+    // transient blip that clears on its own.
     #[test]
     fn auth_and_not_caldav_are_user_actionable_invalid() {
         assert!(matches!(

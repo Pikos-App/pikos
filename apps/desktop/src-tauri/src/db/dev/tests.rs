@@ -272,9 +272,7 @@ async fn reset_db_wipes_all_user_tables() {
     }
 }
 
-/// A surviving account would still be `enabled` with a live `sync_token`, so the
-/// next poll asks for changes since that token, gets none, and never rebuilds the
-/// folder or its events.
+/// Guards the stranded-account failure mode documented on `reset_db`.
 #[tokio::test]
 async fn reset_db_removes_connected_calendar_accounts() {
     let pool = test_pool().await;

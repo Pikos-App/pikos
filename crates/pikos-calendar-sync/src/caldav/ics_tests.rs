@@ -3,7 +3,7 @@
 //! `DURATION`-instead-of-`DTEND` event, an all-day recurring series, and a
 //! malformed body. These are hand-authored on purpose — radicale normalizes or
 //! rejects them on PUT, so the only faithful way to feed an exact wire shape to
-//! the parser is to write it here (the calcard spike took the same tack).
+//! the parser is to write it here.
 
 use super::parse_resource;
 
@@ -15,9 +15,9 @@ fn ics(body: &str) -> String {
 
 // ─── TZID → IANA via VTIMEZONE ──────────────────────────────────────────────────
 
-/// An Outlook-style non-IANA `TZID` ("Eastern Standard Time") is resolved to its
-/// IANA id through the `VTIMEZONE`'s `X-LIC-LOCATION` — the resolution the spec's
-/// "TZID→IANA" assert calls for, which a same-name IANA TZID wouldn't exercise.
+/// An Outlook-style non-IANA `TZID` ("Eastern Standard Time") resolves to its IANA
+/// id via the `VTIMEZONE`'s `X-LIC-LOCATION` — a same-name IANA TZID wouldn't
+/// exercise this fallback path.
 #[test]
 fn non_iana_tzid_resolves_through_vtimezone() {
     let body = "BEGIN:VTIMEZONE\r\n\
@@ -110,7 +110,7 @@ DURATION:P3D\r\n\
 SUMMARY:Three-day span\r\n\
 END:VEVENT\r\n";
     let ev = parse_resource("/da.ics", Some("v1"), &ics(body)).unwrap();
-    // P3D on Jun 15 → exclusive Jun 18 (the reconciler decrements to inclusive 17).
+    // P3D on Jun 15 → raw exclusive Jun 18 (see ExclusiveEnd).
     assert_eq!(ev.schedule.start, "2026-06-15");
     assert_eq!(ev.schedule.end.as_deref(), Some("2026-06-18"));
     assert_eq!(ev.schedule.timezone, None);
@@ -141,9 +141,8 @@ END:VEVENT\r\n";
 
 // ─── malformed override doesn't sink the series ─────────────────────────────────
 
-/// A non-cancelled override VEVENT missing `DTSTART` must drop only that instance,
-/// not the whole resource. Regression for the `?`-propagation in `build_recurrence`
-/// that returned Err for the entire series (master + all valid overrides lost).
+/// A non-cancelled override missing `DTSTART` must drop only that instance, not the
+/// whole resource — regression for `?`-propagation in `build_recurrence` losing the entire series.
 #[test]
 fn override_missing_dtstart_skips_the_instance_not_the_series() {
     let body = "BEGIN:VEVENT\r\n\
@@ -167,16 +166,14 @@ SUMMARY:Standup (moved)\r\n\
 END:VEVENT\r\n";
     let ev = parse_resource("/s.ics", Some("v1"), &ics(body)).unwrap();
     let rec = ev.recurrence.as_ref().expect("recurring");
-    // The master + the well-formed override survive; the DTSTART-less one is dropped.
     assert_eq!(rec.overrides.len(), 1, "only the valid override is kept");
     assert_eq!(rec.overrides[0].schedule.start, "2026-06-15T11:00:00");
 }
 
 // ─── RECURRENCE-ID in UTC ───────────────────────────────────────────────────────
 
-/// A `RECURRENCE-ID` carried in UTC against a zoned series must normalize to the
-/// series' source-zone wall-clock, or the override's `original_date` wouldn't
-/// string-match the expansion and would double-render.
+/// A UTC `RECURRENCE-ID` against a zoned series must normalize to the series'
+/// source-zone wall-clock, or `original_date` won't string-match the expansion (double-render).
 #[test]
 fn utc_recurrence_id_normalizes_to_source_zone() {
     let body = "BEGIN:VEVENT\r\n\
@@ -199,10 +196,9 @@ END:VEVENT\r\n";
     assert_eq!(ov.original_date, "2026-06-08T09:00:00");
 }
 
-/// A `RECURRENCE-ID` carried as a NUMERIC UTC offset (`+0530`/`-0800`, iCloud /
-/// Fastmail exports) must resolve with the correct sign and normalize to the
-/// series' source-zone wall-clock — `convert_to_zone`'s offset arithmetic is
-/// otherwise only exercised via `Z` (offset 0) and named TZIDs.
+/// A `RECURRENCE-ID` as a numeric UTC offset (`+0530`/`-0800`, iCloud/Fastmail
+/// exports) exercises `convert_to_zone`'s offset-sign arithmetic, otherwise only
+/// hit via `Z` (offset 0) and named TZIDs.
 #[test]
 fn numeric_utc_offset_recurrence_id_normalizes_to_source_zone() {
     // Both overrides resolve to 13:00Z = 09:00 EDT (the series basis): +0530 from
@@ -243,10 +239,9 @@ END:VEVENT\r\n";
 
 // ─── cross-zone degradation (pins the current silent fallbacks) ─────────────────
 
-/// A non-IANA `TZID` with no `VTIMEZONE` to resolve it is genuinely unresolvable,
-/// so `source_zone` yields nothing and the event degrades to a zoneless, literal
-/// wall-clock. Acceptable fallback — a cross-zone viewer sees the time unshifted
-/// with no badge — but `source_zone` now logs a warning so it isn't traceless.
+/// A non-IANA `TZID` with no `VTIMEZONE` is unresolvable — `source_zone` yields
+/// nothing and the event degrades to zoneless literal wall-clock (a cross-zone
+/// viewer sees the time unshifted, no badge; `source_zone` logs a warning).
 #[test]
 fn unresolvable_tzid_without_vtimezone_degrades_to_zoneless() {
     let body = "BEGIN:VEVENT\r\n\
@@ -263,11 +258,9 @@ END:VEVENT\r\n";
     assert_eq!(ev.schedule.timezone, None, "the zone is silently dropped");
 }
 
-/// An `EXDATE` in a foreign zone whose local time is nonexistent there (a
-/// spring-forward gap) can't resolve to an instant — `convert_to_zone` returns
-/// None and `instant_wall_clock` falls back to the literal, UNCONVERTED value.
-/// Pinned: the stored EXDATE stays in the foreign basis, so it silently won't
-/// string-match the source-zone expansion.
+/// An `EXDATE` in a foreign zone whose local time doesn't exist there (a
+/// spring-forward gap) can't resolve: `convert_to_zone` returns `None` and the
+/// literal, unconverted value is stored — it silently won't string-match the expansion.
 #[test]
 fn exdate_in_a_foreign_dst_gap_falls_back_to_the_unconverted_literal() {
     let body = "BEGIN:VEVENT\r\n\
@@ -284,9 +277,8 @@ END:VEVENT\r\n";
     assert_eq!(ev.recurrence.unwrap().exdates, vec!["2026-03-08T02:30:00"]);
 }
 
-/// An override whose `RECURRENCE-ID` is in a DIFFERENT zone than its master must
-/// still normalize its `original_date` to the master's source zone, or it won't
-/// string-match the expansion (double-render / orphan).
+/// An override whose `RECURRENCE-ID` is in a different zone than its master must
+/// still normalize `original_date` to the master's zone, or it won't string-match the expansion (double-render / orphan).
 #[test]
 fn override_recurrence_id_in_a_foreign_tzid_normalizes_to_the_master_zone() {
     // Master weekly Mon 09:00 NY. Override RECURRENCE-ID 06:00 LA = 09:00 NY — the
@@ -429,9 +421,8 @@ END:VEVENT\r\n";
     );
 }
 
-/// A resource whose only VEVENT carries a `RECURRENCE-ID` (a detached override
-/// with no master in the same body — malformed for CalDAV but seen in exports)
-/// falls back to that lone VEVENT rather than erroring the whole resource away.
+/// A resource whose only VEVENT carries a `RECURRENCE-ID` (a detached override with
+/// no master in the body — malformed but seen in exports) falls back to that lone VEVENT rather than erroring out.
 #[test]
 fn override_only_resource_falls_back_to_the_single_vevent() {
     let body = "BEGIN:VEVENT\r\n\

@@ -128,15 +128,13 @@ async fn no_google_delta_ever_arms_the_sweep() {
         .await
         .unwrap();
 
-    // The sweep spares a recurring page only when its RRULE has a readable UNTIL,
-    // so an open-ended series absent from a timeMin-bounded list would be detached
-    // or deleted. Google's removals arrive as `status: cancelled` items instead.
+    // See `backfill`'s doc — Google opts out of the sweep by leaving
+    // `authoritative_from` unset even on a full enumerate.
     for delta in [&full, &incremental] {
         assert!(delta.authoritative_from.is_none());
     }
-    // Google's full enumerate sets `full_enumerate` but NOT `authoritative_from` —
-    // the two markers are distinct (one drives the resync label, the other the
-    // sweep), and Google opts out of only the sweep.
+    // `full_enumerate` and `authoritative_from` are separate signals; Google sets
+    // only the former.
     assert!(full.full_enumerate && !incremental.full_enumerate);
     assert!(
         full.removals.is_empty() && incremental.removals.len() == 1,
@@ -169,8 +167,8 @@ async fn backfill_carries_the_all_day_end_raw_exclusive() {
     let ev = event(&delta, "ev-allday");
 
     assert_eq!(ev.schedule.start, "2026-06-15");
-    // Jun 15–17 inclusive arrives as end=Jun 18. The reconciler is the single owner
-    // that decrements; decrementing here too would make every span a day short.
+    // Jun 15–17 inclusive arrives as end=Jun 18; see `ExclusiveEnd` for why
+    // nothing decrements it here.
     assert_eq!(ev.schedule.end.as_deref(), Some("2026-06-18"));
     assert!(ev.schedule.timezone.is_none(), "all-day carries no zone");
 }
@@ -188,8 +186,8 @@ async fn backfill_regroups_a_series_from_its_separate_resources() {
         OccurrenceFidelity::Complete,
         "a full enumerate carries every child, so the occurrence set is whole"
     );
-    // The master's own EXDATE line plus the cancelled child event — both are
-    // cancellations of one occurrence, and both must land as EXDATEs.
+    // One EXDATE line, one cancelled child event — both cancel one occurrence,
+    // both must land as EXDATEs.
     assert_eq!(
         rec.exdates,
         vec!["2026-06-29T09:00:00", "2026-06-15T09:00:00"]
@@ -293,8 +291,8 @@ async fn a_gone_token_falls_back_to_a_full_enumerate() {
         delta.next_token.as_ref().map(|t| t.0.as_str()),
         Some("TOKEN-1")
     );
-    // The recovery carries a fresh cursor AND is a full enumerate — the exact
-    // combination that `next_token.is_none()` couldn't detect.
+    // Recovery carries both a fresh cursor and a full enumerate — a combination
+    // `next_token.is_none()` alone couldn't detect.
     assert!(delta.full_enumerate);
 }
 
@@ -307,7 +305,6 @@ async fn fetch_one_resolves_an_orphan_master() {
     assert_eq!(ev.schedule.start, "2026-06-20T09:00:00");
     let rec = ev.recurrence.expect("the master is recurring");
     assert_eq!(rec.rrule, "FREQ=DAILY;COUNT=10");
-    // Fetched alone, so the series' own cancellations aren't visible here either.
     assert_eq!(rec.fidelity, OccurrenceFidelity::MasterOnly);
 }
 
@@ -367,10 +364,9 @@ async fn a_rate_limited_poll_backs_off_without_touching_the_cursor() {
         .await
         .unwrap_err();
 
-    // RateLimited maps to AppError::Network, which the engine turns into `Offline`:
-    // the cursor is left alone and the next scheduled poll retries. Reading it as a
-    // credential failure instead would flag the account and stop polling it until
-    // the user re-authorized over a quota blip.
+    // RateLimited maps to AppError::Network → Offline: the cursor stays put and
+    // the next poll retries. Reading it as a credential failure would flag the
+    // account and force a re-authorization over a quota blip.
     assert!(matches!(err, GoogleError::RateLimited));
     assert!(matches!(
         pikos_db::error::AppError::from(err),
@@ -396,8 +392,6 @@ async fn a_permission_403_ends_the_sync_instead_of_backing_off() {
 
 #[tokio::test]
 async fn an_unreadable_403_backs_off_rather_than_demanding_a_reconnect() {
-    // A reason Google added since, or an HTML error page from a proxy. Retrying
-    // costs one request; a wrong reconnect prompt costs the user a re-authorization.
     let t = Replay::with(vec![(403, "<html>nope</html>")]);
     let err = sync_calendar(&t, CAL, None).await.unwrap_err();
 
@@ -423,8 +417,8 @@ async fn the_primary_calendar_id_labels_the_account() {
     let t = Replay::ok(CALENDAR_LIST);
     let (_, primary) = list_calendars_with_primary(&t).await.unwrap();
 
-    // This becomes the account's display_name, which is also the key a reconnect
-    // matches a dormant account on — get it wrong and reconnecting duplicates the
-    // account instead of re-linking its detached pages.
+    // This becomes the account's display_name, the key a reconnect matches a
+    // dormant account by — get it wrong and reconnecting duplicates the account
+    // instead of re-linking its detached pages.
     assert_eq!(primary.as_deref(), Some("alex@example.com"));
 }

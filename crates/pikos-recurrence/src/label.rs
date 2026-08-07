@@ -1,7 +1,7 @@
 //! Compact recurrence labels. Mirrors `rruleToShortLabel` in `recurrence.ts`.
 //!
-//! Note: the wrapper's `rruleToLabel` (rrule.js `.toText()` natural language) is
-//! intentionally NOT ported — it stays in rrule.js for display until the display
+//! The wrapper's `rruleToLabel` (rrule.js `.toText()` natural language) is
+//! intentionally not ported — it stays in rrule.js for display until the display
 //! path moves onto this engine over IPC, so byte-parity there buys nothing.
 
 use chrono::{Datelike, NaiveDate};

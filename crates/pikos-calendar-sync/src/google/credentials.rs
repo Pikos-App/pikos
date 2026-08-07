@@ -86,10 +86,8 @@ impl GoogleCredentials {
         }
     }
 
-    /// Every scope the sync engine needs, or the ones the user withheld. Google's
-    /// granular consent lets a user approve the calendar list but not the events,
-    /// which yields a token that authorizes nothing useful — better to say so at
-    /// connect time than to sync empty calendars forever.
+    /// Scopes the user withheld. Surfaced so sync can refuse a token that
+    /// authorizes nothing useful, rather than syncing empty calendars forever.
     pub(crate) fn missing_scopes(&self) -> Vec<&'static str> {
         SCOPES
             .into_iter()

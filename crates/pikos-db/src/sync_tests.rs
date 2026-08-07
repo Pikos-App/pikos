@@ -215,7 +215,6 @@ async fn coexists_with_populated_recurrence_data() {
     .await
     .unwrap();
 
-    // A recurring synced series: rule with a sentinel timezone (all-day style).
     sqlx::query(
         "INSERT INTO page_recurrence_rules
          (id, page_id, rrule, scheduled_start, timezone, created_at)

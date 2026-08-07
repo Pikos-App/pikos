@@ -42,8 +42,8 @@ describe("AddAccountDialog", () => {
     expect(screen.getByRole("button", { name: /Google Calendar/ })).toBeEnabled();
   });
 
-  // A build without the OAuth client can't complete a grant, so the option is
-  // shown-but-disabled rather than offering a connect that always fails.
+  // See `googleAvailable` in useCalendarSync.ts for why: shown-but-disabled, not
+  // hidden, when the build carries no OAuth client.
   it("disables Google when the build carries no OAuth client", () => {
     render({ googleAvailable: false });
     expect(screen.getByRole("button", { name: /Google Calendar/ })).toBeDisabled();
@@ -58,7 +58,7 @@ describe("AddAccountDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /Google Calendar/ }));
 
     expect(onConnectGoogle).toHaveBeenCalled();
-    // The grant can sit pending for minutes; without this the click looks inert.
+    // Why the waiting state exists: see submitGoogle in AddAccountDialog.tsx.
     expect(
       await screen.findByText("Waiting for you to finish in your browser…")
     ).toBeInTheDocument();

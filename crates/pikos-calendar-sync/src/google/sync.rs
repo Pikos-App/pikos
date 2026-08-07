@@ -26,12 +26,11 @@ use super::transport::GoogleTransport;
 
 use pikos_db::sync::BACKFILL_DAYS;
 
-/// Page size for the list endpoints. Google caps `events.list` at 2500; a smaller
-/// page keeps any single response bounded without adding many round-trips.
+/// Page size for the list endpoints. Google caps `events.list` at 2500; 250 keeps
+/// each response bounded without adding many round-trips.
 const PAGE_SIZE: &str = "250";
 
-/// Guards against a malformed `nextPageToken` loop — a paging bug would otherwise
-/// spin against the API indefinitely.
+/// Guards against a malformed `nextPageToken` looping against the API forever.
 const MAX_PAGES: usize = 100;
 
 const GONE: u16 = 410;
@@ -40,9 +39,9 @@ const UNAUTHORIZED: u16 = 401;
 const FORBIDDEN: u16 = 403;
 const TOO_MANY_REQUESTS: u16 = 429;
 
-/// `error.errors[].reason` values that mean "you may not do this" rather than
-/// "slow down". Google overloads `403` for both, and they need opposite handling:
-/// only these end the account's sync, everything else backs off and retries.
+/// `error.errors[].reason` values meaning refusal, not throttling — Google
+/// overloads `403` for both. Only these end the account's sync; everything else
+/// backs off and retries.
 const PERMISSION_REASONS: [&str; 4] = [
     "forbidden",
     "insufficientPermissions",
@@ -73,26 +72,23 @@ pub(crate) async fn sync_calendar<T: GoogleTransport>(
         Err(e) => return Err(e),
     };
 
-    // Incremental bundles are master-only: a series' cancellations and moved
-    // instances are separate resources that need not be in this delta.
+    // Incremental bundles are master-only — a series' cancellations and moves
+    // arrive as separate resources, not in this delta.
     Ok(reduce(pages, OccurrenceFidelity::MasterOnly, false))
 }
 
-/// Full re-enumerate of the visible window. `showDeleted` is what makes this
-/// authoritative for a *series*: a cancelled instance is its own resource, so
-/// without it the enumerate would silently drop every EXDATE.
+/// Full re-enumerate of the visible window. `showDeleted` makes this authoritative
+/// for a series: a cancelled instance is its own resource, so without it the
+/// enumerate would silently drop every EXDATE.
 ///
-/// **Deliberately not `authoritative_from`, so the full-enumerate sweep stays
-/// off.** The sweep deletes stored pages absent from the enumerate, sparing a
-/// recurring one only when its RRULE carries a readable `UNTIL` — so an open-ended
-/// weekly series would be swept if a `timeMin`-bounded list omits it. Whether
-/// Google filters a recurring master by its own start/end or by its expansion is
-/// unverified, and being wrong detaches or deletes live series. It costs little to
-/// skip: `showDeleted=true` means this enumerate carries real removals as
-/// `status: cancelled` items, which is the gap the sweep exists to close for
-/// CalDAV. The residual risk runs the safe way — Google eventually purges very old
-/// cancelled events, so a long-dormant calendar may keep a stale mirror, which is
-/// visible and recoverable rather than silent loss.
+/// Deliberately skips `authoritative_from`, keeping the full-enumerate sweep off.
+/// The sweep spares a recurring page only when its RRULE has a readable `UNTIL`,
+/// and it's unverified whether Google filters a master by its own dates or its
+/// expansion — sweeping here risks detaching or deleting an open-ended series.
+/// Safe to skip: `showDeleted=true` already reports real removals as
+/// `status: cancelled`, the gap the sweep exists to close for CalDAV. Worst case
+/// is a stale mirror on a long-dormant calendar — visible and recoverable, not
+/// silent loss.
 async fn backfill<T: GoogleTransport>(
     transport: &T,
     calendar_id: &str,
@@ -109,13 +105,13 @@ async fn backfill<T: GoogleTransport>(
     Ok(reduce(pages, OccurrenceFidelity::Complete, true))
 }
 
-/// Targeted single-event fetch for orphan-master resolution — one `events.get`,
-/// never a full-series expansion. Maps a `404` to [`GoogleError::NotFound`].
+/// Single-event fetch for orphan-master resolution — one `events.get`, never a
+/// full-series expansion. Maps `404` to [`GoogleError::NotFound`].
 ///
-/// `events.get` carries no calendar-level `timeZone` to fall back on, so an event
-/// without its own would resolve as floating here but zoned via `events.list`.
-/// Only recurring masters reach this path, and Google requires a `timeZone` on
-/// those, so the two agree in practice.
+/// `events.get` has no calendar-level `timeZone` fallback, so an unzoned event
+/// would resolve floating here but zoned via `events.list`. Only recurring
+/// masters reach this path, and Google requires their `timeZone`, so the two
+/// agree in practice.
 pub(crate) async fn fetch_one<T: GoogleTransport>(
     transport: &T,
     calendar_id: &str,
@@ -139,17 +135,16 @@ pub(crate) async fn fetch_one<T: GoogleTransport>(
         .ok_or(GoogleError::NotFound)
 }
 
-/// The account's calendars. `accessRole` is deliberately not filtered on — a
-/// reader-only calendar syncs exactly like an owned one, since nothing is written
-/// back.
+/// The account's calendars. `accessRole` isn't filtered — a reader-only calendar
+/// syncs like an owned one, since nothing is written back.
 pub(crate) async fn list_calendars<T: GoogleTransport>(
     transport: &T,
 ) -> Result<Vec<RemoteCalendar>, GoogleError> {
     Ok(list_calendars_with_primary(transport).await?.0)
 }
 
-/// Also returns the primary calendar's id, which **is** the account's email
-/// address — the account label at connect time. Reading it here avoids adding
+/// Also returns the primary calendar's id, which is the account's email address
+/// — the account label at connect time. Reading it here avoids adding
 /// `openid`/`email` to [`super::config::SCOPES`], which would widen the verified
 /// consent screen for one string.
 pub(crate) async fn list_calendars_with_primary<T: GoogleTransport>(
@@ -195,9 +190,9 @@ pub(crate) async fn list_calendars_with_primary<T: GoogleTransport>(
 
 // ─── paging + status ────────────────────────────────────────────────────────────
 
-/// Every page of one `events.list` call. The final page carries the
-/// `nextSyncToken`; earlier pages carry only a `nextPageToken`, so a delta split
-/// across pages must be fully drained before the cursor is trustworthy.
+/// Every page of one `events.list` call. Only the final page carries
+/// `nextSyncToken`, so a delta split across pages must be fully drained before
+/// the cursor is trustworthy.
 async fn collect_pages<T: GoogleTransport>(
     transport: &T,
     path: &str,
@@ -227,9 +222,9 @@ async fn collect_pages<T: GoogleTransport>(
     ))
 }
 
-/// Flatten drained pages into one delta. Grouping runs across the whole set, not
-/// per page, so a master and an instance that landed on different pages still fold
-/// into one bundle instead of producing a spurious orphan.
+/// Flatten drained pages into one delta. Grouping runs across the whole set, so a
+/// master and an instance split across pages still fold into one bundle instead
+/// of producing a spurious orphan.
 fn reduce(
     pages: Vec<EventsResponse>,
     fidelity: OccurrenceFidelity,
@@ -257,8 +252,8 @@ fn check_status(status: u16, body: &str) -> Result<(), GoogleError> {
     match status {
         200..=299 => Ok(()),
         NOT_FOUND => Err(GoogleError::NotFound),
-        // The access token was refreshed immediately before this call, so a 401 is
-        // the grant itself being gone rather than an expiry we can retry through.
+        // The access token was just refreshed, so a 401 here means the grant
+        // itself is gone, not an expiry we could retry through.
         UNAUTHORIZED => Err(GoogleError::Revoked),
         TOO_MANY_REQUESTS => Err(GoogleError::RateLimited),
         FORBIDDEN => Err(classify_forbidden(body)),
@@ -267,10 +262,9 @@ fn check_status(status: u16, body: &str) -> Result<(), GoogleError> {
 }
 
 /// Split a `403` on its `reason`. Anything not clearly a permission refusal —
-/// including an unreadable body or a reason Google added since — is treated as
-/// transient: a needless retry costs one request, while a wrong `Revoked` flags
-/// the account, drops it out of the background pass, and sends the user through a
-/// re-authorization they didn't need.
+/// including an unreadable body or an unrecognised reason — is treated as
+/// transient: a needless retry costs one request, while a wrong `Revoked` forces
+/// an unnecessary re-authorization.
 fn classify_forbidden(body: &str) -> GoogleError {
     let reasons = serde_json::from_str::<ApiErrorResponse>(body)
         .map(|e| e.reasons())

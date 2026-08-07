@@ -281,14 +281,13 @@ describe("getCompletedViewPages", () => {
   });
 });
 
-describe("belongsToView — past synced events (C26)", () => {
+describe("belongsToView — past synced events", () => {
   const TODAY = "2026-08-04";
   const synced = (o: Partial<PageSummary> = {}) =>
     makePage({ scheduleLocked: true, syncState: "active", ...o });
 
   it("drops a synced one-off whose time has passed", () => {
-    // A meeting happened; it didn't lapse. The mirror is locked, so the user can
-    // neither reschedule nor clear it — leaving it in Today accumulates forever.
+    // See belongsToView for why a past synced one-off isn't a lapsed task.
     const page = synced({ scheduledStart: "2026-07-30T09:00:00" });
     expect(belongsToView(page, "today", TODAY)).toBe(false);
   });
@@ -299,8 +298,7 @@ describe("belongsToView — past synced events (C26)", () => {
   });
 
   it("keeps a past recurring synced head", () => {
-    // Bounded by the sync-window floor, and a missed occurrence of a series is a
-    // real thing to act on — out of scope for this exclusion.
+    // See belongsToView for why a recurring head's floor keeps this a real miss.
     const page = synced({ isRecurring: true, scheduledStart: "2026-07-30T09:00:00" });
     expect(belongsToView(page, "today", TODAY)).toBe(true);
   });

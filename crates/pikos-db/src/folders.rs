@@ -120,7 +120,6 @@ pub async fn create_folder_impl(pool: &sqlx::SqlitePool, data: NewFolder) -> App
     fetch_folder(pool, &id).await
 }
 
-/// True when the folder is a system-managed external-calendar folder.
 async fn folder_is_external(pool: &sqlx::SqlitePool, id: &str) -> AppResult<bool> {
     Ok(sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ? AND is_external_calendar = 1)",
@@ -138,10 +137,9 @@ pub async fn update_folder_impl(
     id: String,
     updates: FolderUpdate,
 ) -> AppResult<Folder> {
-    // Placement lock: an external-calendar folder can't be reparented out of its
-    // area, and nothing can be nested under one. Name/color stay editable (recolor
-    // is a supported per-calendar action). The reconciler/enable path sets the
-    // system flag via raw SQL and bypasses this command.
+    // Placement lock: an external-calendar folder can't be reparented, and nothing
+    // can be nested under one. Name/color stay editable. The reconciler sets the
+    // system flag directly via SQL, bypassing this command.
     if let Some(serde_json::Value::String(new_parent)) = &updates.parent_id {
         if folder_is_external(pool, new_parent).await? {
             return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));

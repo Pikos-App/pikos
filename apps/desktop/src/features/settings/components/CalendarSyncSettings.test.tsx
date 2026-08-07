@@ -1,6 +1,6 @@
-// Layer-4: the Calendar Sync panel drives the real adapter commands end-to-end
-// (against MockStorageAdapter in test mode). Covers add-account → toggle →
-// status, and per-calendar recolour.
+// The Calendar Sync panel drives the real adapter commands end-to-end (against
+// MockStorageAdapter in test mode). Covers add-account → toggle → status, and
+// per-calendar recolour.
 
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,8 +9,8 @@ import { renderWithProviders } from "@/test/renderWithProviders";
 
 import { CalendarSyncSettings } from "./CalendarSyncSettings";
 
-// globals: false in vitest config → @testing-library's auto-cleanup never
-// registers, so unmount between tests by hand or the prior render's DOM leaks.
+// globals: false in vitest config → @testing-library's auto-cleanup never runs,
+// so this file unmounts between tests by hand.
 afterEach(cleanup);
 
 async function connectAccount() {

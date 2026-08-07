@@ -98,9 +98,9 @@ mod tests {
 
     #[test]
     fn google_calendar_colours_map_to_distinct_pastels() {
-        // The four calendars on the dev account, in the order the sidebar lists
-        // them. Distinctness is the point: a mapping that collapsed these onto one
-        // entry would be worse than the provider hex it replaces.
+        // The four calendars on the dev account, in sidebar order. Distinctness is
+        // the point — collapsing any two onto the same entry would be worse than
+        // the provider hex being replaced.
         assert_eq!(nearest("#f83a22"), Some("#E8A6A1")); // Tomato    → Rose
         assert_eq!(nearest("#ff7537"), Some("#E8C3A0")); // Tangerine → Peach
         assert_eq!(nearest("#fbe983"), Some("#DCCB97")); // Banana    → Sand

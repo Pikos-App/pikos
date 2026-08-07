@@ -15,10 +15,9 @@ use thiserror::Error;
 pub enum RecurrenceError {
     #[error("unparseable RRULE: {0}")]
     Parse(String),
-    /// A well-formed RRULE using a feature outside this engine's supported
-    /// envelope (see [`ParsedRule::validate_envelope`]). Distinct from `Parse` so
-    /// callers can fall back loudly (e.g. to rrule.js) rather than silently
-    /// mis-enumerating a provider rule the engine would misread.
+    /// A well-formed RRULE using a feature outside this engine's envelope (see
+    /// [`ParsedRule::validate_envelope`]). Distinct from `Parse` so callers can
+    /// fall back loudly (e.g. to rrule.js) rather than silently mis-enumerate.
     #[error("unsupported RRULE feature: {0}")]
     Unsupported(String),
 }
@@ -124,8 +123,8 @@ pub fn parse_rrule(rrule: &str) -> Option<RecurrenceOptions> {
 }
 
 /// Builds an RRULE string from typed options. Never emits `DTSTART`. Field order
-/// is fixed and self-consistent (the wrapper's `alignWeeklyRuleToAnchor` depends
-/// on `FREQ;INTERVAL;BYDAY`); it is NOT required to match rrule.js byte-for-byte.
+/// is fixed (the wrapper's `alignWeeklyRuleToAnchor` depends on
+/// `FREQ;INTERVAL;BYDAY`); it is not required to match rrule.js byte-for-byte.
 pub fn build_rrule(opts: &RecurrenceOptions) -> String {
     let mut segs = Vec::new();
     if let Some(freq) = opts.freq {
@@ -190,10 +189,10 @@ fn parse_until(value: &str) -> Option<NaiveDateTime> {
 }
 
 /// The `UNTIL` instant of an RRULE, FREQ-agnostic — finds and parses the token
-/// without validating the rule's envelope. Use this (NOT [`parse_rrule`]) to ask
-/// "is this series bounded?": `parse_rrule` returns `None` on an out-of-envelope
-/// FREQ (e.g. `FREQ=HOURLY`), which would misread a bounded rule as unbounded. The
-/// UNTIL format handling is shared with the enumerator via [`parse_until`].
+/// without validating the envelope. Use this, not [`parse_rrule`], to ask "is
+/// this series bounded?": `parse_rrule` returns `None` on an out-of-envelope FREQ
+/// (e.g. `FREQ=HOURLY`), misreading a bounded rule as unbounded. Format handling
+/// is shared with the enumerator via [`parse_until`].
 pub fn extract_until(rrule: &str) -> Option<NaiveDateTime> {
     rrule
         .split(';')
@@ -294,9 +293,9 @@ impl ParsedRule {
                 self.freq.as_str()
             )))
         };
-        // RFC 5545 forbids COUNT and UNTIL together. The enumerator applies both
-        // (COUNT first, then UNTIL), so a malformed feed carrying both would enumerate
-        // to whichever bound is tighter with no signal — reject it loudly instead.
+        // RFC 5545 forbids COUNT+UNTIL together. The enumerator applies COUNT
+        // then UNTIL, so a malformed feed with both would silently enumerate to
+        // whichever bound is tighter — reject it loudly instead.
         if self.count.is_some() && self.until.is_some() {
             return Err(RecurrenceError::Unsupported(
                 "COUNT combined with UNTIL".into(),

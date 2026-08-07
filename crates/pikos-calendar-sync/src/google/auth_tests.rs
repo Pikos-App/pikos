@@ -1,7 +1,7 @@
 //! Layer-1 auth tests. Google's token and revocation endpoints are scripted
-//! through `AsyncHttpClient`, and the OAuth client is built here rather than from
-//! the build's credentials — so the whole flow is exercised in a build that ships
-//! no Google client at all.
+//! through `AsyncHttpClient`; the OAuth client is built here rather than from
+//! the build's credentials, so the whole flow runs in a build that ships no
+//! Google client at all.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -119,8 +119,7 @@ fn credentials(access: &str, refresh: &str, expires_at: Option<&str>) -> GoogleC
 }
 
 // The consent URL is the contract with the verified Google app: the scopes it
-// carries must match what the consent screen declares, and the offline + forced
-// -consent params are what make a refresh token exist at all.
+// carries must match what the consent screen declares.
 #[tokio::test]
 async fn the_consent_url_asks_for_pkce_offline_access_and_only_the_declared_scopes() {
     let pending = begin_with(test_client()).await.unwrap();
@@ -191,9 +190,6 @@ async fn a_live_access_token_is_reused_without_calling_google() {
     assert!(http.sent.borrow().is_empty());
 }
 
-// Google usually returns the same refresh token, but when it rotates one in the
-// old one stops working — persisting the new value is the difference between a
-// live account and one that silently dies at the next refresh.
 #[tokio::test]
 async fn a_rotated_refresh_token_replaces_the_stored_one() {
     let keychain = memory_keychain();
@@ -288,8 +284,6 @@ async fn revoke_sends_the_refresh_token_so_the_whole_grant_drops() {
     assert_eq!(http.field(0, "token_type_hint").unwrap(), "refresh_token");
 }
 
-// Disconnect must be retryable: a grant Google has already forgotten is the
-// end state we wanted, not a failure that blocks the account going dormant.
 #[tokio::test]
 async fn revoking_an_already_revoked_grant_succeeds() {
     let keychain = memory_keychain();
@@ -301,7 +295,6 @@ async fn revoking_an_already_revoked_grant_succeeds() {
         .unwrap();
 }
 
-// Two Google accounts are two `sync_account` rows, so two keychain entries.
 #[tokio::test]
 async fn a_second_account_gets_its_own_credentials() {
     let keychain = memory_keychain();

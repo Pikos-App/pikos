@@ -71,9 +71,8 @@ impl TriggerSource for DesktopTriggers {
 
 /// Main sync loop — spawned from `lib.rs` setup, runs for the app's lifetime.
 pub async fn run(app: AppHandle, rx: mpsc::Receiver<SyncTrigger>) {
-    // The frontend calls connect_db after mount — wait for the pool so the
-    // interval's immediate first tick becomes the launch sync instead of a
-    // dropped trigger.
+    // The frontend calls connect_db after mount — wait for the pool so the interval's
+    // first tick becomes the launch sync instead of a dropped trigger.
     loop {
         if app.state::<DbState>().get_pool().await.is_ok() {
             break;

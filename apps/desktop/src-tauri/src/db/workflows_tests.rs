@@ -119,8 +119,7 @@ async fn recurring_completion_clone_is_searchable() {
     .await
     .unwrap();
 
-    // Complete the head occurrence (2026-05-29, derived server-side). The recompute
-    // then advances the head to the next open occurrence.
+    // The occurrence date isn't passed — it's derived server-side from the head.
     let result = complete_recurring_page_impl(
         &pool,
         CompleteRecurringInput {

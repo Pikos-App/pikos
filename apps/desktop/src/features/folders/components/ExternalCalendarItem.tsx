@@ -26,10 +26,10 @@ export interface ExternalCalendarItemProps {
 }
 
 /**
- * A synced external-calendar folder in the sidebar's Calendars area. Unlike a
- * regular `FolderItem` it is not draggable, not a page drop target, and cannot be
- * renamed or deleted from here — the Calendar Sync panel toggle is the only
- * teardown path (placement lock). Recolor is allowed (Pikos palette).
+ * A synced external-calendar folder in the sidebar. Unlike a regular `FolderItem`
+ * it's not draggable or a page drop target, and can't be renamed or deleted from
+ * here — the Calendar Sync panel toggle is the only teardown path. Recolor is
+ * allowed.
  */
 export function ExternalCalendarItem({
   folder,

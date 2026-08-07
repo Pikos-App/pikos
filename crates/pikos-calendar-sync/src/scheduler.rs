@@ -6,8 +6,7 @@
 //! wakeups without touching this loop.
 //!
 //! The loop never dies on a failing pass: account-level errors are collected
-//! into the [`PassReport`] for the driver to log, and transport/credential
-//! failures are already non-error outcomes at the engine layer.
+//! into the [`PassReport`] for the driver to log.
 
 use std::time::{Duration, Instant};
 

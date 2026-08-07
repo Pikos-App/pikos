@@ -137,7 +137,6 @@ impl Parse {
     /// `Start` and `Empty` share child recording; capture targets and context
     /// flags open only on `Start` (an `Empty` has no text and no closing tag).
     fn open(&mut self, ns: &[u8], local: &[u8], e: &BytesStart, is_start: bool) {
-        // Recorded for both Start and Empty (resourcetype children, comps).
         if self.in_resourcetype && (ns, local) == (NS_CALDAV, b"calendar".as_ref()) {
             self.pbuf.is_calendar = true;
         }

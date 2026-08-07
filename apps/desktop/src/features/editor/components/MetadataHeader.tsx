@@ -72,9 +72,8 @@ function Byline({
   const { recurrenceRules } = usePages();
   const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
 
-  // Synced events own a locked mirror: title (handled above), folder placement,
-  // schedule, and recurrence are read-only. Body + the rest of the byline
-  // (status, reminders, priority, tags) stay user-editable.
+  // Synced events lock title, folder placement, schedule, and recurrence to the
+  // mirror; body, status, reminders, priority, and tags stay user-editable.
   const locked = page.scheduleLocked;
   const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "Calendar";
   const lockedSchedule = locked ? syncedScheduleLabel(page) : null;
@@ -121,9 +120,8 @@ function Byline({
         {/* Reminders only apply to timed events — all-day schedules have no
             start time to fire "minutes before" against, so the scheduler
             ignores them (see notifications/scheduler). Hide the bell to match.
-            Reminders are user-owned and stay editable on every synced event —
-            one-off and recurring alike — since synced recurring occurrences now
-            fire per-occurrence (see notifications/scheduler). */}
+            Reminders stay user-editable on every synced event, one-off or
+            recurring, since synced occurrences now fire per-occurrence. */}
         {!!page.scheduledStart && isTimedIso(page.scheduledStart) && (
           <ReminderDropdown pageId={page.id} />
         )}
@@ -391,9 +389,8 @@ export function MetadataHeader({
     return () => window.removeEventListener("blur", handleBlur);
   }, [flushPage, page.id]);
 
-  // Synced provenance drives read-only title/schedule + the detached notice. A
-  // missing flag defaults safely to editable (native). Detached pages unlock
-  // (sync_state !== 'active'), so they're editable but flagged as disconnected.
+  // A missing scheduleLocked flag defaults to editable (native); detached pages
+  // unlock (sync_state !== 'active') but stay flagged as disconnected.
   const titleLocked = page.scheduleLocked;
   const detached = page.syncState === "detached";
   const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "the calendar";

@@ -224,8 +224,8 @@ mod expand_recurrence_range_tests {
 
     #[tokio::test]
     async fn applies_rule_exdates_but_not_the_completed_skip_union() {
-        // Only rule-level EXDATEs are honored here (Mar 9 removed); the completed/
-        // skip union is the caller's synchronous concern, absent from the input.
+        // Mar 10 drops via the rule's own EXDATE — the completed/skip union isn't
+        // part of this input; see `ExpandRuleInput`.
         let mut r = rule("rule-a", "FREQ=DAILY", "2026-03-09T09:00:00");
         r.rrule_exdates = vec!["2026-03-10".to_string()];
         let out =
@@ -242,9 +242,7 @@ mod expand_recurrence_range_tests {
 
     #[tokio::test]
     async fn omits_an_unparseable_rule_instead_of_erroring_the_batch() {
-        // A garbage RRULE stands in for an out-of-envelope provider rule: it drops
-        // out of the result while the valid rule still expands, so the caller can
-        // fall back to rrule.js for the omitted one.
+        // Mirrors the omit-not-error contract documented on `expand_recurrence_range`.
         let out = expand_recurrence_range(
             vec![
                 rule("bad", "FREQ=NONSENSE;BYWHATEVER=1", "2026-03-09T09:00:00"),

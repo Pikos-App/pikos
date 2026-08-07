@@ -6,11 +6,10 @@ interface CalendarDescriptionNoticeProps {
 }
 
 /**
- * Passive notice shown when the event's description changed upstream but the user
- * had already edited the page body, so the reconciler withheld the change (parked
- * in `page_sync.pending_description`) rather than clobber their notes. Renders the
- * parked text directly — offline-safe, no re-fetch — and the user folds it in by
- * hand; sync never overwrites the body. Read-only end to end.
+ * Shown when the event's description changed upstream but the user had already
+ * edited the body — the reconciler parks the change (`page_sync.pending_description`)
+ * rather than clobber it. Renders the parked text as-is; folding it in is manual
+ * and one-way.
  */
 export function CalendarDescriptionNotice({ text }: CalendarDescriptionNoticeProps) {
   const [open, setOpen] = useState(false);

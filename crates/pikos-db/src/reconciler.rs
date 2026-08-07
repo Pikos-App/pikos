@@ -84,7 +84,7 @@ pub async fn reconcile(
         }
     }
 
-    // Whole-event removals last: detach if owned, else hard delete.
+    // Whole-event removals last.
     for removal in &delta.removals {
         if apply_removal(&mut tx, ctx, removal).await? {
             outcome.applied += 1;
@@ -217,9 +217,8 @@ async fn reclaim_calendar_folder(
 
 /// Find a re-linkable page by `ical_uid`, scoped to this calendar (never across
 /// calendars — that would ping-pong the identity every poll). Trashed pages are
-/// excluded: re-linking one under a changed href would rewrite an invisible
-/// (`deleted_at`) row and re-lock it on restore — same invariant the external_id
-/// match site enforces (never write a deleted page's link).
+/// excluded, for the same reason the external_id match site never writes a
+/// deleted page's link (see [`apply_event`]).
 async fn find_relink(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
@@ -522,8 +521,7 @@ enum OccurrenceResult {
 
 /// A whole event gone upstream → detach if the page is Pikos-owned, else hard
 /// delete the bare mirror. Tombstoned (locally deleted) and already-detached rows
-/// are left untouched, so re-running a removal converges. The destructive call
-/// errs toward keeping.
+/// are left untouched, so re-running a removal converges.
 async fn apply_removal(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ctx: &ReconcileContext,
@@ -551,7 +549,7 @@ async fn apply_removal(
 
 /// The own-vs-delete decision, shared by an explicit removal, teardown, and the
 /// full-enumerate sweep: an owned page detaches (keeps its dormant identity for a
-/// later resync re-link); a bare mirror hard-deletes. Errs toward keeping.
+/// later resync re-link); a bare mirror hard-deletes.
 async fn detach_or_delete(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_sync_id: &str,
@@ -671,12 +669,11 @@ fn date_key(s: &str) -> String {
     s.chars().filter(char::is_ascii_digit).take(8).collect()
 }
 
-/// Tear down a calendar's live sync (the user unsynced or disconnected it). Same
-/// own-vs-delete rule as an upstream removal, applied across the whole calendar:
-/// owned pages detach and keep their dormant identity so a later resync re-links
-/// them in place; non-owned pages hard delete; tombstoned links are cleared so a
-/// fresh resync legitimately brings those events back (the page stays in trash).
-/// The folder survives — de-flagged to a regular folder — whenever a live page
+/// Tear down a calendar's live sync (the user unsynced or disconnected it): the
+/// same own-vs-delete rule as an upstream removal (see [`detach_or_delete`]),
+/// applied across the whole calendar. Tombstoned links are cleared so a fresh
+/// resync legitimately brings those events back (the page stays in trash). The
+/// folder survives — de-flagged to a regular folder — whenever a live page
 /// remains, and is removed only when nothing owned survived. Idempotent.
 pub async fn teardown_calendar(
     pool: &sqlx::SqlitePool,
@@ -723,8 +720,6 @@ async fn teardown_calendar_once(
         }
     }
 
-    // Keep the folder if any live page survived (it just stops being a live sync
-    // folder); remove it only when nothing owned remained.
     let survivors: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE folder_id = ? AND deleted_at IS NULL")
             .bind(folder_id)

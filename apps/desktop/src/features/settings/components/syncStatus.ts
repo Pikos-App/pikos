@@ -1,14 +1,13 @@
 import type { CalendarSyncResult, SyncCalendar } from "@pikos/core";
 
-// Per-calendar health as a four-state dot. Derived, not persisted: the read
-// model only carries `enabled` + `lastSyncedAt`, so a fresh resync result (when
-// one is in hand) sharpens the verdict — offline/reconnect aren't otherwise
-// visible.
+// Four-state calendar health, derived not persisted: the read model only has
+// `enabled` + `lastSyncedAt`, so a resync result (when in hand) sharpens the
+// verdict — offline/reconnect aren't otherwise visible.
 export type SyncDotState = "active" | "off" | "stale" | "error";
 
-// Enabled but no successful poll within this window → stale dot. The poll
-// interval is ~5 min, so this is a few intervals' grace before flagging stale
-// (e.g. after the app was asleep), absent a fresher resync result.
+// Enabled but no successful poll within this window → stale. Poll interval is
+// ~5 min, so this gives a few intervals' grace (e.g. after the app was asleep)
+// absent a fresher resync result.
 export const STALE_AFTER_MS = 15 * 60 * 1000;
 
 export interface SyncDotMeta {
@@ -49,9 +48,8 @@ function calendarSyncState(
 
 export type AccountConnectionState = "connected" | "reconnectNeeded";
 
-// An account is "Reconnect needed" the moment any of its calendars surfaced a
-// credential failure on the last resync — that's an account-wide auth problem,
-// not per-calendar.
+// An account is "Reconnect needed" the moment any calendar's last resync surfaced
+// a credential failure — an account-wide auth problem, not per-calendar.
 export function accountConnectionState(
   statuses: readonly (CalendarSyncResult["status"] | undefined)[]
 ): AccountConnectionState {

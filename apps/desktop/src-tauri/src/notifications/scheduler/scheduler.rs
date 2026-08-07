@@ -374,10 +374,9 @@ async fn fire_default_reminders(
 }
 
 /// Recurring (rrule-backed) pages — see `due_recurring_reminders` for the firing
-/// semantics. Both `now_local` and `now_utc` are passed rather than a pre-formatted
-/// string window because a series can have more than one occurrence in-window (a
-/// short lead and a long lead resolving to the same instant), and native vs synced
-/// occurrences compare against different clocks.
+/// semantics. Both clocks are passed, not a formatted window, because a series can
+/// have more than one occurrence due at once, and native vs. synced occurrences
+/// compare against different clocks.
 async fn fire_recurring_reminders(
     app: &AppHandle,
     pool: &SqlitePool,

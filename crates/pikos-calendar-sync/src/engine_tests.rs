@@ -1,9 +1,5 @@
 //! Layer-3 sync-engine integration tests: the engine driven against a temp
-//! SQLite DB and a scripted [`CalendarProvider`] (no network). Covers the
-//! contract the engine owns on top of the reconciler — cursor storage, the
-//! post-backfill token bootstrap, token-reject convergence, offline/reconnect
-//! classification, orphan-master resolution (incl. the 404 drop), partial-failure
-//! idempotency, reconciler-vs-editor write contention, and backfill throughput.
+//! SQLite DB and a scripted [`CalendarProvider`] (no network).
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -31,10 +27,10 @@ const FOLDER: &str = "f1";
 
 // ─── scripted provider ──────────────────────────────────────────────────────────
 
-/// A `CalendarProvider` whose responses are scripted per test. Each method pops
-/// its next queued response in call order, so a test drives a multi-poll sequence
-/// deterministically. Single-task by construction (tests use `tokio::join!`, not
-/// `spawn`), so the interior `RefCell`s never cross threads.
+/// A `CalendarProvider` whose responses are scripted per test: each method pops
+/// its next queued response in order, driving a deterministic multi-poll
+/// sequence. Single-task by construction (`tokio::join!`, not `spawn`), so the
+/// interior `RefCell`s never cross threads.
 #[derive(Default)]
 struct Scripted {
     sync: RefCell<VecDeque<AppResult<SyncDelta>>>,
@@ -192,9 +188,9 @@ fn orphan_occurrence(uid: &str, series_ref: &str) -> UpsertItem {
     })
 }
 
-/// A full authoritative enumerate: no cursor, `full_enumerate` set (drives the
-/// `full_resync` signal + `last_full_sync_at` stamp), and `authoritative_from` set
-/// so the engine sweeps stored pages absent from `upserts`.
+/// A full authoritative enumerate: no cursor, `full_enumerate` set (drives
+/// `full_resync` + the `last_full_sync_at` stamp), `authoritative_from` set so
+/// the engine sweeps stored pages absent from `upserts`.
 fn full_enumerate(upserts: Vec<UpsertItem>, window_start: &str) -> SyncDelta {
     SyncDelta {
         upserts,
@@ -272,9 +268,9 @@ async fn stored_ctag(pool: &SqlitePool) -> Option<String> {
         .unwrap()
 }
 
-/// Seed a token-less calendar into the ctag-skip precondition: a stored ctag and a
-/// `last_full_sync_at` `hours_ago` in the past (so a test can put the periodic
-/// re-enumerate in or out of its window).
+/// Seed a token-less calendar into the ctag-skip precondition: a stored ctag and
+/// `last_full_sync_at` `hours_ago` in the past, so a test can place the periodic
+/// re-enumerate in or out of its window.
 async fn set_ctag_state(pool: &SqlitePool, ctag: &str, hours_ago: i64) {
     let last_full = (chrono::Utc::now() - chrono::Duration::hours(hours_ago))
         .format("%Y-%m-%dT%H:%M:%S%.3fZ")
@@ -336,10 +332,8 @@ async fn incremental_loop_stores_cursor() {
     assert_eq!(page_count(&pool).await, 1);
     assert_eq!(stored_token(&pool).await.as_deref(), Some("tok-A"));
     assert!(last_synced(&pool).await.is_some());
-    // First backfill was driven from no cursor.
     assert_eq!(provider.sync_since.borrow()[0], None);
 
-    // Incremental poll: change title, carry next_token directly.
     let provider = Scripted::default().with_sync(Ok(delta(
         vec![event("/e1.ics", "u1", "v2", "Lunch w/ Sam")],
         Some("tok-B"),
@@ -358,7 +352,6 @@ async fn incremental_loop_stores_cursor() {
         "same event updates, never dupes"
     );
     assert_eq!(stored_token(&pool).await.as_deref(), Some("tok-B"));
-    // The incremental sync was driven from the bootstrapped cursor.
     assert_eq!(
         provider.sync_since.borrow()[0],
         Some(SyncToken("tok-A".into()))
@@ -394,7 +387,6 @@ async fn empty_incremental_delta_reports_unchanged() {
 async fn token_reject_full_resync_converges() {
     let pool = test_pool().await;
     seed(&pool, Some("stale")).await;
-    // Prime an existing page so the re-enumerate must converge, not duplicate.
     let provider = Scripted::default().with_sync(Ok(delta(
         vec![event("/e1.ics", "u1", "v1", "Lunch")],
         Some("t0"),
@@ -403,15 +395,14 @@ async fn token_reject_full_resync_converges() {
     assert_eq!(page_count(&pool).await, 1);
     let updated_before = page_updated_at(&pool).await;
 
-    // Now the stored cursor is rejected; provider returns a backfill (no token)
-    // carrying the SAME event etag.
+    // The event keeps the SAME etag, so the re-enumerate must no-op, not duplicate.
     let provider = Scripted::default()
         .with_sync(Ok(delta(vec![event("/e1.ics", "u1", "v1", "Lunch")], None)))
         .with_bootstrap(SyncToken("t-new".into()));
     let outcome = run(&pool, &provider).await;
 
-    // Every etag no-ops, so the re-enumerate applied zero writes → `changed:false`,
-    // even though the delta carried an item. No spurious frontend reload each poll.
+    // Every etag no-ops → zero writes → `changed:false`, despite a non-empty delta.
+    // Avoids a spurious frontend reload every poll.
     assert_eq!(
         outcome,
         SyncOutcome::Synced {
@@ -434,12 +425,11 @@ async fn token_reject_full_resync_converges() {
     );
 }
 
-/// Google's `410 Gone` recovery re-enumerates the whole window but — unlike CalDAV
-/// — its backfill hands back a fresh `nextSyncToken`. Deriving "was this full" from
-/// the cursor (`next_token.is_none()`) mislabeled it incremental: `full_resync`
-/// read false and `last_full_sync_at` never got stamped. The explicit
-/// `full_enumerate` marker fixes both, and the cursor still comes from the delta —
-/// no bootstrap call, since Google already returned one.
+/// Google's `410 Gone` recovery re-enumerates the window but, unlike CalDAV, hands
+/// back a fresh `nextSyncToken`. Deriving "was this full" from
+/// `next_token.is_none()` mislabeled it incremental — `full_resync` false,
+/// `last_full_sync_at` never stamped. The explicit `full_enumerate` marker fixes
+/// both; the cursor still comes from the delta, no bootstrap call needed.
 #[tokio::test]
 async fn full_enumerate_carrying_a_cursor_labels_full_resync_and_stamps() {
     let pool = test_pool().await;
@@ -517,9 +507,9 @@ async fn reconnect_needed_preserves_the_cursor() {
     );
 }
 
-/// A full backfill (no delta token) bootstraps the incremental cursor afterward. If
-/// that bootstrap REPORT fails, the sync still succeeds with the events committed —
-/// the cursor just stays null, so the next poll re-enumerates. Best-effort, never wrong.
+/// A full backfill (no delta token) bootstraps the incremental cursor afterward;
+/// if that bootstrap call fails, the sync still succeeds with events committed —
+/// the cursor stays null, so the next poll re-enumerates. Best-effort, never wrong.
 #[tokio::test]
 async fn post_backfill_bootstrap_token_failure_leaves_cursor_null() {
     let pool = test_pool().await;
@@ -601,9 +591,9 @@ async fn orphan_master_404_dropped() {
 }
 
 /// A full authoritative enumerate carrying a lone occurrence (master absent)
-/// fetches the master to resolve it — and the sweep must spare that just-created
-/// master, not detach/delete it in the same pass. Arms for Google, which
-/// emits lone occurrences in a full enumerate; CalDAV never does today.
+/// fetches the master to resolve it, and the sweep must spare that just-created
+/// master rather than detach it in the same pass. Guards against Google, which
+/// emits lone occurrences in a full enumerate — CalDAV never does today.
 #[tokio::test]
 async fn full_enumerate_spares_a_resolved_orphan_master_from_the_sweep() {
     let pool = test_pool().await;
@@ -661,7 +651,6 @@ async fn partial_failure_is_idempotent() {
         )
     };
 
-    // Run 1: the plain event commits, the orphan fetch fails transiently.
     let provider = Scripted::default()
         .with_sync(Ok(batch()))
         .with_fetch(Err(AppError::Network("timeout".into())));
@@ -673,7 +662,6 @@ async fn partial_failure_is_idempotent() {
         "cursor not advanced on partial failure"
     );
 
-    // Run 2: same delta re-delivered, fetch now succeeds.
     let provider = Scripted::default()
         .with_sync(Ok(batch()))
         .with_fetch(Ok(master("/series.ics", "u-series")));
@@ -702,7 +690,6 @@ async fn write_contention_converges() {
     let pool = &db.pool;
     seed(pool, None).await;
 
-    // Prime a synced page the user will edit while the reconciler re-mirrors it.
     let ctx = ReconcileContext {
         account_id: ACCOUNT.into(),
         calendar_id: CAL_ID.into(),
@@ -721,9 +708,9 @@ async fn write_contention_converges() {
         .await
         .unwrap();
 
-    // Reconciler mirror-write (new etag → title update) races the user's body edit
-    // on two real worker threads — the only setup that can actually surface the 517
-    // (`SQLITE_BUSY_SNAPSHOT`) that one cooperative task can't.
+    // The mirror write (new etag → title update) races the user's body edit on two
+    // real worker threads — the only setup that can surface the 517
+    // (`SQLITE_BUSY_SNAPSHOT`) a single cooperative task can't.
     let mirror_pool = pool.clone();
     let mirror = tokio::spawn(async move {
         let d = delta(vec![event("/e1.ics", "u1", "v2", "New Title")], None);
@@ -751,7 +738,6 @@ async fn write_contention_converges() {
         .unwrap()
         .expect("editor write must not surface SQLITE_BUSY");
 
-    // Both effects converge: the mirror title and the user's body coexist.
     let (title, body): (String, Option<String>) =
         sqlx::query_as("SELECT title, content_text FROM pages WHERE id = ?")
             .bind(&page_id)
@@ -789,12 +775,11 @@ async fn backfill_throughput() {
     assert_eq!(page_count(&pool).await, N as i64);
 }
 
-/// The >200 tail sub-delta the only other large test skips. `backfill_throughput`
-/// has 0 occurrences/removals so it hits `reconcile_batched`'s early return; a real
+/// The >200 tail sub-delta `backfill_throughput` skips (it has 0
+/// occurrences/removals, so it hits `reconcile_batched`'s early return) — a real
 /// poll can deliver >200 mixed changes. Here the tail's orphan occurrence's master
-/// sits in an EARLIER event batch (committed to the DB before the tail runs), so it
-/// resolves from storage — no cross-delta missing-master fetch — and a removal in
-/// the same tail detaches its owned page.
+/// sits in an earlier, already-committed batch, so it resolves from storage with no
+/// cross-delta fetch; a removal in the same tail detaches its owned page.
 #[tokio::test]
 async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_removal() {
     let pool = test_pool().await;
@@ -811,9 +796,9 @@ async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_remova
         .await
         .unwrap();
 
-    // 251 upserts (> RECONCILE_BATCH) = 249 plain events + the recurring master the
-    // tail's occurrence references + that orphan occurrence; plus one removal. The
-    // master lands in the second event batch, before the occurrence+removal tail.
+    // 251 upserts (> RECONCILE_BATCH): 249 plain events, the recurring master the
+    // tail's occurrence references, that orphan occurrence, plus one removal. The
+    // master lands in the second batch, ahead of the occurrence+removal tail.
     const N: usize = 249;
     let mut upserts: Vec<UpsertItem> = (0..N)
         .map(|i| event(&format!("/e{i}.ics"), &format!("u{i}"), "v1", "Event"))
@@ -821,7 +806,7 @@ async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_remova
     upserts.push(UpsertItem::Event(master("/series.ics", "u-series")));
     upserts.push(orphan_occurrence("u-series", "series-ref-1"));
 
-    // A scripted fetch that MUST go unconsumed: consuming it would mean the tail
+    // A scripted fetch that must go unconsumed: consuming it would mean the tail
     // couldn't see the just-committed master and fell back to a targeted re-fetch.
     let provider = Scripted::default()
         .with_sync(Ok(SyncDelta {
@@ -862,19 +847,18 @@ async fn batched_tail_resolves_override_from_a_prior_batch_and_detaches_a_remova
     assert_eq!(page_count(&pool).await, N as i64 + 2);
 }
 
-/// A large backfill commits in batches, so a user edit issued mid-ingest slips
-/// between batches instead of waiting for the whole backfill. On a real WAL pool,
-/// race the backfill against one edit and assert the edit lands well inside the
-/// backfill's window — a single-transaction backfill would make it wait for the
-/// entire ingest. The property is temporal, so this asserts a ratio with a wide
-/// margin (the edit waits at most one ~200-row batch out of ~20).
+/// A large backfill commits in batches, so a user edit mid-ingest slips between
+/// batches instead of waiting for the whole run. On a real WAL pool, race the
+/// backfill against one edit and assert it lands well inside the backfill's
+/// window — a single-transaction backfill would block it until the end. The
+/// property is temporal, so this asserts a ratio with a wide margin (at most one
+/// ~200-row batch out of ~20).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn backfill_does_not_block_interactive_writes() {
     let db = wal_db().await;
     let pool = &db.pool;
     seed(pool, None).await;
 
-    // A page the user edits while the backfill runs.
     insert_test_page(
         pool,
         TestPage {
@@ -964,9 +948,9 @@ async fn removal_flows_through() {
 
 /// A backfill carries no per-event removals, so a stale-token gap (or a server
 /// without `sync-collection`) would otherwise leave an upstream-deleted event as a
-/// permanent ghost. The full-enumerate sweep closes that: an event absent from the
-/// authoritative set is removed — but a pre-window event, legitimately outside the
-/// time-bounded query, must survive.
+/// permanent ghost. The full-enumerate sweep fixes that: an event absent from the
+/// authoritative set is removed, but a pre-window event — legitimately outside the
+/// time-bounded query — must survive.
 #[tokio::test]
 async fn full_resync_sweeps_deleted_but_spares_pre_window() {
     let pool = test_pool().await;
@@ -998,9 +982,9 @@ async fn full_resync_sweeps_deleted_but_spares_pre_window() {
     run(&pool, &provider).await;
     assert_eq!(page_count(&pool).await, 2);
 
-    // Stale-token gap: the event was deleted upstream during the gap, so the
-    // re-enumerate returns neither it (deleted) nor the pre-window event (out of
-    // range). Only the deleted one should go.
+    // Stale-token gap: the event was deleted upstream, so the re-enumerate returns
+    // neither it (deleted) nor the pre-window event (out of range). Only the
+    // deleted one should be swept.
     let provider = Scripted::default()
         .with_sync(Ok(full_enumerate(vec![], "2026-06-24")))
         .with_bootstrap(SyncToken("tok-B".into()));
@@ -1059,7 +1043,6 @@ async fn full_resync_sweep_detaches_owned_page() {
         .await
         .unwrap();
 
-    // Deleted upstream; the re-enumerate no longer carries it.
     let provider = Scripted::default()
         .with_sync(Ok(full_enumerate(vec![], "2026-06-24")))
         .with_bootstrap(SyncToken("tok-B".into()));
@@ -1073,7 +1056,7 @@ async fn full_resync_sweep_detaches_owned_page() {
     );
 }
 
-/// R3: a resource present upstream but unparseable this pass (tracked in
+/// A resource present upstream but unparseable this pass (tracked in
 /// `unresolved_present`) must survive the authoritative sweep — treating it as
 /// absent would permanently delete a live event's mirror, since incremental sync
 /// never re-delivers an unchanged event.
@@ -1169,7 +1152,6 @@ async fn unchanged_ctag_skips_the_enumerate() {
     seed(&pool, None).await;
     set_ctag_state(&pool, "ctag-1", 0).await;
 
-    // Same ctag + a recent full sync → nothing to do; sync() must not be called.
     let provider = Scripted::default().with_ctag(Some("ctag-1"));
     let outcome = run(&pool, &provider).await;
 
@@ -1228,7 +1210,6 @@ async fn changed_ctag_enumerates_and_stores_the_new_ctag() {
 async fn periodic_backstop_enumerates_despite_a_matching_ctag() {
     let pool = test_pool().await;
     seed(&pool, None).await;
-    // Ctag matches, but the last full sync is older than the safety interval.
     set_ctag_state(&pool, "ctag-1", FORCE_FULL_INTERVAL_HOURS + 1).await;
 
     let provider = Scripted::default()

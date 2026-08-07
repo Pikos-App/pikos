@@ -1,7 +1,6 @@
-//! Tests for the sync orchestration that needs no network: `disconnect_account`
-//! (DB teardown + keychain delete) and `resync_account` (loops only enabled
-//! calendars through the engine, driven by a scripted provider). `connect_caldav`
-//! is a live discovery seam, exercised manually.
+//! Tests for the sync orchestration that needs no network — `disconnect_account`,
+//! `resync_account` — driven by scripted providers. `connect_caldav` is a live
+//! discovery seam, exercised manually.
 
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
 use pikos_db::sync_commands::{
@@ -105,9 +104,9 @@ async fn disconnect_goes_dormant_and_hides_the_account() {
 }
 
 // Revoking a Google grant is a network call that can fail — unreachable, already
-// revoked, or (here) a build carrying no OAuth client at all. The account must
-// still go dormant and lose its credential, or a user who can't reach Google
-// could never disconnect.
+// revoked, or (here) no OAuth client in a test build. The account must still go
+// dormant and lose its credential, or a user who can't reach Google could never
+// disconnect.
 #[tokio::test]
 async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
     let pool = test_pool().await;
@@ -136,9 +135,9 @@ async fn a_google_disconnect_completes_even_when_the_revoke_fails() {
     assert!(backing.get(&acc.id).is_err());
 }
 
-// The wipe deletes the DB, and the account ids in it are the keychain keys — so a
+// The wipe deletes the DB, and the account ids in it are the keychain keys — a
 // credential missed here can never be found again, only used. Dormant accounts are
-// swept too: their credential is normally already gone, but this is the last pass.
+// swept too: their credential is usually already gone, but this is the last pass.
 #[tokio::test]
 async fn releasing_credentials_clears_every_account_including_dormant_ones() {
     let pool = test_pool().await;
@@ -247,7 +246,6 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
         .await
         .unwrap();
 
-    // First sync creates the mirror page.
     let provider = Scripted {
         delta: one_event_delta("href-1", "uid-1", "Standup", "tok-1"),
     };
@@ -270,7 +268,6 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
         .await
         .unwrap();
 
-    // Disconnect → dormant; the owned page keeps its detached identity.
     let backing = MemoryStore::default();
     backing.set(&acc.id, "blob").unwrap();
     disconnect_account(
@@ -303,7 +300,6 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
     };
     resync_account(&pool, &provider2, &acc.id).await.unwrap();
 
-    // Exactly one page for the series — re-linked, not duplicated — user layer intact.
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE ical_uid = 'uid-1'")
         .fetch_one(&pool)
         .await
@@ -330,14 +326,14 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
 
 // Reconnecting an account that's still active (never disconnected) must refresh
 // its row, not insert a second one — a duplicate account gives every event a second
-// folder and a second page (dedup is per-account). Drives claim_account + the
-// idempotent calendar upsert the connect paths use, skipping only the live discovery.
+// folder and page (dedup is per-account). Drives `claim_account` + the idempotent
+// calendar upsert the connect paths use, skipping only live discovery.
 #[tokio::test]
 async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     let pool = test_pool().await;
 
-    // First connect: account + calendar, enabled (materializes a folder), one sync so
-    // a mirror page exists — the state a live account carries.
+    // Establishes a live account: account + calendar, enabled (materializes a
+    // folder), one sync so a mirror page exists.
     let acc = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
         .unwrap();
@@ -352,7 +348,6 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     };
     resync_account(&pool, &provider, &acc.id).await.unwrap();
 
-    // Second connect of the SAME still-active account, re-upserting the same calendar.
     let acc2 = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
         .unwrap();
@@ -364,7 +359,6 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
         .await
         .unwrap();
 
-    // Nothing doubled: one account, one calendar, one folder.
     let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_account")
         .fetch_one(&pool)
         .await
@@ -381,7 +375,6 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
         .unwrap();
     assert_eq!(folders, 1, "no duplicate folder");
 
-    // Resync through the reused calendar → still one page, event not doubled.
     let provider2 = Scripted {
         delta: one_event_delta("href-1", "uid-1", "Standup", "tok-2"),
     };
@@ -430,9 +423,9 @@ async fn resync_syncs_only_enabled_calendars() {
 
 #[tokio::test]
 async fn connect_caldav_persists_nothing_when_discovery_fails() {
-    // connect_caldav validates by discovering FIRST, so a failure must leave no
-    // half-built account or keychain entry. A malformed URL fails discovery at the
-    // parse step (no network), exercising that ordering without a live server.
+    // connect_caldav validates by discovering first, so a failure must leave no
+    // half-built account or keychain entry. A malformed URL fails at the parse step
+    // (no network), exercising that ordering without a live server.
     let pool = test_pool().await;
     let keychain = Keychain::with_store(Box::new(MemoryStore::default()));
 

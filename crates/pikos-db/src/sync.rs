@@ -45,7 +45,6 @@ pub struct SyncCalendarRow {
     pub display_name: String,
     /// Pikos palette colour (not provider hex).
     pub color: Option<String>,
-    /// Stored 0/1 in SQLite.
     pub enabled: bool,
     /// Google syncToken / CalDAV sync-token.
     pub sync_token: Option<String>,
@@ -63,9 +62,8 @@ pub struct SyncCalendarRow {
 
 /// `page_sync` row — links a Pikos page to its source event. One row per series.
 ///
-/// `external_id` is the dedup identity (CalDAV href / Google event id, NOT the
-/// ICS UID). `ical_uid` is used only for same-calendar re-link of a
-/// dormant/detached page. `sync_state` is 'active' | 'detached' | 'tombstoned'.
+/// `external_id` is the dedup identity; `ical_uid` only re-links a
+/// dormant/detached page on the same calendar.
 #[derive(Debug, sqlx::FromRow)]
 pub struct PageSyncRow {
     pub id: String,
@@ -102,9 +100,9 @@ pub struct PageSyncRow {
 
 // ─── Schedule-lock predicate (shared by the page/schedule/recurrence writers) ──
 //
-// A read-only check, not a writer — it backs the locked-mirror guard so the same
-// invariant holds for every command-layer writer (UI and CLI alike). Sync's own
-// writes use raw SQL and bypass these guarded commands, so seeding is unaffected.
+// Backs the locked-mirror guard so the same invariant holds for every
+// command-layer writer (UI and CLI alike). Sync's own writes use raw SQL and
+// bypass these guarded commands, so seeding is unaffected.
 
 /// User-facing message when a writer rejects an edit to a synced page's locked
 /// mirror (title / schedule / recurrence).

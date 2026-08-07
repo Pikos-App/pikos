@@ -280,8 +280,8 @@ appTest("unchecking a done recurring clone restores the occurrence onto the head
   const clone = items.filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) });
   await expect(clone).toHaveCount(1);
 
-  // Uncheck the clone → the occurrence rewinds onto the head (back in Today, open)
-  // and the clone is gone. A plain-flip regression would leave two open rows.
+  // The occurrence rewinds onto the head (back in Today, open) and the clone is
+  // gone. A plain-flip regression would leave two open rows.
   await clone.getByRole("checkbox", { name: /Mark not done/i }).click();
   await expect(items.filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) })).toHaveCount(0);
   await expect(items.filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })).toHaveCount(1);
@@ -358,7 +358,6 @@ appTest("skipping a virtual occurrence hides it; undo restores it @tier2", async
   const virtualsBefore = await calendar.getByLabel("Recurring").count();
   expect(virtualsBefore).toBeGreaterThanOrEqual(2);
 
-  // Open the first virtual and skip it.
   const firstVirtual = calendar
     .getByRole("button", { name: /^standup/i })
     .filter({ has: app.getByLabel("Recurring") })
@@ -367,10 +366,9 @@ appTest("skipping a virtual occurrence hides it; undo restores it @tier2", async
   await firstVirtual.click();
   await app.getByRole("button", { name: "Skip this occurrence" }).click();
 
-  // The skipped occurrence leaves the calendar.
   await expect(calendar.getByLabel("Recurring")).toHaveCount(virtualsBefore - 1);
 
-  // Undo the skip (Cmd+Z fires the most recent undoable toast) → it returns.
+  // Cmd+Z fires the most recent undoable toast.
   await app.keyboard.press(mod("Mod+z"));
   await expect(calendar.getByLabel("Recurring")).toHaveCount(virtualsBefore);
 });
@@ -535,11 +533,11 @@ appTest(
 
 // ─── Gap-resolution dialog for an overdue recurring head ───────────────────
 //
-// Completing a recurring head that's overdue (today > head, with intermediate
+// Completing an overdue recurring head (today > head, with intermediate
 // occurrences) opens the gap dialog: "Advance to next page" lands on the first
-// missed day (the gap stays), while "Advance to today" / "Skip missed days"
-// dismisses the in-between days and lands the head on today. Uses the raw `page`
-// fixture because clock.install must run before the first app script reads Date.
+// missed day (the gap stays), while "Advance to today" dismisses the in-between
+// days and lands the head on today. Uses the raw `page` fixture — see the
+// snap-forward test above for why.
 
 /** Daily recurring head anchored Mon 2026-06-08, with "now" jumped to Thu
  *  2026-06-11 so Tue + Wed are missed. Returns the "standup" list-item locator. */
@@ -570,7 +568,6 @@ appTest("overdue completion → advance keeps the gap and drops one clone @tier2
   const items = await seedOverdueDailyRecurring(page);
   await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
 
-  // The gap dialog names the two missed days and offers both policies.
   await expect(page.getByText(/You missed 2 days/)).toBeVisible();
   await expect(page.getByRole("button", { name: /Advance to next page/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Advance to today/ })).toBeVisible();
@@ -578,7 +575,6 @@ appTest("overdue completion → advance keeps the gap and drops one clone @tier2
   await page.getByRole("button", { name: /Advance to next page/ }).click();
   await expect(page.getByText(/You missed 2 days/)).not.toBeVisible();
 
-  // Exactly one done clone lands (the completed head occurrence).
   await page.getByRole("button", { name: "Completed", exact: true }).click();
   await expect(
     items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })
@@ -594,8 +590,7 @@ appTest("overdue completion → skip dismisses the gap and lands on today @tier2
   await page.getByRole("button", { name: /Advance to today/ }).click();
   await expect(page.getByText(/You missed 2 days/)).not.toBeVisible();
 
-  // One done clone, and a single open head remains (the skipped days did not
-  // materialise as extra rows).
+  // The skipped days don't materialise as extra rows.
   await page.getByRole("button", { name: "Completed", exact: true }).click();
   await expect(
     items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })

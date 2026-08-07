@@ -55,11 +55,10 @@ function toVirtuals(
   for (const s of overrideSchedules) {
     if (s.ruleId === rule.id && s.originalDate) excluded.add(dateKey(s.originalDate));
   }
-  // Only the head's own-date virtual is suppressed (the real head block renders
-  // it). Vacated dates need no filter: a head move shifts the rule anchor in
-  // lockstep so pre-head dates stop being emitted, and a completion/skip advance
-  // lands them in the exclusion union above. A pre-head date that's neither — an
-  // open gap after an "advance" — renders, which is correct: the gap stays visible.
+  // Only the head's own date is suppressed (the head block already renders it).
+  // Other pre-head dates need no filter: a head move shifts the rule anchor so
+  // vacated dates stop being emitted, and completion/skip lands them in the
+  // exclusion union above. A date that's neither is a genuine open gap and stays visible.
   const headDate = page.scheduledStart?.slice(0, 10);
   const out: VirtualOccurrence[] = [];
   for (const occ of raw) {
@@ -78,21 +77,19 @@ function toVirtuals(
 }
 
 /** A moved synced occurrence, shaped from its series page + the override row's
- * zoned schedule. Deliberately NOT a `VirtualOccurrence`: it carries no
- * `isVirtual`, so the block renders the page's synced treatment (checkbox +
- * sync icon + `PageBlockPopover`, schedule locked) rather than the recurring
- * repeat-glyph — the moved instance reads as a real event the user can complete.
- * `originalDate` (day-key) is the completion key, so checking it records the
- * *original* occurrence (agreeing with the reminder derivation), not the day it
- * was moved to. */
+ * zoned schedule. Deliberately not a `VirtualOccurrence` (no `isVirtual`), so it
+ * renders the page's synced treatment — checkbox, sync icon, schedule-locked
+ * popover — instead of the recurring glyph; it reads as a real, completable
+ * event. `originalDate` (day-key) is the *original* occurrence for the
+ * completion key and reminder derivation, not the day it moved to. */
 type OverrideBlock = PageSummary & { originalDate: string };
 
 /** Shapes each synced override row into a locked, completable block at its moved
- * time. Excludes overrides whose original occurrence is already completed or
- * skipped — its done clone renders instead, and a rendered override beside it
- * would double the slot. Synced-only: a native reschedule re-homes via a clone +
- * exdate, never an override row (`ruleId` is only set for synced series), and the
- * `scheduleLocked` gate skips a detached series that has unlocked again. */
+ * time. Excludes an override whose original occurrence is already completed or
+ * skipped (the done clone renders instead — a rendered override beside it would
+ * double the slot). Synced-only: a native reschedule re-homes via a clone +
+ * exdate, never an override row (`ruleId` is only set for synced series); the
+ * `scheduleLocked` check also skips a detached series that has since unlocked. */
 function toOverrideBlocks(
   rules: PageRecurrenceRule[],
   pages: PageSummary[],
@@ -142,9 +139,8 @@ export function useRecurrenceExpansion({
 
   // null until the first IPC batch resolves; a Map (rule id → raw occurrences)
   // after. Kept across a range change (stale-while-revalidate) so an overlapping
-  // or day-step nav keeps its virtuals while the next batch is in flight. (A
-  // non-overlapping week jump still renders empty for a frame — those dates
-  // aren't in the retained map — the accepted cold-mount-class regression.)
+  // or day-step nav keeps showing virtuals while the next batch is in flight — a
+  // non-overlapping week jump still renders empty for a frame (accepted).
   const [rawExpansion, setRawExpansion] = useState<Map<string, RawOccurrence[]> | null>(null);
   const expandAbortRef = useRef(0);
 
@@ -192,13 +188,12 @@ export function useRecurrenceExpansion({
     });
   }, [useRustEngine, startStr, endStr, rulesKey]);
 
-  // Suppress a recurring head block when its own current date is completed.
-  // Normally a no-op: the head advances past a completed occurrence. Load-bearing
-  // and permanent for an out-of-envelope provider rule the engine rejects — the
-  // recompute skips it, so the head never advances and completing the base can't
-  // move it; without this the base renders next to its done clone. Un-gated: such
-  // a rule can be native or synced. Computed BEFORE the empty-rules early return
-  // so a completed base is hidden even before the rules load.
+  // Suppress a recurring head block when its own date is completed. Usually a
+  // no-op (the head already advances past a completed occurrence), but load-
+  // bearing for an out-of-envelope rule the engine rejects: recompute never
+  // advances such a head, so without this it'd render next to its done clone.
+  // Applies to native or synced rules alike. Computed before the empty-rules
+  // early return so a completed base is hidden even before the rules load.
   const headCompleted = (p: PageSummary): boolean => {
     const baseDate = p.scheduledStart?.slice(0, 10);
     return !!(baseDate && p.completedOccurrences?.[baseDate]);

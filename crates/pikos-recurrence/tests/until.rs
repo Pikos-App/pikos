@@ -1,7 +1,6 @@
-//! `extract_until` is the FREQ-agnostic UNTIL reader the reconciler's pre-window
-//! sweep guard depends on. It must yield a bound even for rules the enumerator
-//! rejects — the err-toward-keeping bias that stops a bounded `HOURLY` series being
-//! read as unbounded (and swept). Format handling is shared with `parse_until`.
+//! `extract_until` is the FREQ-agnostic UNTIL reader the reconciler's
+//! pre-window sweep guard depends on. Format handling is shared with
+//! `parse_until`; see its doc comment for why FREQ-agnostic matters.
 
 use pikos_recurrence::extract_until;
 
@@ -23,8 +22,6 @@ fn reads_date_and_datetime_forms() {
 
 #[test]
 fn is_freq_agnostic_so_a_bounded_hourly_rule_still_reports_its_bound() {
-    // `parse_rrule` rejects `FREQ=HOURLY` (out of envelope); `extract_until` must
-    // NOT — else the sweep reads a bounded series as unbounded and deletes it.
     assert!(extract_until("FREQ=HOURLY;UNTIL=20260201T100000Z").is_some());
 }
 

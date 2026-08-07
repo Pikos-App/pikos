@@ -1,8 +1,7 @@
 //! CalDAV autodiscovery: entered base URL → `.well-known/caldav` →
 //! `current-user-principal` → `calendar-home-set` → enumerate calendars. Runs
-//! once per account at connect time (the engine caches the result later). Yields
-//! the provider-agnostic [`RemoteCalendar`] list; only VEVENT-bearing collections
-//! are kept (inbox/outbox/tasks-only calendars are dropped).
+//! once per account at connect time; the engine caches the result. Yields the
+//! provider-agnostic [`RemoteCalendar`] list.
 
 use pikos_db::sync_delta::RemoteCalendar;
 use url::Url;
@@ -44,10 +43,9 @@ pub(crate) async fn discover_calendars<T: DavTransport>(
     let base = Url::parse(base_url)
         .map_err(|e| CaldavError::NotCaldav(format!("invalid server URL: {e}")))?;
 
-    // 1. current-user-principal: try .well-known (a redirect on most servers),
-    //    then fall back to the entered URL itself. RFC 6764 — some valid servers
-    //    (a misconfigured Nextcloud is the classic) 404 .well-known, and a user may
-    //    paste a full collection URL that already is the context path.
+    // current-user-principal: try .well-known (RFC 6764) first, then the entered
+    // URL — some servers (a misconfigured Nextcloud) 404 .well-known, or the user
+    // pastes a full collection URL that's already the context path.
     let well_known = base
         .join(WELL_KNOWN)
         .map_err(|e| CaldavError::NotCaldav(e.to_string()))?;
@@ -63,7 +61,6 @@ pub(crate) async fn discover_calendars<T: DavTransport>(
     };
     let principal_url = resolve(&base, &principal_from, &principal)?;
 
-    // 2. calendar-home-set on the principal.
     let resp = propfind_follow(transport, &base, principal_url, "0", HOME_BODY)
         .await?
         .ok_or_else(|| CaldavError::NotCaldav("calendar-home-set request not found".into()))?;
@@ -71,7 +68,6 @@ pub(crate) async fn discover_calendars<T: DavTransport>(
         .ok_or_else(|| CaldavError::NotCaldav("no calendar-home-set in response".into()))?;
     let home_url = resolve(&base, &resp.final_url, &home)?;
 
-    // 3. enumerate the home collection (Depth: 1).
     let resp = propfind_follow(transport, &base, home_url, "1", ENUM_BODY)
         .await?
         .ok_or_else(|| CaldavError::NotCaldav("calendar enumeration not found".into()))?;
@@ -109,10 +105,10 @@ async fn principal_at<T: DavTransport>(
     Ok(xml::parse_principal_href(&resp.body)?.map(|href| (resp.final_url, href)))
 }
 
-/// PROPFIND `start`, following `Location` redirects by hand (reqwest would turn a
-/// 301/302 on a PROPFIND into a bodyless GET). Re-applies the original scheme if a
-/// redirect downgrades https→http — the classic CalDAV discovery footgun. `None`
-/// on a 404/405 — "not here," which the caller treats as fallback or fatal.
+/// PROPFIND `start`, following `Location` redirects by hand — reqwest turns a
+/// 301/302 on a PROPFIND into a bodyless GET. Re-applies https if a redirect
+/// downgrades to http (the classic CalDAV footgun). `None` on a 404/405; the
+/// caller decides fallback vs. fatal.
 async fn propfind_follow<T: DavTransport>(
     transport: &T,
     base: &Url,
@@ -152,8 +148,8 @@ async fn propfind_follow<T: DavTransport>(
     ))
 }
 
-/// Resolve an href (absolute URL or origin-relative path) from a response against
-/// the URL it came from, then guard against an https→http downgrade.
+/// Resolve an href against the URL it came from, re-applying https if the result
+/// would downgrade to http (see [`propfind_follow`]).
 fn resolve(base: &Url, from: &Url, href: &str) -> Result<Url, CaldavError> {
     let mut url = from
         .join(href)

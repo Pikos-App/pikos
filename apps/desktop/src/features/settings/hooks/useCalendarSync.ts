@@ -16,10 +16,9 @@ function prune(results: ResultMap, rowIds: string[]): ResultMap {
   return next;
 }
 
-// Connect surfaces its own failure inline in AddAccountDialog. The other actions
-// fire from menu items / toggles with no local error path, so a rejected
-// disconnect/toggle/resync would otherwise look like nothing happened — the hook
-// catches them and exposes `error` for the settings panel to render.
+// Connect shows its own inline error in AddAccountDialog. Other actions (menu
+// items, toggles) have no local error path, so a rejection would otherwise look
+// like nothing happened — the hook catches it and exposes `error` for the panel.
 function actionError(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
 }
@@ -32,7 +31,7 @@ export interface CalendarSyncState {
   error: string | null;
   connect: (data: NewCaldavConnection) => Promise<void>;
   connectGoogle: () => Promise<void>;
-  /** False in a build without the Google OAuth client — the picker hides it. */
+  /** False in a build without the Google OAuth client — the picker disables it. */
   googleAvailable: boolean;
   disconnect: (accountId: string) => Promise<void>;
   toggleCalendar: (calendarRowId: string, enabled: boolean, color: string | null) => Promise<void>;
@@ -104,9 +103,8 @@ export function useCalendarSync(): CalendarSyncState {
     await reload();
   }
 
-  // Toggling clears any stale result for this calendar so its dot falls back to
-  // the derived (off/stale) state until the next resync, rather than showing a
-  // dead verdict from before it was disabled.
+  // Clears any stale result for this calendar on toggle, so its dot falls back to
+  // the derived (off/stale) state instead of showing a dead verdict from before.
   async function toggleCalendar(calendarRowId: string, enabled: boolean, color: string | null) {
     if (!storage) return;
     setError(null);

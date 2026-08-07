@@ -279,7 +279,6 @@ fn roundtrip_matches() {
     for c in corpus().roundtrip {
         let parsed = parse_rrule(&c.rrule).unwrap_or_else(|| panic!("parse {}", c.rrule));
         assert_eq!(to_corpus(&parsed), c.options, "parse parity: {}", c.rrule);
-        // Build must round-trip through parse (byte-parity with rrule.js is not required).
         let rebuilt =
             parse_rrule(&build_rrule(&parsed)).unwrap_or_else(|| panic!("reparse {}", c.rrule));
         assert_eq!(rebuilt, parsed, "build round-trip: {}", c.rrule);

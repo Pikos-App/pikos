@@ -318,9 +318,8 @@ mod tests {
         h.join().unwrap();
     }
 
-    /// The bracket suppresses a write for any pass duration, and once the bracket +
-    /// trailing window lapse an external write reloads. Mirrors production's
-    /// `suppressed()` gate in the emit closure.
+    /// Mirrors production's `suppressed()` gate in the emit closure; see
+    /// `SUPPRESS_DEPTH` for the suppression contract.
     #[test]
     fn bracketed_pass_suppresses_regardless_of_duration_then_releases() {
         SUPPRESS_DEPTH.store(0, Ordering::Relaxed);
@@ -354,8 +353,6 @@ mod tests {
             "write inside the bracket is suppressed"
         );
 
-        // Close the bracket with a short tail, let it lapse, then an external write
-        // reloads.
         suppress_end(Duration::from_millis(40));
         thread::sleep(Duration::from_millis(100));
         tx.send(synthetic(

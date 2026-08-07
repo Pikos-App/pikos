@@ -46,7 +46,6 @@ pub(crate) fn parse_resource(
         .filter(|c| c.component_type == ICalendarComponentType::VEvent)
         .collect();
 
-    // The master is the VEVENT without a RECURRENCE-ID; the rest are overrides.
     // A resource with only overrides (no master) is malformed for CalDAV — fall
     // back to the first VEVENT so we still surface something rather than drop it.
     let master = events
@@ -56,10 +55,9 @@ pub(crate) fn parse_resource(
         .or_else(|| events.first().copied())
         .ok_or_else(|| CaldavError::Protocol("resource has no VEVENT".into()))?;
 
-    // A UID names one recurrence set, so a well-formed resource has exactly one
-    // master (VEVENT without RECURRENCE-ID). Two+ is malformed; one resource is one
-    // page identity, so the extras can't become their own pages — keep the first
-    // (document order, chosen above) and log the drop rather than lose it silently.
+    // A UID names one recurrence set, so two+ masters is malformed. One resource
+    // is one page identity, so extras can't become their own pages — keep the
+    // first (document order) and log the drop rather than lose it silently.
     if events
         .iter()
         .filter(|c| c.property(&ICalendarProperty::RecurrenceId).is_none())
@@ -158,12 +156,12 @@ fn source_zone(master: &ICalendarComponent, resolver: &TzResolver<&str>) -> Opti
     let dtstart = master.property(&ICalendarProperty::Dtstart)?;
     let pdt = dtstart.values.first()?.as_partial_date_time()?;
     if !pdt.has_time() {
-        return None; // all-day
+        return None;
     }
     let iana = if let Some(tzid) = dtstart.tz_id() {
         match resolver.resolve(tzid).and_then(|t| t.name()) {
             Some(name) => name.into_owned(),
-            // Behaviour unchanged (degrade to floating) — logged so it isn't traceless.
+            // Degrades to floating rather than failing; logged so it isn't traceless.
             None => {
                 log::warn!(
                     "caldav ics: DTSTART TZID did not resolve to an IANA zone; treating event as floating"
@@ -172,9 +170,9 @@ fn source_zone(master: &ICalendarComponent, resolver: &TzResolver<&str>) -> Opti
             }
         }
     } else if pdt.has_zone() {
-        "UTC".to_string() // DTSTART…Z
+        "UTC".to_string()
     } else {
-        return None; // floating
+        return None;
     };
     let chrono = iana.parse().ok()?;
     Some(SourceZone { iana, chrono })
@@ -207,10 +205,8 @@ fn schedule_of(
                 .map(|p| (e, p))
         })
         .map(|(e, p)| instant_wall_clock(p, e.tz_id(), resolver, source))
-        // No DTEND → derive the end from a DURATION (start + nominal length), so an
-        // event written `DTSTART`+`DURATION` keeps its span instead of collapsing to
-        // a point. All-day DURATION (`P1D`) yields the same raw-exclusive date a
-        // DTEND would.
+        // No DTEND: derive the end from DURATION so `DTSTART`+`DURATION` events
+        // keep their span instead of collapsing to a point.
         .or_else(|| duration_end(comp, dtstart.1, all_day));
 
     Ok(EventSchedule {
@@ -232,8 +228,8 @@ fn build_recurrence(
     resolver: &TzResolver<&str>,
     source: Option<&SourceZone>,
 ) -> Result<Recurrence, CaldavError> {
-    // Raw RRULE value, kept verbatim (UNTIL=…Z included) so no field is dropped;
-    // the reconciler rewrites only the UNTIL token to wall-clock.
+    // Kept verbatim, `UNTIL=…Z` included: the reconciler owns that rewrite, and
+    // doing it here too would be a second owner.
     let rrule = match master
         .property(&ICalendarProperty::Rrule)
         .and_then(|e| e.values.first())
@@ -272,6 +268,7 @@ fn build_recurrence(
         let original_date = instant_wall_clock(recid.1, recid.0.tz_id(), resolver, source);
 
         // A cancelled instance is a hole in the series, not a moved one → EXDATE.
+        // Read as a moved instance instead and the whole series page is destroyed.
         if ov.status() == Some(&ICalendarStatus::Cancelled) {
             exdates.push(original_date);
             continue;
@@ -297,10 +294,10 @@ fn build_recurrence(
 
 // ─── instant normalization ──────────────────────────────────────────────────────
 
-/// One datetime → source-zone wall-clock (`YYYY-MM-DDTHH:MM:SS`), or a bare date
-/// (`YYYY-MM-DD`) for an all-day value. A value already in the source zone's basis
-/// is taken literally; one in UTC (`Z`), a fixed offset, or a foreign `TZID` is
-/// converted into the source zone so the pure-wall-clock expansion matches it.
+/// One datetime → source-zone wall-clock (`YYYY-MM-DDTHH:MM:SS`), or a bare
+/// `YYYY-MM-DD` for all-day. A same-zone value is taken literally; UTC (`Z`), a
+/// fixed offset, or a foreign `TZID` is converted into the source zone so
+/// wall-clock expansion matches it.
 fn instant_wall_clock(
     pdt: &PartialDateTime,
     tzid: Option<&str>,
@@ -311,9 +308,9 @@ fn instant_wall_clock(
         return fmt_date(pdt);
     }
     if let Some(src) = source {
-        // Convert only when the value's basis differs from the source zone; a
-        // same-zone TZID is already source wall-clock (and skipping the round-trip
-        // dodges DST-fold ambiguity).
+        // Convert only when the value's basis differs from the source zone — a
+        // same-zone TZID is already wall-clock, and skipping the round-trip avoids
+        // DST-fold ambiguity.
         let foreign_tz = tzid.is_some_and(|id| {
             resolver.resolve(id).and_then(|t| t.name()).as_deref() != Some(&src.iana)
         });
@@ -362,9 +359,9 @@ fn convert_to_zone(
     )
 }
 
-/// `start + DURATION` → an end wall-clock string, or `None` when the event has no
-/// DURATION. A date-only start formats a date end (raw-exclusive, like DTEND); a
-/// timed start formats a date-time end.
+/// `start + DURATION` → an end wall-clock string, `None` if there's no DURATION.
+/// A date-only start yields a raw-exclusive date end (like DTEND); a timed start
+/// yields a date-time end.
 fn duration_end(
     comp: &ICalendarComponent,
     start: &PartialDateTime,
@@ -385,9 +382,8 @@ fn duration_end(
     })
 }
 
-/// `PartialDateTime` → a `NaiveDateTime`, defaulting an absent time to midnight
-/// (so an all-day date still anchors duration arithmetic). `None` if the date is
-/// incomplete.
+/// `PartialDateTime` → a `NaiveDateTime`; an absent time defaults to midnight so
+/// an all-day date still anchors duration arithmetic. `None` if the date is incomplete.
 fn naive_dt(pdt: &PartialDateTime) -> Option<NaiveDateTime> {
     NaiveDate::from_ymd_opt(pdt.year? as i32, pdt.month? as u32, pdt.day? as u32)?.and_hms_opt(
         pdt.hour.unwrap_or(0) as u32,

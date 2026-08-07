@@ -86,8 +86,8 @@ async fn assert_invariant(
     }
 
     for step in 0..completions {
-        // Independent check: the stored head — advanced imperatively by prior
-        // completions — equals oldest_open derived from scratch.
+        // The head was advanced imperatively by prior completions; check it
+        // against oldest_open recomputed from scratch.
         let Some(head_occ) = crate::oldest_open_for_page(&pool, "head").await.unwrap() else {
             assert_eq!(
                 head_status(&pool).await,
@@ -102,8 +102,8 @@ async fn assert_invariant(
             "invariant before step {step}: rrule={rrule}, exdates={exdates:?}"
         );
 
-        // Track the completed date for the error context; the backend records it in
-        // completed_set and recomputes the head — no client-supplied next date.
+        // Track the completed date for the error context; the backend records it
+        // in completed_set and recomputes the head.
         exdates.push(head_occ.original_date.clone());
         complete_recurring_page_impl(
             &pool,

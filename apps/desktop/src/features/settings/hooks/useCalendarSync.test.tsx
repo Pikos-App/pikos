@@ -121,7 +121,7 @@ describe("useCalendarSync", () => {
       await hook.result.current.resync(account.id);
     });
 
-    // Keyed by row id, not the provider calendarId (which can collide across accounts).
+    // See `ResultMap` in useCalendarSync.ts for why it's keyed by row id.
     expect(hook.result.current.results[cal.id]).toBe("synced");
     expect(hook.result.current.busyAccountId).toBeNull();
   });

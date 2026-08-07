@@ -42,7 +42,6 @@ pub(crate) async fn sync_calendar<T: DavTransport>(
         .await?;
     match resp.status {
         207 => {}
-        // Stale token (DAV:valid-sync-token): discard it and re-enumerate the window.
         403 => return backfill(transport, calendar_url).await,
         401 => return Err(CaldavError::Unauthorized),
         other => return Err(CaldavError::UnexpectedStatus(other)),
@@ -60,14 +59,11 @@ pub(crate) async fn sync_calendar<T: DavTransport>(
     })
 }
 
-/// Capture the collection's current sync-token via an empty-token
-/// `sync-collection` REPORT (RFC 6578 initial sync). We read **only** the
-/// trailing token — the response also carries the whole collection, but the
-/// preceding `calendar-query` backfill already reconciled those, so we discard
-/// the entries. This bootstraps the incremental cursor the time-bounded backfill
-/// can't supply. A server without `sync-collection` answers `403`/`405`/`501` →
-/// `None` (no cursor to capture; the engine keeps re-enumerating until the
-/// ctag-diff fallback lands).
+/// Captures the collection's current sync-token via an empty-token
+/// `sync-collection` REPORT (RFC 6578 initial sync) — bootstraps the cursor a
+/// time-bounded backfill can't supply. Reads only the trailing token; the
+/// response's entries are discarded since the backfill already reconciled them.
+/// No `sync-collection` support → `403`/`405`/`501` → `None`.
 pub(crate) async fn current_sync_token<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
@@ -83,10 +79,10 @@ pub(crate) async fn current_sync_token<T: DavTransport>(
     }
 }
 
-/// The collection's `getctag` (calendarserver change-tag) via a Depth-0 PROPFIND.
-/// Lets a token-less poll skip re-enumerating when the collection is unchanged. A
-/// server without the property or PROPFIND support answers `403`/`404`/`405`/`501`
-/// → `None`, so the engine keeps enumerating rather than trusting an absent tag.
+/// The collection's `getctag` via a Depth-0 PROPFIND — lets a token-less poll
+/// skip re-enumerating when unchanged. No property/PROPFIND support →
+/// `403`/`404`/`405`/`501` → `None`, so the engine keeps enumerating rather than
+/// trusting an absent tag.
 pub(crate) async fn current_ctag<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
@@ -100,9 +96,9 @@ pub(crate) async fn current_ctag<T: DavTransport>(
     }
 }
 
-/// Refetch one resource (CalDAV's `fetch_event`: a trivial single-href
-/// `calendar-multiget`). CalDAV never orphans a master, so this is only the
-/// generic single-resource refetch, never a series reconstruction.
+/// Refetches one resource: CalDAV's `fetch_event`, a single-href
+/// `calendar-multiget`. CalDAV never orphans a master, so this is a plain
+/// refetch, never a series reconstruction.
 pub(crate) async fn fetch_one<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
@@ -121,8 +117,7 @@ pub(crate) async fn fetch_one<T: DavTransport>(
 }
 
 /// Full re-enumerate of the visible window via `calendar-query` with inline
-/// `calendar-data`. No removals (the result is the authoritative set) and no
-/// token.
+/// `calendar-data`. No removals (the result is authoritative) and no token.
 async fn backfill<T: DavTransport>(
     transport: &T,
     calendar_url: &str,
@@ -168,12 +163,11 @@ fn split_present(entries: Vec<ReportEntry>) -> (Vec<ReportEntry>, Vec<Removal>) 
     (present, removals)
 }
 
-/// Body-and-parse the present resources into upserts: use inline `calendar-data`
-/// when the report already carried it (backfill), else `calendar-multiget` the
-/// rest (sync-collection only returns etags). A resource that fails to parse is
-/// skipped, not fatal — one malformed body must not sink the whole delta. Returns
-/// `(upserts, unresolved)` — `unresolved` is the hrefs present but yielding no
-/// upsert (see `SyncDelta::unresolved_present`).
+/// Parses present resources into upserts: inline `calendar-data` when the report
+/// already carried it (backfill), else `calendar-multiget` for the rest
+/// (sync-collection only returns etags). A resource that fails to parse is
+/// skipped, not fatal. Returns `(upserts, unresolved)` — hrefs present but
+/// yielding no upsert (see `SyncDelta::unresolved_present`).
 async fn resolve_upserts<T: DavTransport>(
     transport: &T,
     calendar_url: &str,

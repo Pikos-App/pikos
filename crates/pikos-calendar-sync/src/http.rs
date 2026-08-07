@@ -12,17 +12,16 @@ fn builder() -> reqwest::ClientBuilder {
         .timeout(Duration::from_secs(60))
 }
 
-/// The shared sync HTTP client; providers clone it.
 pub fn client() -> reqwest::Client {
     builder()
         .build()
         .expect("reqwest rustls client should always build")
 }
 
-/// Like [`client`] but never auto-follows redirects. CalDAV discovery follows
-/// the `.well-known` redirect by hand so it can re-apply the original scheme/host
-/// when a server's `Location` downgrades https→http (reqwest also turns a 301/302
-/// on a PROPFIND into a bodyless GET, which would silently break discovery).
+/// Like [`client`] but never auto-follows redirects. CalDAV discovery follows the
+/// `.well-known` redirect by hand, so it can re-apply the original scheme/host when
+/// a server's `Location` downgrades https→http — reqwest also turns a 301/302 on a
+/// PROPFIND into a bodyless GET, which would silently break discovery.
 pub fn client_no_redirect() -> reqwest::Client {
     builder()
         .redirect(reqwest::redirect::Policy::none())

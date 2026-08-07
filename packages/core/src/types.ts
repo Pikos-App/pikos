@@ -55,12 +55,11 @@ export interface Page {
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   scheduleLocked: boolean; // derived: active page_sync row owns the schedule → render read-only
-  // Derived: this page carries a recurrence rule. Lets a one-off be told from a
-  // series without loading the rule set; the Today predicate needs it to spare a
+  // Derived from the rule's existence. The Today predicate needs it to spare a
   // past synced one-off from overdue while leaving recurring heads alone.
   isRecurring: boolean;
-  // Derived sync provenance (null for native pages):
-  syncState?: "active" | "detached" | "tombstoned" | null; // page_sync.sync_state; 'detached' → broken-sync treatment
+  // Derived from page_sync.sync_state (null for native pages); 'detached' → broken-sync treatment.
+  syncState?: "active" | "detached" | "tombstoned" | null;
   // Source/authoring IANA zone (from the schedule/rule). Consumed at render only
   // for synced (locked) pages — they show absolute in the viewer's zone; native floats.
   timezone?: string | null;

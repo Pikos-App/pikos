@@ -154,8 +154,7 @@ async fn timed_event_maps_identity_schedule_and_mirror_fields() {
 async fn all_day_end_is_carried_raw_exclusive() {
     let delta = run(Mode::Full, None).await;
 
-    // Single all-day: provider carries DTEND raw (the next day); the reconciler
-    // owns the decrement — the provider must NOT pre-subtract.
+    // Single all-day: DTEND carried raw, not pre-subtracted (see ExclusiveEnd).
     let h = by_uid(&delta, "holiday-1@pikos.test");
     assert_eq!(h.schedule.start, "2026-06-15");
     assert_eq!(
@@ -227,7 +226,6 @@ async fn recurring_series_folds_master_overrides_and_cancellation() {
 async fn incremental_delta_applies_change_removal_and_advances_token() {
     let delta = run(Mode::Delta, Some("http://radicale.org/ns/sync/OLD")).await;
 
-    // The lone changed href is bodied via multiget and upserted.
     let evs = events(&delta);
     assert_eq!(evs.len(), 1, "only the changed resource");
     let m = evs[0];
@@ -238,14 +236,12 @@ async fn incremental_delta_applies_change_removal_and_advances_token() {
         "rescheduled time picked up"
     );
 
-    // The 404'd href is a whole-event removal.
     assert_eq!(delta.removals.len(), 1);
     assert_eq!(
         delta.removals[0].external_id,
         "/testuser/work-calendar/trip.ics"
     );
 
-    // The trailing sync-token becomes the next cursor.
     let token = delta.next_token.as_ref().expect("delta advances the token");
     assert!(
         token.0.contains("30f466c6"),
@@ -256,7 +252,6 @@ async fn incremental_delta_applies_change_removal_and_advances_token() {
 
 #[tokio::test]
 async fn full_via_sync_collection_multigets_all_changed_hrefs() {
-    // sync-collection that lists the whole corpus (etags only) → multiget bodies.
     let delta = run(Mode::Full, Some("http://radicale.org/ns/sync/SOME")).await;
     assert_eq!(events(&delta).len(), 4);
     assert!(delta.removals.is_empty());
@@ -272,7 +267,6 @@ async fn full_via_sync_collection_multigets_all_changed_hrefs() {
 
 #[tokio::test]
 async fn stale_token_falls_back_to_full_reenumerate() {
-    // A 403 valid-sync-token must trigger a bounded re-enumerate, not error out.
     let delta = run(Mode::Stale, Some("http://radicale.org/ns/sync/STALE")).await;
     assert_eq!(events(&delta).len(), 4, "recovered the full window");
     assert!(delta.removals.is_empty());
@@ -351,7 +345,7 @@ async fn resolve_upserts_skips_a_malformed_body_keeps_the_good_one() {
         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:good\r\n\
 DTSTART;TZID=America/New_York:20260615T090000\r\nSUMMARY:Good\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
     );
-    // VTODO-only — parse_resource errs on it, the same skip the doc promises.
+    // VTODO-only: parse_resource errs, so this body is skipped.
     let bad = bodied(
         "/bad.ics",
         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:bad\r\nEND:VTODO\r\nEND:VCALENDAR\r\n",
@@ -372,10 +366,8 @@ DTSTART;TZID=America/New_York:20260615T090000\r\nSUMMARY:Good\r\nEND:VEVENT\r\nE
     );
 }
 
-/// A partial 207: the multiget responds for the href but omits `calendar-data`
-/// (server hiccup / permissions). The entry can't be parsed, so it's tracked in
-/// `unresolved` — not silently dropped, which on a backfill would sweep it as a
-/// deletion.
+/// A partial 207: the multiget omits `calendar-data` (server hiccup / permissions).
+/// Tracked in `unresolved`, not dropped — a backfill would otherwise sweep it as a deletion.
 #[tokio::test]
 async fn resolve_upserts_tracks_a_bodyless_multiget_entry() {
     let present = vec![super::super::report_xml::ReportEntry {
@@ -445,10 +437,9 @@ impl DavTransport for StatusOnly {
 
 #[tokio::test]
 async fn backfill_maps_non_207_status() {
-    // A backfill (no cursor) enters via sync_calendar(None). 401/403 → Unauthorized
-    // (reconnect); any other non-207 → UnexpectedStatus, so the poll fails loudly
-    // rather than treating an error body as an empty authoritative set (which would
-    // sweep every stored page).
+    // A backfill (no cursor): 401/403 → Unauthorized (reconnect); any other non-207
+    // → UnexpectedStatus, so the poll fails loudly instead of reading an error body
+    // as an empty authoritative set (which would sweep every stored page).
     let err = sync_calendar(&StatusOnly(500), CAL, None)
         .await
         .unwrap_err();
@@ -475,7 +466,6 @@ async fn current_sync_token_is_none_when_server_lacks_sync_collection() {
 
 #[tokio::test]
 async fn current_sync_token_captures_the_cursor_on_207() {
-    // A 207 sync-collection (the INITIAL fixture) carries the next token.
     let t = FixtureTransport { mode: Mode::Full };
     let tok = current_sync_token(&t, CAL).await.unwrap();
     assert!(

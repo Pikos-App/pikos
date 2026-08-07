@@ -828,7 +828,7 @@ async fn floating_and_date_only_until_pass_through() {
 
 /// Every recurrence instant lands as bare source-zone wall-clock — no trailing
 /// `Z`, no offset — so the pure-wall-clock expansion matches each field by string.
-/// T2 pins `TZ=UTC`, so this asserts per field rather than leaning on the runner.
+/// Tests pin `TZ=UTC`, so this asserts per field rather than leaning on the runner.
 #[tokio::test]
 async fn every_recurrence_instant_is_wall_clock() {
     let pool = setup().await;
@@ -2572,7 +2572,7 @@ async fn resync_with_unchanged_etag_reactivates_detached_page() {
     );
 }
 
-/// R2: a synced page detached (calendar disabled), then trashed, then the calendar
+/// A synced page detached (calendar disabled), then trashed, then the calendar
 /// re-enabled and the still-live event re-enumerated. The trashed copy must stay
 /// severed in the trash — reactivating it would rewrite an invisible (`deleted_at`)
 /// row and re-lock it on restore. Instead the live event mirrors in as a fresh,
@@ -2652,7 +2652,7 @@ async fn re_enable_after_trashing_a_detached_page_mirrors_fresh_and_leaves_trash
     assert_eq!(page_count(&pool).await, 2, "trashed copy + fresh mirror");
 }
 
-/// R15: same as above, but the re-enumerated event returns under a *changed href*
+/// Same as above, but the re-enumerated event returns under a *changed href*
 /// (same UID) — the exact case re-link exists for. The external_id guard at the
 /// match site can't fire (href differs), so without excluding trashed pages from
 /// `find_relink` the UID match would reactivate the invisible trashed row and
@@ -3698,7 +3698,7 @@ async fn nonempty_body_with_no_seed_hash_parks_the_incoming_description() {
     );
 }
 
-/// C30: a provider returns the recurring master's original `DTSTART` whenever the
+/// A provider returns the recurring master's original `DTSTART` whenever the
 /// series still yields instances in the backfill window, so a series running since
 /// 2020 arrives with a 2020 base. Without a floor the head parks there — one
 /// permanently-overdue page per synced series, and completing it completes the

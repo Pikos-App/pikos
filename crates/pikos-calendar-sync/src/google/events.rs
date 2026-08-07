@@ -1,17 +1,17 @@
 //! A flat page of Calendar API events → normalized [`UpsertItem`]s and removals.
 //!
-//! Google splits a recurring series across resources: the master carries the
+//! Google splits a recurring series across resources: the master carries
 //! `RRULE`, while every moved or cancelled instance is its own event carrying
-//! `recurringEventId` + `originalStartTime`. This module regroups them — children
-//! whose master is in the same page fold into that master's bundle, children whose
-//! master is absent become standalone occurrence deltas for the engine to resolve.
+//! `recurringEventId` + `originalStartTime`. This module regroups them — a child
+//! whose master is in the same page folds into that master's bundle, a child
+//! whose master is absent becomes a standalone occurrence delta for the engine
+//! to resolve.
 //!
-//! **The cancelled split is the destructive one.** `status: "cancelled"` *with* a
-//! `recurringEventId` cancels one instance (→ EXDATE); *without* one, the whole
-//! event is gone (→ removal). Backwards, and a single skipped instance deletes or
-//! detaches the entire series page.
+//! `status: "cancelled"` *with* a `recurringEventId` cancels one instance
+//! (→ EXDATE); *without* one, the whole event is gone (→ removal). Getting this
+//! backwards deletes or detaches the entire series.
 //!
-//! Every recurrence instant is normalized to the **source-zone wall-clock** the
+//! Every recurrence instant is normalized to the source-zone wall-clock the
 //! client expansion matches against — `originalStartTime`, each `EXDATE` value,
 //! and the base start alike. The `RRULE` itself is carried raw (incl. a
 //! `UNTIL=…Z`) for the reconciler to rewrite.
@@ -35,15 +35,15 @@ const WALL_FMT: &str = "%Y-%m-%dT%H:%M:%S";
 pub(crate) struct Grouped {
     pub upserts: Vec<UpsertItem>,
     pub removals: Vec<Removal>,
-    /// Ids present upstream that couldn't be turned into an upsert. The
-    /// full-enumerate sweep spares these rather than treating them as deleted.
+    /// Ids present upstream that couldn't upsert — the full-enumerate sweep
+    /// spares these instead of treating them as deleted.
     pub unresolved_present: Vec<String>,
 }
 
 /// Regroup a page of events. `calendar_tz` is the collection's default zone, used
-/// for any timed event Google didn't stamp with one of its own. `fidelity` says
-/// whether this page carries a series' complete occurrence set — true only for a
-/// full enumerate, where every child event arrives alongside its master.
+/// for a timed event Google didn't stamp with one of its own. `fidelity` is
+/// `Complete` only for a full enumerate, where every child arrives with its
+/// master.
 pub(crate) fn group(
     events: Vec<Event>,
     calendar_tz: Option<&str>,
@@ -55,8 +55,8 @@ pub(crate) fn group(
         .into_iter()
         .partition(|e| e.recurring_event_id.is_none());
 
-    // A cancelled master takes its whole series with it, so its children are
-    // noise — drop them rather than emitting deltas against a dying page.
+    // A cancelled master takes its series with it — drop its children rather
+    // than emit deltas against a dying page.
     let cancelled_masters: Vec<String> = masters
         .iter()
         .filter(|m| is_cancelled(m))
@@ -125,8 +125,8 @@ fn build_bundle(
     let core = core_of(&master);
 
     let Some(rrule) = rrule_line(&master.recurrence) else {
-        // No RRULE: either a plain event, or a master carrying only RDATEs — which
-        // Pikos has no rule shape for. Either way it stores as a single event.
+        // No RRULE: a plain event, or an RDATE-only master Pikos has no rule
+        // shape for. Either way it stores as a single event.
         if !master.recurrence.is_empty() {
             log::warn!(
                 "google events: event {} has recurrence lines but no RRULE; storing as a single event",
@@ -196,9 +196,9 @@ fn lone_occurrence(child: &Event, calendar_tz: Option<&str>) -> Result<UpsertIte
         .recurring_event_id
         .clone()
         .ok_or_else(|| GoogleError::Protocol("instance without recurringEventId".into()))?;
-    // The master's own zone isn't available here, so `originalStartTime`'s zone
-    // stands in for it — Google stamps instances with the series' zone, which is
-    // the basis the stored rule's dates are already on.
+    // The master's zone isn't available here, so `originalStartTime`'s zone
+    // stands in — Google stamps instances with the series' zone, the same basis
+    // the stored rule's dates already use.
     let zone = original_zone(child, calendar_tz);
     let original_date = original_date_of(child, zone.as_ref())
         .ok_or_else(|| GoogleError::Protocol("instance without originalStartTime".into()))?;
@@ -263,8 +263,8 @@ fn resolve_zone(named: Option<&str>) -> Option<SourceZone> {
             iana: iana.to_string(),
             tz,
         }),
-        // Behaviour degrades to floating, as an unzoned event would — logged so a
-        // zone Google invented (or one chrono-tz doesn't carry) isn't traceless.
+        // Degrades to floating, like an unzoned event — logged so an unrecognised
+        // zone isn't traceless.
         Err(_) => {
             log::warn!("google events: unknown IANA zone {iana}; treating event as floating");
             None
@@ -300,7 +300,7 @@ fn original_date_of(e: &Event, zone: Option<&SourceZone>) -> Option<String> {
 
 /// One Google date-or-datetime → source-zone wall-clock (or a bare `YYYY-MM-DD`
 /// for all-day). A `dateTime` is an absolute instant; rendering it in the source
-/// zone is what puts it on the same basis as the rule's other instants.
+/// zone puts it on the same basis as the rule's other instants.
 fn wall_clock(field: &EventDateTime, zone: Option<&SourceZone>) -> Option<String> {
     if let Some(date) = &field.date {
         return Some(date.clone());
@@ -327,8 +327,8 @@ fn rrule_line(lines: &[String]) -> Option<String> {
 
 /// Every `EXDATE` line's values, normalized to source-zone wall-clock. One line can
 /// carry several comma-separated dates, and each line names its own zone — a UTC
-/// or foreign-`TZID` value left as-is would never string-match the expansion, so
-/// the cancellation would silently no-op and the occurrence would reappear.
+/// or foreign-`TZID` value left as-is wouldn't string-match the expansion, letting
+/// the occurrence silently reappear.
 fn exdate_values(lines: &[String], zone: Option<&SourceZone>) -> Vec<String> {
     let mut out = Vec::new();
     for line in lines {

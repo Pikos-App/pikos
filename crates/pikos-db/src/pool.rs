@@ -43,8 +43,7 @@ pub fn now_local_iso() -> String {
 }
 
 /// Today's local date, `YYYY-MM-DD` — the day key occurrence dates are compared
-/// against. Local for the same reason as [`now_local_iso`]: a UTC "today" is the
-/// wrong day for much of every day off-UTC.
+/// against. Local for the same reason as [`now_local_iso`].
 pub fn today_local() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
@@ -408,9 +407,8 @@ pub const TEST_CONNECTED_LONG_AGO: &str = "2000-01-01T00:00:00.000Z";
 
 /// Links an existing test page to a synced calendar (a `page_sync` row), creating
 /// a shared throwaway `sync_account` on first use. `sync_state` ∈ active |
-/// detached | tombstoned. Lets schedule/folder/page guard tests mark a page synced.
-/// Only pikos-db's own tests use it (not external `test-support` consumers), so it
-/// stays `cfg(test)` — under `test-support` it would compile unused.
+/// detached | tombstoned. Stays `cfg(test)` rather than `test-support` — only
+/// pikos-db's own tests use it, and under `test-support` it would compile unused.
 #[cfg(test)]
 pub async fn insert_test_page_sync(
     pool: &SqlitePool,

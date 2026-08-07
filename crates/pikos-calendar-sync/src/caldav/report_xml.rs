@@ -108,7 +108,6 @@ impl Parse {
 
     fn text(&mut self, raw: &str) {
         match self.capture {
-            // The ICS body must survive verbatim — no trim, accumulate as-is.
             Capture::CalendarData => self
                 .pstat_data
                 .get_or_insert_with(String::new)
@@ -197,8 +196,7 @@ pub(crate) fn parse_report(xml: &str) -> Result<ReportResult, CaldavError> {
                 let local = e.local_name().as_ref().to_vec();
                 p.open(&ns, &local);
             }
-            // calendar-data is occasionally emitted as a self-closing empty when
-            // absent — no text, nothing to capture, just don't leave capture armed.
+            // calendar-data may arrive as a self-closing empty when absent — no text to capture.
             Event::Empty(_) => {}
             Event::Text(t) => {
                 let text = t
@@ -237,9 +235,8 @@ fn is_ok(code: u16) -> bool {
 mod tests {
     use super::*;
 
-    // A multiget/sync `<response>` can split its props across propstat blocks at
-    // different statuses (RFC 4918 §9.1). The recorded fixtures never exercise this
-    // on the sync path, so pin it here: props are kept ONLY from a 2xx block.
+    // A <response> can split props across propstat blocks at different statuses
+    // (RFC 4918 §9.1); no fixture exercises this, so pin it here.
     #[test]
     fn mixed_propstat_keeps_only_the_2xx_block() {
         let xml = r#"<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
@@ -289,9 +286,8 @@ END:VCALENDAR</C:calendar-data>
         );
     }
 
-    /// Some servers wrap the ICS body in a CDATA section. The `Event::CData` arm
-    /// must capture it identically to plain text, or the resource parses to an
-    /// empty body and its event silently drops.
+    /// Some servers wrap the ICS body in CDATA. `Event::CData` must capture it like
+    /// plain text, or the resource parses to an empty body and silently drops.
     #[test]
     fn calendar_data_in_a_cdata_section_is_captured() {
         let xml = r#"<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">

@@ -582,12 +582,9 @@ async fn skip_advances_head_and_undo_restores_it() {
 
 #[tokio::test]
 async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
-    // Ownership handoff: while the rule exists the derivation owns the head and
-    // advances it as occurrences complete; the surviving non-rule anchor row is
-    // frozen at the creation date. On delete, the head is carried onto that anchor
-    // in the SAME tx BEFORE refresh_schedule_denorm re-derives from it — else
-    // removing recurrence from a long-running series rewinds the task months back
-    // to the stale anchor.
+    // Regression for the head-carry-forward in delete_recurrence_rule_impl: the
+    // surviving non-rule anchor row is frozen at the creation date, so deleting the
+    // rule must not rewind an advanced head back onto it.
     use crate::schedules::{
         create_page_schedule_impl, delete_recurrence_rule_impl, NewPageSchedule,
     };
@@ -2260,10 +2257,10 @@ async fn deleting_a_native_page_still_hard_deletes() {
 
 #[tokio::test]
 async fn restore_only_reactivates_a_tombstone_not_a_detached_link() {
-    // Restore flips only the tombstone its own delete set; a detached link (sync
-    // deliberately severed) must stay detached. Set deleted_at directly to isolate
-    // the restore query's `sync_state = 'tombstoned'` filter — the normal soft
-    // delete would tombstone first, masking the guard.
+    // Restore only reactivates a link that delete tombstoned — a detached link
+    // (sync deliberately severed) stays detached. Set deleted_at directly to
+    // isolate the restore query's filter; a normal soft-delete would tombstone
+    // first, masking the guard.
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p", "Detached synced"))
         .await
@@ -2383,25 +2380,24 @@ async fn synced_recurring_series(pool: &sqlx::SqlitePool) {
     synced_recurring_series_with(pool, "FREQ=WEEKLY", "2026-06-01T09:00:00", "Europe/London").await;
 }
 
-/// The occurrence `weeks` from today at 09:00, in the stored wall-clock form, and
-/// its day key.
+/// The occurrence `weeks` from today at 09:00, in the stored wall-clock form.
 fn occ_start(weeks: i64) -> String {
     (chrono::Local::now() + chrono::Duration::weeks(weeks))
         .format("%Y-%m-%dT09:00:00")
         .to_string()
 }
 
+/// [`occ_start`]'s day key.
 fn occ_date(weeks: i64) -> String {
     (chrono::Local::now() + chrono::Duration::weeks(weeks))
         .format("%Y-%m-%d")
         .to_string()
 }
 
-/// [`synced_recurring_series`] anchored on today. An active mirror's head floors
-/// at today, so only a series reaching into the present can exercise *where the
-/// head lands*; the fixed-June fixture stays for the cases that assert occurrence
-/// validation against particular weekdays and month boundaries, which need dates
-/// that don't move.
+/// [`synced_recurring_series`] anchored on today, needed to exercise *where the
+/// head lands* (an active mirror's head floors at today). The fixed-June fixture
+/// stays for cases asserting occurrence validation against particular weekdays and
+/// month boundaries, which need dates that don't move.
 async fn synced_series_from_today(pool: &sqlx::SqlitePool) {
     synced_recurring_series_with(pool, "FREQ=WEEKLY", &occ_start(0), "Europe/London").await;
 }
@@ -2485,7 +2481,7 @@ async fn synced_completion_inserts_clone_and_records_map() {
     let pool = test_pool().await;
     synced_series_from_today(&pool).await;
 
-    // Completing a FUTURE occurrence leaves the oldest-open head put.
+    // Completing a FUTURE occurrence leaves the oldest-open head in place.
     let result = complete_recurring_page_impl(&pool, synced_complete(&occ_date(1), &occ_start(1)))
         .await
         .unwrap();
@@ -2514,8 +2510,8 @@ async fn synced_completion_inserts_clone_and_records_map() {
 
 #[tokio::test]
 async fn synced_completion_of_the_oldest_open_advances_the_head() {
-    // U9a: a synced completion now advances the head (the reconciler recomputes off
-    // the same completed-set on the next sync, so the two converge).
+    // A synced completion advances the head; the reconciler recomputes off the
+    // same completed-set on the next sync, so the two converge.
     let pool = test_pool().await;
     synced_series_from_today(&pool).await;
 
@@ -2705,8 +2701,8 @@ async fn synced_uncomplete_deletes_clone_and_rewinds_the_head() {
 
 #[tokio::test]
 async fn synced_uncomplete_and_undo_skip_no_longer_reject_synced() {
-    // U9a folds the synced fork into the unified reverse commands: they now handle a
-    // synced series (no-op when the date isn't in the set) instead of rejecting it.
+    // The unified reverse commands now handle a synced series (no-op when the date
+    // isn't in the set) instead of rejecting it.
     let pool = test_pool().await;
     synced_recurring_series(&pool).await;
 
@@ -2732,9 +2728,9 @@ async fn synced_uncomplete_and_undo_skip_no_longer_reject_synced() {
 
 #[tokio::test]
 async fn synced_skip_is_allowed_and_recomputes() {
-    // Decision (2026-07-04): the skip-set is user state the reconciler never writes,
-    // so a synced skip is allowed and converges. Skipping the oldest-open advances
-    // the head like a completion does.
+    // The skip-set is user state the reconciler never writes, so a synced skip is
+    // allowed and converges. Skipping the oldest-open advances the head like a
+    // completion does.
     let pool = test_pool().await;
     synced_series_from_today(&pool).await;
 

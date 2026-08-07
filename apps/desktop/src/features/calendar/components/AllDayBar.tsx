@@ -82,8 +82,8 @@ export function AllDayBar({
     onDoubleClick: () => onDoubleClick(page.id),
   });
 
-  // Synced events have a locked schedule — suppress the drag + edge-resize
-  // affordances (the hooks already no-op; this stops the cursor advertising them).
+  // Suppress the drag + edge-resize affordances too — the hooks already no-op,
+  // this just stops the cursor from advertising a move/resize that can't happen.
   const locked = page.scheduleLocked;
 
   function handleMouseDown(e: React.MouseEvent) {

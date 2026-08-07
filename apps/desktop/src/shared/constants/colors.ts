@@ -1,8 +1,7 @@
 // Shared colour palette for folders AND external-calendar folders — both pick
 // from the same set so a synced calendar never clashes with the user's own
-// folder colours. Provider hex is deliberately NOT inherited (see the
-// external-calendar-sync feature): arbitrary provider colours fight our palette
-// and dark mode, so every synced calendar is recoloured into this set.
+// folder colours. Provider hex is deliberately not inherited — arbitrary
+// provider colours fight this palette and dark mode.
 
 export interface PaletteColor {
   label: string;

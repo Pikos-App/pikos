@@ -211,9 +211,8 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   // CalendarView for the visible date range.
   async function loadData(): Promise<void> {
     // Heal the recurring display cache before reading it: an out-of-process writer
-    // (CLI/mobile) or a prior bug can leave pages.scheduled_start stale, and the
-    // load below reads that cache. In steady state (every in-session write already
-    // recomputes) this is a no-op.
+    // (CLI/mobile) or a prior bug can leave pages.scheduled_start stale. In steady
+    // state (every in-session write already recomputes) this is a no-op.
     await adapter.recomputeRecurringSchedules();
     const [loadedPages, loadedFolders, loadedRules] = await Promise.all([
       adapter.listPages({ status: "not_started" }),
@@ -509,14 +508,13 @@ export function PagesProvider({ children }: { children: ReactNode }) {
       ? alignWeeklyRuleToAnchor(ruleSnapshot.rrule, start)
       : undefined;
 
-    // Snap an off-pattern drop onto the nearest day the rule actually yields,
-    // BEFORE any optimistic update or write. A head dragged onto a day the rule
-    // can't produce (M/W/F dropped on Tue, monthly-by-day onto the wrong date)
-    // would otherwise persist a date the recompute silently reverts on the next
-    // heal — in 0.3.x the dragged position was durable. No-op for single-BYDAY
-    // weekly (the realign above already makes the drop day valid) and for
-    // non-recurring pages. Set-excluded dates still resolve wrong here; the
-    // backend recompute is adopted below to converge those.
+    // Snap an off-pattern drop (M/W/F dropped on Tue, monthly-by-day onto the
+    // wrong date) onto the nearest day the rule yields, before any optimistic
+    // update — otherwise recompute silently reverts it on the next heal (in
+    // 0.3.x the dragged position wasn't durable). No-op for single-BYDAY weekly
+    // (the realign above already fixes the day) and for non-recurring pages.
+    // Set-excluded dates still resolve wrong here; the recompute adopted below
+    // converges those.
     const snappedStart = ruleSnapshot
       ? snapAnchorToRule(alignedRrule ?? ruleSnapshot.rrule, start)
       : start;

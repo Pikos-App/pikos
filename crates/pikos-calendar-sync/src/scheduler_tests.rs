@@ -1,8 +1,5 @@
 //! Layer-3 scheduler tests: the trigger loop driven by a scripted
-//! [`TriggerSource`] and a scripted provider against a temp SQLite DB. Covers
-//! the policy the scheduler owns — focus debounce, poke/interval bypass, the
-//! changed-flag aggregation the reload signal hangs off, per-account error
-//! isolation, and the no-pool skip.
+//! [`TriggerSource`] and a scripted provider against a temp SQLite DB.
 
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
@@ -38,9 +35,9 @@ fn triggers(list: &[SyncTrigger]) -> ScriptedTriggers {
 // ─── scripted provider ──────────────────────────────────────────────────────────
 
 /// Scripted responses shared across the per-account instances the provider
-/// factory hands out — each `sync` call pops the next queued response, so a
-/// multi-pass sequence is deterministic even though every pass constructs a
-/// fresh provider.
+/// factory hands out: each `sync` call pops the next queued response, so a
+/// multi-pass sequence stays deterministic even though every pass builds a fresh
+/// provider.
 #[derive(Clone, Default)]
 struct Shared {
     sync: Rc<RefCell<VecDeque<AppResult<SyncDelta>>>>,
@@ -325,7 +322,6 @@ async fn reconnect_needed_account_is_skipped_until_manual_resync() {
         "a clean resync cleared the flag"
     );
 
-    // The next background pass includes the account again.
     let provider = Shared::default().with_sync(Ok(delta(vec![])));
     super::run_pass(&pool, &|_: &SyncAccountRow| provider.clone()).await;
     assert_eq!(

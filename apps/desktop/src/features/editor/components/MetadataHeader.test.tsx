@@ -1,8 +1,6 @@
 // MetadataHeader — synced (locked) + detached provenance rendering.
-// Verifies: a locked page's title is read-only (no button affordance, click does
-// not enter edit mode); a detached page shows the disconnected notice; the
-// reminder bell shows on a locked timed page whether or not it recurs (synced
-// recurring occurrences now fire per-occurrence).
+// Verifies: a locked title is read-only; a detached page shows the disconnected
+// notice; the reminder bell shows on a locked page whether or not it recurs.
 
 import type { Page } from "@pikos/core";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";

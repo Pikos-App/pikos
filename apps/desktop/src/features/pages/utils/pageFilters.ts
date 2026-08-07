@@ -20,13 +20,12 @@ export function belongsToView(page: PageSummary, viewId: string, todayStr: strin
   if (viewId === "today") {
     if (page.scheduledStart == null) return false;
     const day = page.scheduledStart.slice(0, 10);
-    // A synced one-off that has already happened is not a lapsed task: the user
-    // can't reschedule it (the mirror is locked) or clear it, so leaving it here
-    // would accumulate a permanent, growing backlog from the day a calendar
-    // connects. It stays on the calendar and in its folder. A recurring series is
-    // different: its head floors at the connect day, so an overdue one is a real
-    // missed occurrence the gap dialog can resolve — it belongs here exactly as a
-    // native series does. Detached pages are user-owned and keep task semantics.
+    // Only a past *synced one-off* is excluded from Today — its mirror is locked,
+    // so the user can't reschedule or clear it, and it would otherwise pile up
+    // forever; it stays visible on its own calendar. Recurring heads and detached
+    // pages both keep normal task semantics: a recurring head's floor is the
+    // connect day (so an overdue one is a real missed occurrence), and detached
+    // pages are user-owned.
     if (day < todayStr && page.scheduleLocked && !page.isRecurring) return false;
     return day <= todayStr;
   }

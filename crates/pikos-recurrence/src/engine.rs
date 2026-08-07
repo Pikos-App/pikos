@@ -52,8 +52,7 @@ impl<'a> OccurrenceIter<'a> {
     }
 
     /// Fast-forwards near `target` so far-future queries don't scan every period
-    /// from the anchor. Only safe without COUNT (COUNT needs the running total),
-    /// so callers guard on that.
+    /// from the anchor. Unsafe with COUNT (needs the running total) — callers must guard.
     fn seek_near(&mut self, target: NaiveDate) {
         let approx = match self.rule.freq {
             Freq::Daily => days_between(self.dtstart, target) / self.rule.interval as i64,
@@ -378,18 +377,15 @@ pub fn missed_occurrences_between(
     Ok(out)
 }
 
-/// First occurrence from the anchor whose date is not in `exclusions`. `None`
-/// once a finite series is exhausted (its terminal state). Enumeration starts at
-/// the base and walks forward, so it may land in the past (an overdue head) — the
-/// exclusion set, not `now`, decides where the head sits. Excludes by date-only
-/// key (a rule yields at most one occurrence per date), so a timed exclusion
-/// string still matches.
+/// First occurrence from the anchor not in `exclusions` (day-keyed, see
+/// [`date_key`]); `None` once a finite series is exhausted. Enumeration walks
+/// forward from the base, so it may land in the past (an overdue head) — the
+/// exclusion set, not `now`, decides where the head sits.
 ///
-/// `floor` is a lower bound on the head's date, for a synced series whose master
-/// `DTSTART` predates the window the calendar was actually synced from: the
-/// provider hands back the series' original start (2020, say) whenever it still
-/// yields instances in the window, and nothing before the connection was ever the
-/// user's to complete. It only ever moves the head *forward*, so real completion
+/// `floor` bounds the head's date for a synced series whose `DTSTART` predates
+/// the connected window: the provider still returns the original start if it
+/// yields instances in the window, but nothing before the connection was ever
+/// the user's to complete. Moves the head only forward, so real completion
 /// history still advances past it. `None` for native series, which own their base.
 pub fn oldest_open_occurrence(
     rrule: &str,
@@ -427,11 +423,10 @@ pub fn oldest_open_occurrence(
 }
 
 /// Occurrences whose start wall-clock lands in the inclusive `[lo, hi]` range,
-/// skipping `exclusions`. Unlike [`expand_range`], this **seeks near `lo`** (no
-/// COUNT to preserve) so a pinned-base series whose anchor is far in the past
-/// doesn't scan every period from the anchor — the reminder window sits near
-/// `now`, arbitrarily far from a synced series' base. Runs to COUNT/UNTIL, so a
-/// far-future occurrence inside the window is never dropped by a cap.
+/// skipping `exclusions`. Unlike [`expand_range`], this seeks near `lo` (no COUNT
+/// to preserve) since the reminder window sits near `now`, arbitrarily far from a
+/// synced series' base. Runs to COUNT/UNTIL, so a far-future occurrence in range
+/// is never dropped by a cap.
 pub fn occurrences_in_window(
     rrule: &str,
     start: &str,

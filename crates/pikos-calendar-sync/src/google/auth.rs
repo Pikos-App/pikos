@@ -3,11 +3,11 @@
 //! Split in two so the caller can open the browser between the halves:
 //! [`begin_authorization`] binds the loopback port and builds the consent URL,
 //! [`PendingAuth::complete`] waits for the redirect and trades the code for
-//! tokens. Afterwards [`access_token`] keeps a live bearer token available and
-//! [`revoke`] hands the grant back to Google on disconnect.
+//! tokens. [`access_token`] then keeps a bearer token live, and [`revoke`]
+//! returns the grant to Google on disconnect.
 //!
-//! The public entry points resolve the build's OAuth client and HTTP client; the
-//! work happens in inner functions that take both, so tests drive the whole flow
+//! Public entry points resolve the build's OAuth and HTTP clients; the work
+//! happens in inner functions that take both, so tests drive the whole flow
 //! against scripted responses without build-time credentials — the same seam
 //! CalDAV's `DavTransport` provides.
 
@@ -59,9 +59,9 @@ async fn begin_with(client: GoogleOauthClient) -> Result<PendingAuth, GoogleErro
         .authorize_url(CsrfToken::new_random)
         .add_scopes(SCOPES.iter().map(|s| Scope::new((*s).to_string())))
         .set_pkce_challenge(challenge)
-        // Google issues a refresh token only for an offline grant, and only when
-        // consent is actually shown — a silently re-approved grant returns an
-        // access token that dies in an hour with no way to renew it.
+        // Google issues a refresh token only for an offline grant with consent
+        // actually shown — a silently re-approved grant returns an access token
+        // that dies in an hour with no way to renew it.
         .add_extra_param("access_type", "offline")
         .add_extra_param("prompt", "consent")
         .url();
@@ -188,8 +188,8 @@ where
 }
 
 /// Hand the grant back to Google so it disappears from the user's connected-apps
-/// list, not just from Pikos. Idempotent — a grant Google has already dropped is
-/// the desired end state, so a repeated disconnect succeeds.
+/// list, not just Pikos's. Idempotent — a grant Google already dropped is the
+/// desired end state, so a repeat disconnect succeeds.
 pub async fn revoke(keychain: &Keychain, account_id: &str) -> Result<(), GoogleError> {
     let client = config::oauth_client()?;
     revoke_with(keychain, account_id, &client, &crate::http::client()).await
@@ -234,9 +234,9 @@ where
     RE: std::error::Error + 'static,
 {
     match e {
-        // `invalid_grant` covers every dead-grant case — revoked in the user's
-        // Google account, expired through disuse, or a code already redeemed.
-        // None recover without fresh consent.
+        // `invalid_grant` covers every dead-grant case — revoked, expired
+        // through disuse, or a code already redeemed. None recover without
+        // fresh consent.
         RequestTokenError::ServerResponse(resp)
             if matches!(resp.error(), BasicErrorResponseType::InvalidGrant) =>
         {

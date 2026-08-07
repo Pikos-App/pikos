@@ -14,7 +14,6 @@ fn port_of(loopback: &Loopback) -> u16 {
     port.parse().expect("redirect URI must end in a port")
 }
 
-/// Issue one HTTP/1.1 GET at the loopback and read the whole response back.
 async fn get(port: u16, target: &str) -> String {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     stream
@@ -41,8 +40,6 @@ async fn the_redirect_hands_back_the_code_and_state() {
     assert_eq!(callback.state, "csrf-state");
 }
 
-// Browsers hit the redirect origin for /favicon.ico and friends. Treating the
-// first arrival as the redirect would abandon the flow before the real one lands.
 #[tokio::test]
 async fn an_unrelated_request_is_answered_and_the_wait_continues() {
     let loopback = Loopback::bind().await.unwrap();
@@ -85,8 +82,6 @@ async fn another_google_error_is_not_mistaken_for_cancellation() {
     ));
 }
 
-// A code with no state can't be checked against the CSRF token, so it must not be
-// exchanged even though it otherwise looks like the redirect.
 #[tokio::test]
 async fn a_code_without_state_is_refused() {
     let loopback = Loopback::bind().await.unwrap();
@@ -101,7 +96,6 @@ async fn a_code_without_state_is_refused() {
     ));
 }
 
-// An abandoned grant must release the port rather than hold it for the session.
 #[tokio::test]
 async fn an_abandoned_authorization_times_out_and_frees_the_port() {
     let loopback = Loopback::bind().await.unwrap();
@@ -110,7 +104,6 @@ async fn an_abandoned_authorization_times_out_and_frees_the_port() {
     let result = loopback.wait(Duration::from_millis(50)).await;
     assert!(matches!(result, Err(GoogleError::Cancelled)));
 
-    // The listener is gone with the future, so the port is bindable again.
     assert!(tokio::net::TcpListener::bind(("127.0.0.1", port))
         .await
         .is_ok());

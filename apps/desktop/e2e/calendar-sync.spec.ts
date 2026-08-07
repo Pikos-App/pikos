@@ -1,13 +1,9 @@
-// E2E tests for the external calendar-sync UI.
+// Mock-driven (VITE_TEST_MODE=true → MockStorageAdapter): no network, no real
+// CalDAV/Google creds. Live auth/transport is exercised only in the manual
+// pre-release layer.
 //
-// Entirely mock-driven: runs under VITE_TEST_MODE=true → MockStorageAdapter,
-// whose connectCaldavAccount returns a canned Personal/Work discovery and whose
-// toggleSyncCalendar creates a real is_external_calendar folder. No network, no
-// real CalDAV/Google creds — the live auth/transport seams stay in the manual
-// pre-release layer and are never exercised here.
-//
-// The synced-block tests load the "synced" dev seed (Settings → Developer),
-// available because the e2e webServer runs the Vite dev server (import.meta.env.DEV).
+// The synced-block tests need the "synced" dev seed (Settings → Developer),
+// available because the e2e webServer runs the Vite dev server.
 
 import type { Page } from "@playwright/test";
 
@@ -73,7 +69,6 @@ appTest("Calendar Sync panel adds a CalDAV account, calendars start off @tier1",
 
   await app.getByRole("button", { name: /CalDAV/ }).click();
 
-  // Connect stays disabled until all three fields are filled.
   const connect = app.getByRole("button", { name: "Connect" });
   await expect(connect).toBeDisabled();
   await app.getByLabel("Server URL").fill("https://caldav.example.com");
@@ -82,7 +77,6 @@ appTest("Calendar Sync panel adds a CalDAV account, calendars start off @tier1",
   await expect(connect).toBeEnabled();
   await connect.click();
 
-  // Both discovered calendars appear, all toggles off.
   await expect(app.getByRole("switch", { name: "Sync Personal" })).not.toBeChecked();
   await expect(app.getByRole("switch", { name: "Sync Work" })).not.toBeChecked();
 });
@@ -102,7 +96,6 @@ appTest("enabling a calendar adds a sidebar folder, disabling removes it @tier1"
   const sidebarFolder = app.getByRole("button", { name: "Personal" });
   await expect(sidebarFolder).toBeVisible();
 
-  // Disable → the external folder disappears.
   await openSyncPanel(app);
   await app.getByRole("switch", { name: "Sync Personal" }).click();
   await expect(app.getByRole("switch", { name: "Sync Personal" })).not.toBeChecked();
@@ -121,7 +114,6 @@ appTest("recolor a synced calendar from the swatch palette @tier2", async ({ app
   // overlap check, so force the click on the named target.
   await app.getByRole("button", { name: "Lavender" }).click({ force: true });
 
-  // Palette closes; the colour control is still there (recolor stays allowed).
   await expect(app.getByRole("button", { name: "Colour for Personal" })).toBeVisible();
 });
 
@@ -135,7 +127,6 @@ appTest("resync then disconnect removes the account and its folder @tier2", asyn
   await menu.click();
   await app.getByRole("menuitem", { name: "Resync now" }).click();
 
-  // Disconnect via the overflow menu → confirm dialog.
   await menu.click();
   await app.getByRole("menuitem", { name: "Disconnect" }).click();
   await expect(app.getByRole("alertdialog", { name: /Disconnect/ })).toBeVisible();
@@ -225,17 +216,14 @@ appTest("a synced block can't be dragged @tier2", async ({ app }) => {
 
 // ─── tier2: synced recurring completion (the recurring × synced intersection) ─
 //
-// The recurring × synced intersection previously had zero e2e. A synced recurring
-// occurrence must complete through the unified completeRecurringPage with a *client*
-// occurrence — never a bare updatePage(status), which the locked mirror rejects
-// (mock guard parity). The seed's "Weekly 1:1 (London)" is London-source viewed under New York,
-// so a green completion also proves cross-zone occurrence-date-key agreement:
-// a mis-keyed occurrence would be rejected as "not part of this synced series"
-// and no clone would land.
+// First e2e coverage of the recurring × synced intersection. The seed's "Weekly
+// 1:1 (London)" is London-source viewed under New York, so a green completion
+// also proves cross-zone occurrence-date-key agreement — a mis-keyed occurrence
+// would be rejected as "not part of this synced series" and no clone would land.
 
-/** Open the external-calendar "Personal" folder — isolates the synced recurring
- *  head. A same-named draggable user folder also exists; the external one is the
- *  non-sortable sidebar item (external calendars aren't in the dnd reorder set). */
+/** Open the external-calendar "Personal" folder. A same-named draggable user
+ *  folder also exists; the external one is the non-sortable sidebar item
+ *  (external calendars aren't in the dnd reorder set). */
 async function openPersonalFolder(app: Page) {
   await app.locator('[aria-label="Personal"]:not([aria-roledescription="sortable"])').click();
 }
@@ -285,8 +273,8 @@ appTest("unchecking a synced recurring done clone restores the occurrence @tier2
   });
   await expect(doneClone).toHaveCount(1);
 
-  // Uncheck the clone → uncompleteRecurringOccurrence drops the clone and rewinds
-  // the head onto the restored occurrence.
+  // uncompleteRecurringOccurrence drops the clone and rewinds the head onto the
+  // restored occurrence.
   await doneClone.getByRole("checkbox", { name: /Mark not done/i }).click();
   await expect(
     seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark not done/i }) })
@@ -298,12 +286,11 @@ appTest("unchecking a synced recurring done clone restores the occurrence @tier2
 
 // ─── tier2: a moved synced occurrence renders at its new slot + completes ──────
 //
-// The reconciler stores an upstream-moved instance as an override row keyed to
-// its original date; before this, nothing rendered it (an all-day move vanished,
-// a timed move showed only a ghost at the old slot). Now the moved instance
-// renders at its new time as a locked, completable block, and completing it
-// records the ORIGINAL occurrence so the reminder derivation agrees. The seed's
-// "Recurring review" moves one instance ~3 weeks out, to 4 PM.
+// An upstream-moved instance is stored as an override row keyed to its original
+// date — previously nothing rendered it (an all-day move vanished, a timed move
+// ghosted at the old slot). It now renders locked and completable at its new
+// time, and completing it records the ORIGINAL occurrence so reminder derivation
+// agrees. The seed's "Recurring review" moves one instance ~3 weeks out, to 4 PM.
 
 /** Page forward until the moved override block (its new slot is 4 PM) renders. */
 async function gotoMovedOverride(app: Page) {
@@ -331,26 +318,23 @@ appTest("a moved synced occurrence renders at its new slot, locked, and complete
   await expect(title).toHaveValue("Recurring review");
   await expect(title).toHaveAttribute("readonly", "");
 
-  // Complete via the popover's status toggle: routes through the unified
-  // completeSyncedOccurrence keyed on the ORIGINAL occurrence — never a bare
-  // updatePage(status) that the locked mirror rejects with a read-only error.
+  // Routes through completeSyncedOccurrence, keyed on the ORIGINAL occurrence.
   await app.getByRole("button", { name: "Mark done" }).click();
   await expect(app.getByText(/read-only/i)).toHaveCount(0);
 
-  // The done clone lands at the moved slot (the override drops out once its
-  // original occurrence is completed) — re-open it; its status now reads Done. A
-  // mis-keyed occurrence would reject with no clone, leaving the slot open.
+  // The done clone lands at the moved slot — the override drops out once its
+  // original occurrence is completed. A mis-keyed occurrence would reject with
+  // no clone, leaving the slot open.
   await app.getByRole("button", { name: /Recurring review, 4/ }).click();
   await expect(app.getByRole("button", { name: "Mark not done" })).toBeVisible();
 });
 
 // ─── tier2: a synced virtual occurrence's date is read-only ──────────────────
 //
-// Drag and resize are suppressed on a locked block, so the occurrence popover is
-// the only surface left that can reach a locked series' reschedule. The seed's
-// "Recurring review" is a synced weekly at 10 AM; the current week's block is the
-// series head (a real page block), day+7 is an EXDATE and day+14 moved to an
-// override — so the first plain virtual is day+21. Page forward before matching.
+// Drag/resize are suppressed on a locked block, so the occurrence popover is the
+// only surface that can reach a locked series' reschedule. The seed's "Recurring
+// review" head is this week, day+7 is an EXDATE, day+14 is moved to an override
+// — the first plain virtual is day+21.
 
 appTest("a synced recurring occurrence's popover offers no editable date @tier2", async ({
   app,
@@ -377,14 +361,11 @@ appTest("a synced recurring occurrence's popover offers no editable date @tier2"
   await expect(app.getByRole("button", { name: "Set schedule" })).toHaveCount(0);
 });
 
-// ─── tier2: description-changed notice + read-only mirror metadata (B1) ───────
+// ─── tier2: description-changed notice + read-only mirror metadata ───────────
 //
-// When an event's upstream description changes after the user has edited the body,
-// the reconciler parks the new text in pending_description rather than clobbering.
-// The editor surfaces it as a passive, offline notice (rendered from the parked
-// text, no re-fetch) — the user folds it in by hand; sync never overwrites. The
-// same page shows its calendar-owned location + attendees read-only. The seed's
-// "Team standup" carries all three.
+// pending_description surfaces as a passive, offline notice — the user folds it
+// in by hand, sync never overwrites. The seed's "Team standup" carries a pending
+// description plus read-only location/attendees.
 appTest("a synced event shows the description-changed notice + read-only location/attendees @tier2", async ({
   app,
 }) => {
@@ -392,12 +373,10 @@ appTest("a synced event shows the description-changed notice + read-only locatio
   await openPersonalFolder(app);
   await app.locator("[data-page-list-item]").getByText("Team standup").click();
 
-  // Read-only mirror metadata renders in the editor header.
   await expect(app.getByText("Zoom")).toBeVisible();
   await expect(app.getByText("3 guests")).toBeVisible();
 
-  // The notice is present; the parked upstream text stays hidden until opened
-  // (exact "View" avoids the byline's "View in calendar" button).
+  // Exact "View" avoids the byline's "View in calendar" button.
   await expect(app.getByText(/calendar description changed/i)).toBeVisible();
   await expect(app.getByText(/demo the new sync panel/i)).toHaveCount(0);
   await app.getByRole("button", { name: "View", exact: true }).click();

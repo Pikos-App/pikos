@@ -37,8 +37,8 @@ pub async fn connect_caldav_account(
     .await
 }
 
-/// Whether this build carries the Google OAuth client. The panel hides the Google
-/// option when it doesn't, rather than offering a connect that can only fail.
+/// Whether this build carries the Google OAuth client. The panel disables the
+/// Google option when it doesn't, rather than offering a connect that can only fail.
 #[tauri::command]
 pub fn google_sync_available() -> bool {
     google::is_available()

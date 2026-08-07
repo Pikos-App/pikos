@@ -32,10 +32,9 @@ pub async fn due_explicit_reminders(
     window_start: &str,
     now_ts: &str,
 ) -> Result<Vec<DueReminder>, sqlx::Error> {
-    // A page can carry several reminder leads; the dedup key is per-(schedule, lead),
-    // not per-schedule — otherwise the first lead to fire logs the schedule id and
-    // suppresses every other lead. Encode the lead into schedule_id (`<id>#<minutes>`),
-    // matching the recurring enumeration path's `page_id@start#lead` scheme; the
+    // Dedup keys per-(schedule, lead), not per-schedule — else the first lead to
+    // fire would suppress every other lead. Encoded as `<id>#<minutes>` in
+    // schedule_id, matching the recurring path's `page_id@start#lead` scheme; the
     // scheduler logs this composite verbatim, so the NOT EXISTS below matches per-lead.
     sqlx::query_as(
         "SELECT ps.id || '#' || pr.minutes_before AS schedule_id, ps.page_id, p.title,

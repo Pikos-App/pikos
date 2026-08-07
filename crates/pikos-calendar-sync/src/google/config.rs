@@ -13,7 +13,7 @@ use super::error::GoogleError;
 /// A desktop OAuth client's id and secret ship inside the binary — under PKCE the
 /// secret isn't confidential and Google issues installed-app clients on that
 /// basis. They're supplied at build time rather than committed so the public repo
-/// doesn't advertise them; a build without them simply has no Google sync.
+/// doesn't advertise them; a build without them has no Google sync.
 const CLIENT_ID: Option<&str> = option_env!("PIKOS_GOOGLE_CLIENT_ID");
 const CLIENT_SECRET: Option<&str> = option_env!("PIKOS_GOOGLE_CLIENT_SECRET");
 
@@ -36,7 +36,6 @@ pub(crate) const SCOPES: [&str; 2] = [
 pub(crate) type GoogleOauthClient =
     BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointSet, EndpointSet>;
 
-/// Build the client, or report that this build carries no credentials.
 pub(crate) fn oauth_client() -> Result<GoogleOauthClient, GoogleError> {
     let (client_id, client_secret) = credentials().ok_or(GoogleError::NotConfigured)?;
     Ok(BasicClient::new(ClientId::new(client_id.to_string()))

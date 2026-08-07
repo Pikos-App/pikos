@@ -16,7 +16,6 @@ pub(crate) struct DavResponse {
 
 #[allow(async_fn_in_trait)]
 pub(crate) trait DavTransport {
-    /// Issue a PROPFIND with the given `Depth` and XML body.
     async fn propfind(
         &self,
         url: &str,

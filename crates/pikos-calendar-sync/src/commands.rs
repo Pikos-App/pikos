@@ -28,7 +28,7 @@ pub struct CalendarSyncResult {
     /// `synced` | `offline` | `reconnectNeeded`.
     pub status: String,
     pub full_resync: bool,
-    /// The poll's delta carried items — the scheduler's page-data-changed signal.
+    /// Mirrors `SyncOutcome::Synced`'s `changed` — the scheduler's page-data-changed signal.
     #[serde(skip)]
     pub changed: bool,
 }
@@ -52,16 +52,15 @@ impl CalendarSyncResult {
     }
 }
 
-/// Connect a CalDAV account: validate the credentials by discovering calendars,
-/// then persist the account + its (disabled) calendars and stash the credentials
-/// in the keychain. Validation runs **first** so a wrong URL/password fails
-/// without leaving a half-built account behind.
+/// Connect a CalDAV account: validate credentials by discovering calendars first
+/// — so a bad URL/password fails before anything is persisted — then persist the
+/// account + its (disabled) calendars and stash the credentials in the keychain.
 ///
-/// Reconnecting an account already known by (provider, display_name) — whether it
-/// went dormant via `disconnect_account` or is still active — reuses its row rather
-/// than inserting a duplicate: the dormant case re-links detached pages, the active
-/// case avoids re-syncing every event twice. The idempotent calendar upsert refreshes
-/// each calendar in place, leaving its enabled/folder/cursor untouched.
+/// Reconnecting an account already known by (provider, display_name) — dormant
+/// via `disconnect_account`, or still active — reuses its row instead of
+/// duplicating: dormant re-links detached pages, active avoids re-syncing every
+/// event twice. The calendar upsert is idempotent and leaves each calendar's
+/// enabled/folder/cursor untouched.
 pub async fn connect_caldav(
     pool: &SqlitePool,
     keychain: Keychain,
@@ -165,13 +164,12 @@ async fn upsert_calendars(
 
 /// Disconnect an account: unsync each calendar (detach owned pages, delete bare
 /// mirrors, disable + clear its cursor), then mark the account dormant and clear
-/// the keychain. The row, its calendars, and the detached `page_sync` identities
-/// are **kept** — a reconnect (`connect_caldav`) reuses them and re-links by
-/// `ical_uid` with no duplicate, the same path a calendar unsync already uses.
-/// An OAuth grant is handed back to the provider first, so the account also
-/// disappears from the user's connected-apps list rather than lingering there
-/// with a token Pikos has thrown away. Both the revoke and the credential delete
-/// are best-effort and idempotent — neither may block going dormant.
+/// the keychain. The row, its calendars, and detached `page_sync` identities stay
+/// — a reconnect reuses them and re-links by `ical_uid`, the same path a calendar
+/// unsync already uses. The OAuth grant is revoked first so the account also
+/// drops off the user's connected-apps list, instead of lingering there with a
+/// token Pikos has thrown away. Revoke and credential delete are both
+/// best-effort and idempotent — neither may block going dormant.
 pub async fn disconnect_account(
     pool: &SqlitePool,
     keychain: Keychain,

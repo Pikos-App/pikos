@@ -600,10 +600,9 @@ pub(crate) async fn merge_rule_exdates_tx(
     Ok(exdates)
 }
 
-/// Adds dates to a rule's EXDATEs and recomputes the head. Merge happens DB-side —
-/// see merge_rule_exdates_tx for why callers must not send a replacement array.
-/// Native user dismissals now live in the skip-set ([`crate::pages::skip_occurrence_impl`]);
-/// this remains for provider/manual EXDATE writes.
+/// Adds dates to a rule's EXDATEs and recomputes the head — merge happens DB-side,
+/// see `merge_rule_exdates_tx`. Native dismissals now live in the skip-set
+/// ([`crate::pages::skip_occurrence_impl`]); this remains for provider/manual writes.
 pub async fn add_rule_exdates_impl(
     pool: &sqlx::SqlitePool,
     id: String,
@@ -669,12 +668,8 @@ pub async fn delete_recurrence_rule_impl(pool: &sqlx::SqlitePool, id: &str) -> A
     let page_id = rule_page_id(pool, id).await?;
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;
-        // The head cache (owned by the derivation while the rule existed) holds the
-        // current occurrence; the surviving non-rule anchor row still holds the
-        // creation/last-drag date, which completion never advanced. Carry the head
-        // forward onto that anchor before refresh_schedule_denorm re-derives from
-        // it, or removing recurrence from a long-running series rewinds the task to
-        // a months-old date.
+        // Snapshot the head before the rule row goes away — see the fn doc for why
+        // it must be carried onto the surviving anchor.
         let head: Option<(Option<String>, Option<String>)> =
             sqlx::query_as("SELECT scheduled_start, scheduled_end FROM pages WHERE id = ?")
                 .bind(&page_id)

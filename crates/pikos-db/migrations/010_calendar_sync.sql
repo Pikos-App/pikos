@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS sync_calendar (
   calendar_id        TEXT NOT NULL,               -- provider's calendar identifier
   display_name       TEXT NOT NULL,
   color              TEXT,                        -- Pikos palette colour (not provider hex)
-  enabled            INTEGER NOT NULL DEFAULT 0,  -- per-calendar opt-in, off by default
+  enabled            INTEGER NOT NULL DEFAULT 0,
   sync_token         TEXT,
   ctag               TEXT,
   last_full_sync_at  TEXT,

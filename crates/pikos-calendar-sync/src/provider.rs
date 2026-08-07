@@ -109,9 +109,6 @@ mod tests {
         ));
     }
 
-    // A DB written by a newer build can name a provider this one doesn't have.
-    // Falling back beats panicking: CalDAV's blob simply won't deserialize, which
-    // surfaces as "reconnect needed" on that one account.
     #[test]
     fn an_unknown_provider_falls_back_rather_than_panicking() {
         assert!(matches!(

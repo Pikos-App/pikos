@@ -76,33 +76,27 @@ pub struct Page {
     /// Derived from `page_sync.sync_state` ('active' | 'detached' | 'tombstoned'),
     /// `None` for native pages. Drives detached treatment (dim + broken-sync icon).
     pub sync_state: Option<String>,
-    /// Source/authoring IANA zone (from the schedule or recurrence rule). Consumed
-    /// at render only for synced (locked) pages, which display absolute in the
-    /// viewer's zone; native pages float and ignore it.
+    /// Source/authoring IANA zone (schedule or recurrence rule). Synced pages render
+    /// it absolute in the viewer's zone at read time; native pages float and ignore it.
     pub timezone: Option<String>,
-    /// Completion map for a recurring series, built from the `completed_set` table:
-    /// `occurrence-date → done-clone page id`. The frontend hides a completed
-    /// occurrence (expansion skip + head suppression) and routes an uncomplete by
-    /// the clone id. `None` when the series has no completions.
+    /// `occurrence-date → done-clone page id`, from `completed_set`. The frontend
+    /// hides a completed occurrence and routes an uncomplete by the clone id.
+    /// `None` when the series has no completions.
     pub completed_occurrences: Option<std::collections::HashMap<String, String>>,
     /// Dismissed occurrence dates for a recurring series, from the `skip_set` table.
     /// Excluded from expansion (both native + synced). `None` when nothing skipped.
     pub skipped_occurrences: Option<Vec<String>>,
     /// Calendar-owned location, a read-only mirror field. `None` for native pages
-    /// or a synced event with no location; the frontend renders it only while the
-    /// page is locked (active sync).
+    /// or a synced event with no location; rendered only while the page is locked.
     pub mirror_location: Option<String>,
     /// Calendar-owned attendee list (emails), a read-only mirror field. `None` when
     /// the event has no attendees or the page is native.
     pub mirror_attendees: Option<Vec<String>>,
-    /// Upstream description change withheld because the user already edited the
-    /// body (see `page_sync.pending_description`); drives the editor's passive
-    /// "calendar description changed" notice. `None` = nothing pending.
+    /// Upstream description change withheld because the user already edited the body
+    /// (see `page_sync.pending_description`). `None` = nothing pending.
     pub pending_description: Option<String>,
-    /// Derived (not a stored column): this page carries a recurrence rule. Lets the
-    /// frontend tell a one-off from a series without loading the rule set — the
-    /// Today predicate needs it to spare a past synced *one-off* from the overdue
-    /// bucket while leaving recurring heads alone.
+    /// Derived (not a stored column): lets the frontend tell a one-off from a series
+    /// without loading the rule set.
     pub is_recurring: bool,
 }
 
@@ -279,12 +273,9 @@ const SUMMARY_COLUMNS: &str =
      scheduled_start, scheduled_end, completed_at, links, \
      parent_id, last_opened_at, created_at, updated_at";
 
-/// Appended to every page-hydrating SELECT to populate the derived sync columns:
-/// `schedule_locked` (an active `page_sync` owns the schedule → read-only +
-/// non-draggable), the read-only `sync_state` (detached treatment), and the source
-/// `timezone` (synced events render absolute in the viewer's zone; native pages
-/// float and ignore it). All correlated on the unqualified `pages.id`, so they work
-/// whether or not the query aliases the table.
+/// Appended to every page-hydrating SELECT to populate the derived sync columns
+/// (see the `Page` field docs). Correlated on the unqualified `pages.id`, so it
+/// works whether or not the query aliases the table.
 const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
      WHERE page_sync.page_id = pages.id AND page_sync.sync_state = 'active') \
      AS schedule_locked\
@@ -467,9 +458,9 @@ async fn next_sort_order(pool: &sqlx::SqlitePool, folder_id: Option<&str>) -> Ap
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResult<Page> {
-    // External-calendar folders are system-managed — only the reconciler (raw
-    // SQL, bypasses this command) seeds into them. Reject a user/CLI create that
-    // targets one, or the page lands trapped (the move guard then blocks it out).
+    // External-calendar folders are system-managed; only the reconciler (raw SQL)
+    // seeds into them. Reject a create targeting one, or the page lands trapped —
+    // the placement lock in update_page_impl then blocks it from ever leaving.
     if let Some(folder_id) = data.folder_id.as_deref() {
         let target_external: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM folders WHERE id = ? AND is_external_calendar = 1)",
@@ -536,11 +527,10 @@ pub async fn update_page_impl(
     id: String,
     updates: PageUpdate,
 ) -> AppResult<Page> {
-    // A synced page becomes user-owned the moment the user edits any authored
-    // field through this command path (the reconciler writes raw SQL and never
-    // calls here, so sync can't trip this). `last_opened_at` and `sort_order` are
-    // excluded: reading and arranging author nothing, and ownership decides whether
-    // an upstream delete removes the page or detaches it permanently.
+    // Editing any authored field claims ownership (the reconciler never calls this
+    // path, so sync can't trip it). `last_opened_at`/`sort_order` are excluded —
+    // reading and arranging don't author — and ownership decides whether an
+    // upstream delete removes the page or detaches it permanently.
     let marks_ownership = updates.title.is_some()
         || updates.content.is_some()
         || updates.content_text.is_some()
@@ -555,11 +545,10 @@ pub async fn update_page_impl(
         || updates.completed_at.is_some()
         || updates.parent_id.is_some();
 
-    // Placement lock, keyed on the live link rather than on the folder: nothing
-    // moves into a system-managed calendar folder, and a page the calendar still
-    // owns stays where the calendar put it — but a detached page is the user's and
-    // files anywhere. The reconciler seeds pages into these folders via raw SQL (it
-    // never calls this command), so seeding is unaffected.
+    // Placement lock, keyed on the live sync link rather than the folder: nothing
+    // moves into a calendar folder, and an actively-synced page can't leave; once
+    // detached it's the user's and files anywhere. The reconciler seeds via raw SQL,
+    // bypassing this command.
     if let Some(ref folder_val) = updates.folder_id {
         let target_external: bool = match folder_val {
             serde_json::Value::String(target) => sqlx::query_scalar(
@@ -700,11 +689,9 @@ pub async fn update_page_impl(
 }
 
 pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
-    // A synced page can't be truly deleted while its calendar is synced — it
-    // still exists upstream and the next poll would resurrect it (and an owned
-    // page would lose its content). Route it to soft-delete + tombstone instead:
-    // it leaves the UI, stays recoverable from trash, and sync is suppressed.
-    // (Sync's own non-owned-removal hard-deletes use raw SQL, not this command.)
+    // A synced page can't be hard-deleted — it still exists upstream and the next
+    // poll would resurrect it. Soft-delete + tombstone instead: recoverable from
+    // trash, sync suppressed. (Sync's own hard-deletes use raw SQL, not this path.)
     let synced: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM page_sync WHERE page_id = ?)")
             .bind(id)
@@ -735,10 +722,9 @@ pub async fn soft_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResu
     .bind(id)
     .execute(&mut *tx)
     .await?;
-    // Tombstone the sync link so the next poll doesn't resurrect a deleted synced
-    // page. Only an active link: a detached row (sync severed) must keep that state
-    // through trash → restore, else restore would wrongly reactivate it. No-op for
-    // native pages (no page_sync row).
+    // Tombstones the active sync link so the next poll doesn't resurrect the page.
+    // A detached link is skipped so it stays detached through trash → restore,
+    // rather than being wrongly reactivated. No-op for native pages.
     sqlx::query("UPDATE page_sync SET sync_state = 'tombstoned' WHERE page_id = ? AND sync_state = 'active'")
         .bind(id)
         .execute(&mut *tx)
@@ -763,11 +749,9 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
     .bind(id)
     .execute(&mut *tx)
     .await?;
-    // Sets survive soft-delete, so a restored recurring head must re-derive from
-    // the preserved completed/skip state (no-op for a non-recurring page). Skip
-    // active-synced heads: their cache is reconciler-owned, and the restore above
-    // may have just reactivated the sync link — mirror the foreground heal's
-    // synced exclusion so we don't clobber a pinned provider head.
+    // Sets survive soft-delete, so a restored recurring head must re-derive
+    // (no-op if non-recurring). Skip active-synced heads — their cache is
+    // reconciler-owned, and recomputing here would clobber a pinned provider head.
     if !is_active_synced(&mut tx, id).await? {
         crate::recurrence_derive::recompute_recurring_schedule(&mut tx, id).await?;
     }
@@ -1055,10 +1039,9 @@ pub struct CompleteRecurringInput {
     /// dismisses — written to the skip-set. Empty for a plain completion.
     #[serde(default)]
     pub skip_dates: Vec<String>,
-    /// Synced series only: the client-rendered occurrence being completed, since the
-    /// reconciler pins the head at the series base (the client virtual is the only
-    /// place the occurrence exists). A native series omits these — its occurrence is
-    /// the head's own oldest-open date, derived server-side and never client-sent.
+    /// Synced series only: the client-rendered occurrence being completed (the
+    /// reconciler pins the head at the base, so the virtual is the only record of
+    /// it). Native series omit these — the head's own oldest-open date is used.
     #[serde(default)]
     pub occurrence_date: Option<String>,
     #[serde(default)]
@@ -1194,10 +1177,9 @@ async fn complete_recurring_page_once(
 
     let mut tx = pool.begin().await?;
 
-    // Fetch the head inside the tx, rejecting soft-deleted pages: completing a
-    // trashed recurring page must not resurrect it as a visible "done" clone. The
-    // sort_order read also lives inside the tx so two concurrent completions can't
-    // allocate the same value.
+    // Fetch the head inside the tx, rejecting soft-deleted pages — completing a
+    // trashed series must not resurrect it as a visible "done" clone. The
+    // sort_order read also lives in the tx so concurrent completions can't collide.
     let head = sqlx::query_as::<_, PageRow>(&format!(
         "SELECT *{SYNC_DERIVED_SELECT} FROM pages WHERE id = ? AND deleted_at IS NULL"
     ))
@@ -1220,11 +1202,10 @@ async fn complete_recurring_page_once(
         ));
     }
 
-    // Resolve the occurrence being completed. A native head sits on it (oldest-open),
-    // so its own wall-clock is the clone's schedule and the completed-set key. A synced
-    // series' head is reconciler-pinned at the base, so the client supplies the
-    // rendered virtual — validated against the rule so a cross-zone off-by-one key can't
-    // write a set entry that matches no occurrence (an unsuppressable open occurrence).
+    // Resolve the occurrence: a native head sits on its own oldest-open date (used
+    // directly as the clone's schedule and set key). A synced head is pinned at the
+    // base, so the client supplies the rendered virtual, validated below against
+    // the rule (see synced_occurrence_is_valid).
     let (occurrence_date, occurrence_start, occurrence_end) = if head.schedule_locked {
         let occurrence_date = data.occurrence_date.clone().ok_or_else(|| {
             AppError::Conflict(
@@ -1334,10 +1315,9 @@ async fn complete_recurring_page_once(
     })
 }
 
-/// The live done clone already recorded for `(page_id, occurrence_date)`, if any —
-/// the completion idempotency check shared by the native and synced paths. Returns
-/// `None` when no set row exists or its clone was trashed out of band (the caller
-/// then re-points the set row to a fresh clone).
+/// The live done clone recorded for `(page_id, occurrence_date)`, if any. `None`
+/// when unrecorded or the clone was trashed out of band — the caller then
+/// re-points the set row to a fresh clone.
 async fn existing_completed_clone(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1377,12 +1357,11 @@ async fn is_active_synced(
     .await?)
 }
 
-/// Whether `occurrence_date` (YYYY-MM-DD) is a real occurrence of the page's rule.
-/// A synced series completes a client-rendered virtual, so a cross-zone off-by-one
-/// key would otherwise write a `completed_set` entry matching no occurrence — leaving
-/// it open beside its done clone permanently. The raw rule (no exclusions) is
-/// enumerated so a moved override's `original_date` still counts. An out-of-envelope
-/// rule the engine can't parse skips the check — there's nothing to validate against.
+/// Whether `occurrence_date` (YYYY-MM-DD) is a real occurrence of the page's rule —
+/// guards a synced completion, whose client-supplied virtual could otherwise key a
+/// `completed_set` entry that matches nothing and stays open forever. Enumerates the
+/// raw rule (no exclusions), so a moved override's `original_date` still counts; an
+/// unparseable rule skips the check.
 async fn synced_occurrence_is_valid(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1412,10 +1391,9 @@ async fn synced_occurrence_is_valid(
     }
 }
 
-/// Removes a completed occurrence: drop its `completed_set` row and hard-delete
-/// the done clone via the back-link. Returns whether a row was removed (`false` =
-/// the date wasn't completed, a no-op). Shared by native + synced uncomplete; the
-/// native caller additionally recomputes the head.
+/// Drops the `completed_set` row and hard-deletes the done clone via the back-link.
+/// Returns `false` when the date wasn't completed (no-op). Shared by native +
+/// synced uncomplete; the native caller additionally recomputes the head.
 async fn drop_completed_occurrence_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     page_id: &str,
@@ -1450,12 +1428,11 @@ pub struct UncompleteRecurringInput {
     pub occurrence_date: String,
 }
 
-/// Reverses a recurring completion (native or synced): drop the completed-set entry,
-/// delete the done clone via its back-link, and recompute the head — which un-marks a
-/// `done` head, or rewinds a synced head, when the series yields the occurrence again.
-/// No-op if the date isn't completed. Pre-swap native completions have no back-link,
-/// so they are not uncompletable. Synced recompute converges with the reconciler's on
-/// the next sync (both derive off the same sets).
+/// Reverses a recurring completion (native or synced): drops the completed-set
+/// entry and the done clone (via its back-link), then recomputes the head — which
+/// un-marks `done`, or rewinds a synced head, once the series yields the occurrence
+/// again. No-op if the date wasn't completed. Pre-swap native completions have no
+/// back-link and are not uncompletable.
 pub async fn uncomplete_recurring_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: UncompleteRecurringInput,
@@ -1478,12 +1455,11 @@ pub struct SkipOccurrenceInput {
     pub occurrence_date: String,
 }
 
-/// Dismisses one occurrence of a recurring series (native or synced) to the skip-set,
-/// then recomputes the head. The skip-set is user state the reconciler never writes,
-/// so a synced skip survives sync and converges (expansion unions completed ∪ skip for
-/// both kinds); the provider's own EXDATEs stay separate. A dismissal is distinct from
-/// a *moved* occurrence (a `page_schedules` override) — the two are mutually exclusive.
-/// Undo is [`undo_skip_occurrence_impl`].
+/// Dismisses one occurrence (native or synced) to the skip-set, then recomputes.
+/// The skip-set is user state the reconciler never writes, so a synced skip
+/// survives sync (expansion unions completed ∪ skip). Distinct from — and mutually
+/// exclusive with — a *moved* occurrence (a `page_schedules` override). Undo is
+/// [`undo_skip_occurrence_impl`].
 pub async fn skip_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: SkipOccurrenceInput,
@@ -1524,16 +1500,16 @@ pub async fn undo_skip_occurrence_impl(
 
 /// Heals the display cache for every recurring series on foreground load,
 /// returning only the summaries whose head materially changed (`scheduled_start`
-/// or `status`) so the caller patches the minimum. Guards against a cache left
-/// stale by an out-of-process writer (CLI/mobile) or a prior bug — the in-session
-/// path keeps the cache fresh on every write, so the steady-state result is empty.
+/// or `status`). Guards against a cache left stale by an out-of-process writer
+/// (CLI/mobile) or a prior bug — the in-session path keeps it fresh on every
+/// write, so the steady-state result is empty.
 ///
-/// Active-synced series are included, and this is the only thing that advances
-/// them across a day boundary: their head floors at today
+/// Active-synced series are included: their head floors at today
 /// (`recurrence_derive::synced_head_floor`), so it goes stale by the calendar
-/// rather than by a write, and the reconciler no-ops on an unchanged etag rather
-/// than recomputing. Skipping them here would put the head a day behind for every
-/// session that outlives midnight.
+/// rather than by a write, and the reconciler no-ops on an unchanged etag. This
+/// heal is the only thing that advances them across a day boundary — skipping
+/// them here would leave the head a day behind for any session that outlives
+/// midnight.
 pub async fn recompute_recurring_schedules_impl(
     pool: &sqlx::SqlitePool,
 ) -> AppResult<Vec<PageSummary>> {

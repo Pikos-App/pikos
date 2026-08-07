@@ -489,10 +489,9 @@ async fn synced_reminder_in_the_spring_forward_gap_is_accepted_dropped() {
 
 #[tokio::test]
 async fn detached_series_fires_on_device_local_wall_clock_not_source_zone() {
-    // Once detached the page unlocks and the display treats it as native
-    // (`useRecurrenceExpansion`), so reminders match: device-local wall-clock, even
-    // though the stored wall-clock is still source-zone-stamped. `synced` keys on
-    // sync_state = 'active', so a detached row falls to the native branch.
+    // Detached falls to the native branch (see
+    // `occurrences_with_open_reminder_window`'s doc): reminders fire on
+    // device-local wall-clock despite the source-zone-stamped stored value.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2026-05-25T09:00:00", None).await; // zone = LA
     insert_test_page_sync(&pool, "head", "detached")
@@ -698,11 +697,8 @@ fn connected_days_ago(days: i64) -> String {
 
 #[tokio::test]
 async fn a_synced_head_floors_at_the_connect_day() {
-    // The C30 shape: with `singleEvents=false` a provider returns the master's
-    // original DTSTART whenever the series still yields instances in the backfill
-    // window, so a series running since 2020 arrives carrying a 2020 base. The head
-    // floors at the day the calendar was connected — an occurrence from before the
-    // user connected is one nobody could have completed.
+    // Simulates a provider returning the master's original DTSTART years back (see
+    // `synced_head_floor`) — the head must floor at the connect day, not 2020.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
     crate::pool::insert_test_page_sync_connected_at(&pool, "head", "active", &connected_days_ago(3))
@@ -745,12 +741,8 @@ async fn a_detached_series_floors_the_same_way() {
 
 #[tokio::test]
 async fn a_pre_connection_backfilled_occurrence_never_becomes_the_head() {
-    // The backfill reaches BACKFILL_DAYS back so a calendar connected mid-week still
-    // renders the days already past. Those occurrences sit below the floor: they
-    // render, but must not open a freshly connected series as overdue on a date
-    // nobody could have acted on. Also pins the floor as an *instant*: a prefix
-    // slice of the UTC `created_at` would land on tomorrow when connecting in the
-    // evening west of UTC, skipping today's occurrence entirely.
+    // Backfilled occurrences render below the floor but can't become the head (see
+    // `synced_head_floor`); base sits exactly at -BACKFILL_DAYS to pin the boundary.
     let pool = test_pool().await;
     let base = day_at(-crate::sync::BACKFILL_DAYS, "09:00:00");
     seed_series(&pool, "head", "FREQ=DAILY", &base, None).await;
@@ -792,11 +784,10 @@ async fn completion_history_advances_the_head_past_the_floor() {
 
 #[tokio::test]
 async fn a_no_op_recompute_does_not_restamp_updated_at() {
-    // The foreground heal runs the recompute over every recurring series on load,
-    // active mirrors included. An unconditional write would restamp `updated_at`
-    // each time and float untouched synced pages to the top of every
-    // recently-edited view — the churn the reconciler's unchanged-etag skip exists
-    // to prevent.
+    // Pins the no-op guard on the `Some(occ)` UPDATE (see
+    // `recompute_recurring_schedule`): an unconditional write would restamp
+    // `updated_at` on every foreground heal pass, floating even an untouched synced
+    // mirror to the top of recently-edited views.
     let pool = test_pool().await;
     seed_series(&pool, "head", "FREQ=DAILY", "2020-01-01T09:00:00", None).await;
     insert_test_page_sync(&pool, "head", "active")

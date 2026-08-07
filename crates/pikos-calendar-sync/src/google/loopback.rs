@@ -1,9 +1,8 @@
-//! The ephemeral loopback redirect receiver (RFC 8252). Google's Desktop client
-//! type supports no other redirect — custom schemes are rejected and OOB was shut
-//! off in 2023 — so the grant comes back to a listener bound on `127.0.0.1:0` for
-//! the duration of one authorization, then dropped. Binding loopback means no
-//! other app can claim the redirect the way a custom scheme can be hijacked, and
-//! PKCE binds the returned code to this process's verifier regardless.
+//! Ephemeral loopback redirect receiver (RFC 8252). Google's Desktop client type
+//! accepts no other redirect — custom schemes are rejected, OOB was removed in
+//! 2023 — so the grant returns to a `127.0.0.1:0` listener bound for one
+//! authorization, then dropped. Loopback binding and PKCE together stop another
+//! app from hijacking the redirect.
 
 use std::time::Duration;
 
@@ -79,9 +78,8 @@ impl Loopback {
             respond(&mut write_half, status, &body).await?;
 
             match outcome {
-                // The browser also asks this origin for /favicon.ico and the like;
-                // answering and carrying on is the difference between a working
-                // flow and one that consumes the wrong request.
+                // Browsers also hit this origin for /favicon.ico; answering and
+                // continuing keeps that from being mistaken for the redirect.
                 Outcome::Unrelated => continue,
                 Outcome::Redirect(result) => return result,
             }

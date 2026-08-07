@@ -105,7 +105,7 @@ async fn explicit_reminder_due_in_window_is_returned() {
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
-    assert_eq!(due[0].schedule_id, "s1#10"); // schedule id + reminder lead
+    assert_eq!(due[0].schedule_id, "s1#10");
     assert_eq!(due[0].page_id, "p1");
     assert_eq!(due[0].title, "p1");
     assert_eq!(due[0].minutes_before, 10);
@@ -171,10 +171,9 @@ async fn explicit_reminder_excludes_done_and_deleted_and_already_fired() {
 
 #[tokio::test]
 async fn explicit_multi_lead_second_reminder_fires_in_a_later_tick() {
-    // Two reminder leads on one page (70 min + 10 min before) fire in two different
-    // ticks. The scheduler logs each fire keyed on the schedule row id; the second
-    // lead must still be due after the first has fired — the dedup is per-lead, not
-    // per-schedule-row. (Repro for the bare-`ps.id` dedup collision.)
+    // Two leads on one page (70min + 10min before) fire in separate ticks; the
+    // second must still be due after the first fires — dedup is per-lead, not
+    // per-schedule-row. Repro for the bare-`ps.id` collision.
     let pool = test_pool().await;
     insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await;
@@ -306,7 +305,7 @@ async fn synced_oneoff_explicit_fires_at_the_absolute_instant() {
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
-    assert_eq!(due[0].schedule_id, "s1#10"); // schedule id + reminder lead
+    assert_eq!(due[0].schedule_id, "s1#10");
     assert_eq!(due[0].minutes_before, 10);
 }
 
@@ -346,14 +345,12 @@ async fn synced_oneoff_excludes_all_day_done_and_already_fired() {
         .await
         .unwrap();
     insert_reminder(&pool, "allday", 10).await;
-    // Done page.
     seed_synced_oneoff(&pool, "done", "sd").await;
     sqlx::query("UPDATE pages SET status = 'done' WHERE id = 'done'")
         .execute(&pool)
         .await
         .unwrap();
     insert_reminder(&pool, "done", 10).await;
-    // Already fired this lead.
     seed_synced_oneoff(&pool, "fired", "sf").await;
     insert_reminder(&pool, "fired", 10).await;
     log_reminder_fired(&pool, "fired", "sf#10", "2026-05-25T12:50:00")
@@ -772,10 +769,9 @@ async fn native_default_path_fires_a_recurring_override_row() {
 
 // ─── synced recurring per-instance override reminders ────────────────────────
 //
-// A moved/single-edited synced occurrence (RECURRENCE-ID) is a materialized
-// page_schedules row that no other reminder path fires: the enumeration excludes
-// its original_date, and the native `due_*` paths drop rule-backed active-synced
-// rows. `due_synced_override_reminders` fires it at its own moved absolute instant.
+// See `due_synced_override_reminders`'s doc for the override-materialization
+// contract. These tests pin it against completed/skipped, already-fired, floating,
+// and multi-instance edge cases.
 
 /// Zoned materialized override row for the page's rule.
 async fn insert_override_tz(
@@ -857,7 +853,7 @@ async fn synced_override_fires_at_moved_absolute_instant_with_default_lead() {
         .await
         .unwrap();
     assert_eq!(due.len(), 1);
-    assert_eq!(due[0].schedule_id, "ov#10"); // schedule id + default lead
+    assert_eq!(due[0].schedule_id, "ov#10");
     assert_eq!(due[0].minutes_before, 10);
 }
 
@@ -1039,8 +1035,8 @@ async fn prune_removes_only_rows_before_cutoff() {
     assert_eq!(log_count(&pool, "overdue").await, 1); // kept
 }
 
-// Active synced recurring series now FIRE (they no longer leak-vs-suppress on the
-// native path): the enumeration resolves each occurrence's source-zone → absolute
+// Active synced recurring series now fire (no longer suppressed on the native
+// path) — the enumeration resolves each occurrence's source-zone → absolute
 // instant. Covered in `recurrence_derive_tests`
 // (`synced_series_fires_at_the_absolute_instant_*`, detached + default-suppression).
 
@@ -1086,9 +1082,8 @@ fn synced_fire_instant_fall_back_ambiguous_picks_the_earlier_offset() {
     );
 }
 
-/// Origin does not change what overdue means. A synced page is completable, so
-/// ticking it clears the count exactly as a native page does; the mirror lock only
-/// blocks rescheduling.
+/// Pins `overdue_count`'s origin-independence: a synced page counts and clears
+/// like native; only rescheduling is locked.
 #[tokio::test]
 async fn overdue_count_counts_a_past_synced_one_off() {
     let pool = test_pool().await;

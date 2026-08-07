@@ -18,7 +18,6 @@ pub enum KeychainError {
 }
 
 impl KeychainError {
-    /// Absent credential → "reconnect needed"; not a transient backend failure.
     pub fn is_reconnect_needed(&self) -> bool {
         matches!(self, KeychainError::NotFound)
     }
@@ -85,12 +84,10 @@ impl Keychain {
         self.store.set(account_id, secret)
     }
 
-    /// `NotFound` ⇒ reconnect needed.
     pub fn load(&self, account_id: &str) -> Result<String, KeychainError> {
         self.store.get(account_id)
     }
 
-    /// Idempotent — absent entry is Ok.
     pub fn delete(&self, account_id: &str) -> Result<(), KeychainError> {
         self.store.delete(account_id)
     }

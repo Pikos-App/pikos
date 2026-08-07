@@ -52,13 +52,11 @@ export function expandRecurrenceForRange(
   rangeEnd: Date,
   existingSchedules: PageSchedule[] = []
 ): VirtualOccurrence[] {
-  // Build the set of dates removed from the expansion: provider/legacy EXDATEs,
-  // materialised overrides (moved occurrences), and the occurrence-sets — completed
-  // (its done clone renders in its place) and skipped (dismissed). Sets apply to
-  // BOTH native and synced series under the unified model; the base occurrence (the
-  // head) is suppressed separately in `useRecurrenceExpansion`.
-  // Day-key every entry — a synced timed exdate/override is full wall-clock and
-  // must match the day-only occurrence key below (see dateKey).
+  // Dates removed from expansion: provider/legacy EXDATEs, materialised overrides
+  // (moved occurrences), and the completed/skipped occurrence-sets — applies to
+  // both native and synced series. The head itself is suppressed separately in
+  // `useRecurrenceExpansion`. Day-keyed per `dateKey` (synced entries are full
+  // wall-clock).
   const excludedDates = new Set<string>(
     [
       ...rule.rruleExdates,

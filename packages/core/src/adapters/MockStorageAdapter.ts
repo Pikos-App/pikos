@@ -186,7 +186,7 @@ export class MockStorageAdapter implements StorageAdapter {
    * provenance a real `page_sync` row would derive — `scheduleLocked`,
    * `syncState`, the source `timezone`, and the read-only mirror metadata
    * (`mirrorLocation`, `mirrorAttendees`, `pendingDescription`). Lets the
-   * synced-pages seed + Layer-4 tests exercise the locked/zoned/detached
+   * synced-pages seed + UI tests exercise the locked/zoned/detached
    * treatment and the description-changed notice without a reconciler.
    * `active` locks the schedule; `detached`/`tombstoned` leave it editable.
    */
@@ -519,9 +519,8 @@ export class MockStorageAdapter implements StorageAdapter {
     if (ruleIds.length === 0) return Promise.resolve([]);
     const wanted = new Set(ruleIds);
     const results = [...this.schedules.values()].filter((s) => {
-      // Match Rust's query: override rows (rule_id set) for the given rules,
-      // regardless of moved position; schedules of a soft-deleted page excluded
-      // (the SQL joins pages and filters `deleted_at IS NULL`).
+      // Mirrors Rust: schedules of a soft-deleted page are excluded (the SQL
+      // joins pages and filters `deleted_at IS NULL`).
       if (this.softDeleted.has(s.pageId)) return false;
       return s.ruleId !== undefined && wanted.has(s.ruleId);
     });
@@ -705,10 +704,6 @@ export class MockStorageAdapter implements StorageAdapter {
     const hasRule = [...this.rules.values()].some((r) => r.pageId === data.pageId);
     if (!hasRule) return Promise.reject(new StorageError("Conflict", NOT_RECURRING_MSG));
 
-    // Native completes the head's own oldest-open occurrence (server-derived); a synced
-    // series' head is reconciler-pinned, so the client supplies the rendered virtual —
-    // validated against the rule so a cross-zone off-by-one key can't write an
-    // unsuppressable completed-set entry.
     let occurrenceDate: string;
     let cloneStart: string;
     let cloneEnd: string | null;

@@ -78,10 +78,8 @@ fn a_plain_busy_is_retryable() {
     assert!(is_retryable_busy(&busy()));
 }
 
-/// The budget is wall-clock, not a retry count. An attempt cap converts to a
-/// *shrinking* time budget on a loaded machine — the retry would give up soonest
-/// exactly when lock holds are longest, which is what made the reconcile-batch
-/// contention test flaky.
+/// The budget is wall-clock, not a retry count — see [`WRITE_TX_DEADLINE`] for why.
+/// A fixed attempt cap is what made the reconcile-batch contention test flaky.
 #[tokio::test(start_paused = true)]
 async fn a_perpetually_busy_write_spends_the_deadline_not_a_fixed_attempt_count() {
     let calls = Cell::new(0);

@@ -4,9 +4,8 @@ import { cn } from "@/lib/utils";
 
 import type { SyncDotMeta } from "./syncStatus";
 
-// ● active · ○ off · ◐ stale · ⚠ error. Health, not the calendar's colour —
-// kept on its own semantic scale so a pastel calendar colour can't read as
-// "healthy" or "broken".
+// Health has its own colour scale, not the calendar's — so a pastel calendar
+// colour can't read as "healthy" or "broken".
 export function SyncStatusDot({ label, state }: SyncDotMeta) {
   if (state === "error") {
     return <AlertTriangle aria-label={label} className="size-3 text-destructive" role="img" />;

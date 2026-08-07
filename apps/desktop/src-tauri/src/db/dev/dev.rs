@@ -253,11 +253,8 @@ pub(crate) async fn get_usage_stats_impl(pool: &sqlx::SqlitePool) -> AppResult<U
 /// FK order: focus_sessions → page_schedules → page_recurrence_rules → pages → folders
 ///
 /// Connected calendars are disconnected first, through the same path the settings
-/// panel uses, so the grant is revoked and the keychain entry removed rather than
-/// outliving the data. Leaving them would strand the account: its pages cascade
-/// away with `pages`, its folder link nulls out, but the row stays `enabled` with
-/// a live `sync_token` — so the next poll asks for changes *since* that token,
-/// gets none, and rebuilds nothing.
+/// panel uses — otherwise the row survives with a live `sync_token`, and the next
+/// poll asks for changes since that token, gets none, and never rebuilds.
 #[tauri::command]
 pub async fn reset_db(state: tauri::State<'_, DbState>) -> AppResult<()> {
     let pool = state.get_pool().await?;
@@ -299,9 +296,8 @@ pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
         .await?
         .rows_affected();
 
-    // Cascades sync_calendar and any surviving page_sync. Dormant rows are kept by
-    // a normal disconnect so a reconnect can re-link detached pages, but a reset
-    // deletes those pages too — there is nothing left to re-link to.
+    // Cascades sync_calendar and page_sync. Normal disconnect keeps dormant rows for
+    // reconnect-relink; a reset deletes the pages too, so there's nothing to re-link.
     let accounts = sqlx::query("DELETE FROM sync_account")
         .execute(pool)
         .await?
@@ -315,23 +311,19 @@ pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
 }
 
 // ─── Mock calendar-sync seed (dev only) ──────────────────────────────────────
-// Populates the DB with synced external-calendar data exactly as a finished sync
-// would leave it — folders flagged `is_external_calendar`, pages linked by
-// `page_sync`, a cross-zone timed event, an all-day, a recurring series, and a
-// detached page — but with NO network or keychain. The reconciler is never run;
-// this writes the same rows it would. Lets the whole app be spot-checked /
-// manually QA'd against synced data on demand. Additive: re-running replaces only
-// its own mock account (cascades its calendars + page_sync links).
+// Writes the rows a finished sync would leave — external folders, page_sync
+// links, mixed timed/all-day/recurring/detached pages — without touching the
+// network or keychain, so the synced UI can be spot-checked on demand.
+// Re-running replaces only its own mock account.
 
 // A doc node requires at least one block child (ProseMirror `block+`); an empty
 // content array crashes the editor on open. Match the app's EMPTY_TIPTAP_DOC.
 const EMPTY_DOC: &str = r#"{"type":"doc","content":[{"type":"paragraph"}]}"#;
 const MOCK_ACCOUNT_NAME: &str = "Mock Calendar (dev)";
 
-/// Read-only mirror layer for a seeded synced page: calendar-owned location +
-/// attendees, an optional withheld upstream description (drives the "calendar
-/// description changed" notice), and an optional user-edited body. All default to
-/// empty so most seed rows stay bare mirrors.
+/// Read-only mirror layer for a seeded synced page. `pending_description` is what
+/// drives the "calendar description changed" notice; all fields default to empty
+/// so most seed rows stay bare mirrors.
 #[derive(Default)]
 struct SyncedMirror<'a> {
     location: Option<&'a str>,
@@ -514,7 +506,6 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
     .execute(&mut *tx)
     .await?;
 
-    // Two enabled calendars, each with its own external folder.
     let mut folder_ids = Vec::new();
     for (i, (name, color, cal_id)) in [
         ("Personal (synced)", "#7c9cf0", "mock-personal"),
@@ -558,7 +549,7 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
     let (work, work_cal) = &folder_ids[1];
 
     // Personal: same-day timed (NY), cross-zone (LA), all-day, weekly recurring (London).
-    // "Team standup" carries the full B1 read-only mirror surface: location, attendees,
+    // "Team standup" carries the full read-only mirror surface: location, attendees,
     // a user-edited body, and a withheld upstream description → shows the notice.
     //
     // Times mirror the TS seed (`shared/seeds/syncedCalendar.ts`), which places each

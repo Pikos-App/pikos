@@ -6,7 +6,7 @@ use pikos_db::error::AppError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum GoogleError {
-    /// The build carries no OAuth client. Google sync is simply unavailable —
+    /// The build carries no OAuth client. Google sync is unavailable —
     /// CalDAV accounts are unaffected.
     #[error("Google Calendar sync isn't available in this build")]
     NotConfigured,
@@ -60,11 +60,9 @@ impl From<GoogleError> for AppError {
             | GoogleError::Cancelled
             | GoogleError::ScopesWithheld
             | GoogleError::NotConfigured => AppError::Invalid(e.to_string()),
-            // Terminal-but-expected: the engine drops the orphan and advances.
             GoogleError::NotFound => AppError::NotFound(e.to_string()),
-            // Transient: the engine turns these into `Offline`, which keeps the
-            // cursor and surfaces nothing louder than the stale dot. An unhandled
-            // status lands here too, rather than pushing the user to reconnect.
+            // Transient: maps to `Offline` — cursor kept, retried later, no
+            // reconnect prompt. An unhandled status lands here too, not just network faults.
             GoogleError::Network(_)
             | GoogleError::RateLimited
             | GoogleError::UnexpectedStatus(_) => AppError::Network(e.to_string()),
@@ -81,10 +79,8 @@ mod tests {
         e.into()
     }
 
-    // The boundary mapping decides how a Google failure reads downstream, and the
-    // engine keys off it: Invalid → ReconnectNeeded (stop, ask the user), Network →
-    // Offline (stale dot, cursor untouched, retry). Mapping a revoked grant as
-    // Network would poll a dead account forever with no prompt to reconnect.
+    // Mapping a revoked grant as Network would poll a dead account forever with
+    // no prompt to reconnect.
     #[test]
     fn revoked_is_user_actionable_invalid() {
         assert!(matches!(mapped(GoogleError::Revoked), AppError::Invalid(_)));
@@ -110,9 +106,8 @@ mod tests {
         ));
     }
 
-    // A rate limit must read as transient, not as a bad credential: Invalid would
-    // set reconnect_needed, drop the account out of the background pass, and ask
-    // the user to re-auth over a quota blip that clears itself.
+    // Invalid would set reconnect_needed and prompt re-auth over a quota blip
+    // that clears itself — a rate limit must read as transient, not a bad credential.
     #[test]
     fn rate_limited_is_transient_not_a_reconnect_prompt() {
         assert!(matches!(

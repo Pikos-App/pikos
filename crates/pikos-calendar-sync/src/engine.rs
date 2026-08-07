@@ -43,13 +43,12 @@ mod engine_tests;
 /// `Err`. Only a genuine bug (DB/serde/internal) propagates as `Err`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncOutcome {
-    /// Synced cleanly. `full_resync` is true when a stored cursor was rejected and
-    /// the engine re-enumerated the window (it converges idempotently); false for
-    /// an incremental delta or the very first backfill. `changed` is true when this
-    /// poll actually mutated page data — derived from the reconciler's applied-write
-    /// count plus any sweep removals, *not* from delta size. So a full re-enumerate
-    /// where every etag no-ops reports `false` (no spurious UI refresh), and a
-    /// sweep-only pass that deletes an upstream-vanished event reports `true`.
+    /// Synced cleanly. `full_resync` is true when a rejected cursor forced a
+    /// re-enumerate (still idempotent); false for an incremental delta or the
+    /// first backfill. `changed` is true when the poll mutated page data — from
+    /// the reconciler's applied-write count plus sweep removals, *not* delta
+    /// size — so a no-op full re-enumerate reports `false` and a sweep-only
+    /// deletion reports `true`.
     Synced { full_resync: bool, changed: bool },
     /// Transport/offline failure — show a "synced <time> ago" stale indicator and
     /// keep the stored cursor; the next poll retries. No error storm.
@@ -73,8 +72,7 @@ pub async fn sync_calendar<P: CalendarProvider>(
 ) -> AppResult<SyncOutcome> {
     match run(pool, provider, account, calendar, folder_id).await {
         Ok(outcome) => Ok(outcome),
-        // Offline and credential loss are expected states, not bugs — map them to
-        // outcomes. CalDAV flattens keychain-miss *and* 401/403 to `Invalid`.
+        // CalDAV flattens keychain-miss and 401/403 alike to `Invalid`.
         Err(AppError::Network(_)) => Ok(SyncOutcome::Offline),
         Err(AppError::Invalid(_)) => Ok(SyncOutcome::ReconnectNeeded),
         Err(e) => Err(e),
@@ -98,12 +96,10 @@ async fn run<P: CalendarProvider>(
     let since = calendar.sync_token.clone().map(SyncToken);
     let had_cursor = since.is_some();
 
-    // A token-less collection (no `sync-collection`) would otherwise re-enumerate
-    // every poll. Gate that on the collection's change-tag: unchanged since the
-    // last full enumerate — and not yet due a periodic safety re-enumerate — means
-    // nothing to do. Fetched before the enumerate so a change landing in the gap
-    // re-triggers next poll rather than being masked by a newer stored ctag
-    // (convergent, never lossy).
+    // A token-less collection would otherwise re-enumerate every poll; skip when
+    // the change-tag matches the stored one and no periodic safety re-enumerate is
+    // due. Fetched before the enumerate so a mid-gap change isn't masked by a
+    // newer stored ctag — convergent, never lossy.
     let ctag = if had_cursor {
         None
     } else {
@@ -172,24 +168,21 @@ async fn sweep_absent_events(
         .collect();
     // Spare unresolved-but-present resources from the sweep (see `unresolved_present`).
     present.extend(delta.unresolved_present.iter().cloned());
-    // Spare masters fetched to resolve a lone occurrence this pass — they carry the
-    // series' external_id but never appear in `upserts`, so they'd otherwise be
-    // detached/deleted in the same pass that created them.
+    // Spare masters fetched this pass to resolve an occurrence — absent from
+    // `upserts`, they'd otherwise be detached/deleted in the pass that created them.
     present.extend(resolved_masters.iter().cloned());
     retry_on_busy(|| pikos_db::reconciler::sweep_absent(pool, ctx, &present, window_start)).await
 }
 
 /// Above this many delta items, commit the upserts in batches instead of one
-/// transaction — the initial backfill of a busy calendar would otherwise hold the
-/// write lock for the whole ingest and stall interactive writes (the app's
-/// instant-interaction bar). Small deltas keep the reconciler's single-transaction
-/// all-or-nothing semantics.
+/// transaction — a busy calendar's initial backfill would otherwise hold the
+/// write lock long enough to stall interactive writes. Small deltas keep the
+/// reconciler's single-transaction all-or-nothing semantics.
 const RECONCILE_BATCH: usize = 200;
 
-/// A token-less calendar re-enumerates at least this often regardless of its
-/// ctag, bounding staleness if the server's `getctag` is unreliable (doesn't move
-/// on a change). The ctag skip is an optimisation over this backstop, never the
-/// sole guarantee.
+/// A token-less calendar re-enumerates at least this often regardless of ctag,
+/// bounding staleness when a server's `getctag` doesn't move on change. The ctag
+/// skip is an optimisation over this backstop, not the sole guarantee.
 const FORCE_FULL_INTERVAL_HOURS: i64 = 6;
 
 /// Reconcile a delta, splitting a large one into batched transactions (see
@@ -255,16 +248,15 @@ async fn reconcile_safe(
 }
 
 /// Resolve occurrence deltas the reconciler couldn't apply because their series
-/// rule isn't stored and no master arrived in this delta. For each, fetch the one
-/// master (`fetch_event`, NOT a full-series re-fetch), then re-reconcile it
-/// alongside its occurrence deltas from the original batch — the reconciler's
-/// two-pass applies the master first, so the override lands cleanly.
+/// rule isn't stored and no master arrived in this delta. Fetches the one master
+/// per orphan (`fetch_event`, not a full-series re-fetch) and re-reconciles it
+/// with its occurrence deltas — the reconciler's two-pass applies the master
+/// first, so the override lands cleanly.
 ///
-/// A `404` means the master is truly gone: drop the occurrence delta (terminal,
-/// so the cursor may safely advance). Any other error is transient and propagates
-/// — the cursor is not advanced and the whole run retries next poll. Returns the
-/// external ids of the masters it fetched and stored, so the authoritative sweep
-/// can spare them; a non-empty result also drives the `changed` signal.
+/// A `404` means the master is gone upstream: drop the occurrence delta
+/// (terminal, cursor may advance). Any other error propagates and blocks the
+/// advance, so the run retries next poll. Returns the fetched masters' external
+/// ids so the sweep can spare them and the `changed` signal can see them.
 async fn resolve_missing_masters<P: CalendarProvider>(
     pool: &sqlx::SqlitePool,
     provider: &P,
@@ -292,7 +284,6 @@ async fn resolve_missing_masters<P: CalendarProvider>(
                     }
                 }
             }
-            // Master gone upstream → drop the orphaned occurrence delta.
             Err(AppError::NotFound(_)) => {}
             Err(e) => return Err(e),
         }
@@ -301,17 +292,16 @@ async fn resolve_missing_masters<P: CalendarProvider>(
     if resolved.upserts.is_empty() {
         return Ok(vec![]);
     }
-    // The masters we just fetched are present, so this pass resolves cleanly;
-    // any lingering signal would mean a provider bug, not a retryable orphan.
+    // The masters just fetched are present, so this resolves cleanly — a
+    // lingering signal here would mean a provider bug, not a retryable orphan.
     reconcile_safe(pool, ctx, &resolved).await?;
     Ok(master_ids)
 }
 
-/// Whether a token-less poll may skip enumerating: the collection change-tag must
-/// be present on BOTH sides and match, AND a periodic safety re-enumerate must not
-/// be due. A missing tag on either side (server doesn't support `getctag`, or the
-/// first poll before one is stored) forces enumeration — so an absent or
-/// unreliable tag degrades to bounded staleness, never a dropped change.
+/// Whether a token-less poll may skip enumerating: the change-tag must be present
+/// on both sides and match, and no periodic safety re-enumerate must be due. A
+/// missing tag (no `getctag` support, or no stored tag yet) forces enumeration —
+/// an unreliable tag degrades to bounded staleness, never a dropped change.
 fn can_skip_enumerate(calendar: &SyncCalendarRow, current_ctag: Option<&str>) -> bool {
     let (Some(stored), Some(current)) = (calendar.ctag.as_deref(), current_ctag) else {
         return false;
@@ -342,7 +332,7 @@ async fn persist_skip(pool: &sqlx::SqlitePool, calendar_id: &str) -> AppResult<(
     Ok(())
 }
 
-/// Advance the stored cursor and stamp the freshness clocks. The single writer of
+/// Advance the stored cursor and freshness clocks — the single writer of
 /// `sync_calendar`'s sync state, run only after a fully successful poll. `ctag` is
 /// recorded on a full enumerate so the next token-less poll can diff against it;
 /// incremental polls leave it untouched.
