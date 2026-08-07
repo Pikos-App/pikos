@@ -6,7 +6,6 @@ process.env["TZ"] = "UTC";
 
 export default defineConfig({
   test: {
-    // Local worker cap — rationale in apps/desktop/vitest.config.ts.
     ...(process.env["CI"] ? {} : { maxWorkers: "50%" }),
     environment: "jsdom",
     coverage: {

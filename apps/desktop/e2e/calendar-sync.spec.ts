@@ -13,9 +13,8 @@ import type { Page } from "@playwright/test";
 
 import { expect, mod, test as appTest } from "./fixtures";
 
-// Synced timed events resolve to the viewer's zone (absolute time), so block
-// positions depend on the viewer timezone. Pin it so the seed renders the same
-// everywhere — e.g. "Team standup" (9am New York) always lands at 9am.
+// Synced events render in the viewer's zone, so pin one and the seed's block
+// positions are the same everywhere.
 appTest.use({ timezoneId: "America/New_York" });
 
 async function openSyncPanel(app: Page) {
@@ -151,18 +150,14 @@ appTest("resync then disconnect removes the account and its folder @tier2", asyn
 
 // ─── tier2: the seed is legible on the calendar at all ───────────────────────
 //
-// The synced seed stacks onto the realistic seed's busiest day, so a slot
-// collision doesn't fail loudly — the loser cascades past the visible depth cap
-// into the day's "+N more" pill and simply stops existing for every other check
-// here. Three of the five Personal events sat in that pill for a while, which
-// is why the seed now picks its slots deliberately (see `seeds/syncedCalendar`).
+// A seed slot collision fails silently: the loser collapses into the "+N more"
+// pill and stops existing for every other check here. Three of the five did.
 
 appTest("every seeded Personal synced event renders as its own block @tier2", async ({ app }) => {
   await seedSynced(app);
   await openCalendarMode(app);
 
-  // Matching "<title>, " is what proves a grid block: the trailing time is what
-  // the page-list item lacks, and a collapsed block is absent outright.
+  // The trailing time is what a grid block has and the page-list item doesn't.
   for (const name of [
     /Team standup, /,
     /Weekly 1:1 \(London\), /,
@@ -171,7 +166,7 @@ appTest("every seeded Personal synced event renders as its own block @tier2", as
   ]) {
     await expect(app.getByRole("button", { name })).toBeVisible();
   }
-  // The all-day event lives in the all-day bar, so it carries no time.
+  // All-day events sit in their own bar, with no time.
   await expect(app.getByRole("button", { name: "Company offsite" })).toBeVisible();
 });
 

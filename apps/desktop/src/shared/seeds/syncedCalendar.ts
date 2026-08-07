@@ -11,17 +11,11 @@ import { addDays, set } from "date-fns";
 // cross-zone event (resolves to the viewer's zone, no badge), an all-day event
 // (never shifts), a weekly recurring series, and one detached page (broken-sync).
 //
-// The "synced" scenario stacks this on top of the realistic seed, whose day-0
-// slots are fixed (6:30, 8, 9, 9:15, 2–4 PM, 3–4 PM, 7 PM). Every event below is
-// timed to resolve into a lane that seed leaves free, for a New York viewer —
-// the zone the sync e2e pins. Land one on an occupied slot and it cascades past
-// MAX_VISIBLE_CASCADE_DEPTH into the day's "+N more" pill, where no
-// calendar-surface check can see it.
-//
-// A cross-zone event has to clear its lane at BOTH of its offsets: London and
-// New York run three weeks a year an hour closer than usual (their DST
-// transitions don't line up), and Tokyo keeps none at all, so each of those
-// resolves to two possible slots over a year and both must be free.
+// Times are picked to miss the realistic seed's day-0 slots (6:30, 8, 9, 9:15,
+// 2–4 PM, 3–4 PM, 7 PM), which this scenario stacks onto: a collision collapses
+// the loser into the day's "+N more" pill, where no calendar check can see it.
+// Judge a cross-zone event at both its offsets — London/New York run an hour
+// closer for three weeks a year, so it has two possible lanes and needs both.
 
 function at(base: Date, offsetDays: number, hours: number, minutes: number): string {
   return formatLocalISO(

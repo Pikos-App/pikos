@@ -21,11 +21,7 @@ export default defineConfig({
     },
   },
   test: {
-    // Vitest sizes its worker pool from the core count, but it never has the box
-    // to itself here: `pnpm verify` fans out two packages' suites plus lint,
-    // depcruise and two tsc passes at once, which together peg every core and
-    // leave the machine unusable while it runs. Cap the local share; CI does get
-    // the box to itself, so it keeps the default.
+    // Local runs share the machine with the rest of `pnpm verify`; CI doesn't.
     ...(process.env["CI"] ? {} : { maxWorkers: "50%" }),
     coverage: {
       exclude: [
@@ -42,12 +38,8 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       provider: "v8",
       reporter: ["text-summary", "html", "json-summary"],
-      // Per-directory thresholds on the load-bearing pure-logic dirs (hooks,
-      // context, utils, parsers). Components and feature UI surfaces are 0% by
-      // design here — they're covered by Playwright E2E, which v8 doesn't see.
-      // Numbers sit just under current to allow normal churn but trip on real
-      // regressions. Aggregate global thresholds intentionally omitted: a single
-      // average across tested + E2E-only files is a false signal.
+      // Per-directory rather than global: UI dirs are covered by Playwright,
+      // which v8 can't see, so one average would read them as untested.
       thresholds: {
         "src/features/calendar/utils/**": {
           branches: 85,
