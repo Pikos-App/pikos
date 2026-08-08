@@ -18,18 +18,20 @@ async function openSyncPanel(app: Page) {
   await app.getByRole("button", { name: "Calendar Sync" }).click();
 }
 
-/** Connect the mock CalDAV account, leaving the Sync panel open on its card. */
-async function connectCaldav(app: Page) {
+/** Connect a mock CalDAV account, leaving the Sync panel open on its card. The
+ *  username varies the account identity — every account offers the same two
+ *  calendar names, so a second one collides with the first by design. */
+async function connectCaldav(app: Page, username = "me@example.com") {
   await openSyncPanel(app);
   await app.getByRole("button", { name: "Add account" }).click();
   await app.getByRole("button", { name: /CalDAV/ }).click();
 
   await app.getByLabel("Server URL").fill("https://caldav.example.com");
-  await app.getByLabel("Username").fill("me@example.com");
+  await app.getByLabel("Username").fill(username);
   await app.getByLabel("App password").fill("app-pw");
   await app.getByRole("button", { name: "Connect" }).click();
 
-  await expect(app.getByRole("switch", { name: "Sync Personal" })).toBeVisible();
+  await expect(app.getByRole("switch", { name: "Sync Personal" }).first()).toBeVisible();
 }
 
 /** Wipe + load the mock synced-calendar seed via the Developer settings tab. */
@@ -137,6 +139,38 @@ appTest("resync then disconnect removes the account and its folder @tier2", asyn
   ).toBeVisible();
   await app.keyboard.press("Escape");
   await expect(app.getByRole("button", { name: "Personal" })).not.toBeVisible();
+});
+
+// ─── tier2: two accounts, colliding calendar names ───────────────────────────
+
+appTest("same-named calendars on two accounts separate under account headings @tier2", async ({
+  app,
+}) => {
+  await connectCaldav(app, "work@example.com");
+  await app.getByRole("switch", { name: "Sync Personal" }).click();
+  await app.keyboard.press("Escape");
+
+  await connectCaldav(app, "home@example.com");
+  const personalSwitches = app.getByRole("switch", { name: "Sync Personal" });
+  await expect(personalSwitches).toHaveCount(2);
+  await personalSwitches.nth(1).click();
+  await app.keyboard.press("Escape");
+
+  const work = app.getByRole("group", { name: /^work@example\.com/ });
+  const home = app.getByRole("group", { name: /^home@example\.com/ });
+  await expect(work.getByRole("button", { name: "Personal" })).toBeVisible();
+  await expect(home.getByRole("button", { name: "Personal" })).toBeVisible();
+
+  // Down to one account there is nothing left to disambiguate, so the headings go.
+  await openSyncPanel(app);
+  await app.getByRole("button", { name: /Account actions for home@example\.com/ }).click();
+  await app.getByRole("menuitem", { name: "Disconnect" }).click();
+  await app.getByRole("alertdialog", { name: /Disconnect/ }).waitFor();
+  await app.getByRole("button", { name: "Disconnect" }).click();
+  await app.keyboard.press("Escape");
+
+  await expect(app.getByRole("group", { name: /@example\.com/ })).toHaveCount(0);
+  await expect(app.getByRole("button", { name: "Personal" })).toBeVisible();
 });
 
 // ─── tier2: the seed is legible on the calendar at all ───────────────────────

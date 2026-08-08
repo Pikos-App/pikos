@@ -30,6 +30,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
+import { useCalendarAccountGroups } from "../hooks/useCalendarAccountGroups";
 import { useFolderList } from "../hooks/useFolderList";
 import type { FolderSortOrder } from "../hooks/useFolderList";
 import { ExternalCalendarItem } from "./ExternalCalendarItem";
@@ -55,6 +56,7 @@ export function FolderList() {
     sortOrder,
     todayCount,
   } = useFolderList();
+  const calendarGroups = useCalendarAccountGroups(externalFolders);
   const { openSortMenu, setOpenSortMenu } = useUI();
   const { density } = useListSettings();
   const folderRowHeight = density === "compact" ? 28 : density === "spacious" ? 38 : 32;
@@ -261,16 +263,33 @@ export function FolderList() {
               <span className="type-ui-sm tracking-wide text-subtle uppercase">Calendars</span>
             </button>
             {!calendarsCollapsed &&
-              externalFolders.map((folder) => (
-                <ExternalCalendarItem
-                  folder={folder}
-                  isActive={activeViewId === folder.id}
-                  key={folder.id}
-                  onColorChange={(color) => handleColorChange(folder.id, color)}
-                  onSelect={() => setActiveViewId(folder.id)}
-                  pageCount={pageCountByFolder[folder.id] ?? 0}
-                />
-              ))}
+              calendarGroups.map((group) => {
+                const accountName = calendarGroups.length > 1 ? group.accountName : null;
+                return (
+                  <div
+                    aria-label={accountName ?? undefined}
+                    className="flex flex-col gap-0.5"
+                    key={group.accountId ?? "unlinked"}
+                    role={accountName ? "group" : undefined}
+                  >
+                    {accountName && (
+                      <span className="type-ui-sm truncate px-2 pt-1 text-subtle">
+                        {accountName}
+                      </span>
+                    )}
+                    {group.folders.map((folder) => (
+                      <ExternalCalendarItem
+                        folder={folder}
+                        isActive={activeViewId === folder.id}
+                        key={folder.id}
+                        onColorChange={(color) => handleColorChange(folder.id, color)}
+                        onSelect={() => setActiveViewId(folder.id)}
+                        pageCount={pageCountByFolder[folder.id] ?? 0}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>
