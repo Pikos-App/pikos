@@ -187,6 +187,22 @@ describe("MetadataHeader — reminder bell on locked pages", () => {
   });
 });
 
+describe("MetadataHeader — locked recurrence label", () => {
+  it("names the position of a BYSETPOS series", async () => {
+    const page = makePage({ id: "rec2", scheduleLocked: true, syncState: "active" });
+    const { pagesApi } = await renderHeader(page);
+    await act(async () => {
+      await pagesApi().createRecurrence({
+        pageId: "rec2",
+        rrule: "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+    expect(screen.getByText("every month on the 3rd Friday")).toBeInTheDocument();
+  });
+});
+
 describe("MetadataHeader — why a locked field can't be edited", () => {
   it("explains the lock from the hint beside a locked title", async () => {
     await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));

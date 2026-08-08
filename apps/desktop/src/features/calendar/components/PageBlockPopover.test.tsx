@@ -98,6 +98,14 @@ describe("PageBlockPopover — mirror metadata", () => {
       screen.queryByRole("img", { name: /are read-only for synced pages/ })
     ).not.toBeInTheDocument();
   });
+
+  it("names the position of a locked BYSETPOS series", () => {
+    mocks.recurrenceRules = [
+      { id: "r1", pageId: "p1", rrule: "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3" } as PageRecurrenceRule,
+    ];
+    renderPopover(makePage({ scheduleLocked: true, syncState: "active" }));
+    expect(screen.getByText("every month on the 3rd Friday")).toBeInTheDocument();
+  });
 });
 
 describe("PageBlockPopover — reminder bell", () => {

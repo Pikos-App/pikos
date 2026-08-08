@@ -691,6 +691,54 @@ describe("rruleToLabel", () => {
   it("falls back to raw string on invalid input", () => {
     expect(rruleToLabel("INVALID_RRULE")).toBe("INVALID_RRULE");
   });
+
+  it("restores the position rrule.js drops from BYSETPOS", () => {
+    expect(rruleToLabel("FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3")).toBe("every month on the 3rd Friday");
+  });
+
+  it("reads a negative BYSETPOS as 'last'", () => {
+    expect(rruleToLabel("FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1")).toBe(
+      "every month on the last Friday"
+    );
+  });
+
+  it("collapses a weekday set to 'last weekday'", () => {
+    expect(rruleToLabel("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1")).toBe(
+      "every month on the last weekday"
+    );
+  });
+
+  it("collapses an all-days set to 'day'", () => {
+    expect(rruleToLabel("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR,SA,SU;BYSETPOS=1")).toBe(
+      "every month on the 1st day"
+    );
+  });
+
+  it("joins an arbitrary day set with 'or'", () => {
+    expect(rruleToLabel("FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=1")).toBe(
+      "every month on the 1st Saturday or Sunday"
+    );
+  });
+
+  it("joins multiple positions", () => {
+    expect(rruleToLabel("FREQ=MONTHLY;BYDAY=FR;BYSETPOS=1,3")).toBe(
+      "every month on the 1st or 3rd Friday"
+    );
+  });
+
+  it("keeps rrule's interval and end-condition wording", () => {
+    expect(rruleToLabel("FREQ=MONTHLY;INTERVAL=2;BYDAY=FR;BYSETPOS=3;COUNT=10")).toBe(
+      "every 2 months on the 3rd Friday for 10 times"
+    );
+    expect(rruleToLabel("FREQ=YEARLY;BYMONTH=3;BYDAY=SU;BYSETPOS=-1")).toBe(
+      "every March on the last Sunday"
+    );
+  });
+
+  it("leaves a rule without BYSETPOS untouched", () => {
+    expect(rruleToLabel("FREQ=MONTHLY;BYDAY=3FR")).toBe("every month on the 3rd Friday");
+    expect(rruleToLabel("FREQ=MONTHLY;BYMONTHDAY=15")).toBe("every month on the 15th");
+  });
 });
 
 describe("rruleHasOrdinalCadence", () => {

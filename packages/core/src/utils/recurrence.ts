@@ -400,14 +400,91 @@ export function rruleHasOrdinalCadence(rruleStr: string): boolean {
   return match[1]!.split(",").some((token) => /^\s*[+-]?\d/.test(token));
 }
 
+/** RRULE weekday tokens and names in rrule.js index order (0 = Monday … 6 = Sunday). */
+const WEEKDAY_TOKENS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+const WEEKDAY_NAMES = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
+
+/** Mirrors rrule.js's own ordinal wording — `bySetPosLabel` matches on it to splice. */
+function setPosOrdinal(pos: number): string {
+  if (pos === -1) return "last";
+  const n = Math.abs(pos);
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  const suffix = teen ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
+  return pos < 0 ? `${n}${suffix} last` : `${n}${suffix}`;
+}
+
+function daySetPhrase(days: number[]): string {
+  if (days.length === 7) return "day";
+  if (days.length === 5 && days.every((d) => d <= 4)) return "weekday";
+  const names = days.map((d) => WEEKDAY_NAMES[d]!);
+  if (names.length === 1) return names[0]!;
+  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+}
+
+/**
+ * Label for a BYSETPOS rule, or null if the rule has no BYDAY+BYSETPOS pair.
+ *
+ * rrule.js `toText()` drops BYSETPOS outright, so `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3`
+ * reads "every month on Friday" — a cadence the series does not follow. This relabels
+ * through the equivalent BYDAY-ordinal spelling (`BYDAY=3FR`), which `toText()` does
+ * render, so interval / BYMONTH / end-condition wording stays rrule's rather than
+ * being reimplemented here. A multi-day set has no ordinal equivalent
+ * (`BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1` = "last weekday"), so the set is spliced back
+ * over the single carrier day. Display only — the rule itself is never rewritten.
+ */
+function bySetPosLabel(rruleStr: string): string | null {
+  const positions = (/(?:^|;)BYSETPOS=([^;]+)/i.exec(rruleStr)?.[1] ?? "")
+    .split(",")
+    .map((v) => Number.parseInt(v.trim(), 10))
+    .filter((n) => Number.isInteger(n) && n !== 0);
+  const byday = /(?:^|;)BYDAY=([^;]+)/i.exec(rruleStr)?.[1];
+  if (positions.length === 0 || !byday) return null;
+
+  const days = [
+    ...new Set(
+      byday
+        .split(",")
+        .map((token) => WEEKDAY_TOKENS.indexOf(token.trim().toUpperCase().slice(-2)))
+        .filter((d) => d >= 0)
+    ),
+  ].sort((a, b) => a - b);
+  if (days.length === 0) return null;
+
+  const carrier = rruleStr
+    .split(";")
+    .filter((part) => !/^\s*BYSETPOS=/i.test(part))
+    .map((part) =>
+      /^\s*BYDAY=/i.test(part) ? `BYDAY=${positions[0]}${WEEKDAY_TOKENS[days[0]!]}` : part
+    )
+    .join(";");
+
+  let text: string;
+  try {
+    text = RRule.fromString(`RRULE:${carrier}`).toText();
+  } catch {
+    return null;
+  }
+
+  const carrierPhrase = `the ${setPosOrdinal(positions[0]!)} ${WEEKDAY_NAMES[days[0]!]}`;
+  const fullPhrase = `the ${positions.map(setPosOrdinal).join(" or ")} ${daySetPhrase(days)}`;
+  return carrierPhrase === fullPhrase ? text : text.replace(carrierPhrase, fullPhrase);
+}
+
 /**
  * Converts an RRULE string (e.g. "FREQ=WEEKLY;BYDAY=MO") to a human-readable
  * label (e.g. "every week on Monday"). Falls back to the raw string on error.
  */
 export function rruleToLabel(rruleStr: string): string {
   try {
-    const rule = RRule.fromString(`RRULE:${rruleStr}`);
-    return rule.toText();
+    return bySetPosLabel(rruleStr) ?? RRule.fromString(`RRULE:${rruleStr}`).toText();
   } catch {
     return rruleStr;
   }
