@@ -248,8 +248,10 @@ export interface RescheduleVirtualInput {
 }
 
 export interface RescheduleVirtualResult {
-  /** The independent clone page, scheduled at the new time (denorm set). */
-  clone: PageSummary;
+  /** The independent clone page, scheduled at the new time (denorm set). Null
+   *  when the occurrence already had an override row and that row moved in
+   *  place — no clone, no exdate change. */
+  clone: PageSummary | null;
   /** Post-merge exdates for the rule. */
   ruleExdates: string[];
 }

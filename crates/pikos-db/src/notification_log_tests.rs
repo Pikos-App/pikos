@@ -501,6 +501,18 @@ async fn today_count_ignores_a_recurring_pages_stale_anchor() {
 }
 
 #[tokio::test]
+async fn today_count_includes_an_all_day_series() {
+    let pool = test_pool().await;
+    // Date-only base → all-day occurrences, which sort at midnight and so must
+    // land inside the day window the count builds around `date`.
+    insert_page(&pool, "ad", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "ad", "2026-05-01").await;
+    set_page_start(&pool, "ad", "2026-05-20").await;
+
+    assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 1);
+}
+
+#[tokio::test]
 async fn today_count_excludes_skipped_completed_and_exdated_occurrences() {
     let pool = test_pool().await;
     for id in ["skipped", "completed", "exdated"] {
@@ -693,6 +705,22 @@ async fn overdue_count_ignores_an_occurrence_moved_out_of_the_window() {
         "not_started",
     )
     .await;
+
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+}
+
+#[tokio::test]
+async fn overdue_count_skips_a_freshly_created_series() {
+    // The recency cutoff exists to skip a fresh import batch, and an import
+    // creates recurring pages too — so it has to reach the enumerated arm, not
+    // just the page_schedules one. Without it this series' 07:00 occurrence counts.
+    let pool = test_pool().await;
+    insert_page(&pool, "fresh", "not_started", "2026-05-25T08:59:00").await;
+    insert_rule(&pool, "fresh", "2026-05-01T07:00:00").await;
+    set_page_start(&pool, "fresh", "2026-05-20T07:00:00").await;
 
     let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
         .await
@@ -954,6 +982,72 @@ async fn native_default_path_fires_a_recurring_override_row() {
         .unwrap();
     assert_eq!(via_schedule.len(), 1);
     assert_eq!(via_schedule[0].schedule_id, "ov");
+}
+
+/// A detached series' override renders as an ordinary unlocked block, so its
+/// reminder must fire — on the native path, at the device-local wall-clock.
+/// Detaching runs `float_wall_clock`, which rewrites the row into the device zone
+/// and clears its stamp; from then on the zoned path (active-synced only) no
+/// longer owns it. Pins the handoff so neither query drops it and neither doubles it.
+#[tokio::test]
+async fn a_detached_overrides_reminder_fires_once_on_the_native_path() {
+    let pool = test_pool().await;
+    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "rec", "2026-05-25T09:00:00").await;
+    crate::pool::insert_test_page_sync(&pool, "rec", "detached")
+        .await
+        .unwrap();
+    // Post-float shape: device-local wall-clock, timezone cleared.
+    insert_override(
+        &pool,
+        "ov",
+        "rec",
+        "2026-05-25T09:10:00",
+        "2026-05-25T09:00:00",
+        "not_started",
+    )
+    .await;
+
+    let due = due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+        .await
+        .unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].schedule_id, "ov");
+    assert_eq!(due[0].scheduled_start, "2026-05-25T09:10:00");
+    assert!(
+        due_synced_override_reminders(&pool, override_now(), 10)
+            .await
+            .unwrap()
+            .is_empty(),
+        "the zoned path is active-synced only and must not double-fire it"
+    );
+}
+
+#[tokio::test]
+async fn trashing_the_page_silences_a_detached_overrides_reminder() {
+    // The block is gone from the calendar, so the reminder goes with it — the
+    // override row outlives the page until the trash is emptied.
+    let pool = test_pool().await;
+    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "rec", "2026-05-25T09:00:00").await;
+    crate::pool::insert_test_page_sync(&pool, "rec", "detached")
+        .await
+        .unwrap();
+    insert_override(
+        &pool,
+        "ov",
+        "rec",
+        "2026-05-25T09:10:00",
+        "2026-05-25T09:00:00",
+        "not_started",
+    )
+    .await;
+    soft_delete_page(&pool, "rec").await;
+
+    assert!(due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 // ─── synced recurring per-instance override reminders ────────────────────────

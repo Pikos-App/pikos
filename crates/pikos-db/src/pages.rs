@@ -1612,14 +1612,19 @@ pub struct RescheduleVirtualInput {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RescheduleVirtualResult {
-    /// The independent clone page materialized at the new time.
-    pub clone: PageSummary,
+    /// The independent clone page materialized at the new time. `None` when the
+    /// occurrence already had an override row and that row moved in place.
+    pub clone: Option<PageSummary>,
     /// Post-merge exdates for the rule — callers sync local rule state from this.
     pub rule_exdates: Vec<String>,
 }
 
-/// Atomically materializes a virtual rrule occurrence at a new time (drag or
-/// popover date pick on a virtual block):
+/// Atomically re-times one occurrence of a series (drag or popover date pick).
+///
+/// Two arms, chosen by whether the occurrence is already materialized. An
+/// occurrence a provider moved has an override row → that row moves in place,
+/// keeping `original_date` so a re-link can still overwrite it with the
+/// provider's value. Otherwise the occurrence is virtual and is materialized:
 /// 1. Clones the head as an independent 'not_started' page
 /// 2. Schedules the clone at the new time (page_schedules row + denorm)
 /// 3. Merges the original date into the rule's exdates so the virtual disappears
@@ -1668,6 +1673,47 @@ async fn reschedule_virtual_occurrence_once(
     .await?
     .map(Page::from)
     .ok_or_else(|| AppError::NotFound(format!("Page not found: {page_id}")))?;
+
+    // An occurrence a provider already moved exists as an override row. Move THAT
+    // row instead of cloning: `original_date` is what lets a later re-link
+    // overwrite the row with the provider's value, so cloning would leave the row
+    // to be re-mirrored *and* strand the clone beside it — one occurrence, two
+    // blocks, permanently. Day-keyed, since a synced timed override stores
+    // `original_date` as a full wall-clock while the caller sends the day.
+    // Unreachable for an active mirror (rejected above) and for a native series,
+    // which re-homes by clone + exdate and never writes an override row.
+    let override_id: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM page_schedules
+         WHERE rule_id = ?1 AND substr(original_date, 1, 10) = substr(?2, 1, 10)",
+    )
+    .bind(&data.rule_id)
+    .bind(&data.original_date)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if let Some(override_id) = override_id {
+        // Clearing the zone is the point, not incidental: the user just asserted a
+        // device-local time, so the row must stop claiming the source zone or its
+        // reminder would resolve against the wrong offset.
+        sqlx::query(
+            "UPDATE page_schedules
+             SET scheduled_start = ?, scheduled_end = ?, timezone = NULL
+             WHERE id = ?",
+        )
+        .bind(&data.scheduled_start)
+        .bind(&data.scheduled_end)
+        .bind(&override_id)
+        .execute(&mut *tx)
+        .await?;
+        // Nothing merged — the original date was already excluded by this very row.
+        let rule_exdates = crate::schedules::merge_rule_exdates_tx(&mut tx, &data.rule_id, &[]).await?;
+        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id).await?;
+        tx.commit().await?;
+        return Ok(RescheduleVirtualResult {
+            clone: None,
+            rule_exdates,
+        });
+    }
 
     insert_head_clone_tx(
         &mut tx,
@@ -1724,7 +1770,7 @@ async fn reschedule_virtual_occurrence_once(
     .await?;
 
     Ok(RescheduleVirtualResult {
-        clone: PageSummary::from(clone_row),
+        clone: Some(PageSummary::from(clone_row)),
         rule_exdates,
     })
 }

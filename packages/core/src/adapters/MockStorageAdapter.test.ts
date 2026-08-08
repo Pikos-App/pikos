@@ -1289,10 +1289,12 @@ describe("schedule and rule updates", () => {
       timezone: "America/Los_Angeles",
     });
 
-    expect(result.clone.status).toBe("not_started");
-    expect(result.clone.scheduledStart).toBe("2026-01-04T14:00:00");
+    const clone = result.clone;
+    if (!clone) throw new Error("a virtual occurrence materializes a clone");
+    expect(clone.status).toBe("not_started");
+    expect(clone.scheduledStart).toBe("2026-01-04T14:00:00");
     expect(result.ruleExdates).toEqual(["2026-01-03"]);
-    const schedules = await adapter.listPageSchedules(result.clone.id);
+    const schedules = await adapter.listPageSchedules(clone.id);
     expect(schedules).toHaveLength(1);
     expect(schedules[0]?.scheduledStart).toBe("2026-01-04T14:00:00");
 
@@ -1304,6 +1306,42 @@ describe("schedule and rule updates", () => {
         timezone: "America/Los_Angeles",
       })
     ).rejects.toThrow("Recurrence rule not found: missing");
+  });
+
+  it("rescheduleVirtualOccurrence moves an existing override row instead of cloning", async () => {
+    // A detached series' provider-moved instance. Re-timing it moves that row —
+    // cloning would leave the row to be re-mirrored on re-link, beside the clone.
+    const page = await createTestPage();
+    const rule = await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=DAILY",
+      scheduledStart: "2026-01-01T09:00:00",
+      timezone: "America/Los_Angeles",
+    });
+    const override = await adapter.createPageSchedule({
+      originalDate: "2026-01-03T09:00:00", // stored as full wall-clock; matched by day
+      pageId: page.id,
+      ruleId: rule.id,
+      scheduledStart: "2026-01-03T17:00:00",
+      timezone: "America/Los_Angeles",
+    });
+
+    const result = await adapter.rescheduleVirtualOccurrence({
+      originalDate: "2026-01-03",
+      ruleId: rule.id,
+      scheduledStart: "2026-01-05T14:00:00",
+      timezone: "America/Los_Angeles",
+    });
+
+    expect(result.clone).toBeNull();
+    expect(result.ruleExdates).toEqual([]);
+    const rows = await adapter.listPageSchedulesForRules([rule.id]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(override.id);
+    expect(rows[0]?.scheduledStart).toBe("2026-01-05T14:00:00");
+    // original_date survives, so a re-link can still claim this occurrence.
+    expect(rows[0]?.originalDate).toBe("2026-01-03T09:00:00");
+    expect(rows[0]?.timezone).toBeUndefined();
   });
 });
 

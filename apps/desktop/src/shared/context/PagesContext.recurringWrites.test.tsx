@@ -198,6 +198,30 @@ describe("completeRecurringPage serialization behind the mutation queue", () => 
 });
 
 describe("rescheduleVirtualOccurrence", () => {
+  it("an in-place override move adds no page and bumps overridesVersion", async () => {
+    // A provider-moved occurrence already has an override row, so the backend
+    // moves that row and returns no clone. Nothing enters the page list, and no
+    // dep the calendar's override fetch watches changes — hence the counter.
+    const { hook, ruleId } = await setupRecurringPage();
+    const pageCount = hook.result.current.pages.pages.length;
+    const version = hook.result.current.pages.overridesVersion;
+    vi.spyOn(MockStorageAdapter.prototype, "rescheduleVirtualOccurrence").mockResolvedValue({
+      clone: null,
+      ruleExdates: [],
+    });
+
+    await act(async () => {
+      await hook.result.current.pages.rescheduleVirtualOccurrence(
+        ruleId,
+        "2099-01-12",
+        "2099-01-13T10:00:00"
+      );
+    });
+
+    expect(hook.result.current.pages.pages).toHaveLength(pageCount);
+    expect(hook.result.current.pages.overridesVersion).toBe(version + 1);
+  });
+
   it("drops a re-entrant reschedule of the same occurrence — one clone only", async () => {
     const { hook, ruleId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "rescheduleVirtualOccurrence");

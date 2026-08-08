@@ -41,7 +41,7 @@ import type {
   SyncCalendar,
   UncompleteRecurringInput,
 } from "../types";
-import { formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/dates";
+import { dateKey, formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
 import { computeNextEnd, nextOccurrenceAfter, rawExpandRule } from "../utils/recurrence";
@@ -834,6 +834,26 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     const locked = this.lockedMirrorError(rule.pageId);
     if (locked) return Promise.reject(locked);
+
+    // Already-materialised occurrence → move that row, don't clone. Day-keyed:
+    // a synced timed override stores originalDate as a full wall-clock.
+    const existing = [...this.schedules.values()].find(
+      (s) =>
+        s.ruleId === data.ruleId && s.originalDate && dateKey(s.originalDate) === data.originalDate
+    );
+    if (existing) {
+      // Drops both optional fields before re-adding: the move clears the source
+      // zone (the user asserted a device-local time) and an all-day target
+      // carries no end.
+      const { scheduledEnd: _end, timezone: _tz, ...rest } = existing;
+      this.schedules.set(existing.id, {
+        ...rest,
+        scheduledStart: data.scheduledStart,
+        ...(data.scheduledEnd !== undefined && { scheduledEnd: data.scheduledEnd }),
+      });
+      this.recomputeHead(rule.pageId);
+      return Promise.resolve({ clone: null, ruleExdates: [...rule.rruleExdates] });
+    }
 
     const timestamp = now();
     const clone: Page = {

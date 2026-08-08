@@ -122,6 +122,10 @@ export interface PagesContextValue {
     start: string,
     end?: string
   ) => Promise<void>;
+  /** Bumped when an override row changes without any page or rule changing with
+   *  it — the calendar's override fetch is keyed on the visible range and the
+   *  rule set, so an in-place move is otherwise invisible to it until a nav. */
+  overridesVersion: number;
   /**
    * Complete a recurring page: clone as done, advance head to next occurrence.
    * The `missedPolicy` controls behaviour when there's a gap between the head's
@@ -251,6 +255,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   // (idempotent) clone twice into `pages`.
   const completingSyncedRef = useRef<Set<string>>(new Set());
   const reschedulingVirtualRef = useRef<Set<string>>(new Set());
+  const [overridesVersion, setOverridesVersion] = useState(0);
   const [pageErrors, setPageErrors] = useState<Map<string, StorageError>>(new Map());
 
   // ─── Per-page mutation queue ───────────────────────────────────────────────
@@ -738,7 +743,15 @@ export function PagesProvider({ children }: { children: ReactNode }) {
         timezone: getLocalTimezone(),
         ...(end !== undefined && { scheduledEnd: end }),
       });
-      setPages((prev) => [...prev, result.clone]);
+      // No clone means the occurrence already had an override row and that row
+      // moved in place. Nothing entered the page list, and no dep the calendar's
+      // override fetch watches has changed — hence the explicit version bump.
+      const { clone } = result;
+      if (clone) {
+        setPages((prev) => [...prev, clone]);
+      } else {
+        setOverridesVersion((v) => v + 1);
+      }
       // Rule state syncs from the post-merge exdates the backend returns, not
       // a locally computed array — see addExdates in CompleteRecurringInput.
       setRecurrenceRules((prev) =>
@@ -1112,6 +1125,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     listOverridesForRules,
     maybeToggleRecurringOccurrence,
     mergePages,
+    overridesVersion,
     pageErrors,
     pages,
     patchFolderColor,

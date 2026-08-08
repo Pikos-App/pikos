@@ -29,6 +29,9 @@ interface UseRecurrenceExpansionParams {
   /** Kill-switch. When false, expand in-process via rrule.js instead of the Rust
    * engine over IPC — the fallback if the IPC path misbehaves on the live grid. */
   useRustEngine?: boolean;
+  /** Refetch trigger for an override row that moved in place. Such a move leaves
+   *  the range and the rule set identical, so nothing else below would refire. */
+  overridesVersion?: number;
 }
 
 /** Day-keyed union of a series' completed and skipped occurrence dates. A synced
@@ -82,19 +85,27 @@ function toVirtuals(
 }
 
 /** A moved synced occurrence, shaped from its series page + the override row's
- * zoned schedule. Deliberately not a `VirtualOccurrence` (no `isVirtual`), so it
- * renders the page's synced treatment — checkbox, sync icon, schedule-locked
- * popover — instead of the recurring glyph; it reads as a real, completable
- * event. `originalDate` (day-key) is the *original* occurrence for the
- * completion key and reminder derivation, not the day it moved to. */
+ * schedule. Deliberately not a `VirtualOccurrence` (no `isVirtual`), so it
+ * renders the page's own treatment — checkbox, sync icon, popover — instead of
+ * the recurring glyph; it reads as a real, completable event. `originalDate`
+ * (day-key) is the *original* occurrence for the completion key and reminder
+ * derivation, not the day it moved to. */
 type OverrideBlock = PageSummary & { originalDate: string };
 
-/** Shapes each synced override row into a locked, completable block at its moved
- * time. Excludes an override whose original occurrence is already completed or
- * skipped (the done clone renders instead — a rendered override beside it would
- * double the slot). Synced-only: a native reschedule re-homes via a clone +
- * exdate, never an override row (`ruleId` is only set for synced series); the
- * `scheduleLocked` check also skips a detached series that has since unlocked. */
+/** Shapes each synced override row into a completable block at its moved time,
+ * carrying the page's own lock state — locked while actively synced, unlocked
+ * once detached, since a detached series is the user's.
+ *
+ * Gated on sync *origin*, not lock state: only a synced series has override rows
+ * at all (a native reschedule re-homes via a clone + exdate and never writes
+ * one), so `syncState` is the predicate that matches the invariant. Gating on
+ * `scheduleLocked` — which is `sync_state = 'active'` alone — dropped a detached
+ * series' moved instance from the calendar entirely, because `toVirtuals` goes on
+ * suppressing its original slot regardless of lock state.
+ *
+ * Excludes an override whose original occurrence is already completed or skipped
+ * (the done clone renders instead — a rendered override beside it would double
+ * the slot). */
 function toOverrideBlocks(
   rules: PageRecurrenceRule[],
   pages: PageSummary[],
@@ -110,7 +121,7 @@ function toOverrideBlocks(
   for (const s of overrideSchedules) {
     if (!s.ruleId || !s.originalDate) continue;
     const page = rulePage.get(s.ruleId);
-    if (!page || !page.scheduleLocked) continue;
+    if (!page || !page.syncState) continue;
     const originalKey = dateKey(s.originalDate);
     if (completedOrSkippedKeys(page).has(originalKey)) continue;
     out.push({
@@ -135,6 +146,7 @@ export function useRecurrenceExpansion({
   days,
   expandRecurrenceRange,
   listOverridesForRules,
+  overridesVersion = 0,
   pages,
   recurrenceRules,
   useRustEngine = true,
@@ -181,7 +193,7 @@ export function useRecurrenceExpansion({
         return schedules;
       });
     });
-  }, [startStr, endStr, rulesKey]);
+  }, [startStr, endStr, rulesKey, overridesVersion]);
 
   useEffect(() => {
     if (!useRustEngine || !startStr || !endStr || ruleCount === 0) return;
