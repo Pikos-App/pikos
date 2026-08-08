@@ -376,33 +376,35 @@ export function PageListItem({
             Rename
           </ContextMenuItem>
         )}
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Move to Folder</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuItem
-              className={cn(page.folderId === null && "font-medium")}
-              onSelect={() => onMoveToFolder(null)}
-            >
-              Inbox
-            </ContextMenuItem>
-            {folderMoveTargets(folders).map((folder) => (
+        {!page.scheduleLocked && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>Move to Folder</ContextMenuSubTrigger>
+            <ContextMenuSubContent>
               <ContextMenuItem
-                className={cn(page.folderId === folder.id && "font-medium")}
-                key={folder.id}
-                onSelect={() => onMoveToFolder(folder.id)}
+                className={cn(page.folderId === null && "font-medium")}
+                onSelect={() => onMoveToFolder(null)}
               >
-                <span
-                  className="mr-2 h-2 w-2 shrink-0 rounded-full"
-                  style={{
-                    backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)",
-                  }}
-                />
-                {folder.name}
+                Inbox
               </ContextMenuItem>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        {page.scheduledStart && onClearDate && (
+              {folderMoveTargets(folders).map((folder) => (
+                <ContextMenuItem
+                  className={cn(page.folderId === folder.id && "font-medium")}
+                  key={folder.id}
+                  onSelect={() => onMoveToFolder(folder.id)}
+                >
+                  <span
+                    className="mr-2 h-2 w-2 shrink-0 rounded-full"
+                    style={{
+                      backgroundColor: folder.color ?? "hsl(var(--muted-foreground) / 0.4)",
+                    }}
+                  />
+                  {folder.name}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+        {page.scheduledStart && onClearDate && !page.scheduleLocked && (
           <ContextMenuItem onSelect={onClearDate}>Clear Date</ContextMenuItem>
         )}
         <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>

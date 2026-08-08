@@ -34,6 +34,7 @@ function renderItem(page: PageSummary, onRenameStart: () => void) {
           isActive={false}
           isRenaming={false}
           isSelected={false}
+          onClearDate={() => {}}
           onDelete={() => {}}
           onMoveToFolder={() => {}}
           onPriorityChange={() => {}}
@@ -49,7 +50,7 @@ function renderItem(page: PageSummary, onRenameStart: () => void) {
   );
 }
 
-describe("PageListItem rename gating", () => {
+describe("PageListItem mirror-lock gating", () => {
   // globals: false in vitest config → @testing-library's auto-cleanup never runs.
   afterEach(cleanup);
 
@@ -84,7 +85,50 @@ describe("PageListItem rename gating", () => {
 
     fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
 
-    expect(screen.getByText("Move to Folder")).toBeInTheDocument();
+    expect(screen.getByText("Delete")).toBeInTheDocument();
     expect(screen.queryByText("Rename")).not.toBeInTheDocument();
+  });
+
+  it("context menu offers Move to Folder for a native page", () => {
+    renderItem(makePage(), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(screen.getByText("Move to Folder")).toBeInTheDocument();
+  });
+
+  it("context menu omits Move to Folder for a schedule-locked (synced) page", () => {
+    renderItem(makePage({ scheduleLocked: true, syncState: "active" }), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(screen.queryByText("Move to Folder")).not.toBeInTheDocument();
+  });
+
+  it("context menu offers Clear Date for a scheduled native page", () => {
+    renderItem(makePage({ scheduledStart: "2026-08-10" }), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(screen.getByText("Clear Date")).toBeInTheDocument();
+  });
+
+  it("context menu omits Clear Date for a schedule-locked (synced) page", () => {
+    renderItem(
+      makePage({ scheduledStart: "2026-08-10", scheduleLocked: true, syncState: "active" }),
+      vi.fn()
+    );
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(screen.queryByText("Clear Date")).not.toBeInTheDocument();
+  });
+
+  it("context menu keeps Move to Folder on a detached page", () => {
+    renderItem(makePage({ scheduleLocked: false, syncState: "detached" }), vi.fn());
+
+    fireEvent.contextMenu(screen.getByLabelText("Weekly 1:1"));
+
+    expect(screen.getByText("Move to Folder")).toBeInTheDocument();
   });
 });

@@ -1,8 +1,10 @@
 import type { Folder, Page } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import { act, waitFor } from "@testing-library/react";
+import { format } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -26,8 +28,9 @@ function setup() {
     const selection = useSelection();
     const workspace = useWorkspace();
     const pages = usePages();
+    const calendarDnD = useCalendarDnD();
     const dnd = useThreePanelDnD();
-    return { dnd, pages, selection, ui, workspace };
+    return { calendarDnD, dnd, pages, selection, ui, workspace };
   });
 }
 
@@ -46,6 +49,34 @@ async function makePage(
     page = await hook.result.current.pages.createPage(opts);
   });
   return page;
+}
+
+async function markSynced(hook: ReturnType<typeof setup>, pageId: string): Promise<void> {
+  await act(async () => {
+    const storage = hook.result.current.workspace.storage as MockStorageAdapter;
+    storage.markPageSynced(pageId, { state: "active" });
+    await hook.result.current.workspace.reload();
+  });
+}
+
+/** Page writes are queued behind a promise chain, so a no-op assertion made straight
+ *  after a drag-end passes whether or not the write was skipped. Drain first. */
+async function flushWrites() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+/** Stand in for WeekGrid: register a drop-slot resolver, then move the cursor over it.
+ *  The hook reads the slot off its own mousemove listener, not off the drag-end event. */
+const CALENDAR_SLOT = "2026-08-10T09:00:00";
+function dragOverCalendar(hook: ReturnType<typeof setup>) {
+  act(() =>
+    hook.result.current.calendarDnD.registerExternalDragUpdater(() => ({ start: CALENDAR_SLOT }))
+  );
+  act(() => {
+    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 500, clientY: 300 }));
+  });
 }
 
 async function makeFolder(hook: ReturnType<typeof setup>, name: string): Promise<Folder> {
@@ -74,6 +105,14 @@ function endEventOnFolder(activeId: string, overId: string, folderId: string | n
   return {
     active: { data: { current: { type: "page" } }, id: activeId },
     over: { data: { current: { folderId, type: "folder" } }, id: overId },
+  } as unknown as Parameters<ReturnType<typeof useThreePanelDnD>["handleDragEnd"]>[0];
+}
+
+/** Calendar drops are decided by the tracked slot, not by `over` — hence the null. */
+function endEventOnCalendar(activeId: string) {
+  return {
+    active: { data: { current: { type: "page" } }, id: activeId },
+    over: null,
   } as unknown as Parameters<ReturnType<typeof useThreePanelDnD>["handleDragEnd"]>[0];
 }
 
@@ -301,6 +340,103 @@ describe("useThreePanelDnD — handleDragEnd: page → Today view", () => {
       expect(updatedA?.scheduledStart).toBe(todayStr);
       expect(updatedB?.scheduledStart).toBe(todayStr);
     });
+  });
+});
+
+describe("useThreePanelDnD — schedule-locked (synced) pages", () => {
+  // Positive control for the locked case below: without it, a broken mousemove
+  // harness would make "never writes a schedule" pass for the wrong reason.
+  it("a calendar drop on a native page schedules it at the tracked slot", async () => {
+    const hook = setup();
+    await init(hook);
+    const page = await makePage(hook, { folderId: null, title: "Write spec" });
+    act(() => hook.result.current.ui.setActiveViewId("inbox"));
+    const createSpy = vi.spyOn(MockStorageAdapter.prototype, "createPageSchedule");
+
+    act(() => hook.result.current.dnd.handleDragStart(startEvent(page.id, "page")));
+    dragOverCalendar(hook);
+    act(() => hook.result.current.dnd.handleDragEnd(endEventOnCalendar(page.id)));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ pageId: page.id, scheduledStart: CALENDAR_SLOT })
+      );
+    });
+  });
+
+  it("a calendar drop on a locked page never writes a schedule", async () => {
+    const hook = setup();
+    await init(hook);
+    const page = await makePage(hook, { folderId: null, title: "Standup" });
+    await markSynced(hook, page.id);
+    act(() => hook.result.current.ui.setActiveViewId("inbox"));
+    const createSpy = vi.spyOn(MockStorageAdapter.prototype, "createPageSchedule");
+
+    act(() => hook.result.current.dnd.handleDragStart(startEvent(page.id, "page")));
+    dragOverCalendar(hook);
+    act(() => hook.result.current.dnd.handleDragEnd(endEventOnCalendar(page.id)));
+    await flushWrites();
+
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it("a Today-nav drop on a locked page never writes a schedule", async () => {
+    const hook = setup();
+    await init(hook);
+    const page = await makePage(hook, { folderId: null, title: "Standup" });
+    await markSynced(hook, page.id);
+    act(() => hook.result.current.ui.setActiveViewId("inbox"));
+    const createSpy = vi.spyOn(MockStorageAdapter.prototype, "createPageSchedule");
+
+    act(() => hook.result.current.dnd.handleDragStart(startEvent(page.id, "page")));
+    act(() => hook.result.current.dnd.handleDragEnd(endEventOnTodayView(page.id)));
+    await flushWrites();
+
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it("a folder drop on a locked page leaves it in its calendar folder", async () => {
+    const hook = setup();
+    await init(hook);
+    const work = await makeFolder(hook, "Work");
+    const page = await makePage(hook, { folderId: null, title: "Standup" });
+    await markSynced(hook, page.id);
+    act(() => hook.result.current.ui.setActiveViewId("inbox"));
+
+    act(() => hook.result.current.dnd.handleDragStart(startEvent(page.id, "page")));
+    act(() =>
+      hook.result.current.dnd.handleDragEnd(endEventOnFolder(page.id, "folder-droppable", work.id))
+    );
+
+    await waitFor(() => {
+      expect(hook.result.current.pages.pages.find((p) => p.id === page.id)?.folderId).toBeNull();
+    });
+  });
+
+  it("a multi-drag schedules the unlocked pages and skips the locked one", async () => {
+    const hook = setup();
+    await init(hook);
+    const locked = await makePage(hook, { folderId: null, title: "Standup" });
+    const free = await makePage(hook, { folderId: null, title: "Write spec" });
+    await markSynced(hook, locked.id);
+
+    act(() => {
+      hook.result.current.ui.setActiveViewId("inbox");
+      hook.result.current.selection.togglePageSelection(locked.id);
+      hook.result.current.selection.togglePageSelection(free.id);
+    });
+    const createSpy = vi.spyOn(MockStorageAdapter.prototype, "createPageSchedule");
+
+    act(() => hook.result.current.dnd.handleDragStart(startEvent(free.id, "page")));
+    act(() => hook.result.current.dnd.handleDragEnd(endEventOnTodayView(free.id)));
+
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ pageId: free.id, scheduledStart: todayStr })
+      );
+    });
+    expect(createSpy).toHaveBeenCalledTimes(1);
   });
 });
 

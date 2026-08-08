@@ -32,6 +32,12 @@ function getPageDurationMs(page: PageSummary): number | undefined {
   return ms > 0 ? ms : undefined;
 }
 
+/** Excludes synced mirrors: the reconciler owns their schedule and folder, so the
+ *  backend rejects a drop that changes either and the page silently reverts. */
+function unlockedIds(ids: string[], pages: PageSummary[]): string[] {
+  return ids.filter((id) => !pages.find((p) => p.id === id)?.scheduleLocked);
+}
+
 export function useThreePanelDnD() {
   const { folders, pages, reorderFolders, reorderPages, scheduleOnce, updatePage } = usePages();
   const { activeViewId } = useUI();
@@ -78,7 +84,7 @@ export function useThreePanelDnD() {
   // While a page is being dragged, track cursor position and update the
   // WeekGrid ghost preview via callExternalDragUpdater.
   useEffect(() => {
-    if (!activePageData) {
+    if (!activePageData || activePageData.scheduleLocked) {
       calendarStartRef.current = null;
       callExternalDragUpdaterRef.current(-1, -1, undefined); // clear ghost
       return;
@@ -152,11 +158,13 @@ export function useThreePanelDnD() {
 
     // Calendar drop takes priority over list reorder.
     if (calendarStart && pageData) {
-      if (idsToMove.length <= 1) {
+      const targets = unlockedIds(idsToMove.length > 0 ? idsToMove : [pageData.id], pages);
+      if (targets.length === 1) {
         // Single-page drop: preserve existing behavior (keep duration)
+        const target = pages.find((p) => p.id === targets[0]) ?? pageData;
         let calendarEnd: string | undefined;
         if (isTimedIso(calendarStart)) {
-          const durationMs = getPageDurationMs(pageData);
+          const durationMs = getPageDurationMs(target);
           if (durationMs != null) {
             calendarEnd = format(
               new Date(new Date(calendarStart).getTime() + durationMs),
@@ -164,8 +172,8 @@ export function useThreePanelDnD() {
             );
           }
         }
-        void scheduleOnce(pageData.id, calendarStart, calendarEnd);
-      } else {
+        void scheduleOnce(target.id, calendarStart, calendarEnd);
+      } else if (targets.length > 1) {
         // Multi-page drop
         const isTimedDrop = isTimedIso(calendarStart);
         if (isTimedDrop) {
@@ -173,7 +181,7 @@ export function useThreePanelDnD() {
           // (15min gap after timed pages, 30min slots for point-in-time pages).
           const baseTime = new Date(calendarStart).getTime();
           let offset = 0;
-          for (const id of idsToMove) {
+          for (const id of targets) {
             const page = pages.find((p) => p.id === id);
             const durationMs = page ? getPageDurationMs(page) : undefined;
             const startTime = new Date(baseTime + offset);
@@ -189,7 +197,7 @@ export function useThreePanelDnD() {
           }
         } else {
           // All-day drop: all pages become all-day for that date
-          for (const id of idsToMove) {
+          for (const id of targets) {
             void scheduleOnce(id, calendarStart);
           }
         }
@@ -242,7 +250,7 @@ export function useThreePanelDnD() {
     } else if (at === "page" && ot === "folder") {
       // folderId stored in droppable data; null means Inbox.
       const folderId = (over.data.current?.["folderId"] as string | null | undefined) ?? null;
-      for (const id of idsToMove.length > 0 ? idsToMove : [String(active.id)]) {
+      for (const id of unlockedIds(idsToMove.length > 0 ? idsToMove : [String(active.id)], pages)) {
         updatePage(id, { folderId });
       }
       clearSelection();
@@ -251,7 +259,7 @@ export function useThreePanelDnD() {
       // with an all-day occurrence for today. For recurring pages this also
       // shifts the rule anchor (see scheduleOnce).
       const today = format(new Date(), "yyyy-MM-dd");
-      for (const id of idsToMove.length > 0 ? idsToMove : [String(active.id)]) {
+      for (const id of unlockedIds(idsToMove.length > 0 ? idsToMove : [String(active.id)], pages)) {
         void scheduleOnce(id, today);
       }
       clearSelection();

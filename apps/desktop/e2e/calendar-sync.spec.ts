@@ -221,11 +221,15 @@ appTest("a synced block can't be dragged @tier2", async ({ app }) => {
 // also proves cross-zone occurrence-date-key agreement — a mis-keyed occurrence
 // would be rejected as "not part of this synced series" and no clone would land.
 
-/** Open the external-calendar "Personal" folder. A same-named draggable user
- *  folder also exists; the external one is the non-sortable sidebar item
- *  (external calendars aren't in the dnd reorder set). */
+/** Open an external-calendar folder by name. A same-named draggable user folder
+ *  may also exist; the external one is the non-sortable sidebar item (external
+ *  calendars aren't in the dnd reorder set). */
+async function openCalendarFolder(app: Page, name: string) {
+  await app.locator(`[aria-label="${name}"]:not([aria-roledescription="sortable"])`).click();
+}
+
 async function openPersonalFolder(app: Page) {
-  await app.locator('[aria-label="Personal"]:not([aria-roledescription="sortable"])').click();
+  await openCalendarFolder(app, "Personal");
 }
 
 function seriesRows(app: Page) {
@@ -429,4 +433,88 @@ appTest("search finds a synced page @tier2", async ({ app }) => {
   await expect(dialog).toBeVisible();
   await app.keyboard.type("Team standup");
   await expect(dialog.getByText("Team standup")).toBeVisible();
+});
+
+// ─── tier2: the page list honours the mirror lock ────────────────────────────
+//
+// DOM-level proof for the list side of the lock, mirroring "a synced block can't
+// be dragged" on the calendar side. The unit tests call handleDragEnd directly and
+// fake the mousemove, so nothing below them exercises dnd-kit's activation
+// threshold, the real ghost, or the actual context menu. Both tests pair a locked
+// page against the seed's detached one — same list, same shape, differing only in
+// lock state, which is the axis the fix keys on.
+
+appTest("a synced page's context menu offers no move, rename or date edit @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
+
+  await app.locator("[data-page-list-item]").filter({ hasText: "Team standup" }).click({
+    button: "right",
+  });
+  // Delete stays — trashing a synced page is supported (it tombstones the link).
+  await expect(app.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+  await expect(app.getByRole("menuitem", { name: "Move to Folder" })).toHaveCount(0);
+  await expect(app.getByRole("menuitem", { name: "Clear Date" })).toHaveCount(0);
+  await expect(app.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);
+
+  await app.keyboard.press("Escape");
+
+  // The detached page is the control: unlocked, so every item comes back.
+  await openCalendarFolder(app, "Work");
+  await app.locator("[data-page-list-item]").filter({ hasText: "Old planning" }).click({
+    button: "right",
+  });
+  await expect(app.getByRole("menuitem", { name: "Move to Folder" })).toBeVisible();
+  await expect(app.getByRole("menuitem", { name: "Clear Date" })).toBeVisible();
+  await expect(app.getByRole("menuitem", { name: "Rename" })).toBeVisible();
+});
+
+/**
+ * Drag a page-list row into the week grid, reporting the drop ghost's visibility while
+ * the cursor is still over the grid. Ghost presence is the only honest signal here: the
+ * end state can't tell "blocked" from "attempted", because a rejected schedule write
+ * rolls the optimistic update back and the date label reads unchanged either way.
+ */
+async function dragRowOntoCalendar(app: Page, rowText: string) {
+  const row = app.locator("[data-page-list-item]").filter({ hasText: rowText });
+  await expect(row).toHaveCount(1);
+  const dateButton = row.getByRole("button", { name: /^Toggle date format:/ });
+  const before = await dateButton.getAttribute("aria-label");
+
+  const rowBox = await row.boundingBox();
+  const grid = await app.getByRole("region", { name: "Week calendar" }).boundingBox();
+  if (!rowBox || !grid) throw new Error("page row or week grid missing a bounding box");
+
+  await app.mouse.move(rowBox.x + rowBox.width / 2, rowBox.y + rowBox.height / 2);
+  await app.mouse.down();
+  // Past dnd-kit's 8px activation threshold, then into the grid.
+  await app.mouse.move(rowBox.x + rowBox.width / 2 + 16, rowBox.y + rowBox.height / 2, {
+    steps: 4,
+  });
+  await app.mouse.move(grid.x + grid.width * 0.6, grid.y + grid.height * 0.4, { steps: 10 });
+  const ghosted = (await app.locator("[data-drag-ghost]").count()) > 0;
+  await app.mouse.up();
+
+  return { after: await dateButton.getAttribute("aria-label"), before, ghosted };
+}
+
+appTest("a synced page can't be dragged from the list onto the calendar @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
+  await openCalendarMode(app);
+
+  const locked = await dragRowOntoCalendar(app, "Team standup");
+  expect(locked.ghosted).toBe(false);
+  expect(locked.after).toBe(locked.before);
+
+  // The detached page is the control: the same drag previews and lands, so the
+  // assertions above are the lock and not a broken drag harness.
+  await openCalendarFolder(app, "Work");
+  const detached = await dragRowOntoCalendar(app, "Old planning");
+  expect(detached.ghosted).toBe(true);
+  expect(detached.after).not.toBe(detached.before);
 });

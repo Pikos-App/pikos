@@ -379,6 +379,7 @@ export function DayColumn({
                 ? "flex items-center gap-1 px-1.5"
                 : "flex flex-col items-start px-1.5 py-0.5"
             )}
+            data-drag-ghost
             style={{
               height: dragGhost.height,
               left: 2,
