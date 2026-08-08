@@ -115,6 +115,34 @@ describe("importBatch", () => {
     expect(result.folderIds).toHaveLength(0);
   });
 
+  it("imports into a sibling folder when the name collides with a calendar", async () => {
+    const { hook } = await setup();
+    const adapter = hook.result.current.storage!;
+    const account = await act(async () =>
+      adapter.connectCaldavAccount({ baseUrl: "", displayName: "Mock", password: "", username: "" })
+    );
+    const calendar = account.calendars.find((c) => c.displayName === "Personal")!;
+    const enabled = await act(async () => adapter.toggleSyncCalendar(calendar.id, true, null));
+    await act(async () => {
+      await hook.result.current.reload();
+    });
+
+    let result!: Awaited<ReturnType<typeof hook.result.current.importBatch>>;
+    await act(async () => {
+      result = await hook.result.current.importBatch(
+        batch({
+          folders: [{ key: "f1", name: "Personal" }],
+          pages: [item({ folderKey: "f1", title: "A" }), item({ folderKey: "f1", title: "B" })],
+        })
+      );
+    });
+
+    expect(result.folderIds).toHaveLength(1);
+    expect(result.folderIds[0]).not.toBe(enabled.folderId);
+    const imported = hook.result.current.pages.filter((p) => result.pageIds.includes(p.id));
+    expect(imported.map((p) => p.folderId)).toEqual([result.folderIds[0], result.folderIds[0]]);
+  });
+
   it("creates schedule, recurrence rule, and reminders for a recurring page", async () => {
     const { hook } = await setup();
     const createSchedule = vi.spyOn(MockStorageAdapter.prototype, "createPageSchedule");
