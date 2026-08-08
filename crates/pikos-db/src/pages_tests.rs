@@ -1065,30 +1065,32 @@ async fn insert_schedule(pool: &sqlx::SqlitePool, page_id: &str, scheduled_start
     .unwrap();
 }
 
+async fn insert_scheduled_page(pool: &sqlx::SqlitePool, id: &str, scheduled_start: &str) {
+    insert_test_page(
+        pool,
+        TestPage {
+            scheduled_start: Some(scheduled_start),
+            ..TestPage::new(id, id)
+        },
+    )
+    .await
+    .unwrap();
+}
+
 #[tokio::test]
-async fn list_pages_today_includes_today_and_overdue() {
+async fn list_pages_today_boundary_is_the_local_day() {
     let pool = test_pool().await;
 
-    // today + overdue: should appear
-    insert_test_page(&pool, TestPage::new("today", "Today"))
-        .await
-        .unwrap();
-    insert_schedule(&pool, "today", "2024-01-01T09:00:00").await; // past — overdue
-
-    insert_test_page(&pool, TestPage::new("future", "Future"))
-        .await
-        .unwrap();
-    // 5 years in the future — definitely not "today"
-    insert_schedule(&pool, "future", "2099-01-01T09:00:00").await;
-
-    // unscheduled: should not appear
+    insert_scheduled_page(&pool, "overdue", "2026-08-06T09:00:00").await;
+    insert_scheduled_page(&pool, "today", "2026-08-07T09:00:00").await;
+    insert_scheduled_page(&pool, "tomorrow", "2026-08-08T09:00:00").await;
     insert_test_page(&pool, TestPage::new("unscheduled", "Unscheduled"))
         .await
         .unwrap();
 
-    let pages = list_pages_today_impl(&pool).await.unwrap();
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
     let ids: Vec<&str> = pages.iter().map(|p| p.id.as_str()).collect();
-    assert_eq!(ids, vec!["today"], "only today/overdue page is returned");
+    assert_eq!(ids, vec!["overdue", "today"]);
 }
 
 #[tokio::test]
@@ -1099,17 +1101,14 @@ async fn list_pages_today_excludes_done_and_deleted() {
         &pool,
         TestPage {
             status: "done",
+            scheduled_start: Some("2024-01-01T09:00:00"),
             ..TestPage::new("done", "Done")
         },
     )
     .await
     .unwrap();
-    insert_schedule(&pool, "done", "2024-01-01T09:00:00").await;
 
-    insert_test_page(&pool, TestPage::new("deleted", "Deleted"))
-        .await
-        .unwrap();
-    insert_schedule(&pool, "deleted", "2024-01-01T09:00:00").await;
+    insert_scheduled_page(&pool, "deleted", "2024-01-01T09:00:00").await;
     sqlx::query("UPDATE pages SET deleted_at = datetime('now') WHERE id = 'deleted'")
         .execute(&pool)
         .await
@@ -1123,19 +1122,17 @@ async fn list_pages_today_excludes_done_and_deleted() {
 }
 
 #[tokio::test]
-async fn list_pages_today_deduplicates_pages_with_multiple_schedules() {
+async fn list_pages_today_excludes_a_series_whose_next_occurrence_is_ahead() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("recurring", "Recurring"))
-        .await
-        .unwrap();
-    // Three past schedules — page would appear 3× without DISTINCT.
-    insert_schedule(&pool, "recurring", "2024-01-01T09:00:00").await;
-    insert_schedule(&pool, "recurring", "2024-02-01T09:00:00").await;
-    insert_schedule(&pool, "recurring", "2024-03-01T09:00:00").await;
+    // The stale non-rule anchor the initial scheduleOnce left behind sits in the
+    // past; the head the rule advanced to is weeks out. Reading page_schedules
+    // matches the anchor and lists a series with nothing due.
+    insert_scheduled_page(&pool, "series", "2026-08-21T09:00:00").await;
+    insert_schedule(&pool, "series", "2026-07-01T09:00:00").await;
+    add_daily_rule(&pool, "series", "2026-08-21T09:00:00").await;
 
-    let pages = list_pages_today_impl(&pool).await.unwrap();
-    assert_eq!(pages.len(), 1, "DISTINCT collapses multi-schedule pages");
-    assert_eq!(pages[0].id, "recurring");
+    let pages = list_pages_today_at(&pool, "2026-08-07").await.unwrap();
+    assert!(pages.is_empty());
 }
 
 // ── list_completed_pages ──────────────────────────────────────────────────
@@ -2346,24 +2343,11 @@ async fn rescheduling_an_occurrence_of_a_synced_series_is_rejected() {
 
 #[tokio::test]
 async fn today_view_carries_schedule_locked() {
-    // list_pages_today builds its SELECT with per-column `pages.` prefixing, a
-    // different path than list_pages — confirm the derived flag is wired there too.
+    // Today builds its own SELECT, a different path than list_pages — confirm the
+    // derived flag is wired there too.
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("p", "Synced standup"))
-        .await
-        .unwrap();
+    insert_scheduled_page(&pool, "p", &crate::today_local()).await;
     mark_synced(&pool, "p", "active").await;
-    // Schedule it for today via raw SQL — the command-layer writer is now locked.
-    let now = now_iso();
-    sqlx::query(
-        "INSERT INTO page_schedules
-         (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
-         VALUES ('s1', 'p', date('now'), NULL, 'UTC', NULL, NULL, 'not_started', ?)",
-    )
-    .bind(&now)
-    .execute(&pool)
-    .await
-    .unwrap();
 
     let today = list_pages_today_impl(&pool).await.unwrap();
     let p = today

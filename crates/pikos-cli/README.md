@@ -13,7 +13,7 @@ The Pikos command-line interface, in Rust, over the shared `pikos-db` writer.
   one-shot Node subprocess — the `@pikos/bridge` bundle (`bridge.mjs`). So NLP +
   recurrence stay single-sourced in TS, the writer stays single-sourced in Rust,
   and nothing is duplicated across languages.
-- Read/`status`/`rm`/non-recurring `done` are pure Rust and need no Node.
+- Read/`status`/`delete`/non-recurring `done` are pure Rust and need no Node.
 
 ## Build & run
 
@@ -33,21 +33,39 @@ Requires Node on PATH for `add` and recurring `done` only.
 
 ## Commands
 
-`search`, `read`, `list`, `today`, `add`, `update`, `done`, `status`, `rm` —
-same surface and `--json` contract as documented in `apps/cli/README.md`. Global
-flags: `--json`, `--db <path>`, `--yes`.
+`search`, `read`, `list`, `today`, `add`, `update`, `done`, `status`, `delete`.
+Run `pikos <command> --help` for each surface. Global flags: `--json`,
+`--db <path>`, `--yes`, `--migrate`.
+
+`delete` moves a page to the trash on every origin, mirroring the app; `--hard`
+destroys it instead, and refuses on a page whose calendar is still connected
+(the next poll would recreate it).
+
+`update --due` takes `YYYY-MM-DD` for an all-day start or `YYYY-MM-DDTHH:MM:SS`
+for a local timed one — the CLI's only way to set a time of day. It refuses on a
+recurring or synced page, whose head belongs to the series or the calendar.
 
 ## Exit codes
 
 `0` ok · `2` usage · `3` not found · `4` conflict · `5` workspace not found ·
-`6` schema too new (DB newer than this CLI — upgrade) · `1` other. Foreign
-(SQLite) error text is never surfaced; failures carry a stable `kind`.
+`6` schema too new (DB newer than this CLI — upgrade) · `8` migration required
+(DB older; re-run with `--migrate`) · `1` other. Foreign (SQLite) error text is
+never surfaced; failures carry a stable `kind`.
 
 ## Schema skew
 
-`open_pool` runs the embedded migrator, which fails closed (`VersionMissing` →
-`SchemaTooNew`, exit 6) when the workspace DB is at a newer migration than this
-build — so a stale CLI can never write against an unknown schema.
+Skew is refused in both directions, because the CLI shares one workspace file
+with the installed desktop app and `open_pool` migrates on connect.
+
+- **DB newer than the CLI**: the embedded migrator fails closed
+  (`VersionMissing` → `SchemaTooNew`, exit 6), so a stale CLI never writes
+  against an unknown schema.
+- **DB older than the CLI**: refused up front (exit 8) unless `--migrate` is
+  passed. Migrating is one-way and would leave the installed app unable to open
+  its own workspace until it is updated too.
+
+A debug build addresses `app.pikos.desktop.dev`, the workspace the dev desktop
+app writes, so branch work cannot reach real data at all.
 
 ## Status
 

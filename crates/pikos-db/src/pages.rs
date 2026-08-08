@@ -723,6 +723,14 @@ pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()
         return soft_delete_page_impl(pool, id).await;
     }
 
+    hard_delete_page_impl(pool, id).await
+}
+
+/// Destroy a page outright, whatever its origin. The only unconditional `DELETE
+/// FROM pages` in the writer; [`delete_page_impl`] routes native pages here and
+/// diverts synced ones. Callers reaching it directly own the sync question — an
+/// active mirror destroyed here is recreated by the next poll.
+pub async fn hard_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
     sqlx::query("DELETE FROM pages WHERE id = ?")
         .bind(id)
         .execute(pool)
@@ -862,23 +870,32 @@ pub async fn list_pages_impl(
     Ok(summaries)
 }
 
+/// Open pages due or scheduled on or before today — what the app's Today surface
+/// shows.
+///
+/// Reads the `pages.scheduled_start` denorm rather than joining `page_schedules`:
+/// a recurring page's non-rule anchor row lingers at its original date and never
+/// advances (see `refresh_schedule_denorm_at`), so the join lists a series whose
+/// next occurrence is weeks away. The day boundary is computed in Rust because
+/// SQLite's `date('now')` is UTC while `scheduled_start` is local wall-clock —
+/// comparing the two moves the boundary by up to a day off-UTC.
 pub async fn list_pages_today_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<PageSummary>> {
-    let query = format!(
-        "SELECT DISTINCT {cols}{SYNC_DERIVED_SELECT} FROM pages
-         JOIN page_schedules ON page_schedules.page_id = pages.id
-         WHERE pages.deleted_at IS NULL
-           AND date(page_schedules.scheduled_start) <= date('now')
-           AND pages.status != 'done'
-         ORDER BY pages.sort_order ASC",
-        cols = SUMMARY_COLUMNS
-            .split(", ")
-            .map(|c| format!("pages.{c}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
-    let rows = sqlx::query_as::<_, PageSummaryRow>(&query)
-        .fetch_all(pool)
-        .await?;
+    list_pages_today_at(pool, &crate::today_local()).await
+}
+
+/// Inner form taking an explicit local day (`YYYY-MM-DD`), so the boundary is
+/// deterministically testable without depending on the machine clock or timezone.
+async fn list_pages_today_at(pool: &sqlx::SqlitePool, today: &str) -> AppResult<Vec<PageSummary>> {
+    let rows = sqlx::query_as::<_, PageSummaryRow>(&format!(
+        "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages
+         WHERE deleted_at IS NULL
+           AND substr(scheduled_start, 1, 10) <= ?
+           AND status != 'done'
+         ORDER BY sort_order ASC"
+    ))
+    .bind(today)
+    .fetch_all(pool)
+    .await?;
     Ok(rows.into_iter().map(PageSummary::from).collect())
 }
 

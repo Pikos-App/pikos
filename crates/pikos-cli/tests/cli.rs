@@ -57,6 +57,52 @@ async fn seed(db: &str, pages: Vec<NewPage>) -> Vec<String> {
     ids
 }
 
+/// Link a page to a synced calendar, creating a throwaway account on first use.
+/// `sync_state` ∈ active | detached | tombstoned.
+async fn mark_synced(db: &str, page_id: &str, sync_state: &str) {
+    let pool = open_pool(db).await.unwrap();
+    sqlx::query(
+        "INSERT OR IGNORE INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('acct', 'caldav', 'Test', 'basic', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_sync
+         (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, sync_state, created_at)
+         VALUES (?, ?, 'acct', 'caldav', 'cal', ?, ?, ?, '2026-01-01T00:00:00Z')",
+    )
+    .bind(format!("ps-{page_id}"))
+    .bind(page_id)
+    .bind(format!("href-{page_id}"))
+    .bind(format!("uid-{page_id}"))
+    .bind(sync_state)
+    .execute(&pool)
+    .await
+    .unwrap();
+}
+
+/// Read one value straight from the workspace file. Deliberately not `open_pool`:
+/// that runs the migrator, which would repair the behind-the-CLI schema the
+/// migration-consent test is asserting stayed untouched.
+async fn scalar<T>(db: &str, sql: &str) -> T
+where
+    T: for<'r> sqlx::Decode<'r, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + Send + Unpin,
+{
+    let pool = sqlx::SqlitePool::connect_with(
+        sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(db)
+            .create_if_missing(false),
+    )
+    .await
+    .unwrap();
+    sqlx::query_scalar::<_, T>(sql)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+}
+
 async fn stamp_version(db: &str, version: i64) {
     let pool = open_pool(db).await.unwrap();
     sqlx::query(
@@ -186,7 +232,7 @@ async fn search_finds_body_text() {
 }
 
 #[tokio::test]
-async fn status_and_rm_roundtrip() {
+async fn status_and_delete_roundtrip() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     let ids = seed(dbs, vec![base_page("Task")]).await;
@@ -195,8 +241,128 @@ async fn status_and_rm_roundtrip() {
     assert!(cli(dbs, &["status", id, "done", "--json"]).status.success());
     assert_eq!(json(&cli(dbs, &["read", id, "--json"]))["status"], "done");
 
-    assert!(cli(dbs, &["rm", id, "--yes", "--json"]).status.success());
+    assert!(cli(dbs, &["delete", id, "--hard", "--yes", "--json"])
+        .status
+        .success());
     assert_eq!(code(&cli(dbs, &["read", id])), 3); // gone
+}
+
+#[tokio::test]
+async fn completing_stamps_local_wall_clock() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Task")]).await;
+    assert!(cli(dbs, &["done", &ids[0], "--json"]).status.success());
+
+    let stamped = json(&cli(dbs, &["read", &ids[0], "--json"]))["completedAt"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // A UTC stamp files an evening completion under tomorrow for anyone west of
+    // UTC, because the Completed view date-compares this against the local day.
+    assert!(
+        !stamped.ends_with('Z'),
+        "expected local wall-clock: {stamped}"
+    );
+    assert_eq!(
+        &stamped[..10],
+        chrono::Local::now().format("%Y-%m-%d").to_string()
+    );
+}
+
+// ─── delete: origin × --hard ─────────────────────────────────────────────────
+
+/// Soft-deleted rows keep their `pages` row (so `read` still resolves) but drop
+/// out of every list; only a hard delete removes the row.
+async fn page_row_count(db: &str, id: &str) -> i64 {
+    scalar(db, &format!("SELECT COUNT(*) FROM pages WHERE id = '{id}'")).await
+}
+
+async fn sync_state(db: &str, id: &str) -> Option<String> {
+    scalar(
+        db,
+        &format!("SELECT sync_state FROM page_sync WHERE page_id = '{id}'"),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn delete_soft_deletes_a_native_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Task")]).await;
+
+    assert!(cli(dbs, &["delete", &ids[0], "--yes", "--json"])
+        .status
+        .success());
+    assert_eq!(
+        page_row_count(dbs, &ids[0]).await,
+        1,
+        "recoverable from trash"
+    );
+    assert!(json(&cli(dbs, &["list", "--json"]))
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn delete_soft_deletes_and_tombstones_a_synced_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup")]).await;
+    mark_synced(dbs, &ids[0], "active").await;
+
+    assert!(cli(dbs, &["delete", &ids[0], "--yes", "--json"])
+        .status
+        .success());
+    assert_eq!(page_row_count(dbs, &ids[0]).await, 1);
+    assert_eq!(
+        sync_state(dbs, &ids[0]).await.as_deref(),
+        Some("tombstoned")
+    );
+}
+
+#[tokio::test]
+async fn hard_delete_refuses_on_an_active_synced_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup")]).await;
+    mark_synced(dbs, &ids[0], "active").await;
+
+    // Destroying a live mirror is theatre — the next poll recreates it.
+    let out = cli(dbs, &["delete", &ids[0], "--hard", "--yes", "--json"]);
+    assert_eq!(code(&out), 4);
+    assert_eq!(page_row_count(dbs, &ids[0]).await, 1);
+}
+
+#[tokio::test]
+async fn hard_delete_destroys_a_detached_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Was synced")]).await;
+    mark_synced(dbs, &ids[0], "detached").await;
+
+    // The link is severed and the page is user-owned; nothing upstream restores it.
+    assert!(cli(dbs, &["delete", &ids[0], "--hard", "--yes", "--json"])
+        .status
+        .success());
+    assert_eq!(page_row_count(dbs, &ids[0]).await, 0);
+}
+
+#[tokio::test]
+async fn delete_soft_deletes_a_detached_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Was synced")]).await;
+    mark_synced(dbs, &ids[0], "detached").await;
+
+    assert!(cli(dbs, &["delete", &ids[0], "--yes", "--json"])
+        .status
+        .success());
+    assert_eq!(page_row_count(dbs, &ids[0]).await, 1);
+    // A detached link stays detached through trash → restore.
+    assert_eq!(sync_state(dbs, &ids[0]).await.as_deref(), Some("detached"));
 }
 
 #[tokio::test]
@@ -223,12 +389,165 @@ async fn update_title_and_priority() {
 }
 
 #[tokio::test]
-async fn rm_in_json_mode_without_yes_refuses_exit_2() {
+async fn delete_in_json_mode_without_yes_refuses_exit_2() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     let ids = seed(dbs, vec![base_page("Keep")]).await;
-    let out = cli(dbs, &["rm", &ids[0], "--json"]);
+    let out = cli(dbs, &["delete", &ids[0], "--json"]);
     assert_eq!(code(&out), 2); // refuses without --yes in --json mode
+}
+
+// ─── update --due ────────────────────────────────────────────────────────────
+
+async fn scheduled_start(db: &str, id: &str) -> Option<String> {
+    scalar(
+        db,
+        &format!("SELECT scheduled_start FROM pages WHERE id = '{id}'"),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn update_due_accepts_a_date_and_a_local_timed_iso() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Task")]).await;
+
+    assert!(
+        cli(dbs, &["update", &ids[0], "--due", "2026-09-01", "--json"])
+            .status
+            .success()
+    );
+    assert_eq!(
+        scheduled_start(dbs, &ids[0]).await.as_deref(),
+        Some("2026-09-01")
+    );
+
+    assert!(cli(
+        dbs,
+        &["update", &ids[0], "--due", "2026-09-01T14:00:00", "--json"]
+    )
+    .status
+    .success());
+    assert_eq!(
+        scheduled_start(dbs, &ids[0]).await.as_deref(),
+        Some("2026-09-01T14:00:00")
+    );
+}
+
+#[tokio::test]
+async fn update_due_rejects_freeform_without_touching_the_row() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Task")]).await;
+
+    for bad in ["tomorrow", "2026-9-1", "2026-13-45", "2026-09-01T14:00"] {
+        // --title rides along to prove nothing lands when the flag is rejected.
+        let out = cli(
+            dbs,
+            &[
+                "update", &ids[0], "--due", bad, "--title", "Renamed", "--json",
+            ],
+        );
+        assert_eq!(code(&out), 2, "should reject --due {bad}");
+        assert_eq!(scheduled_start(dbs, &ids[0]).await, None);
+        assert_eq!(
+            json(&cli(dbs, &["read", &ids[0], "--json"]))["title"],
+            "Task"
+        );
+    }
+}
+
+#[tokio::test]
+async fn update_due_refuses_on_a_synced_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup")]).await;
+    mark_synced(dbs, &ids[0], "active").await;
+
+    let out = cli(dbs, &["update", &ids[0], "--due", "2026-09-01", "--json"]);
+    assert_eq!(code(&out), 4);
+    assert_eq!(scheduled_start(dbs, &ids[0]).await, None);
+}
+
+#[tokio::test]
+async fn update_due_refuses_on_a_recurring_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let Some(add) = cli_bridge(dbs, &["add", "Standup every weekday at 9am", "--json"]) else {
+        eprintln!("skipped: @pikos/bridge not built");
+        return;
+    };
+    assert!(add.status.success());
+    let id = json(&add)["created"][0]["id"].as_str().unwrap().to_string();
+    let head = scheduled_start(dbs, &id).await;
+    let rule_base: String = scalar(
+        dbs,
+        &format!("SELECT scheduled_start FROM page_recurrence_rules WHERE page_id = '{id}'"),
+    )
+    .await;
+
+    let out = cli(dbs, &["update", &id, "--due", "2026-09-01", "--json"]);
+    assert_eq!(code(&out), 4);
+    assert_eq!(scheduled_start(dbs, &id).await, head, "head unmoved");
+    assert_eq!(
+        scalar::<String>(
+            dbs,
+            &format!("SELECT scheduled_start FROM page_recurrence_rules WHERE page_id = '{id}'")
+        )
+        .await,
+        rule_base,
+        "rule base unmoved"
+    );
+}
+
+// ─── workspace targeting + migration consent ─────────────────────────────────
+
+#[tokio::test]
+async fn a_debug_build_resolves_the_dev_workspace() {
+    // The CLI opens the same file as the installed app and migrates on connect, so
+    // a branch build pointed at the release identifier can lock the app out.
+    let home = std::env::temp_dir().join(format!("pikos-cli-home-{}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    let out = Command::new(BIN)
+        .arg("list")
+        .env("HOME", &home)
+        .env("XDG_DATA_HOME", home.join("share"))
+        .env("APPDATA", home.join("AppData"))
+        .output()
+        .unwrap();
+
+    assert_eq!(code(&out), 5); // no workspace there — the message names the path
+    let msg = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        msg.contains("app.pikos.desktop.dev"),
+        "a debug build must target the dev workspace: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn a_cli_ahead_of_the_workspace_refuses_to_migrate() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Keep")]).await;
+    // Rewind the recorded schema so this CLI's embedded set is ahead of it.
+    let pool = open_pool(dbs).await.unwrap();
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version > 1")
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.close().await;
+
+    let out = cli(dbs, &["list", "--json"]);
+    assert_eq!(code(&out), 8);
+    assert_eq!(
+        scalar::<i64>(dbs, "SELECT MAX(version) FROM _sqlx_migrations").await,
+        1,
+        "refusing must not have written the migration table"
+    );
+    let msg = String::from_utf8_lossy(&out.stderr);
+    assert!(msg.contains("--migrate"), "must name the opt-in: {msg}");
 }
 
 #[test]

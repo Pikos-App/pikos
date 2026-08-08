@@ -14,14 +14,22 @@ use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
 use pikos_db::{
-    complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl, delete_page_impl,
-    get_page, get_recurrence_rule_impl, list_folders_impl, list_page_schedules_impl,
-    list_pages_impl, list_pages_today_impl, now_iso, open_pool, search_pages_impl,
-    update_page_impl, update_page_schedule_impl, AppError, CompleteRecurringInput, NewPage,
-    NewPageSchedule, NewRecurrenceRule, Page, PageFilter, PageSummary, PageUpdate, SearchResponse,
+    complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl, get_page,
+    get_recurrence_rule_impl, hard_delete_page_impl, list_folders_impl, list_page_schedules_impl,
+    list_pages_impl, list_pages_today_impl, migration_versions, now_local_iso, open_pool,
+    search_pages_impl, soft_delete_page_impl, today_local, update_page_impl,
+    update_page_schedule_impl, AppError, CompleteRecurringInput, NewPage, NewPageSchedule,
+    NewRecurrenceRule, Page, PageFilter, PageSummary, PageUpdate, SearchResponse,
 };
 
-const BUNDLE_IDENTIFIER: &str = "app.pikos.desktop";
+/// Debug builds address the `.dev` workspace the dev desktop app writes, mirroring
+/// `tauri.conf.dev.json`: branch work must not be able to migrate the real
+/// workspace and lock the installed app out of it.
+const BUNDLE_IDENTIFIER: &str = if cfg!(debug_assertions) {
+    "app.pikos.desktop.dev"
+} else {
+    "app.pikos.desktop"
+};
 const DB_FILENAME: &str = "default.sqlite";
 
 // ─── CLI definition ───────────────────────────────────────────────────────────
@@ -39,6 +47,12 @@ struct Cli {
     db: Option<String>,
     #[arg(long, global = true, help = "Skip confirmation prompts")]
     yes: bool,
+    #[arg(
+        long,
+        global = true,
+        help = "Allow upgrading the workspace schema to match this CLI"
+    )]
+    migrate: bool,
     #[command(subcommand)]
     command: CliCommand,
 }
@@ -90,8 +104,15 @@ enum CliCommand {
     Done { id: String },
     /// Set a page's status: done | not_started
     Status { id: String, state: String },
-    /// Permanently delete a page (through core's delete path)
-    Rm { id: String },
+    /// Move a page to the trash, where Pikos can restore it
+    Delete {
+        id: String,
+        #[arg(
+            long,
+            help = "Destroy the page instead — irreversible, and refused on a page from a connected calendar"
+        )]
+        hard: bool,
+    },
 }
 
 // ─── Errors / exit codes ────────────────────────────────────────────────────
@@ -125,6 +146,9 @@ impl CliError {
     }
     fn missing_node(m: impl Into<String>) -> Self {
         Self::new("MissingNode", m, 7)
+    }
+    fn migration_required(m: impl Into<String>) -> Self {
+        Self::new("MigrationRequired", m, 8)
     }
     fn internal(m: impl Into<String>) -> Self {
         Self::new("Internal", m, 1)
@@ -189,6 +213,25 @@ fn resolve_db_path(override_opt: &Option<String>) -> String {
         .into_owned()
 }
 
+/// Refuse to migrate the workspace forward unless the user asked for it — see
+/// `pikos_db::migration_versions` for why a caller that doesn't own the file must
+/// not. The upgrade is one-way; recovering the locked-out desktop app means
+/// hand-editing `_sqlx_migrations`.
+async fn require_migration_consent(path: &str, consented: bool) -> Result<(), CliError> {
+    if consented {
+        return Ok(());
+    }
+    let (embedded, applied) = migration_versions(path).await.map_err(classify)?;
+    let Some(applied) = applied.filter(|a| embedded > *a) else {
+        return Ok(());
+    };
+    Err(CliError::migration_required(format!(
+        "This workspace is at schema v{applied}; this Pikos CLI carries v{embedded}. \
+         Upgrading is one-way — the installed Pikos app will refuse to open the workspace \
+         until it is updated too. Update the app first, or re-run with --migrate."
+    )))
+}
+
 // ─── Bridge (parser + recurrence) ───────────────────────────────────────────
 
 fn bridge_js() -> Result<PathBuf, CliError> {
@@ -223,7 +266,7 @@ fn run_bridge(cmd: &str, payload: &str) -> Result<Value, CliError> {
                 CliError::missing_node(
                     "this command needs Node.js (the NLP parser runs in a one-shot \
                      node subprocess). Install from https://nodejs.org or `brew install node`. \
-                     Every other command (list, today, search, read, status, rm, done) \
+                     Every other command (list, today, search, read, status, delete, done) \
                      works without Node.",
                 )
             } else {
@@ -575,6 +618,27 @@ fn parse_due(due: &str) -> Result<(String, String), CliError> {
     Ok((due.to_string(), end_of(due)))
 }
 
+/// Validate `update --due`, a single instant rather than [`parse_due`]'s filter
+/// range. The timed form is accepted rather than rejected as "not a date" because
+/// the CLI has nothing else that sets a time of day. Everything else is refused:
+/// `scheduled_start` carries no CHECK, so an unparsed "tomorrow" would sit in the
+/// column sorting as garbage against every date compare and rendering nowhere.
+/// Neither form writes an end, matching `add` — its parser only emits one for a
+/// stated duration or range.
+fn validate_due(due: &str) -> Result<(), CliError> {
+    // Lengths pin zero-padding, which chrono's %m/%d do not: "2026-9-1" parses
+    // fine and then sorts before every padded date it should follow.
+    let ok = (due.len() == 10 && chrono::NaiveDate::parse_from_str(due, "%Y-%m-%d").is_ok())
+        || (due.len() == 19
+            && chrono::NaiveDateTime::parse_from_str(due, "%Y-%m-%dT%H:%M:%S").is_ok());
+    if ok {
+        return Ok(());
+    }
+    Err(CliError::usage(format!(
+        "--due must be YYYY-MM-DD for all-day or YYYY-MM-DDTHH:MM:SS for a local time (got \"{due}\")"
+    )))
+}
+
 async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
     let parsed = run_bridge("parse", text)?;
     let result: ParseResult = serde_json::from_value(parsed["result"].clone())
@@ -592,7 +656,7 @@ async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
             apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
                 .await
                 .map_err(classify)?;
-            let rule_start = input.scheduled_start.clone().unwrap_or_else(local_today);
+            let rule_start = input.scheduled_start.clone().unwrap_or_else(today_local);
             create_recurrence_rule_impl(
                 pool,
                 NewRecurrenceRule {
@@ -659,11 +723,6 @@ async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
     Ok(created)
 }
 
-fn local_today() -> String {
-    // YYYY-MM-DD in UTC is good enough for a rule anchor fallback.
-    now_iso()[..10].to_string()
-}
-
 async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
     let page = require_page(pool, id).await?;
     if page.status == "done" {
@@ -673,7 +732,7 @@ async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
     if rule.is_none() {
         let upd = PageUpdate {
             status: Some("done".to_string()),
-            completed_at: Some(Value::String(now_iso())),
+            completed_at: Some(Value::String(now_local_iso())),
             ..Default::default()
         };
         return update_page_impl(pool, id.to_string(), upd)
@@ -730,6 +789,7 @@ async fn run(cli: Cli) -> Result<(), CliError> {
             "No Pikos workspace found at \"{path}\". Open the desktop app once to create it, or pass --db."
         )));
     }
+    require_migration_consent(&path, cli.migrate).await?;
     // open_pool runs the migrator, which fails closed (VersionMissing -> mapped
     // to SchemaTooNew in classify) when the workspace schema is newer than this
     // CLI — so a stale CLI can never write against an unknown schema.
@@ -837,7 +897,29 @@ async fn run(cli: Cli) -> Result<(), CliError> {
             due,
             priority,
         } => {
-            require_page(&pool, &id).await?;
+            let page = require_page(&pool, &id).await?;
+            // Every --due rejection is settled before the first write, so a bad
+            // flag can't leave --title and --priority half-applied.
+            if let Some(d) = &due {
+                validate_due(d)?;
+                if page.schedule_locked {
+                    return Err(CliError::conflict(
+                        "This event comes from a connected calendar — reschedule it in the Pikos app.",
+                    ));
+                }
+                // schedule_once writes the rule-less anchor row, which a recurring
+                // page's denorm deliberately ignores — the write would land and
+                // move nothing.
+                if get_recurrence_rule_impl(&pool, &id)
+                    .await
+                    .map_err(classify)?
+                    .is_some()
+                {
+                    return Err(CliError::conflict(
+                        "This page repeats — move the series in the Pikos app.",
+                    ));
+                }
+            }
             let mut upd = PageUpdate::default();
             if let Some(t) = title {
                 upd.title = Some(t);
@@ -855,7 +937,7 @@ async fn run(cli: Cli) -> Result<(), CliError> {
                 }
                 upd.status = Some(s.clone());
                 upd.completed_at = Some(if s == "done" {
-                    Value::String(now_iso())
+                    Value::String(now_local_iso())
                 } else {
                     Value::Null
                 });
@@ -913,8 +995,13 @@ async fn run(cli: Cli) -> Result<(), CliError> {
                 println!("{}", render_page(&page));
             }
         }
-        CliCommand::Rm { id } => {
+        CliCommand::Delete { id, hard } => {
             let page = require_page(&pool, &id).await?;
+            if hard && page.schedule_locked {
+                return Err(CliError::conflict(
+                    "This event comes from a connected calendar — delete it there, or disconnect the calendar first.",
+                ));
+            }
             if !cli.yes {
                 if json {
                     return Err(CliError::usage(
@@ -926,16 +1013,27 @@ async fn run(cli: Cli) -> Result<(), CliError> {
                 } else {
                     page.title.clone()
                 };
-                if !confirm(&format!("Delete \"{title}\" ({id})?")).await {
+                let question = if hard {
+                    format!("Permanently delete \"{title}\" ({id})? This cannot be undone.")
+                } else {
+                    format!("Move \"{title}\" ({id}) to the trash?")
+                };
+                if !confirm(&question).await {
                     eprintln!("Aborted.");
                     return Ok(());
                 }
             }
-            delete_page_impl(&pool, &id).await.map_err(classify)?;
-            if json {
-                print_json(&json!({ "id": id, "deleted": true }));
+            if hard {
+                hard_delete_page_impl(&pool, &id).await.map_err(classify)?;
             } else {
+                soft_delete_page_impl(&pool, &id).await.map_err(classify)?;
+            }
+            if json {
+                print_json(&json!({ "id": id, "deleted": true, "hard": hard }));
+            } else if hard {
                 println!("Deleted {id}");
+            } else {
+                println!("Moved {id} to the trash");
             }
         }
     }

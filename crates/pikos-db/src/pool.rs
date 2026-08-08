@@ -48,6 +48,56 @@ pub fn today_local() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
+/// Highest migration version this binary carries (down-migrations ignored;
+/// there are none today, but filter defensively).
+fn embedded_migration_max() -> i64 {
+    MIGRATOR
+        .iter()
+        .filter(|m| !m.migration_type.is_down_migration())
+        .map(|m| m.version)
+        .max()
+        .unwrap_or(0)
+}
+
+/// `(embedded, applied)` — the highest migration version this binary carries, and
+/// the highest applied to the workspace at `path` (`None` when the file has no
+/// `_sqlx_migrations` table yet).
+///
+/// [`open_pool`] migrates on connect, so a binary that does not own the workspace
+/// — the CLI shares one file with the installed desktop app — silently upgrades
+/// the schema and leaves the app unable to open it, since the migrator fails
+/// closed on the version it has never heard of. Such a caller compares these two
+/// first and refuses rather than migrate. Opens without `create_if_missing` and
+/// without running the migrator, so it never writes.
+pub async fn migration_versions(path: &str) -> AppResult<(i64, Option<i64>)> {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(false)
+                .busy_timeout(Duration::from_secs(5)),
+        )
+        .await?;
+
+    let has_table: bool = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations')",
+    )
+    .fetch_one(&pool)
+    .await?
+        != 0;
+    let applied = if has_table {
+        sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(version) FROM _sqlx_migrations")
+            .fetch_one(&pool)
+            .await?
+    } else {
+        None
+    };
+    pool.close().await;
+
+    Ok((embedded_migration_max(), applied))
+}
+
 /// Open (or create) the SQLite workspace at `path`, apply migrations, and run
 /// first-launch housekeeping. WAL + busy_timeout make concurrent access with
 /// the desktop app safe.
@@ -108,16 +158,7 @@ pub async fn open_pool(path: &str) -> AppResult<SqlitePool> {
 /// mutates the same file. Downgrade safety is handled separately: the sqlx
 /// migrator fails closed if the workspace is newer than the binary.
 async fn maybe_backup_before_migrations(pool: &SqlitePool, path: &str) -> AppResult<()> {
-    // Highest migration version the binary knows about (down-migrations ignored;
-    // there are none today, but filter defensively).
-    let Some(known_max) = MIGRATOR
-        .iter()
-        .filter(|m| !m.migration_type.is_down_migration())
-        .map(|m| m.version)
-        .max()
-    else {
-        return Ok(());
-    };
+    let known_max = embedded_migration_max();
 
     // No `_sqlx_migrations` table => this file was just created. Nothing to back up.
     let migrations_table_exists: bool = sqlx::query_scalar::<_, i64>(
