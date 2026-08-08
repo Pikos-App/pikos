@@ -473,15 +473,16 @@ async fn today_count_dedups_pages_and_includes_all_day() {
 }
 
 #[tokio::test]
-async fn today_count_reads_a_recurring_pages_occurrence_from_the_head() {
+async fn today_count_enumerates_the_rule_not_the_head() {
     let pool = test_pool().await;
-    insert_page(&pool, "due_today", "not_started", "2026-05-01T00:00:00").await;
-    insert_rule(&pool, "due_today", "2026-05-01T09:00:00").await;
-    set_page_start(&pool, "due_today", "2026-05-25T09:00:00").await;
-    // Same series shape, next occurrence still ahead.
-    insert_page(&pool, "due_later", "not_started", "2026-05-01T00:00:00").await;
-    insert_rule(&pool, "due_later", "2026-05-01T09:00:00").await;
-    set_page_start(&pool, "due_later", "2026-05-26T09:00:00").await;
+    // Nothing advances the head but completion, so a series left running for days
+    // parks it in the past while the rule keeps yielding — including today.
+    insert_page(&pool, "lagging", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "lagging", "2026-05-01T09:00:00").await;
+    set_page_start(&pool, "lagging", "2026-05-20T09:00:00").await;
+    // Same shape, but the series doesn't open until tomorrow.
+    insert_page(&pool, "not_yet", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "not_yet", "2026-05-26T09:00:00").await;
 
     assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 1);
 }
@@ -490,10 +491,26 @@ async fn today_count_reads_a_recurring_pages_occurrence_from_the_head() {
 async fn today_count_ignores_a_recurring_pages_stale_anchor() {
     let pool = test_pool().await;
     insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
-    insert_rule(&pool, "rec", "2026-05-01T09:00:00").await;
-    // The pre-rule anchor row lingers on today; the live occurrence is tomorrow.
+    // The series opens tomorrow; only the pre-rule anchor row sits on today, and
+    // the rule no longer owns it.
+    insert_rule(&pool, "rec", "2026-05-26T09:00:00").await;
     insert_schedule(&pool, "anchor", "rec", "2026-05-25T09:00:00", "not_started").await;
     set_page_start(&pool, "rec", "2026-05-26T09:00:00").await;
+
+    assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn today_count_excludes_skipped_completed_and_exdated_occurrences() {
+    let pool = test_pool().await;
+    for id in ["skipped", "completed", "exdated"] {
+        insert_page(&pool, id, "not_started", "2026-05-01T00:00:00").await;
+        insert_rule(&pool, id, "2026-05-01T09:00:00").await;
+        set_page_start(&pool, id, "2026-05-20T09:00:00").await;
+    }
+    set_skipped(&pool, "skipped", "2026-05-25").await;
+    set_completed(&pool, "completed", "2026-05-25").await;
+    set_exdates(&pool, "exdated", &["2026-05-25"]).await;
 
     assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 0);
 }
@@ -504,10 +521,39 @@ async fn today_count_includes_a_materialised_override() {
     insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
     insert_rule(&pool, "rec", "2026-05-01T09:00:00").await;
     set_page_start(&pool, "rec", "2026-05-27T09:00:00").await;
-    // The user moved an occurrence onto today.
-    insert_override(&pool, "ovr", "rec", "2026-05-25T15:00:00", "not_started").await;
+    // Today's 09:00 occurrence was moved to the afternoon — one page, counted once
+    // off the override row while the rule's own slot is excluded.
+    insert_override(
+        &pool,
+        "ovr",
+        "rec",
+        "2026-05-25T15:00:00",
+        "2026-05-25T09:00:00",
+        "not_started",
+    )
+    .await;
 
     assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 1);
+}
+
+#[tokio::test]
+async fn today_count_follows_an_occurrence_moved_off_the_day() {
+    let pool = test_pool().await;
+    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "rec", "2026-05-01T09:00:00").await;
+    // Moved to tomorrow: it counts there, and today's slot is not resurrected.
+    insert_override(
+        &pool,
+        "ovr",
+        "rec",
+        "2026-05-26T09:00:00",
+        "2026-05-25T09:00:00",
+        "not_started",
+    )
+    .await;
+
+    assert_eq!(today_scheduled_count(&pool, "2026-05-25").await.unwrap(), 0);
+    assert_eq!(today_scheduled_count(&pool, "2026-05-26").await.unwrap(), 1);
 }
 
 #[tokio::test]
@@ -578,28 +624,131 @@ async fn overdue_count_window_and_recency() {
     assert_eq!(n, 1);
 }
 
+// The 24h overdue window used below: [2026-05-24 09:00, 2026-05-25 09:00).
+const STALE_CUTOFF: &str = "2026-05-24 09:00:00";
+const RECENT_CUTOFF: &str = "2026-05-25 08:55:00";
+
 #[tokio::test]
-async fn overdue_count_includes_a_lapsed_recurring_occurrence() {
+async fn overdue_count_enumerates_an_occurrence_the_stale_head_missed() {
     let pool = test_pool().await;
-    // The occurrence was 2h ago and is still not done. A recurring page holds it
-    // on the head alone — there is no page_schedules row to find it by.
+    // The head lapsed out of the window days ago, so reading it finds nothing —
+    // but the rule yielded an occurrence 2h ago that is still not done, and a
+    // recurring page has no page_schedules row to find it by either.
     insert_page(&pool, "lapsed", "not_started", "2026-05-01T00:00:00").await;
     insert_rule(&pool, "lapsed", "2026-05-01T07:00:00").await;
-    set_page_start(&pool, "lapsed", "2026-05-25T07:00:00").await;
+    set_page_start(&pool, "lapsed", "2026-05-20T07:00:00").await;
 
-    let n = overdue_count(&pool, NOW_TS, "2026-05-24 09:00:00", "2026-05-25 08:55:00")
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
         .await
         .unwrap();
     assert_eq!(n, 1);
 }
 
 #[tokio::test]
+async fn overdue_count_counts_a_lagging_series_once_for_several_occurrences() {
+    let pool = test_pool().await;
+    insert_page(&pool, "lapsed", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "lapsed", "2026-05-01T10:00:00").await;
+    set_page_start(&pool, "lapsed", "2026-05-20T10:00:00").await;
+
+    // A 48h window holds two of this series' occurrences; the summary reports
+    // pages, not occurrences.
+    let n = overdue_count(&pool, NOW_TS, "2026-05-23 09:00:00", RECENT_CUTOFF)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+}
+
+#[tokio::test]
+async fn overdue_count_excludes_skipped_completed_and_exdated_occurrences() {
+    let pool = test_pool().await;
+    for id in ["skipped", "completed", "exdated"] {
+        insert_page(&pool, id, "not_started", "2026-05-01T00:00:00").await;
+        insert_rule(&pool, id, "2026-05-01T07:00:00").await;
+        set_page_start(&pool, id, "2026-05-20T07:00:00").await;
+    }
+    set_skipped(&pool, "skipped", "2026-05-25").await;
+    set_completed(&pool, "completed", "2026-05-25").await;
+    set_exdates(&pool, "exdated", &["2026-05-25"]).await;
+
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+}
+
+#[tokio::test]
+async fn overdue_count_ignores_an_occurrence_moved_out_of_the_window() {
+    let pool = test_pool().await;
+    insert_page(&pool, "rec", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "rec", "2026-05-01T07:00:00").await;
+    // This morning's occurrence was moved to tonight — nothing is late yet, and
+    // the original slot must not count in its place.
+    insert_override(
+        &pool,
+        "ov",
+        "rec",
+        "2026-05-25T20:00:00",
+        "2026-05-25T07:00:00",
+        "not_started",
+    )
+    .await;
+
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+}
+
+#[tokio::test]
+async fn overdue_count_ignores_an_all_day_series() {
+    let pool = test_pool().await;
+    // Date-only base — an all-day occurrence has no instant to be late against.
+    insert_page(&pool, "ad", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "ad", "2026-05-01").await;
+
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+}
+
+#[tokio::test]
+async fn overdue_count_ignores_a_synced_occurrence_before_the_connect_day() {
+    let pool = test_pool().await;
+    // Yesterday's 20:00 occurrence is in the window for both series, but for the
+    // calendar connected today it predates the user — a fresh connect must not
+    // open its series already overdue.
+    insert_page(&pool, "connected_today", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "connected_today", "2026-05-01T20:00:00").await;
+    crate::pool::insert_test_page_sync_connected_at(
+        &pool,
+        "connected_today",
+        "active",
+        "2026-05-25T12:00:00.000Z",
+    )
+    .await
+    .unwrap();
+
+    insert_page(&pool, "connected_before", "not_started", "2026-05-01T00:00:00").await;
+    insert_rule(&pool, "connected_before", "2026-05-01T20:00:00").await;
+    crate::pool::insert_test_page_sync(&pool, "connected_before", "active")
+        .await
+        .unwrap();
+
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+        .await
+        .unwrap();
+    assert_eq!(n, 1, "only the series connected before the occurrence counts");
+}
+
+#[tokio::test]
 async fn overdue_count_ignores_a_recurring_pages_stale_anchor() {
     let pool = test_pool().await;
-    // Next occurrence is ahead; only the lingering pre-rule anchor sits in the
+    // The series opens tomorrow; only the lingering pre-rule anchor sits in the
     // overdue window, and it does not represent anything the user still owes.
     insert_page(&pool, "ahead", "not_started", "2026-05-01T00:00:00").await;
-    insert_rule(&pool, "ahead", "2026-05-01T07:00:00").await;
+    insert_rule(&pool, "ahead", "2026-05-26T07:00:00").await;
     insert_schedule(
         &pool,
         "anchor",
@@ -610,7 +759,7 @@ async fn overdue_count_ignores_a_recurring_pages_stale_anchor() {
     .await;
     set_page_start(&pool, "ahead", "2026-05-26T07:00:00").await;
 
-    let n = overdue_count(&pool, NOW_TS, "2026-05-24 09:00:00", "2026-05-25 08:55:00")
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
         .await
         .unwrap();
     assert_eq!(n, 0);
@@ -641,6 +790,16 @@ async fn insert_rule(pool: &sqlx::SqlitePool, page_id: &str, scheduled_start: &s
     .unwrap();
 }
 
+/// Provider EXDATEs on the page's rule (the `rrule_exdates` JSON array).
+async fn set_exdates(pool: &sqlx::SqlitePool, page_id: &str, dates: &[&str]) {
+    sqlx::query("UPDATE page_recurrence_rules SET rrule_exdates = ? WHERE page_id = ?")
+        .bind(serde_json::to_string(dates).unwrap())
+        .bind(page_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
 /// Materialized override row (`rule_id` set) for the page's recurrence rule —
 /// represents a moved/edited occurrence, distinct from the lingering anchor.
 async fn insert_override(
@@ -648,6 +807,7 @@ async fn insert_override(
     id: &str,
     page_id: &str,
     scheduled_start: &str,
+    original_date: &str,
     status: &str,
 ) {
     sqlx::query(
@@ -660,7 +820,7 @@ async fn insert_override(
     .bind(page_id)
     .bind(scheduled_start)
     .bind(page_id)
-    .bind(scheduled_start)
+    .bind(original_date)
     .bind(status)
     .execute(pool)
     .await
@@ -779,7 +939,15 @@ async fn native_default_path_fires_a_recurring_override_row() {
     // A moved/edited occurrence materialized as a real page_schedules row fires via
     // the page_schedules query; the enumeration excludes its original_date, so the
     // two paths partition the series' occurrences rather than double-firing one.
-    insert_override(&pool, "ov", "rec", "2026-05-25T09:10:00", "not_started").await;
+    insert_override(
+        &pool,
+        "ov",
+        "rec",
+        "2026-05-25T09:10:00",
+        "2026-05-25T09:10:00",
+        "not_started",
+    )
+    .await;
 
     let via_schedule = due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
         .await
@@ -975,6 +1143,7 @@ async fn synced_override_path_ignores_floating_and_unsynced_rows() {
         &pool,
         "ov_float",
         "float",
+        "2026-05-25T09:00:00",
         "2026-05-25T09:00:00",
         "not_started",
     )

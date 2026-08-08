@@ -11,7 +11,20 @@
 //! parameter values (titles, etc.). Surfacing the raw error type preserves that
 //! discipline at the call site.
 
+use std::collections::HashSet;
+
 use sqlx::SqlitePool;
+
+/// Recurrence-derivation failures reach the scheduler as a content-free
+/// `sqlx::Error` (see the module doc); a real DB error carries through as itself.
+/// The derivations isolate per-series rule failures internally, so nothing else
+/// is expected here.
+fn derivation_error(e: crate::error::AppError) -> sqlx::Error {
+    match e {
+        crate::error::AppError::Db(e) => e,
+        _ => sqlx::Error::Protocol("recurrence derivation failed".into()),
+    }
+}
 
 /// A schedule occurrence whose reminder is due to fire.
 #[derive(sqlx::FromRow, Clone, Debug)]
@@ -322,10 +335,7 @@ pub async fn due_synced_override_reminders(
 
 /// The sqlx-facing seam over [`crate::recurrence_derive::occurrences_with_open_reminder_window`]
 /// for the scheduler: owns the `max_lead` bound (an upper bound over every
-/// configured lead) and maps the enumeration's `AppError` back to a content-free
-/// `sqlx::Error` so the run loop's `classify_sqlx` never echoes a page title. The
-/// enumeration isolates per-series rule failures internally, so the only error that
-/// reaches here is a real DB error (`AppError::Db`).
+/// configured lead) and maps the enumeration's error through [`derivation_error`].
 pub async fn due_recurring_reminders(
     pool: &SqlitePool,
     now_local: chrono::NaiveDateTime,
@@ -345,10 +355,7 @@ pub async fn due_recurring_reminders(
         max_lead,
     )
     .await
-    .map_err(|e| match e {
-        crate::error::AppError::Db(e) => e,
-        _ => sqlx::Error::Protocol("recurring reminder enumeration failed".into()),
-    })
+    .map_err(derivation_error)
 }
 
 /// Whether the daily-summary marker row was already inserted on `date`
@@ -370,36 +377,41 @@ pub async fn daily_summary_fired_on(pool: &SqlitePool, date: &str) -> Result<boo
 
 /// Count of distinct pages scheduled on `date` (timed or all-day), not done.
 ///
-/// Recurring pages carry their current occurrence on `pages.scheduled_start`
-/// (the rest are virtual and never reach `page_schedules`); their stale pre-rule
-/// anchor row is excluded so a series can't count twice. Materialised overrides
-/// (`rule_id IS NOT NULL`) still count — the user moved that occurrence here.
+/// A recurring page counts when its rule yields an occurrence on `date`
+/// ([`crate::recurrence_derive::recurring_pages_in_window`]) or when a
+/// materialised override lands there — the two partition the series, since the
+/// override's original date is in the exclusion union. Its stale pre-rule anchor
+/// row (`rule_id IS NULL`) counts for neither.
 pub async fn today_scheduled_count(pool: &SqlitePool, date: &str) -> Result<i64, sqlx::Error> {
-    let row: (i64,) = sqlx::query_as(
-        "WITH candidate AS (
-           SELECT p.id,
-                  p.scheduled_start,
-                  EXISTS(SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = p.id) AS recurring
-           FROM pages p
-           WHERE p.status != 'done'
-             AND p.deleted_at IS NULL
-         )
-         SELECT COUNT(*)
-         FROM candidate c
-         WHERE (c.recurring AND date(c.scheduled_start) = ?)
-            OR EXISTS (
-                 SELECT 1 FROM page_schedules ps
-                 WHERE ps.page_id = c.id
-                   AND ps.status != 'done'
-                   AND date(ps.scheduled_start) = ?
-                   AND (ps.rule_id IS NOT NULL OR NOT c.recurring)
-               )",
+    let mut pages: HashSet<String> = sqlx::query_scalar(
+        "SELECT ps.page_id
+         FROM page_schedules ps
+         JOIN pages p ON p.id = ps.page_id
+         WHERE p.status != 'done'
+           AND p.deleted_at IS NULL
+           AND ps.status != 'done'
+           AND date(ps.scheduled_start) = ?
+           AND (ps.rule_id IS NOT NULL
+                OR NOT EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = p.id))",
     )
     .bind(date)
-    .bind(date)
-    .fetch_one(pool)
-    .await?;
-    Ok(row.0)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .collect();
+
+    pages.extend(
+        crate::recurrence_derive::recurring_pages_in_window(
+            pool,
+            &format!("{date}T00:00:00"),
+            &format!("{date}T23:59:59"),
+            false,
+            None,
+        )
+        .await
+        .map_err(derivation_error)?,
+    );
+    Ok(pages.len() as i64)
 }
 
 /// Count of distinct timed, not-done pages overdue in `[stale_cutoff, now_ts)`,
@@ -409,48 +421,50 @@ pub async fn today_scheduled_count(pool: &SqlitePool, date: &str) -> Result<i64,
 /// ticking it clears the count. The mirror lock blocks rescheduling, which is not
 /// what overdue measures.
 ///
-/// Recurring occurrences are read off `pages.scheduled_start` for the same reason
-/// as [`today_scheduled_count`].
+/// Recurring occurrences are enumerated for the same reason as in
+/// [`today_scheduled_count`] — a series whose head lapsed days ago still owes the
+/// occurrences it yielded since.
 pub async fn overdue_count(
     pool: &SqlitePool,
     now_ts: &str,
     stale_cutoff: &str,
     recent_cutoff: &str,
 ) -> Result<i64, sqlx::Error> {
-    let row: (i64,) = sqlx::query_as(
-        "WITH candidate AS (
-           SELECT p.id,
-                  p.scheduled_start,
-                  EXISTS(SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = p.id) AS recurring
-           FROM pages p
-           WHERE p.status != 'done'
-             AND p.deleted_at IS NULL
-             AND datetime(p.created_at) < datetime(?)
-         )
-         SELECT COUNT(*)
-         FROM candidate c
-         WHERE (c.recurring
-                 AND c.scheduled_start LIKE '%T%'
-                 AND datetime(c.scheduled_start) < datetime(?)
-                 AND datetime(c.scheduled_start) >= datetime(?))
-            OR EXISTS (
-                 SELECT 1 FROM page_schedules ps
-                 WHERE ps.page_id = c.id
-                   AND ps.status != 'done'
-                   AND ps.scheduled_start LIKE '%T%'
-                   AND datetime(ps.scheduled_start) < datetime(?)
-                   AND datetime(ps.scheduled_start) >= datetime(?)
-                   AND (ps.rule_id IS NOT NULL OR NOT c.recurring)
-               )",
+    let mut pages: HashSet<String> = sqlx::query_scalar(
+        "SELECT ps.page_id
+         FROM page_schedules ps
+         JOIN pages p ON p.id = ps.page_id
+         WHERE p.status != 'done'
+           AND p.deleted_at IS NULL
+           AND datetime(p.created_at) < datetime(?1)
+           AND ps.status != 'done'
+           AND ps.scheduled_start LIKE '%T%'
+           AND datetime(ps.scheduled_start) < datetime(?2)
+           AND datetime(ps.scheduled_start) >= datetime(?3)
+           AND (ps.rule_id IS NOT NULL
+                OR NOT EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = p.id))",
     )
     .bind(recent_cutoff)
     .bind(now_ts)
     .bind(stale_cutoff)
-    .bind(now_ts)
-    .bind(stale_cutoff)
-    .fetch_one(pool)
-    .await?;
-    Ok(row.0)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .collect();
+
+    // The scheduler passes SQLite's space-separated form; the engine parses ISO `T`.
+    pages.extend(
+        crate::recurrence_derive::recurring_pages_in_window(
+            pool,
+            &stale_cutoff.replace(' ', "T"),
+            &now_ts.replace(' ', "T"),
+            true,
+            Some(recent_cutoff),
+        )
+        .await
+        .map_err(derivation_error)?,
+    );
+    Ok(pages.len() as i64)
 }
 
 /// Record that a per-reminder notification fired (dedup anchor for future ticks).

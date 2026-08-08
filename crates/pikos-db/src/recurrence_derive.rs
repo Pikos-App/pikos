@@ -1,10 +1,11 @@
-//! The two backend derivations over a recurring series' truth — rule base + the
+//! The backend derivations over a recurring series' truth — rule base + the
 //! exclusion union (`completed ∪ skip ∪ provider-EXDATEs ∪ override
 //! original_dates`, keyed by day) — consuming the pure [`pikos_recurrence`]
-//! engine: [`recompute_recurring_schedule`] (the display cache) and
-//! [`occurrences_with_open_reminder_window`] (reminders). Both derive from truth
-//! and never read the cache, so a corrupted `pages.scheduled_start` can't skew
-//! them.
+//! engine: [`recompute_recurring_schedule`] (the display cache),
+//! [`occurrences_with_open_reminder_window`] (reminders) and
+//! [`recurring_pages_in_window`] (the daily-summary counts). All derive from
+//! truth and never read the cache, so a corrupted `pages.scheduled_start` can't
+//! skew them.
 
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
@@ -219,6 +220,88 @@ pub async fn oldest_open_for_page(
     let excl = exclusion_union(&mut conn, page_id, &rule.id, &rule.rrule_exdates).await?;
     let floor = synced_head_floor(&mut conn, page_id).await?;
     derive_oldest_open(&rule, &excl, floor.as_deref())
+}
+
+#[derive(sqlx::FromRow)]
+struct WindowSeries {
+    rule_id: String,
+    page_id: String,
+    rrule: String,
+    rrule_exdates: String,
+    base_start: String,
+    base_end: Option<String>,
+}
+
+/// Pages whose rule yields an open occurrence starting inside the inclusive
+/// wall-clock window `[lo, hi]`. Distinct pages — a series with several
+/// occurrences in the window appears once.
+///
+/// The daily-summary counts read this rather than `pages.scheduled_start`, which
+/// carries only the head: nothing advances the head but completion, so a series
+/// left running sits on a past occurrence while the rule keeps yielding, and the
+/// occurrence the calendar renders today is invisible to a head read.
+///
+/// Occurrences in the exclusion union don't count; a moved instance materializes
+/// as a `page_schedules` row, so the caller counts it at its new date instead of
+/// its original. Synced series floor at the connect day exactly as the head does
+/// — see [`synced_head_floor`].
+///
+/// `timed_only` drops all-day series, which have no instant to be late against;
+/// `created_before` drops pages newer than the cutoff.
+pub(crate) async fn recurring_pages_in_window(
+    pool: &SqlitePool,
+    lo: &str,
+    hi: &str,
+    timed_only: bool,
+    created_before: Option<&str>,
+) -> AppResult<Vec<String>> {
+    let series: Vec<WindowSeries> = sqlx::query_as(
+        "SELECT r.id AS rule_id, r.page_id, r.rrule, r.rrule_exdates,
+                r.scheduled_start AS base_start, r.scheduled_end AS base_end
+         FROM page_recurrence_rules r
+         JOIN pages p ON p.id = r.page_id
+         WHERE p.deleted_at IS NULL
+           AND p.status != 'done'
+           AND (?1 = 0 OR r.scheduled_start LIKE '%T%')
+           AND (?2 IS NULL OR datetime(p.created_at) < datetime(?2))",
+    )
+    .bind(timed_only)
+    .bind(created_before)
+    .fetch_all(pool)
+    .await?;
+
+    let mut pages = Vec::new();
+    for s in series {
+        let mut conn = pool.acquire().await?;
+        let excl = exclusion_union(&mut conn, &s.page_id, &s.rule_id, &s.rrule_exdates).await?;
+        let floor = synced_head_floor(&mut conn, &s.page_id).await?;
+        drop(conn);
+
+        // An out-of-envelope rule is skipped, not fatal to the count — matching
+        // the recompute's and the reminder enumeration's per-series isolation.
+        let occurrences = match pikos_recurrence::occurrences_in_window(
+            &s.rrule,
+            &s.base_start,
+            s.base_end.as_deref(),
+            lo,
+            hi,
+            &excl,
+        ) {
+            Ok(occurrences) => occurrences,
+            Err(e) => {
+                warn_unsupported_series_once(&s.rule_id, &e);
+                continue;
+            }
+        };
+        if occurrences.iter().any(|o| {
+            floor
+                .as_deref()
+                .is_none_or(|f| o.original_date.as_str() >= f)
+        }) {
+            pages.push(s.page_id);
+        }
+    }
+    Ok(pages)
 }
 
 #[derive(sqlx::FromRow)]
