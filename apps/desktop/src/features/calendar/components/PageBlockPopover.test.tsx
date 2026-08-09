@@ -109,7 +109,7 @@ describe("PageBlockPopover — mirror metadata", () => {
 });
 
 describe("PageBlockPopover — reminder bell", () => {
-  const rule = { id: "r1", pageId: "p1" } as PageRecurrenceRule;
+  const rule = { id: "r1", pageId: "p1", rrule: "FREQ=WEEKLY;BYDAY=MO" } as PageRecurrenceRule;
 
   it("offers reminders on a locked timed recurring series", () => {
     mocks.recurrenceRules = [rule];

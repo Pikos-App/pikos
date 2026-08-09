@@ -6,7 +6,7 @@ import type {
   RawRuleExpansion,
   VirtualOccurrence,
 } from "@pikos/core";
-import { dateKey, formatDateOnly, rawExpandRule } from "@pikos/core";
+import { dateKey, formatDateOnly } from "@pikos/core";
 import { addDays } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -26,9 +26,6 @@ interface UseRecurrenceExpansionParams {
     rangeStart: string,
     rangeEnd: string
   ) => Promise<RawRuleExpansion[]>;
-  /** Kill-switch. When false, expand in-process via rrule.js instead of the Rust
-   * engine over IPC — the fallback if the IPC path misbehaves on the live grid. */
-  useRustEngine?: boolean;
   /** Refetch trigger for an override row that moved in place. Such a move leaves
    *  the range and the rule set identical, so nothing else below would refire. */
   overridesVersion?: number;
@@ -149,7 +146,6 @@ export function useRecurrenceExpansion({
   overridesVersion = 0,
   pages,
   recurrenceRules,
-  useRustEngine = true,
 }: UseRecurrenceExpansionParams): (PageSummary | VirtualOccurrence)[] {
   const [overrideSchedules, setOverrideSchedules] = useState<PageSchedule[]>([]);
   const schedulesAbortRef = useRef(0);
@@ -203,14 +199,14 @@ export function useRecurrenceExpansion({
   }, [startStr, endStr, rulesKey, overridesVersion]);
 
   useEffect(() => {
-    if (!useRustEngine || !startStr || !endStr || ruleCount === 0) return;
+    if (!startStr || !endStr || ruleCount === 0) return;
 
     const token = ++expandAbortRef.current;
     void expandRecurrenceRange(recurrenceRules, startStr, endStr).then((result) => {
       if (token !== expandAbortRef.current) return;
       setRawExpansion(new Map(result.map((r) => [r.ruleId, r.occurrences])));
     });
-  }, [useRustEngine, startStr, endStr, rulesKey]);
+  }, [startStr, endStr, rulesKey]);
 
   // Suppress a recurring head block when its own date is completed. Usually a
   // no-op (the head already advances past a completed occurrence), but load-
@@ -226,25 +222,21 @@ export function useRecurrenceExpansion({
 
   if (recurrenceRules.length === 0) return visiblePages;
 
-  const rangeStart = days[0];
-  const lastVisible = days[days.length - 1];
-  if (!rangeStart || !lastVisible) return visiblePages;
-  const rangeEnd = addDays(lastVisible, 1);
+  if (!days[0] || !days[days.length - 1]) return visiblePages;
 
-  // IPC mode before the first batch resolves: render pages only for this frame;
-  // virtuals appear once the batch lands (a one-frame cold-mount cost vs the old
-  // synchronous expansion). The kill-switch computes synchronously below.
-  if (useRustEngine && rawExpansion === null) return visiblePages;
+  // Before the first batch resolves: render pages only for this frame; virtuals
+  // appear once the batch lands (a one-frame cold-mount cost vs the old
+  // synchronous expansion).
+  if (rawExpansion === null) return visiblePages;
 
   const allVirtual: VirtualOccurrence[] = [];
   for (const rule of recurrenceRules) {
     const page = pages.find((p) => p.id === rule.pageId);
     if (!page) continue;
-    // IPC omits a rule the stricter Rust engine can't parse → fall back to
-    // rrule.js so an out-of-envelope provider rule still renders. Kill-switch:
-    // rrule.js for every rule.
-    const ipcRaw = useRustEngine ? rawExpansion?.get(rule.id) : undefined;
-    const raw = ipcRaw ?? rawExpandRule(rule, page, rangeStart, rangeEnd);
+    // The batch omits a rule the engine rejects (out-of-envelope) — such a
+    // series renders no virtuals; there is no second engine to fall back to.
+    const raw = rawExpansion.get(rule.id);
+    if (!raw) continue;
     allVirtual.push(...toVirtuals(raw, page, rule, overrideSchedules));
   }
 

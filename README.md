@@ -47,11 +47,14 @@ pikos/
     mobile/         — iPhone app (placeholder, not started)
   packages/
     core/           — shared TypeScript library (types, utils, Quick Add parser, storage interface)
-    pikos-bridge/   — parser + recurrence logic exposed to the Rust CLI as a node subprocess
+    pikos-bridge/   — Quick Add parser exposed to the Rust CLI as a node subprocess
+    recurrence-wasm/— the Rust recurrence engine compiled to WebAssembly for the JS apps
     ui/             — shared UI components
   crates/
-    pikos-db/       — local SQLite data layer (schema, migrations, writer) shared by desktop and CLI
-    pikos-cli/      — command-line interface, headless access to the local workspace
+    pikos-db/         — local SQLite data layer (schema, migrations, writer) shared by desktop and CLI
+    pikos-cli/        — command-line interface, headless access to the local workspace
+    pikos-recurrence/ — recurrence (RRULE) engine, single-sourced for native + wasm consumers
+    pikos-recurrence-wasm/ — wasm-bindgen bindings that build packages/recurrence-wasm
 ```
 
 ## Development

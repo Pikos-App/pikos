@@ -41,11 +41,6 @@ export interface AppSettingsValue {
   /** Quiet hours end time (HH:MM, 24h format). Default: "08:00". */
   quietHoursEnd: string;
   setQuietHoursEnd: (v: string) => void;
-  /** Expand recurring occurrences via the Rust engine over IPC. Default: true.
-   * The kill-switch: turn off to fall back to the in-process rrule.js expansion
-   * if the IPC path ever misbehaves on the live calendar. */
-  rustRecurrenceEngine: boolean;
-  setRustRecurrenceEngine: (v: boolean) => void;
 }
 
 const AppSettingsContext = createContext<AppSettingsValue | null>(null);
@@ -83,10 +78,6 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     "22:00"
   );
   const [quietHoursEnd, setQuietHoursEnd] = useLocalStorage<string>("pikos:quietHoursEnd", "08:00");
-  const [rustRecurrenceEngine, setRustRecurrenceEngine] = useLocalStorage<boolean>(
-    "pikos:rustRecurrenceEngine",
-    true
-  );
 
   // Sync notification settings to the Rust scheduler whenever they change.
   // Wrapped in catch — Tauri IPC is unavailable in test/non-Tauri environments.
@@ -128,7 +119,6 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     quietHoursEnabled,
     quietHoursEnd,
     quietHoursStart,
-    rustRecurrenceEngine,
     setAutoUpdateEnabled,
     setDefaultFolderId,
     setDefaultReminderMinutes,
@@ -137,7 +127,6 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setQuietHoursEnabled,
     setQuietHoursEnd,
     setQuietHoursStart,
-    setRustRecurrenceEngine,
     setSkippedVersion,
     setSummaryTime,
     setWeekStart,

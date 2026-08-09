@@ -56,9 +56,9 @@
 //   • scenario matrix (one canonical per shape)       ← table
 //   • parser invariants (property tests)              ← end of file
 
-import { RRule } from "rrule";
 import { describe, expect, it } from "vitest";
 
+import { parseRrule } from "../utils/recurrence";
 import { parseInput } from "./parser";
 import { assertCase, forAll, type ParserCase } from "./parser.testHelpers";
 
@@ -734,12 +734,11 @@ describe("NL Page Creation Parser", () => {
         },
         input: "standup every weekday at 9am for 2 weeks",
       },
-      // Round-trip parseable: RRULE alone (no DTSTART) survives RRule.fromString.
+      // Round-trip parseable: RRULE alone (no DTSTART) survives parseRrule.
       {
         expected: {
           custom: (r) => {
-            const rule = RRule.fromString("RRULE:" + r.rrule);
-            expect(rule).toBeDefined();
+            expect(parseRrule(r.rrule)).not.toBeNull();
           },
           rrule: [],
           type: "recurring",
@@ -1123,12 +1122,11 @@ describe("NL Page Creation Parser", () => {
 
   describe("RRULE validation", () => {
     const cases: ParserCase[] = [
-      // Rrule string is parseable by the rrule library.
+      // Rrule string is parseable by the recurrence engine.
       {
         expected: {
           custom: (r) => {
-            const rule = RRule.fromString("RRULE:" + r.rrule);
-            expect(rule).toBeDefined();
+            expect(parseRrule(r.rrule)).not.toBeNull();
           },
           rrule: [],
           type: "recurring",
@@ -1641,8 +1639,7 @@ describe("NL Page Creation Parser", () => {
       {
         expected: {
           custom: (r) => {
-            const rule = RRule.fromString("RRULE:" + r.rrule);
-            expect(rule).toBeDefined();
+            expect(parseRrule(r.rrule)).not.toBeNull();
           },
           rrule: ["FREQ=WEEKLY"],
           type: "recurring",
@@ -2201,7 +2198,7 @@ describe("NL Page Creation Parser", () => {
             ],
             "title": "1:1",
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=TU;INTERVAL=2;UNTIL=20260511T235959Z",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260511T235959Z",
           "type": "recurring",
         }
       `);
@@ -2968,7 +2965,7 @@ describe("NL Page Creation Parser", () => {
       }
     });
 
-    it("rrule (when present) is parseable by the rrule library", () => {
+    it("rrule (when present) is parseable by the recurrence engine", () => {
       const cases = [
         "standup every monday",
         "standup every other tuesday",
@@ -2978,7 +2975,7 @@ describe("NL Page Creation Parser", () => {
       for (const s of cases) {
         const r = parseInput(s, NOW);
         if (r.type !== "recurring") continue;
-        expect(() => RRule.fromString("RRULE:" + r.rrule)).not.toThrow();
+        expect(parseRrule(r.rrule)).not.toBeNull();
       }
     });
 
@@ -3102,15 +3099,10 @@ describe("parser invariants (property tests)", () => {
     });
   });
 
-  it("recurring rrule is always parseable by rrule.js", () => {
+  it("recurring rrule is always parseable by the recurrence engine", () => {
     forAll((_, r) => {
       if (r.type !== "recurring") return true;
-      try {
-        RRule.fromString("RRULE:" + r.rrule);
-        return true;
-      } catch {
-        return false;
-      }
+      return parseRrule(r.rrule) !== null;
     });
   });
 

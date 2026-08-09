@@ -46,11 +46,7 @@ export function CalendarView() {
   const { storage } = useWorkspace();
   const { activeViewId, openPage, referenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
-  const {
-    defaultFolderId: settingsDefaultFolder,
-    rustRecurrenceEngine,
-    weekStart,
-  } = useAppSettings();
+  const { defaultFolderId: settingsDefaultFolder, weekStart } = useAppSettings();
   const { dayCount: preferredDayCount } = useCalendarSettings();
   const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
@@ -106,7 +102,6 @@ export function CalendarView() {
     overridesVersion,
     pages: visiblePages,
     recurrenceRules,
-    useRustEngine: rustRecurrenceEngine,
   });
 
   function handlePageDoubleClick(pageId: string) {

@@ -10,9 +10,9 @@ import {
   set,
   startOfDay,
 } from "date-fns";
-import { RRule, Weekday } from "rrule";
 
-import { formatDateOnly, formatLocalISO, isAllDayIso } from "../utils/dates";
+import { formatDateOnly, formatLocalISO, isAllDayIso, parseLocalISO } from "../utils/dates";
+import { listOccurrences, type RecurrenceFreq } from "../utils/recurrence";
 
 type PagePriority = "urgent" | "high" | "medium" | "low";
 
@@ -31,41 +31,55 @@ export type ParseResult =
   | { type: "finite"; inputs: ParsedInput[]; count: number }
   | { type: "recurring"; input: ParsedInput; rrule: string };
 
+/** Weekday index in the rrule convention: 0 = Monday … 6 = Sunday. */
+type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+const MO = 0 as Weekday;
+const TU = 1 as Weekday;
+const WE = 2 as Weekday;
+const TH = 3 as Weekday;
+const FR = 4 as Weekday;
+const SA = 5 as Weekday;
+const SU = 6 as Weekday;
+
+/** Weekday codes in rrule index order, for RRULE serialization. */
+const WEEKDAY_CODES = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"] as const;
+
 const DAY_MAP: Record<string, Weekday> = {
-  f: RRule.FR,
-  fr: RRule.FR,
-  fri: RRule.FR,
-  friday: RRule.FR,
-  m: RRule.MO,
-  mo: RRule.MO,
-  mon: RRule.MO,
-  monday: RRule.MO,
-  sa: RRule.SA,
-  sat: RRule.SA,
-  saturday: RRule.SA,
-  su: RRule.SU,
-  sun: RRule.SU,
-  sunday: RRule.SU,
-  t: RRule.TU,
-  th: RRule.TH,
-  thu: RRule.TH,
-  thur: RRule.TH,
-  thurs: RRule.TH,
-  thursday: RRule.TH,
-  tu: RRule.TU,
-  tue: RRule.TU,
-  tues: RRule.TU,
-  tuesday: RRule.TU,
-  w: RRule.WE,
-  we: RRule.WE,
-  wed: RRule.WE,
-  wednesday: RRule.WE,
+  f: FR,
+  fr: FR,
+  fri: FR,
+  friday: FR,
+  m: MO,
+  mo: MO,
+  mon: MO,
+  monday: MO,
+  sa: SA,
+  sat: SA,
+  saturday: SA,
+  su: SU,
+  sun: SU,
+  sunday: SU,
+  t: TU,
+  th: TH,
+  thu: TH,
+  thur: TH,
+  thurs: TH,
+  thursday: TH,
+  tu: TU,
+  tue: TU,
+  tues: TU,
+  tuesday: TU,
+  w: WE,
+  we: WE,
+  wed: WE,
+  wednesday: WE,
 };
 
-const WEEKDAY_DAYS = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR];
-const WEEKEND_DAYS = [RRule.SA, RRule.SU];
+const WEEKDAY_DAYS = [MO, TU, WE, TH, FR];
+const WEEKEND_DAYS = [SA, SU];
 
-/** Map RRule weekday (0=MO … 6=SU) to JS Date.getDay() (0=SU … 6=SA). */
+/** Map rrule weekday (0=MO … 6=SU) to JS Date.getDay() (0=SU … 6=SA). */
 const RRULE_TO_JS_DAY: Record<number, number> = {
   0: 1, // MO
   1: 2, // TU
@@ -77,12 +91,52 @@ const RRULE_TO_JS_DAY: Record<number, number> = {
 };
 
 function nextWeekdayOccurrence(ref: Date, weekday: Weekday): Date {
-  const targetJsDay = RRULE_TO_JS_DAY[weekday.weekday]!;
+  const targetJsDay = RRULE_TO_JS_DAY[weekday]!;
   const current = ref.getDay();
   let daysAhead = targetJsDay - current;
   if (daysAhead < 0) daysAhead += 7;
   if (daysAhead === 0) daysAhead = 7; // same day → next week (consistent with chrono "monday" behavior)
   return addDays(ref, daysAhead);
+}
+
+/**
+ * Serializes recurrence parts into an RRULE string (no "RRULE:" prefix, no
+ * DTSTART — matching the data-model convention). INTERVAL is emitted only
+ * when > 1, mirroring the historical rrule.js serializer on this path.
+ */
+function serializeRrule(opts: {
+  freq: RecurrenceFreq;
+  byweekday?: Weekday[] | undefined;
+  interval?: number | undefined;
+  count?: number | undefined;
+  /** Compact UNTIL value, e.g. "20260628T235959Z". */
+  until?: string | undefined;
+}): string {
+  let out = `FREQ=${opts.freq}`;
+  if (opts.interval && opts.interval > 1) out += `;INTERVAL=${opts.interval}`;
+  if (opts.byweekday && opts.byweekday.length > 0) {
+    out += `;BYDAY=${opts.byweekday.map((d) => WEEKDAY_CODES[d]).join(",")}`;
+  }
+  if (opts.count != null) {
+    out += `;COUNT=${opts.count}`;
+  } else if (opts.until) {
+    out += `;UNTIL=${opts.until}`;
+  }
+  return out;
+}
+
+/**
+ * Compact UNTIL value ("YYYYMMDDTHHMMSSZ") from a Date's local wall-clock
+ * fields — the engine and data model are timezone-naive, so the Z is purely
+ * syntactic (RFC 5545 requires it after a COUNT-less UNTIL time).
+ */
+function untilFromLocalDate(d: Date, endOfDay: boolean): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const time = endOfDay
+    ? "235959"
+    : `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  return `${date}T${time}Z`;
 }
 
 export function parseInput(raw: string, now?: Date): ParseResult {
@@ -139,8 +193,8 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     /\blast\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
     (_, weekday: string) => {
       const day = DAY_MAP[weekday.toLowerCase()];
-      if (!day) return _;
-      const targetJsDay = RRULE_TO_JS_DAY[day.weekday]!;
+      if (day === undefined) return _;
+      const targetJsDay = RRULE_TO_JS_DAY[day]!;
       const current = ref.getDay();
       let daysBack = current - targetJsDay;
       if (daysBack <= 0) daysBack += 7;
@@ -306,7 +360,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
   // --- 6. Recurrence detection ---
   type RecurrenceSpec =
-    | { kind: "infinite"; freq: number; byday?: Weekday[]; interval?: number }
+    | { kind: "infinite"; freq: RecurrenceFreq; byday?: Weekday[]; interval?: number }
     | { kind: "finite-slash"; days: Weekday[] }
     | { kind: "finite-weekdays" };
 
@@ -315,11 +369,11 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // "every N <unit>" or "every other <unit>" — interval-based cadence.
   // Checked before "every <day>" so "every 2 weeks" / "every other day" match
   // here instead of falling through to the day-word regex.
-  const INTERVAL_UNIT_FREQ: Record<string, number> = {
-    day: RRule.DAILY,
-    month: RRule.MONTHLY,
-    week: RRule.WEEKLY,
-    year: RRule.YEARLY,
+  const INTERVAL_UNIT_FREQ: Record<string, RecurrenceFreq> = {
+    day: "DAILY",
+    month: "MONTHLY",
+    week: "WEEKLY",
+    year: "YEARLY",
   };
   text = text.replace(
     /\bevery\s+(other|\d+)\s+(day|week|month|year)s?\b/gi,
@@ -340,8 +394,8 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     (_, intervalStr: string, weekday: string) => {
       const interval = intervalStr.toLowerCase() === "other" ? 2 : parseInt(intervalStr, 10);
       const day = DAY_MAP[weekday.toLowerCase()];
-      if (!day) return " ";
-      recurrenceSpec = { byday: [day], freq: RRule.WEEKLY, interval, kind: "infinite" };
+      if (day === undefined) return " ";
+      recurrenceSpec = { byday: [day], freq: "WEEKLY", interval, kind: "infinite" };
       return " ";
     }
   );
@@ -362,30 +416,30 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   text = text.replace(everyDayRe, (_, dayStr: string) => {
     const parts = dayStr.toLowerCase().split(/\s*,?\s*and\s+|\s*,\s*/);
     const allDays: Weekday[] = [];
-    let freq: number | undefined;
+    let freq: RecurrenceFreq | undefined;
     for (const part of parts) {
       const p = part.trim();
       if (!p) continue;
       if (p === "day") {
-        freq = RRule.DAILY;
+        freq = "DAILY";
       } else if (p === "week") {
-        freq = RRule.WEEKLY;
+        freq = "WEEKLY";
       } else if (p === "month") {
-        freq = RRule.MONTHLY;
+        freq = "MONTHLY";
       } else if (p === "year") {
-        freq = RRule.YEARLY;
+        freq = "YEARLY";
       } else if (p === "weekday") {
         allDays.push(...WEEKDAY_DAYS);
       } else if (p === "weekend") {
         allDays.push(...WEEKEND_DAYS);
-      } else if (DAY_MAP[p]) {
+      } else if (DAY_MAP[p] !== undefined) {
         allDays.push(DAY_MAP[p]);
       }
     }
     if (freq !== undefined) {
       recurrenceSpec = { freq, kind: "infinite" };
     } else if (allDays.length > 0) {
-      recurrenceSpec = { byday: allDays, freq: RRule.WEEKLY, kind: "infinite" };
+      recurrenceSpec = { byday: allDays, freq: "WEEKLY", kind: "infinite" };
     }
     return " ";
   });
@@ -394,7 +448,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // the longer match wins.
   if (!recurrenceSpec) {
     text = text.replace(/\b(?:biweekly|fortnightly)\b/gi, () => {
-      recurrenceSpec = { freq: RRule.WEEKLY, interval: 2, kind: "infinite" };
+      recurrenceSpec = { freq: "WEEKLY", interval: 2, kind: "infinite" };
       return " ";
     });
   }
@@ -402,7 +456,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // "bimonthly" → every 2 months. Must run before "monthly".
   if (!recurrenceSpec) {
     text = text.replace(/\bbimonthly\b/gi, () => {
-      recurrenceSpec = { freq: RRule.MONTHLY, interval: 2, kind: "infinite" };
+      recurrenceSpec = { freq: "MONTHLY", interval: 2, kind: "infinite" };
       return " ";
     });
   }
@@ -412,28 +466,28 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // "daily standup every monday" where "every monday" is the specifier.
   if (!recurrenceSpec) {
     text = text.replace(/\bdaily\b/gi, () => {
-      recurrenceSpec = { freq: RRule.DAILY, kind: "infinite" };
+      recurrenceSpec = { freq: "DAILY", kind: "infinite" };
       return " ";
     });
   }
 
   if (!recurrenceSpec) {
     text = text.replace(/\bweekly\b/gi, () => {
-      recurrenceSpec = { freq: RRule.WEEKLY, kind: "infinite" };
+      recurrenceSpec = { freq: "WEEKLY", kind: "infinite" };
       return " ";
     });
   }
 
   if (!recurrenceSpec) {
     text = text.replace(/\bmonthly\b/gi, () => {
-      recurrenceSpec = { freq: RRule.MONTHLY, kind: "infinite" };
+      recurrenceSpec = { freq: "MONTHLY", kind: "infinite" };
       return " ";
     });
   }
 
   if (!recurrenceSpec) {
     text = text.replace(/\b(?:yearly|annually)\b/gi, () => {
-      recurrenceSpec = { freq: RRule.YEARLY, kind: "infinite" };
+      recurrenceSpec = { freq: "YEARLY", kind: "infinite" };
       return " ";
     });
   }
@@ -450,17 +504,17 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     const days: Weekday[] = [];
     for (const part of parts) {
       const day = DAY_MAP[part];
-      if (day) days.push(day);
+      if (day !== undefined) days.push(day);
     }
     if (days.length === 0) return " ";
 
     const isInfiniteWeeklyNoByday =
       recurrenceSpec?.kind === "infinite" &&
-      recurrenceSpec.freq === (RRule.WEEKLY as number) &&
+      recurrenceSpec.freq === "WEEKLY" &&
       !recurrenceSpec.byday;
 
     if (everyPrefix || isInfiniteWeeklyNoByday) {
-      recurrenceSpec = { byday: days, freq: RRule.WEEKLY, kind: "infinite" };
+      recurrenceSpec = { byday: days, freq: "WEEKLY", kind: "infinite" };
     } else {
       recurrenceSpec = { days, kind: "finite-slash" };
     }
@@ -481,7 +535,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       const days: Weekday[] = [];
       for (const part of parts) {
         const singular = part.trim().replace(/s$/, "");
-        if (singular && DAY_MAP[singular]) {
+        if (singular && DAY_MAP[singular] !== undefined) {
           days.push(DAY_MAP[singular]);
         }
       }
@@ -489,11 +543,11 @@ export function parseInput(raw: string, now?: Date): ParseResult {
 
       const isInfiniteWeeklyNoByday =
         recurrenceSpec?.kind === "infinite" &&
-        recurrenceSpec.freq === (RRule.WEEKLY as number) &&
+        recurrenceSpec.freq === "WEEKLY" &&
         !recurrenceSpec.byday;
 
       if (!recurrenceSpec || isInfiniteWeeklyNoByday) {
-        recurrenceSpec = { byday: days, freq: RRule.WEEKLY, kind: "infinite" };
+        recurrenceSpec = { byday: days, freq: "WEEKLY", kind: "infinite" };
         return " ";
       }
       // Another recurrenceSpec already set (e.g. finite-slash); leave plural in title.
@@ -600,23 +654,23 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   const firstChrono = chronoResults[0];
   if (
     recurrenceSpec?.kind === "infinite" &&
-    recurrenceSpec.freq === (RRule.WEEKLY as number) &&
+    recurrenceSpec.freq === "WEEKLY" &&
     !recurrenceSpec.byday &&
     firstChrono &&
     firstChrono.start.isCertain("weekday")
   ) {
     const jsDay = firstChrono.start.get("weekday");
-    // chrono weekday: 0=Sun … 6=Sat → map to RRule Weekday
+    // chrono weekday: 0=Sun … 6=Sat → map to the rrule 0=Mon … 6=Sun index.
     const JS_TO_RRULE: Record<number, Weekday> = {
-      0: RRule.SU,
-      1: RRule.MO,
-      2: RRule.TU,
-      3: RRule.WE,
-      4: RRule.TH,
-      5: RRule.FR,
-      6: RRule.SA,
+      0: SU,
+      1: MO,
+      2: TU,
+      3: WE,
+      4: TH,
+      5: FR,
+      6: SA,
     };
-    if (jsDay !== undefined && jsDay !== null && JS_TO_RRULE[jsDay]) {
+    if (jsDay !== undefined && jsDay !== null && JS_TO_RRULE[jsDay] !== undefined) {
       recurrenceSpec = { ...recurrenceSpec, byday: [JS_TO_RRULE[jsDay]] };
     }
   }
@@ -707,7 +761,7 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   // cadence defaults to daily recurrence. Keeps the count/boundary signal the
   // user typed instead of silently stripping it from the title.
   if (windowSpec && !recurrenceSpec) {
-    recurrenceSpec = { freq: RRule.DAILY, kind: "infinite" };
+    recurrenceSpec = { freq: "DAILY", kind: "infinite" };
   }
 
   const isInfiniteRec = recurrenceSpec?.kind === "infinite";
@@ -719,18 +773,17 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     const win = windowSpec;
     const spec = recurrenceSpec as {
       kind: "infinite";
-      freq: number;
+      freq: RecurrenceFreq;
       byday?: Weekday[];
       interval?: number;
     };
-    const rruleOpts: ConstructorParameters<typeof RRule>[0] = { freq: spec.freq };
-    if (spec.byday) rruleOpts.byweekday = spec.byday;
-    if (spec.interval && spec.interval > 1) rruleOpts.interval = spec.interval;
 
+    let count: number | undefined;
+    let until: string | undefined;
     if (win.kind === "count") {
-      rruleOpts.count = win.count;
+      count = win.count;
     } else {
-      // UNTIL at end-of-day UTC of the boundary date — matches buildRrule()
+      // UNTIL at end-of-day of the boundary date — matches buildRrule()
       // convention so parse→expand round-trips through the same rrule the
       // editor produces.
       let boundary: Date;
@@ -742,18 +795,16 @@ export function parseInput(raw: string, now?: Date): ParseResult {
           : ref;
         boundary = addDays(dtstart, win.count - 1);
       }
-      rruleOpts.until = new Date(
-        Date.UTC(boundary.getFullYear(), boundary.getMonth(), boundary.getDate(), 23, 59, 59)
-      );
+      until = untilFromLocalDate(boundary, true);
     }
 
-    const rule = new RRule(rruleOpts);
-    const rruleStr = rule
-      .toString()
-      .split("\n")
-      .filter((line) => !line.startsWith("DTSTART"))
-      .join("\n")
-      .replace(/^RRULE:/, "");
+    const rruleStr = serializeRrule({
+      byweekday: spec.byday,
+      count,
+      freq: spec.freq,
+      interval: spec.interval,
+      until,
+    });
 
     return { input: baseInput, rrule: rruleStr, type: "recurring" };
   }
@@ -768,28 +819,27 @@ export function parseInput(raw: string, now?: Date): ParseResult {
       ? new Date(isAllDayIso(scheduledStart) ? scheduledStart + "T00:00:00" : scheduledStart)
       : ref;
 
-    const rruleOpts: ConstructorParameters<typeof RRule>[0] = {
-      byweekday: days,
-      dtstart: windowStart,
-      freq: RRule.WEEKLY,
-    };
-
+    let count: number | undefined;
+    let until: string | undefined;
     if (windowSpec) {
       if (windowSpec.kind === "count") {
-        rruleOpts.count = windowSpec.count;
+        count = windowSpec.count;
       } else if (windowSpec.kind === "until") {
-        rruleOpts.until = windowSpec.date;
+        until = untilFromLocalDate(windowSpec.date, false);
       } else {
-        rruleOpts.until = addDays(windowStart, windowSpec.count - 1);
+        until = untilFromLocalDate(addDays(windowStart, windowSpec.count - 1), false);
       }
     } else if (recurrenceSpec.kind === "finite-weekdays") {
-      rruleOpts.count = 5;
+      count = 5;
     } else {
-      rruleOpts.count = days.length;
+      count = days.length;
     }
 
-    const rule = new RRule(rruleOpts);
-    const dates = rule.all();
+    const dates = listOccurrences(
+      serializeRrule({ byweekday: days, count, freq: "WEEKLY", until }),
+      formatLocalISO(windowStart),
+      1000
+    ).map(parseLocalISO);
 
     const inputs: ParsedInput[] = dates.map((d) => {
       const inp: ParsedInput = {
@@ -825,29 +875,17 @@ export function parseInput(raw: string, now?: Date): ParseResult {
   if (isInfiniteRec && !windowSpec) {
     const spec = recurrenceSpec as {
       kind: "infinite";
-      freq: number;
+      freq: RecurrenceFreq;
       byday?: Weekday[];
       interval?: number;
     };
-    const rruleOpts: ConstructorParameters<typeof RRule>[0] = {
-      freq: spec.freq,
-    };
-    if (spec.byday) {
-      rruleOpts.byweekday = spec.byday;
-    }
-    if (spec.interval && spec.interval > 1) {
-      rruleOpts.interval = spec.interval;
-    }
-
-    const rule = new RRule(rruleOpts);
-    // Strip DTSTART — the data model stores RRULE without it (the anchor lives
+    // No DTSTART — the data model stores RRULE without it (the anchor lives
     // on the page), matching buildRrule()'s convention.
-    const rruleStr = rule
-      .toString()
-      .split("\n")
-      .filter((line) => !line.startsWith("DTSTART"))
-      .join("\n")
-      .replace(/^RRULE:/, "");
+    const rruleStr = serializeRrule({
+      byweekday: spec.byday,
+      freq: spec.freq,
+      interval: spec.interval,
+    });
 
     return {
       input: baseInput,

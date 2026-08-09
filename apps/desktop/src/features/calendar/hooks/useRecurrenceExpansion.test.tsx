@@ -1,7 +1,7 @@
 // useRecurrenceExpansion — verifies the calendar's hook for merging virtual
 // rrule occurrences into the rendered page list. Covers head-deduplication,
 // override exclusion, multi-rule expansion, the empty-rules short-circuit, and
-// both engine paths (Rust-via-IPC default + the rrule.js kill-switch).
+// the Rust-via-IPC batch path (including a rule the engine omits).
 
 import type {
   PageRecurrenceRule,
@@ -687,53 +687,49 @@ describe("useRecurrenceExpansion", () => {
     });
   });
 
-  it("falls back to rrule.js for a rule the Rust engine omitted (out-of-envelope)", async () => {
-    // The IPC batch omits any rule its stricter engine can't parse. Here the
-    // expander returns an empty batch (the rule is absent), so the hook must fall
-    // back to the in-process rrule.js expansion — the occurrence still renders.
-    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
-    const rule = makeRule();
-    const omitAll = (): Promise<RawRuleExpansion[]> => Promise.resolve([]);
+  it("renders no virtuals for a rule the engine omitted (out-of-envelope)", async () => {
+    // The batch omits any rule the engine rejects. There is no second engine to
+    // fall back to (the mock adapter and the backend run the same crate), so the
+    // series contributes nothing — while other rules in the batch still render.
+    const pages = [
+      makePage({ id: "page-A", scheduledStart: "2026-03-02T09:00:00" }),
+      makePage({ id: "page-B", scheduledStart: "2026-03-04T15:00:00" }),
+    ];
+    const ruleA = makeRule({ id: "rule-A", pageId: "page-A" });
+    const ruleB = makeRule({
+      id: "rule-B",
+      pageId: "page-B",
+      rrule: "FREQ=WEEKLY;BYDAY=WE",
+      scheduledEnd: "2026-03-04T16:00:00",
+      scheduledStart: "2026-03-04T15:00:00",
+    });
+    // rule-A is omitted from the batch; rule-B expands normally.
+    const omitA = (
+      rules: PageRecurrenceRule[],
+      startStr: string,
+      endStr: string
+    ): Promise<RawRuleExpansion[]> =>
+      EXPAND(
+        rules.filter((r) => r.id !== "rule-A"),
+        startStr,
+        endStr
+      );
 
     const { result } = renderHook(() =>
       useRecurrenceExpansion({
         days: weekDays(new Date(2026, 2, 9)),
-        expandRecurrenceRange: omitAll,
+        expandRecurrenceRange: omitA,
         listOverridesForRules: NOOP_LIST_SCHEDULES,
         pages,
-        recurrenceRules: [rule],
+        recurrenceRules: [ruleA, ruleB],
       })
     );
 
     await waitFor(() => {
       const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
       expect(virtual).toHaveLength(1);
-      expect(virtual[0]?.scheduledStart).toBe("2026-03-09T09:00:00");
+      expect(virtual[0]?.ruleId).toBe("rule-B");
     });
-  });
-
-  it("kill-switch (useRustEngine: false) expands via rrule.js, never touching IPC", async () => {
-    const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00" })];
-    const rule = makeRule();
-    const expandSpy = vi.fn(() => Promise.reject(new Error("IPC must not be called")));
-
-    const { result } = renderHook(() =>
-      useRecurrenceExpansion({
-        days: weekDays(new Date(2026, 2, 9)),
-        expandRecurrenceRange: expandSpy,
-        listOverridesForRules: NOOP_LIST_SCHEDULES,
-        pages,
-        recurrenceRules: [rule],
-        useRustEngine: false,
-      })
-    );
-
-    await waitFor(() => {
-      const virtual = result.current.filter((p): p is VirtualOccurrence => "isVirtual" in p);
-      expect(virtual).toHaveLength(1);
-      expect(virtual[0]?.scheduledStart).toBe("2026-03-09T09:00:00");
-    });
-    expect(expandSpy).not.toHaveBeenCalled();
   });
 });
 
