@@ -5,17 +5,17 @@
 // IANA id, but rendered in the *viewer's* current zone — a 3pm Los_Angeles event
 // shows at 6pm for a New_York viewer. Native pages float and never come here.
 
-import { fromZonedTime } from "date-fns-tz";
+import { wallClockToUtc } from "./zoned";
 
 /**
  * Resolve a synced timed event's source-zone wall-clock string
  * ('YYYY-MM-DDTHH:MM:SS') to its absolute instant, given the source IANA zone.
  * Positioning/formatting then reads that instant in the device's local zone —
- * there's no separate "to viewer zone" step.
+ * there's no separate "to viewer zone" step. DST edge policy: see `zoned.ts`.
  *
  * Timed synced events only. All-day synced events are date-only and never
  * shift — keep them on the floating `parseLocalISO` path.
  */
 export function resolveSyncedInstant(wallClock: string, sourceZone: string): Date {
-  return fromZonedTime(wallClock, sourceZone);
+  return wallClockToUtc(sourceZone, wallClock);
 }

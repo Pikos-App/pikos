@@ -44,3 +44,10 @@ export type {
 } from "./utils/recurrence";
 export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";
 export { resolveSyncedInstant } from "./utils/syncedTime";
+export {
+  expandRecurrenceInZone,
+  normalizeUntilToZone,
+  utcToWallClock,
+  wallClockToUtc,
+} from "./utils/zoned";
+export type { ZonedOccurrence } from "./utils/zoned";

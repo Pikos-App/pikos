@@ -7,8 +7,21 @@ description = "Pikos recurrence engine — pure RRULE date enumeration (no DB, a
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono-tz = { version = "0.10", optional = true }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 
+[features]
+# Timezone boundary layer (src/zoned.rs) for zone-aware synced events.
+# Native consumers opt in; the wasm build MUST NOT enable this — chrono-tz
+# embeds a ~2MB timezone database, and wasm consumers get the equivalent
+# conversions from the platform's own tz data via the Intl-based TS twin
+# (packages/core/src/utils/zoned.ts).
+tz = ["dep:chrono-tz"]
+
 [dev-dependencies]
 serde_json = "1"
+# Self dev-dependency: enables the tz feature for this crate's own test build
+# so `cargo test` covers src/zoned.rs, without imposing chrono-tz on
+# downstream builds (notably pikos-recurrence-wasm).
+pikos-recurrence = { path = ".", features = ["tz"] }

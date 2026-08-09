@@ -16,6 +16,8 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 mod engine;
 mod label;
 mod rule;
+#[cfg(feature = "tz")]
+pub mod zoned;
 
 pub use engine::{
     align_weekly_rule_to_anchor, compute_next_end, expand_range, list_occurrences,
