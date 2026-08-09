@@ -385,6 +385,58 @@ describe("maybeToggleRecurringOccurrence", () => {
     expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({ occurrenceDate: "2099-01-12" });
   });
 
+  it("a detached series' moved block completes on its originalDate, not through the gap dialog", async () => {
+    // Detached is unlocked, so a scheduleLocked gate dropped this to head
+    // completion — aiming the gap dialog at a date that can never be the
+    // override's originalDate. Sync origin is the gate, matching toOverrideBlocks.
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
+    await act(async () => {
+      const storage = hook.result.current.workspace.storage as MockStorageAdapter;
+      storage.markPageSynced(pageId, { state: "detached", timezone: "America/New_York" });
+      await hook.result.current.workspace.reload();
+    });
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+
+    const movedBlock = {
+      ...head(hook, pageId),
+      originalDate: "2099-01-12",
+      scheduledStart: "2099-01-12T14:00:00",
+    };
+    let handled!: boolean;
+    act(() => {
+      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(movedBlock, "done");
+    });
+
+    expect(handled).toBe(true);
+    expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({ occurrenceDate: "2099-01-12" });
+  });
+
+  it("a detached series' virtual completes on its own originalDate too", async () => {
+    // Detach changes ownership, not page kind — a calendar-born series keeps
+    // attendance semantics (tick the instance), active or detached.
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
+    await act(async () => {
+      const storage = hook.result.current.workspace.storage as MockStorageAdapter;
+      storage.markPageSynced(pageId, { state: "detached", timezone: "America/New_York" });
+      await hook.result.current.workspace.reload();
+    });
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+
+    const virtual = {
+      ...head(hook, pageId),
+      isVirtual: true,
+      originalDate: "2099-01-12",
+      scheduledStart: "2099-01-12T09:00:00",
+    };
+    let handled!: boolean;
+    act(() => {
+      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
+    });
+
+    expect(handled).toBe(true);
+    expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({ occurrenceDate: "2099-01-12" });
+  });
+
   it("unchecking a done clone routes to uncompleteRecurringOccurrence with the series id + date", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
     const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteRecurringOccurrence");

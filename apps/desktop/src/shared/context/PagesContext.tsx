@@ -957,22 +957,28 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   /**
    * Intercepts a status toggle that must route to occurrence-based completion, and
    * returns true ONLY when it handled it (caller must then NOT fall through). Two
-   * cases: checking a *virtual* occurrence of an active synced series → complete
-   * that occurrence; unchecking *any* recurring done clone (native or synced) →
-   * uncomplete + restore. Returns false for everything else — including a malformed
-   * synced row with no `scheduledStart`, so the native path runs and surfaces an
-   * error rather than silently swallowing the click.
+   * cases: checking a rendered occurrence (virtual or moved override block) of a
+   * synced-origin series → complete that occurrence; unchecking *any* recurring
+   * done clone (native or synced) → uncomplete + restore. Returns false for
+   * everything else — including a malformed synced row with no `scheduledStart`,
+   * so the native path runs and surfaces an error rather than silently swallowing
+   * the click.
+   *
+   * Sync *origin* is the gate, active and detached alike: a calendar-born series
+   * keeps attendance semantics — tick the instance you attended — where a native
+   * task series funnels every click to the head (do the next thing due). Detach
+   * changes ownership, not what the series is.
    *
    * A synced *head* deliberately falls through to the gap dialog rather than
    * completing here: its floor is the connect day, so it can be genuinely overdue,
    * and resolving that gap is the same gesture a native series offers.
    */
   function maybeToggleRecurringOccurrence(page: PageSummary, nextStatus: PageStatus): boolean {
-    const isSyncedVirtual =
-      !!page.scheduleLocked &&
+    const isSyncedOccurrence =
+      !!page.syncState &&
       "originalDate" in page &&
       recurrenceRulesRef.current.some((r) => r.pageId === page.id);
-    if (isSyncedVirtual && nextStatus === "done" && page.scheduledStart) {
+    if (isSyncedOccurrence && nextStatus === "done" && page.scheduledStart) {
       const occurrenceDate = (page as VirtualOccurrence).originalDate;
       const cloneEnd = page.scheduledEnd
         ? cloneWallClock(page.scheduledEnd, page.timezone)

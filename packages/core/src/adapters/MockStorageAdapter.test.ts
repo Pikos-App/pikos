@@ -669,6 +669,30 @@ describe("completeRecurringPage", () => {
     expect(donePages).toHaveLength(3);
   });
 
+  it("a supplied occurrence key routes a detached (unlocked) series through the occurrence path", async () => {
+    // Mirrors the backend's unlocked-with-key branch: a detached series' moved
+    // override completes on its own date, leaving the oldest-open head in place.
+    const head = await createTestPage({ title: "Detached series" });
+    await adapter.updatePage(head.id, { scheduledStart: "2026-03-16T09:00:00" });
+    await adapter.createRecurrenceRule({
+      pageId: head.id,
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      scheduledStart: "2026-03-16T09:00:00",
+      timezone: "America/New_York",
+    });
+    adapter.markPageSynced(head.id, { state: "detached" });
+
+    const result = await adapter.completeRecurringPage({
+      occurrenceDate: "2026-03-23",
+      pageId: head.id,
+      scheduledStart: "2026-03-23T14:00:00",
+    });
+
+    expect(result.clone.scheduledStart).toBe("2026-03-23T14:00:00");
+    expect(result.head.completedOccurrences?.["2026-03-23"]).toBe(result.clone.id);
+    expect(result.head.scheduledStart).toBe("2026-03-16T09:00:00");
+  });
+
   it("rejects with NotFound when page not found", async () => {
     await expectRejection(
       adapter.completeRecurringPage({ pageId: "nonexistent" }),

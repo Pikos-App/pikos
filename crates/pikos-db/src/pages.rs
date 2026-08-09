@@ -1259,8 +1259,13 @@ async fn complete_recurring_page_once(
     // Resolve the occurrence: a native head sits on its own oldest-open date (used
     // directly as the clone's schedule and set key). A synced head is pinned at the
     // base, so the client supplies the rendered virtual, validated below against
-    // the rule (see synced_occurrence_is_valid).
-    let (occurrence_date, occurrence_start, occurrence_end) = if head.schedule_locked {
+    // the rule (see synced_occurrence_is_valid). A detached series is unlocked but
+    // may still supply one — its moved override renders as a completable block
+    // whose original_date is in the head's exclusion union, so the head path could
+    // never complete it.
+    let (occurrence_date, occurrence_start, occurrence_end) = if head.schedule_locked
+        || data.occurrence_date.is_some()
+    {
         let occurrence_date = data.occurrence_date.clone().ok_or_else(|| {
             AppError::Conflict(
                 "Synced occurrence completion requires an occurrence date.".to_string(),

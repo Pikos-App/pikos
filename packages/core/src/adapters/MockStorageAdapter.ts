@@ -710,7 +710,9 @@ export class MockStorageAdapter implements StorageAdapter {
     let occurrenceDate: string;
     let cloneStart: string;
     let cloneEnd: string | null;
-    if (head.scheduleLocked) {
+    // A supplied key routes an unlocked (detached) series through the validated
+    // occurrence path too — its moved override can never be the head (pages.rs).
+    if (head.scheduleLocked || data.occurrenceDate) {
       if (!data.occurrenceDate)
         return Promise.reject(new StorageError("Conflict", SYNCED_NEEDS_DATE_MSG));
       if (!data.scheduledStart)

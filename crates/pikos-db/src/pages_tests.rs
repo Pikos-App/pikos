@@ -2721,6 +2721,79 @@ async fn synced_completion_rejects_an_occurrence_not_in_the_rule() {
 }
 
 #[tokio::test]
+async fn detached_override_completion_clones_on_original_date_and_leaves_the_head() {
+    // A detached series' provider-moved instance renders as a completable block
+    // whose original_date is in the head's exclusion union, so the head path can
+    // never complete it — the supplied key must route the unlocked page through
+    // the validated occurrence branch.
+    let pool = test_pool().await;
+    synced_series_from_today(&pool).await;
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE page_id = 'head'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let rule_id: String =
+        sqlx::query_scalar("SELECT id FROM page_recurrence_rules WHERE page_id = 'head'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    // Next week's occurrence, provider-moved to 14:00 on its day.
+    let moved_start = format!("{}T14:00:00", occ_date(1));
+    sqlx::query(
+        "INSERT INTO page_schedules
+         (id, page_id, scheduled_start, rule_id, original_date, status, created_at)
+         VALUES ('ovr', 'head', ?, ?, ?, 'not_started', '2026-06-01T00:00:00')",
+    )
+    .bind(&moved_start)
+    .bind(&rule_id)
+    .bind(occ_start(1))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = complete_recurring_page_impl(&pool, synced_complete(&occ_date(1), &moved_start))
+        .await
+        .unwrap();
+
+    assert_eq!(result.clone.scheduled_start, Some(moved_start));
+    let recorded: String = sqlx::query_scalar(
+        "SELECT clone_id FROM completed_set WHERE page_id = 'head' AND occurrence_date = ?",
+    )
+    .bind(occ_date(1))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(recorded, result.clone.id);
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await,
+        Some(occ_start(0)),
+        "head untouched — the override's date was never the head's"
+    );
+}
+
+#[tokio::test]
+async fn detached_completion_rejects_an_off_rule_occurrence_key() {
+    // The unlocked branch shares the locked branch's validation — a bogus key must
+    // not mint a completed_set entry no occurrence matches. 06-03 is a Wednesday;
+    // the rule is weekly-Monday.
+    let pool = test_pool().await;
+    synced_recurring_series(&pool).await;
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE page_id = 'head'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let err =
+        complete_recurring_page_impl(&pool, synced_complete("2026-06-03", "2026-06-03T09:00:00"))
+            .await
+            .unwrap_err();
+    assert!(
+        matches!(err, AppError::Conflict(_)),
+        "off-rule occurrence rejected on the unlocked branch"
+    );
+}
+
+#[tokio::test]
 async fn synced_completion_validates_a_monthly_bysetpos_occurrence() {
     // The validity guard is tested weekly-only elsewhere; BYSETPOS enumeration is a
     // distinct engine path. Rule = last weekday of the month. 2026-06-30 (Tue) is the
