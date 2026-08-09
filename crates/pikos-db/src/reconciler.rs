@@ -26,6 +26,12 @@ use crate::sync_delta::{
 /// carries no zone, rather than relaxing the constraint.
 const SENTINEL_TZ: &str = "UTC";
 
+/// Pages severed per teardown transaction. Matches the sync engine's backfill
+/// batch and exists for the same reason: keep the write-lock hold short enough
+/// that a concurrent editor write can wait it out inside its retry budget.
+/// Measured ~0.1ms/page, so a batch holds for single-digit milliseconds.
+const TEARDOWN_BATCH: i64 = 200;
+
 /// The calendar a reconcile runs against. The engine resolves the system folder
 /// for the calendar and hands it in; the reconciler never decides folder policy.
 pub struct ReconcileContext {
@@ -681,28 +687,48 @@ pub async fn teardown_calendar(
     calendar_id: &str,
     folder_id: &str,
 ) -> AppResult<()> {
-    // Deferred read-then-write (enumerate the links, then rewrite them) — the same
-    // shape that loses the WAL snapshot race elsewhere, so it takes the same retry.
-    crate::tx::retry_on_busy(|| teardown_calendar_once(pool, account_id, calendar_id, folder_id))
-        .await
+    // Batched so the write-lock hold is bounded by batch size, not by how many
+    // events the calendar holds — a racing editor write retries against a
+    // wall-clock budget that one transaction over a large calendar can outlast.
+    let mut cursor = String::new();
+    while let Some(next) = crate::tx::retry_on_busy(|| {
+        teardown_page_batch(pool, account_id, calendar_id, cursor.clone())
+    })
+    .await?
+    {
+        cursor = next;
+    }
+
+    crate::tx::retry_on_busy(|| teardown_folder(pool, folder_id)).await
 }
 
-async fn teardown_calendar_once(
+/// Sever one batch of the calendar's pages, resuming after `cursor`. Returns the
+/// new cursor, or `None` once none are left. Paginates by `page_sync.id` because a
+/// detached row stays behind: a plain `LIMIT` would re-read it forever.
+async fn teardown_page_batch(
     pool: &sqlx::SqlitePool,
     account_id: &str,
     calendar_id: &str,
-    folder_id: &str,
-) -> AppResult<()> {
+    cursor: String,
+) -> AppResult<Option<String>> {
     let mut tx = pool.begin().await?;
 
     let rows = sqlx::query_as::<_, (String, String, String)>(
         "SELECT id, page_id, sync_state FROM page_sync
-         WHERE account_id = ? AND calendar_id = ?",
+         WHERE account_id = ? AND calendar_id = ? AND id > ?
+         ORDER BY id LIMIT ?",
     )
     .bind(account_id)
     .bind(calendar_id)
+    .bind(&cursor)
+    .bind(TEARDOWN_BATCH)
     .fetch_all(&mut *tx)
     .await?;
+
+    let Some((last_id, _, _)) = rows.last() else {
+        return Ok(None);
+    };
+    let next_cursor = last_id.clone();
 
     for (page_sync_id, page_id, state) in rows {
         match state.as_str() {
@@ -719,6 +745,14 @@ async fn teardown_calendar_once(
             _ => detach_or_delete(&mut tx, &page_sync_id, &page_id).await?,
         }
     }
+
+    tx.commit().await?;
+    Ok(Some(next_cursor))
+}
+
+/// Delete the calendar's folder, or de-flag it when pages survived there.
+async fn teardown_folder(pool: &sqlx::SqlitePool, folder_id: &str) -> AppResult<()> {
+    let mut tx = pool.begin().await?;
 
     let survivors: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE folder_id = ? AND deleted_at IS NULL")

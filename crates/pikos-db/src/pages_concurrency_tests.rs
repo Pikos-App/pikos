@@ -75,6 +75,80 @@ async fn busy_snapshot_race_is_classified_retryable() {
     );
 }
 
+// ─── an editor write survives a concurrent read-then-write writer ────────────
+//
+// Why the editor's write needs the retry at all is on `apply_page_update`. What
+// this file adds is the shape that provokes it: a single *held* lock is the wrong
+// one to test with — the busy handler waits that out, so such a test passes with
+// or without the retry. It takes another writer committing *repeatedly* (a
+// teardown retrying, a sync poll batching) to catch the editor mid-upgrade.
+//
+// Reproduction is probabilistic even so. Measured: red ~3 runs in 8 without
+// `retry_on_busy` on the editor path, green 8 of 8 with it. Weak as a detector,
+// stable as a gate; the load reproduction (several suites concurrently while
+// looping `teardown_heals_a_racing_editor_write`) is the stronger signal.
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_editor_write_survives_a_concurrent_writer() {
+    let db = wal_test_pool().await;
+    let pool = db.pool.clone();
+    insert_test_page(&pool, TestPage::new("a", "A"))
+        .await
+        .unwrap();
+
+    // Churn for exactly as long as the editor writes: a fixed count finishes early
+    // and leaves the tail of the editor loop uncontended, which is what makes a
+    // count-based version of this test pass with the bug present.
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let churn_done = done.clone();
+    let churn_pool = pool.clone();
+    let churn = tokio::spawn(async move {
+        let mut i = 0u32;
+        while !churn_done.load(std::sync::atomic::Ordering::Relaxed) {
+            i += 1;
+            // Shaped like every other writer here — deferred read-then-write, under
+            // the retry. Raw BEGIN/COMMIT on a pooled connection would return it to
+            // the pool mid-transaction on the first BUSY and poison the next caller.
+            crate::tx::retry_on_busy(|| async {
+                let mut tx = churn_pool.begin().await?;
+                let _snapshot: String =
+                    sqlx::query_scalar("SELECT title FROM pages WHERE id = 'a'")
+                        .fetch_one(&mut *tx)
+                        .await?;
+                sqlx::query("UPDATE pages SET subtitle = ? WHERE id = 'a'")
+                    .bind(i.to_string())
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await?;
+                Ok::<(), AppError>(())
+            })
+            .await
+            .expect("churn writer must not surface SQLITE_BUSY");
+        }
+    });
+
+    for i in 0..500 {
+        update_page_impl(
+            &pool,
+            "a".to_string(),
+            PageUpdate {
+                content_text: Some(format!("edit {i}")),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("editor write must not surface SQLITE_BUSY");
+    }
+    done.store(true, std::sync::atomic::Ordering::Relaxed);
+    churn.await.unwrap();
+
+    let text: Option<String> = sqlx::query_scalar("SELECT content_text FROM pages WHERE id = 'a'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(text.as_deref(), Some("edit 499"), "the last edit landed");
+}
+
 // ─── complete_recurring_page heals a real snapshot conflict ──────────────────
 //
 // End-to-end on the actual writer: hold a read snapshot open on another

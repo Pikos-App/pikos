@@ -2414,6 +2414,53 @@ async fn resync_after_teardown_makes_a_fresh_page_and_leaves_the_trashed_one_unt
     );
 }
 
+/// Teardown commits a batch at a time, so it must page past `TEARDOWN_BATCH` and
+/// keep going. It cursors by `page_sync.id` rather than re-querying with a plain
+/// LIMIT, because a detached row stays behind and would be re-read forever — a
+/// regression there strands every page after the first batch, still synced to a
+/// calendar the user has unsynced.
+#[tokio::test]
+async fn teardown_severs_every_page_across_batches() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+
+    let total = 250; // > TEARDOWN_BATCH
+    for i in 0..total {
+        let page = synced_page(&pool, &format!("/ev{i}.ics"), &format!("uid-{i}")).await;
+        // Owned pages detach and keep their row; bare mirrors are deleted outright.
+        // Mixing both proves the cursor advances past the rows teardown leaves behind.
+        if i % 2 == 0 {
+            mark_completed(&pool, &page).await;
+        }
+    }
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1")
+        .await
+        .unwrap();
+
+    let still_active: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM page_sync WHERE account_id = ? AND sync_state = 'active'",
+    )
+    .bind(ACCOUNT)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(still_active, 0, "no page survives teardown still synced");
+
+    let detached: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM page_sync WHERE account_id = ? AND sync_state = 'detached'",
+    )
+    .bind(ACCOUNT)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        detached,
+        total / 2,
+        "every owned page detached, none dropped"
+    );
+}
+
 #[tokio::test]
 async fn teardown_is_idempotent() {
     let pool = setup().await;
@@ -2434,12 +2481,13 @@ async fn teardown_is_idempotent() {
     assert_eq!(folder_count(&pool).await, 1);
 }
 
-/// teardown_calendar's deferred read-then-write can lose the WAL snapshot (517)
-/// when the editor commits mid-teardown; retry_on_busy must heal it so neither
-/// write surfaces BUSY and the owned page still detaches. Needs a real on-disk WAL
-/// pool and both writers on real threads (`tokio::spawn` + `worker_threads ≥ 2`) —
-/// a cooperative single task can't overlap them tightly enough to reproduce the
-/// 517. The editor uses the real `update_page_impl` (write-first, busy-safe).
+/// Either side of a teardown/editor race can lose the WAL write race; both must
+/// heal, and the owned page must still detach. Needs a real on-disk WAL pool and
+/// both writers on real threads (`tokio::spawn` + `worker_threads ≥ 2`) — a
+/// cooperative single task can't overlap them tightly enough.
+///
+/// Only reliable under machine load (several suites in parallel); green here in
+/// isolation proves little.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn teardown_heals_a_racing_editor_write() {
     let db = crate::pool::wal_test_pool().await;

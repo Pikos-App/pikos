@@ -602,65 +602,81 @@ pub async fn update_page_impl(
         crate::sync::ensure_page_schedule_unlocked(pool, &id).await?;
     }
 
+    let has_updates =
+        marks_ownership || updates.sort_order.is_some() || updates.last_opened_at.is_some();
+    if !has_updates {
+        return fetch_page(pool, &id).await;
+    }
+
+    crate::tx::retry_on_busy(|| apply_page_update(pool, &id, &updates, marks_ownership)).await?;
+
+    fetch_page(pool, &id).await
+}
+
+/// The write half of [`update_page_impl`], retried as a unit because it can lose
+/// the WAL write race to any concurrent writer (a sync poll, a calendar teardown).
+///
+/// It is **not** exempt from that race for being write-first: SQLite starts the
+/// read snapshot and takes the write lock inside the one UPDATE, so a loser gets
+/// BUSY/BUSY_SNAPSHOT back in microseconds with the busy handler never invoked —
+/// `busy_timeout` cannot cover it, however generous. Measured on the teardown
+/// race: 150µs–1.8ms to fail against a 5s timeout, sometimes as a 517.
+///
+/// The statement is rebuilt from `updates` on each attempt because a
+/// `QueryBuilder` is spent once built.
+async fn apply_page_update(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    updates: &PageUpdate,
+    marks_ownership: bool,
+) -> AppResult<()> {
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE pages SET ");
     let mut fields = builder.separated(", ");
-    let mut has_updates = false;
 
-    if let Some(v) = updates.title {
+    if let Some(v) = &updates.title {
         fields.push("title = ");
-        fields.push_bind_unseparated(v);
-        has_updates = true;
+        fields.push_bind_unseparated(v.clone());
     }
-    if let Some(v) = updates.content {
+    if let Some(v) = &updates.content {
         fields.push("content = ");
-        fields.push_bind_unseparated(v);
-        has_updates = true;
+        fields.push_bind_unseparated(v.clone());
     }
-    if let Some(v) = updates.content_text {
+    if let Some(v) = &updates.content_text {
         fields.push("content_text = ");
-        fields.push_bind_unseparated(v);
-        has_updates = true;
+        fields.push_bind_unseparated(v.clone());
     }
-    if let Some(v) = updates.status {
+    if let Some(v) = &updates.status {
         fields.push("status = ");
-        fields.push_bind_unseparated(v);
-        has_updates = true;
+        fields.push_bind_unseparated(v.clone());
     }
     if let Some(v) = updates.priority {
         fields.push("priority = ");
         fields.push_bind_unseparated(v);
-        has_updates = true;
     }
     if let Some(v) = updates.sort_order {
         fields.push("sort_order = ");
         fields.push_bind_unseparated(v);
-        has_updates = true;
     }
-    let updated_tags = updates.tags.as_deref().map(|t| t.to_vec());
-    if let Some(ref v) = updates.tags {
+    if let Some(v) = &updates.tags {
         let json = serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string());
         fields.push("tags = ");
         fields.push_bind_unseparated(json);
-        has_updates = true;
     }
-    if let Some(v) = updates.links {
-        let json = serde_json::to_string(&v).unwrap_or_else(|_| "[]".to_string());
+    if let Some(v) = &updates.links {
+        let json = serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string());
         fields.push("links = ");
         fields.push_bind_unseparated(json);
-        has_updates = true;
     }
 
     // Nullable string fields (Value::Null sets to NULL, Value::String sets to value)
     macro_rules! push_nullable_str {
         ($field:expr, $col:literal) => {
-            if let Some(val) = $field {
+            if let Some(val) = &$field {
                 fields.push(concat!($col, " = "));
                 match val {
-                    serde_json::Value::Null => fields.push_bind_unseparated(None::<String>),
-                    serde_json::Value::String(s) => fields.push_bind_unseparated(s),
+                    serde_json::Value::String(s) => fields.push_bind_unseparated(Some(s.clone())),
                     _ => fields.push_bind_unseparated(None::<String>),
                 };
-                has_updates = true;
             }
         };
     }
@@ -673,10 +689,6 @@ pub async fn update_page_impl(
     push_nullable_str!(updates.parent_id, "parent_id");
     push_nullable_str!(updates.last_opened_at, "last_opened_at");
 
-    if !has_updates {
-        return fetch_page(pool, &id).await;
-    }
-
     fields.push("updated_at = ");
     fields.push_bind_unseparated(now_iso());
     drop(fields);
@@ -684,7 +696,7 @@ pub async fn update_page_impl(
     // Never mutate a trashed page — a stale view or queued edit must not
     // resurrect or silently rewrite a row the user has deleted.
     builder.push(" WHERE id = ");
-    builder.push_bind(&id);
+    builder.push_bind(id);
     builder.push(" AND deleted_at IS NULL");
 
     // Transaction wraps the pages row + (optional) page_tags rewrite so the
@@ -697,17 +709,17 @@ pub async fn update_page_impl(
         sqlx::query(
             "UPDATE page_sync SET user_modified = 1 WHERE page_id = ? AND user_modified = 0",
         )
-        .bind(&id)
+        .bind(id)
         .execute(&mut *tx)
         .await?;
     }
 
-    if let Some(tags) = updated_tags {
-        upsert_page_tags_tx(&mut tx, &id, &tags).await?;
+    if let Some(tags) = &updates.tags {
+        upsert_page_tags_tx(&mut tx, id, tags).await?;
     }
     tx.commit().await?;
 
-    fetch_page(pool, &id).await
+    Ok(())
 }
 
 pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
@@ -957,24 +969,27 @@ pub async fn set_pages_status_impl(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    // Write-first (the first statement is an UPDATE, no prior read), so this
-    // can't hit BUSY_SNAPSHOT (517) — busy_timeout already covers plain lock
-    // contention. No retry wrapper needed, unlike complete_recurring_page_impl.
-    let now = now_iso();
-    let mut tx = pool.begin().await?;
-    for id in ids {
-        sqlx::query(
-            "UPDATE pages SET status = ?, completed_at = ?, updated_at = ? \
-             WHERE id = ? AND deleted_at IS NULL",
-        )
-        .bind(status)
-        .bind(completed_at)
-        .bind(&now)
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-    }
-    tx.commit().await?;
+    // Retried for the same reason as apply_page_update: being write-first is not
+    // an exemption from the WAL write race.
+    crate::tx::retry_on_busy(|| async {
+        let now = now_iso();
+        let mut tx = pool.begin().await?;
+        for id in ids {
+            sqlx::query(
+                "UPDATE pages SET status = ?, completed_at = ?, updated_at = ? \
+                 WHERE id = ? AND deleted_at IS NULL",
+            )
+            .bind(status)
+            .bind(completed_at)
+            .bind(&now)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok::<(), AppError>(())
+    })
+    .await?;
 
     // Return the updated summaries so the client can reconcile (post-commit so
     // any FTS triggers have fired).
