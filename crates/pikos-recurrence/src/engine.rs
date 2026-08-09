@@ -13,8 +13,10 @@ use chrono::{Datelike, Days, NaiveDate, NaiveDateTime, NaiveTime};
 use crate::rule::{build_rrule, parse_rrule, ByDay, Freq, ParsedRule, RecurrenceError};
 use crate::WallClock;
 
-/// One expanded occurrence, wall-clock strings throughout.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One expanded occurrence, wall-clock strings throughout. The serde shape
+/// (camelCase, end nullable) is the wasm boundary's JSON contract.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Occurrence {
     pub original_date: String,
     pub scheduled_start: String,
@@ -70,11 +72,12 @@ impl<'a> OccurrenceIter<'a> {
 
     fn fill(&mut self) {
         while self.buffer.is_empty() && !self.done {
+            // Candidates arrive sorted, deduped, and BYSETPOS-filtered; the
+            // `>= dtstart` retain must come after BYSETPOS (rrule.js selects
+            // positions from the whole period, then drops pre-anchor dates).
             let mut candidates = candidates_for(self.rule, self.dtstart, self.period);
             self.period += 1;
             candidates.retain(|d| *d >= self.dtstart);
-            candidates.sort_unstable();
-            candidates.dedup();
             if candidates.is_empty() {
                 self.empty_periods += 1;
                 if self.empty_periods >= MAX_EMPTY_PERIODS {
@@ -110,23 +113,53 @@ impl Iterator for OccurrenceIter<'_> {
     }
 }
 
-/// Rule-matching dates within period index `m`, unfiltered by the `>= dtstart`
-/// / COUNT / UNTIL constraints the iterator applies.
+/// Rule-matching dates within period index `m`, sorted, deduped, and
+/// BYSETPOS-filtered; the iterator applies the `>= dtstart` / COUNT / UNTIL
+/// constraints.
 fn candidates_for(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
-    match rule.freq {
+    let mut dates = match rule.freq {
         Freq::Daily => daily_candidates(rule, dtstart, m),
         Freq::Weekly => weekly_candidates(rule, dtstart, m),
         Freq::Monthly => monthly_candidates(rule, dtstart, m),
         Freq::Yearly => yearly_candidates(rule, dtstart, m),
+    };
+    dates.sort_unstable();
+    dates.dedup();
+    if !rule.bysetpos.is_empty() {
+        dates = apply_setpos(&dates, &rule.bysetpos);
     }
+    dates
 }
 
+fn month_allowed(rule: &ParsedRule, month: u32) -> bool {
+    rule.bymonth.is_empty() || rule.bymonth.contains(&month)
+}
+
+/// BYDAY/BYMONTHDAY on DAILY act as filters on the stepped date (rrule.js
+/// semantics), unlike the expansion they perform on MONTHLY/YEARLY.
 fn daily_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
-    add_days_signed(dtstart, m * rule.interval as i64)
-        .into_iter()
-        .collect()
+    let Some(date) = add_days_signed(dtstart, m * rule.interval as i64) else {
+        return vec![];
+    };
+    if !month_allowed(rule, date.month()) {
+        return vec![];
+    }
+    if !rule.byday.is_empty() && !rule.byday.iter().any(|b| b.weekday == weekday_index(date)) {
+        return vec![];
+    }
+    if !rule.bymonthday.is_empty()
+        && !rule
+            .bymonthday
+            .iter()
+            .any(|&md| resolve_monthday(date.year(), date.month(), md) == Some(date))
+    {
+        return vec![];
+    }
+    vec![date]
 }
 
+/// WEEKLY reads BYDAY ordinals as bare weekdays (rrule.js parity — ordinals are
+/// only meaningful under MONTHLY/YEARLY).
 fn weekly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
     let week0 = start_of_week(dtstart, rule.wkst);
     let Some(week_start) = add_days_signed(week0, m * rule.interval as i64 * 7) else {
@@ -143,38 +176,76 @@ fn weekly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<Naive
             let offset = (wd + 7 - rule.wkst) % 7;
             add_days_signed(week_start, offset as i64)
         })
+        .filter(|d| month_allowed(rule, d.month()))
         .collect()
 }
 
-fn monthly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
-    let (year, month) = add_months(dtstart.year(), dtstart.month(), m * rule.interval as i64);
-    let mut dates: Vec<NaiveDate> = if !rule.bymonthday.is_empty() {
+/// Dates one month contributes under the BY* parts — shared by MONTHLY periods
+/// and YEARLY periods with BYMONTH. BYDAY+BYMONTHDAY together intersect
+/// (RFC 5545: BYMONTHDAY limits BYDAY).
+fn month_candidates(rule: &ParsedRule, year: i32, month: u32, anchor_day: u32) -> Vec<NaiveDate> {
+    if !rule.byday.is_empty() {
+        let mut expanded: Vec<NaiveDate> = rule
+            .byday
+            .iter()
+            .flat_map(|b| byday_in_month(year, month, b))
+            .collect();
+        if !rule.bymonthday.is_empty() {
+            let monthdays: Vec<NaiveDate> = rule
+                .bymonthday
+                .iter()
+                .filter_map(|&md| resolve_monthday(year, month, md))
+                .collect();
+            expanded.retain(|d| monthdays.contains(d));
+        }
+        expanded
+    } else if !rule.bymonthday.is_empty() {
         rule.bymonthday
             .iter()
             .filter_map(|&md| resolve_monthday(year, month, md))
             .collect()
-    } else if !rule.byday.is_empty() {
-        rule.byday
-            .iter()
-            .flat_map(|b| byday_in_month(year, month, b))
-            .collect()
     } else {
-        resolve_monthday(year, month, dtstart.day() as i32)
+        resolve_monthday(year, month, anchor_day as i32)
             .into_iter()
             .collect()
-    };
-    dates.sort_unstable();
-    dates.dedup();
-    if !rule.bysetpos.is_empty() {
-        dates = apply_setpos(&dates, &rule.bysetpos);
     }
-    dates
+}
+
+fn monthly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
+    let (year, month) = add_months(dtstart.year(), dtstart.month(), m * rule.interval as i64);
+    if !month_allowed(rule, month) {
+        return vec![];
+    }
+    month_candidates(rule, year, month, dtstart.day())
 }
 
 fn yearly_candidates(rule: &ParsedRule, dtstart: NaiveDate, m: i64) -> Vec<NaiveDate> {
     let year = dtstart.year() + (m * rule.interval as i64) as i32;
-    NaiveDate::from_ymd_opt(year, dtstart.month(), dtstart.day())
-        .into_iter()
+    if !rule.byday.is_empty() && rule.bymonth.is_empty() {
+        // BYDAY over the whole year ("last Sunday of the year"), optionally
+        // limited by BYMONTHDAY.
+        let mut expanded: Vec<NaiveDate> = rule
+            .byday
+            .iter()
+            .flat_map(|b| byday_in_year(year, b))
+            .collect();
+        if !rule.bymonthday.is_empty() {
+            expanded.retain(|d| {
+                rule.bymonthday
+                    .iter()
+                    .any(|&md| resolve_monthday(d.year(), d.month(), md) == Some(*d))
+            });
+        }
+        return expanded;
+    }
+    let months: Vec<u32> = if rule.bymonth.is_empty() {
+        vec![dtstart.month()]
+    } else {
+        rule.bymonth.clone()
+    };
+    months
+        .iter()
+        .flat_map(|&month| month_candidates(rule, year, month, dtstart.day()))
         .collect()
 }
 
@@ -194,8 +265,25 @@ fn apply_setpos(sorted: &[NaiveDate], setpos: &[i32]) -> Vec<NaiveDate> {
     picked
 }
 
+/// Filters weekday-matching dates to the BYDAY ordinal when one is set
+/// (`1MO` = first, `-1FR` = last, counted over the containing period).
+fn select_ordinal(all: Vec<NaiveDate>, ordinal: Option<i32>) -> Vec<NaiveDate> {
+    match ordinal {
+        None => all,
+        Some(n) if n > 0 => all.get((n - 1) as usize).copied().into_iter().collect(),
+        Some(n) => {
+            let idx = all.len() as i32 + n;
+            (idx >= 0)
+                .then(|| all.get(idx as usize).copied())
+                .flatten()
+                .into_iter()
+                .collect()
+        }
+    }
+}
+
 /// All dates in `(year, month)` whose weekday matches `b`, filtered to the
-/// ordinal if one is set (`1MO` = first Monday, `-1FR` = last Friday).
+/// ordinal if one is set.
 fn byday_in_month(year: i32, month: u32, b: &ByDay) -> Vec<NaiveDate> {
     let mut all = Vec::new();
     let mut day = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
@@ -208,18 +296,21 @@ fn byday_in_month(year: i32, month: u32, b: &ByDay) -> Vec<NaiveDate> {
         };
         day = next;
     }
-    match b.ordinal {
-        None => all,
-        Some(n) if n > 0 => all.get((n - 1) as usize).copied().into_iter().collect(),
-        Some(n) => {
-            let idx = all.len() as i32 + n;
-            (idx >= 0)
-                .then(|| all.get(idx as usize).copied())
-                .flatten()
-                .into_iter()
-                .collect()
-        }
-    }
+    select_ordinal(all, b.ordinal)
+}
+
+/// All dates in `year` whose weekday matches `b`, with the ordinal counted over
+/// the whole year (`-1SU` = the year's last Sunday).
+fn byday_in_year(year: i32, b: &ByDay) -> Vec<NaiveDate> {
+    let Some(start) = NaiveDate::from_ymd_opt(year, 1, 1) else {
+        return vec![];
+    };
+    let all: Vec<NaiveDate> = start
+        .iter_days()
+        .take_while(|d| d.year() == year)
+        .filter(|d| weekday_index(*d) == b.weekday)
+        .collect();
+    select_ordinal(all, b.ordinal)
 }
 
 fn resolve_monthday(year: i32, month: u32, md: i32) -> Option<NaiveDate> {
@@ -476,6 +567,21 @@ pub fn occurrences_in_window(
 /// day, since a rule yields one occurrence per date.
 fn date_key(s: &str) -> &str {
     &s[..s.len().min(10)]
+}
+
+/// First `limit` occurrences anchored at `dtstart`, as wall-clock strings.
+/// Empty on an invalid or out-of-envelope rule — consumers (the NL parser's
+/// finite expansion, the rrule.js goldens) treat that the same as an exhausted
+/// series.
+pub fn list_occurrences(rrule: &str, dtstart: &str, limit: u32) -> Vec<String> {
+    let (Ok(rule), Some(anchor)) = (ParsedRule::parse(rrule), WallClock::parse(dtstart)) else {
+        return vec![];
+    };
+    let anchor_time = anchor.time.unwrap_or(NaiveTime::MIN);
+    OccurrenceIter::new(&rule, anchor.date, anchor_time)
+        .take(limit as usize)
+        .map(|date| occ_wallclock(&anchor, date).format())
+        .collect()
 }
 
 /// Applies the base occurrence's duration to `next_start`, rolling an overnight

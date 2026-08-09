@@ -22,11 +22,15 @@ pub enum RecurrenceError {
     Unsupported(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Freq {
+    #[serde(rename = "DAILY")]
     Daily,
+    #[serde(rename = "WEEKLY")]
     Weekly,
+    #[serde(rename = "MONTHLY")]
     Monthly,
+    #[serde(rename = "YEARLY")]
     Yearly,
 }
 
@@ -62,17 +66,25 @@ fn weekday_from_code(code: &str) -> Option<u8> {
 
 /// Typed round-trip options, mirroring `RecurrenceOptions` in `recurrence.ts`.
 /// Field presence matches the TS `parseRrule` output so the conformance corpus
-/// compares equal.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// compares equal; the serde shape is the wasm boundary's JSON contract.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecurrenceOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub freq: Option<Freq>,
     pub interval: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub byweekday: Option<Vec<u8>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bysetpos: Option<Vec<i32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bymonthday: Option<Vec<i32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub wkst: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<u32>,
     /// End date as `YYYY-MM-DD`, matching the TS reduction of UNTIL to a date.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub until: Option<String>,
 }
 
@@ -219,6 +231,8 @@ pub(crate) struct ParsedRule {
     pub interval: u32,
     pub byday: Vec<ByDay>,
     pub bymonthday: Vec<i32>,
+    /// 1..=12; empty = every month.
+    pub bymonth: Vec<u32>,
     pub bysetpos: Vec<i32>,
     pub wkst: u8,
     pub count: Option<u32>,
@@ -226,11 +240,20 @@ pub(crate) struct ParsedRule {
 }
 
 impl ParsedRule {
+    /// Parses the full enumeration envelope. Rejection is reserved for parts the
+    /// enumerator genuinely does not implement (sub-daily FREQ, BYWEEKNO,
+    /// BYYEARDAY, BYHOUR/BYMINUTE/BYSECOND) — with rrule.js gone there is no
+    /// fallback engine, so a rejected rule renders nowhere; anything with
+    /// well-defined rrule.js semantics is enumerated instead. Two shapes rrule.js
+    /// tolerates are normalized the same way it does: a WEEKLY BYDAY ordinal is
+    /// read as the bare weekday, and COUNT+UNTIL together run to the tighter
+    /// bound.
     pub fn parse(rrule: &str) -> Result<Self, RecurrenceError> {
         let mut freq = None;
         let mut interval = 1u32;
         let mut byday = Vec::new();
         let mut bymonthday = Vec::new();
+        let mut bymonth = Vec::new();
         let mut bysetpos = Vec::new();
         let mut wkst = 0u8;
         let mut count = None;
@@ -244,7 +267,7 @@ impl ParsedRule {
                         })?);
                 }
                 "INTERVAL" => interval = value.parse().unwrap_or(1),
-                "BYDAY" => {
+                "BYDAY" | "BYWEEKDAY" => {
                     for term in value.split(',') {
                         let code = strip_ordinal(term);
                         if let Some(weekday) = weekday_from_code(code) {
@@ -252,13 +275,21 @@ impl ParsedRule {
                             let ordinal = if ord_str.is_empty() {
                                 None
                             } else {
-                                ord_str.parse().ok()
+                                ord_str.trim_start_matches('+').parse().ok()
                             };
                             byday.push(ByDay { ordinal, weekday });
                         }
                     }
                 }
                 "BYMONTHDAY" => bymonthday = parse_int_list(value).unwrap_or_default(),
+                "BYMONTH" => {
+                    bymonth = parse_int_list(value)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|&m| (1..=12).contains(&m))
+                        .map(|m| m as u32)
+                        .collect()
+                }
                 "BYSETPOS" => bysetpos = parse_int_list(value).unwrap_or_default(),
                 "WKST" => wkst = weekday_from_code(value).unwrap_or(0),
                 "COUNT" => count = value.parse().ok(),
@@ -267,73 +298,21 @@ impl ParsedRule {
             }
         }
         let freq = freq.ok_or_else(|| RecurrenceError::Parse(rrule.to_string()))?;
-        let rule = ParsedRule {
+        // WEEKLY BYMONTHDAY has no rrule.js-defined meaning worth mimicking
+        // (RFC 5545 forbids the combination) — stay loud rather than guess.
+        if freq == Freq::Weekly && !bymonthday.is_empty() {
+            return Err(RecurrenceError::Unsupported("BYMONTHDAY for FREQ=WEEKLY".into()));
+        }
+        Ok(ParsedRule {
             freq,
             interval: interval.max(1),
             byday,
             bymonthday,
+            bymonth,
             bysetpos,
             wkst,
             count,
             until,
-        };
-        rule.validate_envelope()?;
-        Ok(rule)
-    }
-
-    /// Rejects RRULEs whose BY-parts the enumerator does not handle for the given
-    /// FREQ — it would otherwise ignore them and silently yield wrong dates
-    /// (e.g. `FREQ=YEARLY;BYMONTH=11;BYDAY=1SU`, a common VTIMEZONE shape, would
-    /// collapse to the anchor's month/day). Unknown keys are already rejected in
-    /// [`ParsedRule::parse`]; this covers known keys misapplied to a FREQ.
-    fn validate_envelope(&self) -> Result<(), RecurrenceError> {
-        let unsupported = |what: &str| {
-            Err(RecurrenceError::Unsupported(format!(
-                "{what} for FREQ={}",
-                self.freq.as_str()
-            )))
-        };
-        // RFC 5545 forbids COUNT+UNTIL together. The enumerator applies COUNT
-        // then UNTIL, so a malformed feed with both would silently enumerate to
-        // whichever bound is tighter — reject it loudly instead.
-        if self.count.is_some() && self.until.is_some() {
-            return Err(RecurrenceError::Unsupported(
-                "COUNT combined with UNTIL".into(),
-            ));
-        }
-        match self.freq {
-            Freq::Daily | Freq::Yearly => {
-                if !self.byday.is_empty() {
-                    return unsupported("BYDAY");
-                }
-                if !self.bymonthday.is_empty() {
-                    return unsupported("BYMONTHDAY");
-                }
-                if !self.bysetpos.is_empty() {
-                    return unsupported("BYSETPOS");
-                }
-            }
-            Freq::Weekly => {
-                if !self.bymonthday.is_empty() {
-                    return unsupported("BYMONTHDAY");
-                }
-                if !self.bysetpos.is_empty() {
-                    return unsupported("BYSETPOS");
-                }
-                if self.byday.iter().any(|b| b.ordinal.is_some()) {
-                    return unsupported("BYDAY ordinals");
-                }
-            }
-            // Monthly picks BYMONTHDAY over BYDAY, so a rule carrying both would
-            // silently drop the BYDAY term.
-            Freq::Monthly => {
-                if !self.byday.is_empty() && !self.bymonthday.is_empty() {
-                    return Err(RecurrenceError::Unsupported(
-                        "BYDAY combined with BYMONTHDAY".into(),
-                    ));
-                }
-            }
-        }
-        Ok(())
+        })
     }
 }

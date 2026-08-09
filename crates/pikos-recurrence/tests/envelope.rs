@@ -1,8 +1,10 @@
-//! The engine must REJECT (not silently mis-enumerate) any RRULE outside its
-//! supported envelope, so a caller feeding arbitrary synced-provider rules can
-//! fall back loudly. See `ParsedRule::validate_envelope`.
+//! Envelope boundary: the engine REJECTS (never silently mis-enumerates) parts
+//! it does not implement, and ENUMERATES everything with defined rrule.js
+//! semantics. With rrule.js gone there is no fallback engine — a rejected rule
+//! renders nowhere — so rejection is reserved for parts whose semantics the
+//! enumerator genuinely lacks. See `ParsedRule::parse`.
 
-use pikos_recurrence::{expand_range, RecurrenceError};
+use pikos_recurrence::{expand_range, list_occurrences, RecurrenceError};
 
 fn parse_result(rrule: &str) -> Result<(), RecurrenceError> {
     expand_range(
@@ -31,11 +33,11 @@ fn assert_ok(rrule: &str) {
 }
 
 #[test]
-fn rejects_unhandled_by_parts() {
-    // VTIMEZONE-style yearly nth-weekday-of-month — the motivating hazard.
-    assert_unsupported("FREQ=YEARLY;BYMONTH=11;BYDAY=1SU");
+fn rejects_unimplemented_by_parts() {
     assert_unsupported("FREQ=MONTHLY;BYWEEKNO=1");
     assert_unsupported("FREQ=YEARLY;BYYEARDAY=100");
+    assert_unsupported("FREQ=DAILY;BYHOUR=9");
+    assert_unsupported("FREQ=WEEKLY;BYMONTHDAY=15"); // RFC-forbidden combination
 }
 
 #[test]
@@ -45,29 +47,92 @@ fn rejects_sub_daily_freq() {
 }
 
 #[test]
-fn rejects_by_parts_misapplied_to_freq() {
-    assert_unsupported("FREQ=YEARLY;BYDAY=1SU");
-    assert_unsupported("FREQ=DAILY;BYDAY=MO");
-    assert_unsupported("FREQ=DAILY;BYMONTHDAY=1");
-    assert_unsupported("FREQ=WEEKLY;BYDAY=MO;BYSETPOS=1"); // BYSETPOS is monthly-only
-    assert_unsupported("FREQ=WEEKLY;BYDAY=1MO"); // BYDAY ordinals are monthly-only
-    assert_unsupported("FREQ=WEEKLY;BYMONTHDAY=15");
-    assert_unsupported("FREQ=MONTHLY;BYDAY=MO;BYMONTHDAY=15"); // the combo would silently drop BYDAY
-}
-
-#[test]
-fn rejects_count_and_until_together() {
-    assert_unsupported("FREQ=DAILY;COUNT=5;UNTIL=20260101T000000Z");
-    assert_ok("FREQ=DAILY;COUNT=5");
-    assert_ok("FREQ=DAILY;UNTIL=20260101T000000Z");
-}
-
-#[test]
 fn accepts_in_envelope() {
     assert_ok("FREQ=DAILY");
     assert_ok("FREQ=WEEKLY;BYDAY=MO,WE,FR;WKST=SU");
     assert_ok("FREQ=MONTHLY;BYMONTHDAY=-1");
-    assert_ok("FREQ=MONTHLY;BYDAY=1MO"); // ordinal on monthly is fine
+    assert_ok("FREQ=MONTHLY;BYDAY=1MO");
     assert_ok("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1");
     assert_ok("FREQ=YEARLY");
+}
+
+// ─── Arms the envelope widening added — enumeration pinned, not just accepted ──
+
+#[test]
+fn yearly_bymonth_byday_ordinal_enumerates() {
+    // The VTIMEZONE / US-holiday shape the old envelope rejected.
+    let thanksgiving = list_occurrences("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH", "2026-01-01T09:00:00", 3);
+    assert_eq!(
+        thanksgiving,
+        ["2026-11-26T09:00:00", "2027-11-25T09:00:00", "2028-11-23T09:00:00"]
+    );
+}
+
+#[test]
+fn yearly_bymonth_bymonthday_enumerates() {
+    // "15 March, annually" — the common provider rule C37 named.
+    let dates = list_occurrences("FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15", "2026-01-01T09:00:00", 2);
+    assert_eq!(dates, ["2026-03-15T09:00:00", "2027-03-15T09:00:00"]);
+}
+
+#[test]
+fn daily_byday_filters() {
+    let dates = list_occurrences("FREQ=DAILY;BYDAY=MO,WE", "2026-03-02T09:00:00", 4);
+    assert_eq!(
+        dates,
+        [
+            "2026-03-02T09:00:00", // Mon
+            "2026-03-04T09:00:00", // Wed
+            "2026-03-09T09:00:00", // Mon
+            "2026-03-11T09:00:00", // Wed
+        ]
+    );
+}
+
+#[test]
+fn weekly_bymonth_filters() {
+    // June/July Mondays only — the head-drag degrade scenario's rule (C43).
+    let dates = list_occurrences("FREQ=WEEKLY;BYDAY=MO;BYMONTH=6,7", "2026-05-01T09:00:00", 3);
+    assert_eq!(
+        dates,
+        ["2026-06-01T09:00:00", "2026-06-08T09:00:00", "2026-06-15T09:00:00"]
+    );
+}
+
+#[test]
+fn monthly_byday_bymonthday_intersects() {
+    // Friday the 13th: BYMONTHDAY limits BYDAY (RFC 5545), not either-or.
+    let dates = list_occurrences("FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13", "2026-01-01T09:00:00", 2);
+    assert_eq!(dates, ["2026-02-13T09:00:00", "2026-03-13T09:00:00"]);
+}
+
+#[test]
+fn weekly_byday_ordinal_reads_as_bare_weekday() {
+    // rrule.js parity: ordinals are only meaningful under MONTHLY/YEARLY.
+    assert_eq!(
+        list_occurrences("FREQ=WEEKLY;BYDAY=1MO", "2026-03-02T09:00:00", 3),
+        list_occurrences("FREQ=WEEKLY;BYDAY=MO", "2026-03-02T09:00:00", 3),
+    );
+}
+
+#[test]
+fn count_and_until_run_to_the_tighter_bound() {
+    // RFC forbids the pair but rrule.js honors both; with no fallback engine,
+    // enumerate rather than reject. COUNT tighter:
+    let by_count = list_occurrences(
+        "FREQ=DAILY;COUNT=3;UNTIL=20260401T000000Z",
+        "2026-03-02T09:00:00",
+        10,
+    );
+    assert_eq!(by_count.len(), 3);
+    // UNTIL tighter:
+    let by_until = list_occurrences(
+        "FREQ=DAILY;COUNT=90;UNTIL=20260304T235959Z",
+        "2026-03-02T09:00:00",
+        10,
+    );
+    assert_eq!(
+        by_until,
+        ["2026-03-02T09:00:00", "2026-03-03T09:00:00", "2026-03-04T09:00:00"]
+    );
 }
