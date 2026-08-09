@@ -1,7 +1,8 @@
 //! Pikos CLI — headless access to the local workspace, over the shared
-//! `pikos-db` writer. DB work is pure Rust; the parser and recurrence math are
-//! bridged to the TS core via a one-shot `node` subprocess (parse / next-occurrence),
-//! so NLP+recurrence stay single-sourced in TS and the writer in pikos-db.
+//! `pikos-db` writer. DB work and recurrence math are pure Rust (the latter
+//! via `pikos-recurrence`, the same engine the JS apps run as wasm); only the
+//! NL parser is bridged to the TS core via a one-shot `node` subprocess
+//! (parse), so NLP stays single-sourced in TS and the writer in pikos-db.
 
 use std::path::{Path, PathBuf};
 use std::process::Command as Proc;
@@ -577,23 +578,21 @@ async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
         return update_page_impl(pool, id.to_string(), upd).await.map_err(classify);
     };
 
-    // "advance" policy via the bridge's recurrence math.
+    // "advance" policy via the shared recurrence engine (the same crate the
+    // desktop frontend runs as wasm, linked natively here).
     let head_date = page.scheduled_start.clone().unwrap_or_else(now_iso);
     let completed_date = page.scheduled_start.as_ref().map(|s| s[..10.min(s.len())].to_string());
     let mut exdates = rule.rrule_exdates.clone();
     if let Some(d) = &completed_date {
         exdates.push(d.clone());
     }
-    let req = json!({
-        "rrule": rule.rrule,
-        "scheduledStart": rule.scheduled_start,
-        "afterDate": head_date,
-        "exdates": exdates,
-        "scheduledEnd": rule.scheduled_end,
+    let next_start =
+        pikos_recurrence::next_occurrence_after(&rule.rrule, &rule.scheduled_start, &head_date, &exdates);
+    let next_end = next_start.as_ref().and_then(|start| {
+        rule.scheduled_end
+            .as_deref()
+            .and_then(|base_end| pikos_recurrence::compute_next_end(base_end, start))
     });
-    let resp = run_bridge("next-occurrence", &req.to_string())?;
-    let next_start = resp["next"].get("scheduledStart").and_then(Value::as_str).map(str::to_string);
-    let next_end = resp["nextEnd"].as_str().map(str::to_string);
 
     complete_recurring_page_impl(
         pool,

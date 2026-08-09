@@ -20,8 +20,8 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "@pikos/recurrence-wasm": "workspace:*",
     "chrono-node": "^2.9.0",
-    "date-fns": "^4.1.0",
-    "rrule": "^2.8.1"
+    "date-fns": "^4.1.0"
   }
 }

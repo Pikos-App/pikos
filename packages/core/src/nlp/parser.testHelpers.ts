@@ -10,9 +10,9 @@
 //      to catch compositional bugs no enumerable test will surface (random
 //      orderings, overlong inputs, weird whitespace).
 
-import { RRule } from "rrule";
 import { expect } from "vitest";
 
+import { listOccurrences } from "../utils/recurrence";
 import type { ParsedInput, ParseResult } from "./parser";
 import { parseInput } from "./parser";
 
@@ -95,8 +95,14 @@ export function assertCase(c: ParserCase, defaultNow: Date): void {
     assertInputMatches(r.input, c.expected.inputMatches, c.input);
     if (c.expected.expansion) {
       const { count, dtstart } = c.expected.expansion;
-      const rule = RRule.fromString(`DTSTART:${dtstart}\nRRULE:${r.rrule}`);
-      expect(rule.all().length, `expansion for "${c.input}"`).toBe(count);
+      // dtstart is compact RFC 5545 ("20260316T150000Z"); the engine speaks
+      // naive local ISO.
+      const iso = dtstart.replace(
+        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/,
+        "$1-$2-$3T$4:$5:$6"
+      );
+      const occurrences = listOccurrences(r.rrule, iso, 10000);
+      expect(occurrences.length, `expansion for "${c.input}"`).toBe(count);
     }
     c.expected.custom?.(r);
     return;

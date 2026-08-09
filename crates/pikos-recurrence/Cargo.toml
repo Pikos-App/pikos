@@ -1,0 +1,13 @@
+[package]
+name = "pikos-recurrence"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+description = "Pikos recurrence engine — the single source of truth for RRULE math. Compiled natively for the backend/CLI and to WebAssembly (via pikos-recurrence-wasm) for the JS apps."
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0.151"
