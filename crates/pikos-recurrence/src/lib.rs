@@ -19,6 +19,8 @@ mod iso;
 mod label;
 mod options;
 mod rule;
+#[cfg(feature = "tz")]
+pub mod zoned;
 
 pub use engine::{
     align_weekly_rule_to_anchor, compute_next_end, expand_range, list_occurrences,

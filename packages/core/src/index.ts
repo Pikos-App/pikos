@@ -38,3 +38,10 @@ export type {
   VirtualOccurrence,
 } from "./utils/recurrence";
 export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";
+export {
+  expandRecurrenceInZone,
+  normalizeUntilToZone,
+  utcToWallClock,
+  wallClockToUtc,
+} from "./utils/zoned";
+export type { ZonedOccurrence } from "./utils/zoned";
