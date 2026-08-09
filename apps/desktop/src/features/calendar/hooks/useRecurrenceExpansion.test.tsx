@@ -491,15 +491,28 @@ describe("useRecurrenceExpansion", () => {
     expect(movedBlock(result.current, "2026-03-11T11:00:00")).toBeUndefined();
   });
 
-  it("refetches overrides when overridesVersion changes, not on an unrelated rerender", async () => {
-    // Moving an override row in place leaves the visible range and the rule set
-    // identical, so the version counter is the only thing that can retrigger the
-    // fetch — without it the block sits at its old slot until a week-nav.
+  it("refetches overrides when overridesVersion changes and renders the moved-in-place row's new time", async () => {
+    // Moving an override row in place leaves the visible range, the rule set,
+    // and the row id identical — the version counter is the only refetch
+    // trigger, and the state guard must compare the schedule fields, or the
+    // same-id refetch is discarded and the block snaps back to its old slot.
     const pages = [makePage({ scheduledStart: "2026-03-02T09:00:00", ...DETACHED })];
     const rule = makeRule();
-    const listOverridesForRules = vi.fn().mockResolvedValue([]);
+    const before = {
+      ...makeOverride("2026-03-09T09:00:00", "2026-03-11T11:00:00", "2026-03-11T12:00:00"),
+      id: "sched-in-place",
+    };
+    const after = {
+      ...before,
+      scheduledEnd: "2026-03-12T15:00:00",
+      scheduledStart: "2026-03-12T14:00:00",
+    };
+    const listOverridesForRules = vi
+      .fn()
+      .mockResolvedValueOnce([before])
+      .mockResolvedValue([after]);
 
-    const { rerender } = renderHook(
+    const { rerender, result } = renderHook(
       ({ version }: { version: number }) =>
         useRecurrenceExpansion({
           days: weekDays(new Date(2026, 2, 9)),
@@ -512,12 +525,14 @@ describe("useRecurrenceExpansion", () => {
       { initialProps: { version: 0 } }
     );
 
-    await waitFor(() => expect(listOverridesForRules).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(movedBlock(result.current, "2026-03-11T11:00:00")).toBeDefined());
     rerender({ version: 0 });
     expect(listOverridesForRules).toHaveBeenCalledTimes(1);
 
     rerender({ version: 1 });
-    await waitFor(() => expect(listOverridesForRules).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(movedBlock(result.current, "2026-03-12T14:00:00")).toBeDefined());
+    expect(movedBlock(result.current, "2026-03-11T11:00:00")).toBeUndefined();
+    expect(listOverridesForRules).toHaveBeenCalledTimes(2);
   });
 
   it("still renders a detached series' override — unlocked, original slot suppressed", async () => {

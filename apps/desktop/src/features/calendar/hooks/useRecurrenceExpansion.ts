@@ -187,7 +187,14 @@ export function useRecurrenceExpansion({
     void listOverridesForRules(ruleIds).then((schedules) => {
       if (token !== schedulesAbortRef.current) return;
       setOverrideSchedules((prev) => {
-        if (prev.length === schedules.length && prev.every((p, i) => p.id === schedules[i]?.id)) {
+        // Identity spans every consumed field, not just the id — an in-place
+        // move keeps the row id, so an id-only compare kept the stale slot.
+        const identity = (s: PageSchedule): string =>
+          `${s.id}:${s.ruleId ?? ""}:${s.originalDate ?? ""}:${s.scheduledStart}:${s.scheduledEnd ?? ""}`;
+        if (
+          prev.length === schedules.length &&
+          prev.every((p, i) => identity(p) === identity(schedules[i]!))
+        ) {
           return prev;
         }
         return schedules;
