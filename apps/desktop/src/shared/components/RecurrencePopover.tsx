@@ -8,7 +8,7 @@ import {
   type RecurrenceFreq,
   type RecurrenceOptions,
   type RecurrenceWeekday,
-  rruleHasOrdinalCadence,
+  rruleEditWouldDegrade,
   rruleToLabel,
   rruleToShortLabel,
 } from "@pikos/core";
@@ -92,8 +92,8 @@ export function RecurrencePopover({
 
   const options = rrule ? parseRrule(rrule) : null;
   const hasRule = options !== null;
-  const ordinalLocked = !!rrule && rruleHasOrdinalCadence(rrule);
-  const effectiveReadOnly = readOnly || ordinalLocked;
+  const degradeLocked = !!rrule && rruleEditWouldDegrade(rrule);
+  const effectiveReadOnly = readOnly || degradeLocked;
   const triggerLabel = hasRule
     ? formatTriggerLabel(rrule, /* short */ true)
     : (overrideLabel ?? formatTriggerLabel(rrule, /* short */ true));
@@ -247,7 +247,7 @@ export function RecurrencePopover({
   const isIconOnly = variant === "icon" || !showLabel;
   const iconTooltipText = disabled
     ? (disabledHint ?? "Set a date first")
-    : ordinalLocked
+    : degradeLocked
       ? "This repeat can't be edited here"
       : hasLabelContent
         ? triggerLabel
@@ -280,9 +280,9 @@ export function RecurrencePopover({
   );
 
   if (disabled || effectiveReadOnly) {
-    // Ordinal-locked chips get a tooltip even in label mode so the disabled edit
+    // Degrade-locked chips get a tooltip even in label mode so the disabled edit
     // has an explanation; plain read-only label chips stay bare as before.
-    if (isIconOnly || ordinalLocked) {
+    if (isIconOnly || degradeLocked) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>

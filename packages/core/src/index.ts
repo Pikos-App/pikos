@@ -31,7 +31,7 @@ export {
   optionsWithEnd,
   parseRrule,
   rawExpandRule,
-  rruleHasOrdinalCadence,
+  rruleEditWouldDegrade,
   rruleToLabel,
   rruleToShortLabel,
   snapAnchorToRule,

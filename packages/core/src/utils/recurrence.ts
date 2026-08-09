@@ -385,21 +385,6 @@ export function computeNextEnd(baseEnd: string, nextStart: string): string | nul
   return formatLocalISO(nextEndDate);
 }
 
-/**
- * True when the rule pins an ordinal position ("3rd Friday"), in either spelling:
- * a BYDAY ordinal (`BYDAY=3TU`, `BYDAY=-1FR`) or BYSETPOS (`BYDAY=FR;BYSETPOS=3`).
- * Neither survives the editor — `parseRrule` drops the BYDAY ordinal outright, and
- * the freq/weekday controls have no way to express a position, so any save through
- * them degrades the rule to a plain weekly or monthly. Callers lock editing on it.
- * Nothing in Pikos authors either form; both only arrive on a provider rule.
- */
-export function rruleHasOrdinalCadence(rruleStr: string): boolean {
-  if (/(?:^|;)BYSETPOS=/i.test(rruleStr)) return true;
-  const match = /(?:^|;)BYDAY=([^;]+)/i.exec(rruleStr);
-  if (!match) return false;
-  return match[1]!.split(",").some((token) => /^\s*[+-]?\d/.test(token));
-}
-
 /** RRULE weekday tokens and names in rrule.js index order (0 = Monday … 6 = Sunday). */
 const WEEKDAY_TOKENS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 const WEEKDAY_NAMES = [
@@ -671,6 +656,51 @@ export function buildRrule(options: RecurrenceOptions): string {
 
   const rrule = new RRule(rruleOpts);
   return rrule.toString().replace(/^RRULE:/, "");
+}
+
+// Defaults are seeded so an explicit `INTERVAL=1` / `WKST=MO` compares equal against a
+// rebuilt string that omits them.
+function patternTerms(rruleStr: string): Map<string, string> {
+  const terms = new Map([
+    ["INTERVAL", "1"],
+    ["WKST", "MO"],
+  ]);
+  for (const part of rruleStr.replace(/^RRULE:/i, "").split(";")) {
+    const [key, value] = part.split("=");
+    if (!key || value === undefined) continue;
+    const term = key.trim().toUpperCase();
+    if (term === "COUNT" || term === "UNTIL") continue;
+    terms.set(
+      term,
+      value
+        .split(",")
+        .map((token) => token.trim().toUpperCase())
+        .sort()
+        .join(",")
+    );
+  }
+  return terms;
+}
+
+/**
+ * True when saving the rule back through the editor would change its occurrence set.
+ *
+ * `RecurrenceOptions` models a lossy subset of RRULE, so a provider rule carrying a term
+ * it doesn't keep — a BYDAY ordinal, BYMONTH, BYWEEKNO, BYYEARDAY, BYHOUR — degrades on
+ * any save. The lock is derived from that round-trip rather than from a list of lossy
+ * terms: such a list is only ever as complete as the last person to spot a gap, and it
+ * missed BYMONTH, i.e. "15 March, annually", for exactly that reason.
+ *
+ * Compares pattern terms only. The end condition is excluded because `buildRrule`
+ * deliberately renormalizes UNTIL to end-of-day UTC, which would lock every finite series.
+ */
+export function rruleEditWouldDegrade(rruleStr: string): boolean {
+  const options = parseRrule(rruleStr);
+  if (!options) return true;
+  const before = patternTerms(rruleStr);
+  const after = patternTerms(buildRrule(options));
+  if (before.size !== after.size) return true;
+  return [...before].some(([term, value]) => after.get(term) !== value);
 }
 
 /**

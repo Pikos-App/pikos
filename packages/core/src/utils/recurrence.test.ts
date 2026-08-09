@@ -10,7 +10,7 @@ import {
   optionsForFreq,
   optionsWithEnd,
   parseRrule,
-  rruleHasOrdinalCadence,
+  rruleEditWouldDegrade,
   rruleToLabel,
   rruleToShortLabel,
   snapAnchorToRule,
@@ -741,33 +741,35 @@ describe("rruleToLabel", () => {
   });
 });
 
-describe("rruleHasOrdinalCadence", () => {
-  it("detects a positional ordinal (3rd Tuesday)", () => {
-    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=3TU")).toBe(true);
+describe("rruleEditWouldDegrade", () => {
+  it.each([
+    ["a positional BYDAY ordinal (3rd Tuesday)", "FREQ=MONTHLY;BYDAY=3TU"],
+    ["a from-end BYDAY ordinal (last Friday)", "FREQ=MONTHLY;BYDAY=-1FR"],
+    ["an ordinal on one weekday of a BYDAY set", "FREQ=MONTHLY;BYDAY=MO,2WE"],
+    ["BYMONTH (15 March, annually)", "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15"],
+    ["BYWEEKNO", "FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO"],
+    ["BYYEARDAY", "FREQ=YEARLY;BYYEARDAY=100"],
+    ["a sub-daily BY* term", "FREQ=DAILY;BYHOUR=9"],
+    ["an unparseable rule", "FREQ=NONSENSE"],
+  ])("locks %s", (_term, rrule) => {
+    expect(rruleEditWouldDegrade(rrule)).toBe(true);
   });
 
-  it("detects a from-end ordinal (last Friday)", () => {
-    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=-1FR")).toBe(true);
-  });
-
-  it("detects an ordinal in any BYDAY token", () => {
-    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=MO,2WE")).toBe(true);
-  });
-
-  it("detects the BYSETPOS spelling of the same cadence", () => {
-    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3")).toBe(true);
-  });
-
-  it("detects a from-end BYSETPOS", () => {
-    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1")).toBe(true);
-  });
-
-  it("is false for a plain weekday BYDAY", () => {
-    expect(rruleHasOrdinalCadence("FREQ=WEEKLY;BYDAY=MO,WE,FR")).toBe(false);
-  });
-
-  it("is false when there is no BYDAY", () => {
-    expect(rruleHasOrdinalCadence("FREQ=MONTHLY;BYMONTHDAY=15")).toBe(false);
+  it.each([
+    ["a plain weekly rule", "FREQ=WEEKLY;BYDAY=MO,WE,FR"],
+    ["BYMONTHDAY", "FREQ=MONTHLY;BYMONTHDAY=15"],
+    // BYSETPOS round-trips losslessly, so the editor can no longer degrade it — and the
+    // Ends handler that once dropped it now rebuilds through optionsWithEnd.
+    ["BYSETPOS", "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3"],
+    ["a from-end BYSETPOS over a weekday set", "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"],
+    ["WKST", "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU"],
+    // buildRrule renormalizes UNTIL to end-of-day UTC; comparing it would lock every
+    // finite provider series.
+    ["a UTC UNTIL that the editor renormalizes", "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T090000Z"],
+    ["an explicit INTERVAL=1", "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO"],
+    ["a reordered BYDAY set", "FREQ=WEEKLY;BYDAY=FR,MO,WE"],
+  ])("leaves %s editable", (_term, rrule) => {
+    expect(rruleEditWouldDegrade(rrule)).toBe(false);
   });
 });
 

@@ -15,10 +15,11 @@ const MONTHLY_ON_FRIDAYS = "FREQ=MONTHLY;BYDAY=FR";
 const MONTHLY_ON_THE_15TH = "FREQ=MONTHLY;BYMONTHDAY=15";
 const THIRD_FRIDAY_BYSETPOS = "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3";
 const THIRD_TUESDAY_BYDAY = "FREQ=MONTHLY;BYDAY=3TU";
+const FIFTEENTH_OF_MARCH = "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15";
 
-const ORDINAL_SPELLINGS = [
+const LOSSY_RULES = [
   ["BYDAY ordinal", THIRD_TUESDAY_BYDAY],
-  ["BYSETPOS", THIRD_FRIDAY_BYSETPOS],
+  ["BYMONTH", FIFTEENTH_OF_MARCH],
 ] as const;
 
 function renderPopover(rrule: string, onChange: (rrule: string | null) => void) {
@@ -68,8 +69,8 @@ describe("RecurrencePopover freq re-click", () => {
   });
 });
 
-describe("RecurrencePopover ordinal-cadence lock", () => {
-  it.each(ORDINAL_SPELLINGS)("does not open the editor for a %s rule", (_spelling, rrule) => {
+describe("RecurrencePopover degrade lock", () => {
+  it.each(LOSSY_RULES)("does not open the editor for a %s rule", (_term, rrule) => {
     const onChange = vi.fn();
     renderPopover(rrule, onChange);
 
@@ -80,7 +81,7 @@ describe("RecurrencePopover ordinal-cadence lock", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it.each(ORDINAL_SPELLINGS)("explains the lock on a %s rule", async (_spelling, rrule) => {
+  it.each(LOSSY_RULES)("explains the lock on a %s rule", async (_term, rrule) => {
     renderPopover(rrule, vi.fn());
 
     fireEvent.pointerMove(screen.getByRole("button", { name: /Recurrence:/ }), {
@@ -90,6 +91,14 @@ describe("RecurrencePopover ordinal-cadence lock", () => {
     expect((await screen.findAllByText("This repeat can't be edited here")).length).toBeGreaterThan(
       0
     );
+  });
+
+  it("opens the editor for a BYSETPOS rule, which round-trips losslessly", () => {
+    renderPopover(THIRD_FRIDAY_BYSETPOS, vi.fn());
+
+    openTrigger();
+
+    expect(screen.getByText("Stop repeating")).toBeInTheDocument();
   });
 });
 
@@ -102,5 +111,17 @@ describe("RecurrencePopover Ends editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "After" }));
 
     expect(onChange).toHaveBeenCalledWith(expect.stringContaining("BYMONTHDAY=15"));
+  });
+
+  // The Ends handler dropping BYSETPOS is what motivated locking it in the first place;
+  // unlocking is only safe while this holds.
+  it("keeps a BYSETPOS position when the end condition changes", () => {
+    const onChange = vi.fn();
+    renderPopover(THIRD_FRIDAY_BYSETPOS, onChange);
+
+    openTrigger();
+    fireEvent.click(screen.getByRole("button", { name: "After" }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.stringContaining("BYSETPOS=3"));
   });
 });
