@@ -50,6 +50,10 @@ fn matches_the_harvested_totext_table() {
     assert_label("FREQ=DAILY;BYMONTHDAY=15", "every day on the 15th");
     assert_label("FREQ=DAILY;COUNT=1", "every day for 1 time");
     assert_label("FREQ=WEEKLY;BYDAY=MO;COUNT=10", "every week on Monday for 10 times");
+    assert_label("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE", "every 2 weeks on Monday, Wednesday");
+    assert_label("FREQ=MONTHLY;INTERVAL=6;COUNT=2", "every 6 months for 2 times");
+    assert_label("FREQ=WEEKLY;UNTIL=20260628T235959Z", "every week until June 28, 2026");
+    assert_label("FREQ=YEARLY;INTERVAL=3;UNTIL=20300101T000000Z", "every 3 years until January 1, 2030");
     assert_label("FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T235959Z", "every week on Monday until December 31, 2026");
     assert_label("FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231", "every week on Monday until December 31, 2026");
 }
