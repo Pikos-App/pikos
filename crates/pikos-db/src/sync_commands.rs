@@ -254,11 +254,31 @@ async fn enable_sync_calendar(
 
 /// Tear the calendar down (detach owned pages / delete bare mirrors, remove or
 /// de-flag the folder) and clear the cursor so a later re-enable backfills fresh.
+///
+/// Ordered so a failure anywhere after the first step leaves the calendar durably
+/// off rather than live over half-severed mirrors: the poll loop selects on
+/// `enabled`, so clearing it up front both excludes the scheduler and makes a
+/// rerun of disable finish the job.
 async fn disable_sync_calendar(
     pool: &sqlx::SqlitePool,
     sync_calendar_id: &str,
 ) -> AppResult<SyncCalendar> {
     let cal = fetch_calendar(pool, sync_calendar_id).await?;
+    crate::tx::retry_on_busy(|| async {
+        sqlx::query(
+            "UPDATE sync_calendar
+             SET enabled = 0, sync_token = NULL, ctag = NULL,
+                 last_full_sync_at = NULL, last_synced_at = NULL, updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(now_iso())
+        .bind(&cal.id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    })
+    .await?;
+
     if let Some(folder_id) = &cal.folder_id {
         teardown_calendar(pool, &cal.account_id, &cal.calendar_id, folder_id).await?;
     }
@@ -269,16 +289,15 @@ async fn disable_sync_calendar(
         Some(fid) if folder_exists_pool(pool, fid).await? => Some(fid.clone()),
         _ => None,
     };
-    sqlx::query(
-        "UPDATE sync_calendar
-         SET enabled = 0, folder_id = ?, sync_token = NULL, ctag = NULL,
-             last_full_sync_at = NULL, last_synced_at = NULL, updated_at = ?
-         WHERE id = ?",
-    )
-    .bind(&folder_id)
-    .bind(now_iso())
-    .bind(&cal.id)
-    .execute(pool)
+    crate::tx::retry_on_busy(|| async {
+        sqlx::query("UPDATE sync_calendar SET folder_id = ?, updated_at = ? WHERE id = ?")
+            .bind(&folder_id)
+            .bind(now_iso())
+            .bind(&cal.id)
+            .execute(pool)
+            .await?;
+        Ok(())
+    })
     .await?;
     fetch_calendar(pool, sync_calendar_id).await
 }

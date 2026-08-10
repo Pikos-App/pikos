@@ -32,6 +32,15 @@ const SENTINEL_TZ: &str = "UTC";
 /// Measured ~0.1ms/page, so a batch holds for single-digit milliseconds.
 const TEARDOWN_BATCH: i64 = 200;
 
+/// How many times the page drain restarts from the top. The cursor only walks
+/// `page_sync.id` forward, but a sync pass still in flight when disable began
+/// commits rows with fresh uuids that sort randomly — roughly half land below a
+/// cursor that has already passed, and a link left active in a de-flagged folder
+/// is a permanently locked page. One restart catches those; the cap is a livelock
+/// backstop, since the caller clears `enabled` before tearing down and the poll
+/// loop selects on it, so no further pass can start.
+const TEARDOWN_MAX_DRAINS: u32 = 4;
+
 /// The calendar a reconcile runs against. The engine resolves the system folder
 /// for the calendar and hands it in; the reconciler never decides folder policy.
 pub struct ReconcileContext {
@@ -680,26 +689,49 @@ fn date_key(s: &str) -> String {
 /// applied across the whole calendar. Tombstoned links are cleared so a fresh
 /// resync legitimately brings those events back (the page stays in trash). The
 /// folder survives — de-flagged to a regular folder — whenever a live page
-/// remains, and is removed only when nothing owned survived. Idempotent.
+/// remains, and is removed only when nothing owned survived. Idempotent, and
+/// resumable: a rerun after a failed drain picks up whatever is left.
+///
+/// The caller must clear `sync_calendar.enabled` first — see
+/// [`TEARDOWN_MAX_DRAINS`] for what a still-live poll does to the cursor.
 pub async fn teardown_calendar(
     pool: &sqlx::SqlitePool,
     account_id: &str,
     calendar_id: &str,
     folder_id: &str,
 ) -> AppResult<()> {
-    // Batched so the write-lock hold is bounded by batch size, not by how many
-    // events the calendar holds — a racing editor write retries against a
-    // wall-clock budget that one transaction over a large calendar can outlast.
-    let mut cursor = String::new();
-    while let Some(next) = crate::tx::retry_on_busy(|| {
-        teardown_page_batch(pool, account_id, calendar_id, cursor.clone())
-    })
-    .await?
-    {
-        cursor = next;
+    for _ in 0..TEARDOWN_MAX_DRAINS {
+        let mut cursor = String::new();
+        while let Some(next) = crate::tx::retry_on_busy(|| {
+            teardown_page_batch(pool, account_id, calendar_id, cursor.clone())
+        })
+        .await?
+        {
+            cursor = next;
+        }
+        if !live_link_remains(pool, account_id, calendar_id).await? {
+            break;
+        }
     }
 
     crate::tx::retry_on_busy(|| teardown_folder(pool, folder_id)).await
+}
+
+/// True while any of the calendar's links is still un-severed. `detached` is the
+/// terminal state teardown leaves behind, so it doesn't count.
+async fn live_link_remains(
+    pool: &sqlx::SqlitePool,
+    account_id: &str,
+    calendar_id: &str,
+) -> AppResult<bool> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM page_sync
+          WHERE account_id = ? AND calendar_id = ? AND sync_state <> 'detached')",
+    )
+    .bind(account_id)
+    .bind(calendar_id)
+    .fetch_one(pool)
+    .await?)
 }
 
 /// Sever one batch of the calendar's pages, resuming after `cursor`. Returns the

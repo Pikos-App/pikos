@@ -2481,6 +2481,59 @@ async fn teardown_is_idempotent() {
     assert_eq!(folder_count(&pool).await, 1);
 }
 
+/// A sync pass still in flight when disable begins commits `page_sync` rows with
+/// fresh uuids, roughly half of them sorting below a cursor that has already
+/// passed. The trigger stands in for that commit deterministically — the late row's
+/// id sorts first, so a single forward drain leaves it active: a locked page in a
+/// de-flagged folder.
+#[tokio::test]
+async fn teardown_re_drains_a_link_inserted_below_the_cursor() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    let owned = synced_page(&pool, "/ev.ics", "uid-1").await;
+    simulate_user_body_edit(&pool, &owned, "my notes").await;
+    sqlx::query("UPDATE page_sync SET id = 'zzz-1' WHERE page_id = ?")
+        .bind(&owned)
+        .execute(&pool)
+        .await
+        .unwrap();
+    crate::insert_test_page(
+        &pool,
+        crate::pool::TestPage {
+            folder_id: Some("f1"),
+            ..crate::pool::TestPage::new("late-page", "Late")
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(&format!(
+        "CREATE TRIGGER late_link AFTER UPDATE OF sync_state ON page_sync
+         WHEN NOT EXISTS (SELECT 1 FROM page_sync WHERE id = 'aaa-late')
+         BEGIN
+           INSERT INTO page_sync
+             (id, page_id, account_id, provider, calendar_id, external_id, ical_uid,
+              sync_state, created_at)
+           VALUES ('aaa-late', 'late-page', '{ACCOUNT}', 'caldav', 'cal', '/late.ics',
+                   'uid-late', 'active', '2026-01-01T00:00:00Z');
+         END"
+    ))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1")
+        .await
+        .unwrap();
+
+    let live: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE sync_state <> 'detached'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(live, 0, "the late link is severed too");
+    assert!(!page_exists(&pool, "late-page").await, "its mirror is bare");
+}
+
 /// Either side of a teardown/editor race can lose the WAL write race; both must
 /// heal, and the owned page must still detach. Needs a real on-disk WAL pool and
 /// both writers on real threads (`tokio::spawn` + `worker_threads ≥ 2`) — a

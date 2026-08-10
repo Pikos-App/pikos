@@ -193,6 +193,67 @@ async fn disable_keeps_and_deflags_folder_with_a_survivor() {
     );
 }
 
+/// The poll loop selects on `enabled`, so it is only excluded from the teardown
+/// window if disable clears the flag before severing anything. Witnessed through a
+/// trigger, since the ordering is invisible in the end state.
+#[tokio::test]
+async fn disable_clears_enabled_before_severing_any_page() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let cal = upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work", None)
+        .await
+        .unwrap();
+    let enabled = toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+        .await
+        .unwrap();
+    let folder_id = enabled.folder_id.clone().unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some(&folder_id),
+            ..TestPage::new("p-owned", "Mine")
+        },
+    )
+    .await
+    .unwrap();
+    // user_modified → owned → teardown detaches rather than deleting, so the
+    // severing is an UPDATE the trigger can hang off.
+    sqlx::query(
+        "INSERT INTO page_sync
+           (id, page_id, account_id, provider, calendar_id, external_id, ical_uid,
+            user_modified, created_at)
+         VALUES ('ps-owned', 'p-owned', ?, 'caldav', 'cal-a', '/ev.ics', 'uid-1', 1, ?)",
+    )
+    .bind(&acc)
+    .bind(now_iso())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("CREATE TABLE witness (enabled INTEGER)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER witness_enabled AFTER UPDATE OF sync_state ON page_sync
+         BEGIN
+           INSERT INTO witness SELECT enabled FROM sync_calendar WHERE calendar_id = 'cal-a';
+         END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    toggle_sync_calendar_impl(&pool, &cal.id, false, None)
+        .await
+        .unwrap();
+
+    let seen: Vec<i64> = sqlx::query_scalar("SELECT enabled FROM witness")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(seen, vec![0], "already disabled when the first page was cut");
+}
+
 #[tokio::test]
 async fn re_enable_reflags_the_same_folder() {
     let pool = test_pool().await;
