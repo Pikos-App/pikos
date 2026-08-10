@@ -9,7 +9,8 @@ import { addDays, set } from "date-fns";
 //
 // Produces the same spread as the dev command: a same-day timed event, a
 // cross-zone event (resolves to the viewer's zone, no badge), an all-day event
-// (never shifts), a weekly recurring series, and one detached page (broken-sync).
+// (never shifts), a weekly recurring series, a past one-off, and one detached
+// page (broken-sync).
 //
 // Times are picked to miss the realistic seed's day-0 slots (6:30, 8, 9, 9:15,
 // 2–4 PM, 3–4 PM, 7 PM), which this scenario stacks onto: a collision collapses
@@ -165,6 +166,16 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
     at(today, 1, 10, 0),
     at(today, 1, 10, 30),
     "Asia/Tokyo",
+    "active"
+  );
+  // A one-off two days past: it stays in Today until ticked, so it needs a lane
+  // the realistic seed leaves free on a *past* day (that seed fills day −1 only).
+  await synced(
+    work,
+    "Budget sign-off",
+    at(today, -2, 13, 0),
+    at(today, -2, 13, 30),
+    "America/New_York",
     "active"
   );
   await synced(

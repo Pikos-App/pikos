@@ -457,6 +457,31 @@ appTest("an overdue synced series completes through the gap dialog @tier2", asyn
   await expect(page.getByText(/read-only/i)).toHaveCount(0);
 });
 
+// ─── tier2: a past synced one-off stays in Today until ticked ────────────────
+//
+// The predicate is unit-pinned; this covers the round trip — the row reaches
+// Today's Overdue group, and the tick lands on the locked mirror instead of
+// being rejected read-only.
+
+appTest("a past synced one-off shows in Today and clears when ticked @tier2", async ({ app }) => {
+  await seedSynced(app);
+
+  await app.getByRole("button", { name: /^Today/ }).click();
+  await app.getByRole("button", { name: /^Overdue/ }).click();
+
+  const list = app.locator("[data-page-list-item]");
+  const signoff = list.filter({ hasText: "Budget sign-off" });
+  await expect(signoff).toBeVisible();
+
+  await signoff.getByRole("checkbox", { name: "Mark done" }).click();
+
+  await expect(signoff).not.toBeVisible();
+
+  // In Completed, not merely filtered out — the tick reached the locked mirror.
+  await app.getByRole("button", { name: /^Completed/ }).click();
+  await expect(signoff).toBeVisible();
+});
+
 // ─── tier2: FTS search finds a synced page ───────────────────────────────────
 
 appTest("search finds a synced page @tier2", async ({ app }) => {

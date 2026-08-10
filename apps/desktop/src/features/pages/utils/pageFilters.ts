@@ -19,15 +19,7 @@ export type SortMode = "manual" | "date" | "title" | "priority";
 export function belongsToView(page: PageSummary, viewId: string, todayStr: string): boolean {
   if (viewId === "today") {
     if (page.scheduledStart == null) return false;
-    const day = page.scheduledStart.slice(0, 10);
-    // Only a past *synced one-off* is excluded from Today — its mirror is locked,
-    // so the user can't reschedule or clear it, and it would otherwise pile up
-    // forever; it stays visible on its own calendar. Recurring heads and detached
-    // pages both keep normal task semantics: a recurring head's floor is the
-    // connect day (so an overdue one is a real missed occurrence), and detached
-    // pages are user-owned.
-    if (day < todayStr && page.scheduleLocked && !page.isRecurring) return false;
-    return day <= todayStr;
+    return page.scheduledStart.slice(0, 10) <= todayStr;
   }
   if (viewId === "inbox") return page.folderId === null;
   return page.folderId === viewId;

@@ -281,15 +281,16 @@ describe("getCompletedViewPages", () => {
   });
 });
 
+// Today is origin-blind, agreeing with the daily summary's `overdue_count`: a
+// locked mirror can't be rescheduled, so ticking is the only resolution there is.
 describe("belongsToView — past synced events", () => {
   const TODAY = "2026-08-04";
   const synced = (o: Partial<PageSummary> = {}) =>
     makePage({ scheduleLocked: true, syncState: "active", ...o });
 
-  it("drops a synced one-off whose time has passed", () => {
-    // See belongsToView for why a past synced one-off isn't a lapsed task.
+  it("keeps a synced one-off whose time has passed", () => {
     const page = synced({ scheduledStart: "2026-07-30T09:00:00" });
-    expect(belongsToView(page, "today", TODAY)).toBe(false);
+    expect(belongsToView(page, "today", TODAY)).toBe(true);
   });
 
   it("keeps a synced one-off scheduled today", () => {
@@ -298,7 +299,6 @@ describe("belongsToView — past synced events", () => {
   });
 
   it("keeps a past recurring synced head", () => {
-    // See belongsToView for why a recurring head's floor keeps this a real miss.
     const page = synced({ isRecurring: true, scheduledStart: "2026-07-30T09:00:00" });
     expect(belongsToView(page, "today", TODAY)).toBe(true);
   });

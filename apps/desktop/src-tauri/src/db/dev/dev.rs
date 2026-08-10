@@ -626,7 +626,8 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
     )
     .await?;
 
-    // Work: cross-zone (Tokyo) + a detached page (sync severed → editable, broken-sync icon).
+    // Work: cross-zone (Tokyo), a past one-off (stays in Today until ticked), and a
+    // detached page (sync severed → editable, broken-sync icon).
     insert_synced_page(
         &mut tx,
         work,
@@ -647,19 +648,34 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         work,
         &account_id,
         work_cal,
+        "Budget sign-off",
+        &at(-2, "13:00"),
+        Some(&at(-2, "13:30")),
+        Some("America/New_York"),
+        "active",
+        1,
+        SyncedMirror::default(),
+        &now,
+    )
+    .await?;
+    insert_synced_page(
+        &mut tx,
+        work,
+        &account_id,
+        work_cal,
         "Old planning (detached)",
         &at(0, "17:00"),
         Some(&at(0, "17:30")),
         Some("America/New_York"),
         "detached",
-        1,
+        2,
         SyncedMirror::default(),
         &now,
     )
     .await?;
 
     tx.commit().await?;
-    log::info!("dev_seed_synced_calendar: seeded mock account + 2 calendars + 6 pages");
+    log::info!("dev_seed_synced_calendar: seeded mock account + 2 calendars + 7 pages");
     Ok(())
 }
 
