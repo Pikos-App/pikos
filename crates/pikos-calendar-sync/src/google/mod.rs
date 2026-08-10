@@ -40,12 +40,12 @@ impl GoogleProvider {
 
     /// Enumerate calendars straight from a fresh grant, before any account row or
     /// keychain entry exists — the Google counterpart to CalDAV's `discover_with`.
-    /// Also yields the primary calendar's id, the account's email.
+    /// Also yields the primary calendar's id, which identifies the account.
     pub async fn list_with(
         credentials: &GoogleCredentials,
-    ) -> AppResult<(Vec<RemoteCalendar>, Option<String>)> {
+    ) -> AppResult<(Vec<RemoteCalendar>, String)> {
         let transport = ReqwestGoogle::new(credentials.access_token.clone());
-        Ok(sync::list_calendars_with_primary(&transport).await?)
+        Ok(sync::list_calendars_for_connect(&transport).await?)
     }
 
     /// Resolve a usable access token, refreshing (and re-persisting a rotated

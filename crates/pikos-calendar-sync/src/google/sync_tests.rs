@@ -415,10 +415,39 @@ async fn calendar_list_prefers_the_users_own_name_and_drops_removed_entries() {
 #[tokio::test]
 async fn the_primary_calendar_id_labels_the_account() {
     let t = Replay::ok(CALENDAR_LIST);
-    let (_, primary) = list_calendars_with_primary(&t).await.unwrap();
+    let (_, primary) = list_calendars_for_connect(&t).await.unwrap();
 
     // This becomes the account's display_name, the key a reconnect matches a
     // dormant account by — get it wrong and reconnecting duplicates the account
     // instead of re-linking its detached pages.
-    assert_eq!(primary.as_deref(), Some("alex@example.com"));
+    assert_eq!(primary, "alex@example.com");
+}
+
+const NO_PRIMARY: &str = r#"{
+  "kind": "calendar#calendarList",
+  "items": [
+    {
+      "kind": "calendar#calendarListEntry",
+      "id": "team123@group.calendar.google.com",
+      "summary": "Team Calendar",
+      "accessRole": "reader"
+    }
+  ]
+}"#;
+
+// Not a cosmetic label — see `GoogleError::NoPrimaryCalendar`.
+#[tokio::test]
+async fn a_list_without_a_primary_refuses_the_connect() {
+    let t = Replay::ok(NO_PRIMARY);
+    let err = list_calendars_for_connect(&t).await.unwrap_err();
+
+    assert!(matches!(err, GoogleError::NoPrimaryCalendar));
+}
+
+#[tokio::test]
+async fn a_list_without_a_primary_still_enumerates_for_a_routine_sync() {
+    let t = Replay::ok(NO_PRIMARY);
+    let cals = list_calendars(&t).await.unwrap();
+
+    assert_eq!(cals.len(), 1);
 }

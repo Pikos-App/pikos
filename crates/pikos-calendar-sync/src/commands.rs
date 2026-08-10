@@ -110,8 +110,7 @@ where
 
     // Proves the grant actually reads calendars before anything is persisted —
     // the same validate-first order connect_caldav uses.
-    let (remote, primary) = crate::google::GoogleProvider::list_with(&credentials).await?;
-    let display_name = primary.unwrap_or_else(|| "Google Calendar".to_string());
+    let (remote, display_name) = crate::google::GoogleProvider::list_with(&credentials).await?;
 
     let account = claim_account(pool, PROVIDER_GOOGLE, &display_name, "oauth").await?;
     crate::google::store(&keychain, &account.id, &credentials)?;

@@ -25,6 +25,15 @@ pub enum GoogleError {
     #[error("Google Calendar access wasn't fully granted — reconnect and allow both permissions")]
     ScopesWithheld,
 
+    /// No `primary` entry in `calendarList`. Its id is the account's *identity* —
+    /// a reconnect is matched on it — not just a label, so falling back to a
+    /// constant would let a second primary-less account claim the first's row and
+    /// overwrite its keychain blob: a silent cross-account merge.
+    #[error(
+        "Google didn't return a primary calendar, so Pikos can't tell this account apart from another — nothing was connected"
+    )]
+    NoPrimaryCalendar,
+
     /// Transport-level failure (DNS, TLS, connection, timeout, read).
     #[error("Google network error: {0}")]
     Network(String),
@@ -59,6 +68,7 @@ impl From<GoogleError> for AppError {
             GoogleError::Revoked
             | GoogleError::Cancelled
             | GoogleError::ScopesWithheld
+            | GoogleError::NoPrimaryCalendar
             | GoogleError::NotConfigured => AppError::Invalid(e.to_string()),
             GoogleError::NotFound => AppError::NotFound(e.to_string()),
             // Transient: maps to `Offline` — cursor kept, retried later, no
@@ -94,6 +104,10 @@ mod tests {
         ));
         assert!(matches!(
             mapped(GoogleError::NotConfigured),
+            AppError::Invalid(_)
+        ));
+        assert!(matches!(
+            mapped(GoogleError::NoPrimaryCalendar),
             AppError::Invalid(_)
         ));
     }

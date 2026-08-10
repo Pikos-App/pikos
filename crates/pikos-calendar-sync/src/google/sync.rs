@@ -143,11 +143,21 @@ pub(crate) async fn list_calendars<T: GoogleTransport>(
     Ok(list_calendars_with_primary(transport).await?.0)
 }
 
-/// Also returns the primary calendar's id, which is the account's email address
-/// — the account label at connect time. Reading it here avoids adding
-/// `openid`/`email` to [`super::config::SCOPES`], which would widen the verified
-/// consent screen for one string.
-pub(crate) async fn list_calendars_with_primary<T: GoogleTransport>(
+/// Connect-time enumeration: also resolves the account's identity from the
+/// primary calendar's id, refusing rather than inventing one when Google names
+/// no primary (see [`GoogleError::NoPrimaryCalendar`]). [`list_calendars`] stays
+/// tolerant — only a connect turns that id into an identity.
+pub(crate) async fn list_calendars_for_connect<T: GoogleTransport>(
+    transport: &T,
+) -> Result<(Vec<RemoteCalendar>, String), GoogleError> {
+    let (calendars, primary) = list_calendars_with_primary(transport).await?;
+    Ok((calendars, primary.ok_or(GoogleError::NoPrimaryCalendar)?))
+}
+
+/// Also returns the primary calendar's id, which is the account's email address.
+/// Reading it here avoids adding `openid`/`email` to [`super::config::SCOPES`],
+/// which would widen the verified consent screen for one string.
+async fn list_calendars_with_primary<T: GoogleTransport>(
     transport: &T,
 ) -> Result<(Vec<RemoteCalendar>, Option<String>), GoogleError> {
     let mut out = Vec::new();
