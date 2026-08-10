@@ -748,6 +748,17 @@ describe("rruleEditWouldDegrade", () => {
     ["a sub-daily BY* term", "FREQ=DAILY;BYHOUR=9"],
     ["an unparseable rule", "FREQ=NONSENSE"],
     ["a BYMONTH outside 1–12, which the carrier normalises away", "FREQ=YEARLY;BYMONTH=13"],
+    // The editor rebuilds UNTIL as end-of-day, so a provider cut-off mid-day would
+    // gain that day's final occurrence.
+    ["a UTC UNTIL mid-day", "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T090000Z"],
+    [
+      "a wall-clock UNTIL mid-day, as the reconciler rewrites it",
+      "FREQ=DAILY;UNTIL=20261231T060000",
+    ],
+    [
+      "COUNT beside UNTIL, of which only COUNT is rebuilt",
+      "FREQ=DAILY;COUNT=90;UNTIL=20260304T235959",
+    ],
   ])("locks %s", (_term, rrule) => {
     expect(rruleEditWouldDegrade(rrule)).toBe(true);
   });
@@ -765,9 +776,21 @@ describe("rruleEditWouldDegrade", () => {
     ["BYSETPOS", "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3"],
     ["a from-end BYSETPOS over a weekday set", "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"],
     ["WKST", "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU"],
-    // buildRrule renormalizes UNTIL to end-of-day UTC; comparing it would lock every
-    // finite provider series.
-    ["a UTC UNTIL that the editor renormalizes", "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T090000Z"],
+    ["an explicit + on BYMONTHDAY", "FREQ=MONTHLY;BYMONTHDAY=+15"],
+    ["an explicit + on a BYDAY ordinal", "FREQ=MONTHLY;BYDAY=+1MO"],
+    ["an explicit + on BYSETPOS", "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=+3"],
+    [
+      "a date-only UNTIL, which ends an all-day series at the same occurrence",
+      "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260315",
+    ],
+    [
+      "a floating end-of-day UNTIL, the form the editor writes",
+      "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T235959",
+    ],
+    [
+      "an end-of-day UNTIL still carrying the legacy Z",
+      "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T235959Z",
+    ],
     ["an explicit INTERVAL=1", "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO"],
     ["a reordered BYDAY set", "FREQ=WEEKLY;BYDAY=FR,MO,WE"],
   ])("leaves %s editable", (_term, rrule) => {
@@ -939,11 +962,10 @@ describe("buildRrule", () => {
     expect(buildRrule({ count: 5, freq: "DAILY", interval: 1 })).toContain("COUNT=5");
   });
 
-  it("emits UNTIL end condition as end-of-day UTC", () => {
-    // UNTIL is set to 23:59:59 UTC so the final occurrence on that local date
-    // is included.
+  it("emits UNTIL end condition as floating end-of-day", () => {
     const result = buildRrule({ freq: "WEEKLY", interval: 1, until: "2026-06-15" });
-    expect(result).toContain("UNTIL=20260615T235959Z");
+    expect(result).toContain("UNTIL=20260615T235959");
+    expect(result).not.toContain("Z");
   });
 
   it("roundtrips through parseRrule → buildRrule", () => {

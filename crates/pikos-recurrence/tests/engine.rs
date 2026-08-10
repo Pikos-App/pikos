@@ -478,7 +478,7 @@ fn builds_expected_rrule_strings() {
         until: Some("2026-06-15".to_string()),
         ..Default::default()
     };
-    assert_eq!(build_rrule(&until), "FREQ=WEEKLY;INTERVAL=1;UNTIL=20260615T235959Z");
+    assert_eq!(build_rrule(&until), "FREQ=WEEKLY;INTERVAL=1;UNTIL=20260615T235959");
 
     let counted = RecurrenceOptions {
         freq: Some(Freq::Daily),

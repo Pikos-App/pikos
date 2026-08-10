@@ -2151,7 +2151,7 @@ describe("NL Page Creation Parser", () => {
             ],
             "title": "team sync",
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260426T235959Z",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260426T235959",
           "type": "recurring",
         }
       `);
@@ -2198,7 +2198,7 @@ describe("NL Page Creation Parser", () => {
             ],
             "title": "1:1",
           },
-          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260511T235959Z",
+          "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260511T235959",
           "type": "recurring",
         }
       `);
@@ -2241,7 +2241,7 @@ describe("NL Page Creation Parser", () => {
             ],
             "title": "team sync",
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260426T235959Z",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260426T235959",
           "type": "recurring",
         }
       `);
@@ -2260,7 +2260,7 @@ describe("NL Page Creation Parser", () => {
             ],
             "title": "standup",
           },
-          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260412T235959Z",
+          "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260412T235959",
           "type": "recurring",
         }
       `);

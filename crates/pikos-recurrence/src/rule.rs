@@ -181,10 +181,10 @@ pub fn build_rrule(opts: &RecurrenceOptions) -> String {
     if let Some(count) = opts.count {
         segs.push(format!("COUNT={count}"));
     } else if let Some(until) = &opts.until {
-        // Interpreted as end-of-day UTC so the final local date is included,
-        // matching `buildRrule`.
+        // End-of-day so the final date's occurrence is included, and floating because
+        // every other instant in the rule is wall-clock — a `Z` mixes the two bases.
         let compact = until.replace('-', "");
-        segs.push(format!("UNTIL={compact}T235959Z"));
+        segs.push(format!("UNTIL={compact}T235959"));
     }
     segs.join(";")
 }

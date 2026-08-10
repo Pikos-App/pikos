@@ -329,7 +329,7 @@ export function buildRrule(options: RecurrenceOptions): string {
 
 // Defaults are seeded so an explicit `INTERVAL=1` / `WKST=MO` compares equal against a
 // rebuilt string that omits them.
-function patternTerms(rruleStr: string): Map<string, string> {
+function ruleTerms(rruleStr: string): Map<string, string> {
   const terms = new Map([
     ["INTERVAL", "1"],
     ["WKST", "MO"],
@@ -338,17 +338,31 @@ function patternTerms(rruleStr: string): Map<string, string> {
     const [key, value] = part.split("=");
     if (!key || value === undefined) continue;
     const term = key.trim().toUpperCase();
-    if (term === "COUNT" || term === "UNTIL") continue;
-    terms.set(
-      term,
-      value
-        .split(",")
-        .map((token) => token.trim().toUpperCase())
-        .sort()
-        .join(",")
-    );
+    terms.set(term, term === "UNTIL" ? normalizedUntil(value) : normalizedList(value));
   }
   return terms;
+}
+
+// The RFC's optional `+` on an ordinal (`BYMONTHDAY=+15`, `BYDAY=+1MO`) is dropped by the
+// carrier, so a rule that spells it out round-trips losslessly and must not read as lossy.
+function normalizedList(value: string): string {
+  return value
+    .split(",")
+    .map((token) => token.trim().toUpperCase().replace(/^\+/, ""))
+    .sort()
+    .join(",");
+}
+
+/**
+ * A UNTIL token reduced to the only form the editor rebuilds: floating end-of-day. Two
+ * inputs collapse to it losslessly — a `Z` is syntactic (the engine reads every instant
+ * as wall-clock), and a date-only UNTIL pairs with an all-day DTSTART whose final
+ * occurrence sits at midnight. Any other time-of-day is the provider's own cut-off, and
+ * rebuilding it as end-of-day gains the occurrence it excluded.
+ */
+function normalizedUntil(value: string): string {
+  const stamp = value.trim().toUpperCase().replace(/Z$/, "");
+  return stamp.includes("T") ? stamp : `${stamp}T235959`;
 }
 
 /**
@@ -360,14 +374,14 @@ function patternTerms(rruleStr: string): Map<string, string> {
  * such a list is only ever as complete as the last person to spot a gap, and it missed
  * BYMONTH, i.e. "15 March, annually", for exactly that reason.
  *
- * Compares pattern terms only. The end condition is excluded because `buildRrule`
- * deliberately renormalizes UNTIL to end-of-day UTC, which would lock every finite series.
+ * The end condition is compared too, against the normalization in `normalizedUntil` — an
+ * approved edit rewrites a timed UNTIL to end-of-day, which gains the final occurrence.
  */
 export function rruleEditWouldDegrade(rruleStr: string): boolean {
   const options = parseRrule(rruleStr);
   if (!options) return true;
-  const before = patternTerms(rruleStr);
-  const after = patternTerms(buildRrule(options));
+  const before = ruleTerms(rruleStr);
+  const after = ruleTerms(buildRrule(options));
   if (before.size !== after.size) return true;
   return [...before].some(([term, value]) => after.get(term) !== value);
 }

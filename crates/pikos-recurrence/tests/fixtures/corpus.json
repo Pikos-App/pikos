@@ -346,7 +346,7 @@
     { "built": "FREQ=DAILY;INTERVAL=1", "options": { "freq": "DAILY", "interval": 1 }, "rrule": "FREQ=DAILY" },
     { "built": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR", "options": { "freq": "WEEKLY", "interval": 2, "byweekday": [0, 2, 4] }, "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR" },
     { "built": "FREQ=MONTHLY;INTERVAL=1;COUNT=12", "options": { "freq": "MONTHLY", "interval": 1, "count": 12 }, "rrule": "FREQ=MONTHLY;COUNT=12" },
-    { "built": "FREQ=YEARLY;INTERVAL=1;UNTIL=20301231T235959Z", "options": { "freq": "YEARLY", "interval": 1, "until": "2030-12-31" }, "rrule": "FREQ=YEARLY;UNTIL=20301231T235959Z" },
+    { "built": "FREQ=YEARLY;INTERVAL=1;UNTIL=20301231T235959", "options": { "freq": "YEARLY", "interval": 1, "until": "2030-12-31" }, "rrule": "FREQ=YEARLY;UNTIL=20301231T235959Z" },
     { "built": "FREQ=MONTHLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1", "options": { "freq": "MONTHLY", "interval": 1, "byweekday": [0, 1, 2, 3, 4], "bysetpos": [-1] }, "rrule": "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1" },
     { "built": "FREQ=WEEKLY;INTERVAL=1;BYDAY=SA,SU;WKST=SU", "options": { "freq": "WEEKLY", "interval": 1, "byweekday": [5, 6], "wkst": 6 }, "rrule": "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU" },
     { "built": "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=15", "options": { "freq": "MONTHLY", "interval": 1, "bymonthday": [15] }, "rrule": "FREQ=MONTHLY;BYMONTHDAY=15" },

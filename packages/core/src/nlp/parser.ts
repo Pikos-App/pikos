@@ -109,7 +109,7 @@ function serializeRrule(opts: {
   byweekday?: Weekday[] | undefined;
   interval?: number | undefined;
   count?: number | undefined;
-  /** Compact UNTIL value, e.g. "20260628T235959Z". */
+  /** Compact UNTIL value, e.g. "20260628T235959". */
   until?: string | undefined;
 }): string {
   let out = `FREQ=${opts.freq}`;
@@ -126,9 +126,9 @@ function serializeRrule(opts: {
 }
 
 /**
- * Compact UNTIL value ("YYYYMMDDTHHMMSSZ") from a Date's local wall-clock
- * fields — the engine and data model are timezone-naive, so the Z is purely
- * syntactic (RFC 5545 requires it after a COUNT-less UNTIL time).
+ * Compact UNTIL value ("YYYYMMDDTHHMMSS") from a Date's local wall-clock fields.
+ * Floating, not UTC: the data model is timezone-naive, and RFC 5545 asks for a
+ * floating UNTIL beside the floating DTSTART these rules anchor to.
  */
 function untilFromLocalDate(d: Date, endOfDay: boolean): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -136,7 +136,7 @@ function untilFromLocalDate(d: Date, endOfDay: boolean): string {
   const time = endOfDay
     ? "235959"
     : `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-  return `${date}T${time}Z`;
+  return `${date}T${time}`;
 }
 
 export function parseInput(raw: string, now?: Date): ParseResult {
