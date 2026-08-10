@@ -743,14 +743,11 @@ describe("rruleToLabel", () => {
 
 describe("rruleEditWouldDegrade", () => {
   it.each([
-    ["a positional BYDAY ordinal (3rd Tuesday)", "FREQ=MONTHLY;BYDAY=3TU"],
-    ["a from-end BYDAY ordinal (last Friday)", "FREQ=MONTHLY;BYDAY=-1FR"],
-    ["an ordinal on one weekday of a BYDAY set", "FREQ=MONTHLY;BYDAY=MO,2WE"],
-    ["BYMONTH (15 March, annually)", "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15"],
     ["BYWEEKNO", "FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO"],
     ["BYYEARDAY", "FREQ=YEARLY;BYYEARDAY=100"],
     ["a sub-daily BY* term", "FREQ=DAILY;BYHOUR=9"],
     ["an unparseable rule", "FREQ=NONSENSE"],
+    ["a BYMONTH outside 1–12, which the carrier normalises away", "FREQ=YEARLY;BYMONTH=13"],
   ])("locks %s", (_term, rrule) => {
     expect(rruleEditWouldDegrade(rrule)).toBe(true);
   });
@@ -758,6 +755,11 @@ describe("rruleEditWouldDegrade", () => {
   it.each([
     ["a plain weekly rule", "FREQ=WEEKLY;BYDAY=MO,WE,FR"],
     ["BYMONTHDAY", "FREQ=MONTHLY;BYMONTHDAY=15"],
+    ["a positional BYDAY ordinal (3rd Tuesday)", "FREQ=MONTHLY;BYDAY=3TU"],
+    ["a from-end BYDAY ordinal (last Friday)", "FREQ=MONTHLY;BYDAY=-1FR"],
+    ["an ordinal on one weekday of a BYDAY set", "FREQ=MONTHLY;BYDAY=MO,2WE"],
+    ["BYMONTH (15 March, annually)", "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15"],
+    ["BYMONTH beside a weekly BYDAY", "FREQ=WEEKLY;BYDAY=MO;BYMONTH=6,7"],
     // BYSETPOS round-trips losslessly, so the editor can no longer degrade it — and the
     // Ends handler that once dropped it now rebuilds through optionsWithEnd.
     ["BYSETPOS", "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3"],
@@ -994,6 +996,24 @@ describe("optionsForFreq", () => {
   it("keeps bymonthday when staying monthly", () => {
     const imported = parseRrule("FREQ=MONTHLY;BYMONTHDAY=15")!;
     expect(optionsForFreq(imported, "MONTHLY").bymonthday).toEqual([15]);
+  });
+
+  it("drops a BYDAY ordinal, which no frequency the editor offers can carry", () => {
+    const imported = parseRrule("FREQ=MONTHLY;BYDAY=1MO")!;
+    expect(optionsForFreq(imported, "WEEKLY")).toEqual({
+      byweekday: [0],
+      freq: "WEEKLY",
+      interval: 1,
+    });
+  });
+
+  it("drops BYMONTH rather than narrow the new frequency to those months", () => {
+    const imported = parseRrule("FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15")!;
+    expect(optionsForFreq(imported, "MONTHLY")).toEqual({
+      bymonthday: [15],
+      freq: "MONTHLY",
+      interval: 1,
+    });
   });
 
   it("preserves the end condition across a freq change", () => {

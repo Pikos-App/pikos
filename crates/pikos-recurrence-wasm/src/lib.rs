@@ -98,9 +98,9 @@ pub fn compute_next_end(base_end: &str, next_start: &str) -> Option<String> {
     pikos_recurrence::compute_next_end(base_end, next_start)
 }
 
-/// Typed options as a JSON object (`{freq, interval, byweekday?, bysetpos?,
-/// bymonthday?, wkst?, count?, until?}`), or undefined when unparseable or the
-/// FREQ is unsupported.
+/// Typed options as a JSON object (`{freq, interval, byweekday?,
+/// byweekdayOrdinals?, bysetpos?, bymonthday?, bymonth?, wkst?, count?,
+/// until?}`), or undefined when unparseable or the FREQ is unsupported.
 #[wasm_bindgen(js_name = parseRruleOptions)]
 pub fn parse_rrule_options(rrule: &str) -> Option<String> {
     pikos_recurrence::parse_rrule(rrule).and_then(|opts| serde_json::to_string(&opts).ok())

@@ -62,13 +62,33 @@ export interface Preset {
   startsGroup?: boolean;
 }
 
-/** Shape-compare two RecurrenceOptions, ignoring end conditions (count/until). */
+/**
+ * Every pattern term, normalised for comparison. WKST defaults to Monday so an
+ * imported rule that spells it out still matches a preset that omits it.
+ */
+function shapeKey(o: RecurrenceOptions): string {
+  return JSON.stringify([
+    o.freq,
+    o.interval,
+    o.byweekday ?? [],
+    o.byweekdayOrdinals ?? [],
+    o.bymonthday ?? [],
+    o.bymonth ?? [],
+    o.bysetpos ?? [],
+    o.wkst ?? 0,
+  ]);
+}
+
+/**
+ * Shape-compare two RecurrenceOptions, ignoring end conditions (count/until).
+ *
+ * Comparing every pattern term, not just freq/interval/byweekday: a partial
+ * compare made a richer rule ("monthly on the last day") light up the plain
+ * Monthly preset as already-active, and clicking that highlighted row then
+ * flattened the rule to the preset.
+ */
 export function shapesMatch(a: RecurrenceOptions, b: RecurrenceOptions): boolean {
-  if (a.freq !== b.freq) return false;
-  if (a.interval !== b.interval) return false;
-  const aDays = (a.byweekday ?? []).join(",");
-  const bDays = (b.byweekday ?? []).join(",");
-  return aDays === bDays;
+  return shapeKey(a) === shapeKey(b);
 }
 
 export function computePresets(anchor: Date): Preset[] {

@@ -422,6 +422,7 @@ pub fn align_weekly_rule_to_anchor(rrule: &str, anchor_start: &str) -> String {
     }
     build_rrule(&crate::rule::RecurrenceOptions {
         byweekday: Some(vec![anchor_weekday]),
+        byweekday_ordinals: None,
         ..opts
     })
 }

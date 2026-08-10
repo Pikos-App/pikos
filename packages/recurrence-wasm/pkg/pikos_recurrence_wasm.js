@@ -205,9 +205,9 @@ export function nextOccurrenceAfter(rrule, scheduled_start, after, exdates_json)
 }
 
 /**
- * Typed options as a JSON object (`{freq, interval, byweekday?, bysetpos?,
- * bymonthday?, wkst?, count?, until?}`), or undefined when unparseable or the
- * FREQ is unsupported.
+ * Typed options as a JSON object (`{freq, interval, byweekday?,
+ * byweekdayOrdinals?, bysetpos?, bymonthday?, bymonth?, wkst?, count?,
+ * until?}`), or undefined when unparseable or the FREQ is unsupported.
  * @param {string} rrule
  * @returns {string | undefined}
  */

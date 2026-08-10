@@ -269,16 +269,30 @@ export type RecurrenceFreq = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
  */
 export type RecurrenceWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
+/**
+ * The editor's typed view of an RRULE, and a lossless carrier for every pattern
+ * term the engine enumerates — including the ones the editor never authors. A
+ * term parsed but not rebuilt is one the editor can only degrade, which is what
+ * `rruleEditWouldDegrade` then locks the whole rule out for.
+ */
 export interface RecurrenceOptions {
   freq: RecurrenceFreq;
   /** Positive integer ≥ 1. Default 1. */
   interval: number;
   /** Weekdays for FREQ=WEEKLY (rrule.js: 0=Monday … 6=Sunday). */
   byweekday?: RecurrenceWeekday[];
+  /**
+   * BYDAY ordinals ("first Monday" = 1, "last Friday" = -1) positionally aligned
+   * with `byweekday`, null per bare weekday. Present only when the rule carried
+   * one, so anything rewriting `byweekday` must drop it.
+   */
+  byweekdayOrdinals?: (number | null)[];
   /** Positions within the recurrence set, e.g. -1 for "last" (BYSETPOS). */
   bysetpos?: number[];
   /** Days of the month, 1–31 or negative from month-end (BYMONTHDAY). */
   bymonthday?: number[];
+  /** Months 1–12 the rule is limited to (BYMONTH). */
+  bymonth?: number[];
   /** Week-start day (rrule.js: 0=Monday … 6=Sunday); changes weekly grouping. */
   wkst?: RecurrenceWeekday;
   /** End condition — exactly one of `count` or `until` may be set. */
@@ -340,11 +354,11 @@ function patternTerms(rruleStr: string): Map<string, string> {
 /**
  * True when saving the rule back through the editor would change its occurrence set.
  *
- * `RecurrenceOptions` models a lossy subset of RRULE, so a provider rule carrying a term
- * it doesn't keep — a BYDAY ordinal, BYMONTH, BYWEEKNO, BYYEARDAY, BYHOUR — degrades on
- * any save. The lock is derived from that round-trip rather than from a list of lossy
- * terms: such a list is only ever as complete as the last person to spot a gap, and it
- * missed BYMONTH, i.e. "15 March, annually", for exactly that reason.
+ * `RecurrenceOptions` carries every term the engine enumerates, so what remains is the
+ * tail outside that envelope — BYWEEKNO, BYYEARDAY, BYHOUR — plus rules that don't parse
+ * at all. The lock is derived from the round-trip rather than from a list of lossy terms:
+ * such a list is only ever as complete as the last person to spot a gap, and it missed
+ * BYMONTH, i.e. "15 March, annually", for exactly that reason.
  *
  * Compares pattern terms only. The end condition is excluded because `buildRrule`
  * deliberately renormalizes UNTIL to end-of-day UTC, which would lock every finite series.
@@ -361,10 +375,10 @@ export function rruleEditWouldDegrade(rruleStr: string): boolean {
 /**
  * Re-key options to a new frequency, keeping interval + the end condition and only
  * the `BY*` terms that frequency can carry in the engine's envelope. The editor
- * only authors freq/interval/byweekday, but `parseRrule` surfaces `bymonthday`/
- * `bysetpos`/`wkst` from an imported (synced) rule — without this whitelist a freq
- * change would leak them, e.g. `BYMONTHDAY=15` onto a WEEKLY rule, which the
- * engine rejects as Unsupported.
+ * only authors freq/interval/byweekday, but `parseRrule` surfaces the imported
+ * (synced) rule's full shape — without this whitelist a freq change would leak it,
+ * e.g. `BYMONTHDAY=15` onto a WEEKLY rule, which the engine rejects as Unsupported,
+ * or a "first Monday" ordinal onto a frequency where it means nothing.
  */
 export function optionsForFreq(
   options: RecurrenceOptions,

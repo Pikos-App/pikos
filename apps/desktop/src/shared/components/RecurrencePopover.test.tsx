@@ -13,13 +13,20 @@ const ANCHOR = "2026-07-06T09:00:00";
 
 const MONTHLY_ON_FRIDAYS = "FREQ=MONTHLY;BYDAY=FR";
 const MONTHLY_ON_THE_15TH = "FREQ=MONTHLY;BYMONTHDAY=15";
+const MONTHLY_ON_THE_LAST_DAY = "FREQ=MONTHLY;BYMONTHDAY=-1";
 const THIRD_FRIDAY_BYSETPOS = "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3";
 const THIRD_TUESDAY_BYDAY = "FREQ=MONTHLY;BYDAY=3TU";
 const FIFTEENTH_OF_MARCH = "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15";
 
+// Outside the engine's envelope, so no round-trip can carry them.
 const LOSSY_RULES = [
-  ["BYDAY ordinal", THIRD_TUESDAY_BYDAY],
-  ["BYMONTH", FIFTEENTH_OF_MARCH],
+  ["BYWEEKNO", "FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO"],
+  ["sub-daily BY* term", "FREQ=DAILY;BYHOUR=9"],
+] as const;
+
+const CARRIED_RULES = [
+  ["BYDAY ordinal", THIRD_TUESDAY_BYDAY, "BYDAY=3TU"],
+  ["BYMONTH", FIFTEENTH_OF_MARCH, "BYMONTH=3"],
 ] as const;
 
 function renderPopover(rrule: string, onChange: (rrule: string | null) => void) {
@@ -100,6 +107,37 @@ describe("RecurrencePopover degrade lock", () => {
 
     expect(screen.getByText("Stop repeating")).toBeInTheDocument();
   });
+
+  it.each(CARRIED_RULES)("opens the editor for a %s rule, which round-trips", (_term, rrule) => {
+    renderPopover(rrule, vi.fn());
+
+    openTrigger();
+
+    expect(screen.getByText("Stop repeating")).toBeInTheDocument();
+  });
+});
+
+describe("RecurrencePopover preset matching", () => {
+  it("leaves plain Monthly inactive for a monthly-on-the-last-day rule", () => {
+    renderPopover(MONTHLY_ON_THE_LAST_DAY, vi.fn());
+
+    openTrigger();
+
+    expect(screen.getByRole("button", { name: /^Monthly/ })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+  });
+
+  it("re-clicking the active preset is a no-op", () => {
+    const onChange = vi.fn();
+    renderPopover("FREQ=DAILY", onChange);
+
+    openTrigger();
+    fireEvent.click(screen.getByRole("button", { name: "Daily" }));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
 
 describe("RecurrencePopover Ends editor", () => {
@@ -123,5 +161,15 @@ describe("RecurrencePopover Ends editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "After" }));
 
     expect(onChange).toHaveBeenCalledWith(expect.stringContaining("BYSETPOS=3"));
+  });
+
+  it.each(CARRIED_RULES)("keeps %s when the end condition changes", (_term, rrule, kept) => {
+    const onChange = vi.fn();
+    renderPopover(rrule, onChange);
+
+    openTrigger();
+    fireEvent.click(screen.getByRole("button", { name: "After" }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.stringContaining(kept));
   });
 });

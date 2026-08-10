@@ -2,11 +2,9 @@
 //!
 //! Two layers share this file:
 //!   - [`RecurrenceOptions`] + [`parse_rrule`]/[`build_rrule`] mirror the
-//!     editor round-trip in `recurrence.ts` (freq/interval/byweekday/bysetpos/
-//!     bymonthday/wkst/count/until). BYDAY *ordinals* are intentionally dropped
-//!     here — the TS `RecurrenceOptions` never carried them.
+//!     editor round-trip in `recurrence.ts`.
 //!   - [`ParsedRule`] is the fuller internal parse the enumerator needs; it keeps
-//!     BYDAY ordinals (`1MO`, `-1FR`) and the raw `UNTIL` instant.
+//!     the raw `UNTIL` instant that [`RecurrenceOptions`] reduces to a date.
 
 use chrono::NaiveDateTime;
 use thiserror::Error;
@@ -75,10 +73,19 @@ pub struct RecurrenceOptions {
     pub interval: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub byweekday: Option<Vec<u8>>,
+    /// BYDAY ordinals (`1` in `1MO`, `-1` in `-1FR`) positionally aligned with
+    /// `byweekday`; `None` per entry for a bare weekday. Set only when the rule
+    /// carried at least one, so anything rewriting `byweekday` must clear it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub byweekday_ordinals: Option<Vec<Option<i32>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bysetpos: Option<Vec<i32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bymonthday: Option<Vec<i32>>,
+    /// Months 1–12. Range-filtered like the enumerator, so an out-of-range month
+    /// fails the round-trip rather than silently widening the rule to every month.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bymonth: Option<Vec<u32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wkst: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -110,16 +117,17 @@ pub fn parse_rrule(rrule: &str) -> Option<RecurrenceOptions> {
             }
             "INTERVAL" => opts.interval = value.parse().ok()?,
             "BYDAY" => {
-                let days: Vec<u8> = value
-                    .split(',')
-                    .filter_map(|d| weekday_from_code(strip_ordinal(d)))
-                    .collect();
+                let (days, ordinals) = parse_byday(value);
                 if !days.is_empty() {
                     opts.byweekday = Some(days);
+                    if ordinals.iter().any(Option::is_some) {
+                        opts.byweekday_ordinals = Some(ordinals);
+                    }
                 }
             }
             "BYSETPOS" => opts.bysetpos = parse_int_list(value),
             "BYMONTHDAY" => opts.bymonthday = parse_int_list(value),
+            "BYMONTH" => opts.bymonth = parse_month_list(value),
             "WKST" => opts.wkst = weekday_from_code(value),
             "COUNT" => opts.count = value.parse().ok(),
             "UNTIL" => {
@@ -144,11 +152,25 @@ pub fn build_rrule(opts: &RecurrenceOptions) -> String {
     }
     segs.push(format!("INTERVAL={}", opts.interval.max(1)));
     if let Some(days) = opts.byweekday.as_ref().filter(|d| !d.is_empty()) {
-        let codes: Vec<&str> = days.iter().map(|&d| WEEKDAY_CODES[d as usize]).collect();
+        let ordinals = opts.byweekday_ordinals.as_deref().unwrap_or_default();
+        let codes: Vec<String> = days
+            .iter()
+            .enumerate()
+            .map(|(i, &d)| {
+                let code = WEEKDAY_CODES[d as usize];
+                match ordinals.get(i).copied().flatten() {
+                    Some(n) => format!("{n}{code}"),
+                    None => code.to_string(),
+                }
+            })
+            .collect();
         segs.push(format!("BYDAY={}", codes.join(",")));
     }
     if let Some(list) = opts.bymonthday.as_ref().filter(|l| !l.is_empty()) {
         segs.push(format!("BYMONTHDAY={}", join_ints(list)));
+    }
+    if let Some(list) = opts.bymonth.as_ref().filter(|l| !l.is_empty()) {
+        segs.push(format!("BYMONTH={}", join_ints(list)));
     }
     if let Some(list) = opts.bysetpos.as_ref().filter(|l| !l.is_empty()) {
         segs.push(format!("BYSETPOS={}", join_ints(list)));
@@ -172,12 +194,41 @@ fn strip_ordinal(byday: &str) -> &str {
     &byday[ordinal_prefix.len()..]
 }
 
+/// Splits a BYDAY value into weekday indices and their positionally-aligned
+/// ordinals, dropping terms whose weekday code isn't recognised.
+fn parse_byday(value: &str) -> (Vec<u8>, Vec<Option<i32>>) {
+    let mut days = Vec::new();
+    let mut ordinals = Vec::new();
+    for term in value.split(',') {
+        let code = strip_ordinal(term);
+        let Some(weekday) = weekday_from_code(code) else {
+            continue;
+        };
+        days.push(weekday);
+        ordinals.push(parse_ordinal(&term[..term.len() - code.len()]));
+    }
+    (days, ordinals)
+}
+
+fn parse_ordinal(prefix: &str) -> Option<i32> {
+    prefix.trim_start_matches('+').parse().ok()
+}
+
 fn parse_int_list(value: &str) -> Option<Vec<i32>> {
     let list: Vec<i32> = value.split(',').filter_map(|v| v.parse().ok()).collect();
     (!list.is_empty()).then_some(list)
 }
 
-fn join_ints(list: &[i32]) -> String {
+fn parse_month_list(value: &str) -> Option<Vec<u32>> {
+    let list: Vec<u32> = value
+        .split(',')
+        .filter_map(|v| v.parse().ok())
+        .filter(|m| (1..=12).contains(m))
+        .collect();
+    (!list.is_empty()).then_some(list)
+}
+
+fn join_ints<T: std::fmt::Display>(list: &[T]) -> String {
     list.iter()
         .map(|n| n.to_string())
         .collect::<Vec<_>>()
@@ -268,28 +319,15 @@ impl ParsedRule {
                 }
                 "INTERVAL" => interval = value.parse().unwrap_or(1),
                 "BYDAY" | "BYWEEKDAY" => {
-                    for term in value.split(',') {
-                        let code = strip_ordinal(term);
-                        if let Some(weekday) = weekday_from_code(code) {
-                            let ord_str = &term[..term.len() - code.len()];
-                            let ordinal = if ord_str.is_empty() {
-                                None
-                            } else {
-                                ord_str.trim_start_matches('+').parse().ok()
-                            };
-                            byday.push(ByDay { ordinal, weekday });
-                        }
-                    }
+                    let (days, ordinals) = parse_byday(value);
+                    byday = days
+                        .into_iter()
+                        .zip(ordinals)
+                        .map(|(weekday, ordinal)| ByDay { ordinal, weekday })
+                        .collect();
                 }
                 "BYMONTHDAY" => bymonthday = parse_int_list(value).unwrap_or_default(),
-                "BYMONTH" => {
-                    bymonth = parse_int_list(value)
-                        .unwrap_or_default()
-                        .into_iter()
-                        .filter(|&m| (1..=12).contains(&m))
-                        .map(|m| m as u32)
-                        .collect()
-                }
+                "BYMONTH" => bymonth = parse_month_list(value).unwrap_or_default(),
                 "BYSETPOS" => bysetpos = parse_int_list(value).unwrap_or_default(),
                 "WKST" => wkst = weekday_from_code(value).unwrap_or(0),
                 "COUNT" => count = value.parse().ok(),

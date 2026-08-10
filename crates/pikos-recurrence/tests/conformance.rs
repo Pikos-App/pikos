@@ -132,9 +132,13 @@ struct CorpusOptions {
     #[serde(default)]
     byweekday: Option<Vec<u8>>,
     #[serde(default)]
+    byweekday_ordinals: Option<Vec<Option<i32>>>,
+    #[serde(default)]
     bysetpos: Option<Vec<i32>>,
     #[serde(default)]
     bymonthday: Option<Vec<i32>>,
+    #[serde(default)]
+    bymonth: Option<Vec<u32>>,
     #[serde(default)]
     wkst: Option<u8>,
     #[serde(default)]
@@ -148,8 +152,10 @@ fn to_corpus(o: &RecurrenceOptions) -> CorpusOptions {
         freq: o.freq.expect("freq").as_str().to_string(),
         interval: o.interval,
         byweekday: o.byweekday.clone(),
+        byweekday_ordinals: o.byweekday_ordinals.clone(),
         bysetpos: o.bysetpos.clone(),
         bymonthday: o.bymonthday.clone(),
+        bymonth: o.bymonth.clone(),
         wkst: o.wkst,
         count: o.count,
         until: o.until.clone(),

@@ -27,6 +27,7 @@ import {
   missedOccurrencesBetween,
   parseLocalISO,
   resolveSyncedInstant,
+  rruleEditWouldDegrade,
   snapAnchorToRule,
   toStorageError,
 } from "@pikos/core";
@@ -508,10 +509,13 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     // Realign a single-BYDAY weekly rule's weekday to the moved anchor — a head
     // dragged Mon→Wed must make the series "every Wednesday", else completion's
     // advance snaps back to the BYDAY weekday (the "reverts to its original
-    // day" bug). No-op for daily/monthly/multi-day rules.
-    const alignedRrule = ruleSnapshot
-      ? alignWeeklyRuleToAnchor(ruleSnapshot.rrule, start)
-      : undefined;
+    // day" bug). No-op for daily/monthly/multi-day rules. Skipped for a rule the
+    // editor is locked out of: the realign rebuilds through the same round-trip,
+    // so it would silently drop the terms the lock exists to protect.
+    const alignedRrule =
+      ruleSnapshot && !rruleEditWouldDegrade(ruleSnapshot.rrule)
+        ? alignWeeklyRuleToAnchor(ruleSnapshot.rrule, start)
+        : undefined;
 
     // Snap an off-pattern drop (M/W/F dropped on Tue, monthly-by-day onto the
     // wrong date) onto the nearest day the rule yields, before any optimistic

@@ -661,6 +661,49 @@ describe("scheduleOnce head-drag snapping (U6-F1)", () => {
   });
 });
 
+// ─── The realign rewrites BYDAY through parse→build ──────────────────────────
+// Terms the round-trip carries must survive it; a rule it can't carry must not
+// be rewritten at all.
+describe("scheduleOnce head-drag realign fidelity", () => {
+  async function setupWeeklyRule(rrule: string) {
+    const hook = renderHookWithProviders(() => ({
+      pages: usePages(),
+      workspace: useWorkspace(),
+    }));
+    await act(async () => {
+      await hook.result.current.workspace.selectWorkspace();
+    });
+    let pageId!: string;
+    await act(async () => {
+      const p = await hook.result.current.pages.createPage({ title: "Standup" });
+      pageId = p.id;
+      await hook.result.current.pages.scheduleOnce(p.id, "2099-01-05T10:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: p.id,
+        rrule,
+        scheduledStart: "2099-01-05T10:00:00",
+        timezone: "America/New_York",
+      });
+    });
+    await act(async () => {
+      await hook.result.current.pages.scheduleOnce(pageId, "2099-01-07T10:00:00");
+    });
+    return hook.result.current.pages.recurrenceRules.find((r) => r.pageId === pageId)!;
+  }
+
+  it("realigns BYDAY to the moved weekday and keeps BYMONTH", async () => {
+    const rule = await setupWeeklyRule("FREQ=WEEKLY;BYDAY=MO;BYMONTH=1");
+    expect(rule.rrule).toBe("FREQ=WEEKLY;INTERVAL=1;BYDAY=WE;BYMONTH=1");
+  });
+
+  it("leaves a degrade-locked rule verbatim", async () => {
+    // BYHOUR is outside the engine's envelope, so the series renders nowhere
+    // either way — the point is that the drag doesn't quietly drop the term.
+    const rule = await setupWeeklyRule("FREQ=WEEKLY;BYDAY=MO;BYHOUR=9");
+    expect(rule.rrule).toBe("FREQ=WEEKLY;BYDAY=MO;BYHOUR=9");
+  });
+});
+
 // ─── U6-F2: un-done of a recurring head routes through uncomplete ────────────
 describe("uncompleteRecurringHead (U6-F2)", () => {
   async function setupFiniteSeries() {

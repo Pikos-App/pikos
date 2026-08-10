@@ -14,9 +14,9 @@ export function computeNextEnd(base_end: string, next_start: string): string | u
  */
 export function nextOccurrenceAfter(rrule: string, scheduled_start: string, after: string, exdates_json: string): string | undefined;
 /**
- * Typed options as a JSON object (`{freq, interval, byweekday?, bysetpos?,
- * bymonthday?, wkst?, count?, until?}`), or undefined when unparseable or the
- * FREQ is unsupported.
+ * Typed options as a JSON object (`{freq, interval, byweekday?,
+ * byweekdayOrdinals?, bysetpos?, bymonthday?, bymonth?, wkst?, count?,
+ * until?}`), or undefined when unparseable or the FREQ is unsupported.
  */
 export function parseRruleOptions(rrule: string): string | undefined;
 /**

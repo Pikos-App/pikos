@@ -128,6 +128,9 @@ export function RecurrencePopover({
 
   function handleSelectPreset(preset: Preset) {
     setCustomManuallyExpanded(false);
+    // Re-clicking the active preset must not re-emit: the head's rule update
+    // triggers a backend recompute for an identical rule.
+    if (options && shapesMatch(options, preset.options)) return;
     emit(withEndCondition(preset.options));
   }
 
@@ -171,6 +174,7 @@ export function RecurrencePopover({
     const next = current.includes(day) ? current.filter((d) => d !== day) : [...current, day];
     const sorted = [...next].sort((a, b) => a - b);
     const nextOpts: RecurrenceOptions = { ...options };
+    delete nextOpts.byweekdayOrdinals;
     if (sorted.length === 0) delete nextOpts.byweekday;
     else nextOpts.byweekday = sorted;
     emit(nextOpts);
