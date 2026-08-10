@@ -174,6 +174,52 @@ async fn releasing_credentials_clears_every_account_including_dormant_ones() {
     }
 }
 
+// A reset deletes every account row, so it has the same one-last-chance property as
+// the wipe: a dormant account never reaches the panel's disconnect path, and once its
+// row is gone nothing holds the id its blob is keyed to.
+#[tokio::test]
+async fn disconnecting_all_accounts_sweeps_dormant_credentials_too() {
+    let pool = test_pool().await;
+    let active = insert_sync_account_impl(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    let cal = upsert_sync_calendar_impl(&pool, &active.id, "cal-a", "Work", None)
+        .await
+        .unwrap();
+    toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+        .await
+        .unwrap();
+    let dormant = insert_sync_account_impl(&pool, PROVIDER_CALDAV, "old · https://y", "basic")
+        .await
+        .unwrap();
+    mark_account_disconnected_impl(&pool, &dormant.id)
+        .await
+        .unwrap();
+
+    let backing = MemoryStore::default();
+    for acc in [&active, &dormant] {
+        backing.set(&acc.id, "secret-blob").unwrap();
+    }
+
+    disconnect_all_accounts(&pool, Keychain::with_store(Box::new(backing.clone())))
+        .await
+        .unwrap();
+
+    for acc in [&active, &dormant] {
+        assert!(
+            backing.get(&acc.id).is_err(),
+            "credential left behind for {}",
+            acc.display_name
+        );
+    }
+    let enabled: bool = sqlx::query_scalar("SELECT enabled FROM sync_calendar WHERE id = ?")
+        .bind(&cal.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(!enabled, "the live account went dormant, so no poll follows");
+}
+
 /// Scripted provider that hands back a fixed one-event delta on every sync — enough
 /// to create then re-link a mirror page across a disconnect/reconnect.
 struct Scripted {

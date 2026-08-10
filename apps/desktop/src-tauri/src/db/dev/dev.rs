@@ -252,20 +252,15 @@ pub(crate) async fn get_usage_stats_impl(pool: &sqlx::SqlitePool) -> AppResult<U
 /// Delete all user data from the workspace (keeps the DB file and schema).
 /// FK order: focus_sessions → page_schedules → page_recurrence_rules → pages → folders
 ///
-/// Connected calendars are disconnected first, through the same path the settings
-/// panel uses — otherwise the row survives with a live `sync_token`, and the next
-/// poll asks for changes since that token, gets none, and never rebuilds.
+/// Sync accounts are disconnected first, through the same path the settings panel
+/// uses — see `disconnect_all_accounts` for what that has to reach before the rows
+/// their keychain blobs are keyed to are gone.
 #[tauri::command]
 pub async fn reset_db(state: tauri::State<'_, DbState>) -> AppResult<()> {
     let pool = state.get_pool().await?;
-    for account in pikos_db::sync_commands::get_sync_status_impl(&pool).await? {
-        // Best-effort: an unreachable provider must not block wiping local data.
-        if let Err(e) =
-            pikos_calendar_sync::disconnect_account(&pool, Keychain::system(), &account.account.id)
-                .await
-        {
-            log::warn!("reset_db: could not disconnect {}: {e}", account.account.id);
-        }
+    // Best-effort: an unreachable provider must not block wiping local data.
+    if let Err(e) = pikos_calendar_sync::disconnect_all_accounts(&pool, Keychain::system()).await {
+        log::warn!("reset_db: could not disconnect the sync accounts: {e}");
     }
     reset_db_impl(&pool).await
 }

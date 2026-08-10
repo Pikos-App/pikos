@@ -162,60 +162,82 @@ async fn upsert_calendars(
     Ok(calendars)
 }
 
-/// Disconnect an account: unsync each calendar (detach owned pages, delete bare
-/// mirrors, disable + clear its cursor), then mark the account dormant and clear
-/// the keychain. The row, its calendars, and detached `page_sync` identities stay
-/// — a reconnect reuses them and re-links by `ical_uid`, the same path a calendar
-/// unsync already uses. The OAuth grant is revoked first so the account also
-/// drops off the user's connected-apps list, instead of lingering there with a
-/// token Pikos has thrown away. Revoke and credential delete are both
-/// best-effort and idempotent — neither may block going dormant.
+/// Disconnect an account: unsync its calendars, mark it dormant, release its
+/// credential. The row, its calendars, and detached `page_sync` identities stay —
+/// a reconnect reuses them and re-links by `ical_uid`, the same path a calendar
+/// unsync already uses.
 pub async fn disconnect_account(
     pool: &SqlitePool,
     keychain: Keychain,
     account_id: &str,
 ) -> AppResult<()> {
+    go_dormant(pool, account_id).await?;
+    let provider = provider_of(pool, account_id).await?.unwrap_or_default();
+    release_credential(&keychain, account_id, &provider).await;
+    Ok(())
+}
+
+/// Disconnect every account, for a caller about to wipe the workspace. Active
+/// accounts go dormant through the normal path first — clearing `enabled` is what
+/// keeps a poll from writing pages back over the wipe — and then every credential
+/// is released, dormant rows included.
+pub async fn disconnect_all_accounts(pool: &SqlitePool, keychain: Keychain) -> AppResult<()> {
+    for (id, _, disconnected) in all_accounts(pool).await? {
+        // Best-effort: a calendar that won't tear down must not block the wipe.
+        if !disconnected {
+            if let Err(e) = go_dormant(pool, &id).await {
+                log::warn!("sync: could not disconnect {id} before the wipe: {e}");
+            }
+        }
+    }
+    release_all_credentials(pool, keychain).await
+}
+
+/// The local half of a disconnect: unsync each calendar (detach owned pages, delete
+/// bare mirrors, disable + clear its cursor), then hide the account from the panel.
+async fn go_dormant(pool: &SqlitePool, account_id: &str) -> AppResult<()> {
     for cal in list_sync_calendars_impl(pool, account_id).await? {
         if cal.enabled {
             toggle_sync_calendar_impl(pool, &cal.id, false, None).await?;
         }
     }
-    mark_account_disconnected_impl(pool, account_id).await?;
-    if provider_of(pool, account_id).await?.as_deref() == Some(PROVIDER_GOOGLE) {
-        if let Err(e) = crate::google::revoke(&keychain, account_id).await {
-            log::warn!("sync: could not revoke the Google grant for {account_id}: {e}");
-        }
-    }
-    let _ = keychain.delete(account_id);
-    Ok(())
+    mark_account_disconnected_impl(pool, account_id).await
 }
 
 /// Revoke every OAuth grant and clear every keychain entry, for a caller about to
 /// delete the workspace wholesale. No DB writes — the rows are going away anyway.
 ///
 /// The keychain lives outside `app_data_dir`, so a wipe on its own would strand a
-/// usable refresh token keyed to an account id nothing references any more. Steps
-/// are best-effort like [`disconnect_account`]'s: an offline revoke must not block
-/// a wipe the user already confirmed.
+/// usable refresh token keyed to an account id nothing references any more.
 pub async fn release_all_credentials(pool: &SqlitePool, keychain: Keychain) -> AppResult<()> {
-    for (id, provider) in all_accounts(pool).await? {
-        if provider == PROVIDER_GOOGLE {
-            if let Err(e) = crate::google::revoke(&keychain, &id).await {
-                log::warn!("sync: could not revoke the Google grant for {id}: {e}");
-            }
-        }
-        let _ = keychain.delete(&id);
+    for (id, provider, _) in all_accounts(pool).await? {
+        release_credential(&keychain, &id, &provider).await;
     }
     Ok(())
 }
 
+/// Drop one account's stored secret. The OAuth grant is revoked first so the
+/// account also drops off the user's connected-apps list, instead of lingering
+/// there with a token Pikos has thrown away. Both steps are best-effort and
+/// idempotent — neither may block a disconnect the user has already asked for.
+async fn release_credential(keychain: &Keychain, account_id: &str, provider: &str) {
+    if provider == PROVIDER_GOOGLE {
+        if let Err(e) = crate::google::revoke(keychain, account_id).await {
+            log::warn!("sync: could not revoke the Google grant for {account_id}: {e}");
+        }
+    }
+    let _ = keychain.delete(account_id);
+}
+
 /// Every account, dormant ones included — a dormant row's credential should
 /// already be gone, but a wipe is the last chance to be sure.
-async fn all_accounts(pool: &SqlitePool) -> AppResult<Vec<(String, String)>> {
+async fn all_accounts(pool: &SqlitePool) -> AppResult<Vec<(String, String, bool)>> {
     Ok(
-        sqlx::query_as::<_, (String, String)>("SELECT id, provider FROM sync_account")
-            .fetch_all(pool)
-            .await?,
+        sqlx::query_as::<_, (String, String, bool)>(
+            "SELECT id, provider, disconnected FROM sync_account",
+        )
+        .fetch_all(pool)
+        .await?,
     )
 }
 
