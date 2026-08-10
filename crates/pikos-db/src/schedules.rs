@@ -301,26 +301,30 @@ pub async fn create_page_schedule_impl(
 
     // Insert + denorm refresh in one tx so a crash can't leave the row
     // committed with a stale pages.scheduled_start.
-    let mut tx = pool.begin().await?;
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
 
-    sqlx::query(
-        "INSERT INTO page_schedules
-         (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started', ?)",
-    )
-    .bind(&id)
-    .bind(&data.page_id)
-    .bind(&data.scheduled_start)
-    .bind(&data.scheduled_end)
-    .bind(&data.timezone)
-    .bind(&data.rule_id)
-    .bind(&data.original_date)
-    .bind(&now)
-    .execute(&mut *tx)
+        sqlx::query(
+            "INSERT INTO page_schedules
+             (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started', ?)",
+        )
+        .bind(&id)
+        .bind(&data.page_id)
+        .bind(&data.scheduled_start)
+        .bind(&data.scheduled_end)
+        .bind(&data.timezone)
+        .bind(&data.rule_id)
+        .bind(&data.original_date)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await?;
+
+        refresh_schedule_denorm_conn(&mut tx, &data.page_id).await?;
+        tx.commit().await?;
+        Ok(())
+    })
     .await?;
-
-    refresh_schedule_denorm_conn(&mut tx, &data.page_id).await?;
-    tx.commit().await?;
 
     fetch_schedule(pool, &id).await
 }
@@ -331,38 +335,46 @@ pub async fn update_page_schedule_impl(
     updates: PageScheduleUpdate,
 ) -> AppResult<PageSchedule> {
     ensure_schedule_row_unlocked(pool, &id).await?;
-    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE page_schedules SET ");
-    let mut fields = builder.separated(", ");
-    let mut has_updates = false;
-    let start_changed = updates.scheduled_start.is_some();
-
-    if let Some(v) = updates.scheduled_start {
-        fields.push("scheduled_start = ");
-        fields.push_bind_unseparated(v);
-        has_updates = true;
-    }
-    if let Some(v) = updates.status {
-        fields.push("status = ");
-        fields.push_bind_unseparated(v);
-        has_updates = true;
-    }
-    if let Some(val) = updates.scheduled_end {
-        fields.push("scheduled_end = ");
-        match val {
-            serde_json::Value::Null => fields.push_bind_unseparated(None::<String>),
-            serde_json::Value::String(s) => fields.push_bind_unseparated(s),
-            _ => fields.push_bind_unseparated(None::<String>),
-        };
-        has_updates = true;
-    }
-
+    let has_updates = updates.scheduled_start.is_some()
+        || updates.status.is_some()
+        || updates.scheduled_end.is_some();
     if !has_updates {
         return fetch_schedule(pool, &id).await;
     }
 
+    crate::tx::retry_on_busy(|| apply_schedule_update(pool, &id, &updates)).await?;
+    fetch_schedule(pool, &id).await
+}
+
+/// The write half of [`update_page_schedule_impl`]; the statement is rebuilt on
+/// each attempt because a `QueryBuilder` is spent once built.
+async fn apply_schedule_update(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    updates: &PageScheduleUpdate,
+) -> AppResult<()> {
+    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE page_schedules SET ");
+    let mut fields = builder.separated(", ");
+
+    if let Some(v) = &updates.scheduled_start {
+        fields.push("scheduled_start = ");
+        fields.push_bind_unseparated(v.clone());
+    }
+    if let Some(v) = &updates.status {
+        fields.push("status = ");
+        fields.push_bind_unseparated(v.clone());
+    }
+    if let Some(val) = &updates.scheduled_end {
+        fields.push("scheduled_end = ");
+        match val {
+            serde_json::Value::String(s) => fields.push_bind_unseparated(Some(s.clone())),
+            _ => fields.push_bind_unseparated(None::<String>),
+        };
+    }
+
     drop(fields);
     builder.push(" WHERE id = ");
-    builder.push_bind(&id);
+    builder.push_bind(id);
 
     // Update + reminder-log clear + denorm refresh in one tx: a crash
     // between them could otherwise leave a stale dedup row (reminder never
@@ -373,49 +385,52 @@ pub async fn update_page_schedule_impl(
 
     // If scheduled_start changed, clear reminder notification_log entries for
     // this schedule so the scheduler can re-fire at the new time.
-    if start_changed {
+    if updates.scheduled_start.is_some() {
         sqlx::query("DELETE FROM notification_log WHERE schedule_id = ? AND type = 'reminder'")
-            .bind(&id)
+            .bind(id)
             .execute(&mut *tx)
             .await?;
     }
 
     let page_id: Option<String> =
         sqlx::query_scalar("SELECT page_id FROM page_schedules WHERE id = ?")
-            .bind(&id)
+            .bind(id)
             .fetch_optional(&mut *tx)
             .await?;
-    if let Some(pid) = &page_id {
-        refresh_schedule_denorm_conn(&mut tx, pid).await?;
-    }
-
-    tx.commit().await?;
-    fetch_schedule(pool, &id).await
-}
-
-pub async fn delete_page_schedule_impl(pool: &sqlx::SqlitePool, id: String) -> AppResult<()> {
-    ensure_schedule_row_unlocked(pool, &id).await?;
-    // Lookup + delete + denorm refresh in one tx so the denorm can't be
-    // left pointing at the now-deleted row after a mid-flight crash.
-    let mut tx = pool.begin().await?;
-
-    let page_id: Option<String> =
-        sqlx::query_scalar("SELECT page_id FROM page_schedules WHERE id = ?")
-            .bind(&id)
-            .fetch_optional(&mut *tx)
-            .await?;
-
-    sqlx::query("DELETE FROM page_schedules WHERE id = ?")
-        .bind(&id)
-        .execute(&mut *tx)
-        .await?;
-
     if let Some(pid) = &page_id {
         refresh_schedule_denorm_conn(&mut tx, pid).await?;
     }
 
     tx.commit().await?;
     Ok(())
+}
+
+pub async fn delete_page_schedule_impl(pool: &sqlx::SqlitePool, id: String) -> AppResult<()> {
+    ensure_schedule_row_unlocked(pool, &id).await?;
+    // Lookup + delete + denorm refresh in one tx so the denorm can't be
+    // left pointing at the now-deleted row after a mid-flight crash.
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+
+        let page_id: Option<String> =
+            sqlx::query_scalar("SELECT page_id FROM page_schedules WHERE id = ?")
+                .bind(&id)
+                .fetch_optional(&mut *tx)
+                .await?;
+
+        sqlx::query("DELETE FROM page_schedules WHERE id = ?")
+            .bind(&id)
+            .execute(&mut *tx)
+            .await?;
+
+        if let Some(pid) = &page_id {
+            refresh_schedule_denorm_conn(&mut tx, pid).await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 pub async fn list_page_schedules_impl(
@@ -477,26 +492,32 @@ pub async fn create_recurrence_rule_impl(
     let exdates_json =
         serde_json::to_string(&data.rrule_exdates).unwrap_or_else(|_| "[]".to_string());
 
-    sqlx::query(
-        "INSERT INTO page_recurrence_rules
-         (id, page_id, rrule, rrule_exdates, scheduled_start, scheduled_end, timezone, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(&data.page_id)
-    .bind(&data.rrule)
-    .bind(&exdates_json)
-    .bind(&data.scheduled_start)
-    .bind(&data.scheduled_end)
-    .bind(&data.timezone)
-    .bind(&now)
-    .execute(pool)
-    .await?;
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        sqlx::query(
+            "INSERT INTO page_recurrence_rules
+             (id, page_id, rrule, rrule_exdates, scheduled_start, scheduled_end, timezone, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&data.page_id)
+        .bind(&data.rrule)
+        .bind(&exdates_json)
+        .bind(&data.scheduled_start)
+        .bind(&data.scheduled_end)
+        .bind(&data.timezone)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await?;
 
-    // Ownership handoff: the derivation now owns `pages.scheduled_start`. Materialise
-    // the oldest-open occurrence so the head reflects the rule immediately (before
-    // this, the page carried the pre-rule scheduleOnce anchor).
-    crate::recurrence_derive::recompute_recurring_schedule_pool(pool, &data.page_id).await?;
+        // Ownership handoff: the derivation now owns `pages.scheduled_start`. Materialise
+        // the oldest-open occurrence so the head reflects the rule immediately (before
+        // this, the page carried the pre-rule scheduleOnce anchor).
+        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &data.page_id).await?;
+        tx.commit().await?;
+        Ok(())
+    })
+    .await?;
 
     fetch_rule(pool, &id).await
 }
@@ -516,56 +537,66 @@ pub async fn update_recurrence_rule_impl(
     updates: RecurrenceRuleUpdate,
 ) -> AppResult<PageRecurrenceRule> {
     ensure_rule_row_unlocked(pool, &id).await?;
-    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE page_recurrence_rules SET ");
-    let mut fields = builder.separated(", ");
-    let mut has_updates = false;
-
-    if let Some(v) = updates.rrule {
-        fields.push("rrule = ");
-        fields.push_bind_unseparated(v);
-        has_updates = true;
-    }
-    if let Some(v) = updates.rrule_exdates {
-        let json = serde_json::to_string(&v).unwrap_or_else(|_| "[]".to_string());
-        fields.push("rrule_exdates = ");
-        fields.push_bind_unseparated(json);
-        has_updates = true;
-    }
-    if let Some(v) = updates.scheduled_start {
-        fields.push("scheduled_start = ");
-        fields.push_bind_unseparated(v);
-        has_updates = true;
-    }
-    if let Some(v) = updates.timezone {
-        fields.push("timezone = ");
-        fields.push_bind_unseparated(v);
-        has_updates = true;
-    }
-    if let Some(val) = updates.scheduled_end {
-        fields.push("scheduled_end = ");
-        match val {
-            serde_json::Value::Null => fields.push_bind_unseparated(None::<String>),
-            serde_json::Value::String(s) => fields.push_bind_unseparated(s),
-            _ => fields.push_bind_unseparated(None::<String>),
-        };
-        has_updates = true;
-    }
-
+    let has_updates = updates.rrule.is_some()
+        || updates.rrule_exdates.is_some()
+        || updates.scheduled_start.is_some()
+        || updates.timezone.is_some()
+        || updates.scheduled_end.is_some();
     if !has_updates {
         return fetch_rule(pool, &id).await;
     }
 
+    let page_id = rule_page_id(pool, &id).await?;
+    crate::tx::retry_on_busy(|| apply_rule_update(pool, &id, &updates, &page_id)).await?;
+    fetch_rule(pool, &id).await
+}
+
+/// The write half of [`update_recurrence_rule_impl`]; the statement is rebuilt on
+/// each attempt because a `QueryBuilder` is spent once built.
+async fn apply_rule_update(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    updates: &RecurrenceRuleUpdate,
+    page_id: &str,
+) -> AppResult<()> {
+    let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE page_recurrence_rules SET ");
+    let mut fields = builder.separated(", ");
+
+    if let Some(v) = &updates.rrule {
+        fields.push("rrule = ");
+        fields.push_bind_unseparated(v.clone());
+    }
+    if let Some(v) = &updates.rrule_exdates {
+        let json = serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string());
+        fields.push("rrule_exdates = ");
+        fields.push_bind_unseparated(json);
+    }
+    if let Some(v) = &updates.scheduled_start {
+        fields.push("scheduled_start = ");
+        fields.push_bind_unseparated(v.clone());
+    }
+    if let Some(v) = &updates.timezone {
+        fields.push("timezone = ");
+        fields.push_bind_unseparated(v.clone());
+    }
+    if let Some(val) = &updates.scheduled_end {
+        fields.push("scheduled_end = ");
+        match val {
+            serde_json::Value::String(s) => fields.push_bind_unseparated(Some(s.clone())),
+            _ => fields.push_bind_unseparated(None::<String>),
+        };
+    }
+
     drop(fields);
     builder.push(" WHERE id = ");
-    builder.push_bind(&id);
+    builder.push_bind(id);
 
-    builder.build().execute(pool).await?;
-
+    let mut tx = pool.begin().await?;
+    builder.build().execute(&mut *tx).await?;
     // The rule (rrule/base/exdates) changed — re-derive the head from truth.
-    let page_id = rule_page_id(pool, &id).await?;
-    crate::recurrence_derive::recompute_recurring_schedule_pool(pool, &page_id).await?;
-
-    fetch_rule(pool, &id).await
+    crate::recurrence_derive::recompute_recurring_schedule(&mut tx, page_id).await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 /// Merges `add` into the rule's `rrule_exdates` inside the caller's transaction

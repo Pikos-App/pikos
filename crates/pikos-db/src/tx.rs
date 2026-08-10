@@ -16,9 +16,10 @@
 //!   they don't back off. Hence the backoff below.
 //!
 //! This is the systemic counterpart to "fold concurrent writes into one
-//! transaction": any read-then-write writer that can run concurrently with
-//! another writer should go through [`retry_on_busy`] so a lost snapshot race
-//! self-heals instead of surfacing as a dropped write.
+//! transaction": every user-facing writer goes through [`retry_on_busy`] so a
+//! lost snapshot race self-heals instead of surfacing as a dropped write. No
+//! command is exempt — none of them owns the write lock alone, and a sync poll or
+//! a calendar teardown can commit between any two of its statements.
 
 use crate::error::{AppError, AppResult};
 
@@ -99,3 +100,7 @@ where
 #[cfg(test)]
 #[path = "tx_tests.rs"]
 mod tx_tests;
+
+#[cfg(test)]
+#[path = "tx_writers_tests.rs"]
+mod tx_writers_tests;

@@ -194,8 +194,8 @@ pub async fn recompute_recurring_schedule(
 
 /// Pool-level [`recompute_recurring_schedule`] in its own transaction, retrying on
 /// `SQLITE_BUSY_SNAPSHOT`. For callers with no ambient transaction — the foreground
-/// load/time-tick heal and the rule-add handoff — where the recompute is the whole
-/// write, not a step folded into a larger one.
+/// load/time-tick heal — where the recompute is the whole write, not a step folded
+/// into a larger one.
 pub async fn recompute_recurring_schedule_pool(pool: &SqlitePool, page_id: &str) -> AppResult<()> {
     crate::tx::retry_on_busy(|| async {
         let mut tx = pool.begin().await?;

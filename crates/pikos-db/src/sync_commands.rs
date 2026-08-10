@@ -216,35 +216,39 @@ async fn enable_sync_calendar(
     color: Option<&str>,
 ) -> AppResult<SyncCalendar> {
     let cal = fetch_calendar(pool, sync_calendar_id).await?;
-    let now = now_iso();
-    let mut tx = pool.begin().await?;
+    crate::tx::retry_on_busy(|| async {
+        let now = now_iso();
+        let mut tx = pool.begin().await?;
 
-    let folder_id = match &cal.folder_id {
-        // Re-enable: the de-flagged folder still exists → re-flag it in place so its
-        // surviving owned pages rejoin a live sync folder.
-        Some(fid) if folder_exists(&mut tx, fid).await? => {
-            sqlx::query("UPDATE folders SET is_external_calendar = 1, color = ?, updated_at = ? WHERE id = ?")
-                .bind(color)
-                .bind(&now)
-                .bind(fid)
-                .execute(&mut *tx)
-                .await?;
-            fid.clone()
-        }
-        _ => create_external_folder(&mut tx, &cal.display_name, color, &now).await?,
-    };
+        let folder_id = match &cal.folder_id {
+            // Re-enable: the de-flagged folder still exists → re-flag it in place so its
+            // surviving owned pages rejoin a live sync folder.
+            Some(fid) if folder_exists(&mut tx, fid).await? => {
+                sqlx::query("UPDATE folders SET is_external_calendar = 1, color = ?, updated_at = ? WHERE id = ?")
+                    .bind(color)
+                    .bind(&now)
+                    .bind(fid)
+                    .execute(&mut *tx)
+                    .await?;
+                fid.clone()
+            }
+            _ => create_external_folder(&mut tx, &cal.display_name, color, &now).await?,
+        };
 
-    sqlx::query(
-        "UPDATE sync_calendar SET enabled = 1, color = ?, folder_id = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(color)
-    .bind(&folder_id)
-    .bind(&now)
-    .bind(&cal.id)
-    .execute(&mut *tx)
+        sqlx::query(
+            "UPDATE sync_calendar SET enabled = 1, color = ?, folder_id = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(color)
+        .bind(&folder_id)
+        .bind(&now)
+        .bind(&cal.id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    })
     .await?;
-
-    tx.commit().await?;
     fetch_calendar(pool, sync_calendar_id).await
 }
 

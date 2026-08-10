@@ -508,38 +508,42 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
     // Transaction wraps the pages row + page_tags rows together. The FTS
     // index is driven from pages.tags text — if a crash splits these two
     // writes apart, search results don't match the join table.
-    let mut tx = pool.begin().await?;
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
 
-    sqlx::query(
-        "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
-         priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
-         links, parent_id, last_opened_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(&data.folder_id)
-    .bind(&data.title)
-    .bind(&data.subtitle)
-    .bind(&data.content)
-    .bind(data.content_text.as_deref().unwrap_or(""))
-    .bind(&data.status)
-    .bind(data.priority)
-    .bind(&tags_json)
-    .bind(sort_order)
-    .bind(&data.scheduled_start)
-    .bind(&data.scheduled_end)
-    .bind(&data.completed_at)
-    .bind(&links_json)
-    .bind(&data.parent_id)
-    .bind(&data.last_opened_at)
-    .bind(created_at)
-    .bind(updated_at)
-    .execute(&mut *tx)
+        sqlx::query(
+            "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
+             priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
+             links, parent_id, last_opened_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&data.folder_id)
+        .bind(&data.title)
+        .bind(&data.subtitle)
+        .bind(&data.content)
+        .bind(data.content_text.as_deref().unwrap_or(""))
+        .bind(&data.status)
+        .bind(data.priority)
+        .bind(&tags_json)
+        .bind(sort_order)
+        .bind(&data.scheduled_start)
+        .bind(&data.scheduled_end)
+        .bind(&data.completed_at)
+        .bind(&links_json)
+        .bind(&data.parent_id)
+        .bind(&data.last_opened_at)
+        .bind(created_at)
+        .bind(updated_at)
+        .execute(&mut *tx)
+        .await?;
+
+        upsert_page_tags_tx(&mut tx, &id, &data.tags).await?;
+
+        tx.commit().await?;
+        Ok::<(), AppError>(())
+    })
     .await?;
-
-    upsert_page_tags_tx(&mut tx, &id, &data.tags).await?;
-
-    tx.commit().await?;
 
     fetch_page(pool, &id).await
 }
@@ -751,54 +755,60 @@ pub async fn hard_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResu
 }
 
 pub async fn soft_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
-    let now = now_iso();
-    let mut tx = pool.begin().await?;
-    // Guard on deleted_at IS NULL (mirrors soft_delete_folder_impl) so a second
-    // delete can't overwrite the original trash timestamp and reset the
-    // auto-purge clock.
-    sqlx::query(
-        "UPDATE pages SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(&now)
-    .bind(&now)
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
-    // Tombstones the active sync link so the next poll doesn't resurrect the page.
-    // A detached link is skipped so it stays detached through trash → restore,
-    // rather than being wrongly reactivated. No-op for native pages.
-    sqlx::query("UPDATE page_sync SET sync_state = 'tombstoned' WHERE page_id = ? AND sync_state = 'active'")
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-    tx.commit().await?;
-    Ok(())
-}
-
-pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
-    let now = now_iso();
-    let mut tx = pool.begin().await?;
-    sqlx::query("UPDATE pages SET deleted_at = NULL, updated_at = ? WHERE id = ?")
+    crate::tx::retry_on_busy(|| async {
+        let now = now_iso();
+        let mut tx = pool.begin().await?;
+        // Guard on deleted_at IS NULL (mirrors soft_delete_folder_impl) so a second
+        // delete can't overwrite the original trash timestamp and reset the
+        // auto-purge clock.
+        sqlx::query(
+            "UPDATE pages SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+        )
+        .bind(&now)
         .bind(&now)
         .bind(id)
         .execute(&mut *tx)
         .await?;
-    // Resume syncing a restored page (only flips the tombstone this delete set;
-    // a detached page stays detached). No-op for native pages.
-    sqlx::query(
-        "UPDATE page_sync SET sync_state = 'active' WHERE page_id = ? AND sync_state = 'tombstoned'",
-    )
-    .bind(id)
-    .execute(&mut *tx)
-    .await?;
-    // Sets survive soft-delete, so a restored recurring head must re-derive
-    // (no-op if non-recurring). Skip active-synced heads — their cache is
-    // reconciler-owned, and recomputing here would clobber a pinned provider head.
-    if !is_active_synced(&mut tx, id).await? {
-        crate::recurrence_derive::recompute_recurring_schedule(&mut tx, id).await?;
-    }
-    tx.commit().await?;
-    Ok(())
+        // Tombstones the active sync link so the next poll doesn't resurrect the page.
+        // A detached link is skipped so it stays detached through trash → restore,
+        // rather than being wrongly reactivated. No-op for native pages.
+        sqlx::query("UPDATE page_sync SET sync_state = 'tombstoned' WHERE page_id = ? AND sync_state = 'active'")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
+}
+
+pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
+    crate::tx::retry_on_busy(|| async {
+        let now = now_iso();
+        let mut tx = pool.begin().await?;
+        sqlx::query("UPDATE pages SET deleted_at = NULL, updated_at = ? WHERE id = ?")
+            .bind(&now)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        // Resume syncing a restored page (only flips the tombstone this delete set;
+        // a detached page stays detached). No-op for native pages.
+        sqlx::query(
+            "UPDATE page_sync SET sync_state = 'active' WHERE page_id = ? AND sync_state = 'tombstoned'",
+        )
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+        // Sets survive soft-delete, so a restored recurring head must re-derive
+        // (no-op if non-recurring). Skip active-synced heads — their cache is
+        // reconciler-owned, and recomputing here would clobber a pinned provider head.
+        if !is_active_synced(&mut tx, id).await? {
+            crate::recurrence_derive::recompute_recurring_schedule(&mut tx, id).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 /// List pages with an optional filter (folder, status, priority, scheduled
@@ -916,35 +926,38 @@ pub async fn reorder_pages_impl(
     folder_id: Option<&str>,
     ordered_ids: &[String],
 ) -> AppResult<()> {
-    let mut tx = pool.begin().await?;
-    let now = now_iso();
-    for (i, id) in ordered_ids.iter().enumerate() {
-        match &folder_id {
-            Some(folder_id) => {
-                sqlx::query(
-                    "UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ? AND folder_id = ?",
-                )
-                .bind(i as i64)
-                .bind(&now)
-                .bind(id)
-                .bind(folder_id)
-                .execute(&mut *tx)
-                .await?;
-            }
-            None => {
-                sqlx::query(
-                    "UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ? AND folder_id IS NULL",
-                )
-                .bind(i as i64)
-                .bind(&now)
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
+    crate::tx::retry_on_busy(|| async {
+        let mut tx = pool.begin().await?;
+        let now = now_iso();
+        for (i, id) in ordered_ids.iter().enumerate() {
+            match &folder_id {
+                Some(folder_id) => {
+                    sqlx::query(
+                        "UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ? AND folder_id = ?",
+                    )
+                    .bind(i as i64)
+                    .bind(&now)
+                    .bind(id)
+                    .bind(folder_id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+                None => {
+                    sqlx::query(
+                        "UPDATE pages SET sort_order = ?, updated_at = ? WHERE id = ? AND folder_id IS NULL",
+                    )
+                    .bind(i as i64)
+                    .bind(&now)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
             }
         }
-    }
-    tx.commit().await?;
-    Ok(())
+        tx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 /// Bulk-set `status` (+ `completed_at`) for many pages in a single transaction.
@@ -1808,7 +1821,7 @@ pub async fn get_page(pool: &sqlx::SqlitePool, id: &str) -> AppResult<Option<Pag
 
 #[cfg(test)]
 #[path = "pages_tests.rs"]
-mod pages_tests;
+pub(crate) mod pages_tests;
 
 #[cfg(test)]
 #[path = "shadow_invariant_tests.rs"]

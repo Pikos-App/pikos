@@ -755,7 +755,7 @@ async fn tag_variants_collapse_to_one_lowercase_tag() {
 
 // ── CRUD round-trips ───────────────────────────────────────────────────
 
-fn new_page(title: &str) -> NewPage {
+pub(crate) fn new_page(title: &str) -> NewPage {
     NewPage {
         folder_id: None,
         title: title.into(),
