@@ -113,7 +113,7 @@ pub struct PageSyncRow {
     pub created_at: String,
 }
 
-// ─── Schedule-lock predicate (shared by the page/schedule/recurrence writers) ──
+// ─── Sync-state predicates (shared by the writers and the CLI) ────────────────
 //
 // Backs the locked-mirror guard so the same invariant holds for every
 // command-layer writer (UI and CLI alike). Sync's own writes use raw SQL and
@@ -155,6 +155,23 @@ pub(crate) async fn ensure_page_schedule_unlocked(
         ));
     }
     Ok(())
+}
+
+/// True when destroying this page would let the next poll re-create it: any
+/// `page_sync` row that isn't `detached`. Deliberately broader than
+/// [`page_schedule_locked`] — a tombstoned mirror is unlocked, but the FK cascade
+/// takes its tombstone along with the page, so the suppression dies with it and
+/// the event comes back.
+pub async fn hard_delete_would_resurrect(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+) -> crate::error::AppResult<bool> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM page_sync WHERE page_id = ? AND sync_state <> 'detached')",
+    )
+    .bind(page_id)
+    .fetch_one(pool)
+    .await?)
 }
 
 #[cfg(test)]

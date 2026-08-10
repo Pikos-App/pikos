@@ -744,8 +744,8 @@ pub async fn delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()
 
 /// Destroy a page outright, whatever its origin. The only unconditional `DELETE
 /// FROM pages` in the writer; [`delete_page_impl`] routes native pages here and
-/// diverts synced ones. Callers reaching it directly own the sync question — an
-/// active mirror destroyed here is recreated by the next poll.
+/// diverts synced ones. Callers reaching it directly own the sync question — see
+/// [`crate::sync::hard_delete_would_resurrect`].
 pub async fn hard_delete_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<()> {
     sqlx::query("DELETE FROM pages WHERE id = ?")
         .bind(id)

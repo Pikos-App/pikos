@@ -15,11 +15,12 @@ use sqlx::SqlitePool;
 
 use pikos_db::{
     complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl, get_page,
-    get_recurrence_rule_impl, hard_delete_page_impl, list_folders_impl, list_page_schedules_impl,
-    list_pages_impl, list_pages_today_impl, migration_versions, now_local_iso, open_pool,
-    search_pages_impl, soft_delete_page_impl, today_local, update_page_impl,
-    update_page_schedule_impl, AppError, CompleteRecurringInput, NewPage, NewPageSchedule,
-    NewRecurrenceRule, Page, PageFilter, PageSummary, PageUpdate, SearchResponse,
+    get_recurrence_rule_impl, hard_delete_page_impl, hard_delete_would_resurrect,
+    list_folders_impl, list_page_schedules_impl, list_pages_impl, list_pages_today_impl,
+    migration_versions, now_local_iso, open_pool, search_pages_impl, soft_delete_page_impl,
+    today_local, update_page_impl, update_page_schedule_impl, AppError, CompleteRecurringInput,
+    NewPage, NewPageSchedule, NewRecurrenceRule, Page, PageFilter, PageSummary, PageUpdate,
+    SearchResponse,
 };
 
 /// Debug builds address the `.dev` workspace the dev desktop app writes, mirroring
@@ -997,7 +998,11 @@ async fn run(cli: Cli) -> Result<(), CliError> {
         }
         CliCommand::Delete { id, hard } => {
             let page = require_page(&pool, &id).await?;
-            if hard && page.schedule_locked {
+            if hard
+                && hard_delete_would_resurrect(&pool, &id)
+                    .await
+                    .map_err(classify)?
+            {
                 return Err(CliError::conflict(
                     "This event comes from a connected calendar — delete it there, or disconnect the calendar first.",
                 ));

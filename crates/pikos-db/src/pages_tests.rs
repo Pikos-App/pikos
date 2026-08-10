@@ -1870,6 +1870,33 @@ async fn schedule_locked_true_only_for_active_synced_pages() {
 }
 
 #[tokio::test]
+async fn hard_delete_would_resurrect_covers_tombstoned_as_well_as_active() {
+    let pool = test_pool().await;
+    for id in ["native", "active", "detached", "tombstoned"] {
+        insert_test_page(&pool, TestPage::new(id, id)).await.unwrap();
+    }
+    mark_synced(&pool, "active", "active").await;
+    mark_synced(&pool, "detached", "detached").await;
+    mark_synced(&pool, "tombstoned", "tombstoned").await;
+
+    let resurrects = |id: &'static str| {
+        let pool = pool.clone();
+        async move {
+            crate::sync::hard_delete_would_resurrect(&pool, id)
+                .await
+                .unwrap()
+        }
+    };
+    assert!(!resurrects("native").await, "nothing upstream to restore it");
+    assert!(resurrects("active").await);
+    assert!(
+        resurrects("tombstoned").await,
+        "the cascade would take the tombstone that suppresses it"
+    );
+    assert!(!resurrects("detached").await, "the link is severed");
+}
+
+#[tokio::test]
 async fn read_only_mirror_metadata_surfaces_on_page_and_summary() {
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("synced", "Event"))

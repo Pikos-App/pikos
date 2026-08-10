@@ -337,6 +337,23 @@ async fn hard_delete_refuses_on_an_active_synced_page() {
 }
 
 #[tokio::test]
+async fn hard_delete_refuses_on_a_tombstoned_synced_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup")]).await;
+    mark_synced(dbs, &ids[0], "tombstoned").await;
+
+    // The tombstone is what suppresses the mirror; cascading it away un-suppresses it.
+    let out = cli(dbs, &["delete", &ids[0], "--hard", "--yes", "--json"]);
+    assert_eq!(code(&out), 4);
+    assert_eq!(page_row_count(dbs, &ids[0]).await, 1);
+    assert_eq!(
+        sync_state(dbs, &ids[0]).await.as_deref(),
+        Some("tombstoned")
+    );
+}
+
+#[tokio::test]
 async fn hard_delete_destroys_a_detached_page() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
