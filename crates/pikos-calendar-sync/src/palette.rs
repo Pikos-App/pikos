@@ -58,7 +58,8 @@ fn arc(a: f32, b: f32) -> f32 {
 
 fn parse_hex(hex: &str) -> Option<(f32, f32, f32)> {
     let s = hex.strip_prefix('#')?;
-    if s.len() != 6 {
+    // Apple's `calendar-color` is `#RRGGBBAA` — the trailing alpha pair carries no hue.
+    if s.len() != 6 && s.len() != 8 {
         return None;
     }
     let channel = |i: usize| u8::from_str_radix(s.get(i..i + 2)?, 16).ok();
@@ -114,6 +115,14 @@ mod tests {
         assert_eq!(nearest("#8e24aa"), Some("#C3B8E8")); // Grape     → Lavender
         assert_eq!(nearest("#7986cb"), Some("#A6C8E8")); // Lavender  → Sky
         assert_eq!(nearest("#33b679"), Some("#A8CDB4")); // Sage      → Sage
+    }
+
+    #[test]
+    fn caldav_rgba_matches_on_its_rgb_hue() {
+        // Apple's form, and what our own recorded radicale fixture carries.
+        assert_eq!(nearest("#FF5733FF"), Some("#E8A6A1"));
+        assert_eq!(nearest("#FF573300"), nearest("#FF5733"));
+        assert_eq!(nearest("#616161FF"), None); // grey stays hueless
     }
 
     #[test]
