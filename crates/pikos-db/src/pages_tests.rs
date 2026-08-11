@@ -1720,7 +1720,10 @@ async fn reschedule_virtual_on_a_detached_series_writes_an_override_row() {
     .await
     .unwrap();
 
-    assert!(result.clone.is_none(), "no clone — the occurrence stays in-series");
+    assert!(
+        result.clone.is_none(),
+        "no clone — the occurrence stays in-series"
+    );
     assert!(
         result.rule_exdates.is_empty(),
         "no exdate — the override row is what excludes the date"
@@ -1742,7 +1745,10 @@ async fn reschedule_virtual_on_a_detached_series_writes_an_override_row() {
     assert_eq!(row.1, "2026-06-11T14:00:00");
     assert_eq!(row.2.as_deref(), Some("2026-06-11T15:00:00"));
     assert_eq!(row.3, "2026-06-10T09:00:00");
-    assert_eq!(row.4, None, "floating — the user asserted a device-local time");
+    assert_eq!(
+        row.4, None,
+        "floating — the user asserted a device-local time"
+    );
 
     // The head skips the moved date without an exdate: the derivation excludes
     // every materialized original_date.
