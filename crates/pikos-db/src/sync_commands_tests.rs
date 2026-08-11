@@ -251,7 +251,11 @@ async fn disable_clears_enabled_before_severing_any_page() {
         .fetch_all(&pool)
         .await
         .unwrap();
-    assert_eq!(seen, vec![0], "already disabled when the first page was cut");
+    assert_eq!(
+        seen,
+        vec![0],
+        "already disabled when the first page was cut"
+    );
 }
 
 #[tokio::test]

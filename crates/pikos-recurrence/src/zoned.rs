@@ -147,16 +147,23 @@ pub fn expand_range_in_zone(
     let all_day = WallClock::parse(scheduled_start).is_none_or(|w| w.is_all_day());
 
     if all_day {
-        return expand_range(rrule, scheduled_start, scheduled_end, range_start, range_end, exdates)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|occ| ZonedOccurrence {
-                original_date: occ.original_date,
-                utc_start: occ.scheduled_start.clone(),
-                scheduled_start: occ.scheduled_start,
-                scheduled_end: occ.scheduled_end,
-            })
-            .collect();
+        return expand_range(
+            rrule,
+            scheduled_start,
+            scheduled_end,
+            range_start,
+            range_end,
+            exdates,
+        )
+        .unwrap_or_default()
+        .into_iter()
+        .map(|occ| ZonedOccurrence {
+            original_date: occ.original_date,
+            utc_start: occ.scheduled_start.clone(),
+            scheduled_start: occ.scheduled_start,
+            scheduled_end: occ.scheduled_end,
+        })
+        .collect();
     }
 
     let to_event_wall = |viewer_iso: &str| -> Option<String> {
@@ -168,26 +175,33 @@ pub fn expand_range_in_zone(
     };
 
     let normalized = normalize_until_to_zone(rrule, event_zone);
-    expand_range(&normalized, scheduled_start, scheduled_end, &rs, &re, exdates)
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|occ| {
-            let utc_start = wall_clock_to_utc(event_zone, parse_naive(&occ.scheduled_start)?)?;
-            let scheduled_end = match &occ.scheduled_end {
-                Some(end) => Some(format_datetime(utc_to_wall_clock(
-                    viewer_zone,
-                    wall_clock_to_utc(event_zone, parse_naive(end)?)?,
-                )?)),
-                None => None,
-            };
-            Some(ZonedOccurrence {
-                original_date: occ.original_date,
-                scheduled_start: format_datetime(utc_to_wall_clock(viewer_zone, utc_start)?),
-                scheduled_end,
-                utc_start: format!("{}Z", format_datetime(utc_start)),
-            })
+    expand_range(
+        &normalized,
+        scheduled_start,
+        scheduled_end,
+        &rs,
+        &re,
+        exdates,
+    )
+    .unwrap_or_default()
+    .into_iter()
+    .filter_map(|occ| {
+        let utc_start = wall_clock_to_utc(event_zone, parse_naive(&occ.scheduled_start)?)?;
+        let scheduled_end = match &occ.scheduled_end {
+            Some(end) => Some(format_datetime(utc_to_wall_clock(
+                viewer_zone,
+                wall_clock_to_utc(event_zone, parse_naive(end)?)?,
+            )?)),
+            None => None,
+        };
+        Some(ZonedOccurrence {
+            original_date: occ.original_date,
+            scheduled_start: format_datetime(utc_to_wall_clock(viewer_zone, utc_start)?),
+            scheduled_end,
+            utc_start: format!("{}Z", format_datetime(utc_start)),
         })
-        .collect()
+    })
+    .collect()
 }
 
 #[cfg(test)]
@@ -207,9 +221,18 @@ mod tests {
 
     #[test]
     fn round_trips_standard_and_daylight_time() {
-        assert_eq!(wall_clock_to_utc(NY, dt("2026-01-15T09:00:00")), Some(dt("2026-01-15T14:00:00")));
-        assert_eq!(wall_clock_to_utc(NY, dt("2026-07-15T09:00:00")), Some(dt("2026-07-15T13:00:00")));
-        assert_eq!(utc_to_wall_clock(NY, dt("2026-07-15T13:00:00")), Some(dt("2026-07-15T09:00:00")));
+        assert_eq!(
+            wall_clock_to_utc(NY, dt("2026-01-15T09:00:00")),
+            Some(dt("2026-01-15T14:00:00"))
+        );
+        assert_eq!(
+            wall_clock_to_utc(NY, dt("2026-07-15T09:00:00")),
+            Some(dt("2026-07-15T13:00:00"))
+        );
+        assert_eq!(
+            utc_to_wall_clock(NY, dt("2026-07-15T13:00:00")),
+            Some(dt("2026-07-15T09:00:00"))
+        );
     }
 
     #[test]
@@ -237,7 +260,10 @@ mod tests {
 
     #[test]
     fn unknown_zone_is_none() {
-        assert_eq!(wall_clock_to_utc("Not/AZone", dt("2026-01-15T09:00:00")), None);
+        assert_eq!(
+            wall_clock_to_utc("Not/AZone", dt("2026-01-15T09:00:00")),
+            None
+        );
     }
 
     #[test]
@@ -250,7 +276,10 @@ mod tests {
             normalize_until_to_zone("FREQ=DAILY;UNTIL=20260701", NY),
             "FREQ=DAILY;UNTIL=20260701"
         );
-        assert_eq!(normalize_until_to_zone("FREQ=DAILY;COUNT=3", NY), "FREQ=DAILY;COUNT=3");
+        assert_eq!(
+            normalize_until_to_zone("FREQ=DAILY;COUNT=3", NY),
+            "FREQ=DAILY;COUNT=3"
+        );
     }
 
     #[test]
@@ -268,7 +297,12 @@ mod tests {
         let starts: Vec<&str> = occ.iter().map(|o| o.scheduled_start.as_str()).collect();
         assert_eq!(
             starts,
-            ["2026-02-25T06:00:00", "2026-03-04T06:00:00", "2026-03-11T06:00:00", "2026-03-18T06:00:00"]
+            [
+                "2026-02-25T06:00:00",
+                "2026-03-04T06:00:00",
+                "2026-03-11T06:00:00",
+                "2026-03-18T06:00:00"
+            ]
         );
         let utcs: Vec<&str> = occ.iter().map(|o| o.utc_start.as_str()).collect();
         assert_eq!(
@@ -297,7 +331,14 @@ mod tests {
             &[],
         );
         let starts: Vec<&str> = occ.iter().map(|o| o.scheduled_start.as_str()).collect();
-        assert_eq!(starts, ["2026-03-04T07:00:00", "2026-03-11T06:00:00", "2026-03-18T06:00:00"]);
+        assert_eq!(
+            starts,
+            [
+                "2026-03-04T07:00:00",
+                "2026-03-11T06:00:00",
+                "2026-03-18T06:00:00"
+            ]
+        );
     }
 
     #[test]
@@ -313,7 +354,14 @@ mod tests {
             &[],
         );
         let starts: Vec<&str> = occ.iter().map(|o| o.scheduled_start.as_str()).collect();
-        assert_eq!(starts, ["2026-01-14T11:00:00", "2026-01-15T11:00:00", "2026-01-16T11:00:00"]);
+        assert_eq!(
+            starts,
+            [
+                "2026-01-14T11:00:00",
+                "2026-01-15T11:00:00",
+                "2026-01-16T11:00:00"
+            ]
+        );
         let dates: Vec<&str> = occ.iter().map(|o| o.original_date.as_str()).collect();
         assert_eq!(dates, ["2026-01-13", "2026-01-14", "2026-01-15"]);
     }

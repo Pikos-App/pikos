@@ -1537,11 +1537,16 @@ async fn reschedule_virtual_clones_schedules_and_exdates_in_one_call() {
     .unwrap();
 
     // Clone is an independent live page at the new time, content copied.
-    let clone = result.clone.expect("a virtual occurrence materializes a clone");
+    let clone = result
+        .clone
+        .expect("a virtual occurrence materializes a clone");
     assert_eq!(clone.status, "not_started");
     assert_eq!(clone.title, "Daily standup");
     assert_eq!(clone.tags, vec!["work".to_string()]);
-    assert_eq!(clone.scheduled_start.as_deref(), Some("2026-06-11T14:00:00"));
+    assert_eq!(
+        clone.scheduled_start.as_deref(),
+        Some("2026-06-11T14:00:00")
+    );
     assert!(clone.completed_at.is_none());
 
     // Original date MERGED into existing exdates, not written as a replacement.
@@ -1659,11 +1664,12 @@ async fn reschedule_virtual_moves_an_existing_override_row_in_place() {
     .await
     .unwrap();
 
-    let after: (String, Option<String>) =
-        sqlx::query_as("SELECT scheduled_start, scheduled_end FROM page_schedules WHERE id = 'ovr'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let after: (String, Option<String>) = sqlx::query_as(
+        "SELECT scheduled_start, scheduled_end FROM page_schedules WHERE id = 'ovr'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(after.0, "2026-06-14");
     assert_eq!(after.1, None);
 }
@@ -1873,7 +1879,9 @@ async fn schedule_locked_true_only_for_active_synced_pages() {
 async fn hard_delete_would_resurrect_covers_tombstoned_as_well_as_active() {
     let pool = test_pool().await;
     for id in ["native", "active", "detached", "tombstoned"] {
-        insert_test_page(&pool, TestPage::new(id, id)).await.unwrap();
+        insert_test_page(&pool, TestPage::new(id, id))
+            .await
+            .unwrap();
     }
     mark_synced(&pool, "active", "active").await;
     mark_synced(&pool, "detached", "detached").await;
@@ -1887,7 +1895,10 @@ async fn hard_delete_would_resurrect_covers_tombstoned_as_well_as_active() {
                 .unwrap()
         }
     };
-    assert!(!resurrects("native").await, "nothing upstream to restore it");
+    assert!(
+        !resurrects("native").await,
+        "nothing upstream to restore it"
+    );
     assert!(resurrects("active").await);
     assert!(
         resurrects("tombstoned").await,

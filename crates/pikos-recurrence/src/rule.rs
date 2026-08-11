@@ -339,7 +339,9 @@ impl ParsedRule {
         // WEEKLY BYMONTHDAY has no rrule.js-defined meaning worth mimicking
         // (RFC 5545 forbids the combination) — stay loud rather than guess.
         if freq == Freq::Weekly && !bymonthday.is_empty() {
-            return Err(RecurrenceError::Unsupported("BYMONTHDAY for FREQ=WEEKLY".into()));
+            return Err(RecurrenceError::Unsupported(
+                "BYMONTHDAY for FREQ=WEEKLY".into(),
+            ));
         }
         Ok(ParsedRule {
             freq,

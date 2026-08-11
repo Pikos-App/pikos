@@ -61,17 +61,26 @@ fn accepts_in_envelope() {
 #[test]
 fn yearly_bymonth_byday_ordinal_enumerates() {
     // The VTIMEZONE / US-holiday shape the old envelope rejected.
-    let thanksgiving = list_occurrences("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH", "2026-01-01T09:00:00", 3);
+    let thanksgiving =
+        list_occurrences("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH", "2026-01-01T09:00:00", 3);
     assert_eq!(
         thanksgiving,
-        ["2026-11-26T09:00:00", "2027-11-25T09:00:00", "2028-11-23T09:00:00"]
+        [
+            "2026-11-26T09:00:00",
+            "2027-11-25T09:00:00",
+            "2028-11-23T09:00:00"
+        ]
     );
 }
 
 #[test]
 fn yearly_bymonth_bymonthday_enumerates() {
     // "15 March, annually" — the common provider rule C37 named.
-    let dates = list_occurrences("FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15", "2026-01-01T09:00:00", 2);
+    let dates = list_occurrences(
+        "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15",
+        "2026-01-01T09:00:00",
+        2,
+    );
     assert_eq!(dates, ["2026-03-15T09:00:00", "2027-03-15T09:00:00"]);
 }
 
@@ -95,14 +104,22 @@ fn weekly_bymonth_filters() {
     let dates = list_occurrences("FREQ=WEEKLY;BYDAY=MO;BYMONTH=6,7", "2026-05-01T09:00:00", 3);
     assert_eq!(
         dates,
-        ["2026-06-01T09:00:00", "2026-06-08T09:00:00", "2026-06-15T09:00:00"]
+        [
+            "2026-06-01T09:00:00",
+            "2026-06-08T09:00:00",
+            "2026-06-15T09:00:00"
+        ]
     );
 }
 
 #[test]
 fn monthly_byday_bymonthday_intersects() {
     // Friday the 13th: BYMONTHDAY limits BYDAY (RFC 5545), not either-or.
-    let dates = list_occurrences("FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13", "2026-01-01T09:00:00", 2);
+    let dates = list_occurrences(
+        "FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13",
+        "2026-01-01T09:00:00",
+        2,
+    );
     assert_eq!(dates, ["2026-02-13T09:00:00", "2026-03-13T09:00:00"]);
 }
 
@@ -133,6 +150,10 @@ fn count_and_until_run_to_the_tighter_bound() {
     );
     assert_eq!(
         by_until,
-        ["2026-03-02T09:00:00", "2026-03-03T09:00:00", "2026-03-04T09:00:00"]
+        [
+            "2026-03-02T09:00:00",
+            "2026-03-03T09:00:00",
+            "2026-03-04T09:00:00"
+        ]
     );
 }

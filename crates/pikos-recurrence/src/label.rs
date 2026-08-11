@@ -46,7 +46,10 @@ fn ordinal(n: i32) -> String {
     let suffix = if teen {
         "th"
     } else {
-        ["th", "st", "nd", "rd"].get((abs % 10) as usize).copied().unwrap_or("th")
+        ["th", "st", "nd", "rd"]
+            .get((abs % 10) as usize)
+            .copied()
+            .unwrap_or("th")
     };
     if n < 0 {
         format!("{abs}{suffix} last")
@@ -131,9 +134,8 @@ pub fn rrule_to_label(rrule: &str) -> Option<String> {
     // Base: "every [N] <unit>" — except a month-scoped MONTHLY/YEARLY at
     // interval 1, which reads "every January and July".
     let mut out = "every".to_string();
-    let month_scoped = !rule.bymonth.is_empty()
-        && matches!(rule.freq, Freq::Monthly | Freq::Yearly)
-        && !plural;
+    let month_scoped =
+        !rule.bymonth.is_empty() && matches!(rule.freq, Freq::Monthly | Freq::Yearly) && !plural;
     if month_scoped {
         out.push(' ');
         out.push_str(&month_list(&rule.bymonth)?);

@@ -1276,38 +1276,37 @@ async fn complete_recurring_page_once(
     // may still supply one — its moved override renders as a completable block
     // whose original_date is in the head's exclusion union, so the head path could
     // never complete it.
-    let (occurrence_date, occurrence_start, occurrence_end) = if head.schedule_locked
-        || data.occurrence_date.is_some()
-    {
-        let occurrence_date = data.occurrence_date.clone().ok_or_else(|| {
-            AppError::Conflict(
-                "Synced occurrence completion requires an occurrence date.".to_string(),
+    let (occurrence_date, occurrence_start, occurrence_end) =
+        if head.schedule_locked || data.occurrence_date.is_some() {
+            let occurrence_date = data.occurrence_date.clone().ok_or_else(|| {
+                AppError::Conflict(
+                    "Synced occurrence completion requires an occurrence date.".to_string(),
+                )
+            })?;
+            let start = data.scheduled_start.clone().ok_or_else(|| {
+                AppError::Conflict(
+                    "Synced occurrence completion requires the occurrence start.".to_string(),
+                )
+            })?;
+            if !synced_occurrence_is_valid(&mut tx, &data.page_id, &occurrence_date).await? {
+                return Err(AppError::Conflict(
+                    "Occurrence is not part of this synced series.".to_string(),
+                ));
+            }
+            (occurrence_date, start, data.scheduled_end.clone())
+        } else {
+            let occurrence_start = head.scheduled_start.clone().ok_or_else(|| {
+                AppError::Conflict(
+                    "Recurring page has no scheduled occurrence to complete.".to_string(),
+                )
+            })?;
+            let occurrence_date = occurrence_start[..occurrence_start.len().min(10)].to_string();
+            (
+                occurrence_date,
+                occurrence_start,
+                head.scheduled_end.clone(),
             )
-        })?;
-        let start = data.scheduled_start.clone().ok_or_else(|| {
-            AppError::Conflict(
-                "Synced occurrence completion requires the occurrence start.".to_string(),
-            )
-        })?;
-        if !synced_occurrence_is_valid(&mut tx, &data.page_id, &occurrence_date).await? {
-            return Err(AppError::Conflict(
-                "Occurrence is not part of this synced series.".to_string(),
-            ));
-        }
-        (occurrence_date, start, data.scheduled_end.clone())
-    } else {
-        let occurrence_start = head.scheduled_start.clone().ok_or_else(|| {
-            AppError::Conflict(
-                "Recurring page has no scheduled occurrence to complete.".to_string(),
-            )
-        })?;
-        let occurrence_date = occurrence_start[..occurrence_start.len().min(10)].to_string();
-        (
-            occurrence_date,
-            occurrence_start,
-            head.scheduled_end.clone(),
-        )
-    };
+        };
 
     // Idempotency: a double-click or post-`SQLITE_BUSY_SNAPSHOT` retry must not mint
     // a second clone for the same occurrence. A live clone → return it unchanged;
@@ -1739,7 +1738,8 @@ async fn reschedule_virtual_occurrence_once(
         .execute(&mut *tx)
         .await?;
         // Nothing merged — the original date was already excluded by this very row.
-        let rule_exdates = crate::schedules::merge_rule_exdates_tx(&mut tx, &data.rule_id, &[]).await?;
+        let rule_exdates =
+            crate::schedules::merge_rule_exdates_tx(&mut tx, &data.rule_id, &[]).await?;
         crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id).await?;
         tx.commit().await?;
         return Ok(RescheduleVirtualResult {

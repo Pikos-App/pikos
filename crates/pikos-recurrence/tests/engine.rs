@@ -13,7 +13,14 @@ fn ex(dates: &[&str]) -> Vec<String> {
     dates.iter().map(|s| s.to_string()).collect()
 }
 
-fn expand(rrule: &str, start: &str, end: Option<&str>, rs: &str, re: &str, exdates: &[String]) -> Vec<Occurrence> {
+fn expand(
+    rrule: &str,
+    start: &str,
+    end: Option<&str>,
+    rs: &str,
+    re: &str,
+    exdates: &[String],
+) -> Vec<Occurrence> {
     expand_range(rrule, start, end, rs, re, exdates).unwrap()
 }
 
@@ -175,7 +182,13 @@ fn no_occurrences_before_dtstart() {
 #[test]
 fn next_monday_after_given_date() {
     assert_eq!(
-        next("FREQ=WEEKLY;BYDAY=MO", "2026-03-02T09:00:00", "2026-03-02T00:00:00", &[]).as_deref(),
+        next(
+            "FREQ=WEEKLY;BYDAY=MO",
+            "2026-03-02T09:00:00",
+            "2026-03-02T00:00:00",
+            &[]
+        )
+        .as_deref(),
         Some("2026-03-09T09:00:00")
     );
 }
@@ -183,7 +196,13 @@ fn next_monday_after_given_date() {
 #[test]
 fn skips_missed_occurrences() {
     assert_eq!(
-        next("FREQ=WEEKLY;BYDAY=MO", "2026-03-02T09:00:00", "2026-03-18T00:00:00", &[]).as_deref(),
+        next(
+            "FREQ=WEEKLY;BYDAY=MO",
+            "2026-03-02T09:00:00",
+            "2026-03-18T00:00:00",
+            &[]
+        )
+        .as_deref(),
         Some("2026-03-23T09:00:00")
     );
 }
@@ -191,7 +210,13 @@ fn skips_missed_occurrences() {
 #[test]
 fn next_handles_all_day() {
     assert_eq!(
-        next("FREQ=WEEKLY;BYDAY=FR", "2026-03-06", "2026-03-06T00:00:00", &[]).as_deref(),
+        next(
+            "FREQ=WEEKLY;BYDAY=FR",
+            "2026-03-06",
+            "2026-03-06T00:00:00",
+            &[]
+        )
+        .as_deref(),
         Some("2026-03-13")
     );
 }
@@ -199,7 +224,13 @@ fn next_handles_all_day() {
 #[test]
 fn next_handles_daily() {
     assert_eq!(
-        next("FREQ=DAILY", "2026-03-02T08:00:00", "2026-03-05T00:00:00", &[]).as_deref(),
+        next(
+            "FREQ=DAILY",
+            "2026-03-02T08:00:00",
+            "2026-03-05T00:00:00",
+            &[]
+        )
+        .as_deref(),
         Some("2026-03-06T08:00:00")
     );
 }
@@ -220,7 +251,12 @@ fn none_when_until_has_passed() {
 #[test]
 fn none_when_count_exhausted_weekly() {
     assert_eq!(
-        next("FREQ=WEEKLY;BYDAY=MO;COUNT=2", "2026-03-02T09:00:00", "2026-03-09T23:59:00", &[]),
+        next(
+            "FREQ=WEEKLY;BYDAY=MO;COUNT=2",
+            "2026-03-02T09:00:00",
+            "2026-03-09T23:59:00",
+            &[]
+        ),
         None
     );
 }
@@ -228,7 +264,12 @@ fn none_when_count_exhausted_weekly() {
 #[test]
 fn none_when_count_1_daily() {
     assert_eq!(
-        next("FREQ=DAILY;COUNT=1", "2026-03-02T09:00:00", "2026-03-02T00:00:00", &[]),
+        next(
+            "FREQ=DAILY;COUNT=1",
+            "2026-03-02T09:00:00",
+            "2026-03-02T00:00:00",
+            &[]
+        ),
         None
     );
 }
@@ -236,8 +277,13 @@ fn none_when_count_1_daily() {
 #[test]
 fn next_within_count_bound() {
     assert_eq!(
-        next("FREQ=WEEKLY;BYDAY=MO;COUNT=3", "2026-03-02T09:00:00", "2026-03-05T00:00:00", &[])
-            .as_deref(),
+        next(
+            "FREQ=WEEKLY;BYDAY=MO;COUNT=3",
+            "2026-03-02T09:00:00",
+            "2026-03-05T00:00:00",
+            &[]
+        )
+        .as_deref(),
         Some("2026-03-09T09:00:00")
     );
 }
@@ -245,7 +291,13 @@ fn next_within_count_bound() {
 #[test]
 fn final_occurrence_within_count() {
     assert_eq!(
-        next("FREQ=DAILY;COUNT=3", "2026-03-02T09:00:00", "2026-03-03T00:00:00", &[]).as_deref(),
+        next(
+            "FREQ=DAILY;COUNT=3",
+            "2026-03-02T09:00:00",
+            "2026-03-03T00:00:00",
+            &[]
+        )
+        .as_deref(),
         Some("2026-03-04T09:00:00")
     );
 }
@@ -253,8 +305,13 @@ fn final_occurrence_within_count() {
 #[test]
 fn skips_single_exdate() {
     assert_eq!(
-        next("FREQ=DAILY", "2026-03-02T09:00:00", "2026-03-02T00:00:00", &ex(&["2026-03-03"]))
-            .as_deref(),
+        next(
+            "FREQ=DAILY",
+            "2026-03-02T09:00:00",
+            "2026-03-02T00:00:00",
+            &ex(&["2026-03-03"])
+        )
+        .as_deref(),
         Some("2026-03-04T09:00:00")
     );
 }
@@ -303,7 +360,13 @@ fn none_when_every_remaining_count_occurrence_excluded() {
 #[test]
 fn completing_same_day_returns_next_week() {
     assert_eq!(
-        next("FREQ=WEEKLY;BYDAY=MO", "2026-03-02T09:00:00", "2026-03-02T08:00:00", &[]).as_deref(),
+        next(
+            "FREQ=WEEKLY;BYDAY=MO",
+            "2026-03-02T09:00:00",
+            "2026-03-02T08:00:00",
+            &[]
+        )
+        .as_deref(),
         Some("2026-03-09T09:00:00")
     );
 }
@@ -312,12 +375,18 @@ fn completing_same_day_returns_next_week() {
 
 #[test]
 fn snaps_sunday_anchor_to_mwf_rule() {
-    assert_eq!(snap_anchor_to_rule("FREQ=WEEKLY;BYDAY=MO,WE,FR", "2026-06-07"), "2026-06-08");
+    assert_eq!(
+        snap_anchor_to_rule("FREQ=WEEKLY;BYDAY=MO,WE,FR", "2026-06-07"),
+        "2026-06-08"
+    );
 }
 
 #[test]
 fn leaves_satisfying_anchor() {
-    assert_eq!(snap_anchor_to_rule("FREQ=WEEKLY;BYDAY=MO,WE,FR", "2026-06-08"), "2026-06-08");
+    assert_eq!(
+        snap_anchor_to_rule("FREQ=WEEKLY;BYDAY=MO,WE,FR", "2026-06-08"),
+        "2026-06-08"
+    );
 }
 
 #[test]
@@ -330,8 +399,14 @@ fn snap_preserves_wall_clock_time() {
 
 #[test]
 fn snap_leaves_daily_and_monthly_anchor() {
-    assert_eq!(snap_anchor_to_rule("FREQ=DAILY", "2026-06-07"), "2026-06-07");
-    assert_eq!(snap_anchor_to_rule("FREQ=MONTHLY", "2026-06-07"), "2026-06-07");
+    assert_eq!(
+        snap_anchor_to_rule("FREQ=DAILY", "2026-06-07"),
+        "2026-06-07"
+    );
+    assert_eq!(
+        snap_anchor_to_rule("FREQ=MONTHLY", "2026-06-07"),
+        "2026-06-07"
+    );
 }
 
 #[test]
@@ -344,7 +419,10 @@ fn snap_unchanged_when_rule_yields_nothing() {
 
 #[test]
 fn snap_unchanged_for_unparseable_rule() {
-    assert_eq!(snap_anchor_to_rule("not-a-rule", "2026-06-07"), "2026-06-07");
+    assert_eq!(
+        snap_anchor_to_rule("not-a-rule", "2026-06-07"),
+        "2026-06-07"
+    );
 }
 
 // ─── align_weekly_rule_to_anchor ────────────────────────────────────────────
@@ -384,9 +462,18 @@ fn align_leaves_multi_day_nonweekly_and_no_byday() {
         align_weekly_rule_to_anchor("FREQ=WEEKLY;BYDAY=MO,WE,FR", "2099-01-06"),
         "FREQ=WEEKLY;BYDAY=MO,WE,FR"
     );
-    assert_eq!(align_weekly_rule_to_anchor("FREQ=DAILY", "2099-01-07"), "FREQ=DAILY");
-    assert_eq!(align_weekly_rule_to_anchor("FREQ=MONTHLY", "2099-01-07"), "FREQ=MONTHLY");
-    assert_eq!(align_weekly_rule_to_anchor("FREQ=WEEKLY", "2099-01-07"), "FREQ=WEEKLY");
+    assert_eq!(
+        align_weekly_rule_to_anchor("FREQ=DAILY", "2099-01-07"),
+        "FREQ=DAILY"
+    );
+    assert_eq!(
+        align_weekly_rule_to_anchor("FREQ=MONTHLY", "2099-01-07"),
+        "FREQ=MONTHLY"
+    );
+    assert_eq!(
+        align_weekly_rule_to_anchor("FREQ=WEEKLY", "2099-01-07"),
+        "FREQ=WEEKLY"
+    );
 }
 
 // ─── compute_next_end ───────────────────────────────────────────────────────
@@ -470,7 +557,10 @@ fn builds_expected_rrule_strings() {
         byweekday: Some(vec![0, 2, 4]),
         ..Default::default()
     };
-    assert_eq!(build_rrule(&weekly), "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE,FR");
+    assert_eq!(
+        build_rrule(&weekly),
+        "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE,FR"
+    );
 
     let until = RecurrenceOptions {
         freq: Some(Freq::Weekly),
@@ -478,7 +568,10 @@ fn builds_expected_rrule_strings() {
         until: Some("2026-06-15".to_string()),
         ..Default::default()
     };
-    assert_eq!(build_rrule(&until), "FREQ=WEEKLY;INTERVAL=1;UNTIL=20260615T235959");
+    assert_eq!(
+        build_rrule(&until),
+        "FREQ=WEEKLY;INTERVAL=1;UNTIL=20260615T235959"
+    );
 
     let counted = RecurrenceOptions {
         freq: Some(Freq::Daily),
@@ -500,7 +593,11 @@ fn roundtrips_parse_build() {
     ] {
         let parsed = parse_rrule(original).unwrap();
         let rebuilt = build_rrule(&parsed);
-        assert_eq!(parse_rrule(&rebuilt).unwrap(), parsed, "roundtrip for {original}");
+        assert_eq!(
+            parse_rrule(&rebuilt).unwrap(),
+            parsed,
+            "roundtrip for {original}"
+        );
     }
 }
 
@@ -534,7 +631,11 @@ fn missed_empty_when_range_inverted() {
 
 #[test]
 fn lists_occurrences_from_dtstart() {
-    let occ = list_occurrences("FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=4", "2026-03-02T09:00:00", 100);
+    let occ = list_occurrences(
+        "FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=4",
+        "2026-03-02T09:00:00",
+        100,
+    );
     assert_eq!(
         occ,
         [

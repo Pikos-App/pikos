@@ -231,13 +231,11 @@ async fn release_credential(keychain: &Keychain, account_id: &str, provider: &st
 /// Every account, dormant ones included — a dormant row's credential should
 /// already be gone, but a wipe is the last chance to be sure.
 async fn all_accounts(pool: &SqlitePool) -> AppResult<Vec<(String, String, bool)>> {
-    Ok(
-        sqlx::query_as::<_, (String, String, bool)>(
-            "SELECT id, provider, disconnected FROM sync_account",
-        )
-        .fetch_all(pool)
-        .await?,
+    Ok(sqlx::query_as::<_, (String, String, bool)>(
+        "SELECT id, provider, disconnected FROM sync_account",
     )
+    .fetch_all(pool)
+    .await?)
 }
 
 async fn provider_of(pool: &SqlitePool, account_id: &str) -> AppResult<Option<String>> {

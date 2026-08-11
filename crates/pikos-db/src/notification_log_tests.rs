@@ -747,7 +747,13 @@ async fn overdue_count_ignores_a_synced_occurrence_before_the_connect_day() {
     // Yesterday's 20:00 occurrence is in the window for both series, but for the
     // calendar connected today it predates the user — a fresh connect must not
     // open its series already overdue.
-    insert_page(&pool, "connected_today", "not_started", "2026-05-01T00:00:00").await;
+    insert_page(
+        &pool,
+        "connected_today",
+        "not_started",
+        "2026-05-01T00:00:00",
+    )
+    .await;
     insert_rule(&pool, "connected_today", "2026-05-01T20:00:00").await;
     crate::pool::insert_test_page_sync_connected_at(
         &pool,
@@ -758,7 +764,13 @@ async fn overdue_count_ignores_a_synced_occurrence_before_the_connect_day() {
     .await
     .unwrap();
 
-    insert_page(&pool, "connected_before", "not_started", "2026-05-01T00:00:00").await;
+    insert_page(
+        &pool,
+        "connected_before",
+        "not_started",
+        "2026-05-01T00:00:00",
+    )
+    .await;
     insert_rule(&pool, "connected_before", "2026-05-01T20:00:00").await;
     crate::pool::insert_test_page_sync(&pool, "connected_before", "active")
         .await
@@ -767,7 +779,10 @@ async fn overdue_count_ignores_a_synced_occurrence_before_the_connect_day() {
     let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
         .await
         .unwrap();
-    assert_eq!(n, 1, "only the series connected before the occurrence counts");
+    assert_eq!(
+        n, 1,
+        "only the series connected before the occurrence counts"
+    );
 }
 
 #[tokio::test]

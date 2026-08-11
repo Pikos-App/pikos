@@ -20,9 +20,8 @@ struct Case {
 
 #[test]
 fn matches_rrule_js_goldens() {
-    let fixtures: Fixtures =
-        serde_json::from_str(include_str!("fixtures/rrule_js_goldens.json"))
-            .expect("fixtures parse");
+    let fixtures: Fixtures = serde_json::from_str(include_str!("fixtures/rrule_js_goldens.json"))
+        .expect("fixtures parse");
     assert!(!fixtures.cases.is_empty());
 
     let mut mismatches = Vec::new();

@@ -217,7 +217,10 @@ async fn disconnecting_all_accounts_sweeps_dormant_credentials_too() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert!(!enabled, "the live account went dormant, so no poll follows");
+    assert!(
+        !enabled,
+        "the live account went dormant, so no poll follows"
+    );
 }
 
 /// Scripted provider that hands back a fixed one-event delta on every sync — enough
