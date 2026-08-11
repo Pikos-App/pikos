@@ -402,7 +402,7 @@ async fn fire_recurring_reminders(
 /// Counts:
 /// - `today_count` — pages scheduled today (timed or all-day), status != done.
 /// - `overdue_count` — timed events with scheduled_start in [now-24h, now),
-///   status != done, page created > 5 minutes ago (skip import batches).
+///   status != done, minus freshly created pages (`pikos_db::overdue_count`).
 async fn fire_daily_summary(
     app: &AppHandle,
     pool: &SqlitePool,
@@ -419,14 +419,16 @@ async fn fire_daily_summary(
     let stale_cutoff = (*now - chrono::Duration::hours(24))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
-    let recent_cutoff = (*now - chrono::Duration::minutes(5))
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
 
     let today_count = pikos_db::today_scheduled_count(pool, &today).await?;
 
-    let overdue_count =
-        pikos_db::overdue_count(pool, &now_ts, &stale_cutoff, &recent_cutoff).await?;
+    let overdue_count = pikos_db::overdue_count(
+        pool,
+        &now_ts,
+        &stale_cutoff,
+        now.with_timezone(&chrono::Utc),
+    )
+    .await?;
 
     // Insert marker row (local time, consistent with date(fired_at)=today above).
     pikos_db::log_daily_summary(pool, &now_ts).await?;

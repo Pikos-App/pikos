@@ -414,8 +414,19 @@ pub async fn today_scheduled_count(pool: &SqlitePool, date: &str) -> Result<i64,
     Ok(pages.len() as i64)
 }
 
+/// A page created this recently reads as part of an import batch rather than the
+/// user's backlog — a connect lands dozens of past-dated events at once and none
+/// of them are overdue to anyone.
+const IMPORT_SKIP_MINUTES: i64 = 5;
+
 /// Count of distinct timed, not-done pages overdue in `[stale_cutoff, now_ts)`,
-/// excluding pages created after `recent_cutoff` (skips fresh import batches).
+/// excluding pages created within [`IMPORT_SKIP_MINUTES`] of `now_utc`.
+///
+/// The window bounds are local wall-clock, matching `scheduled_start`; `now_utc`
+/// is the same instant in UTC because the recency cutoff derives from it and is
+/// compared against `created_at`, which is UTC ([`crate::now_iso`]). One `now` in
+/// both clocks swallowed real overdue pages west of UTC and never skipped an
+/// import east of it.
 ///
 /// Origin does not enter into it: a synced page is completable like any other, so
 /// ticking it clears the count. The mirror lock blocks rescheduling, which is not
@@ -428,8 +439,11 @@ pub async fn overdue_count(
     pool: &SqlitePool,
     now_ts: &str,
     stale_cutoff: &str,
-    recent_cutoff: &str,
+    now_utc: chrono::DateTime<chrono::Utc>,
 ) -> Result<i64, sqlx::Error> {
+    let recent_cutoff = (now_utc - chrono::Duration::minutes(IMPORT_SKIP_MINUTES))
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
     let mut pages: HashSet<String> = sqlx::query_scalar(
         "SELECT ps.page_id
          FROM page_schedules ps
@@ -444,7 +458,7 @@ pub async fn overdue_count(
            AND (ps.rule_id IS NOT NULL
                 OR NOT EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = p.id))",
     )
-    .bind(recent_cutoff)
+    .bind(&recent_cutoff)
     .bind(now_ts)
     .bind(stale_cutoff)
     .fetch_all(pool)
@@ -459,7 +473,7 @@ pub async fn overdue_count(
             &stale_cutoff.replace(' ', "T"),
             &now_ts.replace(' ', "T"),
             true,
-            Some(recent_cutoff),
+            Some(&recent_cutoff),
         )
         .await
         .map_err(derivation_error)?,

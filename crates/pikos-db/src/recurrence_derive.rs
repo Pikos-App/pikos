@@ -247,7 +247,8 @@ struct WindowSeries {
 /// — see [`synced_head_floor`].
 ///
 /// `timed_only` drops all-day series, which have no instant to be late against;
-/// `created_before` drops pages newer than the cutoff.
+/// `created_before` drops pages newer than the cutoff and is UTC, like the
+/// `created_at` it meets (see [`crate::overdue_count`]).
 pub(crate) async fn recurring_pages_in_window(
     pool: &SqlitePool,
     lo: &str,

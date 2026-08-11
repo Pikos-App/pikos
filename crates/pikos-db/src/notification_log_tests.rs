@@ -601,12 +601,11 @@ async fn today_count_reads_every_schedule_of_a_non_recurring_page() {
 async fn overdue_count_window_and_recency() {
     let pool = test_pool().await;
     let stale_cutoff = "2026-05-24 09:00:00"; // now - 24h
-    let recent_cutoff = "2026-05-25 08:55:00"; // now - 5m
 
     // Overdue: timed, started 2h ago, page created long ago.
     insert_page(&pool, "od", "not_started", "2026-05-01T00:00:00").await;
     insert_schedule(&pool, "s_od", "od", "2026-05-25T07:00:00", "not_started").await;
-    // Excluded — just imported (created after recent_cutoff).
+    // Excluded — just imported (created inside the import-skip window).
     insert_page(&pool, "fresh", "not_started", "2026-05-25T08:59:00").await;
     insert_schedule(
         &pool,
@@ -630,7 +629,7 @@ async fn overdue_count_window_and_recency() {
     )
     .await;
 
-    let n = overdue_count(&pool, NOW_TS, stale_cutoff, recent_cutoff)
+    let n = overdue_count(&pool, NOW_TS, stale_cutoff, now_utc())
         .await
         .unwrap();
     assert_eq!(n, 1);
@@ -638,7 +637,13 @@ async fn overdue_count_window_and_recency() {
 
 // The 24h overdue window used below: [2026-05-24 09:00, 2026-05-25 09:00).
 const STALE_CUTOFF: &str = "2026-05-24 09:00:00";
-const RECENT_CUTOFF: &str = "2026-05-25 08:55:00";
+
+// The tick instant the scheduler passes; the import-skip cutoff it yields is
+// 08:55Z, which is what the "fresh" pages below are dated against. Equals
+// `NOW_TS` read as UTC, except where a test names a different local clock.
+fn now_utc() -> chrono::DateTime<chrono::Utc> {
+    naive("2026-05-25T09:00:00").and_utc()
+}
 
 #[tokio::test]
 async fn overdue_count_enumerates_an_occurrence_the_stale_head_missed() {
@@ -650,7 +655,7 @@ async fn overdue_count_enumerates_an_occurrence_the_stale_head_missed() {
     insert_rule(&pool, "lapsed", "2026-05-01T07:00:00").await;
     set_page_start(&pool, "lapsed", "2026-05-20T07:00:00").await;
 
-    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, now_utc())
         .await
         .unwrap();
     assert_eq!(n, 1);
@@ -665,7 +670,7 @@ async fn overdue_count_counts_a_lagging_series_once_for_several_occurrences() {
 
     // A 48h window holds two of this series' occurrences; the summary reports
     // pages, not occurrences.
-    let n = overdue_count(&pool, NOW_TS, "2026-05-23 09:00:00", RECENT_CUTOFF)
+    let n = overdue_count(&pool, NOW_TS, "2026-05-23 09:00:00", now_utc())
         .await
         .unwrap();
     assert_eq!(n, 1);
@@ -683,7 +688,7 @@ async fn overdue_count_excludes_skipped_completed_and_exdated_occurrences() {
     set_completed(&pool, "completed", "2026-05-25").await;
     set_exdates(&pool, "exdated", &["2026-05-25"]).await;
 
-    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, now_utc())
         .await
         .unwrap();
     assert_eq!(n, 0);
@@ -706,7 +711,7 @@ async fn overdue_count_ignores_an_occurrence_moved_out_of_the_window() {
     )
     .await;
 
-    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, now_utc())
         .await
         .unwrap();
     assert_eq!(n, 0);
@@ -722,9 +727,49 @@ async fn overdue_count_skips_a_freshly_created_series() {
     insert_rule(&pool, "fresh", "2026-05-01T07:00:00").await;
     set_page_start(&pool, "fresh", "2026-05-20T07:00:00").await;
 
-    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, now_utc())
         .await
         .unwrap();
+    assert_eq!(n, 0);
+}
+
+#[tokio::test]
+async fn overdue_count_counts_a_page_created_before_the_utc_recency_cutoff() {
+    let pool = test_pool().await;
+    // A UTC−7 machine at 02:00 local. `created_at` is UTC, so a page made three
+    // hours ago reads 06:00Z — later than the local-clock cutoff, which would
+    // swallow it as a fresh import.
+    insert_page(&pool, "od", "not_started", "2026-05-25T06:00:00.000Z").await;
+    insert_schedule(&pool, "s_od", "od", "2026-05-25T01:00:00", "not_started").await;
+
+    let n = overdue_count(
+        &pool,
+        "2026-05-25 02:00:00",
+        "2026-05-24 02:00:00",
+        now_utc(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(n, 1);
+}
+
+#[tokio::test]
+async fn overdue_count_skips_a_fresh_import_east_of_utc() {
+    let pool = test_pool().await;
+    // A UTC+9 machine at 18:00 local: the batch landed a minute ago (08:59Z),
+    // earlier than any local-clock cutoff, so the import skip never fires.
+    insert_page(&pool, "fresh", "not_started", "2026-05-25T08:59:00.000Z").await;
+    insert_rule(&pool, "fresh", "2026-05-01T07:00:00").await;
+    set_page_start(&pool, "fresh", "2026-05-20T07:00:00").await;
+
+    let n = overdue_count(
+        &pool,
+        "2026-05-25 18:00:00",
+        "2026-05-24 18:00:00",
+        now_utc(),
+    )
+    .await
+    .unwrap();
     assert_eq!(n, 0);
 }
 
@@ -735,7 +780,7 @@ async fn overdue_count_ignores_an_all_day_series() {
     insert_page(&pool, "ad", "not_started", "2026-05-01T00:00:00").await;
     insert_rule(&pool, "ad", "2026-05-01").await;
 
-    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, now_utc())
         .await
         .unwrap();
     assert_eq!(n, 0);
@@ -776,7 +821,7 @@ async fn overdue_count_ignores_a_synced_occurrence_before_the_connect_day() {
         .await
         .unwrap();
 
-    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, now_utc())
         .await
         .unwrap();
     assert_eq!(
@@ -802,7 +847,7 @@ async fn overdue_count_ignores_a_recurring_pages_stale_anchor() {
     .await;
     set_page_start(&pool, "ahead", "2026-05-26T07:00:00").await;
 
-    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, RECENT_CUTOFF)
+    let n = overdue_count(&pool, NOW_TS, STALE_CUTOFF, now_utc())
         .await
         .unwrap();
     assert_eq!(n, 0);
@@ -1387,7 +1432,6 @@ fn synced_fire_instant_fall_back_ambiguous_picks_the_earlier_offset() {
 async fn overdue_count_counts_a_past_synced_one_off() {
     let pool = test_pool().await;
     let stale_cutoff = "2026-05-24 09:00:00";
-    let recent_cutoff = "2026-05-25 08:55:00";
 
     // Native one-off, same instant — the control: still overdue.
     insert_page(&pool, "native", "not_started", "2026-05-01T00:00:00").await;
@@ -1413,7 +1457,7 @@ async fn overdue_count_counts_a_past_synced_one_off() {
         .await
         .unwrap();
 
-    let n = overdue_count(&pool, NOW_TS, stale_cutoff, recent_cutoff)
+    let n = overdue_count(&pool, NOW_TS, stale_cutoff, now_utc())
         .await
         .unwrap();
     assert_eq!(n, 2, "native and synced one-offs both count");
@@ -1425,7 +1469,6 @@ async fn overdue_count_counts_a_past_synced_one_off() {
 async fn overdue_count_counts_synced_recurring_and_detached() {
     let pool = test_pool().await;
     let stale_cutoff = "2026-05-24 09:00:00";
-    let recent_cutoff = "2026-05-25 08:55:00";
 
     insert_page(&pool, "series", "not_started", "2026-05-01T00:00:00").await;
     insert_rule(&pool, "series", "2026-05-25T07:00:00").await;
@@ -1448,7 +1491,7 @@ async fn overdue_count_counts_synced_recurring_and_detached() {
         .await
         .unwrap();
 
-    let n = overdue_count(&pool, NOW_TS, stale_cutoff, recent_cutoff)
+    let n = overdue_count(&pool, NOW_TS, stale_cutoff, now_utc())
         .await
         .unwrap();
     assert_eq!(n, 2, "recurring synced head and detached page both count");
