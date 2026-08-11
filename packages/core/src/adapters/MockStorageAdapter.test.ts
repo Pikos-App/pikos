@@ -1349,6 +1349,7 @@ describe("schedule and rule updates", () => {
       scheduledStart: "2026-01-03T17:00:00",
       timezone: "America/Los_Angeles",
     });
+    adapter.markPageSynced(page.id, { state: "detached" });
 
     const result = await adapter.rescheduleVirtualOccurrence({
       originalDate: "2026-01-03",
@@ -1364,6 +1365,38 @@ describe("schedule and rule updates", () => {
     expect(rows[0]?.id).toBe(override.id);
     expect(rows[0]?.scheduledStart).toBe("2026-01-05T14:00:00");
     // original_date survives, so a re-link can still claim this occurrence.
+    expect(rows[0]?.originalDate).toBe("2026-01-03T09:00:00");
+    expect(rows[0]?.timezone).toBeUndefined();
+  });
+
+  it("rescheduleVirtualOccurrence mints an override row on a detached series, no clone", async () => {
+    // Sync origin picks the arm: the occurrence stays in-series so a re-link
+    // reclaims it, rather than stranding a clone beside the re-mirrored slot.
+    const page = await createTestPage();
+    const rule = await adapter.createRecurrenceRule({
+      pageId: page.id,
+      rrule: "FREQ=DAILY",
+      scheduledStart: "2026-01-01T09:00:00",
+      timezone: "America/Los_Angeles",
+    });
+    adapter.markPageSynced(page.id, { state: "detached" });
+    const pagesBefore = (await adapter.listPages({})).length;
+
+    const result = await adapter.rescheduleVirtualOccurrence({
+      originalDate: "2026-01-03",
+      ruleId: rule.id,
+      scheduledStart: "2026-01-05T14:00:00",
+      timezone: "America/Los_Angeles",
+    });
+
+    expect(result.clone).toBeNull();
+    expect(result.ruleExdates).toEqual([]);
+    expect((await adapter.listPages({})).length).toBe(pagesBefore);
+
+    const rows = await adapter.listPageSchedulesForRules([rule.id]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.scheduledStart).toBe("2026-01-05T14:00:00");
+    // The rule's time-of-day, matching what a provider's RECURRENCE-ID carries.
     expect(rows[0]?.originalDate).toBe("2026-01-03T09:00:00");
     expect(rows[0]?.timezone).toBeUndefined();
   });

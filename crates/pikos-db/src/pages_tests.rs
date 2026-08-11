@@ -1675,9 +1675,141 @@ async fn reschedule_virtual_moves_an_existing_override_row_in_place() {
 }
 
 #[tokio::test]
-async fn reschedule_virtual_still_clones_when_another_occurrence_has_an_override() {
-    // The in-place arm must key on the occurrence, not the series: a series that
-    // owns an override for one date still materializes a clone for a different one.
+async fn reschedule_virtual_on_a_detached_series_writes_an_override_row() {
+    // A detached synced series has no upstream reclaim path through a clone: the
+    // occurrence stays in-series as an override row, so a re-link's rewrite
+    // overwrites it with the provider's time instead of leaving a clone stranded
+    // beside a re-mirrored occurrence.
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-06-08T09:00:00"),
+            ..TestPage::new("head", "Daily standup")
+        },
+    )
+    .await
+    .unwrap();
+    let rule = crate::create_recurrence_rule_impl(
+        &pool,
+        crate::NewRecurrenceRule {
+            page_id: "head".into(),
+            rrule: "FREQ=DAILY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-06-08T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+    crate::pool::insert_test_page_sync(&pool, "head", "detached")
+        .await
+        .unwrap();
+
+    let result = reschedule_virtual_occurrence_impl(
+        &pool,
+        RescheduleVirtualInput {
+            rule_id: rule.id.clone(),
+            original_date: "2026-06-10".into(),
+            scheduled_start: "2026-06-11T14:00:00".into(),
+            scheduled_end: Some("2026-06-11T15:00:00".into()),
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(result.clone.is_none(), "no clone — the occurrence stays in-series");
+    assert!(
+        result.rule_exdates.is_empty(),
+        "no exdate — the override row is what excludes the date"
+    );
+    assert_eq!(count_pages(&pool).await, 1);
+
+    // original_date carries the rule's time-of-day: the provider writes its
+    // RECURRENCE-ID in that basis, and the reconciler replaces an override by an
+    // exact match on it.
+    let row: (String, String, Option<String>, String, Option<String>) = sqlx::query_as(
+        "SELECT page_id, scheduled_start, scheduled_end, original_date, timezone
+         FROM page_schedules WHERE rule_id = ?",
+    )
+    .bind(&rule.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "head");
+    assert_eq!(row.1, "2026-06-11T14:00:00");
+    assert_eq!(row.2.as_deref(), Some("2026-06-11T15:00:00"));
+    assert_eq!(row.3, "2026-06-10T09:00:00");
+    assert_eq!(row.4, None, "floating — the user asserted a device-local time");
+
+    // The head skips the moved date without an exdate: the derivation excludes
+    // every materialized original_date.
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await.as_deref(),
+        Some("2026-06-08T09:00:00")
+    );
+}
+
+#[tokio::test]
+async fn reschedule_virtual_on_an_all_day_detached_series_keys_the_override_by_date() {
+    // An all-day series has no time-of-day to carry, so original_date is the bare
+    // date — the same basis an all-day RECURRENCE-ID arrives in.
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-06-08"),
+            ..TestPage::new("head", "Daily reminder")
+        },
+    )
+    .await
+    .unwrap();
+    let rule = crate::create_recurrence_rule_impl(
+        &pool,
+        crate::NewRecurrenceRule {
+            page_id: "head".into(),
+            rrule: "FREQ=DAILY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-06-08".into(),
+            scheduled_end: None,
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+    crate::pool::insert_test_page_sync(&pool, "head", "detached")
+        .await
+        .unwrap();
+
+    reschedule_virtual_occurrence_impl(
+        &pool,
+        RescheduleVirtualInput {
+            rule_id: rule.id.clone(),
+            original_date: "2026-06-10".into(),
+            scheduled_start: "2026-06-12".into(),
+            scheduled_end: None,
+            timezone: "UTC".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let original_date: String =
+        sqlx::query_scalar("SELECT original_date FROM page_schedules WHERE rule_id = ?")
+            .bind(&rule.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(original_date, "2026-06-10");
+}
+
+#[tokio::test]
+async fn reschedule_virtual_keys_the_in_place_move_to_one_occurrence() {
+    // The move arm must key on the occurrence, not the series: a series that owns
+    // an override for one date mints a second row for a different one, leaving the
+    // first untouched.
     let pool = test_pool().await;
     insert_test_page(
         &pool,
@@ -1728,7 +1860,68 @@ async fn reschedule_virtual_still_clones_when_another_occurrence_has_an_override
     .await
     .unwrap();
 
-    assert!(result.clone.is_some(), "a virtual occurrence still clones");
+    assert!(result.clone.is_none());
+    assert_eq!(count_pages(&pool).await, 1);
+
+    let untouched: String =
+        sqlx::query_scalar("SELECT scheduled_start FROM page_schedules WHERE id = 'ovr'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(untouched, "2026-06-10T17:00:00");
+
+    let minted: String = sqlx::query_scalar(
+        "SELECT scheduled_start FROM page_schedules WHERE rule_id = ? AND id != 'ovr'",
+    )
+    .bind(&rule.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(minted, "2026-06-13T14:00:00");
+}
+
+#[tokio::test]
+async fn reschedule_virtual_on_a_native_series_clones_even_beside_an_override() {
+    // Origin, not the presence of an override row, picks the arm — a native series
+    // materializes an independent clone regardless of what its rule already carries.
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-06-08T09:00:00"),
+            ..TestPage::new("head", "Daily standup")
+        },
+    )
+    .await
+    .unwrap();
+    let rule = crate::create_recurrence_rule_impl(
+        &pool,
+        crate::NewRecurrenceRule {
+            page_id: "head".into(),
+            rrule: "FREQ=DAILY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-06-08T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let result = reschedule_virtual_occurrence_impl(
+        &pool,
+        RescheduleVirtualInput {
+            rule_id: rule.id.clone(),
+            original_date: "2026-06-11".into(),
+            scheduled_start: "2026-06-13T14:00:00".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(result.clone.is_some(), "a native virtual still clones");
     assert_eq!(result.rule_exdates, vec!["2026-06-11".to_string()]);
     assert_eq!(count_pages(&pool).await, 2);
 }

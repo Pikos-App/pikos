@@ -76,6 +76,14 @@ function deriveContentText(content: string): string {
   }
 }
 
+/** An occurrence's own start in the basis a provider's override carries. Mirrors
+ *  `original_date_in_rule_basis` (pages.rs), which owns the reasoning. */
+function originalDateInRuleBasis(occurrenceDate: string, ruleStart: string): string {
+  const day = occurrenceDate.slice(0, 10);
+  const time = ruleStart.split("T")[1];
+  return time ? `${day}T${time}` : day;
+}
+
 function nextSortOrder(items: { sortOrder: number }[]): number {
   return items.length === 0 ? 0 : Math.max(...items.map((i) => i.sortOrder)) + 1;
 }
@@ -663,6 +671,12 @@ export class MockStorageAdapter implements StorageAdapter {
       ...rule.rruleExdates,
       ...Object.keys(head.completedOccurrences ?? {}),
       ...(head.skippedOccurrences ?? []),
+      // Materialised overrides, matching exclusion_union (recurrence_derive.rs) —
+      // without them the head can land back on an occurrence that moved away.
+      // Day-keyed: nextOccurrenceAfter matches exclusions on the date alone.
+      ...[...this.schedules.values()]
+        .filter((s) => s.ruleId === rule.id && s.originalDate)
+        .map((s) => dateKey(s.originalDate!)),
     ];
     // Oldest-open = first occurrence not excluded, on/after the base: seek strictly
     // after the day before the base (nextOccurrenceAfter is day-level strict-after).
@@ -837,27 +851,37 @@ export class MockStorageAdapter implements StorageAdapter {
     const locked = this.lockedMirrorError(rule.pageId);
     if (locked) return Promise.reject(locked);
 
-    // Already-materialised occurrence → move that row, don't clone. Day-keyed:
-    // a synced timed override stores originalDate as a full wall-clock.
-    const existing = [...this.schedules.values()].find(
-      (s) =>
-        s.ruleId === data.ruleId && s.originalDate && dateKey(s.originalDate) === data.originalDate
-    );
-    if (existing) {
-      // Drops both optional fields before re-adding: the move clears the source
-      // zone (the user asserted a device-local time) and an all-day target
-      // carries no end.
-      const { scheduledEnd: _end, timezone: _tz, ...rest } = existing;
-      this.schedules.set(existing.id, {
-        ...rest,
+    const timestamp = now();
+
+    // Synced origin → the occurrence stays in-series as an override row, moved in
+    // place when the provider already materialised it. Mirrors the two arms of
+    // reschedule_virtual_occurrence_impl (pages.rs), which owns the reasoning.
+    if (head.syncState) {
+      // Day-keyed: a synced timed override stores originalDate as a full wall-clock.
+      const existing = [...this.schedules.values()].find(
+        (s) =>
+          s.ruleId === data.ruleId &&
+          s.originalDate &&
+          dateKey(s.originalDate) === data.originalDate
+      );
+      // Rebuilt rather than spread over: the move clears the source zone (the user
+      // asserted a device-local time) and an all-day target carries no end.
+      const override: PageSchedule = {
+        createdAt: existing?.createdAt ?? timestamp,
+        id: existing?.id ?? uuid(),
+        originalDate:
+          existing?.originalDate ?? originalDateInRuleBasis(data.originalDate, rule.scheduledStart),
+        pageId: head.id,
+        ruleId: data.ruleId,
         scheduledStart: data.scheduledStart,
+        status: existing?.status ?? "not_started",
         ...(data.scheduledEnd !== undefined && { scheduledEnd: data.scheduledEnd }),
-      });
+      };
+      this.schedules.set(override.id, override);
       this.recomputeHead(rule.pageId);
       return Promise.resolve({ clone: null, ruleExdates: [...rule.rruleExdates] });
     }
 
-    const timestamp = now();
     const clone: Page = {
       ...head,
       completedAt: null,

@@ -1653,10 +1653,17 @@ pub struct RescheduleVirtualResult {
 
 /// Atomically re-times one occurrence of a series (drag or popover date pick).
 ///
-/// Two arms, chosen by whether the occurrence is already materialized. An
-/// occurrence a provider moved has an override row → that row moves in place,
-/// keeping `original_date` so a re-link can still overwrite it with the
-/// provider's value. Otherwise the occurrence is virtual and is materialized:
+/// Two arms, chosen by sync origin. A **synced** series keeps the occurrence
+/// in-series as a `page_schedules` override row — moved in place when the
+/// provider already materialized it, minted otherwise — because `original_date`
+/// is what lets a later re-link overwrite the row with the provider's value.
+/// Cloning instead would leave the row to be re-mirrored *and* strand the clone
+/// beside it: one occurrence, two blocks, permanently. Only an unlocked
+/// (detached) series gets here; an active mirror is rejected before the
+/// transaction.
+///
+/// A **native** series has no upstream to reclaim the date, so the occurrence
+/// leaves the series and becomes an independent page:
 /// 1. Clones the head as an independent 'not_started' page
 /// 2. Schedules the clone at the new time (page_schedules row + denorm)
 /// 3. Merges the original date into the rule's exdates so the virtual disappears
@@ -1664,7 +1671,9 @@ pub struct RescheduleVirtualResult {
 /// One transaction — previously these were three separate client-issued writes,
 /// so a failure after the clone insert left BOTH the clone and the still-
 /// unexcluded virtual on the calendar (duplicate occurrence, duplicate
-/// reminders). The head and rule are otherwise untouched.
+/// reminders). The head and rule are otherwise untouched; an override row needs
+/// no exdate, since the head derivation already excludes every materialized
+/// `original_date`.
 pub async fn reschedule_virtual_occurrence_impl(
     pool: &sqlx::SqlitePool,
     data: RescheduleVirtualInput,
@@ -1674,6 +1683,21 @@ pub async fn reschedule_virtual_occurrence_impl(
     crate::schedules::ensure_rule_row_unlocked(pool, &data.rule_id).await?;
     // Read-then-write under WAL — retry on BUSY_SNAPSHOT like completion.
     crate::tx::retry_on_busy(|| reschedule_virtual_occurrence_once(pool, &data)).await
+}
+
+/// The occurrence's own start, in the basis the reconciler stores `original_date`
+/// in: source-zone wall-clock for a timed series, the bare date for an all-day one
+/// — i.e. what the provider's `RECURRENCE-ID` would carry. A user-authored
+/// override has to agree, because the reconciler replaces an override by exact
+/// `original_date` match; a day-only value against a timed series would leave a
+/// provider move writing a *second* row for the same occurrence. Only the render
+/// and derivation layers day-key.
+fn original_date_in_rule_basis(occurrence_date: &str, rule_start: &str) -> String {
+    let day = occurrence_date.get(..10).unwrap_or(occurrence_date);
+    match rule_start.split_once('T') {
+        Some((_, time)) => format!("{day}T{time}"),
+        None => day.to_string(),
+    }
 }
 
 async fn reschedule_virtual_occurrence_once(
@@ -1686,8 +1710,8 @@ async fn reschedule_virtual_occurrence_once(
 
     let mut tx = pool.begin().await?;
 
-    let page_id: String =
-        sqlx::query_scalar("SELECT page_id FROM page_recurrence_rules WHERE id = ?")
+    let (page_id, rule_start): (String, String) =
+        sqlx::query_as("SELECT page_id, scheduled_start FROM page_recurrence_rules WHERE id = ?")
             .bind(&data.rule_id)
             .fetch_optional(&mut *tx)
             .await?
@@ -1706,38 +1730,52 @@ async fn reschedule_virtual_occurrence_once(
     .map(Page::from)
     .ok_or_else(|| AppError::NotFound(format!("Page not found: {page_id}")))?;
 
-    // An occurrence a provider already moved exists as an override row. Move THAT
-    // row instead of cloning: `original_date` is what lets a later re-link
-    // overwrite the row with the provider's value, so cloning would leave the row
-    // to be re-mirrored *and* strand the clone beside it — one occurrence, two
-    // blocks, permanently. Day-keyed, since a synced timed override stores
-    // `original_date` as a full wall-clock while the caller sends the day.
-    // Unreachable for an active mirror (rejected above) and for a native series,
-    // which re-homes by clone + exdate and never writes an override row.
-    let override_id: Option<String> = sqlx::query_scalar(
-        "SELECT id FROM page_schedules
-         WHERE rule_id = ?1 AND substr(original_date, 1, 10) = substr(?2, 1, 10)",
-    )
-    .bind(&data.rule_id)
-    .bind(&data.original_date)
-    .fetch_optional(&mut *tx)
-    .await?;
+    if head.sync_state.is_some() {
+        // Day-keyed lookup, since a synced timed override stores `original_date` as
+        // a full wall-clock while the caller sends the day.
+        let override_id: Option<String> = sqlx::query_scalar(
+            "SELECT id FROM page_schedules
+             WHERE rule_id = ?1 AND substr(original_date, 1, 10) = substr(?2, 1, 10)",
+        )
+        .bind(&data.rule_id)
+        .bind(&data.original_date)
+        .fetch_optional(&mut *tx)
+        .await?;
 
-    if let Some(override_id) = override_id {
         // Clearing the zone is the point, not incidental: the user just asserted a
         // device-local time, so the row must stop claiming the source zone or its
-        // reminder would resolve against the wrong offset.
-        sqlx::query(
-            "UPDATE page_schedules
-             SET scheduled_start = ?, scheduled_end = ?, timezone = NULL
-             WHERE id = ?",
-        )
-        .bind(&data.scheduled_start)
-        .bind(&data.scheduled_end)
-        .bind(&override_id)
-        .execute(&mut *tx)
-        .await?;
-        // Nothing merged — the original date was already excluded by this very row.
+        // reminder would resolve against the wrong offset. A moved row keeps the
+        // `original_date` the provider wrote, which is what its re-link matches on.
+        if let Some(override_id) = override_id {
+            sqlx::query(
+                "UPDATE page_schedules
+                 SET scheduled_start = ?, scheduled_end = ?, timezone = NULL
+                 WHERE id = ?",
+            )
+            .bind(&data.scheduled_start)
+            .bind(&data.scheduled_end)
+            .bind(&override_id)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query(
+                "INSERT INTO page_schedules
+                 (id, page_id, scheduled_start, scheduled_end, timezone, rule_id, original_date, status, created_at)
+                 VALUES (?, ?, ?, ?, NULL, ?, ?, 'not_started', ?)",
+            )
+            .bind(&schedule_id)
+            .bind(&page_id)
+            .bind(&data.scheduled_start)
+            .bind(&data.scheduled_end)
+            .bind(&data.rule_id)
+            .bind(original_date_in_rule_basis(&data.original_date, &rule_start))
+            .bind(&now)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // No exdate to merge — the head derivation already excludes every
+        // materialized `original_date`. Read the rule's current set for the caller.
         let rule_exdates =
             crate::schedules::merge_rule_exdates_tx(&mut tx, &data.rule_id, &[]).await?;
         crate::recurrence_derive::recompute_recurring_schedule(&mut tx, &page_id).await?;

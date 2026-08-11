@@ -917,3 +917,74 @@ fn collect_asset_paths_finds_nested_images_only() {
     collect_asset_paths(&doc, &mut paths);
     assert_eq!(paths, vec!["/a/one.png", "/a/two.png"]); // empty path skipped
 }
+
+// ── dev_seed_synced_calendar ───────────────────────────────────────────────────
+
+/// The seed's whole point is exercising surfaces no unit test reaches, so what it
+/// *contains* is the contract — and its TS twin (`shared/seeds/syncedCalendar.ts`)
+/// claims to mirror it. The recurring half drifted apart unnoticed once already,
+/// which is what this pins: both series, and the occurrence deltas that make them
+/// worth seeding at all.
+#[tokio::test]
+async fn seed_synced_calendar_carries_both_recurring_series_with_their_deltas() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+
+    let series: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT p.title, ps.sync_state, r.rrule_exdates
+         FROM page_recurrence_rules r
+         JOIN pages p ON p.id = r.page_id
+         JOIN page_sync ps ON ps.page_id = r.page_id
+         ORDER BY p.title",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let titles: Vec<&str> = series.iter().map(|(t, _, _)| t.as_str()).collect();
+    assert_eq!(
+        titles,
+        vec!["Detached sprint", "Recurring review", "Weekly 1:1 (London)"]
+    );
+    assert_eq!(series[0].1, "detached");
+    assert_eq!(series[1].1, "active");
+
+    // Timed, not date-only: a date-only exdate matches whether or not the render
+    // layer day-keys, so it would pin nothing.
+    let exdates: Vec<String> = serde_json::from_str(&series[1].2).unwrap();
+    assert_eq!(exdates.len(), 1);
+    assert!(exdates[0].contains("T10:00:00"), "{}", exdates[0]);
+
+    // One provider-moved instance per series, keyed to an occurrence of its rule.
+    let moved: Vec<(String, String)> = sqlx::query_as(
+        "SELECT p.title, s.original_date FROM page_schedules s
+         JOIN pages p ON p.id = s.page_id
+         WHERE s.original_date IS NOT NULL ORDER BY p.title",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(moved.len(), 2);
+    assert_eq!(moved[0].0, "Detached sprint");
+    assert!(moved[0].1.contains("T07:15:00"), "{}", moved[0].1);
+    assert_eq!(moved[1].0, "Recurring review");
+    assert!(moved[1].1.contains("T10:00:00"), "{}", moved[1].1);
+}
+
+/// Re-seeding drops the prior mock account and everything it owns — the dev
+/// workflow is "seed, poke at it, seed again", so a second run must not double up.
+#[tokio::test]
+async fn seed_synced_calendar_is_idempotent() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+    let after_first: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+    let after_second: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(after_first, after_second);
+}

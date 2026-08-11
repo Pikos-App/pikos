@@ -400,6 +400,35 @@ async fn insert_synced_page(
     Ok(())
 }
 
+/// A provider-moved instance of a seeded series: the occurrence's own start (in
+/// the source-zone wall-clock basis a `RECURRENCE-ID` carries) and where the
+/// provider put it.
+struct MovedInstance<'a> {
+    original: &'a str,
+    start: &'a str,
+    end: &'a str,
+}
+
+/// The occurrence deltas and lifecycle state of a seeded recurring series —
+/// everything past the bare "weekly from here". Defaults to a live series with no
+/// exceptions, which is what most seed rows want.
+struct SyncedSeries<'a> {
+    sync_state: &'a str,
+    /// Cancelled occurrences, in the same basis as [`MovedInstance::original`].
+    exdates: &'a [&'a str],
+    moved: Option<MovedInstance<'a>>,
+}
+
+impl Default for SyncedSeries<'_> {
+    fn default() -> Self {
+        Self {
+            sync_state: "active",
+            exdates: &[],
+            moved: None,
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn insert_synced_recurring(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -411,6 +440,7 @@ async fn insert_synced_recurring(
     base_end: &str,
     timezone: &str,
     rrule: &str,
+    series: SyncedSeries<'_>,
     sort_order: i64,
     now: &str,
 ) -> AppResult<()> {
@@ -432,14 +462,16 @@ async fn insert_synced_recurring(
     .execute(&mut **tx)
     .await?;
 
+    let rule_id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO page_recurrence_rules (id, page_id, rrule, rrule_exdates, scheduled_start,
             scheduled_end, timezone, created_at)
-         VALUES (?, ?, ?, '[]', ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&rule_id)
     .bind(&page_id)
     .bind(rrule)
+    .bind(serde_json::to_string(series.exdates).unwrap_or_else(|_| "[]".to_string()))
     .bind(base_start)
     .bind(base_end)
     .bind(timezone)
@@ -447,11 +479,29 @@ async fn insert_synced_recurring(
     .execute(&mut **tx)
     .await?;
 
+    if let Some(moved) = series.moved {
+        sqlx::query(
+            "INSERT INTO page_schedules (id, page_id, scheduled_start, scheduled_end, timezone,
+                rule_id, original_date, status, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started', ?)",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&page_id)
+        .bind(moved.start)
+        .bind(moved.end)
+        .bind(timezone)
+        .bind(&rule_id)
+        .bind(moved.original)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    }
+
     let ext = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO page_sync (id, page_id, account_id, provider, calendar_id, external_id,
             ical_uid, sync_state, created_at)
-         VALUES (?, ?, ?, 'caldav', ?, ?, ?, 'active', ?)",
+         VALUES (?, ?, ?, 'caldav', ?, ?, ?, ?, ?)",
     )
     .bind(uuid::Uuid::new_v4().to_string())
     .bind(&page_id)
@@ -459,6 +509,7 @@ async fn insert_synced_recurring(
     .bind(calendar_id)
     .bind(&ext)
     .bind(&ext)
+    .bind(series.sync_state)
     .bind(now)
     .execute(&mut **tx)
     .await?;
@@ -616,7 +667,35 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         &at(0, "17:30"),
         "Europe/London",
         "FREQ=WEEKLY",
+        SyncedSeries::default(),
         3,
+        &now,
+    )
+    .await?;
+    // A live series carrying both occurrence deltas a provider can send: a
+    // cancelled instance (timed EXDATE) and one moved weeks out. Both stored as
+    // full wall-clock, which is what exercises the day-keyed exclusion — a
+    // date-only fixture passes whether or not the render layer day-keys.
+    insert_synced_recurring(
+        &mut tx,
+        personal,
+        &account_id,
+        personal_cal,
+        "Recurring review",
+        &at(0, "10:00"),
+        &at(0, "10:30"),
+        "America/New_York",
+        "FREQ=WEEKLY",
+        SyncedSeries {
+            exdates: &[&at(7, "10:00")],
+            moved: Some(MovedInstance {
+                original: &at(14, "10:00"),
+                start: &at(24, "15:00"),
+                end: &at(24, "15:30"),
+            }),
+            ..SyncedSeries::default()
+        },
+        4,
         &now,
     )
     .await?;
@@ -668,9 +747,35 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         &now,
     )
     .await?;
+    // A detached series carrying a provider-moved instance: its occurrences stay
+    // in-series as override rows rather than cloning out, so the moved block is
+    // unlocked and a re-link can reclaim the slot. Times mirror the TS seed.
+    insert_synced_recurring(
+        &mut tx,
+        work,
+        &account_id,
+        work_cal,
+        "Detached sprint",
+        &at(0, "07:15"),
+        &at(0, "07:45"),
+        "America/New_York",
+        "FREQ=WEEKLY",
+        SyncedSeries {
+            sync_state: "detached",
+            moved: Some(MovedInstance {
+                original: &at(14, "07:15"),
+                start: &at(16, "15:00"),
+                end: &at(16, "15:30"),
+            }),
+            ..SyncedSeries::default()
+        },
+        3,
+        &now,
+    )
+    .await?;
 
     tx.commit().await?;
-    log::info!("dev_seed_synced_calendar: seeded mock account + 2 calendars + 7 pages");
+    log::info!("dev_seed_synced_calendar: seeded mock account + 2 calendars + 9 pages");
     Ok(())
 }
 

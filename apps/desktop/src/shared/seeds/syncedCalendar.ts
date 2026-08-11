@@ -9,14 +9,23 @@ import { addDays, set } from "date-fns";
 //
 // Produces the same spread as the dev command: a same-day timed event, a
 // cross-zone event (resolves to the viewer's zone, no badge), an all-day event
-// (never shifts), a weekly recurring series, a past one-off, and one detached
-// page (broken-sync).
+// (never shifts), a plain weekly series, a live series carrying both occurrence
+// deltas (a timed EXDATE + a moved instance), a past one-off, one detached page
+// (broken-sync), and a detached series with a moved instance. The Rust side pins
+// the recurring half of that list — it drifted apart unnoticed once.
 //
 // Times are picked to miss the realistic seed's day-0 slots (6:30, 8, 9, 9:15,
 // 2–4 PM, 3–4 PM, 7 PM), which this scenario stacks onto: a collision collapses
-// the loser into the day's "+N more" pill, where no calendar check can see it.
-// Judge a cross-zone event at both its offsets — London/New York run an hour
-// closer for three weeks a year, so it has two possible lanes and needs both.
+// the loser out of the layout, where no calendar check can see it. Two lanes to
+// judge beyond day 0, both of which have cost a red test:
+//   · Beyond day+7 the realistic seed places only *recurring* items, whose lane
+//     depends on the weekday the run lands on — Mon/Wed/Fri 6:30, weekdays 9:15,
+//     Wed 2 PM, Fri 4 PM. An offset far enough out to shift weekday by run day
+//     needs a lane free on EVERY weekday, not just today's.
+//   · A cross-zone event has two possible lanes — London/New York run an hour
+//     closer for three weeks a year — so both must be free.
+// The calendar also collapses [0,6) and [22,24) by default: a seed outside that
+// band renders nowhere at all.
 
 function at(base: Date, offsetDays: number, hours: number, minutes: number): string {
   return formatLocalISO(
@@ -152,8 +161,8 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
     originalDate: at(today, 14, 10, 0),
     pageId: review.id,
     ruleId: reviewRule.id,
-    scheduledEnd: at(today, 24, 16, 30),
-    scheduledStart: at(today, 24, 16, 0),
+    scheduledEnd: at(today, 24, 15, 30),
+    scheduledStart: at(today, 24, 15, 0),
     timezone: "America/New_York",
   });
   mock.markPageSynced(review.id, { state: "active", timezone: "America/New_York" });
@@ -186,4 +195,37 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
     "America/New_York",
     "detached"
   );
+
+  // A detached series carrying a provider-moved instance: its occurrences stay
+  // in-series as override rows rather than cloning out, so the moved block is
+  // unlocked and a re-link can reclaim the slot. 7:15 AM is the one gap day 0
+  // leaves between the 6:30 run and the 8 AM block.
+  const sprintStart = at(today, 0, 7, 15);
+  const sprintEnd = at(today, 0, 7, 45);
+  const sprint = await adapter.createPage({
+    content: "",
+    folderId: work,
+    priority: 0,
+    scheduledEnd: sprintEnd,
+    scheduledStart: sprintStart,
+    status: "not_started",
+    tags: [],
+    title: "Detached sprint",
+  });
+  const sprintRule = await adapter.createRecurrenceRule({
+    pageId: sprint.id,
+    rrule: "FREQ=WEEKLY",
+    scheduledEnd: sprintEnd,
+    scheduledStart: sprintStart,
+    timezone: "America/New_York",
+  });
+  await adapter.createPageSchedule({
+    originalDate: at(today, 14, 7, 15),
+    pageId: sprint.id,
+    ruleId: sprintRule.id,
+    scheduledEnd: at(today, 16, 15, 30),
+    scheduledStart: at(today, 16, 15, 0),
+    timezone: "America/New_York",
+  });
+  mock.markPageSynced(sprint.id, { state: "detached", timezone: "America/New_York" });
 }

@@ -208,7 +208,7 @@ appTest("synced events render source + detached treatment, schedule read-only @t
   await expect(
     app.getByRole("img", { name: "Synced from external calendar" }).first()
   ).toBeVisible();
-  await expect(app.getByRole("img", { name: "Disconnected from calendar" })).toBeVisible();
+  await expect(app.getByRole("img", { name: "Disconnected from calendar" }).first()).toBeVisible();
 
   // Open a synced block's popover — title is read-only (schedule_locked). The
   // block's accessible name is "<title>, <time>"; the comma distinguishes it
@@ -328,11 +328,11 @@ appTest("unchecking a synced recurring done clone restores the occurrence @tier2
 // date — previously nothing rendered it (an all-day move vanished, a timed move
 // ghosted at the old slot). It now renders locked and completable at its new
 // time, and completing it records the ORIGINAL occurrence so reminder derivation
-// agrees. The seed's "Recurring review" moves one instance ~3 weeks out, to 4 PM.
+// agrees. The seed's "Recurring review" moves one instance ~3 weeks out, to 3 PM.
 
-/** Page forward until the moved override block (its new slot is 4 PM) renders. */
+/** Page forward until the moved override block (its new slot is 3 PM) renders. */
 async function gotoMovedOverride(app: Page) {
-  const moved = app.getByRole("button", { name: /Recurring review, 4/ });
+  const moved = app.getByRole("button", { name: /Recurring review, 3/ });
   for (let i = 0; i < 6 && (await moved.count()) === 0; i++) {
     await app.getByRole("button", { name: "Next week" }).click();
     await app.waitForTimeout(400);
@@ -363,8 +363,99 @@ appTest("a moved synced occurrence renders at its new slot, locked, and complete
   // The done clone lands at the moved slot — the override drops out once its
   // original occurrence is completed. A mis-keyed occurrence would reject with
   // no clone, leaving the slot open.
-  await app.getByRole("button", { name: /Recurring review, 4/ }).click();
+  await app.getByRole("button", { name: /Recurring review, 3/ }).click();
   await expect(app.getByRole("button", { name: "Mark not done" })).toBeVisible();
+});
+
+// ─── tier2: a detached series keeps its occurrences in-series ────────────────
+//
+// A detached synced series is the user's to move, but it still has an upstream to
+// re-link to — so a moved occurrence stays an override row keyed to its original
+// date rather than cloning out of the series. Two halves: the seeded
+// provider-moved instance renders unlocked and completes on its ORIGINAL date
+// with the head untouched, and dragging a plain virtual mints an override
+// (one block, no clone) instead of materialising a page.
+//
+// The seed's "Detached sprint" is weekly from today 7:15 AM, with day+14's
+// instance moved to day+16 at 3 PM.
+
+function sprintBlocks(app: Page, timeLabel: RegExp) {
+  return app.getByRole("button", { name: timeLabel });
+}
+
+function sprintRows(app: Page) {
+  return app.locator("[data-page-list-item]").filter({ hasText: "Detached sprint" });
+}
+
+appTest("a detached series' moved occurrence is editable and completes its original date @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openCalendarFolder(app, "Work");
+  await openCalendarMode(app);
+
+  const moved = sprintBlocks(app, /Detached sprint, 3/);
+  for (let i = 0; i < 6 && (await moved.count()) === 0; i++) {
+    await app.getByRole("button", { name: "Next week" }).click();
+    await app.waitForTimeout(400);
+  }
+  await expect(moved).toBeVisible();
+
+  // Unlocked, unlike the active series' moved block above: detach hands the page
+  // back to the user while the override row keeps the re-link path open.
+  await moved.click();
+  const title = app.getByPlaceholder("Untitled");
+  await expect(title).toHaveValue("Detached sprint");
+  await expect(title).not.toHaveAttribute("readonly", "");
+
+  await app.getByRole("button", { name: "Mark done" }).click();
+
+  // The done clone lands at the moved slot and the override drops out. Completion
+  // keyed on the moved day instead of the original would be rejected as not part
+  // of the series, leaving the slot open.
+  await moved.click();
+  await expect(app.getByRole("button", { name: "Mark not done" })).toBeVisible();
+  await app.keyboard.press("Escape");
+
+  // The head is still open at its own date — an occurrence was completed, not the
+  // series (the done clone is the only other row, and it isn't the head).
+  await expect(
+    sprintRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
+  ).toHaveCount(1);
+});
+
+appTest("dragging a detached series' virtual leaves one block and no clone @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openCalendarFolder(app, "Work");
+  await expect(sprintRows(app)).toHaveCount(1);
+  await openCalendarMode(app);
+
+  // One week on, the visible window is wholly after the head, so the 7:15 block
+  // is a virtual rather than the head page itself.
+  await app.getByRole("button", { name: "Next week" }).click();
+  const virtual = sprintBlocks(app, /Detached sprint, 7:15/);
+  await expect(virtual).toBeVisible();
+  await virtual.scrollIntoViewIfNeeded();
+  const box = await virtual.boundingBox();
+  if (!box) throw new Error("virtual block has no bounding box");
+
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  await app.mouse.move(startX, startY);
+  await app.mouse.down();
+  await app.mouse.move(startX, startY + 12, { steps: 5 }); // past the drag threshold
+  await app.mouse.move(startX, startY + 60, { steps: 5 }); // one hour later
+  await app.mouse.up();
+
+  // The occurrence moved rather than duplicating: nothing left at the old slot.
+  await expect(sprintBlocks(app, /Detached sprint, 8:15/)).toHaveCount(1);
+  await expect(sprintBlocks(app, /Detached sprint, 7:15/)).toHaveCount(0);
+
+  // A clone-and-exdate would render one block here too — the Work list's row count
+  // is what separates them. No page materialised: the occurrence stayed in-series.
+  await expect(sprintRows(app)).toHaveCount(1);
 });
 
 // ─── tier2: a synced virtual occurrence's date is read-only ──────────────────
