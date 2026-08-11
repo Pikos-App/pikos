@@ -21,8 +21,10 @@ RESET='\033[0m'
 step() { printf "\n${BOLD}▶ %s${RESET}${DIM} %s${RESET}\n" "$1" "$2"; }
 
 # ── verify job ────────────────────────────────────────────────────────────────
+# VERIFY_ALL forces the full unit suite: verify's default is affected-only, which
+# is right for a pre-commit gate and wrong for a release gate.
 step "verify" "typecheck + lint + prettier + depcruise + unit tests"
-pnpm verify
+VERIFY_ALL=1 pnpm verify
 
 step "coverage" "desktop + core, per-directory thresholds"
 pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
@@ -31,16 +33,26 @@ step "source audit" "secrets, XSS, SQL, Tauri capabilities"
 pnpm audit:source
 
 # ── rust job ──────────────────────────────────────────────────────────────────
-step "cargo fmt --check" ""
+# Two Cargo trees. The root workspace is `crates/*` and *excludes*
+# apps/desktop/src-tauri, so `--all` inside src-tauri covers that crate alone —
+# gating only there leaves pikos-db, -cli, -calendar-sync and -recurrence unchecked.
+step "cargo fmt --check" "workspace + desktop"
+(cd "$ROOT" && cargo fmt --all --check)
 (cd "$SRC_TAURI" && cargo fmt --check)
 
-step "cargo check" "zero warnings"
+step "cargo clippy (workspace)" "zero warnings"
+(cd "$ROOT" && cargo clippy --workspace --all-targets -- -D warnings)
+
+step "cargo test (workspace)" ""
+(cd "$ROOT" && cargo test --workspace --quiet)
+
+step "cargo check (desktop)" "zero warnings"
 (cd "$SRC_TAURI" && RUSTFLAGS="-D warnings" cargo check)
 
-step "cargo clippy" "zero warnings"
+step "cargo clippy (desktop)" "zero warnings"
 (cd "$SRC_TAURI" && cargo clippy --all-targets -- -D warnings)
 
-step "cargo test" ""
+step "cargo test (desktop)" ""
 (cd "$SRC_TAURI" && cargo test --all --quiet)
 
 # ── e2e job (slowest — last) ──────────────────────────────────────────────────

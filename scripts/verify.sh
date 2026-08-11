@@ -50,11 +50,33 @@ run_check "typecheck-core"    pnpm --filter @pikos/core typecheck &
 run_check "lint"              pnpm exec turbo lint &
 run_check "depcruise"         pnpm exec depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs &
 
+# Only the specs the working-tree diff can reach. Safe because the workspace
+# resolves `@pikos/core` to its *source* (`exports: "./src/index.ts"`), so
+# vitest's module graph crosses the package boundary — a core edit still selects
+# every desktop spec importing it, rather than silently testing nothing. Specs
+# reached only at runtime (dynamic import, fixture read off disk) are the blind
+# spot, and why the full suite still gates pre-push and CI.
+affected_tests() {
+  pnpm --filter @pikos/desktop exec vitest run --changed --passWithNoTests &&
+    pnpm --filter @pikos/core exec vitest run --changed --passWithNoTests
+}
+
 # SKIP_UNIT_TESTS=1 omits the unit run — CI sets this so the coverage job (which
 # runs the same desktop+core suite, with thresholds) is the single test pass.
-# Locally it stays on so `pnpm verify` remains a complete pre-commit gate.
+#
+# Locally the default is affected-only: the full suite is ~37s and dominates this
+# script's wall clock on every commit, where a typical edit reaches 4 of 91 specs.
+# VERIFY_ALL=1 forces the full run — validate.sh sets it, a release gate being the
+# one place scoping to a diff is wrong.
+tests_mode=""
 if [ -z "$SKIP_UNIT_TESTS" ]; then
-  run_check "tests"           pnpm exec turbo test &
+  if [ -n "$VERIFY_ALL" ]; then
+    tests_mode="(full)"
+    run_check "tests"         pnpm exec turbo test &
+  else
+    tests_mode="(affected — VERIFY_ALL=1 for the full suite)"
+    run_check "tests"         affected_tests &
+  fi
 fi
 
 if [ ${#changed[@]} -gt 0 ]; then
@@ -68,7 +90,7 @@ for name in typecheck-desktop typecheck-core lint prettier depcruise tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then
-    pass "$name"
+    if [ "$name" = "tests" ]; then pass "$name" "$tests_mode"; else pass "$name"; fi
   else
     fail "$name"
     if [ "$name" = "tests" ]; then

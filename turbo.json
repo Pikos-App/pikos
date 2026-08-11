@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["tsconfig.base.json", "eslint.config.js"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -10,11 +11,15 @@
       "persistent": true
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"]
+      "dependsOn": ["^typecheck"],
+      "inputs": ["src/**", "tsconfig*.json", "vitest.config.ts", "package.json"]
     },
-    "lint": {},
+    "lint": {
+      "inputs": ["src/**", "package.json"]
+    },
     "test": {
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
+      "inputs": ["src/**", "vitest.config.ts", "tsconfig*.json", "package.json"]
     }
   }
 }

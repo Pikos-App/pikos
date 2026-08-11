@@ -1,3 +1,10 @@
+# Full unit suite. Pre-commit runs only the specs its diff reaches, so this is the
+# first gate seeing all of them — what keeps commits fast without letting an
+# unreached breakage leave the machine. Turbo-cached, so usually ~free.
+echo "Running unit tests (full suite)..."
+pnpm exec turbo test || exit 1
+printf '\033[0;32m✓\033[0m Unit tests — full suite\n'
+
 # Rust lint + tests — too slow for pre-commit (~15s), fine for pre-push.
 #
 # Two Cargo trees, and both need covering: the root workspace is `crates/*`

@@ -189,25 +189,44 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/desktop/src-tauri -> target
+          workspaces: |
+            . -> target
+            apps/desktop/src-tauri -> target
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
 
-      - name: Cargo fmt --check
+      # Two Cargo trees, both gated. The root workspace is `crates/*` and it
+      # *excludes* apps/desktop/src-tauri, so `--all` inside src-tauri resolves to
+      # that one standalone crate — running only there left pikos-db, -cli,
+      # -calendar-sync and -recurrence with no CI coverage at all. Mirrors the
+      # split .husky/pre-push already runs.
+      - name: Cargo fmt --check (workspace)
+        working-directory: .
+        run: cargo fmt --all --check
+
+      - name: Cargo clippy (workspace, zero warnings)
+        working-directory: .
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Cargo test (workspace)
+        working-directory: .
+        run: cargo test --workspace --quiet
+
+      - name: Cargo fmt --check (desktop crate)
         run: cargo fmt --check
 
-      - name: Cargo check (zero warnings)
+      - name: Cargo check (desktop crate, zero warnings)
         env:
           RUSTFLAGS: "-D warnings"
         run: cargo check
 
-      - name: Cargo clippy (zero warnings)
+      - name: Cargo clippy (desktop crate, zero warnings)
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Cargo test
+      - name: Cargo test (desktop crate)
         run: cargo test --all --quiet
 
       # cargo-audit gate — non-blocking for one cycle, then promote to blocking.
