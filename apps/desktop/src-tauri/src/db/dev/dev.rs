@@ -994,12 +994,37 @@ fn collect_asset_paths(node: &serde_json::Value, paths: &mut Vec<String>) {
     }
 }
 
+/// The pages a user-facing export ships. An un-actioned mirror is the calendar's
+/// copy of an event and none of the user's work, so it stays out unless
+/// `include_synced` asks for it; everything the user completed, edited or detached
+/// exports either way. Shared by the Markdown and CSV exports so the two can't
+/// drift on what counts as the user's own.
+async fn fetch_export_pages(
+    pool: &sqlx::SqlitePool,
+    columns: &str,
+    include_synced: bool,
+) -> AppResult<Vec<sqlx::sqlite::SqliteRow>> {
+    let exclude_mirrors = if include_synced {
+        String::new()
+    } else {
+        format!(" AND NOT {}", pikos_db::unactioned_mirror_sql())
+    };
+    let sql = format!(
+        "SELECT {columns} FROM pages p \
+         WHERE p.deleted_at IS NULL{exclude_mirrors} ORDER BY p.sort_order"
+    );
+    Ok(sqlx::query(&sql).fetch_all(pool).await?)
+}
+
 /// Export all pages as Markdown files to ~/Downloads/pikos-markdown-<timestamp>/.
 /// Each page becomes a .md file with YAML frontmatter (title, status, priority, tags,
 /// scheduled dates). Folder structure is preserved as subdirectories.
 /// Images are copied into an assets/ subdirectory with references rewritten.
 #[tauri::command]
-pub async fn export_markdown(state: tauri::State<'_, DbState>) -> AppResult<String> {
+pub async fn export_markdown(
+    state: tauri::State<'_, DbState>,
+    include_synced: bool,
+) -> AppResult<String> {
     let pool = state.get_pool().await?;
 
     let folders =
@@ -1009,12 +1034,12 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> AppResult<Stri
 
     let folder_names: std::collections::HashMap<String, String> = folders.into_iter().collect();
 
-    let pages = sqlx::query(
-        "SELECT id, folder_id, title, content, status, priority, tags, \
-         scheduled_start, scheduled_end, created_at, updated_at \
-         FROM pages WHERE deleted_at IS NULL ORDER BY sort_order",
+    let pages = fetch_export_pages(
+        &pool,
+        "id, folder_id, title, content, status, priority, tags, \
+         scheduled_start, scheduled_end, created_at, updated_at",
+        include_synced,
     )
-    .fetch_all(&pool)
     .await?;
 
     let home =
@@ -1143,9 +1168,12 @@ pub async fn export_markdown(state: tauri::State<'_, DbState>) -> AppResult<Stri
 /// Columns match what the CSV importer expects so the output can be re-imported.
 /// Rich text content is exported as plain text (content_text).
 #[tauri::command]
-pub async fn export_csv(state: tauri::State<'_, DbState>) -> AppResult<String> {
+pub async fn export_csv(
+    state: tauri::State<'_, DbState>,
+    include_synced: bool,
+) -> AppResult<String> {
     let pool = state.get_pool().await?;
-    let out = build_export_csv_impl(&pool).await?;
+    let out = build_export_csv_impl(&pool, include_synced).await?;
 
     let home =
         std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
@@ -1167,7 +1195,10 @@ pub async fn export_csv(state: tauri::State<'_, DbState>) -> AppResult<String> {
 /// `export_csv` so the escaping and column order are testable without writing
 /// to disk. Column names match the CSV importer's header heuristics so the
 /// output round-trips back through import.
-pub(crate) async fn build_export_csv_impl(pool: &sqlx::SqlitePool) -> AppResult<String> {
+pub(crate) async fn build_export_csv_impl(
+    pool: &sqlx::SqlitePool,
+    include_synced: bool,
+) -> AppResult<String> {
     let folders =
         sqlx::query_as::<_, (String, String)>("SELECT id, name FROM folders ORDER BY sort_order")
             .fetch_all(pool)
@@ -1175,12 +1206,12 @@ pub(crate) async fn build_export_csv_impl(pool: &sqlx::SqlitePool) -> AppResult<
 
     let folder_names: std::collections::HashMap<String, String> = folders.into_iter().collect();
 
-    let pages = sqlx::query(
-        "SELECT id, folder_id, title, content_text, status, priority, tags, \
-         scheduled_start, scheduled_end, created_at, updated_at, completed_at \
-         FROM pages WHERE deleted_at IS NULL ORDER BY sort_order",
+    let pages = fetch_export_pages(
+        pool,
+        "id, folder_id, title, content_text, status, priority, tags, \
+         scheduled_start, scheduled_end, created_at, updated_at, completed_at",
+        include_synced,
     )
-    .fetch_all(pool)
     .await?;
 
     let mut out = String::new();

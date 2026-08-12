@@ -5,11 +5,13 @@ import { Download, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { TypedConfirmDialog } from "@/components/ui/typed-confirm-dialog";
 import { ImportSection } from "@/features/import";
 import type { ImportState, LastImportResult } from "@/features/import";
 import { formatTimeAgo } from "@/features/import/parsers/utils";
 import { deleteAllData } from "@/lib/data/deleteAllData";
+import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
@@ -85,6 +87,7 @@ function ExportRow({
           </button>
         )}
         <button
+          aria-label={label}
           className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled || saving}
           onClick={onExport}
@@ -121,12 +124,16 @@ export function DataSettings({
   usageStats,
 }: DataSettingsProps) {
   const { workspace } = useWorkspace();
+  const { folders } = usePages();
   const { showNotice } = useUndoDelete();
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
   const [csvExport, setCsvExport] = useState<ExportState>({ status: "idle" });
   const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
+  const [includeSynced, setIncludeSynced] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const hasSyncedCalendar = folders.some((f) => f.isExternalCalendar);
 
   async function handleDeleteAll() {
     if (deleting) return;
@@ -161,7 +168,7 @@ export function DataSettings({
   async function handleExportCsv() {
     setCsvExport({ status: "saving" });
     try {
-      const dest = await invoke<string>("export_csv");
+      const dest = await invoke<string>("export_csv", { includeSynced });
       setCsvExport({ path: dest, status: "done" });
     } catch (e: unknown) {
       setCsvExport({
@@ -174,7 +181,7 @@ export function DataSettings({
   async function handleExportMarkdown() {
     setMarkdownExport({ status: "saving" });
     try {
-      const dest = await invoke<string>("export_markdown");
+      const dest = await invoke<string>("export_markdown", { includeSynced });
       setMarkdownExport({ path: dest, status: "done" });
     } catch (e: unknown) {
       setMarkdownExport({
@@ -258,6 +265,24 @@ export function DataSettings({
             onExport={() => void handleExportMarkdown()}
             state={markdownExport}
           />
+          {hasSyncedCalendar && (
+            <div className="flex items-center justify-between gap-6 py-3">
+              <div className="min-w-0">
+                <label className="text-sm font-medium" htmlFor="export-include-synced">
+                  Include synced calendar events
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Adds events Pikos reads in from your connected calendars to the Markdown and CSV
+                  exports. Ones you've completed or edited are always included.
+                </p>
+              </div>
+              <Switch
+                checked={includeSynced}
+                id="export-include-synced"
+                onCheckedChange={setIncludeSynced}
+              />
+            </div>
+          )}
         </div>
       </SettingsSection>
 

@@ -443,14 +443,13 @@ pub async fn insert_test_folder(pool: &SqlitePool, id: &str, name: &str) -> AppR
 /// A connection date old enough that the synced head-floor never binds, so a
 /// fixture using any plausible occurrence date keeps testing what it meant to.
 /// Tests that exercise the floor itself pass their own date.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub const TEST_CONNECTED_LONG_AGO: &str = "2000-01-01T00:00:00.000Z";
 
 /// Links an existing test page to a synced calendar (a `page_sync` row), creating
 /// a shared throwaway `sync_account` on first use. `sync_state` ∈ active |
-/// detached | tombstoned. Stays `cfg(test)` rather than `test-support` — only
-/// pikos-db's own tests use it, and under `test-support` it would compile unused.
-#[cfg(test)]
+/// detached | tombstoned.
+#[cfg(any(test, feature = "test-support"))]
 pub async fn insert_test_page_sync(
     pool: &SqlitePool,
     page_id: &str,
@@ -463,7 +462,7 @@ pub async fn insert_test_page_sync(
 /// the head-floor derives from, i.e. when this calendar was connected. Pass the
 /// [`now_iso`] form the reconciler writes (UTC, trailing `Z`): the floor parses it
 /// as an instant, so a local wall-clock string here yields no floor at all.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub async fn insert_test_page_sync_connected_at(
     pool: &SqlitePool,
     page_id: &str,

@@ -807,31 +807,19 @@ async fn teardown_folder(pool: &sqlx::SqlitePool, folder_id: &str) -> AppResult<
     Ok(())
 }
 
-/// Pikos-owned = the user has invested in this page, so teardown keeps it. True if
-/// completed, the dirty bit is set, or it carries a field sync never writes (a user
-/// tag or reminder, or a non-empty completed-set/skip-set for a recurring series the
-/// user has completed or dismissed occurrences of). The row checks belt-and-suspenders
-/// the dirty bit: those edits flow through the editor path that sets it, but reading
-/// the rows too keeps the predicate correct even if a future edit path forgets.
-/// `last_opened_at` is not a signal — reading an event is not authoring it. Without
-/// the completed-set/skip-set checks a synced series whose only user investment is
-/// completed or skipped occurrences would classify non-owned and hard-delete on
-/// upstream removal — losing the completion/dismissal history and resurrecting
-/// dismissed occurrences on reconnect.
+/// Teardown and upstream removal keep a Pikos-owned page and destroy a bare
+/// mirror. See [`crate::sync::PAGE_OWNED_SQL`] for what ownership means.
 async fn is_owned(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, page_id: &str) -> AppResult<bool> {
-    let owned: bool = sqlx::query_scalar(
-        "SELECT p.completed_at IS NOT NULL
-              OR ps.user_modified
-              OR (p.tags <> '[]' AND p.tags <> '')
-              OR EXISTS (SELECT 1 FROM page_reminders pr WHERE pr.page_id = p.id)
-              OR EXISTS (SELECT 1 FROM completed_set cs WHERE cs.page_id = p.id)
-              OR EXISTS (SELECT 1 FROM skip_set ss WHERE ss.page_id = p.id)
+    let sql = format!(
+        "SELECT {}
          FROM pages p JOIN page_sync ps ON ps.page_id = p.id
          WHERE p.id = ?",
-    )
-    .bind(page_id)
-    .fetch_one(&mut **tx)
-    .await?;
+        crate::sync::PAGE_OWNED_SQL
+    );
+    let owned: bool = sqlx::query_scalar(&sql)
+        .bind(page_id)
+        .fetch_one(&mut **tx)
+        .await?;
     Ok(owned)
 }
 

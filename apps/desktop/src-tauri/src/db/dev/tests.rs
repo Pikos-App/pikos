@@ -1,8 +1,9 @@
 use super::*;
 use crate::db::DbState;
 use pikos_db::{
-    create_folder_impl, create_page_impl, insert_test_folder, insert_test_page, list_folders_impl,
-    list_pages_impl, now_iso, test_pool, NewFolder, NewPage, TestPage,
+    create_folder_impl, create_page_impl, insert_test_folder, insert_test_page,
+    insert_test_page_sync, list_folders_impl, list_pages_impl, now_iso, test_pool, NewFolder,
+    NewPage, TestPage,
 };
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -504,6 +505,46 @@ async fn export_reimport_round_trip_preserves_content_tags_and_image_refs() {
     );
 }
 
+// ── fetch_export_pages ─────────────────────────────────────────────────────────
+
+async fn insert_synced_page(pool: &SqlitePool, id: &str, title: &str, sync_state: &str) {
+    insert_test_page(pool, TestPage::new(id, title))
+        .await
+        .unwrap();
+    insert_test_page_sync(pool, id, sync_state).await.unwrap();
+}
+
+async fn export_titles(pool: &SqlitePool, include_synced: bool) -> Vec<String> {
+    fetch_export_pages(pool, "id, title", include_synced)
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get::<String, _>("title"))
+        .collect()
+}
+
+#[tokio::test]
+async fn export_drops_only_the_mirrors_the_user_never_actioned() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("native", "My Note"))
+        .await
+        .unwrap();
+    insert_synced_page(&pool, "bare", "Standup", "active").await;
+    insert_synced_page(&pool, "done", "Retro", "active").await;
+    set_completed(&pool, "done", "2026-05-01T12:00:00Z").await;
+    insert_synced_page(&pool, "severed", "Old 1:1", "detached").await;
+
+    let kept = export_titles(&pool, false).await;
+    assert!(!kept.contains(&"Standup".to_string()));
+    assert_eq!(
+        kept.len(),
+        3,
+        "native, completed mirror and detached all stay"
+    );
+
+    assert_eq!(export_titles(&pool, true).await.len(), 4);
+}
+
 // ── build_export_csv_impl ──────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -522,7 +563,7 @@ async fn export_csv_header_and_row_basics() {
     .await
     .unwrap();
 
-    let csv = build_export_csv_impl(&pool).await.unwrap();
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
     let lines: Vec<&str> = csv.lines().collect();
 
     assert_eq!(
@@ -542,7 +583,7 @@ async fn export_csv_escapes_special_characters() {
     // Title with comma + quote, content with newline.
     insert_rich_page(&pool, "p1", "a, \"b\"", "{}", "line1\nline2", 0, "[]").await;
 
-    let csv = build_export_csv_impl(&pool).await.unwrap();
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
     let row = csv.lines().nth(1).unwrap();
 
     // Comma+quote field → wrapped in quotes with "" escaping.
@@ -552,13 +593,25 @@ async fn export_csv_escapes_special_characters() {
 }
 
 #[tokio::test]
+async fn export_csv_excludes_un_actioned_mirrors_unless_asked() {
+    let pool = test_pool().await;
+    insert_synced_page(&pool, "bare", "Standup", "active").await;
+
+    let default = build_export_csv_impl(&pool, false).await.unwrap();
+    assert_eq!(default.lines().count(), 1, "header only");
+
+    let with_synced = build_export_csv_impl(&pool, true).await.unwrap();
+    assert!(with_synced.contains("Standup"));
+}
+
+#[tokio::test]
 async fn export_csv_excludes_soft_deleted() {
     let pool = test_pool().await;
     insert_rich_page(&pool, "p1", "Live", "{}", "", 0, "[]").await;
     insert_rich_page(&pool, "p2", "Gone", "{}", "", 0, "[]").await;
     soft_delete(&pool, "p2").await;
 
-    let csv = build_export_csv_impl(&pool).await.unwrap();
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
     assert_eq!(csv.lines().count(), 2); // header + 1 live page
     assert!(csv.contains("Live"));
     assert!(!csv.contains("Gone"));
@@ -570,7 +623,7 @@ async fn export_csv_includes_completed_at() {
     insert_rich_page(&pool, "p1", "Done", "{}", "", 0, "[]").await;
     set_completed(&pool, "p1", "2026-05-01T12:00:00Z").await;
 
-    let csv = build_export_csv_impl(&pool).await.unwrap();
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
     let row = csv.lines().nth(1).unwrap();
     assert!(row.ends_with("2026-05-01T12:00:00Z"));
     assert!(row.contains(",done,"));

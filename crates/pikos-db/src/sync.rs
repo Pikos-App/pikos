@@ -130,6 +130,37 @@ pub(crate) const SYNCED_READONLY_MSG: &str =
 pub(crate) const SYNCED_PLACEMENT_MSG: &str =
     "This event is synced from an external calendar — it stays in its calendar folder.";
 
+/// SQL boolean over `pages p` joined to its `page_sync ps` — Pikos-owned means
+/// the user has invested in this page, so teardown keeps it and a user-facing
+/// export ships it. True if completed, the dirty bit is set, or it carries a field
+/// sync never writes (a user tag or reminder, or a non-empty completed-set/skip-set
+/// for a recurring series the user has completed or dismissed occurrences of). The
+/// row checks belt-and-suspenders the dirty bit: those edits flow through the editor
+/// path that sets it, but reading the rows too keeps the predicate correct even if a
+/// future edit path forgets. `last_opened_at` is not a signal — reading an event is
+/// not authoring it. Without the completed-set/skip-set checks a synced series whose
+/// only user investment is completed or skipped occurrences would classify non-owned
+/// and hard-delete on upstream removal — losing the completion/dismissal history and
+/// resurrecting dismissed occurrences on reconnect.
+pub(crate) const PAGE_OWNED_SQL: &str = "p.completed_at IS NOT NULL
+      OR ps.user_modified
+      OR (p.tags <> '[]' AND p.tags <> '')
+      OR EXISTS (SELECT 1 FROM page_reminders pr WHERE pr.page_id = p.id)
+      OR EXISTS (SELECT 1 FROM completed_set cs WHERE cs.page_id = p.id)
+      OR EXISTS (SELECT 1 FROM skip_set ss WHERE ss.page_id = p.id)";
+
+/// SQL boolean over an outer `pages p` — true for a live mirror carrying none of
+/// the user's work, i.e. the calendar's copy of an event and nothing more. Negate
+/// it to keep a query to the user's own pages. A detached page never matches: the
+/// link is severed and the page is the user's outright.
+pub fn unactioned_mirror_sql() -> String {
+    format!(
+        "EXISTS (SELECT 1 FROM page_sync ps
+                  WHERE ps.page_id = p.id AND ps.sync_state = 'active'
+                    AND NOT ({PAGE_OWNED_SQL}))"
+    )
+}
+
 /// True when an active `page_sync` row owns this page (its schedule is locked).
 /// Detached/tombstoned pages are unlocked.
 pub(crate) async fn page_schedule_locked(
