@@ -17,6 +17,10 @@ pub struct SyncAccount {
     pub display_name: String,
     pub auth_kind: String,
     pub created_at: String,
+    /// Set when a poll hits a rejected credential, and the scheduler then skips the
+    /// account entirely — so the panel must surface it, or a background rejection is
+    /// invisible until someone resyncs by hand.
+    pub reconnect_needed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
@@ -40,6 +44,8 @@ pub struct AccountWithCalendars {
     pub account: SyncAccount,
     pub calendars: Vec<SyncCalendar>,
 }
+
+const ACCOUNT_COLS: &str = "id, provider, display_name, auth_kind, created_at, reconnect_needed";
 
 const CAL_COLS: &str =
     "id, account_id, calendar_id, display_name, color, enabled, last_synced_at, folder_id";
@@ -66,7 +72,7 @@ pub async fn insert_sync_account_impl(
     .bind(&now)
     .execute(pool)
     .await?;
-    fetch_account(pool, &id).await
+    get_sync_account_impl(pool, &id).await
 }
 
 /// Mark an account dormant (disconnected) rather than deleting it, so its calendars
@@ -95,15 +101,16 @@ pub async fn find_account_by_identity_impl(
     provider: &str,
     display_name: &str,
 ) -> AppResult<Option<SyncAccount>> {
-    Ok(sqlx::query_as::<_, SyncAccount>(
-        "SELECT id, provider, display_name, auth_kind, created_at FROM sync_account
+    let sql = format!(
+        "SELECT {ACCOUNT_COLS} FROM sync_account
          WHERE provider = ? AND display_name = ?
-         ORDER BY disconnected ASC, created_at ASC LIMIT 1",
-    )
-    .bind(provider)
-    .bind(display_name)
-    .fetch_optional(pool)
-    .await?)
+         ORDER BY disconnected ASC, created_at ASC LIMIT 1"
+    );
+    Ok(sqlx::query_as::<_, SyncAccount>(&sql)
+        .bind(provider)
+        .bind(display_name)
+        .fetch_optional(pool)
+        .await?)
 }
 
 /// Clear the dormant flag when a reconnect reuses the account.
@@ -121,12 +128,12 @@ pub async fn reactivate_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppRe
 pub async fn get_sync_status_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<AccountWithCalendars>> {
     // Dormant (disconnected) accounts are hidden — disconnect reads as removal in
     // the panel even though the row survives for reconnect re-link.
-    let accounts = sqlx::query_as::<_, SyncAccount>(
-        "SELECT id, provider, display_name, auth_kind, created_at
-         FROM sync_account WHERE disconnected = 0 ORDER BY created_at ASC",
-    )
-    .fetch_all(pool)
-    .await?;
+    let sql = format!(
+        "SELECT {ACCOUNT_COLS} FROM sync_account WHERE disconnected = 0 ORDER BY created_at ASC"
+    );
+    let accounts = sqlx::query_as::<_, SyncAccount>(&sql)
+        .fetch_all(pool)
+        .await?;
 
     let mut out = Vec::with_capacity(accounts.len());
     for account in accounts {
@@ -136,14 +143,13 @@ pub async fn get_sync_status_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<Acco
     Ok(out)
 }
 
-async fn fetch_account(pool: &sqlx::SqlitePool, id: &str) -> AppResult<SyncAccount> {
-    sqlx::query_as::<_, SyncAccount>(
-        "SELECT id, provider, display_name, auth_kind, created_at FROM sync_account WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound(format!("sync account not found: {id}")))
+pub async fn get_sync_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<SyncAccount> {
+    let sql = format!("SELECT {ACCOUNT_COLS} FROM sync_account WHERE id = ?");
+    sqlx::query_as::<_, SyncAccount>(&sql)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("sync account not found: {id}")))
 }
 
 // ─── calendars ──────────────────────────────────────────────────────────────────

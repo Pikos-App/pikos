@@ -294,6 +294,9 @@ export interface SyncAccount {
   displayName: string; // email (Google) / server·username (CalDAV)
   authKind: string; // 'basic' | 'oauth'
   createdAt: string;
+  // A poll hit a rejected credential. The scheduler skips the account while this is
+  // set, so the panel has to surface it — nothing else will.
+  reconnectNeeded: boolean;
 }
 
 export interface SyncCalendar {

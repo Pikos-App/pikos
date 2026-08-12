@@ -58,4 +58,10 @@ describe("accountConnectionState", () => {
   it("is reconnectNeeded if any calendar failed auth", () => {
     expect(accountConnectionState(["synced", "reconnectNeeded"])).toBe("reconnectNeeded");
   });
+
+  // The background pass leaves no result behind, so the stored flag is the only
+  // evidence a credential was rejected — and the scheduler has stopped polling.
+  it("is reconnectNeeded from the stored flag alone, with no results", () => {
+    expect(accountConnectionState([undefined], true)).toBe("reconnectNeeded");
+  });
 });

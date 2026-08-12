@@ -995,6 +995,18 @@ export class MockStorageAdapter implements StorageAdapter {
     );
   }
 
+  reconnectCaldavAccount(accountId: string, password: string): Promise<AccountWithCalendars> {
+    const account = this.syncAccounts.get(accountId);
+    if (!account) return Promise.reject(new Error(`sync account not found: ${accountId}`));
+    // The real path proves the password by discovery before storing it; the mock has
+    // no server, so an empty one stands in for the rejection e2e needs.
+    if (!password) return Promise.reject(new Error("Could not connect. Check the password."));
+    const next = { ...account, reconnectNeeded: false };
+    this.syncAccounts.set(accountId, next);
+    this.dormantAccounts.delete(accountId);
+    return Promise.resolve({ ...next, calendars: this._calendarsFor(accountId) });
+  }
+
   connectGoogleAccount(): Promise<AccountWithCalendars> {
     return Promise.resolve(
       this._connectAccount("google", "you@gmail.com", "oauth", ["you@gmail.com", "Team"])
@@ -1028,6 +1040,7 @@ export class MockStorageAdapter implements StorageAdapter {
       displayName,
       id: uuid(),
       provider,
+      reconnectNeeded: false,
     };
     this.syncAccounts.set(account.id, account);
     // Canned discovery so test mode has calendars to toggle.

@@ -9,9 +9,9 @@ use sqlx::SqlitePool;
 use pikos_db::error::{AppError, AppResult};
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow, PROVIDER_CALDAV, PROVIDER_GOOGLE};
 use pikos_db::sync_commands::{
-    find_account_by_identity_impl, insert_sync_account_impl, list_sync_calendars_impl,
-    mark_account_disconnected_impl, reactivate_account_impl, toggle_sync_calendar_impl,
-    upsert_sync_calendar_impl, AccountWithCalendars,
+    find_account_by_identity_impl, get_sync_account_impl, insert_sync_account_impl,
+    list_sync_calendars_impl, mark_account_disconnected_impl, reactivate_account_impl,
+    toggle_sync_calendar_impl, upsert_sync_calendar_impl, AccountWithCalendars,
 };
 use pikos_db::sync_delta::CalendarProvider;
 
@@ -85,6 +85,46 @@ pub async fn connect_caldav(
         .map_err(|e| AppError::Internal(format!("keychain store: {e}")))?;
 
     let calendars = upsert_calendars(pool, &account.id, &remote).await?;
+    Ok(AccountWithCalendars { account, calendars })
+}
+
+/// Repair a CalDAV account whose password stopped working: swap the stored
+/// password, prove it by discovery, then clear the flag that has the scheduler
+/// skipping this account.
+///
+/// Takes the password alone because the base URL and username already live in the
+/// keychain blob. Re-collecting them would let a typo land a *second* account
+/// instead of repairing this one, which is the outcome the flow exists to avoid —
+/// identity is `provider + display_name`, and a reconnect must not change it.
+/// Nothing is persisted until discovery succeeds, so a wrong password leaves the
+/// existing credential in place.
+pub async fn reconnect_caldav(
+    pool: &SqlitePool,
+    keychain: Keychain,
+    account_id: &str,
+    password: String,
+) -> AppResult<AccountWithCalendars> {
+    let row = load_account_row(pool, account_id).await?;
+    if row.provider != PROVIDER_CALDAV {
+        return Err(AppError::Invalid(
+            "only a CalDAV account reconnects with a password".into(),
+        ));
+    }
+
+    let mut creds = crate::caldav::stored_credentials(&keychain, account_id)?;
+    creds.password = password;
+    let remote = CaldavProvider::discover_with(&creds).await?;
+
+    let blob = creds
+        .to_blob()
+        .map_err(|e| AppError::Internal(format!("serialize credentials: {e}")))?;
+    keychain
+        .store(account_id, &blob)
+        .map_err(|e| AppError::Internal(format!("keychain store: {e}")))?;
+    reactivate_account_impl(pool, account_id).await?;
+
+    let calendars = upsert_calendars(pool, account_id, &remote).await?;
+    let account = get_sync_account_impl(pool, account_id).await?;
     Ok(AccountWithCalendars { account, calendars })
 }
 

@@ -15,7 +15,7 @@ use pikos_db::test_pool;
 
 use super::*;
 use crate::keychain::{CredentialStore, Keychain};
-use crate::test_support::MemoryStore;
+use crate::test_support::{memory_keychain, MemoryStore};
 
 // ─── scripted provider (sync returns a trivial backfill) ────────────────────────
 
@@ -501,4 +501,56 @@ async fn connect_caldav_persists_nothing_when_discovery_fails() {
         accounts, 0,
         "no account row written before discovery succeeds"
     );
+}
+
+#[tokio::test]
+async fn reconnect_caldav_keeps_the_working_credential_when_the_new_password_fails() {
+    let pool = test_pool().await;
+    let store = MemoryStore::default();
+    let account = insert_sync_account_impl(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    set_reconnect_needed(&pool, &account.id, true)
+        .await
+        .unwrap();
+    // A malformed stored URL fails discovery at the parse step, no network — and
+    // proves the server/username come from the blob, since the caller passes neither.
+    let stored = CaldavCredentials {
+        base_url: "not a valid url".into(),
+        username: "you".into(),
+        password: "old".into(),
+    };
+    store.set(&account.id, &stored.to_blob().unwrap()).unwrap();
+
+    let err = reconnect_caldav(
+        &pool,
+        Keychain::with_store(Box::new(store.clone())),
+        &account.id,
+        "new".into(),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(matches!(err, AppError::Invalid(_)));
+    let kept = CaldavCredentials::from_blob(&store.get(&account.id).unwrap()).unwrap();
+    assert_eq!(kept.password, "old", "a rejected password is not stored");
+    let still_flagged = get_sync_account_impl(&pool, &account.id)
+        .await
+        .unwrap()
+        .reconnect_needed;
+    assert!(still_flagged, "the account stays out of the poll loop");
+}
+
+#[tokio::test]
+async fn reconnect_caldav_refuses_a_google_account() {
+    let pool = test_pool().await;
+    let account = insert_sync_account_impl(&pool, PROVIDER_GOOGLE, "you@gmail.com", "oauth")
+        .await
+        .unwrap();
+
+    let err = reconnect_caldav(&pool, memory_keychain(), &account.id, "pw".into())
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, AppError::Invalid(_)));
 }

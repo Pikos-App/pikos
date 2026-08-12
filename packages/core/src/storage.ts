@@ -220,6 +220,10 @@ export interface StorageAdapter {
   /** Validate a CalDAV connection (autodiscovery), then persist the account +
    * its discovered (disabled) calendars; credentials go to the OS keychain. */
   connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars>;
+  /** Replace a CalDAV account's stored password and clear `reconnectNeeded`. Takes
+   * no server URL or username: both come from the keychain blob, so a reconnect
+   * can't drift the account's identity and mint a duplicate instead of repairing. */
+  reconnectCaldavAccount(accountId: string, password: string): Promise<AccountWithCalendars>;
   /** Run the Google OAuth grant (opens the user's browser) and persist the
    * account + its discovered (disabled) calendars. Resolves only once the user
    * finishes in the browser, so callers must show a waiting state. */

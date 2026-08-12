@@ -45,18 +45,28 @@ impl CaldavProvider {
         self.credentials_by_id(&account.id)
     }
 
-    /// Load + deserialize the account's keychain blob. A keychain miss maps to a
-    /// user-actionable "reconnect needed", not a transient network error.
     fn credentials_by_id(&self, account_id: &str) -> AppResult<CaldavCredentials> {
-        let blob = self.keychain.load(account_id).map_err(|e| {
-            if e.is_reconnect_needed() {
-                AppError::Invalid("CalDAV credentials missing — reconnect the account".into())
-            } else {
-                AppError::Network(e.to_string())
-            }
-        })?;
-        Ok(CaldavCredentials::from_blob(&blob)?)
+        stored_credentials(&self.keychain, account_id)
     }
+}
+
+/// Load + deserialize an account's keychain blob. A keychain miss maps to a
+/// user-actionable "reconnect needed", not a transient network error.
+///
+/// Free rather than a method because the reconnect command needs the stored server
+/// URL and username while still owning the keychain to write the new blob back.
+pub(crate) fn stored_credentials(
+    keychain: &Keychain,
+    account_id: &str,
+) -> AppResult<CaldavCredentials> {
+    let blob = keychain.load(account_id).map_err(|e| {
+        if e.is_reconnect_needed() {
+            AppError::Invalid("CalDAV credentials missing — reconnect the account".into())
+        } else {
+            AppError::Network(e.to_string())
+        }
+    })?;
+    Ok(CaldavCredentials::from_blob(&blob)?)
 }
 
 impl CalendarProvider for CaldavProvider {

@@ -1,5 +1,5 @@
 import type { AccountWithCalendars, CalendarSyncResult } from "@pikos/core";
-import { MoreHorizontal, RefreshCw, Server } from "lucide-react";
+import { KeyRound, MoreHorizontal, RefreshCw, Server } from "lucide-react";
 import { useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -9,9 +9,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
 import { defaultColorForProvider } from "@/shared/constants/colors";
 
+import { ReconnectAccountDialog } from "./ReconnectAccountDialog";
 import { SyncCalendarRow } from "./SyncCalendarRow";
 import { accountConnectionState } from "./syncStatus";
 
@@ -21,6 +21,8 @@ interface SyncAccountCardProps {
   busy: boolean;
   onResync: () => void;
   onDisconnect: () => Promise<void>;
+  onReconnect: (password: string) => Promise<void>;
+  onReconnectGoogle: () => Promise<void>;
   onToggleCalendar: (calendarId: string, enabled: boolean, color: string | null) => void;
   onRecolorCalendar: (calendarId: string, enabled: boolean, color: string) => void;
 }
@@ -30,13 +32,19 @@ export function SyncAccountCard({
   busy,
   onDisconnect,
   onRecolorCalendar,
+  onReconnect,
+  onReconnectGoogle,
   onResync,
   onToggleCalendar,
   results,
 }: SyncAccountCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reconnectOpen, setReconnectOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const connection = accountConnectionState(account.calendars.map((c) => results[c.id]));
+  const connection = accountConnectionState(
+    account.calendars.map((c) => results[c.id]),
+    account.reconnectNeeded
+  );
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -49,15 +57,18 @@ export function SyncAccountCard({
               <RefreshCw className="size-3 animate-spin" />
               Syncing…
             </p>
-          ) : (
-            <p
-              className={cn(
-                "text-xs",
-                connection === "reconnectNeeded" ? "text-destructive" : "text-muted-foreground"
-              )}
-            >
-              {connection === "reconnectNeeded" ? "Reconnect needed" : "Connected"}
+          ) : connection === "reconnectNeeded" ? (
+            <p className="text-xs text-destructive">
+              Reconnect needed ·{" "}
+              <button
+                className="underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setReconnectOpen(true)}
+              >
+                Reconnect
+              </button>
             </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">Connected</p>
           )}
         </div>
         <DropdownMenu>
@@ -71,6 +82,10 @@ export function SyncAccountCard({
             <DropdownMenuItem disabled={busy} onSelect={onResync}>
               <RefreshCw className="size-3.5" />
               Resync now
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setReconnectOpen(true)}>
+              <KeyRound className="size-3.5" />
+              Reconnect…
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
@@ -103,6 +118,21 @@ export function SyncAccountCard({
           ))
         )}
       </div>
+
+      {account.calendars.some((cal) => !cal.enabled) && (
+        <p className="px-4 pt-1 pb-3 text-xs text-muted-foreground">
+          Turning a calendar back on reconnects the pages you kept, and takes back their title,
+          time, and folder. Anything you wrote on them stays.
+        </p>
+      )}
+
+      <ReconnectAccountDialog
+        account={account}
+        onOpenChange={setReconnectOpen}
+        onReconnect={onReconnect}
+        onReconnectGoogle={onReconnectGoogle}
+        open={reconnectOpen}
+      />
 
       <ConfirmDialog
         busy={disconnecting}

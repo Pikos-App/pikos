@@ -6,8 +6,8 @@
 use tauri::State;
 
 use pikos_calendar_sync::{
-    connect_caldav, connect_google, disconnect_account, google, release_all_credentials,
-    resync_account_auto, CalendarSyncResult, Keychain,
+    connect_caldav, connect_google, disconnect_account, google, reconnect_caldav,
+    release_all_credentials, resync_account_auto, CalendarSyncResult, Keychain,
 };
 use pikos_db::sync_commands::{
     get_sync_status_impl, list_sync_calendars_impl, toggle_sync_calendar_impl,
@@ -35,6 +35,16 @@ pub async fn connect_caldav_account(
         display_name,
     )
     .await
+}
+
+#[tauri::command]
+pub async fn reconnect_caldav_account(
+    state: State<'_, DbState>,
+    account_id: String,
+    password: String,
+) -> AppResult<AccountWithCalendars> {
+    let pool = state.get_pool().await?;
+    reconnect_caldav(&pool, Keychain::system(), &account_id, password).await
 }
 
 /// Whether this build carries the Google OAuth client. The panel disables the

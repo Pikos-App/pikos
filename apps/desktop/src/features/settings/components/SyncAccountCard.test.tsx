@@ -1,5 +1,5 @@
 import type { AccountWithCalendars, SyncCalendar } from "@pikos/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SyncAccountCard } from "./SyncAccountCard";
@@ -20,7 +20,10 @@ function cal(over: Partial<SyncCalendar> = {}): SyncCalendar {
   };
 }
 
-function account(calendars: SyncCalendar[]): AccountWithCalendars {
+function account(
+  calendars: SyncCalendar[],
+  over: Partial<AccountWithCalendars> = {}
+): AccountWithCalendars {
   return {
     authKind: "basic",
     calendars,
@@ -28,6 +31,8 @@ function account(calendars: SyncCalendar[]): AccountWithCalendars {
     displayName: "me@example.com",
     id: "a1",
     provider: "caldav",
+    reconnectNeeded: false,
+    ...over,
   };
 }
 
@@ -38,6 +43,8 @@ function render_(over?: Partial<Parameters<typeof SyncAccountCard>[0]>) {
       busy={false}
       onDisconnect={() => Promise.resolve()}
       onRecolorCalendar={vi.fn()}
+      onReconnect={() => Promise.resolve()}
+      onReconnectGoogle={() => Promise.resolve()}
       onResync={vi.fn()}
       onToggleCalendar={vi.fn()}
       results={{}}
@@ -57,14 +64,35 @@ describe("SyncAccountCard", () => {
   it("shows Reconnect needed when a calendar's last resync failed auth", () => {
     // results is keyed by sync_calendar row id (cal() → id "c1").
     render_({ results: { c1: "reconnectNeeded" } });
-    expect(screen.getByText("Reconnect needed")).toBeInTheDocument();
+    expect(screen.getByText(/Reconnect needed/)).toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+  });
+
+  it("shows Reconnect needed from the stored flag, with no resync result in hand", () => {
+    render_({ account: account([cal()], { reconnectNeeded: true }) });
+    expect(screen.getByText(/Reconnect needed/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
+  });
+
+  it("opens the reconnect dialog from the status link", () => {
+    render_({ account: account([cal()], { reconnectNeeded: true }) });
+    fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Reconnect me@example.com");
   });
 
   it("spins a syncing indicator while the account is busy", () => {
     render_({ busy: true });
     expect(screen.getByText("Syncing…")).toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+  });
+
+  it("warns that re-enabling reclaims edits, only while a calendar is off", () => {
+    const reclaim = /takes back their title, time, and folder/;
+    render_();
+    expect(screen.queryByText(reclaim)).not.toBeInTheDocument();
+    cleanup();
+    render_({ account: account([cal({ enabled: false })]) });
+    expect(screen.getByText(reclaim)).toBeInTheDocument();
   });
 
   it("handles an account with no discovered calendars", () => {

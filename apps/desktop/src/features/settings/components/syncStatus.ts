@@ -50,8 +50,16 @@ export type AccountConnectionState = "connected" | "reconnectNeeded";
 
 // An account is "Reconnect needed" the moment any calendar's last resync surfaced
 // a credential failure — an account-wide auth problem, not per-calendar.
+//
+// `persisted` is the account's stored flag, and it carries the case a resync result
+// cannot: a background pass hit the rejection, so nothing in this session has a
+// result to report, and the scheduler has since dropped the account from the poll
+// loop. Without it a dead credential reads as "Connected" until someone resyncs by
+// hand.
 export function accountConnectionState(
-  statuses: readonly (CalendarSyncResult["status"] | undefined)[]
+  statuses: readonly (CalendarSyncResult["status"] | undefined)[],
+  persisted = false
 ): AccountConnectionState {
-  return statuses.some((s) => s === "reconnectNeeded") ? "reconnectNeeded" : "connected";
+  const rejected = persisted || statuses.some((s) => s === "reconnectNeeded");
+  return rejected ? "reconnectNeeded" : "connected";
 }

@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const APP_PASSWORD_HELP = "https://pikos.app/calendar-sync#app-password";
+import { APP_PASSWORD_HELP, FORM_INPUT } from "./accountForm";
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -20,9 +20,6 @@ interface AddAccountDialogProps {
   onConnectGoogle: () => Promise<void>;
   googleAvailable: boolean;
 }
-
-const FORM_INPUT =
-  "w-full rounded border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-text-tertiary focus-visible:border-ring focus-visible:outline-none";
 
 export function AddAccountDialog({
   googleAvailable,

@@ -111,6 +111,7 @@ const WRITE_COMMANDS = new Set([
   "delete_page_reminder",
   "delete_page_reminders",
   "connect_caldav_account",
+  "reconnect_caldav_account",
   "disconnect_sync_account",
   "toggle_sync_calendar",
   "resync_sync_account",
@@ -348,6 +349,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars> {
     return invoke<AccountWithCalendars>("connect_caldav_account", { ...data });
+  }
+
+  reconnectCaldavAccount(accountId: string, password: string): Promise<AccountWithCalendars> {
+    return invoke<AccountWithCalendars>("reconnect_caldav_account", { accountId, password });
   }
 
   connectGoogleAccount(): Promise<AccountWithCalendars> {

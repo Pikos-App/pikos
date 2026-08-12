@@ -31,6 +31,8 @@ export interface CalendarSyncState {
   error: string | null;
   connect: (data: NewCaldavConnection) => Promise<void>;
   connectGoogle: () => Promise<void>;
+  reconnect: (accountId: string, password: string) => Promise<void>;
+  reconnectGoogle: (accountId: string) => Promise<void>;
   /** False in a build without the Google OAuth client — the picker disables it. */
   googleAvailable: boolean;
   disconnect: (accountId: string) => Promise<void>;
@@ -84,6 +86,26 @@ export function useCalendarSync(): CalendarSyncState {
     setError(null);
     await storage.connectGoogleAccount();
     await refresh();
+  }
+
+  // Both reconnect paths resync straight away: the account has been out of the
+  // background pass since the flag was set (`load_accounts` filters on it), so
+  // without this its calendars sit stale until the next interval tick.
+  // Rejections propagate to the dialog, which owns the inline error.
+  async function reconnect(accountId: string, password: string) {
+    if (!storage) return;
+    setError(null);
+    await storage.reconnectCaldavAccount(accountId, password);
+    await refresh();
+    await resync(accountId);
+  }
+
+  async function reconnectGoogle(accountId: string) {
+    if (!storage) return;
+    setError(null);
+    await storage.connectGoogleAccount();
+    await refresh();
+    await resync(accountId);
   }
 
   async function disconnect(accountId: string) {
@@ -176,6 +198,8 @@ export function useCalendarSync(): CalendarSyncState {
     googleAvailable,
     loading,
     recolorCalendar,
+    reconnect,
+    reconnectGoogle,
     results,
     resync,
     toggleCalendar,
