@@ -1,6 +1,15 @@
 import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Captures the handler the hook subscribes so a test can fire a sync pass.
+const passHandlers: Array<() => void> = [];
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (event: string, handler: () => void) => {
+    if (event === "calendar-sync:pass") passHandlers.push(handler);
+    return Promise.resolve(() => {});
+  },
+}));
+
 import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderHookWithProviders } from "@/test/renderWithProviders";
@@ -24,6 +33,7 @@ async function ready(hook: ReturnType<typeof setup>) {
 
 beforeEach(() => {
   localStorage.clear();
+  passHandlers.length = 0;
 });
 
 describe("useCalendarSync", () => {
@@ -62,6 +72,36 @@ describe("useCalendarSync", () => {
     expect(updated.enabled).toBe(true);
     expect(updated.color).toBe("#A8CDB4");
     expect(updated.folderId).not.toBeNull();
+  });
+
+  // Enabling a calendar only pokes the backfill, so the freshness that first sync
+  // stamps lands after this hook's own post-toggle read. The pass event is what
+  // pulls it in; without it the row sits on a pre-sync snapshot.
+  it("re-reads the panel when a background pass completes", async () => {
+    const hook = renderHookWithProviders(() => ({
+      storage: useWorkspace().storage,
+      sync: useCalendarSync(),
+    }));
+    await waitFor(() => expect(hook.result.current.sync.loading).toBe(false));
+    await act(async () => {
+      await hook.result.current.sync.connect(CONN);
+    });
+    const account = hook.result.current.sync.accounts[0]!;
+    const cal = account.calendars[0]!;
+    await act(async () => {
+      await hook.result.current.sync.toggleCalendar(cal.id, true, "#A8CDB4");
+    });
+    const shown = () =>
+      hook.result.current.sync.accounts[0]!.calendars.find((c) => c.id === cal.id)!;
+    expect(shown().lastSyncedAt).toBeNull();
+
+    // Out of band, as the background loop would: sync, then announce the pass.
+    await act(async () => {
+      await hook.result.current.storage!.resyncSyncAccount(account.id);
+      passHandlers.forEach((h) => h());
+    });
+
+    await waitFor(() => expect(shown().lastSyncedAt).not.toBeNull());
   });
 
   it("recolorCalendar changes the colour without flipping enabled", async () => {

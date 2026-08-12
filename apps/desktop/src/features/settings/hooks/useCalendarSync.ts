@@ -1,5 +1,6 @@
 import type { AccountWithCalendars, CalendarSyncResult, NewCaldavConnection } from "@pikos/core";
-import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { useEffect, useRef, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -71,6 +72,31 @@ export function useCalendarSync(): CalendarSyncState {
     if (!storage) return;
     setAccounts(await storage.getSyncStatus());
   }
+
+  // The dot and "synced N ago" read `lastSyncedAt`, which the *backfill* stamps —
+  // and enabling a calendar only pokes that backfill, so it lands after this hook's
+  // own post-toggle read. Without this the row keeps showing a pre-sync snapshot
+  // (stale dot, no timestamp) until some other panel action happens to re-read.
+  const refreshRef = useRef(refresh);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  });
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    listen("calendar-sync:pass", () => void refreshRef.current())
+      .then((un) => {
+        if (cancelled) un();
+        else unlisten = un;
+      })
+      .catch(() => {
+        /* listener failed to attach; the panel just stays on its last read */
+      });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   async function connect(data: NewCaldavConnection) {
     if (!storage) return;

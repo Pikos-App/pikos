@@ -27,6 +27,14 @@ const TRAILING_COVER: Duration = Duration::from_secs(2);
 /// listens and reloads (see `useSyncAppliedReload`).
 const SYNC_APPLIED_EVENT: &str = "calendar-sync:applied";
 
+/// Emitted after every completed pass, changed or not. The sync panel's freshness
+/// (`sync_calendar.last_synced_at`) moves on a no-change poll too, and a calendar
+/// enable pokes a backfill that lands *after* the toggle's own read — so the panel
+/// needs a signal the workspace reload deliberately doesn't get. Kept separate
+/// because reloading the workspace every 5 min is exactly what the applied event's
+/// `changed` gate exists to prevent.
+const SYNC_PASS_EVENT: &str = "calendar-sync:pass";
+
 /// Managed sender half of the trigger stream, so window focus and the
 /// calendar-enable command can wake the loop.
 pub struct SyncTriggerSender(mpsc::Sender<SyncTrigger>);
@@ -109,6 +117,7 @@ pub async fn run(app: AppHandle, rx: mpsc::Receiver<SyncTrigger>) {
                 log::info!("calendar_sync_applied_changes");
                 let _ = app.emit(SYNC_APPLIED_EVENT, ());
             }
+            let _ = app.emit(SYNC_PASS_EVENT, ());
         },
     )
     .await;

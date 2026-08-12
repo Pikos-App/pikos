@@ -1115,10 +1115,20 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
-    const results = this._calendarsFor(accountId)
-      .filter((c) => c.enabled)
-      .map((c) => ({ calendarId: c.calendarId, fullResync: false, status: "synced" as const }));
-    return Promise.resolve(results);
+    const synced = this._calendarsFor(accountId).filter((c) => c.enabled);
+    // Stamp freshness like `persist_progress` does on every successful poll — the
+    // panel's dot and "synced N ago" read it, so without this a mock-mode calendar
+    // reads stale forever.
+    for (const c of synced) {
+      this.syncCalendars.set(c.id, { ...c, lastSyncedAt: now() });
+    }
+    return Promise.resolve(
+      synced.map((c) => ({
+        calendarId: c.calendarId,
+        fullResync: false,
+        status: "synced" as const,
+      }))
+    );
   }
 
   getSyncStatus(): Promise<AccountWithCalendars[]> {
