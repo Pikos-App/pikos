@@ -11,6 +11,7 @@ function cal(over: Partial<SyncCalendar> = {}): SyncCalendar {
     accountId: "a1",
     calendarId: "personal-cal",
     color: "#A8CDB4",
+    detachedPages: 0,
     displayName: "Personal",
     enabled: true,
     folderId: "f1",
@@ -84,15 +85,6 @@ describe("SyncAccountCard", () => {
     render_({ busy: true });
     expect(screen.getByText("Syncing…")).toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
-  });
-
-  it("warns that re-enabling reclaims edits, only while a calendar is off", () => {
-    const reclaim = /takes back their title, time, and folder/;
-    render_();
-    expect(screen.queryByText(reclaim)).not.toBeInTheDocument();
-    cleanup();
-    render_({ account: account([cal({ enabled: false })]) });
-    expect(screen.getByText(reclaim)).toBeInTheDocument();
   });
 
   it("handles an account with no discovered calendars", () => {

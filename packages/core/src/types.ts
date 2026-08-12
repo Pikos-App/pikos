@@ -308,6 +308,10 @@ export interface SyncCalendar {
   enabled: boolean; // per-calendar opt-in
   lastSyncedAt: string | null;
   folderId: string | null; // the calendar's system folder, set while enabled
+  // Pages left behind when the calendar was unsynced. Re-enabling re-links them and
+  // takes back their title, time, and folder, so the toggle confirms first — and
+  // stays instant at zero, which is every calendar that was never on.
+  detachedPages: number;
 }
 
 /** An account plus its calendars — the account-centric panel read (getSyncStatus). */

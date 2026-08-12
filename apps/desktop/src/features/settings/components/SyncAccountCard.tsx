@@ -119,13 +119,6 @@ export function SyncAccountCard({
         )}
       </div>
 
-      {account.calendars.some((cal) => !cal.enabled) && (
-        <p className="px-4 pt-1 pb-3 text-xs text-muted-foreground">
-          Turning a calendar back on reconnects the pages you kept, and takes back their title,
-          time, and folder. Anything you wrote on them stays.
-        </p>
-      )}
-
       <ReconnectAccountDialog
         account={account}
         onOpenChange={setReconnectOpen}

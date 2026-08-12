@@ -34,6 +34,11 @@ pub struct SyncCalendar {
     pub enabled: bool,
     pub last_synced_at: Option<String>,
     pub folder_id: Option<String>,
+    /// Pages this calendar left behind when it was unsynced — owned, so teardown
+    /// detached them instead of deleting. Derived, not stored. Re-enabling re-links
+    /// them and overwrites their mirror fields, so the panel confirms first; a zero
+    /// here means there is nothing to warn about and the toggle stays instant.
+    pub detached_pages: i64,
 }
 
 /// One account plus its calendars — the panel's account-centric read.
@@ -47,8 +52,12 @@ pub struct AccountWithCalendars {
 
 const ACCOUNT_COLS: &str = "id, provider, display_name, auth_kind, created_at, reconnect_needed";
 
-const CAL_COLS: &str =
-    "id, account_id, calendar_id, display_name, color, enabled, last_synced_at, folder_id";
+const CAL_COLS: &str = "id, account_id, calendar_id, display_name, color, enabled, \
+     last_synced_at, folder_id, \
+     (SELECT COUNT(*) FROM page_sync ps \
+        WHERE ps.account_id = sync_calendar.account_id \
+          AND ps.calendar_id = sync_calendar.calendar_id \
+          AND ps.sync_state = 'detached') AS detached_pages";
 
 // ─── accounts ───────────────────────────────────────────────────────────────────
 

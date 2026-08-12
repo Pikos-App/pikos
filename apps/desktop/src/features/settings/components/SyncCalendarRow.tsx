@@ -2,6 +2,7 @@ import type { CalendarSyncResult, SyncCalendar } from "@pikos/core";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
 import { PALETTE_COLORS } from "@/shared/constants/colors";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
@@ -23,18 +24,32 @@ export function SyncCalendarRow({
   onToggle,
 }: SyncCalendarRowProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   // Re-render each minute so "synced N ago" and the stale dot stay current
   // without a user interaction, since both derive from the wall clock.
   useMinuteTick();
   const dot = calendarSyncDot(calendar, lastResult);
   const swatch = calendar.color ?? "var(--text-tertiary)";
+  const kept = calendar.detachedPages;
+
+  // Turning a calendar back on is the one toggle that overwrites work the user did
+  // while it was off, and nothing else warns them — the page-level banner says the
+  // opposite ("a regular page you can edit"). Only asks when pages are actually
+  // waiting to be reclaimed; every other flip stays instant.
+  function toggle(next: boolean) {
+    if (next && kept > 0) {
+      setConfirmOpen(true);
+      return;
+    }
+    onToggle(next);
+  }
 
   return (
     <div className="flex items-center gap-2.5 py-2">
       <Switch
         aria-label={`Sync ${calendar.displayName}`}
         checked={calendar.enabled}
-        onCheckedChange={onToggle}
+        onCheckedChange={toggle}
         size="sm"
       />
 
@@ -80,6 +95,18 @@ export function SyncCalendarRow({
       )}
 
       <SyncStatusDot label={`${calendar.displayName}: ${dot.label}`} state={dot.state} />
+
+      <ConfirmDialog
+        confirmLabel="Turn on"
+        description={`You kept ${kept} ${kept === 1 ? "page" : "pages"} when this calendar was off. Turning it back on takes back their title, time, and folder. Anything you wrote on them stays.`}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          onToggle(true);
+        }}
+        onOpenChange={setConfirmOpen}
+        open={confirmOpen}
+        title={`Turn ${calendar.displayName} back on?`}
+      />
     </div>
   );
 }

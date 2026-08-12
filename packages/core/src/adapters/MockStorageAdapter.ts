@@ -1049,6 +1049,7 @@ export class MockStorageAdapter implements StorageAdapter {
         accountId: account.id,
         calendarId: `${provider}-${name.toLowerCase()}-cal`,
         color: null,
+        detachedPages: 0,
         displayName: name,
         enabled: false,
         folderId: null,
@@ -1083,6 +1084,8 @@ export class MockStorageAdapter implements StorageAdapter {
     const cal = this.syncCalendars.get(syncCalendarId);
     if (!cal) return Promise.reject(new Error(`Sync calendar not found: ${syncCalendarId}`));
     let folderId = cal.folderId;
+    // A re-enable re-links them, so nothing is left detached once sync resumes.
+    let detachedPages = enabled ? 0 : cal.detachedPages;
     if (enabled && !folderId) {
       const folder: Folder = {
         createdAt: now(),
@@ -1097,10 +1100,16 @@ export class MockStorageAdapter implements StorageAdapter {
       this.folders.set(folder.id, folder);
       folderId = folder.id;
     } else if (!enabled && folderId) {
+      // No page_sync table here, so approximate the real teardown's detach-if-owned:
+      // count the folder's synced pages. Over-counts (a bare mirror would be deleted
+      // upstream of this), which is enough to drive the re-enable confirm.
+      detachedPages = [...this.pages.values()].filter(
+        (p) => p.folderId === folderId && p.syncState
+      ).length;
       this.folders.delete(folderId);
       folderId = null;
     }
-    const updated: SyncCalendar = { ...cal, color, enabled, folderId };
+    const updated: SyncCalendar = { ...cal, color, detachedPages, enabled, folderId };
     this.syncCalendars.set(syncCalendarId, updated);
     return Promise.resolve(updated);
   }
