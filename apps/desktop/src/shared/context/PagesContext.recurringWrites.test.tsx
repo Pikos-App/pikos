@@ -56,8 +56,8 @@ describe("completeRecurringPage idempotency", () => {
 
     await act(async () => {
       await Promise.all([
-        hook.result.current.pages.completeRecurringPage(pageId, "advance"),
-        hook.result.current.pages.completeRecurringPage(pageId, "advance"),
+        hook.result.current.pages.completeRecurringPage(pageId),
+        hook.result.current.pages.completeRecurringPage(pageId),
       ]);
     });
 
@@ -73,17 +73,17 @@ describe("completeRecurringPage idempotency", () => {
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
-      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+      await hook.result.current.pages.completeRecurringPage(pageId);
     });
     await act(async () => {
-      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+      await hook.result.current.pages.completeRecurringPage(pageId);
     });
 
     expect(completeSpy).toHaveBeenCalledTimes(2);
   });
 });
 
-describe("completeRecurringPage policy inputs (occurrence-sets payload)", () => {
+describe("completeRecurringPage payload", () => {
   // Date is faked (only Date) to make the gap deterministic; the head sits 5 days
   // before "today" on a daily rule.
   const NOW = "2099-01-10T12:00:00";
@@ -96,43 +96,94 @@ describe("completeRecurringPage policy inputs (occurrence-sets payload)", () => 
     vi.useRealTimers();
   });
 
-  it("no gap (future head) → advance sends just the page id", async () => {
-    vi.setSystemTime(new Date("2099-01-01T12:00:00")); // before the 2099-01-05 head
+  it("a native head sends just the page id — the backend derives its occurrence", async () => {
     const { hook, pageId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
-      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+      await hook.result.current.pages.completeRecurringPage(pageId);
     });
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![0]).toEqual({ pageId });
   });
 
-  it("overdue head → advance leaves the gap open (no skipDates)", async () => {
+  it("completes the head off the passed-in override, not the lagging pages state", async () => {
+    // The "all to today" run chains each step off the previous call's recomputed
+    // head; reading React state instead would re-send the same occurrence and the
+    // backend's idempotency would silently stall the run after one completion.
     const { hook, pageId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+    const stale = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
 
     await act(async () => {
-      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+      await hook.result.current.pages.completeRecurringPage(pageId, {
+        ...stale,
+        scheduledStart: "2099-01-08T09:00:00",
+        scheduleLocked: true,
+        timezone: null,
+      });
     });
 
-    expect(spy.mock.calls[0]![0]).toEqual({ pageId });
+    expect(spy.mock.calls[0]![0]).toMatchObject({ occurrenceDate: "2099-01-08" });
+  });
+});
+
+describe("completeRecurringToToday", () => {
+  const NOW = "2099-01-10T12:00:00";
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(NOW));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("overdue head → skip dismisses the whole gap to skipDates", async () => {
+  it("clones every open occurrence up to today and leaves the head on today", async () => {
+    // Head 2099-01-05 on a daily rule, today 2099-01-10 → 05..09 complete, and the
+    // head lands on today rather than running past it.
+    const { hook, pageId } = await setupRecurringPage();
+
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringToToday(pageId, { maxSteps: 20 });
+    });
+
+    const clones = hook.result.current.pages.pages.filter(
+      (p) => p.title === "Standup" && p.status === "done"
+    );
+    expect(clones.map((p) => p.scheduledStart).sort()).toEqual([
+      "2099-01-05T09:00:00",
+      "2099-01-06T09:00:00",
+      "2099-01-07T09:00:00",
+      "2099-01-08T09:00:00",
+      "2099-01-09T09:00:00",
+    ]);
+    expect(head(hook, pageId).scheduledStart).toBe("2099-01-10T09:00:00");
+  });
+
+  it("stops at the step budget", async () => {
+    const { hook, pageId } = await setupRecurringPage();
+
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringToToday(pageId, { maxSteps: 2 });
+    });
+
+    expect(
+      hook.result.current.pages.pages.filter((p) => p.title === "Standup" && p.status === "done")
+    ).toHaveLength(2);
+  });
+
+  it("does nothing when the head is not overdue", async () => {
+    vi.setSystemTime(new Date("2099-01-01T12:00:00")); // before the 2099-01-05 head
     const { hook, pageId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
-      await hook.result.current.pages.completeRecurringPage(pageId, "skip");
+      await hook.result.current.pages.completeRecurringToToday(pageId, { maxSteps: 20 });
     });
 
-    // Head 2099-01-05 (completed server-side), today 2099-01-10 → gap = 06..09 skipped.
-    expect(spy.mock.calls[0]![0]).toEqual({
-      pageId,
-      skipDates: ["2099-01-06", "2099-01-07", "2099-01-08", "2099-01-09"],
-    });
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 
@@ -179,9 +230,9 @@ describe("completeRecurringPage serialization behind the mutation queue", () => 
       drag = hook.result.current.pages.scheduleOnce(pageId, "2099-01-06T10:00:00");
     });
     // Complete while the drag's writes are still in flight.
-    let complete!: Promise<void>;
+    let complete!: Promise<unknown>;
     act(() => {
-      complete = hook.result.current.pages.completeRecurringPage(pageId, "advance");
+      complete = hook.result.current.pages.completeRecurringPage(pageId);
     });
     await act(async () => {
       releaseUpdate();
@@ -267,7 +318,7 @@ describe("synced recurring completion routing", () => {
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
-      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+      await hook.result.current.pages.completeRecurringPage(pageId);
     });
 
     expect(completeSpy).toHaveBeenCalledTimes(1);
@@ -276,18 +327,18 @@ describe("synced recurring completion routing", () => {
   });
 });
 
-describe("skipOccurrence undo", () => {
+describe("skipOccurrences", () => {
   // A skip is per-occurrence state in the skip-set (page.skippedOccurrences), not
-  // a rule EXDATE. Undo removes only its own date, leaving a skip written inside
+  // a rule EXDATE. Undo removes only its own dates, leaving a skip written inside
   // the undo-toast window intact.
   it("preserves a skip written between the skip and its undo", async () => {
     const { hook, pageId } = await setupRecurringPage();
 
     let undo!: () => void;
     await act(async () => {
-      undo = await hook.result.current.pages.skipOccurrence(pageId, "2099-01-12");
+      undo = await hook.result.current.pages.skipOccurrences(pageId, ["2099-01-12"]);
       // Interleaved writer inside the undo window: a second skip.
-      await hook.result.current.pages.skipOccurrence(pageId, "2099-01-19");
+      await hook.result.current.pages.skipOccurrences(pageId, ["2099-01-19"]);
     });
     await act(async () => {
       undo();
@@ -298,13 +349,46 @@ describe("skipOccurrence undo", () => {
     const page = hook.result.current.pages.pages.find((p) => p.id === pageId);
     expect(page?.skippedOccurrences).toEqual(["2099-01-19"]);
   });
+
+  it("a bulk dismissal covering the head's own date advances the head", async () => {
+    // Only the delete dialog's "all to today" arm can skip the head's date, and
+    // the local skip list alone would leave the head sitting on a dismissed day.
+    const { hook, pageId } = await setupRecurringPage();
+
+    await act(async () => {
+      await hook.result.current.pages.skipOccurrences(pageId, [
+        "2099-01-05",
+        "2099-01-06",
+        "2099-01-07",
+      ]);
+    });
+
+    expect(head(hook, pageId).scheduledStart).toBe("2099-01-08T09:00:00");
+  });
+
+  it("undoing a bulk dismissal restores the head with the dates", async () => {
+    const { hook, pageId } = await setupRecurringPage();
+
+    let undo!: () => void;
+    await act(async () => {
+      undo = await hook.result.current.pages.skipOccurrences(pageId, ["2099-01-05", "2099-01-06"]);
+    });
+    await act(async () => {
+      undo();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(head(hook, pageId).scheduledStart).toBe("2099-01-05T09:00:00");
+    expect(head(hook, pageId).skippedOccurrences ?? []).toEqual([]);
+  });
 });
 
-// ─── maybeToggleRecurringOccurrence + cloneWallClock ───────────────────────────
-// Toggling a synced recurring occurrence's status must route to occurrence-based
-// completion (never the native head advance) and store the done clone at the
-// viewer-local wall clock for a zoned timed event. maybeToggleRecurringOccurrence
-// is the gate every UI toggle funnels through; cloneWallClock is the conversion.
+// ─── completeSyncedOccurrence + cloneWallClock ────────────────────────────────
+// Completing a rendered occurrence of a synced series writes against that
+// occurrence's own date (never the head's) and stores the done clone at the
+// viewer-local wall clock for a zoned timed event. Which gesture reaches this
+// writer is the gap dialog's job (RecurringGapDialogContext); what it writes is
+// pinned here.
 
 type Hook = Awaited<ReturnType<typeof setupRecurringPage>>["hook"];
 
@@ -349,115 +433,89 @@ function head(hook: Hook, pageId: string) {
   return p;
 }
 
-describe("maybeToggleRecurringOccurrence", () => {
-  it("leaves the head alone so it reaches the gap dialog", async () => {
-    // The head floors at the connect day, so it can be genuinely overdue — completing
-    // it is the gesture that has to offer advance-one vs skip-the-gap, exactly as a
-    // native series does. Intercepting here is what used to deny it that dialog.
+describe("completeSyncedOccurrence", () => {
+  it("completes a rendered occurrence on its own date, not the head's", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
-    let handled!: boolean;
-    act(() => {
-      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(
-        head(hook, pageId),
-        "done"
-      );
-    });
-
-    expect(handled).toBe(false);
-    expect(completeSpy).not.toHaveBeenCalled();
-  });
-
-  it("a virtual occurrence completes on its own originalDate, not the head's date", async () => {
-    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
-
-    const virtual = {
-      ...head(hook, pageId),
-      originalDate: "2099-01-12",
-      scheduledStart: "2099-01-12T09:00:00",
-    };
-    act(() => {
-      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
-    });
-
-    expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({ occurrenceDate: "2099-01-12" });
-  });
-
-  it("a detached series' moved block completes on its originalDate, not through the gap dialog", async () => {
-    // Detached is unlocked, so a scheduleLocked gate dropped this to head
-    // completion — aiming the gap dialog at a date that can never be the
-    // override's originalDate. Sync origin is the gate, matching toOverrideBlocks.
-    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
     await act(async () => {
-      const storage = hook.result.current.workspace.storage as MockStorageAdapter;
-      storage.markPageSynced(pageId, { state: "detached", timezone: "America/New_York" });
-      await hook.result.current.workspace.reload();
-    });
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
-
-    const movedBlock = {
-      ...head(hook, pageId),
-      originalDate: "2099-01-12",
-      scheduledStart: "2099-01-12T14:00:00",
-    };
-    let handled!: boolean;
-    act(() => {
-      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(movedBlock, "done");
+      await hook.result.current.pages.completeSyncedOccurrence({
+        occurrenceDate: "2099-01-12",
+        pageId,
+        scheduledStart: "2099-01-12T09:00:00",
+      });
     });
 
-    expect(handled).toBe(true);
     expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({ occurrenceDate: "2099-01-12" });
   });
 
-  it("a detached series' virtual completes on its own originalDate too", async () => {
-    // Detach changes ownership, not page kind — a calendar-born series keeps
-    // attendance semantics (tick the instance), active or detached.
+  it("drops a re-entrant completion of the same occurrence — one clone, no duplicate", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    await act(async () => {
-      const storage = hook.result.current.workspace.storage as MockStorageAdapter;
-      storage.markPageSynced(pageId, { state: "detached", timezone: "America/New_York" });
-      await hook.result.current.workspace.reload();
-    });
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
-    const virtual = {
-      ...head(hook, pageId),
-      isVirtual: true,
-      originalDate: "2099-01-12",
-      scheduledStart: "2099-01-12T09:00:00",
+    const occurrence = {
+      occurrenceDate: "2099-01-05",
+      pageId,
+      scheduledStart: "2099-01-05T09:00:00",
     };
-    let handled!: boolean;
-    act(() => {
-      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
+    await act(async () => {
+      await Promise.all([
+        hook.result.current.pages.completeSyncedOccurrence(occurrence),
+        hook.result.current.pages.completeSyncedOccurrence(occurrence),
+      ]);
     });
 
-    expect(handled).toBe(true);
-    expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({ occurrenceDate: "2099-01-12" });
+    expect(completeSpy).toHaveBeenCalledTimes(1);
+    const pages = hook.result.current.pages.pages;
+    expect(new Set(pages.map((p) => p.id)).size).toBe(pages.length);
+    expect(pages.filter((p) => p.title === "Synced standup" && p.status === "done")).toHaveLength(
+      1
+    );
   });
 
+  it("a settled re-completion of the SAME occurrence replaces the clone in state — no duplicate row", async () => {
+    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
+    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+
+    const occurrence = {
+      occurrenceDate: "2099-01-05",
+      pageId,
+      scheduledStart: "2099-01-05T09:00:00",
+    };
+    await act(async () => {
+      await hook.result.current.pages.completeSyncedOccurrence(occurrence);
+    });
+    await act(async () => {
+      await hook.result.current.pages.completeSyncedOccurrence(occurrence);
+    });
+
+    expect(completeSpy).toHaveBeenCalledTimes(2);
+    const pages = hook.result.current.pages.pages;
+    expect(new Set(pages.map((p) => p.id)).size).toBe(pages.length);
+    expect(pages.filter((p) => p.title === "Synced standup" && p.status === "done")).toHaveLength(
+      1
+    );
+  });
+});
+
+describe("maybeUncompleteRecurringClone", () => {
   it("unchecking a done clone routes to uncompleteRecurringOccurrence with the series id + date", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
     const uncompleteSpy = vi.spyOn(MockStorageAdapter.prototype, "uncompleteRecurringOccurrence");
 
-    // completeSyncedOccurrence's optimistic clone insert lands a microtask after
-    // the (fire-and-forget) toggle — flush so the clone is in `pages`.
-    const virtual = {
-      ...head(hook, pageId),
-      originalDate: "2099-01-05",
-      scheduledStart: "2099-01-05T09:00:00",
-    };
     await act(async () => {
-      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
-      await Promise.resolve();
+      await hook.result.current.pages.completeSyncedOccurrence({
+        occurrenceDate: "2099-01-05",
+        pageId,
+        scheduledStart: "2099-01-05T09:00:00",
+      });
     });
     const cloneId = head(hook, pageId).completedOccurrences?.["2099-01-05"] ?? "";
     const clone = hook.result.current.pages.pages.find((p) => p.id === cloneId)!;
 
     let handled!: boolean;
     act(() => {
-      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(clone, "not_started");
+      handled = hook.result.current.pages.maybeUncompleteRecurringClone(clone, "not_started");
     });
 
     expect(handled).toBe(true);
@@ -468,64 +526,13 @@ describe("maybeToggleRecurringOccurrence", () => {
     });
   });
 
-  it("drops a re-entrant completion of the same occurrence — one clone, no duplicate", async () => {
+  it("leaves a tick alone — completion is the gap dialog's to route", async () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
-    const virtual = {
-      ...head(hook, pageId),
-      originalDate: "2099-01-05",
-      scheduledStart: "2099-01-05T09:00:00",
-    };
-    await act(async () => {
-      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
-      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
-      await Promise.resolve();
-    });
-
-    expect(completeSpy).toHaveBeenCalledTimes(1);
-    const pages = hook.result.current.pages.pages;
-    expect(new Set(pages.map((p) => p.id)).size).toBe(pages.length);
-    const doneClones = pages.filter((p) => p.title === "Synced standup" && p.status === "done");
-    expect(doneClones).toHaveLength(1);
-  });
-
-  it("a settled re-completion of the SAME occurrence replaces the clone in state — no duplicate row", async () => {
-    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
-
-    // Complete a fixed virtual twice (the head itself advances off the completed date
-    // now, so re-clicking the head would be a *different* occurrence — the idempotency
-    // being tested is per-occurrence, so pin the same originalDate both gestures).
-    const virtual = {
-      ...head(hook, pageId),
-      originalDate: "2099-01-05",
-      scheduledStart: "2099-01-05T09:00:00",
-    };
-    await act(async () => {
-      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
-      await Promise.resolve();
-    });
-    await act(async () => {
-      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
-      await Promise.resolve();
-    });
-
-    expect(completeSpy).toHaveBeenCalledTimes(2);
-    const pages = hook.result.current.pages.pages;
-    expect(new Set(pages.map((p) => p.id)).size).toBe(pages.length);
-    const doneClones = pages.filter((p) => p.title === "Synced standup" && p.status === "done");
-    expect(doneClones).toHaveLength(1);
-  });
-
-  it("returns false for a malformed synced row with no scheduledStart so the native path surfaces the error", async () => {
-    const { hook, pageId } = await setupSyncedRecurring("2099-01-05T09:00:00", "America/New_York");
-    const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
-
-    const malformed = { ...head(hook, pageId), scheduledStart: null };
     let handled!: boolean;
     act(() => {
-      handled = hook.result.current.pages.maybeToggleRecurringOccurrence(malformed, "done");
+      handled = hook.result.current.pages.maybeUncompleteRecurringClone(head(hook, pageId), "done");
     });
 
     expect(handled).toBe(false);
@@ -542,13 +549,13 @@ describe("cloneWallClock", () => {
     );
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
-    const virtual = {
-      ...head(hook, pageId),
-      originalDate: "2099-01-05",
-      scheduledStart: "2099-01-05T15:00:00",
-    };
-    act(() => {
-      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
+    await act(async () => {
+      await hook.result.current.pages.completeSyncedOccurrence({
+        occurrenceDate: "2099-01-05",
+        pageId,
+        scheduledEnd: "2099-01-05T16:00:00",
+        scheduledStart: "2099-01-05T15:00:00",
+      });
     });
 
     // Under TZ=UTC the viewer zone is UTC: 15:00 Los_Angeles → its absolute
@@ -567,10 +574,10 @@ describe("cloneWallClock", () => {
     });
   });
 
-  it("converts the head's wall-clock too, when the gap dialog's completion drives it", async () => {
-    // The head no longer routes through maybeToggleRecurringOccurrence, so the
-    // conversion has to be applied on the completeRecurringPage path as well —
-    // otherwise a dialog-driven completion would clone the source-zone wall-clock.
+  it("converts the head's wall-clock too, when a head tick drives it", async () => {
+    // A synced head names its own occurrence, so the conversion has to be applied
+    // on the completeRecurringPage path as well — otherwise a head tick would clone
+    // the source-zone wall-clock.
     const { hook, pageId } = await setupSyncedRecurring(
       "2099-01-05T15:00:00",
       "America/Los_Angeles",
@@ -579,7 +586,7 @@ describe("cloneWallClock", () => {
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
     await act(async () => {
-      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+      await hook.result.current.pages.completeRecurringPage(pageId);
     });
 
     expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({
@@ -597,13 +604,12 @@ describe("cloneWallClock", () => {
     const { hook, pageId } = await setupSyncedRecurring("2099-01-05", "America/Los_Angeles");
     const completeSpy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
-    const virtual = {
-      ...head(hook, pageId),
-      originalDate: "2099-01-05",
-      scheduledStart: "2099-01-05",
-    };
-    act(() => {
-      hook.result.current.pages.maybeToggleRecurringOccurrence(virtual, "done");
+    await act(async () => {
+      await hook.result.current.pages.completeSyncedOccurrence({
+        occurrenceDate: "2099-01-05",
+        pageId,
+        scheduledStart: "2099-01-05",
+      });
     });
 
     expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({
@@ -732,7 +738,7 @@ describe("uncompleteRecurringHead (U6-F2)", () => {
   it("un-marks an exhausted head and the un-done survives a heal", async () => {
     const { hook, pageId } = await setupFiniteSeries();
     await act(async () => {
-      await hook.result.current.pages.completeRecurringPage(pageId, "advance");
+      await hook.result.current.pages.completeRecurringPage(pageId);
     });
     expect(head(hook, pageId).status).toBe("done");
 

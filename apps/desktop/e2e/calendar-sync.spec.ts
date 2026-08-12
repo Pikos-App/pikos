@@ -367,6 +367,65 @@ appTest("a moved synced occurrence renders at its new slot, locked, and complete
   await expect(app.getByRole("button", { name: "Mark not done" })).toBeVisible();
 });
 
+// ─── tier2: the tick routing splits on sync origin ──────────────────────────
+//
+// A synced-origin occurrence is ticked where it renders: completion is a record
+// that this instance is resolved, so the checkbox sits on the block and the head
+// is untouched. A native virtual keeps the repeat glyph and no checkbox — its
+// completions funnel to the head, which is always the next thing due.
+
+appTest("a synced virtual completes itself; a native virtual has no checkbox @tier2", async ({
+  app,
+}) => {
+  await seedSynced(app);
+  await openCalendarMode(app);
+
+  // Page forward to a week made entirely of virtuals of the weekly London series.
+  const virtualLabel = /Weekly 1:1 \(London\)/;
+  for (let i = 0; i < 3; i++) {
+    await app.getByRole("button", { name: "Next week" }).click();
+    await app.waitForTimeout(400);
+  }
+  const virtual = app.getByRole("button", { name: virtualLabel }).first();
+  await expect(virtual).toBeVisible();
+
+  // No repeat glyph on a synced-origin occurrence — it carries a checkbox, and its
+  // popover offers the same status toggle a real block does.
+  await expect(virtual.getByLabel("Recurring")).toHaveCount(0);
+  await virtual.click();
+  await app.getByRole("button", { name: "Mark done" }).click();
+  await expect(app.getByText(/read-only/i)).toHaveCount(0);
+
+  // That occurrence alone is resolved: its slot shows a done page, and the series
+  // still has exactly one open head row in the list.
+  await expect(app.getByRole("button", { name: virtualLabel }).first()).toBeVisible();
+  await openPersonalFolder(app);
+  await expect(
+    seriesRows(app).filter({ has: app.getByRole("checkbox", { name: /Mark done/i }) })
+  ).toHaveCount(1);
+
+  // A native series' virtual is the other arm of the split: glyph, no checkbox.
+  await app.keyboard.press(mod("Mod+n"));
+  const dialog = app.getByRole("dialog", { name: "Quick add" });
+  await expect(dialog).toBeVisible();
+  await app.getByRole("textbox", { name: "Quick add input" }).fill("standup every day at 9am");
+  await expect(dialog.getByRole("button", { name: /Recurrence: every day/i })).toBeVisible({
+    timeout: 2000,
+  });
+  await app.keyboard.press("Enter");
+  await expect(dialog).not.toBeVisible();
+
+  await openCalendarMode(app);
+  await app.getByRole("button", { name: "Next week" }).click();
+  const nativeVirtual = app
+    .getByRole("button", { name: /^standup/i })
+    .filter({ has: app.getByLabel("Recurring") })
+    .first();
+  await expect(nativeVirtual).toBeVisible({ timeout: 5_000 });
+  await nativeVirtual.click();
+  await expect(app.getByRole("button", { name: "Mark done" })).toHaveCount(0);
+});
+
 // ─── tier2: a detached series keeps its occurrences in-series ────────────────
 //
 // A detached synced series is the user's to move, but it still has an upstream to
@@ -481,8 +540,11 @@ appTest("a synced recurring occurrence's popover offers no editable date @tier2"
   await expect(occurrence).toBeVisible();
 
   await occurrence.click();
-  // The virtual popover, not the page one: it has a Skip action and no title input.
-  await expect(app.getByRole("button", { name: "Skip this occurrence" })).toBeVisible();
+  // The virtual popover, not the page one: its delete names the local copy, and it
+  // has no title input.
+  await expect(
+    app.getByRole("button", { name: "Remove this occurrence from Pikos" })
+  ).toBeVisible();
   await expect(app.getByPlaceholder("Untitled")).toHaveCount(0);
 
   // Date renders as the read-only synced label — neither picker trigger is present.
@@ -515,11 +577,9 @@ appTest("a synced event shows the description-changed notice + read-only locatio
 // ─── tier2: an overdue synced head reaches the gap dialog ────────────────────
 //
 // A synced head floors at the connect day, so occurrences that pass while the app
-// is closed leave it genuinely overdue — the same shape a native series reaches.
-// It must offer the same advance-one / skip-the-gap choice; the toggle router used
-// to intercept a synced head and silently complete one occurrence per click. Uses
-// the raw `page` fixture because clock.install must run before the first app
-// script reads Date.
+// is closed leave it genuinely overdue — the same shape a native series reaches,
+// and it gets the same scope question. Uses the raw `page` fixture because
+// clock.install must run before the first app script reads Date.
 
 appTest("an overdue synced series completes through the gap dialog @tier2", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-06-08T09:00:00") });
@@ -540,9 +600,11 @@ appTest("an overdue synced series completes through the gap dialog @tier2", asyn
 
   await head.getByRole("checkbox", { name: /Mark done/i }).click();
 
-  await expect(page.getByRole("button", { name: /Advance to next page/ })).toBeVisible();
-  await page.getByRole("button", { name: /Advance to today/ }).click();
-  await expect(page.getByRole("button", { name: /Advance to today/ })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
+  await page.getByRole("button", { name: /This and everything before today/ }).click();
+  await expect(
+    page.getByRole("button", { name: /This and everything before today/ })
+  ).not.toBeVisible();
   // The locked mirror accepted the completion — a mis-routed write would surface
   // the read-only rejection instead.
   await expect(page.getByText(/read-only/i)).toHaveCount(0);

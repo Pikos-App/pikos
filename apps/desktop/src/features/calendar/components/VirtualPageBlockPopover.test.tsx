@@ -57,7 +57,7 @@ function renderPopover(page: VirtualOccurrence) {
   return renderWithProviders(
     <AppSettingsProvider>
       <TooltipProvider>
-        <VirtualPageBlockPopover onClose={vi.fn()} onSkip={vi.fn()} page={page} />
+        <VirtualPageBlockPopover onClose={vi.fn()} onDelete={vi.fn()} page={page} />
       </TooltipProvider>
     </AppSettingsProvider>
   );
@@ -93,5 +93,38 @@ describe("VirtualPageBlockPopover — schedule lock", () => {
     renderPopover(makeOccurrence({}));
 
     expect(screen.getByRole("button", { name: /^Scheduled:/ })).toBeInTheDocument();
+  });
+});
+
+describe("VirtualPageBlockPopover — completion", () => {
+  beforeEach(() => {
+    mocks.recurrenceRules = [
+      {
+        id: "r1",
+        pageId: "p1",
+        rrule: "FREQ=WEEKLY",
+        scheduledStart: "2099-01-05T09:00:00",
+      } as PageRecurrenceRule,
+    ];
+  });
+
+  it("offers a status toggle on a synced-origin occurrence", () => {
+    renderPopover(makeOccurrence({ scheduleLocked: true, syncState: "active" }));
+
+    expect(screen.getByRole("button", { name: "Mark done" })).toBeInTheDocument();
+  });
+
+  it("offers none on a native occurrence — those funnel to the head", () => {
+    renderPopover(makeOccurrence({}));
+
+    expect(screen.queryByRole("button", { name: "Mark done" })).not.toBeInTheDocument();
+  });
+
+  it("names the dismissal local-only on an active mirror", () => {
+    renderPopover(makeOccurrence({ scheduleLocked: true, syncState: "active" }));
+
+    expect(
+      screen.getByRole("button", { name: "Remove this occurrence from Pikos" })
+    ).toBeInTheDocument();
   });
 });

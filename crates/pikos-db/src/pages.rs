@@ -1102,10 +1102,6 @@ pub async fn list_completed_pages_impl(
 #[serde(rename_all = "camelCase")]
 pub struct CompleteRecurringInput {
     pub page_id: String,
-    /// Missed-occurrence dates (YYYY-MM-DD) the "advance to today" gap dialog
-    /// dismisses — written to the skip-set. Empty for a plain completion.
-    #[serde(default)]
-    pub skip_dates: Vec<String>,
     /// Synced series only: the client-rendered occurrence being completed (the
     /// reconciler pins the head at the base, so the virtual is the only record of
     /// it). Native series omit these — the head's own oldest-open date is used.
@@ -1133,8 +1129,8 @@ pub struct CompleteRecurringResult {
 ///    for a native series the head's own oldest-open occurrence; for a synced series
 ///    the client-supplied virtual (validated against the rule), since the reconciler
 ///    pins the head at the base.
-/// 2. Records `(page_id, occurrence_date) → clone_id` in `completed_set`, and any
-///    gap `skip_dates` in `skip_set` — no EXDATE merge (the exclusion is set-only).
+/// 2. Records `(page_id, occurrence_date) → clone_id` in `completed_set` — no EXDATE
+///    merge (the exclusion is set-only). Dismissals are `skip_occurrence`'s.
 /// 3. Recomputes `pages.scheduled_start` from truth (`recompute_recurring_schedule`),
 ///    which advances the head to the next open occurrence or marks it `done`. A
 ///    synced head advances the same way; the reconciler recomputes off the same sets
@@ -1347,15 +1343,6 @@ async fn complete_recurring_page_once(
     .bind(&clone_id)
     .execute(&mut *tx)
     .await?;
-
-    // Gap "advance to today" dismisses the in-between occurrences to the skip-set.
-    for date in &data.skip_dates {
-        sqlx::query("INSERT OR IGNORE INTO skip_set (page_id, occurrence_date) VALUES (?, ?)")
-            .bind(&data.page_id)
-            .bind(date)
-            .execute(&mut *tx)
-            .await?;
-    }
 
     // Advance the head off the completed + skipped dates (or mark done if the
     // series is exhausted) from truth, in the same tx.

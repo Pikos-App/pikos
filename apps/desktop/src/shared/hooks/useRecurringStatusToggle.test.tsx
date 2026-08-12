@@ -1,7 +1,8 @@
 // useRecurringStatusToggle — the shared router that decides how a status toggle
-// dispatches: recurring-occurrence handler first, then recurring done/undone, then
-// a plain non-recurring update. A branch reorder here silently mis-routes a synced
-// completion (the bug this hook was extracted to prevent), so each arm is pinned.
+// dispatches: un-check of a done clone first, then a recurring tick to the gap
+// dialog, then a plain non-recurring update. A branch reorder here silently
+// mis-routes a synced completion (the bug this hook was extracted to prevent), so
+// each arm is pinned.
 
 import type { PageRecurrenceRule, PageStatus, PageSummary, PageUpdate } from "@pikos/core";
 import { renderHook } from "@testing-library/react";
@@ -10,24 +11,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useRecurringStatusToggle } from "./useRecurringStatusToggle";
 
 const mocks = vi.hoisted(() => ({
-  maybeToggleRecurringOccurrence: vi.fn<(page: PageSummary, next: PageStatus) => boolean>(),
+  maybeUncompleteRecurringClone: vi.fn<(page: PageSummary, next: PageStatus) => boolean>(),
   recurrenceRules: [] as PageRecurrenceRule[],
-  requestRecurringComplete: vi.fn(),
+  requestComplete: vi.fn(),
   uncompleteRecurringOrFlip: vi.fn(),
   updatePage: vi.fn<(id: string, patch: PageUpdate) => void>(),
 }));
 
 vi.mock("@/shared/context/PagesContext", () => ({
   usePages: () => ({
-    maybeToggleRecurringOccurrence: mocks.maybeToggleRecurringOccurrence,
+    maybeUncompleteRecurringClone: mocks.maybeUncompleteRecurringClone,
     recurrenceRules: mocks.recurrenceRules,
     uncompleteRecurringOrFlip: mocks.uncompleteRecurringOrFlip,
     updatePage: mocks.updatePage,
   }),
 }));
 
-vi.mock("@/shared/context/RecurringCompleteDialogContext", () => ({
-  useRecurringCompleteDialog: () => ({ request: mocks.requestRecurringComplete }),
+vi.mock("@/shared/context/RecurringGapDialogContext", () => ({
+  useRecurringGapDialog: () => ({ requestComplete: mocks.requestComplete }),
 }));
 
 const PAGE = { id: "p1" } as PageSummary;
@@ -40,16 +41,16 @@ function toggle(): (page: PageSummary, next: PageStatus) => void {
 describe("useRecurringStatusToggle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.maybeToggleRecurringOccurrence.mockReturnValue(false);
+    mocks.maybeUncompleteRecurringClone.mockReturnValue(false);
     mocks.recurrenceRules = [];
   });
 
-  it("routes a done toggle on a recurring series to the complete dialog", () => {
+  it("routes a done toggle on a recurring series to the gap dialog", () => {
     mocks.recurrenceRules = [ruleFor("p1")];
 
     toggle()(PAGE, "done");
 
-    expect(mocks.requestRecurringComplete).toHaveBeenCalledWith("p1");
+    expect(mocks.requestComplete).toHaveBeenCalledWith(PAGE);
     expect(mocks.uncompleteRecurringOrFlip).not.toHaveBeenCalled();
     expect(mocks.updatePage).not.toHaveBeenCalled();
   });
@@ -60,7 +61,7 @@ describe("useRecurringStatusToggle", () => {
     toggle()(PAGE, "not_started");
 
     expect(mocks.uncompleteRecurringOrFlip).toHaveBeenCalledWith("p1");
-    expect(mocks.requestRecurringComplete).not.toHaveBeenCalled();
+    expect(mocks.requestComplete).not.toHaveBeenCalled();
     expect(mocks.updatePage).not.toHaveBeenCalled();
   });
 
@@ -74,7 +75,7 @@ describe("useRecurringStatusToggle", () => {
     expect(id).toBe("p1");
     expect(patch.status).toBe("done");
     expect(typeof patch.completedAt).toBe("string");
-    expect(mocks.requestRecurringComplete).not.toHaveBeenCalled();
+    expect(mocks.requestComplete).not.toHaveBeenCalled();
     expect(mocks.uncompleteRecurringOrFlip).not.toHaveBeenCalled();
   });
 
@@ -87,13 +88,13 @@ describe("useRecurringStatusToggle", () => {
     });
   });
 
-  it("suppresses all fallthrough when maybeToggleRecurringOccurrence handles it", () => {
-    mocks.maybeToggleRecurringOccurrence.mockReturnValue(true);
+  it("suppresses all fallthrough when the un-check handler takes it", () => {
+    mocks.maybeUncompleteRecurringClone.mockReturnValue(true);
     mocks.recurrenceRules = [ruleFor("p1")]; // recurring, yet nothing below must fire
 
-    toggle()(PAGE, "done");
+    toggle()(PAGE, "not_started");
 
-    expect(mocks.requestRecurringComplete).not.toHaveBeenCalled();
+    expect(mocks.requestComplete).not.toHaveBeenCalled();
     expect(mocks.uncompleteRecurringOrFlip).not.toHaveBeenCalled();
     expect(mocks.updatePage).not.toHaveBeenCalled();
   });

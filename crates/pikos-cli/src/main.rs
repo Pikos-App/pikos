@@ -757,7 +757,6 @@ async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
         pool,
         CompleteRecurringInput {
             page_id: id.to_string(),
-            skip_dates: Vec::new(),
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,

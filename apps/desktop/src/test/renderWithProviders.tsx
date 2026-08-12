@@ -21,7 +21,7 @@ import { CalendarDnDProvider } from "@/shared/context/CalendarDnDContext";
 import { ImportProvider } from "@/shared/context/ImportContext";
 import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
 import { PagesProvider } from "@/shared/context/PagesContext";
-import { RecurringCompleteDialogProvider } from "@/shared/context/RecurringCompleteDialogContext";
+import { RecurringGapDialogProvider } from "@/shared/context/RecurringGapDialogContext";
 import { SelectionProvider } from "@/shared/context/SelectionContext";
 import { UIProvider } from "@/shared/context/UIContext";
 import { UndoDeleteProvider } from "@/shared/context/UndoDeleteContext";
@@ -36,9 +36,9 @@ function TestProviders({ children }: { children: ReactNode }) {
             <SelectionProvider>
               <CalendarDnDProvider>
                 <UndoDeleteProvider>
-                  <RecurringCompleteDialogProvider>
+                  <RecurringGapDialogProvider>
                     <ListSettingsProvider>{children}</ListSettingsProvider>
-                  </RecurringCompleteDialogProvider>
+                  </RecurringGapDialogProvider>
                 </UndoDeleteProvider>
               </CalendarDnDProvider>
             </SelectionProvider>

@@ -16,15 +16,14 @@ import type {
   SearchResponse,
   StorageError,
   Tag,
-  VirtualOccurrence,
 } from "@pikos/core";
 import {
   alignWeeklyRuleToAnchor,
+  dateKey,
   formatDateOnly,
   formatLocalISO,
   getLocalTimezone,
   isTimedIso,
-  missedOccurrencesBetween,
   parseLocalISO,
   resolveSyncedInstant,
   rruleEditWouldDegrade,
@@ -37,7 +36,7 @@ import type {
   PageUpdate,
   RecurrenceRuleUpdate,
 } from "@pikos/core";
-import { addDays, differenceInCalendarDays, startOfDay } from "date-fns";
+import { addDays, differenceInCalendarDays } from "date-fns";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { createLogger } from "@/shared/logger";
@@ -51,12 +50,14 @@ function toPageSummary(page: Page): PageSummary {
   return summary;
 }
 
-/**
- * How `completeRecurringPage` handles missed occurrences when the head is
- * overdue (today > head's scheduledStart). See completeRecurringPage's JSDoc
- * for what each policy does.
- */
-export type MissedOccurrencePolicy = "advance" | "skip";
+/** Chaining + bound for a "complete everything to today" run. `fromHead` carries
+ * the recomputed head returned by the gesture that opened the run — `pages` state
+ * lags a sequential loop, so a state read would re-complete the same occurrence.
+ * `maxSteps` is the runaway backstop: the dialog counted the backlog it promised. */
+export interface GapRunOptions {
+  fromHead?: PageSummary;
+  maxSteps?: number;
+}
 
 export interface PagesContextValue {
   /** Lightweight summaries (no content) — use getPage() to load full content. */
@@ -128,24 +129,35 @@ export interface PagesContextValue {
    *  rule set, so an in-place move is otherwise invisible to it until a nav. */
   overridesVersion: number;
   /**
-   * Complete a recurring page: clone as done, advance head to next occurrence.
-   * The `missedPolicy` controls behaviour when there's a gap between the head's
-   * date and today (head is overdue):
-   *   - `advance` (default): one rrule step from head — past virtuals stay on
-   *     the calendar so the user can address each individually.
-   *   - `skip`: exdate every missed occurrence between head and today, then
-   *     advance to today/the next non-excluded date — past calendar reads clean.
-   * No gap → `advance` is the only sensible choice and the dialog is skipped.
+   * Complete the head's own occurrence: clone as done, advance the head to the
+   * next open one. `head` overrides the state lookup so a sequential run can
+   * chain off the previous call's recomputed head — `pages` state lags a loop.
+   * Null when the re-entrancy guard swallowed the call.
    */
-  completeRecurringPage: (pageId: string, missedPolicy?: MissedOccurrencePolicy) => Promise<void>;
-  /** Skip a single occurrence of a recurring page (dismiss to the skip-set). Returns an undo function. */
-  skipOccurrence: (pageId: string, date: string) => Promise<() => void>;
+  completeRecurringPage: (
+    pageId: string,
+    head?: PageSummary
+  ) => Promise<CompleteRecurringResult | null>;
+  /** Complete one rendered occurrence of a synced-origin series (virtual or moved
+   *  block), keyed on its original date. Null when the guard swallowed the call. */
+  completeSyncedOccurrence: (input: {
+    pageId: string;
+    occurrenceDate: string;
+    scheduledStart: string;
+    scheduledEnd?: string;
+  }) => Promise<CompleteRecurringResult | null>;
+  /** Complete every open occurrence from the head up to, but not including, today
+   *  — the gap dialog's "all to today". */
+  completeRecurringToToday: (pageId: string, opts?: GapRunOptions) => Promise<void>;
+  /** Dismiss occurrences of a recurring page to the skip-set. Returns an undo
+   *  function that restores all of them. */
+  skipOccurrences: (pageId: string, dates: string[]) => Promise<() => void>;
   /**
-   * Routes a status toggle that belongs to a synced recurring series to
-   * occurrence-based completion, bypassing the native head-advance path.
-   * Returns true when handled — the caller must not fall through.
+   * Unchecking a recurring done clone (native or synced) → uncomplete that
+   * occurrence and restore it, rather than a plain status flip a recompute would
+   * revert. Returns true when handled — the caller must not fall through.
    */
-  maybeToggleRecurringOccurrence: (page: PageSummary, nextStatus: PageStatus) => boolean;
+  maybeUncompleteRecurringClone: (page: PageSummary, nextStatus: PageStatus) => boolean;
   /**
    * Un-done of a native recurring head → occurrence-uncomplete (undo the last
    * completion), not a plain status flip that a recompute would revert. Returns
@@ -263,9 +275,9 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   // Serialises concurrent DB writes for the same page so that a fast debounced
   // write and a concurrent scheduleOnce can never interleave or clobber each other.
 
-  const mutationQueues = useRef<Map<string, Promise<void>>>(new Map());
+  const mutationQueues = useRef<Map<string, Promise<unknown>>>(new Map());
 
-  function enqueue(pageId: string, fn: () => Promise<void>): Promise<void> {
+  function enqueue<T>(pageId: string, fn: () => Promise<T>): Promise<T> {
     const prev = mutationQueues.current.get(pageId) ?? Promise.resolve();
     // Pass fn as both fulfilment and rejection handler so the queue never stalls
     // on a previous error.
@@ -780,9 +792,9 @@ export function PagesProvider({ children }: { children: ReactNode }) {
 
   async function completeRecurringPage(
     pageId: string,
-    missedPolicy: MissedOccurrencePolicy = "advance"
-  ): Promise<void> {
-    const page = pagesRef.current.find((p) => p.id === pageId);
+    head?: PageSummary
+  ): Promise<CompleteRecurringResult | null> {
+    const page = head ?? pagesRef.current.find((p) => p.id === pageId);
     // Re-entrancy guard: the checkbox path is fire-and-forget and not disabled
     // in flight, and the backend mints one clone + one head-advance per call —
     // a re-entrant call (or, now that completion is queued, a SERIALIZED
@@ -790,7 +802,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     // occurrence (`pageId:date`, unified with the synced path) so completing two
     // different virtuals of one series in quick succession isn't dropped.
     const occKey = `${pageId}:${page?.scheduledStart?.slice(0, 10) ?? ""}`;
-    if (completingRecurringRef.current.has(occKey)) return;
+    if (completingRecurringRef.current.has(occKey)) return null;
     completingRecurringRef.current.add(occKey);
     try {
       // Drain any pending debounced patch for this page before advancing the
@@ -806,7 +818,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
       // schedule write commit AFTER the advance — rewinding the head to the
       // just-completed occurrence. Reading the refs inside the queued fn also
       // means the advance is computed from fully settled state.
-      await enqueue(pageId, () => completeRecurringPageQueued(pageId, missedPolicy));
+      return await enqueue(pageId, () => completeRecurringPageQueued(pageId, page));
     } finally {
       completingRecurringRef.current.delete(occKey);
     }
@@ -814,30 +826,8 @@ export function PagesProvider({ children }: { children: ReactNode }) {
 
   async function completeRecurringPageQueued(
     pageId: string,
-    missedPolicy: MissedOccurrencePolicy
-  ): Promise<void> {
-    const rule = recurrenceRulesRef.current.find((r) => r.pageId === pageId);
-    if (!rule) throw new Error(`No recurrence rule for page ${pageId}`);
-
-    const head = pagesRef.current.find((p) => p.id === pageId);
-    const headDate = head?.scheduledStart ? parseLocalISO(head.scheduledStart) : new Date();
-    const todayStart = startOfDay(new Date());
-
-    // The backend completes the head's own occurrence and recomputes the next open
-    // one from truth — no client-computed next date. For the "skip" policy on an
-    // overdue head, dismiss the missed occurrences (strictly between head and today)
-    // to the skip-set; "advance" leaves them open to address one at a time.
-    const skipDates =
-      missedPolicy === "skip" && todayStart > headDate
-        ? missedOccurrencesBetween(
-            rule.rrule,
-            rule.scheduledStart,
-            headDate,
-            todayStart,
-            rule.rruleExdates
-          )
-        : [];
-
+    head: PageSummary | undefined
+  ): Promise<CompleteRecurringResult> {
     // An active synced head must name the occurrence it's completing: the reconciler
     // pins `pages.scheduled_start` at the series base, so the backend can't derive it
     // the way it does for a native head. The wall-clocks convert out of the source
@@ -853,38 +843,68 @@ export function PagesProvider({ children }: { children: ReactNode }) {
           }
         : {};
 
-    const result = await adapter.completeRecurringPage({
-      pageId,
-      ...syncedHead,
-      ...(skipDates.length > 0 ? { skipDates } : {}),
-    });
+    const result = await adapter.completeRecurringPage({ pageId, ...syncedHead });
 
     setPages((prev) => {
       const updated = prev.map((p) => (p.id === pageId ? result.head : p));
       return [...updated, result.clone];
     });
+    return result;
   }
 
-  async function skipOccurrence(pageId: string, date: string): Promise<() => void> {
-    // Skips are per-occurrence state in the skip-set, not rule EXDATEs. The backend
-    // recomputes the head; expansion excludes the date via page.skippedOccurrences.
-    await adapter.skipOccurrence({ occurrenceDate: date, pageId });
+  /** Each step is the ordinary single completion, so the backend picks the next
+   * open occurrence off truth and the client never computes a date. Stops when the
+   * recomputed head reaches today, stops advancing (an out-of-envelope rule the
+   * recompute can't move), or the caller's step budget runs out. */
+  async function completeRecurringToToday(pageId: string, opts: GapRunOptions = {}): Promise<void> {
+    const todayKey = formatDateOnly(new Date());
+    const budget = opts.maxSteps ?? Number.MAX_SAFE_INTEGER;
+    let head = opts.fromHead ?? pagesRef.current.find((p) => p.id === pageId);
+    for (let step = 0; step < budget; step++) {
+      const start = head?.scheduledStart;
+      if (!head || !start || head.status === "done") return;
+      if (dateKey(start) >= todayKey) return;
+      const result = await completeRecurringPage(pageId, head);
+      if (!result || result.head.scheduledStart === start) return;
+      head = result.head;
+    }
+  }
+
+  async function skipOccurrences(pageId: string, dates: string[]): Promise<() => void> {
+    // Skips are per-occurrence state in the skip-set, not rule EXDATEs. Expansion
+    // excludes each date via page.skippedOccurrences; the head is adopted from the
+    // backend's recompute because a bulk dismissal can cover the head's own date.
+    for (const date of dates) {
+      await adapter.skipOccurrence({ occurrenceDate: date, pageId });
+    }
     setPages((prev) =>
       prev.map((p) =>
-        p.id === pageId ? { ...p, skippedOccurrences: [...(p.skippedOccurrences ?? []), date] } : p
+        p.id === pageId
+          ? { ...p, skippedOccurrences: [...(p.skippedOccurrences ?? []), ...dates] }
+          : p
       )
     );
+    await patchRecomputedHead(pageId);
 
     return () => {
-      void adapter.undoSkipOccurrence({ occurrenceDate: date, pageId }).then(() => {
+      void (async () => {
+        for (const date of dates) {
+          await adapter.undoSkipOccurrence({ occurrenceDate: date, pageId });
+        }
         setPages((prev) =>
           prev.map((p) =>
             p.id === pageId
-              ? { ...p, skippedOccurrences: (p.skippedOccurrences ?? []).filter((d) => d !== date) }
+              ? {
+                  ...p,
+                  skippedOccurrences: (p.skippedOccurrences ?? []).filter(
+                    (d) => !dates.includes(d)
+                  ),
+                }
               : p
           )
         );
-      });
+        await patchRecomputedHead(pageId);
+      })();
     };
   }
 
@@ -893,18 +913,27 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   // (why a synced series supplies its occurrence, and how the recompute converges) is
   // documented on `complete_recurring_page` in the backend.
 
+  /** `scheduledStart`/`scheduledEnd` are the occurrence as the engine emits it —
+   *  source-zone wall-clock — and convert to the viewer's zone here. */
   async function completeSyncedOccurrence(input: {
     pageId: string;
     occurrenceDate: string;
     scheduledStart: string;
     scheduledEnd?: string;
-  }): Promise<void> {
+  }): Promise<CompleteRecurringResult | null> {
     const key = `${input.pageId}:${input.occurrenceDate}`;
-    if (completingSyncedRef.current.has(key)) return;
+    if (completingSyncedRef.current.has(key)) return null;
     completingSyncedRef.current.add(key);
+    const timezone = pagesRef.current.find((p) => p.id === input.pageId)?.timezone;
     let result: CompleteRecurringResult;
     try {
-      result = await adapter.completeRecurringPage(input);
+      result = await adapter.completeRecurringPage({
+        ...input,
+        scheduledStart: cloneWallClock(input.scheduledStart, timezone),
+        ...(input.scheduledEnd
+          ? { scheduledEnd: cloneWallClock(input.scheduledEnd, timezone) }
+          : {}),
+      });
     } finally {
       completingSyncedRef.current.delete(key);
     }
@@ -916,6 +945,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
         ? withHead.map((p) => (p.id === result.clone.id ? result.clone : p))
         : [...withHead, result.clone];
     });
+    return result;
   }
 
   // The unified backend uncomplete recomputes the head (native or synced), so
@@ -959,50 +989,17 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   }
 
   /**
-   * Intercepts a status toggle that must route to occurrence-based completion, and
-   * returns true ONLY when it handled it (caller must then NOT fall through). Two
-   * cases: checking a rendered occurrence (virtual or moved override block) of a
-   * synced-origin series → complete that occurrence; unchecking *any* recurring
-   * done clone (native or synced) → uncomplete + restore. Returns false for
-   * everything else — including a malformed synced row with no `scheduledStart`,
-   * so the native path runs and surfaces an error rather than silently swallowing
-   * the click.
-   *
-   * Sync *origin* is the gate, active and detached alike: a calendar-born series
-   * keeps attendance semantics — tick the instance you attended — where a native
-   * task series funnels every click to the head (do the next thing due). Detach
-   * changes ownership, not what the series is.
-   *
-   * A synced *head* deliberately falls through to the gap dialog rather than
-   * completing here: its floor is the connect day, so it can be genuinely overdue,
-   * and resolving that gap is the same gesture a native series offers.
+   * Intercepts the un-check of a recurring done clone (native or synced) and
+   * returns true ONLY when it handled it (caller must then NOT fall through) — a
+   * plain status flip would be reverted by the next recompute. Completion routes
+   * the other way, through the gap dialog, which owns the scope choice.
    */
-  function maybeToggleRecurringOccurrence(page: PageSummary, nextStatus: PageStatus): boolean {
-    const isSyncedOccurrence =
-      !!page.syncState &&
-      "originalDate" in page &&
-      recurrenceRulesRef.current.some((r) => r.pageId === page.id);
-    if (isSyncedOccurrence && nextStatus === "done" && page.scheduledStart) {
-      const occurrenceDate = (page as VirtualOccurrence).originalDate;
-      const cloneEnd = page.scheduledEnd
-        ? cloneWallClock(page.scheduledEnd, page.timezone)
-        : undefined;
-      void completeSyncedOccurrence({
-        occurrenceDate,
-        pageId: page.id,
-        scheduledStart: cloneWallClock(page.scheduledStart, page.timezone),
-        ...(cloneEnd ? { scheduledEnd: cloneEnd } : {}),
-      });
-      return true;
-    }
-    if (nextStatus === "not_started") {
-      const found = findRecurringOccurrenceClone(page.id);
-      if (found) {
-        void uncompleteRecurringClone(found.seriesId, found.occurrenceDate);
-        return true;
-      }
-    }
-    return false;
+  function maybeUncompleteRecurringClone(page: PageSummary, nextStatus: PageStatus): boolean {
+    if (nextStatus !== "not_started") return false;
+    const found = findRecurringOccurrenceClone(page.id);
+    if (!found) return false;
+    void uncompleteRecurringClone(found.seriesId, found.occurrenceDate);
+    return true;
   }
 
   // ─── Flush on window close ────────────────────────────────────────────────
@@ -1121,6 +1118,8 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     clearPageError,
     clearSchedule,
     completeRecurringPage,
+    completeRecurringToToday,
+    completeSyncedOccurrence,
     createFolder,
     createPage,
     createRecurrence,
@@ -1133,7 +1132,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     getPage,
     listCompletedPages,
     listOverridesForRules,
-    maybeToggleRecurringOccurrence,
+    maybeUncompleteRecurringClone,
     mergePages,
     overridesVersion,
     pageErrors,
@@ -1149,7 +1148,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     searchPages,
     searchTags,
     setPagesStatus,
-    skipOccurrence,
+    skipOccurrences,
     softDeleteFolder,
     softDeletePage,
     tags,

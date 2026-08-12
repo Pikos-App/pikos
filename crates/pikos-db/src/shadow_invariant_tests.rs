@@ -109,7 +109,6 @@ async fn assert_invariant(
             &pool,
             CompleteRecurringInput {
                 page_id: "head".into(),
-                skip_dates: vec![],
                 occurrence_date: None,
                 scheduled_start: None,
                 scheduled_end: None,

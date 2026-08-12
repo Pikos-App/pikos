@@ -257,14 +257,13 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     // Recurring completion clones + advances the head, so it can't be a plain
     // flip. Complete each one at a time — awaited, never concurrently — so the
     // writers don't race the WAL pool, and never through the gap dialog (its
-    // single pending slot would drop all but the last of a bulk selection).
-    // Bulk uses the default "advance" policy; un-done routes through uncomplete
-    // (see uncompleteRecurringHead).
+    // single pending slot would drop all but the last of a bulk selection), so a
+    // bulk tick completes one occurrence each and leaves any backlog alone.
     for (const p of recurring) {
       if (p.status === "done") {
         if (!(await uncompleteRecurringHead(p.id)))
           await setPagesStatus([p.id], "not_started", null);
-      } else await completeRecurringPage(p.id, "advance");
+      } else await completeRecurringPage(p.id);
     }
   }
   useKeyboardShortcut(

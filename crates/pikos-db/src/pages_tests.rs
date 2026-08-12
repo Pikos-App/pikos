@@ -61,7 +61,6 @@ async fn series_advances_to_next_open_occurrence() {
         &pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
@@ -149,7 +148,6 @@ async fn completion_records_the_set_and_leaves_rule_exdates_untouched() {
         &pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
@@ -216,7 +214,6 @@ async fn series_marks_head_done_when_exhausted() {
         &pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
@@ -257,7 +254,6 @@ async fn syncs_normalized_tag_tables_on_clone() {
         &pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
@@ -282,7 +278,6 @@ async fn missing_head_returns_not_found() {
         &pool,
         CompleteRecurringInput {
             page_id: "nope".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
@@ -315,7 +310,6 @@ async fn rejects_soft_deleted_head() {
         &pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
@@ -389,7 +383,6 @@ async fn advanced_head_survives_later_denorm_refresh() {
         &pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
@@ -433,7 +426,6 @@ async fn uncomplete_reverses_a_native_completion() {
         &pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
@@ -501,7 +493,6 @@ async fn exhausted_series_uncomplete_unmarks_done() {
         &pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
@@ -633,7 +624,6 @@ async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
             &pool,
             CompleteRecurringInput {
                 page_id: "head".into(),
-                skip_dates: vec![],
                 occurrence_date: None,
                 scheduled_start: None,
                 scheduled_end: None,
@@ -2819,7 +2809,6 @@ async fn synced_recurring_series_with(
 fn synced_complete(date: &str, start: &str) -> CompleteRecurringInput {
     CompleteRecurringInput {
         page_id: "head".into(),
-        skip_dates: vec![],
         occurrence_date: Some(date.into()),
         scheduled_start: Some(start.into()),
         scheduled_end: None,
@@ -2840,7 +2829,6 @@ async fn unified_completion_rejects_a_non_recurring_synced_page() {
         &pool,
         CompleteRecurringInput {
             page_id: "p".into(),
-            skip_dates: vec![],
             occurrence_date: Some("2026-06-01".into()),
             scheduled_start: Some("2026-06-01T09:00:00".into()),
             scheduled_end: None,
@@ -3100,7 +3088,6 @@ async fn unified_completion_requires_an_occurrence_for_a_synced_series() {
         &pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,

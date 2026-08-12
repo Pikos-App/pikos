@@ -190,8 +190,7 @@ export interface StorageAdapter {
   /** Complete one occurrence of a recurring page (native or synced): done clone +
    * completed-set entry, then recompute the head onto the next open occurrence (or
    * done). Native completes the head's own occurrence (server-derived); synced passes
-   * the client-rendered virtual (occurrenceDate/scheduledStart). Gap dismissals go to
-   * skipDates. */
+   * the client-rendered virtual (occurrenceDate/scheduledStart). */
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult>;
   /** Reverse a recurring completion (native or synced) by occurrence date (delete the
    * clone via its back-link, drop the completed-set entry, recompute the head). */

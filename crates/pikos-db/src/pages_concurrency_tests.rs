@@ -203,7 +203,6 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
         pool,
         CompleteRecurringInput {
             page_id: "head".into(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,

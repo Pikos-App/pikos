@@ -7,7 +7,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
-import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
@@ -62,12 +61,7 @@ export function AllDayBar({
   position,
 }: AllDayBarProps) {
   const { continuesLeft, continuesRight, page } = bar;
-  const { requestDeletePage } = useUndoDelete();
-  const {
-    isRecurring,
-    skipOccurrence: handleSkipOccurrence,
-    toggleStatus,
-  } = useRecurringActions(page);
+  const { deleteBlock, isVirtual, showsCheckbox, toggleStatus } = useRecurringActions(page);
 
   const {
     handleClick,
@@ -139,8 +133,8 @@ export function AllDayBar({
   // Edge handles only appear on a real (non-continuation) boundary, so a
   // multi-week event that crosses into this view has no left handle here —
   // extending across weeks goes through the popover's date picker.
-  const showLeftEdgeHandle = !continuesLeft && !!onEdgeResizeStart && !isRecurring && !locked;
-  const showRightEdgeHandle = !continuesRight && !!onEdgeResizeStart && !isRecurring && !locked;
+  const showLeftEdgeHandle = !continuesLeft && !!onEdgeResizeStart && !isVirtual && !locked;
+  const showRightEdgeHandle = !continuesRight && !!onEdgeResizeStart && !isVirtual && !locked;
 
   return (
     <Popover onOpenChange={handlePopoverOpenChange} open={popoverOpen}>
@@ -161,17 +155,17 @@ export function AllDayBar({
           onMouseDown={handleMouseDown}
           style={{ ...chipStyle, ...position }}
         >
-          {isRecurring ? (
-            <Repeat2
-              aria-label="Recurring"
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-            />
-          ) : (
+          {showsCheckbox ? (
             <TaskCheckbox
               as="span"
               checked={done}
               className="h-3.5 w-3.5 cursor-pointer!"
               onChange={handleCheckboxClick}
+            />
+          ) : (
+            <Repeat2
+              aria-label="Recurring"
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
             />
           )}
           <span className="type-body-sm min-w-0 truncate text-left font-medium text-foreground">
@@ -204,12 +198,12 @@ export function AllDayBar({
         side="bottom"
         sideOffset={4}
       >
-        {isRecurring ? (
+        {isVirtual ? (
           <VirtualPageBlockPopover
             onClose={() => setPopoverOpen(false)}
-            onSkip={() => {
+            onDelete={() => {
               setPopoverOpen(false);
-              void handleSkipOccurrence();
+              deleteBlock();
             }}
             page={page as VirtualOccurrence}
           />
@@ -218,7 +212,7 @@ export function AllDayBar({
             onClose={() => setPopoverOpen(false)}
             onDelete={() => {
               setPopoverOpen(false);
-              requestDeletePage(page);
+              deleteBlock();
             }}
             onRemoveDate={() => setPopoverOpen(false)}
             page={page}

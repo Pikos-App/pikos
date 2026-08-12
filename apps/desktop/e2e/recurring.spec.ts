@@ -334,13 +334,13 @@ appTest("daily recurring page renders virtual occurrences on the calendar @tier1
 
 // ─── Skip a virtual occurrence, then undo the skip ─────────────────────────
 //
-// The dismiss flow: opening a virtual and choosing Skip drops the occurrence
-// into the skip-set (page.skippedOccurrences), so it vanishes from the calendar;
+// The dismiss flow: opening a virtual and deleting it drops the occurrence into
+// the skip-set (page.skippedOccurrences), so it vanishes from the calendar;
 // Cmd+Z (the undo toast's action) removes it from the skip-set and the virtual
-// reappears. Distinct from rescheduling a virtual (drag → materialise), which is
-// covered separately.
+// reappears. Nothing here is overdue, so the scope dialog stays out of the way.
+// Distinct from rescheduling a virtual (drag → materialise), covered separately.
 
-appTest("skipping a virtual occurrence hides it; undo restores it @tier2", async ({ app }) => {
+appTest("deleting a future virtual hides it with no dialog; undo restores it @tier2", async ({ app }) => {
   await app.keyboard.press(mod("Mod+n"));
   const dialog = app.getByRole("dialog", { name: "Quick add" });
   await expect(dialog).toBeVisible();
@@ -364,7 +364,7 @@ appTest("skipping a virtual occurrence hides it; undo restores it @tier2", async
     .first();
   await firstVirtual.scrollIntoViewIfNeeded();
   await firstVirtual.click();
-  await app.getByRole("button", { name: "Skip this occurrence" }).click();
+  await app.getByRole("button", { name: "Delete this occurrence" }).click();
 
   await expect(calendar.getByLabel("Recurring")).toHaveCount(virtualsBefore - 1);
 
@@ -531,13 +531,13 @@ appTest(
   }
 );
 
-// ─── Gap-resolution dialog for an overdue recurring head ───────────────────
+// ─── Gap dialog for an overdue recurring head ──────────────────────────────
 //
-// Completing an overdue recurring head (today > head, with intermediate
-// occurrences) opens the gap dialog: "Advance to next page" lands on the first
-// missed day (the gap stays), while "Advance to today" dismisses the in-between
-// days and lands the head on today. Uses the raw `page` fixture — see the
-// snap-forward test above for why.
+// Ticking an overdue recurring head (today > head, with intermediate
+// occurrences) asks only for scope: "Just this one" resolves the head's own day
+// and leaves the rest open, "This and everything before today" clones a done
+// page per missed day. Uses the raw `page` fixture — see the snap-forward test
+// above for why.
 
 /** Daily recurring head anchored Mon 2026-06-08, with "now" jumped to Thu
  *  2026-06-11 so Tue + Wed are missed. Returns the "standup" list-item locator. */
@@ -564,16 +564,16 @@ async function seedOverdueDailyRecurring(page: import("@playwright/test").Page) 
   return page.locator("[data-page-list-item]").filter({ hasText: "standup" });
 }
 
-appTest("overdue completion → advance keeps the gap and drops one clone @tier2", async ({ page }) => {
+appTest("overdue tick → just this one keeps the gap and drops one clone @tier2", async ({ page }) => {
   const items = await seedOverdueDailyRecurring(page);
   await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
 
-  await expect(page.getByText(/You missed 2 days/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Advance to next page/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Advance to today/ })).toBeVisible();
+  await expect(page.getByText(/2 earlier days are still open/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /This and everything before today/ })).toBeVisible();
 
-  await page.getByRole("button", { name: /Advance to next page/ }).click();
-  await expect(page.getByText(/You missed 2 days/)).not.toBeVisible();
+  await page.getByRole("button", { name: /Just this one/ }).click();
+  await expect(page.getByText(/2 earlier days are still open/)).not.toBeVisible();
 
   await page.getByRole("button", { name: "Completed", exact: true }).click();
   await expect(
@@ -581,23 +581,56 @@ appTest("overdue completion → advance keeps the gap and drops one clone @tier2
   ).toHaveCount(1);
 });
 
-appTest("overdue completion → skip dismisses the gap and lands on today @tier2", async ({ page }) => {
+appTest("overdue tick → everything before today clones one done page per day @tier2", async ({ page }) => {
   const items = await seedOverdueDailyRecurring(page);
   await items.first().getByRole("checkbox", { name: /Mark done/i }).click();
 
-  await expect(page.getByText(/You missed 2 days/)).toBeVisible();
-  // For a daily rule, "skip" lands on today — the card reads "Advance to today".
-  await page.getByRole("button", { name: /Advance to today/ }).click();
-  await expect(page.getByText(/You missed 2 days/)).not.toBeVisible();
+  await expect(page.getByText(/2 earlier days are still open/)).toBeVisible();
+  await page.getByRole("button", { name: /This and everything before today/ }).click();
+  await expect(page.getByText(/2 earlier days are still open/)).not.toBeVisible();
 
-  // The skipped days don't materialise as extra rows.
+  // Mon, Tue and Wed each land as their own done page; the head moves to today.
   await page.getByRole("button", { name: "Completed", exact: true }).click();
   await expect(
     items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })
-  ).toHaveCount(1);
+  ).toHaveCount(3);
   await expect(
     items.filter({ has: page.getByRole("checkbox", { name: /Mark done/i }) })
   ).toHaveCount(1);
+});
+
+// ─── The same scope question on an occurrence delete ────────────────────────
+//
+// Deleting a past occurrence carries the "not doing this" intent the retired
+// dialog buried in a completion card. Both arms write the skip-set, so nothing
+// is minted as done.
+
+appTest("deleting a past occurrence → everything before today clears the gap @tier2", async ({
+  page,
+}) => {
+  await seedOverdueDailyRecurring(page);
+  await openCalendarMode(page);
+
+  const calendar = calendarRegion(page);
+  await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5_000 });
+  const before = await calendar.getByLabel("Recurring").count();
+
+  // The head (Mon) renders as a real block, so the first virtual is Tue — inside
+  // the backlog, which is what opens the dialog.
+  const firstVirtual = calendar
+    .getByRole("button", { name: /^standup/i })
+    .filter({ has: page.getByLabel("Recurring") })
+    .first();
+  await firstVirtual.scrollIntoViewIfNeeded();
+  await firstVirtual.click();
+  await page.getByRole("button", { name: "Delete this occurrence" }).click();
+
+  await expect(page.getByText(/2 earlier days are still open/)).toBeVisible();
+  await page.getByRole("button", { name: /This and everything before today/ }).click();
+
+  // Tue and Wed are dismissed, and today's occurrence stops being a virtual — the
+  // head advanced onto it once Mon went to the skip-set.
+  await expect(calendar.getByLabel("Recurring")).toHaveCount(before - 3);
 });
 
 // ─── Stop repeating removes the rule ───────────────────────────────────────

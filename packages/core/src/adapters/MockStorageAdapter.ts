@@ -776,15 +776,14 @@ export class MockStorageAdapter implements StorageAdapter {
     };
     this.pages.set(cloneId, clone);
 
-    // Record the completion + any gap skips on the head, then recompute it onto the
-    // next open occurrence (or done) — for both kinds; the reconciler converges a
-    // synced head off the same sets on the next sync.
+    // Record the completion on the head, then recompute it onto the next open
+    // occurrence (or done) — for both kinds; the reconciler converges a synced head
+    // off the same sets on the next sync.
     const completedOccurrences = {
       ...(head.completedOccurrences ?? {}),
       [occurrenceDate]: cloneId,
     };
-    const skippedOccurrences = [...(head.skippedOccurrences ?? []), ...(data.skipDates ?? [])];
-    this.pages.set(head.id, { ...head, completedOccurrences, skippedOccurrences });
+    this.pages.set(head.id, { ...head, completedOccurrences });
     this.recomputeHead(head.id);
 
     return Promise.resolve({ clone: toSummary(clone), head: toSummary(this.pages.get(head.id)!) });

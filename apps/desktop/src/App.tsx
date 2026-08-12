@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { RecurringCompleteDialog } from "@/features/calendar/components/RecurringCompleteDialog";
+import { RecurringGapDialog } from "@/features/calendar/components/RecurringGapDialog";
 import { ThreePanelLayout } from "@/features/layout";
 import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
@@ -16,7 +16,7 @@ import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
 import { ImportProvider } from "@/shared/context/ImportContext";
 import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
 import { PagesProvider, usePages } from "@/shared/context/PagesContext";
-import { RecurringCompleteDialogProvider } from "@/shared/context/RecurringCompleteDialogContext";
+import { RecurringGapDialogProvider } from "@/shared/context/RecurringGapDialogContext";
 import { SelectionProvider } from "@/shared/context/SelectionContext";
 import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
@@ -287,7 +287,7 @@ export default function App() {
                           <CalendarSettingsProvider>
                             <ListSettingsProvider>
                               <UndoDeleteProvider>
-                                <RecurringCompleteDialogProvider>
+                                <RecurringGapDialogProvider>
                                   <TooltipProvider delayDuration={400}>
                                     <WorkspaceGate />
                                     <ErrorBoundary
@@ -299,10 +299,10 @@ export default function App() {
                                         />
                                       )}
                                     >
-                                      <RecurringCompleteDialog />
+                                      <RecurringGapDialog />
                                     </ErrorBoundary>
                                   </TooltipProvider>
-                                </RecurringCompleteDialogProvider>
+                                </RecurringGapDialogProvider>
                               </UndoDeleteProvider>
                             </ListSettingsProvider>
                           </CalendarSettingsProvider>

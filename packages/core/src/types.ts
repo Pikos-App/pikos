@@ -206,9 +206,6 @@ export type PageSummary = Omit<Page, "content" | "contentText">;
  * records it in `completed_set` and recomputes the head. */
 export interface CompleteRecurringInput {
   pageId: string;
-  /** Missed-occurrence dates (YYYY-MM-DD) the "advance to today" gap dialog
-   * dismisses — written to the skip-set. Empty for a plain completion. */
-  skipDates?: string[];
   /** Synced series only: the client-rendered occurrence being completed, since the
    * reconciler pins the head at the base. Native omits these — its occurrence is the
    * head's own oldest-open date, derived server-side. */

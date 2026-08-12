@@ -8,7 +8,6 @@ import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
-import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
@@ -83,14 +82,9 @@ export function PageBlock({
     top,
     widthPct,
   } = block;
-  const { requestDeletePage } = useUndoDelete();
   const { highlightedPageId } = useUI();
   const { metrics } = useCalendarSettings();
-  const {
-    isRecurring,
-    skipOccurrence: handleSkipOccurrence,
-    toggleStatus,
-  } = useRecurringActions(page);
+  const { deleteBlock, isVirtual, showsCheckbox, toggleStatus } = useRecurringActions(page);
   const isHighlighted = highlightedPageId === page.id;
 
   const isResizing = resizeHeight !== undefined;
@@ -248,9 +242,7 @@ export function PageBlock({
   // Checkbox stroke tracks the event's accent (the left-border stripe), not
   // the fill — so it stays legible on muted fills and against any folder
   // color. Same fallback the chip background uses when no folder colour is set.
-  const checkbox = isRecurring ? (
-    <Repeat2 aria-label="Recurring" className={cn("shrink-0 text-muted-foreground", iconClass)} />
-  ) : (
+  const checkbox = showsCheckbox ? (
     <TaskCheckbox
       as="span"
       borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
@@ -258,6 +250,8 @@ export function PageBlock({
       className={cn(iconClass, "cursor-pointer!")}
       onChange={handleCheckboxClick}
     />
+  ) : (
+    <Repeat2 aria-label="Recurring" className={cn("shrink-0 text-muted-foreground", iconClass)} />
   );
 
   // Synced provenance: an active mirror dims-on-detach (never strikethrough —
@@ -378,12 +372,12 @@ export function PageBlock({
         side="right"
         sideOffset={8}
       >
-        {isRecurring ? (
+        {isVirtual ? (
           <VirtualPageBlockPopover
             onClose={() => setPopoverOpen(false)}
-            onSkip={() => {
+            onDelete={() => {
               setPopoverOpen(false);
-              void handleSkipOccurrence();
+              deleteBlock();
             }}
             page={page as VirtualOccurrence}
           />
@@ -392,7 +386,7 @@ export function PageBlock({
             onClose={() => setPopoverOpen(false)}
             onDelete={() => {
               setPopoverOpen(false);
-              requestDeletePage(page);
+              deleteBlock();
             }}
             onRemoveDate={() => {
               setPopoverOpen(false);

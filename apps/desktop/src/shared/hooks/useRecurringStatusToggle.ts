@@ -2,7 +2,7 @@ import type { PageStatus, PageSummary } from "@pikos/core";
 import { nowLocalISO } from "@pikos/core";
 
 import { usePages } from "@/shared/context/PagesContext";
-import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
+import { useRecurringGapDialog } from "@/shared/context/RecurringGapDialogContext";
 
 /**
  * The shared recurring-aware status toggle. Centralised so a change to how a
@@ -10,14 +10,14 @@ import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDi
  * that produced the synced-completion mis-route.
  */
 export function useRecurringStatusToggle(): (page: PageSummary, nextStatus: PageStatus) => void {
-  const { maybeToggleRecurringOccurrence, recurrenceRules, uncompleteRecurringOrFlip, updatePage } =
+  const { maybeUncompleteRecurringClone, recurrenceRules, uncompleteRecurringOrFlip, updatePage } =
     usePages();
-  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
+  const { requestComplete } = useRecurringGapDialog();
 
   return (page, nextStatus) => {
-    if (maybeToggleRecurringOccurrence(page, nextStatus)) return;
+    if (maybeUncompleteRecurringClone(page, nextStatus)) return;
     if (recurrenceRules.some((r) => r.pageId === page.id)) {
-      if (nextStatus === "done") requestRecurringComplete(page.id);
+      if (nextStatus === "done") requestComplete(page);
       else void uncompleteRecurringOrFlip(page.id);
       return;
     }
