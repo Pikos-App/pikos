@@ -11,10 +11,10 @@
 pub const PROVIDER_CALDAV: &str = "caldav";
 pub const PROVIDER_GOOGLE: &str = "google";
 
-/// How far back a backfill reaches, so a calendar connected mid-week still renders
-/// the days already past. These occurrences are deliberately below the head floor
-/// (`recurrence_derive::synced_head_floor`) — they render, but predate the user and
-/// can't open a series as overdue.
+/// How far back a backfill reaches, so a calendar connected mid-week still pulls
+/// the events already past. Bounds what is fetched, nothing else — the head and
+/// render floors anchor on the connect day, never on this window (see
+/// `recurrence_derive::synced_head_floor`, `Page::synced_since`).
 pub const BACKFILL_DAYS: i64 = 7;
 
 /// `page_sync.created_at` (UTC) → the local calendar day it fell on.

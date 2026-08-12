@@ -93,10 +93,11 @@ fn derive_oldest_open(
 /// would let the head fall back to the original start.
 ///
 /// The anchor is the connect *day*, not the backfill window that admitted the
-/// page. The backfill reaches [`crate::sync::BACKFILL_DAYS`] back so the current
-/// week renders on connect, but those occurrences predate the user — flooring
-/// there would open a freshly connected series already overdue on a date nobody
-/// could have acted on. They still render; they just can't become the head.
+/// page. The backfill reaches [`crate::sync::BACKFILL_DAYS`] back so a mid-week
+/// connect still pulls the events already past, but those occurrences predate the
+/// user — flooring there would open a freshly connected series already overdue on
+/// a date nobody could have acted on. The render floor (`Page::synced_since`)
+/// keeps them off the calendar on the same anchor.
 ///
 /// `page_sync.created_at` is the anchor because the reconciler writes it once on
 /// insert and never rewrites it — an etag update and a dormant re-link both leave

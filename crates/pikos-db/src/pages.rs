@@ -1575,12 +1575,10 @@ pub async fn undo_skip_occurrence_impl(
 /// (CLI/mobile) or a prior bug — the in-session path keeps it fresh on every
 /// write, so the steady-state result is empty.
 ///
-/// Active-synced series are included: their head floors at today
-/// (`recurrence_derive::synced_head_floor`), so it goes stale by the calendar
-/// rather than by a write, and the reconciler no-ops on an unchanged etag. This
-/// heal is the only thing that advances them across a day boundary — skipping
-/// them here would leave the head a day behind for any session that outlives
-/// midnight.
+/// Active-synced series are healed too, not skipped as reconciler-owned: the
+/// reconciler no-ops on an unchanged etag, so nothing else revisits a head left
+/// stale. Their head floors at the connect day
+/// (`recurrence_derive::synced_head_floor`), so it never moves with the clock.
 pub async fn recompute_recurring_schedules_impl(
     pool: &sqlx::SqlitePool,
 ) -> AppResult<Vec<PageSummary>> {
