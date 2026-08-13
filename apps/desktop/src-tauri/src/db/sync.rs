@@ -10,8 +10,8 @@ use pikos_calendar_sync::{
     release_all_credentials, resync_account_auto, CalendarSyncResult, Keychain,
 };
 use pikos_db::sync_commands::{
-    get_sync_status_impl, list_sync_calendars_impl, toggle_sync_calendar_impl,
-    AccountWithCalendars, SyncCalendar,
+    get_sync_status_impl, list_sync_calendars_impl, set_sync_calendar_color_impl,
+    toggle_sync_calendar_impl, AccountWithCalendars, SyncCalendar,
 };
 
 use super::DbState;
@@ -106,6 +106,16 @@ pub async fn toggle_sync_calendar(
         crate::db::sync_loop::poke(&app);
     }
     Ok(cal)
+}
+
+#[tauri::command]
+pub async fn set_sync_calendar_color(
+    state: State<'_, DbState>,
+    sync_calendar_id: String,
+    color: String,
+) -> AppResult<SyncCalendar> {
+    let pool = state.get_pool().await?;
+    set_sync_calendar_color_impl(&pool, &sync_calendar_id, &color).await
 }
 
 #[tauri::command]

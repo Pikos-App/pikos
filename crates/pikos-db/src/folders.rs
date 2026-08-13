@@ -149,6 +149,13 @@ pub async fn update_folder_impl(
         return Err(AppError::Conflict(EXTERNAL_FOLDER_LOCKED_MSG.to_string()));
     }
 
+    // A sidebar recolour is a user pick like the panel's, so it has to reach the
+    // column that owns it (see `sync_calendar.color_user_set`).
+    let recolor = match &updates.color {
+        Some(serde_json::Value::String(c)) => Some(c.clone()),
+        _ => None,
+    };
+
     let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("UPDATE folders SET ");
     let mut fields = builder.separated(", ");
     let mut has_updates = false;
@@ -194,6 +201,22 @@ pub async fn update_folder_impl(
     builder.push_bind(&id);
 
     builder.build().execute(pool).await?;
+
+    if let Some(color) = recolor {
+        crate::tx::retry_on_busy(|| async {
+            sqlx::query(
+                "UPDATE sync_calendar SET color = ?, color_user_set = 1, updated_at = ?
+                 WHERE folder_id = ?",
+            )
+            .bind(&color)
+            .bind(now_iso())
+            .bind(&id)
+            .execute(pool)
+            .await?;
+            Ok(())
+        })
+        .await?;
+    }
 
     fetch_folder(pool, &id).await
 }

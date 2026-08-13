@@ -24,7 +24,7 @@ interface SyncAccountCardProps {
   onReconnect: (password: string) => Promise<void>;
   onReconnectGoogle: () => Promise<void>;
   onToggleCalendar: (calendarId: string, enabled: boolean, color: string | null) => void;
-  onRecolorCalendar: (calendarId: string, enabled: boolean, color: string) => void;
+  onRecolorCalendar: (calendarId: string, color: string) => void;
 }
 
 export function SyncAccountCard({
@@ -106,7 +106,7 @@ export function SyncAccountCard({
               calendar={cal}
               key={cal.id}
               lastResult={results[cal.id]}
-              onRecolor={(color) => onRecolorCalendar(cal.id, cal.enabled, color)}
+              onRecolor={(color) => onRecolorCalendar(cal.id, color)}
               onToggle={(enabled) =>
                 onToggleCalendar(
                   cal.id,

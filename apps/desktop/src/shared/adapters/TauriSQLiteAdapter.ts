@@ -379,6 +379,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<SyncCalendar>("toggle_sync_calendar", { color, enabled, syncCalendarId });
   }
 
+  setSyncCalendarColor(syncCalendarId: string, color: string): Promise<SyncCalendar> {
+    return invoke<SyncCalendar>("set_sync_calendar_color", { color, syncCalendarId });
+  }
+
   resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
     return invoke<CalendarSyncResult[]>("resync_sync_account", { accountId });
   }

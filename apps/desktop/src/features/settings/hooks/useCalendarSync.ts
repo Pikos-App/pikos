@@ -38,7 +38,7 @@ export interface CalendarSyncState {
   googleAvailable: boolean;
   disconnect: (accountId: string) => Promise<void>;
   toggleCalendar: (calendarRowId: string, enabled: boolean, color: string | null) => Promise<void>;
-  recolorCalendar: (calendarRowId: string, enabled: boolean, color: string) => Promise<void>;
+  recolorCalendar: (calendarRowId: string, color: string) => Promise<void>;
   resync: (accountId: string) => Promise<void>;
 }
 
@@ -170,14 +170,14 @@ export function useCalendarSync(): CalendarSyncState {
   }
 
   // An enabled calendar's folder already exists; a disabled one has none to repaint.
-  async function recolorCalendar(calendarRowId: string, enabled: boolean, color: string) {
+  async function recolorCalendar(calendarRowId: string, color: string) {
     if (!storage) return;
     setError(null);
     const folderId = accounts
       .flatMap((a) => a.calendars)
       .find((c) => c.id === calendarRowId)?.folderId;
     try {
-      await storage.toggleSyncCalendar(calendarRowId, enabled, color);
+      await storage.setSyncCalendarColor(calendarRowId, color);
     } catch (e) {
       setError(actionError(e, "Couldn't update the calendar colour. Try again."));
       return;

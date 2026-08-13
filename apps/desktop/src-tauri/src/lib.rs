@@ -43,7 +43,8 @@ use db::{
     sync::{
         connect_caldav_account, connect_google_account, disconnect_sync_account, get_sync_status,
         google_sync_available, list_sync_calendars, reconnect_caldav_account,
-        release_sync_credentials, resync_sync_account, toggle_sync_calendar,
+        release_sync_credentials, resync_sync_account, set_sync_calendar_color,
+        toggle_sync_calendar,
     },
     tags::search_tags,
     DbState,
@@ -371,6 +372,7 @@ pub fn run() {
             disconnect_sync_account,
             list_sync_calendars,
             toggle_sync_calendar,
+            set_sync_calendar_color,
             resync_sync_account,
             get_sync_status,
             release_sync_credentials,

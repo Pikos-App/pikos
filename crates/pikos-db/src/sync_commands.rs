@@ -164,8 +164,12 @@ pub async fn get_sync_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResu
 // ─── calendars ──────────────────────────────────────────────────────────────────
 
 /// Persist a discovered calendar (disabled, no folder). Idempotent on
-/// `(account_id, calendar_id)`: a re-discovery refreshes only the display name,
-/// leaving the user's enable/colour/cursor untouched.
+/// `(account_id, calendar_id)`: a re-discovery refreshes the display name and —
+/// unless the user has picked one — the colour, leaving enable state and cursor
+/// untouched. Growing this `ON CONFLICT` set is how a reconnect silently disables
+/// every calendar or resets its cursor, so add a column here only deliberately.
+/// Both refreshed fields then flow onto the calendar's folder, which holds a
+/// derived copy rather than a second truth.
 pub async fn upsert_sync_calendar_impl(
     pool: &sqlx::SqlitePool,
     account_id: &str,
@@ -180,7 +184,11 @@ pub async fn upsert_sync_calendar_impl(
            (id, account_id, calendar_id, display_name, color, enabled, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, 0, ?, ?)
          ON CONFLICT (account_id, calendar_id) DO UPDATE SET
-           display_name = excluded.display_name, updated_at = excluded.updated_at",
+           display_name = excluded.display_name,
+           color = CASE WHEN color_user_set = 1
+                        THEN color
+                        ELSE COALESCE(excluded.color, color) END,
+           updated_at = excluded.updated_at",
     )
     .bind(&id)
     .bind(account_id)
@@ -191,7 +199,12 @@ pub async fn upsert_sync_calendar_impl(
     .bind(&now)
     .execute(pool)
     .await?;
-    fetch_calendar_by_keys(pool, account_id, calendar_id).await
+    let cal = fetch_calendar_by_keys(pool, account_id, calendar_id).await?;
+    if let Some(folder_id) = &cal.folder_id {
+        reconcile_folder_to_calendar(pool, folder_id, &cal.display_name, cal.color.as_deref())
+            .await?;
+    }
+    Ok(cal)
 }
 
 pub async fn list_sync_calendars_impl(
@@ -222,6 +235,32 @@ pub async fn toggle_sync_calendar_impl(
     }
 }
 
+/// Record a colour the **user** picked, from either surface — latching
+/// `color_user_set` (see the column) and repainting the folder to match.
+pub async fn set_sync_calendar_color_impl(
+    pool: &sqlx::SqlitePool,
+    sync_calendar_id: &str,
+    color: &str,
+) -> AppResult<SyncCalendar> {
+    let cal = fetch_calendar(pool, sync_calendar_id).await?;
+    crate::tx::retry_on_busy(|| async {
+        sqlx::query(
+            "UPDATE sync_calendar SET color = ?, color_user_set = 1, updated_at = ? WHERE id = ?",
+        )
+        .bind(color)
+        .bind(now_iso())
+        .bind(&cal.id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    })
+    .await?;
+    if let Some(folder_id) = &cal.folder_id {
+        reconcile_folder_to_calendar(pool, folder_id, &cal.display_name, Some(color)).await?;
+    }
+    fetch_calendar(pool, sync_calendar_id).await
+}
+
 /// Materialize the calendar's system folder (creating it, or re-flagging the one a
 /// prior disable de-flagged) and mark the calendar enabled. The actual backfill is
 /// the engine's job on the next resync/poll.
@@ -239,7 +278,8 @@ async fn enable_sync_calendar(
             // Re-enable: the de-flagged folder still exists → re-flag it in place so its
             // surviving owned pages rejoin a live sync folder.
             Some(fid) if folder_exists(&mut tx, fid).await? => {
-                sqlx::query("UPDATE folders SET is_external_calendar = 1, color = ?, updated_at = ? WHERE id = ?")
+                sqlx::query("UPDATE folders SET is_external_calendar = 1, name = ?, color = ?, updated_at = ? WHERE id = ?")
+                    .bind(&cal.display_name)
                     .bind(color)
                     .bind(&now)
                     .bind(fid)
@@ -318,6 +358,31 @@ async fn disable_sync_calendar(
 }
 
 // ─── internal ───────────────────────────────────────────────────────────────────
+
+/// Repaint an external folder from its calendar. Guarded on an actual difference:
+/// every discovery pass calls this for every enabled calendar, and an
+/// unconditional write would restamp `updated_at` on each one.
+async fn reconcile_folder_to_calendar(
+    pool: &sqlx::SqlitePool,
+    folder_id: &str,
+    name: &str,
+    color: Option<&str>,
+) -> AppResult<()> {
+    crate::tx::retry_on_busy(|| async {
+        sqlx::query(
+            "UPDATE folders SET name = ?1, color = ?2, updated_at = ?3
+             WHERE id = ?4 AND (name IS NOT ?1 OR color IS NOT ?2)",
+        )
+        .bind(name)
+        .bind(color)
+        .bind(now_iso())
+        .bind(folder_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    })
+    .await
+}
 
 async fn create_external_folder(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,

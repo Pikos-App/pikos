@@ -20,6 +20,33 @@ async fn folder_flag(pool: &sqlx::SqlitePool, folder_id: &str) -> Option<i64> {
         .unwrap()
 }
 
+async fn folder_name_color(
+    pool: &sqlx::SqlitePool,
+    folder_id: &str,
+) -> (String, Option<String>, String) {
+    sqlx::query_as("SELECT name, color, updated_at FROM folders WHERE id = ?")
+        .bind(folder_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn enabled_calendar(
+    pool: &sqlx::SqlitePool,
+    acc: &str,
+    name: &str,
+    color: Option<&str>,
+) -> (SyncCalendar, String) {
+    let cal = upsert_sync_calendar_impl(pool, acc, "cal-a", name, color)
+        .await
+        .unwrap();
+    let enabled = toggle_sync_calendar_impl(pool, &cal.id, true, color)
+        .await
+        .unwrap();
+    let folder_id = enabled.folder_id.clone().expect("folder linked on enable");
+    (enabled, folder_id)
+}
+
 #[tokio::test]
 async fn status_lists_accounts_with_their_calendars() {
     let pool = test_pool().await;
@@ -301,4 +328,142 @@ async fn re_enable_reflags_the_same_folder() {
         .await
         .unwrap();
     assert_eq!(folder_count, 1, "no duplicate folder");
+}
+
+#[tokio::test]
+async fn an_upstream_rename_reaches_the_calendars_folder() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let (_, folder_id) = enabled_calendar(&pool, &acc, "Work", None).await;
+
+    upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work (renamed)", None)
+        .await
+        .unwrap();
+
+    let (name, _, _) = folder_name_color(&pool, &folder_id).await;
+    assert_eq!(
+        name, "Work (renamed)",
+        "the sidebar folder follows the calendar's name"
+    );
+}
+
+#[tokio::test]
+async fn re_enable_re_asserts_the_calendars_name_onto_a_surviving_folder() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let (cal, folder_id) = enabled_calendar(&pool, &acc, "Work", None).await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some(&folder_id),
+            ..TestPage::new("p-keep", "My note")
+        },
+    )
+    .await
+    .unwrap();
+    toggle_sync_calendar_impl(&pool, &cal.id, false, None)
+        .await
+        .unwrap();
+    upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Renamed while off", None)
+        .await
+        .unwrap();
+
+    toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+        .await
+        .unwrap();
+
+    let (name, _, _) = folder_name_color(&pool, &folder_id).await;
+    assert_eq!(
+        name, "Renamed while off",
+        "the re-flag arm renames the folder it reclaims"
+    );
+}
+
+#[tokio::test]
+async fn re_discovery_follows_the_provider_colour_until_the_user_picks_one() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let (cal, folder_id) = enabled_calendar(&pool, &acc, "Work", Some("#aaa")).await;
+
+    let followed = upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work", Some("#bbb"))
+        .await
+        .unwrap();
+    assert_eq!(
+        followed.color.as_deref(),
+        Some("#bbb"),
+        "sync owns the colour while the user has not chosen one"
+    );
+
+    set_sync_calendar_color_impl(&pool, &cal.id, "#ccc")
+        .await
+        .unwrap();
+    let after_pick = upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work", Some("#ddd"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        after_pick.color.as_deref(),
+        Some("#ccc"),
+        "the user's pick outranks the provider from then on"
+    );
+    let (_, color, _) = folder_name_color(&pool, &folder_id).await;
+    assert_eq!(color.as_deref(), Some("#ccc"), "and the folder matches it");
+}
+
+#[tokio::test]
+async fn a_colourless_provider_never_clears_the_stored_colour() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    enabled_calendar(&pool, &acc, "Work", Some("#aaa")).await;
+
+    let after = upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work", None)
+        .await
+        .unwrap();
+
+    assert_eq!(after.color.as_deref(), Some("#aaa"));
+}
+
+#[tokio::test]
+async fn recolouring_the_folder_reaches_the_calendar_and_latches() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let (_, folder_id) = enabled_calendar(&pool, &acc, "Work", Some("#aaa")).await;
+
+    crate::folders::update_folder_impl(
+        &pool,
+        folder_id.clone(),
+        crate::folders::FolderUpdate {
+            color: Some(serde_json::Value::String("#ccc".into())),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let after = upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work", Some("#ddd"))
+        .await
+        .unwrap();
+    assert_eq!(
+        after.color.as_deref(),
+        Some("#ccc"),
+        "a sidebar recolour is a user pick, so re-discovery leaves it alone"
+    );
+}
+
+#[tokio::test]
+async fn an_unchanged_re_discovery_does_not_restamp_the_folder() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let (_, folder_id) = enabled_calendar(&pool, &acc, "Work", Some("#aaa")).await;
+    let (_, _, before) = folder_name_color(&pool, &folder_id).await;
+
+    upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work", Some("#aaa"))
+        .await
+        .unwrap();
+
+    let (_, _, after) = folder_name_color(&pool, &folder_id).await;
+    assert_eq!(
+        before, after,
+        "every discovery pass hits this, so an unchanged one must not churn updated_at"
+    );
 }

@@ -430,6 +430,12 @@ export class MockStorageAdapter implements StorageAdapter {
     if (!existing) return Promise.reject(new Error(`Folder not found: ${id}`));
     const updated: Folder = { ...existing, ...updates, id, updatedAt: now() };
     this.folders.set(id, updated);
+    // Mirrors the real writer: a sidebar recolour reaches the calendar too.
+    if (typeof updates.color === "string") {
+      for (const cal of this.syncCalendars.values()) {
+        if (cal.folderId === id) this.syncCalendars.set(cal.id, { ...cal, color: updates.color });
+      }
+    }
     return Promise.resolve(updated);
   }
 
@@ -1108,8 +1114,34 @@ export class MockStorageAdapter implements StorageAdapter {
       this.folders.delete(folderId);
       folderId = null;
     }
+    // Re-enable re-flags a surviving folder, so it re-asserts the name and colour
+    // the calendar owns rather than keeping what it had while off.
+    if (enabled && folderId) {
+      const folder = this.folders.get(folderId);
+      if (folder) {
+        this.folders.set(folderId, {
+          ...folder,
+          isExternalCalendar: true,
+          name: cal.displayName,
+          updatedAt: now(),
+          ...(color != null ? { color } : {}),
+        });
+      }
+    }
     const updated: SyncCalendar = { ...cal, color, detachedPages, enabled, folderId };
     this.syncCalendars.set(syncCalendarId, updated);
+    return Promise.resolve(updated);
+  }
+
+  setSyncCalendarColor(syncCalendarId: string, color: string): Promise<SyncCalendar> {
+    const cal = this.syncCalendars.get(syncCalendarId);
+    if (!cal) return Promise.reject(new Error(`Sync calendar not found: ${syncCalendarId}`));
+    const updated: SyncCalendar = { ...cal, color };
+    this.syncCalendars.set(syncCalendarId, updated);
+    if (cal.folderId) {
+      const folder = this.folders.get(cal.folderId);
+      if (folder) this.folders.set(cal.folderId, { ...folder, color, updatedAt: now() });
+    }
     return Promise.resolve(updated);
   }
 

@@ -46,7 +46,7 @@ export function CalendarSyncSettings() {
               busy={busyAccountId === account.id}
               key={account.id}
               onDisconnect={() => disconnect(account.id)}
-              onRecolorCalendar={(id, enabled, color) => void recolorCalendar(id, enabled, color)}
+              onRecolorCalendar={(id, color) => void recolorCalendar(id, color)}
               onReconnect={(password) => reconnect(account.id, password)}
               onReconnectGoogle={() => reconnectGoogle(account.id)}
               onResync={() => void resync(account.id)}

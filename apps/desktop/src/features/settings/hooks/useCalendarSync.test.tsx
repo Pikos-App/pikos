@@ -113,7 +113,7 @@ describe("useCalendarSync", () => {
     const cal = hook.result.current.accounts[0]!.calendars[0]!;
 
     await act(async () => {
-      await hook.result.current.recolorCalendar(cal.id, false, "#E5534B");
+      await hook.result.current.recolorCalendar(cal.id, "#E5534B");
     });
 
     const updated = hook.result.current.accounts[0]!.calendars.find((c) => c.id === cal.id)!;
@@ -139,10 +139,37 @@ describe("useCalendarSync", () => {
     )!.folderId!;
 
     await act(async () => {
-      await hook.result.current.sync.recolorCalendar(cal.id, true, "#E5534B");
+      await hook.result.current.sync.recolorCalendar(cal.id, "#E5534B");
     });
 
     expect(hook.result.current.pages.folders.find((f) => f.id === folderId)?.color).toBe("#E5534B");
+  });
+
+  it("a sidebar recolour reaches the calendar, so the panel swatch follows it", async () => {
+    const hook = renderHookWithProviders(() => ({
+      pages: usePages(),
+      sync: useCalendarSync(),
+      ws: useWorkspace(),
+    }));
+    await waitFor(() => expect(hook.result.current.sync.loading).toBe(false));
+    await act(async () => {
+      await hook.result.current.sync.connect(CONN);
+    });
+    const account = hook.result.current.sync.accounts[0]!;
+    const cal = account.calendars[0]!;
+    await act(async () => {
+      await hook.result.current.sync.toggleCalendar(cal.id, true, "#A8CDB4");
+    });
+    const folderId = hook.result.current.sync.accounts[0]!.calendars.find(
+      (c) => c.id === cal.id
+    )!.folderId!;
+
+    await act(async () => {
+      await hook.result.current.pages.updateFolder(folderId, { color: "#E5534B" });
+    });
+
+    const calendars = await hook.result.current.ws.storage!.listSyncCalendars(account.id);
+    expect(calendars.find((c) => c.id === cal.id)?.color).toBe("#E5534B");
   });
 
   it("resync records per-calendar results and clears the busy flag", async () => {

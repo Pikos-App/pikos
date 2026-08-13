@@ -240,6 +240,10 @@ export interface StorageAdapter {
     enabled: boolean,
     color: string | null
   ): Promise<SyncCalendar>;
+  /** Record a colour the user picked, from the panel or the sidebar. Unlike the one
+   * `toggleSyncCalendar` assigns, this latches: re-discovery stops following the
+   * provider's colour for this calendar. */
+  setSyncCalendarColor(syncCalendarId: string, color: string): Promise<SyncCalendar>;
   /** Poll every enabled calendar on the account; returns per-calendar outcomes. */
   resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]>;
   /** Account-centric status tree for the Calendar Sync panel. */
