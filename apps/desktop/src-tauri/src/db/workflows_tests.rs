@@ -124,7 +124,6 @@ async fn recurring_completion_clone_is_searchable() {
         &pool,
         CompleteRecurringInput {
             page_id: head.id.clone(),
-            skip_dates: vec![],
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
