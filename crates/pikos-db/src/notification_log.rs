@@ -111,9 +111,12 @@ pub async fn due_default_reminders(
            )
            AND datetime(ps.scheduled_start, '-' || ? || ' minutes')
                BETWEEN ? AND ?
-           AND NOT EXISTS (
-             SELECT 1 FROM page_sync sy
-             WHERE sy.page_id = ps.page_id AND sy.sync_state = 'active'
+           AND (
+             ps.timezone IS NULL
+             OR NOT EXISTS (
+               SELECT 1 FROM page_sync sy
+               WHERE sy.page_id = ps.page_id AND sy.sync_state = 'active'
+             )
            )
            AND NOT EXISTS (
              SELECT 1 FROM notification_log nl
@@ -135,7 +138,10 @@ pub async fn due_default_reminders(
 // source-zone wall-clock, so a reminder must fire on the absolute INSTANT, not
 // when the device-local wall-clock happens to read the same digits. The naive
 // `due_*` queries above interpret `scheduled_start` as device-local, so they
-// exclude active-synced pages and this path handles them instead.
+// exclude *zoned* active-synced pages and this path handles them instead. A
+// zone-less synced event (a floating CalDAV DTSTART) is device-local by
+// definition and stays on the naive path — both its explicit and its
+// default-lead arm, or it would fall through every query and never remind.
 //
 // Origin does not change the lead time: every page notifies at the user's global
 // default unless it carries an explicit reminder, and an explicit `-1` still means
@@ -497,6 +503,28 @@ pub async fn log_reminder_fired(
     .bind(schedule_id)
     .bind(fired_at)
     .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Drop a schedule row's already-fired dedup anchors so its reminders re-arm at
+/// the row's new time.
+///
+/// Matches both key shapes the `due_*` queries dedup on: the bare row id
+/// (default lead) and the per-lead composite `<id>#<minutes>` (explicit, synced,
+/// synced-override). Deleting only the bare id leaves every explicit and synced
+/// reminder pinned as fired, so a moved event never notifies again until the
+/// 30-day prune.
+pub(crate) async fn clear_reminder_log_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    schedule_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "DELETE FROM notification_log
+         WHERE type = 'reminder' AND (schedule_id = ?1 OR schedule_id LIKE ?1 || '#%')",
+    )
+    .bind(schedule_id)
+    .execute(&mut **tx)
     .await?;
     Ok(())
 }

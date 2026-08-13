@@ -429,11 +429,11 @@ async fn update_clears_reminder_log_when_start_changes() {
     .await
     .unwrap();
 
-    // Seed a reminder log entry — must be cleared when scheduled_start moves.
+    // Seed both dedup key shapes — default-lead (bare id) and per-lead composite.
     let now = now_iso();
     sqlx::query(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
-         VALUES ('n1', 'p1', ?, 'reminder', ?)",
+         VALUES ('n1', 'p1', ?1, 'reminder', ?2), ('n3', 'p1', ?1 || '#10', 'reminder', ?2)",
     )
     .bind(&s.id)
     .bind(&now)
@@ -464,7 +464,8 @@ async fn update_clears_reminder_log_when_start_changes() {
     .unwrap();
 
     let reminders: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM notification_log WHERE schedule_id = ? AND type = 'reminder'",
+        "SELECT COUNT(*) FROM notification_log WHERE type = 'reminder'
+         AND (schedule_id = ?1 OR schedule_id LIKE ?1 || '#%')",
     )
     .bind(&s.id)
     .fetch_one(&pool)
@@ -479,6 +480,76 @@ async fn update_clears_reminder_log_when_start_changes() {
     .unwrap();
     assert_eq!(reminders, 0, "reminder log not cleared");
     assert_eq!(overdues, 1, "overdue log incorrectly cleared");
+}
+
+#[tokio::test]
+async fn moving_a_schedule_re_arms_a_fired_explicit_reminder() {
+    // Drives the real dedup key rather than seeding one: the scheduler logs
+    // whatever `due_*` returns, so a self-seeded key can pass while the user's
+    // reminder never re-fires.
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Task"))
+        .await
+        .unwrap();
+    let s = create_page_schedule_impl(
+        &pool,
+        NewPageSchedule {
+            page_id: "p1".into(),
+            scheduled_start: "2026-05-25T09:10:00".into(),
+            scheduled_end: None,
+            timezone: None,
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES ('r1', 'p1', 10, '2026-05-01T00:00:00')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let fired = crate::notification_log::due_explicit_reminders(
+        &pool,
+        "2026-05-25 08:59:00",
+        "2026-05-25 09:00:00",
+    )
+    .await
+    .unwrap();
+    assert_eq!(fired.len(), 1);
+    crate::notification_log::log_reminder_fired(
+        &pool,
+        &fired[0].page_id,
+        &fired[0].schedule_id,
+        "2026-05-25 09:00:00",
+    )
+    .await
+    .unwrap();
+
+    update_page_schedule_impl(
+        &pool,
+        s.id.clone(),
+        PageScheduleUpdate {
+            scheduled_start: Some("2026-05-25T11:10:00".into()),
+            scheduled_end: None,
+            status: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let due = crate::notification_log::due_explicit_reminders(
+        &pool,
+        "2026-05-25 10:59:00",
+        "2026-05-25 11:00:00",
+    )
+    .await
+    .unwrap();
+    assert_eq!(due.len(), 1, "moved event's reminder never re-armed");
+    assert_eq!(due[0].schedule_id, fired[0].schedule_id);
 }
 
 // ── list_page_schedules / range / recurrence rules ─────────────────────

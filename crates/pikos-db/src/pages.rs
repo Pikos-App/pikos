@@ -1742,6 +1742,7 @@ async fn reschedule_virtual_occurrence_once(
             .bind(&override_id)
             .execute(&mut *tx)
             .await?;
+            crate::notification_log::clear_reminder_log_tx(&mut tx, &override_id).await?;
         } else {
             sqlx::query(
                 "INSERT INTO page_schedules

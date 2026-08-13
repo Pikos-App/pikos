@@ -438,6 +438,32 @@ async fn default_reminder_skips_pages_with_explicit_reminders() {
         .is_empty());
 }
 
+#[tokio::test]
+async fn floating_synced_oneoff_default_reminder_fires_on_native_path() {
+    // Twin of the explicit-lead case: with no page_reminders row the global
+    // default is the only lead, and the synced path can't serve a zone-less row.
+    let pool = test_pool().await;
+    insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
+    insert_schedule(&pool, "s1", "p1", "2026-05-25T09:10:00", "not_started").await; // tz NULL
+    crate::pool::insert_test_page_sync(&pool, "p1", "active")
+        .await
+        .unwrap();
+
+    let due = due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+        .await
+        .unwrap();
+    assert_eq!(
+        due.len(),
+        1,
+        "floating synced one-off got no default reminder"
+    );
+    assert_eq!(due[0].schedule_id, "s1");
+    assert!(due_synced_reminders(&pool, synced_oneoff_now(), 10)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
 // ─── daily summary dedup + logging ───────────────────────────────────────────
 
 #[tokio::test]

@@ -1877,6 +1877,81 @@ async fn reschedule_virtual_keys_the_in_place_move_to_one_occurrence() {
 }
 
 #[tokio::test]
+async fn reschedule_virtual_re_arms_a_fired_reminder_on_the_moved_override() {
+    // Moving a provider-materialized override leaves its row id intact, so the
+    // dedup row from the fire at the old time would otherwise pin it forever.
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some("2026-06-08T09:00:00"),
+            ..TestPage::new("head", "Daily standup")
+        },
+    )
+    .await
+    .unwrap();
+    let rule = crate::create_recurrence_rule_impl(
+        &pool,
+        crate::NewRecurrenceRule {
+            page_id: "head".into(),
+            rrule: "FREQ=DAILY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-06-08T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+    crate::pool::insert_test_page_sync(&pool, "head", "detached")
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES ('r1', 'head', 10, '2026-06-01T00:00:00')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_schedules
+         (id, page_id, scheduled_start, timezone, rule_id, original_date, status, created_at)
+         VALUES ('ovr', 'head', '2026-06-10T17:00:00', 'America/Los_Angeles', ?,
+                 '2026-06-10T09:00:00', 'not_started', '2026-06-01T00:00:00')",
+    )
+    .bind(&rule.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    crate::notification_log::log_reminder_fired(&pool, "head", "ovr#10", "2026-06-10T16:50:00")
+        .await
+        .unwrap();
+
+    reschedule_virtual_occurrence_impl(
+        &pool,
+        RescheduleVirtualInput {
+            rule_id: rule.id.clone(),
+            original_date: "2026-06-10".into(),
+            scheduled_start: "2026-06-13T14:00:00".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let due = crate::notification_log::due_explicit_reminders(
+        &pool,
+        "2026-06-13 13:49:00",
+        "2026-06-13 13:50:00",
+    )
+    .await
+    .unwrap();
+    assert_eq!(due.len(), 1, "moved override's reminder never re-armed");
+    assert_eq!(due[0].schedule_id, "ovr#10");
+}
+
+#[tokio::test]
 async fn reschedule_virtual_on_a_native_series_clones_even_beside_an_override() {
     // Origin, not the presence of an override row, picks the arm — a native series
     // materializes an independent clone regardless of what its rule already carries.

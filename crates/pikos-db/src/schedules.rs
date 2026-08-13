@@ -383,13 +383,8 @@ async fn apply_schedule_update(
 
     builder.build().execute(&mut *tx).await?;
 
-    // If scheduled_start changed, clear reminder notification_log entries for
-    // this schedule so the scheduler can re-fire at the new time.
     if updates.scheduled_start.is_some() {
-        sqlx::query("DELETE FROM notification_log WHERE schedule_id = ? AND type = 'reminder'")
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
+        crate::notification_log::clear_reminder_log_tx(&mut tx, id).await?;
     }
 
     let page_id: Option<String> =

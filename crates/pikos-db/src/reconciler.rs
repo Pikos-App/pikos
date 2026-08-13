@@ -253,7 +253,10 @@ async fn find_relink(
 
 /// Replace the page's mirror schedule wholesale. The schedule is fully
 /// reconciler-owned for a synced page, so a clean delete-and-reinsert is the
-/// simplest idempotent write — re-running yields the same rows.
+/// simplest idempotent write — re-running yields the same rows. Fresh row ids
+/// are also what re-arms a reminder an upstream time edit moved: updating in
+/// place instead would need
+/// [`crate::notification_log::clear_reminder_log_tx`].
 ///
 /// A [`OccurrenceFidelity::MasterOnly`] bundle is the exception: it can't see the
 /// series' exdates and overrides (see the enum), so those are read back before the
