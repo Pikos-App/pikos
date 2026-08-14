@@ -37,10 +37,10 @@ pub struct SyncCalendar {
     pub last_synced_at: Option<String>,
     #[ts(optional = false)]
     pub folder_id: Option<String>,
-    /// Pages this calendar left behind when it was unsynced — owned, so teardown
-    /// detached them instead of deleting. Derived, not stored. Re-enabling re-links
-    /// them and overwrites their mirror fields, so the panel confirms first; a zero
-    /// here means there is nothing to warn about and the toggle stays instant.
+    /// How many pages this calendar left behind when it was switched off — ones the
+    /// user had worked in, so they were kept rather than deleted. Switching the
+    /// calendar back on reclaims them and the calendar's own values win, which is
+    /// worth confirming first; zero means there is nothing to ask about.
     #[ts(type = "number")]
     pub detached_pages: i64,
 }

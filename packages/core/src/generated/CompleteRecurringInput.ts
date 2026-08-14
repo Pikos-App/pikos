@@ -3,9 +3,9 @@
 export type CompleteRecurringInput = {
   pageId: string;
   /**
-   * Synced series only: the client-rendered occurrence being completed (the
-   * reconciler pins the head at the base, so the virtual is the only record of
-   * it). Native series omit these — the head's own oldest-open date is used.
+   * Which occurrence is being completed, for a page a calendar owns — the caller
+   * has to say, because such a page's own date stays pinned to where the series
+   * began. Omit for a page created in Pikos: its next-due date is used.
    */
   occurrenceDate?: string | null;
   scheduledStart?: string | null;

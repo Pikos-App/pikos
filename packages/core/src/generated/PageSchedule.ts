@@ -3,8 +3,17 @@
 export type PageSchedule = {
   id: string;
   pageId: string;
+  /**
+   * Local wall-clock: `YYYY-MM-DD` all-day, `YYYY-MM-DDTHH:MM:SS` timed.
+   */
   scheduledStart: string;
+  /**
+   * Same shape as the start. `null` means a single day, or an hour by default.
+   */
   scheduledEnd?: string | null;
+  /**
+   * IANA zone the time was authored in. Recurrence expansion ignores it.
+   */
   timezone?: string | null;
   ruleId?: string | null;
   originalDate?: string | null;

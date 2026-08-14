@@ -2,78 +2,106 @@
 
 export type Page = {
   id: string;
+  /**
+   * `null` for a page in the Inbox.
+   */
   folderId: string | null;
   title: string;
+  /**
+   * One-line summary, shown in the page list and on calendar blocks.
+   */
   subtitle?: string | null;
+  /**
+   * A Tiptap document, JSON-encoded — not markdown.
+   */
   content: string;
+  /**
+   * Plain text extracted from `content` so search can index it. Not for display.
+   */
   contentText?: string | null;
   status: "not_started" | "done";
   priority: 0 | 1 | 2 | 3 | 4;
   tags: Array<string>;
+  /**
+   * Hand-arranged position within the folder.
+   */
   sortOrder: number;
+  /**
+   * Local wall-clock, never UTC: `YYYY-MM-DD` for an all-day page,
+   * `YYYY-MM-DDTHH:MM:SS` for a timed one. The shape is what distinguishes them.
+   */
   scheduledStart?: string | null;
+  /**
+   * Same shape as the start. For an all-day span this is the last day the page
+   * covers, not the day after it.
+   */
   scheduledEnd?: string | null;
+  /**
+   * Local wall-clock, set when the page was marked done.
+   */
   completedAt?: string | null;
+  /**
+   * Ids of pages this one links to. Nothing writes these yet.
+   */
   links?: Array<string>;
+  /**
+   * The page this one is nested under, if any.
+   */
   parentId?: string | null;
   lastOpenedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   /**
-   * Derived (not a stored column): an active `page_sync` row owns this page's
-   * schedule, so the calendar/editor render it read-only and non-draggable.
+   * True while a calendar owns this page's schedule. Its title, dates and
+   * recurrence are read-only, and the calendar block can't be dragged or resized.
    */
   scheduleLocked: boolean;
   /**
-   * Derived from `page_sync.sync_state` ('active' | 'detached' | 'tombstoned'),
-   * `None` for native pages. Drives detached treatment (dim + broken-sync icon).
+   * How this page's calendar link stands: `active` mirrors a live event,
+   * `detached` was severed and the page is now the user's outright, `tombstoned`
+   * was deleted locally. `null` for a page created in Pikos.
    */
   syncState?: "active" | "detached" | "tombstoned" | null;
   /**
-   * Source/authoring IANA zone (schedule or recurrence rule). Synced pages render
-   * it absolute in the viewer's zone at read time; native pages float and ignore it.
+   * IANA zone the schedule was authored in. Only read for a page a calendar owns,
+   * which renders at its true instant — 3pm in Berlin shows as 2pm in London. A
+   * page created in Pikos floats: it shows at its wall-clock time everywhere.
    */
   timezone?: string | null;
   /**
-   * `occurrence-date → done-clone page id`, from `completed_set`. The frontend
-   * hides a completed occurrence and routes an uncomplete by the clone id.
-   * `None` when the series has no completions.
+   * For a repeating page: each completed occurrence's date (`YYYY-MM-DD`) mapped
+   * to the page that records it. Completed occurrences stop rendering, and
+   * un-completing one is routed by that id. `null` when none are done.
    */
   completedOccurrences?: { [key in string]: string } | null;
   /**
-   * Dismissed occurrence dates for a recurring series, from the `skip_set` table.
-   * Excluded from expansion (both native + synced). `None` when nothing skipped.
+   * Occurrence dates (`YYYY-MM-DD`) dismissed from a repeating page. They stop
+   * rendering and are skipped when working out what's next due.
    */
   skippedOccurrences?: Array<string> | null;
   /**
-   * Calendar-owned location, a read-only mirror field. `None` for native pages
-   * or a synced event with no location; rendered only while the page is locked.
+   * Where the event is, as the calendar reports it. Read-only, and shown only
+   * while a calendar still owns the page.
    */
   mirrorLocation?: string | null;
   /**
-   * Calendar-owned attendee list (emails), a read-only mirror field. `None` when
-   * the event has no attendees or the page is native.
+   * Attendee email addresses, as the calendar reports them. Read-only.
    */
   mirrorAttendees?: Array<string> | null;
   /**
-   * Upstream description change withheld because the user already edited the body
-   * (see `page_sync.pending_description`). `None` = nothing pending.
+   * A description change from the calendar that wasn't applied, because the body
+   * had been edited here. Offered to the user rather than overwriting their work.
    */
   pendingDescription?: string | null;
   /**
-   * Local day this page first synced, or `None` for a native page.
-   *
-   * The render floor for a synced series: client-side expansion is bounded
-   * only by the visible range, so without this the calendar paints occurrences
-   * from the master's original `DTSTART` — years before the connection, from a
-   * period whose cancellations and moves were never fetched, and all of it
-   * below the head floor so none of it can be actioned. Same anchor as that
-   * floor, so what renders and what can become the head agree.
+   * The day this page first synced. Occurrences of a repeating event from before
+   * it are not rendered — the calendar was never asked about that period, so what
+   * it would show there is unreliable. (Why this day and not the backfill
+   * window is argued at `synced_head_floor`, in the recurrence derivation.)
    */
   syncedSince?: string | null;
   /**
-   * Derived (not a stored column): lets the frontend tell a one-off from a series
-   * without loading the rule set.
+   * Whether this page repeats, without having to load its rule.
    */
   isRecurring: boolean;
 };

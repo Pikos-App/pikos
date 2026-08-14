@@ -11,7 +11,7 @@ export type SearchResult = {
   priority: 0 | 1 | 2 | 3 | 4;
   tags: Array<string>;
   /**
-   * First ~80 chars of body content — used as fallback line 2 when no metadata exists
+   * First ~80 characters of the body, shown when there's no other metadata to show.
    */
   contentPreview: string;
 };

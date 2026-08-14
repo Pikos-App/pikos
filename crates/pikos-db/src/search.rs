@@ -28,7 +28,7 @@ pub struct SearchResult {
     #[ts(type = "0 | 1 | 2 | 3 | 4")]
     pub priority: i32,
     pub tags: Vec<String>,
-    /// First ~80 chars of body content — used as fallback line 2 when no metadata exists
+    /// First ~80 characters of the body, shown when there's no other metadata to show.
     pub content_preview: String,
 }
 

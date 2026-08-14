@@ -32,7 +32,8 @@ pub struct Folder {
     pub sort_order: i64,
     pub color: Option<String>,
     pub icon: Option<String>,
-    /// System-managed: drives the placement lock + separate sidebar area.
+    /// True for a folder that mirrors a synced calendar. Pikos manages it: it can't be
+    /// renamed, moved or deleted, and nothing can be filed into it.
     pub is_external_calendar: bool,
     pub created_at: String,
     pub updated_at: String,

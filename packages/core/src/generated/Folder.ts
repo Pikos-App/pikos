@@ -8,7 +8,8 @@ export type Folder = {
   color?: string | null;
   icon?: string | null;
   /**
-   * System-managed: drives the placement lock + separate sidebar area.
+   * True for a folder that mirrors a synced calendar. Pikos manages it: it can't be
+   * renamed, moved or deleted, and nothing can be filed into it.
    */
   isExternalCalendar: boolean;
   createdAt: string;

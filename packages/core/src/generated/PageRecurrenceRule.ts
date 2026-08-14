@@ -3,9 +3,21 @@
 export type PageRecurrenceRule = {
   id: string;
   pageId: string;
+  /**
+   * An iCalendar RRULE, e.g. `FREQ=WEEKLY;BYDAY=MO`.
+   */
   rrule: string;
+  /**
+   * Dates the rule would yield but that are excluded from it.
+   */
   rruleExdates: Array<string>;
+  /**
+   * Where the repeat starts, in the same shape a schedule uses.
+   */
   scheduledStart: string;
+  /**
+   * Where the first occurrence ends. `null` means an hour by default.
+   */
   scheduledEnd?: string | null;
   timezone: string;
   createdAt: string;

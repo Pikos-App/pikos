@@ -25,8 +25,11 @@ struct PageScheduleRow {
 pub struct PageSchedule {
     pub id: String,
     pub page_id: String,
+    /// Local wall-clock: `YYYY-MM-DD` all-day, `YYYY-MM-DDTHH:MM:SS` timed.
     pub scheduled_start: String,
+    /// Same shape as the start. `null` means a single day, or an hour by default.
     pub scheduled_end: Option<String>,
+    /// IANA zone the time was authored in. Recurrence expansion ignores it.
     pub timezone: Option<String>,
     pub rule_id: Option<String>,
     pub original_date: Option<String>,
@@ -95,9 +98,13 @@ struct RecurrenceRuleRow {
 pub struct PageRecurrenceRule {
     pub id: String,
     pub page_id: String,
+    /// An iCalendar RRULE, e.g. `FREQ=WEEKLY;BYDAY=MO`.
     pub rrule: String,
+    /// Dates the rule would yield but that are excluded from it.
     pub rrule_exdates: Vec<String>,
+    /// Where the repeat starts, in the same shape a schedule uses.
     pub scheduled_start: String,
+    /// Where the first occurrence ends. `null` means an hour by default.
     pub scheduled_end: Option<String>,
     pub timezone: String,
     pub created_at: String,

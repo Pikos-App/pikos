@@ -3,12 +3,12 @@ import type { PageSummary } from "./PageSummary";
 
 export type RescheduleVirtualResult = {
   /**
-   * The independent clone page materialized at the new time. `None` when the
-   * occurrence already had an override row and that row moved in place.
+   * The new standalone page this occurrence became. `null` when the occurrence
+   * was already pinned to its own time and simply moved.
    */
   clone?: PageSummary | null;
   /**
-   * Post-merge exdates for the rule — callers sync local rule state from this.
+   * The repeat's excluded dates after the move, for the caller to store.
    */
   ruleExdates: Array<string>;
 };
