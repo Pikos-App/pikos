@@ -31,6 +31,23 @@ async function ready(hook: ReturnType<typeof setup>) {
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
 }
 
+// Pairs the hook with the workspace, for the tests that need to reach the adapter
+// the hook is calling — to spy on it, or to reject from it.
+function setupWithWorkspace() {
+  return renderHookWithProviders(() => ({
+    sync: useCalendarSync(),
+    ws: useWorkspace(),
+  }));
+}
+
+async function connectedAccount(hook: ReturnType<typeof setupWithWorkspace>) {
+  await waitFor(() => expect(hook.result.current.sync.loading).toBe(false));
+  await act(async () => {
+    await hook.result.current.sync.connect(CONN);
+  });
+  return hook.result.current.sync.accounts[0]!;
+}
+
 beforeEach(() => {
   localStorage.clear();
   passHandlers.length = 0;
@@ -193,6 +210,29 @@ describe("useCalendarSync", () => {
     expect(hook.result.current.busyAccountId).toBeNull();
   });
 
+  // The two menu actions differ only in which command they run, so the wiring is
+  // the whole assertion: a refresh routed to the incremental poll would look
+  // identical in the panel and quietly not repair anything.
+  it("refreshFromCalendar runs the full refresh, not the incremental resync", async () => {
+    const hook = setupWithWorkspace();
+    const account = await connectedAccount(hook);
+    const cal = account.calendars[0]!;
+    await act(async () => {
+      await hook.result.current.sync.toggleCalendar(cal.id, true, "#A8CDB4");
+    });
+    const refresh = vi.spyOn(hook.result.current.ws.storage!, "refreshSyncAccount");
+    const resync = vi.spyOn(hook.result.current.ws.storage!, "resyncSyncAccount");
+
+    await act(async () => {
+      await hook.result.current.sync.refreshFromCalendar(account.id);
+    });
+
+    expect(refresh).toHaveBeenCalledWith(account.id);
+    expect(resync).not.toHaveBeenCalled();
+    expect(hook.result.current.sync.results[cal.id]).toBe("synced");
+    expect(hook.result.current.sync.busyAccountId).toBeNull();
+  });
+
   it("prunes a calendar's result when it's toggled, so no stale dot lingers", async () => {
     const hook = setup();
     await ready(hook);
@@ -248,23 +288,8 @@ describe("useCalendarSync", () => {
     expect(hook.result.current.accounts).toEqual([]);
   });
 
+  // Why these need catching (unlike connect): see actionError in useCalendarSync.ts.
   describe("surfaces action failures instead of swallowing them", () => {
-    // Why these need catching (unlike connect): see actionError in useCalendarSync.ts.
-    function setupWithWorkspace() {
-      return renderHookWithProviders(() => ({
-        sync: useCalendarSync(),
-        ws: useWorkspace(),
-      }));
-    }
-
-    async function connectedAccount(hook: ReturnType<typeof setupWithWorkspace>) {
-      await waitFor(() => expect(hook.result.current.sync.loading).toBe(false));
-      await act(async () => {
-        await hook.result.current.sync.connect(CONN);
-      });
-      return hook.result.current.sync.accounts[0]!;
-    }
-
     it("disconnect failure surfaces as error, keeps the account", async () => {
       const hook = setupWithWorkspace();
       const account = await connectedAccount(hook);

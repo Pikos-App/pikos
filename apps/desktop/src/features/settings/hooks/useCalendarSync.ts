@@ -1,4 +1,9 @@
-import type { AccountWithCalendars, CalendarSyncResult, NewCaldavConnection } from "@pikos/core";
+import type {
+  AccountWithCalendars,
+  CalendarSyncResult,
+  NewCaldavConnection,
+  StorageAdapter,
+} from "@pikos/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 
@@ -40,6 +45,7 @@ export interface CalendarSyncState {
   toggleCalendar: (calendarRowId: string, enabled: boolean, color: string | null) => Promise<void>;
   recolorCalendar: (calendarRowId: string, color: string) => Promise<void>;
   resync: (accountId: string) => Promise<void>;
+  refreshFromCalendar: (accountId: string) => Promise<void>;
 }
 
 export function useCalendarSync(): CalendarSyncState {
@@ -187,11 +193,22 @@ export function useCalendarSync(): CalendarSyncState {
   }
 
   async function resync(accountId: string) {
+    await poll(accountId, (s) => s.resyncSyncAccount(accountId));
+  }
+
+  async function refreshFromCalendar(accountId: string) {
+    await poll(accountId, (s) => s.refreshSyncAccount(accountId));
+  }
+
+  async function poll(
+    accountId: string,
+    run: (s: StorageAdapter) => Promise<CalendarSyncResult[]>
+  ) {
     if (!storage) return;
     setError(null);
     setBusyAccountId(accountId);
     try {
-      const outcomes = await storage.resyncSyncAccount(accountId);
+      const outcomes = await run(storage);
       const byCalendarId = new Map(
         accounts.find((a) => a.id === accountId)?.calendars.map((c) => [c.calendarId, c.id]) ?? []
       );
@@ -204,7 +221,7 @@ export function useCalendarSync(): CalendarSyncState {
         return next;
       });
       await refresh();
-      // A resync can upsert/remove pages — reload PagesContext so the calendar
+      // A poll can upsert/remove pages — reload PagesContext so the calendar
       // reflects the result without waiting for the next background pass.
       await reload();
     } catch (e) {
@@ -226,6 +243,7 @@ export function useCalendarSync(): CalendarSyncState {
     recolorCalendar,
     reconnect,
     reconnectGoogle,
+    refreshFromCalendar,
     results,
     resync,
     toggleCalendar,

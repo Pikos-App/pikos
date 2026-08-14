@@ -21,6 +21,7 @@ export function CalendarSyncSettings() {
     recolorCalendar,
     reconnect,
     reconnectGoogle,
+    refreshFromCalendar,
     results,
     resync,
     toggleCalendar,
@@ -49,6 +50,7 @@ export function CalendarSyncSettings() {
               onRecolorCalendar={(id, color) => void recolorCalendar(id, color)}
               onReconnect={(password) => reconnect(account.id, password)}
               onReconnectGoogle={() => reconnectGoogle(account.id)}
+              onRefresh={() => void refreshFromCalendar(account.id)}
               onResync={() => void resync(account.id)}
               onToggleCalendar={(id, enabled, color) => void toggleCalendar(id, enabled, color)}
               results={results}

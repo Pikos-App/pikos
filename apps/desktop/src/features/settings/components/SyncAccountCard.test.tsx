@@ -46,6 +46,7 @@ function render_(over?: Partial<Parameters<typeof SyncAccountCard>[0]>) {
       onRecolorCalendar={vi.fn()}
       onReconnect={() => Promise.resolve()}
       onReconnectGoogle={() => Promise.resolve()}
+      onRefresh={vi.fn()}
       onResync={vi.fn()}
       onToggleCalendar={vi.fn()}
       results={{}}
@@ -85,6 +86,21 @@ describe("SyncAccountCard", () => {
     render_({ busy: true });
     expect(screen.getByText("Syncing…")).toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+  });
+
+  it("offers a full refresh alongside the incremental resync", async () => {
+    const onRefresh = vi.fn();
+    const onResync = vi.fn();
+    render_({ onRefresh, onResync });
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Account actions for me@example.com" }),
+      { button: 0, ctrlKey: false }
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Refresh from calendar/ }));
+
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(onResync).not.toHaveBeenCalled();
   });
 
   it("handles an account with no discovered calendars", () => {

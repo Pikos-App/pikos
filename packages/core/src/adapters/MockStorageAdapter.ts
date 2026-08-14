@@ -1146,20 +1146,14 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
-    const synced = this._calendarsFor(accountId).filter((c) => c.enabled);
-    // Stamp freshness like `persist_progress` does on every successful poll — the
-    // panel's dot and "synced N ago" read it, so without this a mock-mode calendar
-    // reads stale forever.
-    for (const c of synced) {
-      this.syncCalendars.set(c.id, { ...c, lastSyncedAt: now() });
-    }
-    return Promise.resolve(
-      synced.map((c) => ({
-        calendarId: c.calendarId,
-        fullResync: false,
-        status: "synced" as const,
-      }))
-    );
+    return Promise.resolve(this._pollAccount(accountId));
+  }
+
+  // Identical to a resync, and deliberately so: there is no cursor here to drop
+  // and no provider to re-read from, and `fullResync` stays false on the real
+  // path too (the engine reserves it for a cursor the *provider* rejected).
+  refreshSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
+    return Promise.resolve(this._pollAccount(accountId));
   }
 
   getSyncStatus(): Promise<AccountWithCalendars[]> {
@@ -1171,6 +1165,21 @@ export class MockStorageAdapter implements StorageAdapter {
           calendars: this._calendarsFor(a.id),
         }))
     );
+  }
+
+  private _pollAccount(accountId: string): CalendarSyncResult[] {
+    const synced = this._calendarsFor(accountId).filter((c) => c.enabled);
+    // Stamp freshness like `persist_progress` does on every successful poll — the
+    // panel's dot and "synced N ago" read it, so without this a mock-mode calendar
+    // reads stale forever.
+    for (const c of synced) {
+      this.syncCalendars.set(c.id, { ...c, lastSyncedAt: now() });
+    }
+    return synced.map((c) => ({
+      calendarId: c.calendarId,
+      fullResync: false,
+      status: "synced" as const,
+    }));
   }
 
   private _calendarsFor(accountId: string): SyncCalendar[] {

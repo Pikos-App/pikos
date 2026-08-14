@@ -7,7 +7,8 @@ use tauri::State;
 
 use pikos_calendar_sync::{
     connect_caldav, connect_google, disconnect_account, google, reconnect_caldav,
-    release_all_credentials, resync_account_auto, CalendarSyncResult, Keychain,
+    refresh_account_auto, release_all_credentials, resync_account_auto, CalendarSyncResult,
+    Keychain,
 };
 use pikos_db::sync_commands::{
     get_sync_status_impl, list_sync_calendars_impl, set_sync_calendar_color_impl,
@@ -125,6 +126,15 @@ pub async fn resync_sync_account(
 ) -> AppResult<Vec<CalendarSyncResult>> {
     let pool = state.get_pool().await?;
     resync_account_auto(&pool, Keychain::system(), &account_id).await
+}
+
+#[tauri::command]
+pub async fn refresh_sync_account(
+    state: State<'_, DbState>,
+    account_id: String,
+) -> AppResult<Vec<CalendarSyncResult>> {
+    let pool = state.get_pool().await?;
+    refresh_account_auto(&pool, Keychain::system(), &account_id).await
 }
 
 #[tauri::command]

@@ -1,5 +1,5 @@
 import type { AccountWithCalendars, CalendarSyncResult } from "@pikos/core";
-import { KeyRound, MoreHorizontal, RefreshCw, Server } from "lucide-react";
+import { CalendarSync, KeyRound, MoreHorizontal, RefreshCw, Server } from "lucide-react";
 import { useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -20,6 +20,7 @@ interface SyncAccountCardProps {
   results: Record<string, CalendarSyncResult["status"]>;
   busy: boolean;
   onResync: () => void;
+  onRefresh: () => void;
   onDisconnect: () => Promise<void>;
   onReconnect: (password: string) => Promise<void>;
   onReconnectGoogle: () => Promise<void>;
@@ -34,6 +35,7 @@ export function SyncAccountCard({
   onRecolorCalendar,
   onReconnect,
   onReconnectGoogle,
+  onRefresh,
   onResync,
   onToggleCalendar,
   results,
@@ -82,6 +84,15 @@ export function SyncAccountCard({
             <DropdownMenuItem disabled={busy} onSelect={onResync}>
               <RefreshCw className="size-3.5" />
               Resync now
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={busy} onSelect={onRefresh}>
+              <CalendarSync className="size-3.5" />
+              <span className="flex flex-col items-start">
+                Refresh from calendar
+                <span className="text-xs text-muted-foreground">
+                  Re-reads every event. Use if something looks out of date.
+                </span>
+              </span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setReconnectOpen(true)}>
               <KeyRound className="size-3.5" />

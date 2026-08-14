@@ -235,6 +235,28 @@ pub async fn toggle_sync_calendar_impl(
     }
 }
 
+/// Discard every enabled calendar's cursor on an account, so the next poll
+/// re-enumerates the whole backfill window instead of polling from where it left
+/// off. Backs the panel's full-refresh action; a disabled calendar has no cursor
+/// to clear (disable already did).
+///
+/// `last_full_sync_at` is deliberately left alone: it clocks the engine's own
+/// periodic re-enumerate, and the poll this precedes restamps it anyway.
+pub async fn clear_sync_cursors_impl(pool: &sqlx::SqlitePool, account_id: &str) -> AppResult<()> {
+    crate::tx::retry_on_busy(|| async {
+        sqlx::query(
+            "UPDATE sync_calendar SET sync_token = NULL, ctag = NULL, updated_at = ?
+             WHERE account_id = ? AND enabled = 1",
+        )
+        .bind(now_iso())
+        .bind(account_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    })
+    .await
+}
+
 /// Record a colour the **user** picked, from either surface — latching
 /// `color_user_set` (see the column) and repainting the folder to match.
 pub async fn set_sync_calendar_color_impl(

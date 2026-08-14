@@ -21,7 +21,8 @@ mod test_support;
 pub use caldav::{CaldavCredentials, CaldavError, CaldavProvider};
 pub use commands::{
     connect_caldav, connect_google, disconnect_account, disconnect_all_accounts, reconnect_caldav,
-    release_all_credentials, resync_account, resync_account_auto, CalendarSyncResult,
+    refresh_account, refresh_account_auto, release_all_credentials, resync_account,
+    resync_account_auto, CalendarSyncResult,
 };
 pub use engine::{sync_calendar, SyncOutcome};
 pub use google::{GoogleCredentials, GoogleError, GoogleProvider};

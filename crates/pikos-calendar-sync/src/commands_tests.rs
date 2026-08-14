@@ -1,6 +1,8 @@
 //! Tests for the sync orchestration that needs no network — `disconnect_account`,
-//! `resync_account` — driven by scripted providers. `connect_caldav` is a live
-//! discovery seam, exercised manually.
+//! `resync_account`, `refresh_account` — driven by scripted providers.
+//! `connect_caldav` is a live discovery seam, exercised manually.
+
+use std::cell::RefCell;
 
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
 use pikos_db::sync_commands::{
@@ -15,7 +17,7 @@ use pikos_db::test_pool;
 
 use super::*;
 use crate::keychain::{CredentialStore, Keychain};
-use crate::test_support::{memory_keychain, MemoryStore};
+use crate::test_support::{memory_keychain, page_count, MemoryStore};
 
 // ─── scripted provider (sync returns a trivial backfill) ────────────────────────
 
@@ -223,10 +225,31 @@ async fn disconnecting_all_accounts_sweeps_dormant_credentials_too() {
     );
 }
 
-/// Scripted provider that hands back a fixed one-event delta on every sync — enough
-/// to create then re-link a mirror page across a disconnect/reconnect.
+/// Scripted provider that answers a sync from the cursor it was handed, the way a
+/// real one does — enough to create then re-link a mirror page across a
+/// disconnect/reconnect, and to tell a cursor-less re-enumerate from an
+/// incremental poll. Single-task by construction, so the interior `RefCell` never
+/// crosses threads.
 struct Scripted {
-    delta: SyncDelta,
+    full: SyncDelta,
+    incremental: SyncDelta,
+    /// The `since` cursor each `sync` call received, for assertions.
+    seen_since: RefCell<Vec<Option<SyncToken>>>,
+}
+
+impl Scripted {
+    /// One answer whichever cursor arrives — for tests that only need a mirror page.
+    fn new(delta: SyncDelta) -> Self {
+        Self::per_cursor(delta.clone(), delta)
+    }
+
+    fn per_cursor(full: SyncDelta, incremental: SyncDelta) -> Self {
+        Self {
+            full,
+            incremental,
+            seen_since: RefCell::new(vec![]),
+        }
+    }
 }
 
 impl CalendarProvider for Scripted {
@@ -239,9 +262,15 @@ impl CalendarProvider for Scripted {
     async fn sync(
         &self,
         _c: &SyncCalendarRow,
-        _since: Option<SyncToken>,
+        since: Option<SyncToken>,
     ) -> pikos_db::AppResult<SyncDelta> {
-        Ok(self.delta.clone())
+        let delta = if since.is_some() {
+            self.incremental.clone()
+        } else {
+            self.full.clone()
+        };
+        self.seen_since.borrow_mut().push(since);
+        Ok(delta)
     }
     async fn fetch_event(
         &self,
@@ -258,25 +287,41 @@ impl CalendarProvider for Scripted {
     }
 }
 
+fn one_event(href: &str, uid: &str, title: &str) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: EventCore {
+            external_id: href.into(),
+            ical_uid: uid.into(),
+            etag: Some("e1".into()),
+            title: title.into(),
+            description: None,
+            location: None,
+            attendees: vec![],
+        },
+        schedule: EventSchedule {
+            start: "2026-06-15T09:00:00".into(),
+            end: ExclusiveEnd::new(None),
+            timezone: Some("UTC".into()),
+        },
+        recurrence: None,
+    })
+}
+
 fn one_event_delta(href: &str, uid: &str, title: &str, token: &str) -> SyncDelta {
     SyncDelta {
-        upserts: vec![UpsertItem::Event(EventUpsert {
-            core: EventCore {
-                external_id: href.into(),
-                ical_uid: uid.into(),
-                etag: Some("e1".into()),
-                title: title.into(),
-                description: None,
-                location: None,
-                attendees: vec![],
-            },
-            schedule: EventSchedule {
-                start: "2026-06-15T09:00:00".into(),
-                end: ExclusiveEnd::new(None),
-                timezone: Some("UTC".into()),
-            },
-            recurrence: None,
-        })],
+        upserts: vec![one_event(href, uid, title)],
+        next_token: Some(SyncToken(token.into())),
+        ..Default::default()
+    }
+}
+
+/// A cursor-less CalDAV backfill: `full_enumerate` set, and its upserts marked the
+/// complete set from `window_start` — the only shape that arms the deletion sweep.
+fn backfill(upserts: Vec<UpsertItem>, window_start: &str, token: &str) -> SyncDelta {
+    SyncDelta {
+        upserts,
+        authoritative_from: Some(window_start.into()),
+        full_enumerate: true,
         next_token: Some(SyncToken(token.into())),
         ..Default::default()
     }
@@ -295,9 +340,7 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
         .await
         .unwrap();
 
-    let provider = Scripted {
-        delta: one_event_delta("href-1", "uid-1", "Standup", "tok-1"),
-    };
+    let provider = Scripted::new(one_event_delta("href-1", "uid-1", "Standup", "tok-1"));
     resync_account(&pool, &provider, &acc.id).await.unwrap();
     let page_id: String =
         sqlx::query_scalar("SELECT page_id FROM page_sync WHERE ical_uid = 'uid-1'")
@@ -344,9 +387,7 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
     toggle_sync_calendar_impl(&pool, &cal.id, true, None)
         .await
         .unwrap();
-    let provider2 = Scripted {
-        delta: one_event_delta("href-2", "uid-1", "Standup", "tok-2"),
-    };
+    let provider2 = Scripted::new(one_event_delta("href-2", "uid-1", "Standup", "tok-2"));
     resync_account(&pool, &provider2, &acc.id).await.unwrap();
 
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE ical_uid = 'uid-1'")
@@ -392,9 +433,7 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     toggle_sync_calendar_impl(&pool, &cal.id, true, None)
         .await
         .unwrap();
-    let provider = Scripted {
-        delta: one_event_delta("href-1", "uid-1", "Standup", "tok-1"),
-    };
+    let provider = Scripted::new(one_event_delta("href-1", "uid-1", "Standup", "tok-1"));
     resync_account(&pool, &provider, &acc.id).await.unwrap();
 
     let acc2 = claim_account(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
@@ -424,9 +463,7 @@ async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
         .unwrap();
     assert_eq!(folders, 1, "no duplicate folder");
 
-    let provider2 = Scripted {
-        delta: one_event_delta("href-1", "uid-1", "Standup", "tok-2"),
-    };
+    let provider2 = Scripted::new(one_event_delta("href-1", "uid-1", "Standup", "tok-2"));
     resync_account(&pool, &provider2, &acc.id).await.unwrap();
     let pages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE ical_uid = 'uid-1'")
         .fetch_one(&pool)
@@ -468,6 +505,111 @@ async fn resync_syncs_only_enabled_calendars() {
             .await
             .unwrap();
     assert_eq!(token.as_deref(), Some("tok-1"));
+}
+
+// ─── refresh (full re-read) ─────────────────────────────────────────────────────
+
+/// One account with one enabled calendar, already backfilled — the state a refresh
+/// starts from. Returns the account id and the sync_calendar row id.
+async fn synced_account(pool: &sqlx::SqlitePool) -> (String, String) {
+    let acc = insert_sync_account_impl(pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    let cal = upsert_sync_calendar_impl(pool, &acc.id, "cal-a", "Work", None)
+        .await
+        .unwrap();
+    toggle_sync_calendar_impl(pool, &cal.id, true, None)
+        .await
+        .unwrap();
+    let provider = Scripted::new(backfill(
+        vec![one_event("href-1", "uid-1", "Standup")],
+        "2026-06-01",
+        "tok-1",
+    ));
+    resync_account(pool, &provider, &acc.id).await.unwrap();
+    (acc.id, cal.id)
+}
+
+/// A refresh re-reads everything, so it has to cost nothing for the events that
+/// didn't change. If the reconciler's etag no-op failed to hold across the
+/// re-delivery, every refresh would restamp the whole calendar and float it to the
+/// top of any recently-edited view (invariant 5) — which would make the action
+/// itself the reason not to use it.
+#[tokio::test]
+async fn a_refresh_re_enumerates_without_churning_unchanged_pages() {
+    let pool = test_pool().await;
+    let (account_id, cal_row_id) = synced_account(&pool).await;
+
+    // A sentinel makes the churn assertion sharp: any write at all moves it, even
+    // one landing in the same millisecond the refresh would have stamped.
+    sqlx::query("UPDATE pages SET updated_at = '2000-01-01T00:00:00.000Z'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let provider = Scripted::new(backfill(
+        vec![one_event("href-1", "uid-1", "Standup")],
+        "2026-06-01",
+        "tok-2",
+    ));
+    refresh_account(&pool, &provider, &account_id).await.unwrap();
+
+    assert_eq!(
+        provider.seen_since.borrow().as_slice(),
+        &[None],
+        "the stored cursor is dropped, so the provider re-enumerates"
+    );
+    let updated_at: String = sqlx::query_scalar("SELECT updated_at FROM pages")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        updated_at, "2000-01-01T00:00:00.000Z",
+        "unchanged event re-delivered, not rewritten"
+    );
+    let (token, ctag): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT sync_token, ctag FROM sync_calendar WHERE id = ?")
+            .bind(&cal_row_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(token.as_deref(), Some("tok-2"), "cursor re-established");
+    assert_eq!(ctag, None, "no ctag offered by this provider");
+}
+
+/// The hole C65 exists to close: an upstream deletion that never reached an
+/// incremental delta — nothing was polling when it happened — leaves a mirror the
+/// cursor will never revisit. Only a cursor-less enumerate is authoritative enough
+/// to sweep it, and until this action the sole way to force one was the
+/// disable→enable toggle, which tears down the pages it is meant to repair.
+#[tokio::test]
+async fn a_refresh_sweeps_an_upstream_deletion_a_resync_cannot_see() {
+    let pool = test_pool().await;
+    let (account_id, _) = synced_account(&pool).await;
+
+    // Upstream the event is gone: a cursor-less enumerate returns nothing and says
+    // so authoritatively, while a poll from the stored cursor carries no removal —
+    // the deletion happened behind it. One provider, so the only thing separating
+    // the two calls below is whether the cursor survived.
+    let provider = Scripted::per_cursor(
+        backfill(vec![], "2026-06-01", "tok-3"),
+        SyncDelta {
+            next_token: Some(SyncToken("tok-2".into())),
+            ..Default::default()
+        },
+    );
+
+    resync_account(&pool, &provider, &account_id).await.unwrap();
+    assert_eq!(
+        page_count(&pool).await,
+        1,
+        "an incremental poll can't know the event is gone"
+    );
+
+    refresh_account(&pool, &provider, &account_id)
+        .await
+        .unwrap();
+    assert_eq!(page_count(&pool).await, 0, "ghost mirror swept");
 }
 
 #[tokio::test]

@@ -9,9 +9,10 @@ use sqlx::SqlitePool;
 use pikos_db::error::{AppError, AppResult};
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow, PROVIDER_CALDAV, PROVIDER_GOOGLE};
 use pikos_db::sync_commands::{
-    find_account_by_identity_impl, get_sync_account_impl, insert_sync_account_impl,
-    list_sync_calendars_impl, mark_account_disconnected_impl, reactivate_account_impl,
-    toggle_sync_calendar_impl, upsert_sync_calendar_impl, AccountWithCalendars,
+    clear_sync_cursors_impl, find_account_by_identity_impl, get_sync_account_impl,
+    insert_sync_account_impl, list_sync_calendars_impl, mark_account_disconnected_impl,
+    reactivate_account_impl, toggle_sync_calendar_impl, upsert_sync_calendar_impl,
+    AccountWithCalendars,
 };
 use pikos_db::sync_delta::CalendarProvider;
 
@@ -341,6 +342,42 @@ pub async fn resync_account<P: CalendarProvider>(
         set_reconnect_needed(pool, account_id, next).await?;
     }
     Ok(results)
+}
+
+/// Refresh an account through whichever provider its `provider` column names —
+/// the panel's entry point, paired with [`resync_account_auto`].
+pub async fn refresh_account_auto(
+    pool: &SqlitePool,
+    keychain: Keychain,
+    account_id: &str,
+) -> AppResult<Vec<CalendarSyncResult>> {
+    let account = load_account_row(pool, account_id).await?;
+    let provider = AnyProvider::for_account(&account, keychain);
+    refresh_account(pool, &provider, account_id).await
+}
+
+/// Re-read an account's calendars in full: discard every enabled calendar's
+/// cursor so the poll that follows enumerates the whole backfill window.
+///
+/// The repair path for a mirror that has drifted — a change the cursor advanced
+/// past (see the engine's backfill/bootstrap race), or an upstream deletion made
+/// while nothing was polling. Deliberately not a teardown: the reconciler no-ops
+/// on an unchanged etag, so re-delivering the whole calendar leaves pages,
+/// folders and `updated_at` alone. The only lever that forced a re-read before
+/// this was the disable→enable toggle, which deletes un-actioned mirrors and
+/// detaches owned pages first — destructive repair for a read-only copy.
+///
+/// Only a full enumerate marks its upserts authoritative, so for CalDAV this also
+/// re-arms the deletion sweep, which is the half that catches a deletion no
+/// incremental delta ever reported. A Google backfill leaves the sweep disarmed
+/// by design, so a refresh there re-reads without sweeping.
+pub async fn refresh_account<P: CalendarProvider>(
+    pool: &SqlitePool,
+    provider: &P,
+    account_id: &str,
+) -> AppResult<Vec<CalendarSyncResult>> {
+    clear_sync_cursors_impl(pool, account_id).await?;
+    resync_account(pool, provider, account_id).await
 }
 
 async fn set_reconnect_needed(pool: &SqlitePool, account_id: &str, needed: bool) -> AppResult<()> {

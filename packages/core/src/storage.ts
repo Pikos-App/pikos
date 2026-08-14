@@ -246,6 +246,10 @@ export interface StorageAdapter {
   setSyncCalendarColor(syncCalendarId: string, color: string): Promise<SyncCalendar>;
   /** Poll every enabled calendar on the account; returns per-calendar outcomes. */
   resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]>;
+  /** Same poll, but from scratch: drops each calendar's cursor first so the
+   * provider re-sends everything. The repair path when a mirror looks out of
+   * date; re-delivered events that haven't changed are left untouched. */
+  refreshSyncAccount(accountId: string): Promise<CalendarSyncResult[]>;
   /** Account-centric status tree for the Calendar Sync panel. */
   getSyncStatus(): Promise<AccountWithCalendars[]>;
 }

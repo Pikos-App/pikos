@@ -115,6 +115,7 @@ const WRITE_COMMANDS = new Set([
   "disconnect_sync_account",
   "toggle_sync_calendar",
   "resync_sync_account",
+  "refresh_sync_account",
   "backdate_page",
   "reset_db",
   "wipe_app_data",
@@ -385,6 +386,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
     return invoke<CalendarSyncResult[]>("resync_sync_account", { accountId });
+  }
+
+  refreshSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
+    return invoke<CalendarSyncResult[]>("refresh_sync_account", { accountId });
   }
 
   getSyncStatus(): Promise<AccountWithCalendars[]> {
