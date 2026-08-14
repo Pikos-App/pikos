@@ -15,7 +15,9 @@ appTest.use({ timezoneId: "America/New_York" });
 
 async function openSyncPanel(app: Page) {
   await app.getByRole("button", { name: "Open settings" }).click();
-  await app.getByRole("button", { name: "Calendar Sync" }).click();
+  // Settings reopens on the tab it was last left on, and Developer's "Seed Mock
+  // calendar sync" also matches loosely — the nav item is the exact name.
+  await app.getByRole("button", { exact: true, name: "Calendar Sync" }).click();
 }
 
 /** Connect a mock CalDAV account, leaving the Sync panel open on its card. The
@@ -139,6 +141,69 @@ appTest("resync then disconnect removes the account and its folder @tier2", asyn
   ).toBeVisible();
   await app.keyboard.press("Escape");
   await expect(app.getByRole("button", { name: "Personal" })).not.toBeVisible();
+});
+
+// ─── tier2: connecting an account that is already connected ──────────────────
+//
+// The CalDAV half of C2's "connect the same account twice" row. Identity is
+// provider + display name, so the second connect must land on the existing
+// account rather than minting a twin with duplicate folders. The Google half
+// stays manual — its OAuth can't run here.
+
+appTest("connecting the same CalDAV account again reuses it, no duplicates @tier2", async ({
+  app,
+}) => {
+  await connectCaldav(app);
+  await app.getByRole("switch", { name: "Sync Personal" }).click();
+  await app.keyboard.press("Escape");
+
+  await connectCaldav(app);
+
+  await expect(app.getByRole("button", { name: /Account actions for/ })).toHaveCount(1);
+  await expect(app.getByRole("switch", { name: "Sync Personal" })).toHaveCount(1);
+  await expect(app.getByRole("switch", { name: "Sync Personal" })).toBeChecked();
+  await app.keyboard.press("Escape");
+  await expect(app.getByRole("button", { name: "Personal" })).toHaveCount(1);
+});
+
+// ─── tier2: disabling a calendar the user has worked in ──────────────────────
+//
+// The survivors arm of the teardown: a mirror the user edited is theirs, so it
+// detaches in place and its folder stays behind as an ordinary one. The empty
+// case (folder disappears) is the tier1 toggle test above.
+
+appTest("disabling a calendar keeps an edited mirror and its folder @tier2", async ({ app }) => {
+  await seedSynced(app);
+  await openPersonalFolder(app);
+
+  const standup = app.locator("[data-page-list-item]").getByText("Team standup").first();
+  await standup.click();
+  // A locked title renders as static text; unlocking turns it into a button.
+  const editableTitle = app.getByRole("button", { name: "Page title" });
+  await expect(editableTitle).toHaveCount(0);
+  await app.getByRole("textbox", { name: "Page content" }).click();
+  await app.keyboard.type(" — my own notes");
+  // Two debounces sit between a keystroke and the write that claims ownership:
+  // the editor's (flushed by unmounting, i.e. moving off the page) and the pages
+  // context's own 800ms. Only the write marks the page the user's, so wait it out.
+  await app.locator("[data-page-list-item]").getByText("Company offsite").first().click();
+  await app.waitForTimeout(1000);
+
+  // Two all along: the realistic seed's own folder and the calendar's.
+  const personalFolders = app.getByRole("button", { name: "Personal" });
+  await expect(personalFolders).toHaveCount(2);
+
+  await openSyncPanel(app);
+  await app.getByRole("switch", { name: "Sync Personal" }).click();
+  await expect(app.getByRole("switch", { name: "Sync Personal" })).not.toBeChecked();
+  await app.keyboard.press("Escape");
+
+  // Still two, so the calendar's folder stayed behind rather than being deleted
+  // with the sync. That it is now an ordinary folder is unit-pinned on the writer.
+  await expect(personalFolders).toHaveCount(2);
+
+  await standup.click();
+  await expect(editableTitle).toBeVisible();
 });
 
 // ─── tier2: two accounts, colliding calendar names ───────────────────────────

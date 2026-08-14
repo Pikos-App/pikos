@@ -129,6 +129,9 @@ export class MockStorageAdapter implements StorageAdapter {
   private syncCalendars = new Map<string, SyncCalendar>();
   // Disconnected (dormant) accounts: kept for reconnect re-link, hidden from status.
   private dormantAccounts = new Set<string>();
+  // `page_sync.user_modified`: set by the editor path, never by sync. One half of
+  // the ownership predicate teardown and export share — see `_isOwned`.
+  private userModified = new Set<string>();
 
   clear(): void {
     this.pages.clear();
@@ -141,6 +144,7 @@ export class MockStorageAdapter implements StorageAdapter {
     this.syncAccounts.clear();
     this.syncCalendars.clear();
     this.dormantAccounts.clear();
+    this.userModified.clear();
   }
 
   // ─── Command-layer guards ────────────────────────────────────────────────────
@@ -237,6 +241,12 @@ export class MockStorageAdapter implements StorageAdapter {
     ) {
       const locked = this.lockedMirrorError(id);
       if (locked) return Promise.reject(locked);
+    }
+    // Editing an authored field claims ownership, so an upstream delete or an
+    // unsync detaches the page instead of destroying it. Reading and arranging
+    // author nothing (`marks_ownership`, pages.rs).
+    if (Object.keys(updates).some((k) => k !== "sortOrder" && k !== "lastOpenedAt")) {
+      this.userModified.add(id);
     }
     const updated: Page = { ...existing, ...updates, id, updatedAt: now() };
     // Keep contentText in sync with content unless the caller explicitly set it.
@@ -1028,15 +1038,18 @@ export class MockStorageAdapter implements StorageAdapter {
     authKind: string,
     calendarNames: string[]
   ): AccountWithCalendars {
-    // Reconnect reuses a dormant account (matched by provider+displayName) so its
-    // dormant calendars/pages re-link rather than duplicate — mirrors claim_account.
-    const dormant = [...this.syncAccounts.values()].find(
-      (a) =>
-        this.dormantAccounts.has(a.id) && a.provider === provider && a.displayName === displayName
-    );
-    if (dormant) {
-      this.dormantAccounts.delete(dormant.id);
-      return { ...dormant, calendars: this._calendarsFor(dormant.id) };
+    // Identity is provider + displayName, dormant or not: `find_account_by_identity_impl`
+    // matches on those two alone and merely *prefers* a live row (`ORDER BY
+    // disconnected ASC`). Matching only dormant rows minted a second account for the
+    // same identity when the user connected one that was already active.
+    const existing = [...this.syncAccounts.values()]
+      .filter((a) => a.provider === provider && a.displayName === displayName)
+      .sort(
+        (a, b) => Number(this.dormantAccounts.has(a.id)) - Number(this.dormantAccounts.has(b.id))
+      )[0];
+    if (existing) {
+      this.dormantAccounts.delete(existing.id);
+      return { ...existing, calendars: this._calendarsFor(existing.id) };
     }
 
     const account: SyncAccount = {
@@ -1067,14 +1080,59 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   disconnectSyncAccount(accountId: string): Promise<void> {
-    // Dormant, not deleted: disable each calendar (drop its folder) but keep the
-    // account + calendar rows so a reconnect re-links them. Hidden from getSyncStatus.
+    // Dormant, not deleted: tear down each calendar but keep the account + calendar
+    // rows so a reconnect re-links them. Hidden from getSyncStatus.
     for (const cal of this._calendarsFor(accountId)) {
-      if (cal.folderId) this.folders.delete(cal.folderId);
-      this.syncCalendars.set(cal.id, { ...cal, enabled: false, folderId: null });
+      const detachedPages = cal.folderId ? this._teardownCalendar(cal.folderId) : 0;
+      this.syncCalendars.set(cal.id, { ...cal, detachedPages, enabled: false, folderId: null });
     }
     this.dormantAccounts.add(accountId);
     return Promise.resolve();
+  }
+
+  /** Ownership, as `PAGE_OWNED_SQL` defines it: anything of the user's on the page.
+   *  Errs toward keeping — a page that matches survives teardown, detached. */
+  private _isOwned(page: Page): boolean {
+    return (
+      page.completedAt != null ||
+      this.userModified.has(page.id) ||
+      (page.tags?.length ?? 0) > 0 ||
+      [...this.reminders.values()].some((r) => r.pageId === page.id) ||
+      Object.keys(page.completedOccurrences ?? {}).length > 0 ||
+      (page.skippedOccurrences?.length ?? 0) > 0
+    );
+  }
+
+  /** `teardown_calendar`: bare mirrors are destroyed, owned pages detach in place,
+   *  and the folder is deleted only when nothing survived it — otherwise it stays
+   *  as a plain folder. Returns how many pages detached (the re-enable confirm's
+   *  count). A tombstoned page keeps its trashed copy and loses only the link, so a
+   *  resync recreates the event. */
+  private _teardownCalendar(folderId: string): number {
+    let detached = 0;
+    for (const page of [...this.pages.values()]) {
+      if (page.folderId !== folderId || !page.syncState) continue;
+      if (page.syncState === "detached") continue;
+      if (page.syncState === "tombstoned") {
+        this.pages.set(page.id, { ...page, scheduleLocked: false, syncState: null });
+        continue;
+      }
+      if (this._isOwned(page)) {
+        this.pages.set(page.id, { ...page, scheduleLocked: false, syncState: "detached" });
+        detached += 1;
+      } else {
+        this.pages.delete(page.id);
+      }
+    }
+    const survivors = [...this.pages.values()].some(
+      (p) => p.folderId === folderId && !this.softDeleted.has(p.id)
+    );
+    const folder = this.folders.get(folderId);
+    if (!survivors) this.folders.delete(folderId);
+    else if (folder) {
+      this.folders.set(folderId, { ...folder, isExternalCalendar: false, updatedAt: now() });
+    }
+    return detached;
   }
 
   listSyncCalendars(accountId: string): Promise<SyncCalendar[]> {
@@ -1105,14 +1163,11 @@ export class MockStorageAdapter implements StorageAdapter {
       this.folders.set(folder.id, folder);
       folderId = folder.id;
     } else if (!enabled && folderId) {
-      // No page_sync table here, so approximate the real teardown's detach-if-owned:
-      // count the folder's synced pages. Over-counts (a bare mirror would be deleted
-      // upstream of this), which is enough to drive the re-enable confirm.
-      detachedPages = [...this.pages.values()].filter(
-        (p) => p.folderId === folderId && p.syncState
-      ).length;
-      this.folders.delete(folderId);
-      folderId = null;
+      detachedPages = this._teardownCalendar(folderId);
+      // Keep the link while the de-flagged folder survives, so a re-enable re-flags
+      // that one in place. Dropping it mints a second folder of the same name and
+      // strands the detached pages in the first.
+      if (!this.folders.has(folderId)) folderId = null;
     }
     // Re-enable re-flags a surviving folder, so it re-asserts the name and colour
     // the calendar owns rather than keeping what it had while off.

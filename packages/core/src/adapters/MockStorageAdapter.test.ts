@@ -1706,4 +1706,132 @@ describe("calendar sync — connect / disconnect dormancy", () => {
     expect(status).toHaveLength(1);
     expect(status[0]?.id).toBe(other.id);
   });
+
+  it("connecting an account that is still active reuses it rather than duplicating", async () => {
+    const first = await adapter.connectCaldavAccount(conn("me · https://x"));
+    const again = await adapter.connectCaldavAccount(conn("me · https://x"));
+
+    expect(again.id).toBe(first.id);
+    expect(await adapter.getSyncStatus()).toHaveLength(1);
+    expect(again.calendars).toHaveLength(2);
+  });
+});
+
+describe("calendar sync — teardown keeps the user's work", () => {
+  const conn = {
+    baseUrl: "https://x",
+    displayName: "me · https://x",
+    password: "pw",
+    username: "me",
+  };
+
+  /** Connect, enable "Personal", and mirror one event into its folder. A rule has
+   *  to exist before the mirror locks, exactly as the reconciler writes it. */
+  async function syncedPage(opts: { recurring?: boolean; title?: string } = {}) {
+    const account = await adapter.connectCaldavAccount(conn);
+    const cal = account.calendars[0]!;
+    const enabled = await adapter.toggleSyncCalendar(cal.id, true, "#7c9cf0");
+    const page = await adapter.createPage({
+      content: "",
+      folderId: enabled.folderId!,
+      priority: 0,
+      scheduledStart: "2026-08-13T09:00:00",
+      status: "not_started",
+      tags: [],
+      title: opts.title ?? "Standup",
+    });
+    if (opts.recurring) {
+      await adapter.createRecurrenceRule({
+        pageId: page.id,
+        rrule: "FREQ=WEEKLY",
+        scheduledStart: "2026-08-13T09:00:00",
+        timezone: "America/New_York",
+      });
+    }
+    adapter.markPageSynced(page.id, { state: "active" });
+    return { calendarId: cal.id, folderId: enabled.folderId!, pageId: page.id };
+  }
+
+  it("disable destroys a mirror the user never actioned, and its folder with it", async () => {
+    const { calendarId, folderId, pageId } = await syncedPage();
+
+    const off = await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    expect(await adapter.getPage(pageId)).toBeNull();
+    expect(off.detachedPages).toBe(0);
+    expect((await adapter.listFolders()).find((f) => f.id === folderId)).toBeUndefined();
+  });
+
+  it("disable detaches an edited mirror in place and leaves its folder as a regular one", async () => {
+    const { calendarId, folderId, pageId } = await syncedPage();
+    await adapter.updatePage(pageId, { content: '{"type":"doc","content":[]}' });
+
+    const off = await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    const page = await adapter.getPage(pageId);
+    expect(page?.syncState).toBe("detached");
+    expect(page?.scheduleLocked).toBe(false);
+    expect(page?.folderId).toBe(folderId);
+    expect(off.detachedPages).toBe(1);
+    const folder = (await adapter.listFolders()).find((f) => f.id === folderId);
+    expect(folder?.isExternalCalendar).toBe(false);
+  });
+
+  it("a completed mirror counts as the user's even with nothing edited", async () => {
+    const { calendarId, pageId } = await syncedPage();
+    await adapter.updatePage(pageId, { completedAt: "2026-08-13T10:00:00", status: "done" });
+
+    await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    expect((await adapter.getPage(pageId))?.syncState).toBe("detached");
+  });
+
+  it("re-enabling reclaims the folder teardown left behind, not a second one", async () => {
+    const { calendarId, folderId, pageId } = await syncedPage();
+    await adapter.updatePage(pageId, { priority: 2 });
+    await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    const on = await adapter.toggleSyncCalendar(calendarId, true, "#7c9cf0");
+
+    expect(on.folderId).toBe(folderId);
+    const personal = (await adapter.listFolders()).filter((f) => f.name === "Personal");
+    expect(personal).toHaveLength(1);
+    expect(personal[0]?.isExternalCalendar).toBe(true);
+  });
+
+  it("a trashed mirror keeps its trashed copy and loses only the link", async () => {
+    const { calendarId, pageId } = await syncedPage();
+    adapter.markPageSynced(pageId, { state: "tombstoned" });
+
+    await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    const page = await adapter.getPage(pageId);
+    expect(page).not.toBeNull();
+    expect(page?.syncState).toBeNull();
+  });
+
+  it("a series whose only investment is a completed occurrence survives", async () => {
+    const { calendarId, pageId } = await syncedPage({ recurring: true, title: "Weekly sync" });
+    await adapter.completeRecurringPage({
+      occurrenceDate: "2026-08-13",
+      pageId,
+      scheduledStart: "2026-08-13T09:00:00",
+    });
+
+    await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    expect((await adapter.getPage(pageId))?.syncState).toBe("detached");
+  });
+
+  it("disconnecting the account tears its calendars down the same way", async () => {
+    const { folderId, pageId } = await syncedPage();
+    await adapter.updatePage(pageId, { priority: 2 });
+    const [account] = await adapter.getSyncStatus();
+
+    await adapter.disconnectSyncAccount(account!.id);
+
+    expect((await adapter.getPage(pageId))?.syncState).toBe("detached");
+    const folder = (await adapter.listFolders()).find((f) => f.id === folderId);
+    expect(folder?.isExternalCalendar).toBe(false);
+  });
 });
