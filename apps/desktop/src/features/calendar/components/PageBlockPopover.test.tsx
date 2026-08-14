@@ -132,3 +132,34 @@ describe("PageBlockPopover — reminder bell", () => {
     expect(screen.queryByLabelText("Page reminders")).not.toBeInTheDocument();
   });
 });
+
+// The lock is enforced in the backend and every write path already refuses, but a
+// control the user can reach and press only to have the change revert reads as the
+// app losing their edit. So the affordances have to be gone, not merely inert —
+// and each is a separate branch, which is why the absences are asserted one by one
+// against an unlocked control that proves the query would have found them.
+describe("PageBlockPopover — a locked mirror offers no schedule affordances", () => {
+  const schedulePicker = () => screen.queryByRole("button", { name: /^Scheduled:|^Set schedule$/ });
+  const folderPicker = () => screen.queryByRole("button", { name: /^Folder:/ });
+
+  it("drops the date and folder pickers", () => {
+    renderPopover(makePage({ scheduleLocked: true, syncState: "active" }));
+
+    expect(schedulePicker()).not.toBeInTheDocument();
+    expect(folderPicker()).not.toBeInTheDocument();
+  });
+
+  it("keeps both on an unlocked page", () => {
+    renderPopover(makePage({ scheduleLocked: false, syncState: null }));
+
+    expect(schedulePicker()).toBeInTheDocument();
+    expect(folderPicker()).toBeInTheDocument();
+  });
+
+  it("keeps them on a detached page — the lock is what gates them, not the origin", () => {
+    renderPopover(makePage({ scheduleLocked: false, syncState: "detached" }));
+
+    expect(schedulePicker()).toBeInTheDocument();
+    expect(folderPicker()).toBeInTheDocument();
+  });
+});

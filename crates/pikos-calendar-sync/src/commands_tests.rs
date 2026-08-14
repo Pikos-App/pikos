@@ -761,3 +761,79 @@ async fn an_offline_pass_leaves_the_reconnect_flag_where_it_was() {
         );
     }
 }
+
+/// A provider that fails the first calendar it is asked for and serves the rest.
+struct FailsFirst {
+    seen: RefCell<usize>,
+}
+
+impl CalendarProvider for FailsFirst {
+    async fn list_calendars(
+        &self,
+        _a: &SyncAccountRow,
+    ) -> pikos_db::AppResult<Vec<RemoteCalendar>> {
+        unreachable!("resync never discovers")
+    }
+    async fn sync(
+        &self,
+        _c: &SyncCalendarRow,
+        _since: Option<SyncToken>,
+    ) -> pikos_db::AppResult<SyncDelta> {
+        let first = {
+            let mut seen = self.seen.borrow_mut();
+            *seen += 1;
+            *seen == 1
+        };
+        if first {
+            return Err(pikos_db::AppError::Invalid("credential rejected".into()));
+        }
+        Ok(SyncDelta::default())
+    }
+    async fn fetch_event(
+        &self,
+        _c: &SyncCalendarRow,
+        _r: &str,
+    ) -> pikos_db::AppResult<EventUpsert> {
+        unreachable!("no orphans in an empty delta")
+    }
+    async fn current_sync_token(
+        &self,
+        _c: &SyncCalendarRow,
+    ) -> pikos_db::AppResult<Option<SyncToken>> {
+        Ok(None)
+    }
+}
+
+/// One calendar failing is not the account failing: a pass reports per calendar and
+/// keeps going, so a single broken collection can't stop the others from syncing.
+/// The status strings are the panel's vocabulary — it renders the badge off them —
+/// so they are contract, not debug text.
+#[tokio::test]
+async fn one_failing_calendar_does_not_stop_the_pass() {
+    let pool = test_pool().await;
+    let acc = insert_sync_account_impl(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
+        .await
+        .unwrap();
+    for id in ["cal-a", "cal-b"] {
+        let cal = upsert_sync_calendar_impl(&pool, &acc.id, id, id, None)
+            .await
+            .unwrap();
+        toggle_sync_calendar_impl(&pool, &cal.id, true, None)
+            .await
+            .unwrap();
+    }
+
+    let results = resync_account(
+        &pool,
+        &FailsFirst {
+            seen: RefCell::new(0),
+        },
+        &acc.id,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(results.len(), 2, "both calendars reported on");
+    assert_eq!(results[0].status, "reconnectNeeded");
+    assert_eq!(results[1].status, "synced");
+}

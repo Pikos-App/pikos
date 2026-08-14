@@ -452,6 +452,48 @@ async fn update_due_accepts_a_date_and_a_local_timed_iso() {
     );
 }
 
+/// `--due` writes a start and nothing else, so a date-only value against a timed
+/// event converts it to all-day *and* drops the end — an hour-long meeting becomes
+/// a whole day, with no warning and no way to put the end back from the CLI. The
+/// matrix carries it as a ⚠️, and whether it should refuse instead is an open call
+/// (C61-A7); this pins the current behavior so a change to it is deliberate.
+#[tokio::test]
+async fn update_due_with_a_bare_date_converts_a_timed_page_and_drops_its_end() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Review")]).await;
+    assert!(cli(
+        dbs,
+        &["update", &ids[0], "--due", "2026-09-01T14:00:00", "--json"]
+    )
+    .status
+    .success());
+    let pool = open_pool(dbs).await.unwrap();
+    sqlx::query("UPDATE pages SET scheduled_end = '2026-09-01T15:00:00' WHERE id = ?")
+        .bind(&ids[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert!(
+        cli(dbs, &["update", &ids[0], "--due", "2026-09-02", "--json"])
+            .status
+            .success()
+    );
+
+    assert_eq!(
+        scheduled_start(dbs, &ids[0]).await.as_deref(),
+        Some("2026-09-02"),
+        "now all-day"
+    );
+    let end: Option<String> = scalar(
+        dbs,
+        &format!("SELECT scheduled_end FROM pages WHERE id = '{}'", ids[0]),
+    )
+    .await;
+    assert_eq!(end, None, "the end is gone, not converted");
+}
+
 #[tokio::test]
 async fn update_due_rejects_freeform_without_touching_the_row() {
     let db = unique_db();

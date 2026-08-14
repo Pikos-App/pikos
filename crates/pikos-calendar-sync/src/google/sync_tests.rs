@@ -525,3 +525,37 @@ async fn a_list_without_a_primary_still_enumerates_for_a_routine_sync() {
 
     assert_eq!(cals.len(), 1);
 }
+
+/// Google stamps most events with their own `timeZone`, but not all — an event
+/// created in the calendar's default zone can arrive without one, and then the
+/// collection's `timeZone` is what says where it happened. Losing that fallback
+/// makes such events float: they'd render at the same wall-clock everywhere
+/// instead of at their instant, which is the whole native/synced distinction.
+/// Every recorded fixture carries a per-event zone, so nothing else reaches this.
+#[tokio::test]
+async fn an_event_without_its_own_zone_takes_the_calendars() {
+    let t = Replay::ok(
+        r#"{
+      "timeZone": "Europe/Berlin",
+      "items": [
+        {
+          "id": "ev-unstamped",
+          "iCalUID": "uid-unstamped@google.com",
+          "status": "confirmed",
+          "summary": "Kickoff",
+          "start": { "dateTime": "2026-06-15T09:00:00+02:00" },
+          "end": { "dateTime": "2026-06-15T10:00:00+02:00" }
+        }
+      ],
+      "nextSyncToken": "TOKEN-2"
+    }"#,
+    );
+
+    let delta = sync_calendar(&t, CAL, Some(&SyncToken("TOKEN-1".into())))
+        .await
+        .unwrap();
+
+    let ev = event(&delta, "ev-unstamped");
+    assert_eq!(ev.schedule.timezone.as_deref(), Some("Europe/Berlin"));
+    assert_eq!(ev.schedule.start, "2026-06-15T09:00:00");
+}

@@ -26,7 +26,19 @@ enum Mode {
     NoWellKnown,
     /// `calendar-home-set` points at a different host (iCloud partition style).
     CrossHostHome,
+    /// A server that advertises no component set at all on its calendars.
+    NoComponentSet,
 }
+
+/// An enumerate whose calendar declares no `supported-calendar-component-set`.
+/// Hand-authored: radicale always sends one, and this is the RFC's default arm.
+const ENUM_NO_COMPONENTS: &str = r#"<?xml version='1.0' encoding='utf-8'?>
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <response><href>/testuser/plain/</href><propstat><prop>
+    <resourcetype><C:calendar /><collection /></resourcetype>
+    <displayname>Plain</displayname>
+  </prop><status>HTTP/1.1 200 OK</status></propstat></response>
+</multistatus>"#;
 
 struct FixtureTransport {
     mode: Mode,
@@ -50,6 +62,7 @@ impl DavTransport for FixtureTransport {
             (Mode::CrossHostHome, "127.0.0.1", "/testuser/", "0") => ok(HOME_REMOTE),
             (Mode::CrossHostHome, "p42-caldav.icloud.com", _, "1") => ok(ENUM),
             (_, _, "/testuser/", "0") => ok(HOME),
+            (Mode::NoComponentSet, _, "/testuser/", "1") => ok(ENUM_NO_COMPONENTS),
             (_, _, "/testuser/", "1") => ok(ENUM),
             other => panic!("unexpected discovery request: {other:?}"),
         };
@@ -116,6 +129,19 @@ async fn discovers_only_vevent_calendars() {
         "calendar_id should be the resolved collection URL, got {}",
         work.calendar_id
     );
+}
+
+/// RFC 4791 makes the component set optional and reads its absence as "supports
+/// everything", so a calendar that omits it is a normal calendar. Treating absent
+/// like an empty set would drop it — the user connects and sees none of their
+/// calendars, with nothing to explain why. The VTODO-only arm is `discovers_only_
+/// vevent_calendars`; this is the other side of the same condition.
+#[tokio::test]
+async fn a_calendar_with_no_declared_components_is_kept() {
+    let calendars = discover(Mode::NoComponentSet).await.unwrap();
+
+    assert_eq!(calendars.len(), 1, "got: {calendars:?}");
+    assert_eq!(calendars[0].display_name, "Plain");
 }
 
 #[tokio::test]

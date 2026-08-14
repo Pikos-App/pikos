@@ -691,6 +691,73 @@ async fn completed_single_gaining_an_rrule_unmarks_done() {
     assert!(completed_at.is_none());
 }
 
+/// The provider cancels the very occurrence the head is parked on. The Cancel arm
+/// merges the EXDATE and stops there — no recompute — so the denorm still points at
+/// a date the rule no longer yields until something heals it; the foreground load
+/// recompute is what does, and after it the head sits on the next open day.
+///
+/// **Characterization, deliberately.** Whether the reconciler should recompute in
+/// step or leave it to the heal is an open call: healing later means a session left
+/// open shows a cancelled occurrence until the next load, recomputing in step means
+/// a poll writes `pages` on every cancellation. This pins the chain as it behaves
+/// today so a change to either half is visible; re-point the first assertion if the
+/// ruling goes the other way.
+#[tokio::test]
+async fn cancelling_the_heads_own_occurrence_leaves_the_denorm_to_the_heal() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![master_only_at(
+            "v1",
+            "FREQ=WEEKLY",
+            "2026-06-01T09:00:00",
+            "UTC",
+        )]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    let head = |pool: &sqlx::SqlitePool| {
+        let page_id = page_id.clone();
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, Option<String>>(
+                "SELECT scheduled_start FROM pages WHERE id = ?",
+            )
+            .bind(&page_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+        }
+    };
+    // A synced head floors at the connect day, so it sits on the first occurrence
+    // from today onward rather than the series base — read it rather than assume it.
+    let parked = head(&pool).await.expect("a head to cancel out from under");
+
+    reconcile(&pool, &ctx(), &delta(vec![cancel_occurrence(&parked)]))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        head(&pool).await.as_deref(),
+        Some(parked.as_str()),
+        "the cancel merges the exdate and leaves the denorm alone"
+    );
+    assert_eq!(rule_exdates(&pool, &page_id).await, vec![parked.clone()]);
+
+    crate::recurrence_derive::recompute_recurring_schedule_pool(&pool, &page_id)
+        .await
+        .unwrap();
+
+    let healed = head(&pool).await.expect("still a head");
+    assert_ne!(healed, parked, "the heal walks it off the cancelled day");
+    assert!(
+        !rule_exdates(&pool, &page_id).await.contains(&healed),
+        "and lands on a day the rule still yields"
+    );
+}
+
 #[tokio::test]
 async fn occurrence_cancel_adds_exdate() {
     let pool = setup().await;
@@ -2734,6 +2801,80 @@ async fn unsync_then_resync_relinks_in_place() {
         page_content_text(&pool, &page_id).await,
         "my notes",
         "user layer preserved"
+    );
+}
+
+/// The composition C38 actually decided, which each half is pinned for separately:
+/// while a series is detached the user may move one of its occurrences, and a later
+/// re-link overwrites that move with the provider's time. It reads as data loss and
+/// isn't — the mirror is read-first, so the calendar is the truth, and the
+/// alternative (cloning the occurrence out) leaves it to be re-mirrored *beside* the
+/// clone: one occurrence, two blocks, permanently. What has to survive is the
+/// `original_date` key, since that is what lets the re-link find the row to reclaim
+/// instead of minting a second one.
+#[tokio::test]
+async fn a_relink_reclaims_an_occurrence_the_user_moved_while_detached() {
+    let pool = setup().await;
+    flag_external(&pool, "f1").await;
+    reconcile(&pool, &ctx(), &delta(vec![weekly_series()]))
+        .await
+        .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    simulate_user_body_edit(&pool, &page_id, "my notes").await;
+    let rule_id: String =
+        sqlx::query_scalar("SELECT id FROM page_recurrence_rules WHERE page_id = ?")
+            .bind(&page_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    teardown_calendar(&pool, ACCOUNT, "cal", "f1")
+        .await
+        .unwrap();
+    assert_eq!(sync_state(&pool, &page_id).await, "detached");
+
+    // The user drags the provider-moved instance somewhere else again.
+    crate::reschedule_virtual_occurrence_impl(
+        &pool,
+        crate::RescheduleVirtualInput {
+            rule_id,
+            original_date: "2026-06-08T09:00:00".into(),
+            scheduled_start: "2026-06-09T16:00:00".into(),
+            scheduled_end: Some("2026-06-09T16:30:00".into()),
+            timezone: "America/New_York".into(),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        override_row(&pool, &page_id, "2026-06-08T09:00:00").await,
+        Some((
+            "2026-06-09T16:00:00".into(),
+            Some("2026-06-09T16:30:00".into()),
+            None
+        )),
+        "moved in place, keyed on the occurrence it belongs to"
+    );
+
+    reconcile(&pool, &ctx(), &delta(vec![weekly_series()]))
+        .await
+        .unwrap();
+
+    assert_eq!(sync_state(&pool, &page_id).await, "active");
+    assert_eq!(override_count(&pool).await, 1, "reclaimed, not duplicated");
+    assert_eq!(
+        override_row(&pool, &page_id, "2026-06-08T09:00:00").await,
+        Some((
+            "2026-06-08T11:00:00".into(),
+            Some("2026-06-08T11:30:00".into()),
+            Some("America/New_York".into())
+        )),
+        "the calendar's time wins the re-link"
+    );
+    assert_eq!(
+        page_content_text(&pool, &page_id).await,
+        "my notes",
+        "the user layer is untouched by any of it"
     );
 }
 

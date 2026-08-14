@@ -167,6 +167,25 @@ async fn every_backfill_arms_the_sweep_at_the_window_it_queried() {
     }
 }
 
+/// Sync tokens are opaque server strings and several servers put a URL in them, so
+/// an `&` in one is ordinary. Interpolated raw it breaks the REPORT body's XML —
+/// the server rejects the request, and since a rejected token is indistinguishable
+/// from an invalidated one the engine falls back to a full re-enumerate on every
+/// single poll, forever, without ever saying so.
+#[tokio::test]
+async fn a_token_with_xml_metacharacters_is_escaped_into_the_report() {
+    let (_, queries) = run_capturing(Mode::Delta, Some("http://x/ns/sync/a&b<c")).await;
+
+    let report = queries
+        .iter()
+        .find(|q| q.contains("sync-collection"))
+        .expect("an incremental poll issues a sync-collection");
+    assert!(
+        report.contains("<d:sync-token>http://x/ns/sync/a&amp;b&lt;c</d:sync-token>"),
+        "{report}"
+    );
+}
+
 #[tokio::test]
 async fn timed_event_maps_identity_schedule_and_mirror_fields() {
     let delta = run(Mode::Full, None).await;

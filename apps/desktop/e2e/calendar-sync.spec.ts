@@ -808,3 +808,42 @@ appTest("a synced page can't be dragged from the list onto the calendar @tier2",
   expect(detached.ghosted).toBe(true);
   expect(detached.after).not.toBe(detached.before);
 });
+
+// A calendar folder is system-managed: nothing files into it, and the backend
+// refuses a move that tries. Today the UI never gets that far — `ExternalCalendarItem`
+// registers no dnd droppable, so the drag simply finds nothing to drop on. That is
+// structural rather than guarded, and the matrix warns that unifying the two sidebar
+// components would quietly hand the calendar folder a droppable. This pins the
+// outcome so such a refactor fails here instead of in a QA pass.
+appTest("a page can't be dropped onto a calendar folder @tier2", async ({ app }) => {
+  await seedSynced(app);
+  await openCalendarFolder(app, "Work");
+
+  const row = app.locator("[data-page-list-item]").filter({ hasText: "Old planning" });
+  await expect(row).toHaveCount(1);
+  const rowBox = await row.boundingBox();
+  // The other "Personal" is the realistic seed's own folder — a regular one, and a
+  // legitimate drop target, which is exactly what this must not be confused with.
+  const calendarFolder = app
+    .locator('[aria-label="Personal"]:not([aria-roledescription="sortable"])')
+    .first();
+  const folderBox = await calendarFolder.boundingBox();
+  if (!rowBox || !folderBox) throw new Error("page row or calendar folder missing a box");
+
+  await app.mouse.move(rowBox.x + rowBox.width / 2, rowBox.y + rowBox.height / 2);
+  await app.mouse.down();
+  await app.mouse.move(rowBox.x + rowBox.width / 2 + 16, rowBox.y + rowBox.height / 2, {
+    steps: 4,
+  });
+  await app.mouse.move(folderBox.x + folderBox.width / 2, folderBox.y + folderBox.height / 2, {
+    steps: 10,
+  });
+  await app.mouse.up();
+
+  // Still in the calendar's own list, not moved into the folder it was dropped on.
+  await expect(row).toHaveCount(1);
+  await openPersonalFolder(app);
+  await expect(
+    app.locator("[data-page-list-item]").filter({ hasText: "Old planning" })
+  ).toHaveCount(0);
+});
