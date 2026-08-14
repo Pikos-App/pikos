@@ -1242,7 +1242,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
- "iana-time-zone",
  "pikos-db",
  "serde",
  "serde_json",

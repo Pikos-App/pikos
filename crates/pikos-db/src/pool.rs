@@ -48,6 +48,34 @@ pub fn today_local() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
+/// The device's IANA zone, resolved once per process — the lookup reads OS config
+/// and one caller runs inside the detach transaction, where a per-value lookup
+/// would widen the write lock under a racing editor write. An OS zone chrono-tz
+/// can't parse falls back to UTC rather than being stored raw: an unparseable
+/// stamp is unusable by every layer that later reads it.
+///
+/// This crate's own tests pin UTC (the corpus convention), so no conversion
+/// assertion depends on the machine that ran it. `cfg(test)` does **not** reach a
+/// dependent crate's tests — those see the real zone, and must derive any
+/// expectation from this function rather than a literal.
+pub fn device_zone() -> chrono_tz::Tz {
+    #[cfg(test)]
+    {
+        chrono_tz::Tz::UTC
+    }
+    #[cfg(not(test))]
+    {
+        use std::sync::OnceLock;
+        static ZONE: OnceLock<chrono_tz::Tz> = OnceLock::new();
+        *ZONE.get_or_init(|| {
+            iana_time_zone::get_timezone()
+                .ok()
+                .and_then(|name| name.parse().ok())
+                .unwrap_or(chrono_tz::Tz::UTC)
+        })
+    }
+}
+
 /// Highest migration version this binary carries (down-migrations ignored;
 /// there are none today, but filter defensively).
 fn embedded_migration_max() -> i64 {

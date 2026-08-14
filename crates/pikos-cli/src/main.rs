@@ -468,7 +468,7 @@ fn print_json<T: serde::Serialize>(value: &T) {
 // ─── Write helpers (mirror the app's persistence path) ────────────────────────
 
 fn local_tz() -> String {
-    iana_time_zone::get_timezone().unwrap_or_else(|_| "UTC".to_string())
+    pikos_db::device_zone().name().to_string()
 }
 
 fn base_page(folder_id: Option<String>, title: String) -> NewPage {

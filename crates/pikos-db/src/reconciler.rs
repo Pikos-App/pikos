@@ -15,11 +15,11 @@ use chrono_tz::Tz;
 
 use self::allday_end::InclusiveEnd;
 use crate::error::AppResult;
-use crate::now_iso;
 use crate::sync_delta::{
     EventCore, EventUpsert, OccurrenceDelta, OccurrenceFidelity, OccurrenceKind, Removal,
     SyncDelta, UpsertItem,
 };
+use crate::{device_zone, now_iso};
 
 /// All-day recurring events have no meaningful zone, but
 /// `page_recurrence_rules.timezone` is NOT NULL. Stamp this when the event
@@ -1027,28 +1027,6 @@ fn convert_instant(value: &str, fmt: &str, source: Tz, device: Tz) -> Option<Nai
             .with_timezone(&device)
             .naive_local(),
     )
-}
-
-/// The device's IANA zone, resolved once per process — the lookup reads OS config
-/// and this runs inside the detach transaction, where a per-value lookup would
-/// widen the write lock under a racing editor write. Tests pin UTC (the corpus
-/// convention), so no conversion assertion depends on the machine that ran it.
-fn device_zone() -> Tz {
-    #[cfg(test)]
-    {
-        Tz::UTC
-    }
-    #[cfg(not(test))]
-    {
-        use std::sync::OnceLock;
-        static ZONE: OnceLock<Tz> = OnceLock::new();
-        *ZONE.get_or_init(|| {
-            iana_time_zone::get_timezone()
-                .ok()
-                .and_then(|name| name.parse().ok())
-                .unwrap_or(Tz::UTC)
-        })
-    }
 }
 
 /// Destroy a non-owned synced page. The FK cascade removes its `page_sync` link,

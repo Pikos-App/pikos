@@ -1,5 +1,5 @@
 import type { MockStorageAdapter, StorageAdapter } from "@pikos/core";
-import { formatDateOnly, formatLocalISO } from "@pikos/core";
+import { formatDateOnly, formatLocalISO, getLocalTimezone } from "@pikos/core";
 import { addDays, endOfMonth, format, set } from "date-fns";
 
 // Mock external-calendar sync seed (TEST MODE ONLY). Mirrors the real-DB
@@ -39,6 +39,21 @@ import { addDays, endOfMonth, format, set } from "date-fns";
 
 /** What an all-day series' rule row carries — see the reconciler's `SENTINEL_TZ`. */
 const ZONELESS_RULE_TZ = "UTC";
+
+/**
+ * The stored zone for a seeded row, given the source zone the event came with:
+ * detaching spends the stamp, so a detached row's schedule carries none and its
+ * rule carries the device zone — all-day excepted, which keeps the sentinel.
+ * Twin of `schedule_row_zone` in the dev command, which documents why.
+ */
+function scheduleRowZone(source: string | undefined, detached: boolean): string | undefined {
+  return detached ? undefined : source;
+}
+
+function ruleRowZone(source: string | undefined, detached: boolean): string {
+  if (!source) return ZONELESS_RULE_TZ;
+  return detached ? getLocalTimezone() : source;
+}
 
 function at(base: Date, offsetDays: number, hours: number, minutes: number): string {
   return formatLocalISO(
@@ -93,7 +108,8 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
       title,
       ...(scheduledEnd ? { scheduledEnd } : {}),
     });
-    mock.markPageSynced(page.id, { state, ...(timezone ? { timezone } : {}), ...mirrorMeta });
+    const zone = scheduleRowZone(timezone, state === "detached");
+    mock.markPageSynced(page.id, { state, ...(zone ? { timezone: zone } : {}), ...mirrorMeta });
   };
 
   // Mirrors the dev command's `insert_synced_recurring`. Occurrence deltas are
@@ -123,12 +139,15 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
       tags: [],
       title,
     });
+    const detached = series.state === "detached";
+    const ruleZone = ruleRowZone(timezone, detached);
+    const rowZone = scheduleRowZone(timezone, detached);
     const rule = await adapter.createRecurrenceRule({
       pageId: page.id,
       rrule,
       scheduledEnd: baseEnd,
       scheduledStart: baseStart,
-      timezone: timezone ?? ZONELESS_RULE_TZ,
+      timezone: ruleZone,
     });
     if (series.exdates?.length) await adapter.addRuleExdates(rule.id, series.exdates);
     if (series.moved) {
@@ -138,12 +157,12 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
         ruleId: rule.id,
         scheduledEnd: series.moved.end,
         scheduledStart: series.moved.start,
-        ...(timezone ? { timezone } : {}),
+        ...(rowZone ? { timezone: rowZone } : {}),
       });
     }
     mock.markPageSynced(page.id, {
       state: series.state ?? "active",
-      ...(timezone ? { timezone } : {}),
+      timezone: ruleZone,
       ...(series.syncedSince ? { syncedSince: series.syncedSince } : {}),
     });
   };

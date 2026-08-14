@@ -330,6 +330,33 @@ struct SyncedMirror<'a> {
     body: Option<&'a str>, // Tiptap JSON; the user's own notes on the event
 }
 
+/// What a seeded row's stored zone must be, given the source zone the event came
+/// with. Detaching **spends** the stamp (`float_wall_clock`): every wall-clock is
+/// rewritten into the device zone, `page_schedules.timezone` goes NULL and the
+/// rule keeps the device zone. Seeding the source zone onto a detached row instead
+/// describes a state the product cannot reach — and off that zone, every later
+/// conversion of the row shifts it by the offset. Seed times are already
+/// device-local, so applying the outcome is just this pair of stamps.
+///
+/// An all-day series never gets that far: date-only has nothing to convert, so
+/// `float_wall_clock` returns before touching anything and the rule's zone-less
+/// sentinel stands.
+fn schedule_row_zone<'a>(source: Option<&'a str>, sync_state: &str) -> Option<&'a str> {
+    match sync_state {
+        "detached" => None,
+        _ => source,
+    }
+}
+
+/// The rule row's half of the pairing [`schedule_row_zone`] documents.
+fn rule_row_zone<'a>(source: Option<&'a str>, sync_state: &str) -> &'a str {
+    match (source, sync_state) {
+        (None, _) => ZONELESS_RULE_TZ,
+        (Some(_), "detached") => pikos_db::device_zone().name(),
+        (Some(tz), _) => tz,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn insert_synced_page(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -371,7 +398,7 @@ async fn insert_synced_page(
     .bind(&page_id)
     .bind(scheduled_start)
     .bind(scheduled_end)
-    .bind(timezone)
+    .bind(schedule_row_zone(timezone, sync_state))
     .bind(now)
     .execute(&mut **tx)
     .await?;
@@ -482,7 +509,7 @@ async fn insert_synced_recurring(
     .bind(serde_json::to_string(series.exdates).unwrap_or_else(|_| "[]".to_string()))
     .bind(base_start)
     .bind(base_end)
-    .bind(timezone.unwrap_or(ZONELESS_RULE_TZ))
+    .bind(rule_row_zone(timezone, series.sync_state))
     .bind(now)
     .execute(&mut **tx)
     .await?;
@@ -497,7 +524,7 @@ async fn insert_synced_recurring(
         .bind(&page_id)
         .bind(moved.start)
         .bind(moved.end)
-        .bind(timezone)
+        .bind(schedule_row_zone(timezone, series.sync_state))
         .bind(&rule_id)
         .bind(moved.original)
         .bind(now)

@@ -1079,6 +1079,48 @@ async fn seed_synced_calendar_backdates_the_countdown_series_connect_day() {
     assert!(base.starts_with(&expected), "{base}");
 }
 
+/// A detached row is one the product could have produced: detaching spends the
+/// source stamp, so the schedule rows carry no zone and the rule carries the
+/// device's. A row left on its source zone converts on every read that follows —
+/// invisible on a machine in that zone, an hour out everywhere else.
+#[tokio::test]
+async fn seed_synced_calendar_detaches_rows_the_way_the_reconciler_does() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+
+    let stranded: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT p.title, s.timezone FROM page_schedules s
+         JOIN pages p ON p.id = s.page_id
+         JOIN page_sync ps ON ps.page_id = p.id
+         WHERE ps.sync_state = 'detached' AND s.timezone IS NOT NULL",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert!(stranded.is_empty(), "{stranded:?}");
+
+    // All-day is the carve-out: date-only has nothing to convert, so detaching
+    // returns before it reaches the rule and the zone-less sentinel stands.
+    let rules: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT p.title, r.timezone, r.scheduled_start FROM page_recurrence_rules r
+         JOIN pages p ON p.id = r.page_id
+         JOIN page_sync ps ON ps.page_id = p.id
+         WHERE ps.sync_state = 'detached'",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rules.len(), 4);
+    for (title, zone, start) in &rules {
+        let expected = if start.len() == 10 {
+            "UTC"
+        } else {
+            pikos_db::device_zone().name()
+        };
+        assert_eq!(zone, expected, "{title}");
+    }
+}
+
 /// Two one-off shapes with no other source: a multi-day all-day span (whose
 /// inclusive end is what a double-decrement would shorten) and a zone-less timed
 /// mirror (which floats, and whose reminders come from a third query).

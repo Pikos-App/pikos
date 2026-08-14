@@ -29,12 +29,12 @@ pub use error::{AppError, AppResult};
 pub use folders::*;
 pub use notification_log::*;
 pub use pages::*;
+pub use pool::{device_zone, migration_versions, now_iso, now_local_iso, open_pool, today_local};
 #[cfg(any(test, feature = "test-support"))]
 pub use pool::{
     insert_test_folder, insert_test_page, insert_test_page_sync,
     insert_test_page_sync_connected_at, test_pool, TestPage, TEST_CONNECTED_LONG_AGO,
 };
-pub use pool::{migration_versions, now_iso, now_local_iso, open_pool, today_local};
 pub use reconciler::*;
 pub use recurrence_derive::*;
 pub use reminders::*;
