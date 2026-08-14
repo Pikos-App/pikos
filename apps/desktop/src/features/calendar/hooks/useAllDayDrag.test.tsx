@@ -76,6 +76,45 @@ describe("useAllDayDrag — chip drag schedule lock guard", () => {
   });
 });
 
+// Dragging one bar of a recurring all-day series has to say *which* occurrence
+// moved. `originalDate` is that answer, and it survives a round trip through the
+// drag state before it reaches `onReschedule` — drop it anywhere along the way and
+// the move is read as a move of the series itself, rewriting the head's anchor and
+// taking every other occurrence with it. The timed twin shipped exactly that bug.
+describe("useAllDayDrag — occurrence identity", () => {
+  it("carries originalDate through to the reschedule", () => {
+    const { onReschedule, result } = setup(false);
+    result.current.handleAllDayChipDragStart({
+      folderColor: undefined,
+      originalDate: "2099-01-05",
+      pageId: "p1",
+    });
+    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: -50 }));
+    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: -50 }));
+
+    expect(onReschedule).toHaveBeenCalledWith(
+      "p1",
+      expect.any(String),
+      expect.anything(),
+      "2099-01-05"
+    );
+  });
+
+  it("leaves it undefined for a page that is not an occurrence", () => {
+    const { onReschedule, result } = setup(false);
+    result.current.handleAllDayChipDragStart({ folderColor: undefined, pageId: "p1" });
+    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: -50 }));
+    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: -50 }));
+
+    expect(onReschedule).toHaveBeenCalledWith(
+      "p1",
+      expect.any(String),
+      expect.anything(),
+      undefined
+    );
+  });
+});
+
 describe("useAllDayDrag — edge resize schedule lock guard", () => {
   it("does not reschedule a locked (synced) chip on edge resize", () => {
     const { onReschedule, result } = setup(true);

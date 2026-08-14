@@ -311,7 +311,9 @@ describe("synced recurring completion routing", () => {
     const { hook, pageId } = await setupRecurringPage();
     const storage = hook.result.current.workspace.storage as MockStorageAdapter;
     await act(async () => {
-      storage.markPageSynced(pageId, { state: "active", timezone: "Europe/London" });
+      // Tokyo, not London: the runner is pinned to UTC, so a January London source
+      // converts to itself and an unconverted wall-clock would read as correct.
+      storage.markPageSynced(pageId, { state: "active", timezone: "Asia/Tokyo" });
       await hook.result.current.workspace.reload();
     });
 
@@ -322,8 +324,14 @@ describe("synced recurring completion routing", () => {
     });
 
     expect(completeSpy).toHaveBeenCalledTimes(1);
-    expect(completeSpy.mock.calls[0]?.[0].occurrenceDate).toBeDefined();
-    expect(completeSpy.mock.calls[0]?.[0].scheduledStart).toBeDefined();
+    // The occurrence keeps its source-zone day — that is what the completed set is
+    // keyed by — while the clone's wall-clock is the viewer's, so the done copy
+    // lands at the hour the event was rendered at.
+    expect(completeSpy.mock.calls[0]?.[0]).toMatchObject({
+      occurrenceDate: "2099-01-05",
+      pageId,
+      scheduledStart: "2099-01-05T00:00:00",
+    });
   });
 });
 

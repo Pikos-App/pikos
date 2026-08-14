@@ -114,6 +114,107 @@ async fn account_is_reused_by_identity_whether_dormant_or_active() {
     );
 }
 
+/// With a live row and a dormant one sharing an identity, reconnect has to land on
+/// the live one (`ORDER BY disconnected ASC`). Picking the dormant one would
+/// reactivate a second account beside the working one, and the user would end up
+/// with the calendar twice.
+#[tokio::test]
+async fn identity_match_prefers_the_live_row_over_a_dormant_twin() {
+    let pool = test_pool().await;
+    let dormant = insert_sync_account_impl(&pool, "caldav", "you · https://x", "basic")
+        .await
+        .unwrap()
+        .id;
+    mark_account_disconnected_impl(&pool, &dormant)
+        .await
+        .unwrap();
+    let live = insert_sync_account_impl(&pool, "caldav", "you · https://x", "basic")
+        .await
+        .unwrap()
+        .id;
+
+    let matched = find_account_by_identity_impl(&pool, "caldav", "you · https://x")
+        .await
+        .unwrap()
+        .expect("one of the two matched");
+
+    assert_eq!(matched.id, live);
+}
+
+/// Re-discovery runs on every connect and every enable, so its `ON CONFLICT` decides
+/// what survives. Widening it to the whole row would turn a reconnect into a silent
+/// reset: calendars the user syncs would come back off, and a cleared cursor would
+/// re-enumerate the world.
+#[tokio::test]
+async fn re_discovery_leaves_enabled_and_the_cursor_alone() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let (cal, _) = enabled_calendar(&pool, &acc, "Work", Some("#7c9cf0")).await;
+    sqlx::query("UPDATE sync_calendar SET sync_token = 'tok-1', ctag = 'ct-1' WHERE id = ?")
+        .bind(&cal.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    upsert_sync_calendar_impl(&pool, &acc, "cal-a", "Work (renamed)", Some("#7c9cf0"))
+        .await
+        .unwrap();
+
+    let after = list_sync_calendars_impl(&pool, &acc).await.unwrap();
+    let after = after.first().expect("still one calendar");
+    assert!(after.enabled, "an enabled calendar stays enabled");
+    assert_eq!(after.folder_id, cal.folder_id);
+    let cursor: (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT sync_token, ctag FROM sync_calendar WHERE id = ?")
+            .bind(&cal.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(cursor, (Some("tok-1".into()), Some("ct-1".into())));
+}
+
+/// The count behind C55's re-enable confirm ("N pages will be reclaimed"). It is a
+/// correlated subquery in `CAL_COLS` with no other pin: if it read 0, the confirm
+/// would never show and a provider overwrite of the user's edits would land unasked.
+#[tokio::test]
+async fn detached_pages_counts_only_this_calendars_survivors() {
+    let pool = test_pool().await;
+    let acc = account(&pool).await;
+    let (cal, folder_id) = enabled_calendar(&pool, &acc, "Work", None).await;
+    let sibling = upsert_sync_calendar_impl(&pool, &acc, "cal-b", "Personal", None)
+        .await
+        .unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some(&folder_id),
+            ..TestPage::new("p-owned", "Mine")
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_sync
+           (id, page_id, account_id, provider, calendar_id, external_id, ical_uid,
+            user_modified, created_at)
+         VALUES ('ps-owned', 'p-owned', ?, 'caldav', 'cal-a', '/ev.ics', 'uid-1', 1, ?)",
+    )
+    .bind(&acc)
+    .bind(now_iso())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    toggle_sync_calendar_impl(&pool, &cal.id, false, None)
+        .await
+        .unwrap();
+
+    let all = list_sync_calendars_impl(&pool, &acc).await.unwrap();
+    let by_id = |id: &str| all.iter().find(|c| c.id == id).unwrap().detached_pages;
+    assert_eq!(by_id(&cal.id), 1);
+    assert_eq!(by_id(&sibling.id), 0, "scoped to its own calendar");
+}
+
 #[tokio::test]
 async fn upsert_calendar_is_idempotent_on_keys() {
     let pool = test_pool().await;

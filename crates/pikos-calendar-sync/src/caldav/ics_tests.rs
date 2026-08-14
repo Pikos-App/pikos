@@ -436,3 +436,34 @@ END:VEVENT\r\n";
     assert_eq!(ev.core.ical_uid, "s");
     assert_eq!(ev.schedule.start, "2026-06-08T11:00:00");
 }
+
+/// A yearly all-day series — a birthday, a holiday — carries its exclusions as
+/// `VALUE=DATE`, and its cancelled instances as date-only `RECURRENCE-ID`s. Both
+/// have to come out in the same date-only basis the series expands in: a value left
+/// timed matches no occurrence, so the cancelled year quietly comes back and there
+/// is nothing on screen to say why.
+#[test]
+fn all_day_exclusions_stay_date_only() {
+    let body = "BEGIN:VEVENT\r\n\
+UID:bday\r\n\
+DTSTART;VALUE=DATE:20260315\r\n\
+DTEND;VALUE=DATE:20260316\r\n\
+RRULE:FREQ=YEARLY\r\n\
+EXDATE;VALUE=DATE:20270315\r\n\
+SUMMARY:Birthday\r\n\
+END:VEVENT\r\n\
+BEGIN:VEVENT\r\n\
+UID:bday\r\n\
+RECURRENCE-ID;VALUE=DATE:20280315\r\n\
+DTSTART;VALUE=DATE:20280315\r\n\
+DTEND;VALUE=DATE:20280316\r\n\
+STATUS:CANCELLED\r\n\
+SUMMARY:Birthday\r\n\
+END:VEVENT\r\n";
+
+    let ev = parse_resource("/bday.ics", Some("v1"), &ics(body)).unwrap();
+
+    let mut exdates = ev.recurrence.unwrap().exdates;
+    exdates.sort();
+    assert_eq!(exdates, vec!["2027-03-15", "2028-03-15"]);
+}

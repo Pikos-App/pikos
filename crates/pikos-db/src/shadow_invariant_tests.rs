@@ -4,9 +4,13 @@
 //! Pins the load-bearing fact behind the occurrence-sets swap: after any sequence
 //! of completions and skips, the stored native head (`pages.scheduled_start`)
 //! equals `oldest_open_for_page` derived from scratch over `(base anchor, rrule,
-//! exclusion union)`. Completion now recomputes the head from truth; this gates
-//! the whole path (completion → recompute → cache, plus every skip/exdate trigger)
-//! end-to-end across the corpus, so a missed trigger or a union bug desyncs it.
+//! exclusion union)`. Completion recomputes the head from truth, and this gates
+//! that path — completion → recompute → cache — end-to-end across the corpus, so a
+//! union bug desyncs it.
+//!
+//! What it does **not** reach: the harness drives rule-EXDATEs and native heads
+//! only. Skip-set entries and the synced floor take other triggers into the same
+//! cache, and neither is exercised here.
 
 use super::*;
 use crate::pool::{insert_test_page, test_pool, TestPage};

@@ -6,7 +6,7 @@
 // last resort since done state isn't otherwise exposed accessibly inside the bar.
 
 import type { PageSummary } from "@pikos/core";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/renderWithProviders";
@@ -49,17 +49,18 @@ function makeBar(page: PageSummary): AllDayBarData {
   };
 }
 
-function renderBar(page: PageSummary) {
-  return renderWithProviders(
+function renderBar(page: PageSummary, onDragStart = vi.fn()) {
+  renderWithProviders(
     <AllDayBar
       bar={makeBar(page)}
       draggingPageId={null}
       folderColor={undefined}
       onDoubleClick={vi.fn()}
-      onDragStart={vi.fn()}
+      onDragStart={onDragStart}
       position={{}}
     />
   );
+  return onDragStart;
 }
 
 describe("AllDayBar — detached synced rendering", () => {
@@ -75,5 +76,40 @@ describe("AllDayBar — detached synced rendering", () => {
     renderBar(makePage({ status: "done", syncState: "detached" }));
     const bar = screen.getByRole("button", { name: "Conference" });
     expect(bar.className).toContain("opacity-50");
+  });
+});
+
+// One bar of a recurring all-day series is an occurrence, not the series: the drag
+// has to name which day moved, or the write lands on the head and drags every other
+// occurrence with it. This is the first half of the hand-off `useAllDayDrag` then
+// carries through to the reschedule.
+describe("AllDayBar — occurrence identity on drag", () => {
+  const dragPast = (bar: HTMLElement) => {
+    fireEvent.mouseDown(bar, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(window, { clientX: 40, clientY: 0 });
+  };
+
+  it("hands the occurrence's date to the drag", () => {
+    // `originalDate` rides along on the rendered page the way the expansion adds
+    // it — it is not part of `PageSummary` itself.
+    const occurrence: PageSummary & { originalDate: string } = {
+      ...makePage({ syncState: "detached" }),
+      originalDate: "2099-01-05",
+    };
+    const onDragStart = renderBar(occurrence);
+
+    dragPast(screen.getByRole("button", { name: "Conference" }));
+
+    expect(onDragStart).toHaveBeenCalledWith(
+      expect.objectContaining({ originalDate: "2099-01-05", pageId: "p1" })
+    );
+  });
+
+  it("omits it for a plain all-day page", () => {
+    const onDragStart = renderBar(makePage({ syncState: null }));
+
+    dragPast(screen.getByRole("button", { name: "Conference" }));
+
+    expect(onDragStart).toHaveBeenCalledWith({ folderColor: undefined, pageId: "p1" });
   });
 });

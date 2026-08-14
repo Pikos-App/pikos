@@ -227,17 +227,12 @@ async fn an_unsupported_rule_series_is_skipped_not_fatal() {
     let pool = test_pool().await;
     seed_series(&pool, "good", "FREQ=DAILY", "2026-05-21T09:00:00", None).await;
     add_reminder(&pool, "good", 30).await;
-    // A provider rule outside the engine's envelope (YEARLY+BYDAY). Before per-series
-    // isolation, its `RecurrenceError` errored the whole enumeration — no reminder
-    // fired for any series.
-    seed_series(
-        &pool,
-        "bad",
-        "FREQ=YEARLY;BYDAY=1SU",
-        "2026-05-21T09:00:00",
-        None,
-    )
-    .await;
+    // A rule the engine genuinely rejects: sub-daily frequencies are outside the
+    // day-key model, so this is one of the few shapes that still errors. Before
+    // per-series isolation its `RecurrenceError` failed the whole enumeration and no
+    // reminder fired for any series. (The fixture used to be `FREQ=YEARLY;BYDAY=1SU`,
+    // which C43 brought *into* the envelope — the test then proved nothing.)
+    seed_series(&pool, "bad", "FREQ=HOURLY", "2026-05-21T09:00:00", None).await;
     add_reminder(&pool, "bad", 30).await;
     let now = local("2026-05-25T08:30:00");
 

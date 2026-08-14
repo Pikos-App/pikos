@@ -1,9 +1,12 @@
-// ─── Conformance corpus — the rrule.js oracle for the Rust recurrence engine ──
+// ─── Conformance corpus — a regression fixture, no longer a live oracle ───────
 //
-// The Rust crate `pikos-recurrence` must enumerate occurrences byte-identically
-// to rrule.js. This file is the single source of that truth: it
-// drives the REAL `recurrence.ts` functions over a fixed case set and emits their
-// output to a committed JSON fixture the Rust conformance test reads.
+// The committed JSON is genuine rrule.js output, captured when `recurrence.ts`
+// still wrapped it, and the Rust engine must keep matching it byte for byte. What
+// changed with the wasm harvest is where a *regeneration* now reads from:
+// `recurrence.ts` calls the same engine under test, so `GEN_CORPUS=1` would
+// re-bless whatever the engine currently does. Regenerate only against a real
+// rrule.js install (see `scripts/gen-rrule-goldens.mjs`), and treat
+// `rrule_js_goldens.rs` as the external oracle.
 //
 // It runs as a golden-file guard: normally it regenerates in-memory and asserts
 // equality with the committed fixture, so any drift in rrule.js behavior (a
@@ -585,7 +588,7 @@ function generateCorpus() {
         scheduledStart: o.scheduledStart,
       })),
     })),
-    generatedFrom: "rrule.js ^2.8.1 via packages/core recurrence.ts",
+    generatedFrom: "rrule.js ^2.8.1 (captured; see the header before regenerating)",
     missedBetween: MISSED_CASES.map((c) => ({
       ...c,
       exdates: c.exdates ?? [],

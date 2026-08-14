@@ -416,8 +416,10 @@ async fn disconnect_reconnect_relinks_owned_page_without_duplicating() {
 
 // Reconnecting an account that's still active (never disconnected) must refresh
 // its row, not insert a second one — a duplicate account gives every event a second
-// folder and page (dedup is per-account). Drives `claim_account` + the idempotent
-// calendar upsert the connect paths use, skipping only live discovery.
+// folder and page (dedup is per-account). Scope: `claim_account`'s identity match
+// and the row counts around it. What the upsert *preserves* (enabled, colour, the
+// cursor) is out of reach here — nothing below would notice a clobber; that is
+// `re_discovery_leaves_enabled_and_the_cursor_alone` in `pikos-db`.
 #[tokio::test]
 async fn reconnecting_an_active_account_refreshes_it_without_duplicating() {
     let pool = test_pool().await;
@@ -552,7 +554,9 @@ async fn a_refresh_re_enumerates_without_churning_unchanged_pages() {
         "2026-06-01",
         "tok-2",
     ));
-    refresh_account(&pool, &provider, &account_id).await.unwrap();
+    refresh_account(&pool, &provider, &account_id)
+        .await
+        .unwrap();
 
     assert_eq!(
         provider.seen_since.borrow().as_slice(),
@@ -695,4 +699,65 @@ async fn reconnect_caldav_refuses_a_google_account() {
         .unwrap_err();
 
     assert!(matches!(err, AppError::Invalid(_)));
+}
+
+/// A provider that can't reach the network at all.
+struct Unreachable;
+
+impl CalendarProvider for Unreachable {
+    async fn list_calendars(
+        &self,
+        _a: &SyncAccountRow,
+    ) -> pikos_db::AppResult<Vec<RemoteCalendar>> {
+        unreachable!("resync never discovers")
+    }
+    async fn sync(
+        &self,
+        _c: &SyncCalendarRow,
+        _since: Option<SyncToken>,
+    ) -> pikos_db::AppResult<SyncDelta> {
+        Err(pikos_db::AppError::Network("offline".into()))
+    }
+    async fn fetch_event(
+        &self,
+        _c: &SyncCalendarRow,
+        _r: &str,
+    ) -> pikos_db::AppResult<EventUpsert> {
+        unreachable!("never reached while offline")
+    }
+    async fn current_sync_token(
+        &self,
+        _c: &SyncCalendarRow,
+    ) -> pikos_db::AppResult<Option<SyncToken>> {
+        Ok(None)
+    }
+}
+
+/// Offline is not a verdict on the credential, so a pass that never reached the
+/// server must leave the flag exactly as it found it. Both directions are wrong and
+/// both currently pass: clearing it drops the badge and silently strands an account
+/// whose password really is dead, and setting it demands a re-authorization the
+/// user never needed — after which the account drops out of the poll loop entirely.
+#[tokio::test]
+async fn an_offline_pass_leaves_the_reconnect_flag_where_it_was() {
+    for already_flagged in [false, true] {
+        let pool = test_pool().await;
+        let (account_id, _) = synced_account(&pool).await;
+        set_reconnect_needed(&pool, &account_id, already_flagged)
+            .await
+            .unwrap();
+
+        let results = resync_account(&pool, &Unreachable, &account_id)
+            .await
+            .unwrap();
+
+        assert_eq!(results[0].status, "offline");
+        assert_eq!(
+            get_sync_account_impl(&pool, &account_id)
+                .await
+                .unwrap()
+                .reconnect_needed,
+            already_flagged
+        );
+    }
 }

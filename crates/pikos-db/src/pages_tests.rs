@@ -2239,6 +2239,32 @@ async fn editing_a_synced_page_marks_it_user_modified() {
     );
 }
 
+/// Priority is the one `marks_ownership` field with no second signal behind it —
+/// `PAGE_OWNED_SQL` reads completions, tags, reminders and the occurrence sets, none
+/// of which a priority-only edit touches. Drop it from the list and a page the user
+/// flagged Important is a bare mirror again, destroyed on the next upstream delete.
+#[tokio::test]
+async fn setting_priority_alone_marks_a_synced_page_user_modified() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Event"))
+        .await
+        .unwrap();
+    mark_synced(&pool, "p", "active").await;
+
+    update_page_impl(
+        &pool,
+        "p".into(),
+        PageUpdate {
+            priority: Some(2),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(user_modified(&pool, "p").await);
+}
+
 #[tokio::test]
 async fn opening_a_synced_page_does_not_mark_it_user_modified() {
     let pool = test_pool().await;
@@ -2816,6 +2842,28 @@ async fn today_view_carries_schedule_locked() {
     assert!(p.schedule_locked, "Today view must carry schedule_locked");
 }
 
+/// The third leg of Today == daily summary == `pikos today`. A past synced one-off
+/// stays open until the user ticks it, exactly like a native one — the carve-out
+/// that used to hide it was removed once the three surfaces were made to agree
+/// (C44). This query is the CLI's, and the axis has already regressed twice, so
+/// re-growing the carve-out here would go unnoticed: nothing else reads it.
+#[tokio::test]
+async fn today_keeps_a_past_synced_one_off_like_a_native_one() {
+    let pool = test_pool().await;
+    let yesterday = (chrono::Local::now() - chrono::Duration::days(1))
+        .format("%Y-%m-%dT09:00:00")
+        .to_string();
+    insert_scheduled_page(&pool, "synced", &yesterday).await;
+    mark_synced(&pool, "synced", "active").await;
+    insert_scheduled_page(&pool, "native", &yesterday).await;
+
+    let today = list_pages_today_impl(&pool).await.unwrap();
+
+    let ids: Vec<&str> = today.iter().map(|p| p.id.as_str()).collect();
+    assert!(ids.contains(&"native"));
+    assert!(ids.contains(&"synced"), "no origin carve-out in Today");
+}
+
 /// Build an active synced recurring series ("head") for the occurrence tests: a
 /// weekly-Monday rule from 2026-06-01 (so 06-01, 06-08, 06-15… are occurrences and
 /// e.g. 06-03 is not, which the occurrence-validation guard rejects).
@@ -3269,6 +3317,66 @@ async fn synced_skip_is_allowed_and_recomputes() {
         fetch_scheduled_start(&pool, "head").await,
         Some(occ_start(1)),
         "head advanced off the skipped oldest-open occurrence"
+    );
+}
+
+/// The positive arm of the restore recompute. A native series' head is derived, and
+/// the completed set it derives from survives the trash — so a series trashed and
+/// restored has to come back on its oldest *open* occurrence, not on the completed
+/// one it was parked on. Only the negative arm (an active mirror, skipped) was
+/// pinned, so deleting the recompute call failed nothing.
+#[tokio::test]
+async fn restore_re_derives_a_native_series_head() {
+    let pool = test_pool().await;
+    insert_test_page(
+        &pool,
+        TestPage {
+            scheduled_start: Some(&occ_start(0)),
+            ..TestPage::new("head", "Weekly review")
+        },
+    )
+    .await
+    .unwrap();
+    crate::create_recurrence_rule_impl(
+        &pool,
+        crate::NewRecurrenceRule {
+            page_id: "head".into(),
+            rrule: "FREQ=WEEKLY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: occ_start(0),
+            scheduled_end: None,
+            timezone: "America/New_York".into(),
+        },
+    )
+    .await
+    .unwrap();
+    complete_recurring_page_impl(
+        &pool,
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Park the head back on the occurrence that is now completed — the state a
+    // stale denorm leaves behind. Only the recompute can walk it forward again.
+    sqlx::query("UPDATE pages SET scheduled_start = ? WHERE id = 'head'")
+        .bind(occ_start(0))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    soft_delete_page_impl(&pool, "head").await.unwrap();
+    restore_page_impl(&pool, "head").await.unwrap();
+
+    assert_eq!(
+        fetch_scheduled_start(&pool, "head").await,
+        Some(occ_start(1)),
+        "head returns on the next open occurrence, not the completed one"
     );
 }
 

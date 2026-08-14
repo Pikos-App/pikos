@@ -519,13 +519,16 @@ async fn exhausted_done_series_rewritten_to_unsupported_rule_unmarks_done() {
     // Simulate the finite series having exhausted to a terminal-done head.
     force_terminal_done(&pool, &page_id).await;
 
-    // The provider rewrites the rule into a shape the engine rejects (BYSETPOS), so
+    // The provider rewrites the rule into a shape the engine rejects — RFC 5545
+    // forbids BYMONTHDAY on a weekly rule, so nothing enumerates and
     // recompute_recurring_schedule skips it. Without the up-front terminal clear the
     // page would stay `done` → invisible on the calendar and reminder-excluded.
+    // (The fixture used to be `BYSETPOS`, which C43 brought into the envelope: the
+    // rule then enumerated and `clear_terminal` could have been deleted unnoticed.)
     reconcile(
         &pool,
         &ctx(),
-        &delta(vec![series_v("v2", "FREQ=MONTHLY;BYSETPOS=1;BYDAY=MO")]),
+        &delta(vec![series_v("v2", "FREQ=WEEKLY;BYMONTHDAY=15")]),
     )
     .await
     .unwrap();
@@ -536,7 +539,7 @@ async fn exhausted_done_series_rewritten_to_unsupported_rule_unmarks_done() {
     // Storage still takes the rewrite — the rejection is only in derivation.
     assert_eq!(
         rule_row(&pool, &page_id).await.0,
-        "FREQ=MONTHLY;BYSETPOS=1;BYDAY=MO"
+        "FREQ=WEEKLY;BYMONTHDAY=15"
     );
 }
 
@@ -1661,6 +1664,66 @@ async fn master_only_rewrite_carries_across_an_until_rewrite() {
     assert_eq!(override_count(&pool).await, 1);
 }
 
+/// An all-day series whose moved instance spans two days. Providers send the end
+/// **exclusive**, so `2026-06-10` here is stored as the inclusive `2026-06-09`.
+fn all_day_master_only(etag: &str, overrides: Vec<OccurrenceOverride>) -> UpsertItem {
+    UpsertItem::Event(EventUpsert {
+        core: core("/allday.ics", "uid-allday", etag, "Offsite"),
+        schedule: all_day("2026-06-01", Some("2026-06-02")),
+        recurrence: Some(Recurrence {
+            fidelity: OccurrenceFidelity::MasterOnly,
+            rrule: "FREQ=WEEKLY".into(),
+            exdates: vec![],
+            overrides,
+        }),
+    })
+}
+
+/// The carry-forward re-inserts stored override rows, and a stored all-day end is
+/// already inclusive — running it back through the provider conversion would take a
+/// day off the span on **every** poll, so a two-day offsite silently becomes one and
+/// then none. `InclusiveEnd::from_stored` vs `from_provider` is the whole guard, and
+/// every other carry test is timed, where the conversion is a no-op either way.
+#[tokio::test]
+async fn master_only_rewrite_carries_an_all_day_override_without_shortening_it() {
+    let pool = setup().await;
+    let moved = OccurrenceOverride {
+        original_date: "2026-06-08".into(),
+        schedule: all_day("2026-06-08", Some("2026-06-10")),
+    };
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![all_day_master_only("v1", vec![moved])]),
+    )
+    .await
+    .unwrap();
+
+    let (page_id, _, _) = only_page_sync(&pool).await;
+    assert_eq!(
+        override_row(&pool, &page_id, "2026-06-08").await.unwrap().1,
+        Some("2026-06-09".into()),
+        "the provider's exclusive end is decremented once on the way in"
+    );
+
+    // Two polls that change nothing but the etag — each one re-writes the rule and
+    // re-inserts the carried override.
+    for etag in ["v2", "v3"] {
+        reconcile(
+            &pool,
+            &ctx(),
+            &delta(vec![all_day_master_only(etag, vec![])]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            override_row(&pool, &page_id, "2026-06-08").await.unwrap().1,
+            Some("2026-06-09".into()),
+            "the span lost a day on poll {etag}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn complete_rewrite_still_clears_a_dropped_exdate() {
     let pool = setup().await;
@@ -2142,6 +2205,49 @@ async fn sweep_spares_an_ahead_of_utc_window_edge_event() {
         page_exists_by_uid(&pool, "uid-edge").await,
         "window-edge event spared, not swept"
     );
+}
+
+/// The sweep reads `sync_state = 'active'` only. Both other states are already
+/// severed and mean the opposite of "the provider still has this": a tombstone is a
+/// page the user trashed, so sweeping it would empty the trash from under them and
+/// take the tombstone with it (the next poll then resurrects the event); a detached
+/// page is theirs outright and has no link left to remove.
+#[tokio::test]
+async fn sweep_leaves_tombstoned_and_detached_links_alone() {
+    let pool = setup().await;
+    for (href, uid) in [("/trashed.ics", "uid-trashed"), ("/mine.ics", "uid-mine")] {
+        reconcile(
+            &pool,
+            &ctx(),
+            &delta(vec![single(
+                core(href, uid, "v1", "Standup"),
+                timed("2026-06-25T09:00:00", None, "UTC"),
+            )]),
+        )
+        .await
+        .unwrap();
+    }
+    sqlx::query("UPDATE page_sync SET sync_state = 'tombstoned' WHERE ical_uid = 'uid-trashed'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE ical_uid = 'uid-mine'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let removed = sweep_absent(
+        &pool,
+        &ctx(),
+        &std::collections::HashSet::new(),
+        "2026-06-24",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(removed, 0);
+    assert!(page_exists_by_uid(&pool, "uid-trashed").await);
+    assert!(page_exists_by_uid(&pool, "uid-mine").await);
 }
 
 fn series_recurring(href: &str, uid: &str, rrule: &str) -> UpsertItem {

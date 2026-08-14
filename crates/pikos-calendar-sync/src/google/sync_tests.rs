@@ -243,6 +243,80 @@ async fn cancelled_instance_becomes_an_occurrence_cancel_not_a_removal() {
     );
 }
 
+/// The all-day twin of the cancel split, on both arms. A birthday or holiday
+/// series is where this bites: its instances carry `originalStartTime.date`, not
+/// `.dateTime`, and an exclusion that comes out timed matches no occurrence in a
+/// date-only expansion — so the year the user cancelled upstream silently returns,
+/// with nothing on screen to say why. With the master in the same page the
+/// cancellation folds into its exdates; arriving alone it is an occurrence delta.
+#[tokio::test]
+async fn a_cancelled_all_day_instance_excludes_in_the_date_only_basis() {
+    let t = Replay::ok(
+        r#"{
+      "items": [
+        {
+          "id": "ev-bday",
+          "iCalUID": "uid-bday@google.com",
+          "status": "confirmed",
+          "summary": "Birthday",
+          "start": { "date": "2026-03-15" },
+          "end": { "date": "2026-03-16" },
+          "recurrence": ["RRULE:FREQ=YEARLY", "EXDATE;VALUE=DATE:20290315"]
+        },
+        {
+          "id": "ev-bday_20270315",
+          "iCalUID": "uid-bday@google.com",
+          "status": "cancelled",
+          "recurringEventId": "ev-bday",
+          "originalStartTime": { "date": "2027-03-15" }
+        }
+      ],
+      "nextSyncToken": "TOKEN-2"
+    }"#,
+    );
+
+    let delta = sync_calendar(&t, CAL, Some(&SyncToken("TOKEN-1".into())))
+        .await
+        .unwrap();
+
+    let mut exdates = event(&delta, "ev-bday").recurrence.clone().unwrap().exdates;
+    exdates.sort();
+    assert_eq!(exdates, vec!["2027-03-15", "2029-03-15"]);
+    assert!(
+        delta.removals.is_empty(),
+        "one cancelled year is not the series being deleted"
+    );
+}
+
+#[tokio::test]
+async fn a_lone_cancelled_all_day_instance_keeps_its_date_only_key() {
+    let t = Replay::ok(
+        r#"{
+      "items": [
+        {
+          "id": "ev-bday_20270315",
+          "iCalUID": "uid-bday@google.com",
+          "status": "cancelled",
+          "recurringEventId": "ev-bday",
+          "originalStartTime": { "date": "2027-03-15" }
+        }
+      ],
+      "nextSyncToken": "TOKEN-2"
+    }"#,
+    );
+
+    let delta = sync_calendar(&t, CAL, Some(&SyncToken("TOKEN-1".into())))
+        .await
+        .unwrap();
+
+    let cancel = occurrences(&delta)
+        .into_iter()
+        .find(|o| matches!(o.kind, OccurrenceKind::Cancel))
+        .expect("the cancelled year");
+    assert_eq!(cancel.original_date, "2027-03-15");
+    assert_eq!(cancel.series_ref, "ev-bday");
+}
+
 #[tokio::test]
 async fn cancelled_event_without_a_recurrence_ref_becomes_a_removal() {
     let t = Replay::ok(INCREMENTAL);
@@ -357,7 +431,7 @@ fn quota_error(reason: &str) -> String {
 }
 
 #[tokio::test]
-async fn a_rate_limited_poll_backs_off_without_touching_the_cursor() {
+async fn a_rate_limited_poll_classifies_as_network_not_a_dead_credential() {
     let body = quota_error("rateLimitExceeded");
     let t = Replay::with(vec![(403, &body)]);
     let err = sync_calendar(&t, CAL, Some(&SyncToken("TOKEN-1".into())))

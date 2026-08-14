@@ -115,8 +115,10 @@ appTest("attaching a rule that excludes today snaps the head forward @tier2", as
   await page.getByRole("button", { name: "Set recurrence" }).click();
   await page.getByRole("button", { name: /^Every weekday/ }).click();
 
-  // Head snapped to Monday 2026-06-08 = "Tomorrow" under the pinned clock.
-  // A regression (no snap) would leave it on Sunday, reading "Today".
+  // Head snapped to Monday 2026-06-08 = "Tomorrow" under the pinned clock. The
+  // outcome is the contract; don't read the cause from here when triaging — in mock
+  // mode `recomputeHead` heals an unsnapped anchor anyway, so this stays green
+  // whether the client-side snap ran or the backend caught it.
   await expect(page.getByRole("button", { name: "Scheduled: Tomorrow" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Scheduled: Today" })).toHaveCount(0);
 });

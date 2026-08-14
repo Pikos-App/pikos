@@ -672,3 +672,61 @@ async fn done_recurring_advances_and_clones() {
         .any(|r| r["status"] == "done");
     assert!(has_done, "expected a completed Standup clone");
 }
+
+// ─── done: the synced guard sits on the series, not the origin ─────────────────
+
+/// Attach a weekly rule so the page reads as a series to the `done` guard.
+async fn mark_recurring(db: &str, page_id: &str, start: &str) {
+    let pool = open_pool(db).await.unwrap();
+    pikos_db::create_recurrence_rule_impl(
+        &pool,
+        pikos_db::NewRecurrenceRule {
+            page_id: page_id.to_string(),
+            rrule: "FREQ=WEEKLY".into(),
+            rrule_exdates: Vec::new(),
+            scheduled_start: start.to_string(),
+            scheduled_end: None,
+            timezone: "America/New_York".into(),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+/// The CLI has no expansion engine, so it can't name which occurrence a tick means
+/// — for a live mirror it refuses and says where to do it. The refusal is on the
+/// *pair* (synced **and** recurring): a synced one-off has exactly one occurrence,
+/// so completing it needs no engine and must still work. Guard the placement from
+/// both sides, since widening it to all synced pages would quietly make `pikos done`
+/// useless against a calendar, and narrowing it would complete the wrong week.
+#[tokio::test]
+async fn done_refuses_a_synced_series_but_not_a_synced_one_off() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup"), base_page("Review")]).await;
+    // The rule goes on before the mirror locks — the order the reconciler writes in.
+    mark_recurring(dbs, &ids[0], "2026-06-01T09:00:00").await;
+    mark_synced(dbs, &ids[0], "active").await;
+    mark_synced(dbs, &ids[1], "active").await;
+
+    let refused = cli(dbs, &["done", &ids[0], "--json"]);
+    assert_eq!(code(&refused), 4);
+    // Errors are JSON-on-stderr; stdout is reserved for successful payloads.
+    let body: Value = serde_json::from_slice(&refused.stderr).expect("stderr JSON");
+    let msg = body["error"]["message"]
+        .as_str()
+        .unwrap_or("")
+        .to_lowercase();
+    assert!(
+        msg.contains("pikos app"),
+        "message points at the app: {msg}"
+    );
+
+    let allowed = cli(dbs, &["done", &ids[1], "--json"]);
+    assert!(
+        allowed.status.success(),
+        "a synced one-off completes: {}",
+        String::from_utf8_lossy(&allowed.stderr)
+    );
+    assert_eq!(json(&allowed)["status"], "done");
+}

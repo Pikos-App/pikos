@@ -36,6 +36,9 @@ enum Mode {
 
 struct FixtureTransport {
     mode: Mode,
+    /// Every REPORT body the run issued, so a test can check what the server was
+    /// actually asked for and not just what came back.
+    queries: std::sync::Mutex<Vec<String>>,
 }
 
 impl DavTransport for FixtureTransport {
@@ -49,6 +52,7 @@ impl DavTransport for FixtureTransport {
         _depth: &str,
         body: &str,
     ) -> Result<DavResponse, CaldavError> {
+        self.queries.lock().unwrap().push(body.to_string());
         let resp = if body.contains("calendar-multiget") {
             match self.mode {
                 Mode::Delta => ok(MULTIGET_CHANGED),
@@ -82,10 +86,19 @@ fn ok(body: &str) -> DavResponse {
 }
 
 async fn run(mode: Mode, since: Option<&str>) -> SyncDelta {
-    let t = FixtureTransport { mode };
-    sync_calendar(&t, CAL, since.map(|s| SyncToken(s.to_string())).as_ref())
+    run_capturing(mode, since).await.0
+}
+
+async fn run_capturing(mode: Mode, since: Option<&str>) -> (SyncDelta, Vec<String>) {
+    let t = FixtureTransport {
+        mode,
+        queries: Default::default(),
+    };
+    let delta = sync_calendar(&t, CAL, since.map(|s| SyncToken(s.to_string())).as_ref())
         .await
-        .unwrap()
+        .unwrap();
+    let queries = t.queries.lock().unwrap().clone();
+    (delta, queries)
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────────
@@ -111,7 +124,7 @@ fn by_uid<'a>(delta: &'a SyncDelta, uid: &str) -> &'a EventUpsert {
 // ─── backfill (calendar-query, inline calendar-data) ────────────────────────────
 
 #[tokio::test]
-async fn backfill_enumerates_the_window_with_no_token_or_removals() {
+async fn backfill_returns_the_whole_corpus_with_no_token_or_removals() {
     let delta = run(Mode::Full, None).await;
     assert_eq!(events(&delta).len(), 4, "all four seeded resources");
     assert!(
@@ -123,6 +136,35 @@ async fn backfill_enumerates_the_window_with_no_token_or_removals() {
         "backfill leaves token bootstrap to the engine"
     );
     assert!(delta.full_enumerate, "a backfill is a full enumerate");
+}
+
+/// A backfill carries no removals of its own, so `authoritative_from` is the only
+/// thing that lets the engine notice a CalDAV deletion that happened while nothing
+/// was polling. Losing it turns those into permanent ghost mirrors; naming a later
+/// window than the one queried sweeps live events instead. Both CalDAV full
+/// enumerates — first connect and the stale-token fallback — have to arm it, and at
+/// the same date the REPORT actually asked for. (Google's deliberate never-arm is
+/// pinned by `no_google_delta_ever_arms_the_sweep`.)
+#[tokio::test]
+async fn every_backfill_arms_the_sweep_at_the_window_it_queried() {
+    for (mode, since) in [(Mode::Full, None), (Mode::Stale, Some("stale-token"))] {
+        let (delta, queries) = run_capturing(mode, since).await;
+
+        let armed = delta
+            .authoritative_from
+            .expect("a full enumerate arms the sweep");
+        let query = queries
+            .iter()
+            .find(|q| q.contains("calendar-query"))
+            .expect("the window came from a calendar-query");
+        assert!(
+            query.contains(&format!(
+                r#"time-range start="{}T000000Z""#,
+                armed.replace('-', "")
+            )),
+            "armed at {armed}, but asked the server for: {query}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -307,7 +349,10 @@ async fn report_parser_splits_changes_from_deletions() {
 
 #[tokio::test]
 async fn fetch_one_refetches_a_single_resource() {
-    let t = FixtureTransport { mode: Mode::Delta };
+    let t = FixtureTransport {
+        mode: Mode::Delta,
+        queries: Default::default(),
+    };
     let ev = fetch_one(&t, CAL, "/testuser/work-calendar/meeting.ics")
         .await
         .unwrap();
@@ -466,7 +511,10 @@ async fn current_sync_token_is_none_when_server_lacks_sync_collection() {
 
 #[tokio::test]
 async fn current_sync_token_captures_the_cursor_on_207() {
-    let t = FixtureTransport { mode: Mode::Full };
+    let t = FixtureTransport {
+        mode: Mode::Full,
+        queries: Default::default(),
+    };
     let tok = current_sync_token(&t, CAL).await.unwrap();
     assert!(
         tok.is_some(),

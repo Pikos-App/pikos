@@ -320,3 +320,96 @@ async fn a_second_account_gets_its_own_credentials() {
     assert_eq!(personal.access_token, "home-access");
     assert_eq!(personal.refresh_token, "home-rt");
 }
+
+// ─── the redirect leg of the grant ──────────────────────────────────────────────
+//
+// Everything above starts from stored credentials; these drive the one-shot
+// exchange that produces them. The loopback is real (the same TCP round-trip the
+// browser makes) and the token endpoint is scripted, so the whole grant runs in a
+// build carrying no Google client. `complete_with` consumes the authorization and
+// waits on the listener, so the redirect has to be driven concurrently — and on
+// this task, since the scripted transport is not `Send`.
+
+fn loopback_port(pending: &PendingAuth) -> u16 {
+    pending
+        .redirect_uri
+        .as_str()
+        .strip_prefix("http://127.0.0.1:")
+        .and_then(|rest| rest.trim_end_matches('/').parse().ok())
+        .expect("loopback redirect carries a port")
+}
+
+/// Answer the pending authorization's redirect the way the browser would.
+async fn redirect_with(port: u16, state: &str) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .unwrap();
+    stream
+        .write_all(
+            format!("GET /?code=auth-code&state={state} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+                .as_bytes(),
+        )
+        .await
+        .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).await.unwrap();
+}
+
+/// The CSRF check is what stops a page the user happens to have open from firing a
+/// code of its own at the listener — the loopback answers anything that reaches the
+/// port. Rejection has to come *before* the exchange: the scripted transport holds
+/// no responses, so a token request at all fails the test.
+#[tokio::test]
+async fn a_redirect_carrying_someone_elses_state_never_reaches_the_token_endpoint() {
+    let pending = begin_with(test_client()).await.unwrap();
+    let port = loopback_port(&pending);
+    let http = Scripted::silent();
+
+    let (result, ()) = tokio::join!(
+        pending.complete_with(test_client(), &http),
+        redirect_with(port, "not-the-state"),
+    );
+
+    assert!(matches!(result, Err(GoogleError::Protocol(_))));
+}
+
+/// Google's granular consent lets the user approve a subset. Syncing on a partial
+/// grant would poll calendars it can never read, so connect refuses instead.
+#[tokio::test]
+async fn a_grant_missing_a_scope_is_refused_rather_than_half_connected() {
+    let pending = begin_with(test_client()).await.unwrap();
+    let port = loopback_port(&pending);
+    let state = pending.csrf.secret().clone();
+    let partial = format!(
+        r#"{{"access_token":"at","token_type":"Bearer","refresh_token":"rt","expires_in":3600,"scope":"{}"}}"#,
+        SCOPES[0]
+    );
+    let http = Scripted::ok(partial);
+
+    let (result, ()) = tokio::join!(
+        pending.complete_with(test_client(), &http),
+        redirect_with(port, &state),
+    );
+
+    assert!(matches!(result, Err(GoogleError::ScopesWithheld)));
+}
+
+#[tokio::test]
+async fn a_full_grant_yields_credentials_carrying_both_tokens() {
+    let pending = begin_with(test_client()).await.unwrap();
+    let port = loopback_port(&pending);
+    let state = pending.csrf.secret().clone();
+    let http = Scripted::ok(token_json("at", Some("rt"), 3600));
+
+    let (result, ()) = tokio::join!(
+        pending.complete_with(test_client(), &http),
+        redirect_with(port, &state),
+    );
+
+    let credentials = result.unwrap();
+    assert_eq!(credentials.access_token, "at");
+    assert_eq!(credentials.refresh_token, "rt");
+    assert!(credentials.missing_scopes().is_empty());
+}

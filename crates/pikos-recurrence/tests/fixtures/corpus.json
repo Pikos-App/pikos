@@ -292,7 +292,7 @@
       ]
     }
   ],
-  "generatedFrom": "rrule.js ^2.8.1 via packages/core recurrence.ts",
+  "generatedFrom": "rrule.js ^2.8.1 (captured; see the header before regenerating)",
   "missedBetween": [
     { "after": "2026-03-02T00:00:00", "before": "2026-03-06T00:00:00", "name": "daily gap", "rrule": "FREQ=DAILY", "start": "2026-03-02T09:00:00", "exdates": [], "expected": ["2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05"] },
     { "after": "2026-03-02T00:00:00", "before": "2026-03-06T00:00:00", "exdates": ["2026-03-04"], "name": "daily gap with exdate", "rrule": "FREQ=DAILY", "start": "2026-03-02T09:00:00", "expected": ["2026-03-02", "2026-03-03", "2026-03-05"] },
