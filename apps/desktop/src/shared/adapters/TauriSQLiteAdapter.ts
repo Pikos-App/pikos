@@ -83,18 +83,27 @@ function watchdog(command: string): void {
 
 // Commands that mutate the workspace DB. Issuing one opens a suppression
 // window so the DB watcher's change event for our own write doesn't trigger a
-// redundant reload (see shared/lib/externalChange.ts).
-const WRITE_COMMANDS = new Set([
+// redundant reload (see shared/lib/externalChange.ts). Leaving a mutating
+// command out is not inert: the watcher reads its own echo as somebody else's
+// write and refetches the workspace on top of the user's action.
+//
+// Only commands issued through this module's `invoke` are covered. The wipe/reset
+// and seeding commands go straight to `@tauri-apps/api/core` and are not listed —
+// a reload after wiping the workspace is the right outcome anyway.
+export const WRITE_COMMANDS = new Set([
   "create_page",
   "update_page",
   "delete_page",
   "soft_delete_page",
   "restore_page",
   "reorder_pages",
+  "set_pages_status",
   "complete_recurring_page",
   "uncomplete_recurring_occurrence",
   "skip_occurrence",
   "undo_skip_occurrence",
+  "reschedule_virtual_occurrence",
+  "recompute_recurring_schedules",
   "create_folder",
   "update_folder",
   "delete_folder",
@@ -107,18 +116,43 @@ const WRITE_COMMANDS = new Set([
   "create_recurrence_rule",
   "update_recurrence_rule",
   "delete_recurrence_rule",
+  "add_rule_exdates",
+  "remove_rule_exdate",
   "create_page_reminder",
   "delete_page_reminder",
   "delete_page_reminders",
   "connect_caldav_account",
   "reconnect_caldav_account",
+  "connect_google_account",
   "disconnect_sync_account",
   "toggle_sync_calendar",
+  "set_sync_calendar_color",
   "resync_sync_account",
   "refresh_sync_account",
-  "backdate_page",
-  "reset_db",
-  "wipe_app_data",
+]);
+
+/** Commands that only read. Listed rather than inferred so a new command has to be
+ *  classified deliberately — the test below rejects any invoke in neither set.
+ *  `connect_db` belongs here: it opens the pool and writes no workspace data. */
+export const READ_COMMANDS = new Set([
+  "connect_db",
+  "get_page",
+  "list_pages",
+  "list_pages_today",
+  "list_completed_pages",
+  "search_pages",
+  "search_tags",
+  "get_folder",
+  "list_folders",
+  "list_page_schedules",
+  "list_page_schedules_for_rules",
+  "get_recurrence_rule",
+  "list_recurrence_rules",
+  "expand_recurrence_range",
+  "list_page_reminders",
+  "get_sync_status",
+  "list_sync_calendars",
+  "google_sync_available",
 ]);
 
 // Rust commands serialize errors as { kind, message } (see

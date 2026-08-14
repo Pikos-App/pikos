@@ -28,8 +28,6 @@ export default defineConfig({
         "src/**/*.test.{ts,tsx}",
         "src/test/**",
         "src/**/*.d.ts",
-        // Adapter is exercised via @pikos/core MockStorageAdapter tests.
-        "src/lib/adapters/**",
         // Seeds and screenshots/scripts are dev/marketing-only utilities.
         "src/shared/seeds/**",
         "src/main.tsx",
