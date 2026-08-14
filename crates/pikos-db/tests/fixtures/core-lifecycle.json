@@ -1,0 +1,328 @@
+{
+  "scenarios": [
+    {
+      "name": "a multi-word query matches a page carrying both words apart",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Team standup",
+          "contentText": "meeting notes"
+        },
+        {
+          "op": "page",
+          "id": "p2",
+          "title": "Unrelated",
+          "contentText": "nothing here"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "team meeting",
+          "matches": [
+            "p1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a hyphenated query tokenizes the same way the index does",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Multi color palette"
+        },
+        {
+          "op": "page",
+          "id": "p2",
+          "title": "Unrelated"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "multi-color",
+          "matches": [
+            "p1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a query matches the start of a word, not its middle",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Meeting"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "eeting",
+          "matches": []
+        }
+      }
+    },
+    {
+      "name": "the last word of a query matches as a prefix",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Morning routine"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "morn",
+          "matches": [
+            "p1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "completed pages are counted but withheld until asked for",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup"
+        },
+        {
+          "op": "page",
+          "id": "p2",
+          "title": "Standup archive"
+        },
+        {
+          "op": "setStatus",
+          "pages": [
+            "p2"
+          ],
+          "status": "done"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "standup",
+          "matches": [
+            "p1"
+          ],
+          "completedCount": 1
+        }
+      }
+    },
+    {
+      "name": "asking for completed pages returns them",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup"
+        },
+        {
+          "op": "page",
+          "id": "p2",
+          "title": "Standup archive"
+        },
+        {
+          "op": "setStatus",
+          "pages": [
+            "p2"
+          ],
+          "status": "done"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "standup",
+          "includeCompleted": true,
+          "matches": [
+            "p1",
+            "p2"
+          ],
+          "completedCount": 1
+        }
+      }
+    },
+    {
+      "name": "a trashed page leaves search and the page list, and comes back on restore",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup"
+        },
+        {
+          "op": "softDeletePage",
+          "page": "p1"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "standup",
+          "matches": []
+        },
+        "visiblePages": []
+      }
+    },
+    {
+      "name": "restoring a trashed page returns it to search and the list",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup"
+        },
+        {
+          "op": "softDeletePage",
+          "page": "p1"
+        },
+        {
+          "op": "restorePage",
+          "page": "p1"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "standup",
+          "matches": [
+            "p1"
+          ]
+        },
+        "visiblePages": [
+          "p1"
+        ]
+      }
+    },
+    {
+      "name": "trashing a folder takes its pages out of view with it",
+      "steps": [
+        {
+          "op": "folder",
+          "id": "f1",
+          "name": "Work"
+        },
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup",
+          "folder": "f1"
+        },
+        {
+          "op": "page",
+          "id": "p2",
+          "title": "Loose"
+        },
+        {
+          "op": "softDeleteFolder",
+          "folder": "f1"
+        }
+      ],
+      "expect": {
+        "visiblePages": [
+          "p2"
+        ]
+      }
+    },
+    {
+      "name": "deleting a page takes its reminders with it",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup"
+        },
+        {
+          "op": "reminder",
+          "page": "p1",
+          "minutesBefore": 10
+        },
+        {
+          "op": "reminder",
+          "page": "p1",
+          "minutesBefore": 30
+        },
+        {
+          "op": "deletePage",
+          "page": "p1"
+        }
+      ],
+      "expect": {
+        "reminderCount": {
+          "page": "p1",
+          "count": 0
+        }
+      }
+    },
+    {
+      "name": "a tag search finds the page that carries the tag",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup",
+          "tags": [
+            "engineering"
+          ]
+        },
+        {
+          "op": "page",
+          "id": "p2",
+          "title": "Other"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "engineering",
+          "matches": [
+            "p1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "the list filter reads the page's text, not the shape it is stored in",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup",
+          "contentText": "sprint notes"
+        },
+        {
+          "op": "page",
+          "id": "p2",
+          "title": "Other",
+          "contentText": "nothing"
+        }
+      ],
+      "expect": {
+        "listQuery": {
+          "query": "sprint",
+          "matches": [
+            "p1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "the list filter never matches the editor's own markup",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup",
+          "contentText": "sprint notes"
+        }
+      ],
+      "expect": {
+        "listQuery": {
+          "query": "paragraph",
+          "matches": []
+        }
+      }
+    }
+  ]
+}

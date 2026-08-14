@@ -46,17 +46,37 @@ import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
 import { computeNextEnd, nextOccurrenceAfter, rawExpandRule } from "../utils/recurrence";
 
-// Command-layer guard messages, mirrored verbatim from the Rust writers so a
-// mis-routed write fails identically in test mode and in prod. If the backend
-// copy changes, these must move in lockstep (crates/pikos-db/src/sync.rs and
-// pages.rs). The mock is the only place e2e/unit tests see these rejections.
-const SYNCED_READONLY_MSG =
-  "This event is synced from an external calendar — its title and schedule are read-only.";
-const NOT_RECURRING_MSG = "Occurrence completion applies only to a recurring series.";
-const SYNCED_NEEDS_DATE_MSG = "Synced occurrence completion requires an occurrence date.";
-const SYNCED_NEEDS_START_MSG = "Synced occurrence completion requires the occurrence start.";
-const OCCURRENCE_NOT_IN_SERIES_MSG = "Occurrence is not part of this synced series.";
-const NO_OCCURRENCE_MSG = "Recurring page has no scheduled occurrence to complete.";
+/**
+ * Command-layer guard messages, mirrored verbatim from the Rust writers so a
+ * mis-routed write fails identically in test mode and in prod. The mock is the
+ * only place e2e and unit tests ever see these rejections, so a message the
+ * backend has since reworded still reads as correct here and the test asserting
+ * it still passes — against words no user is shown. `guardMessages.test.ts`
+ * checks each one against the Rust source rather than trusting lockstep edits.
+ */
+export const MIRRORED_GUARD_MESSAGES = {
+  intoCalendarFolder: "Pages cannot be moved into an external calendar folder",
+  noOccurrence: "Recurring page has no scheduled occurrence to complete.",
+  notRecurring: "Occurrence completion applies only to a recurring series.",
+  occurrenceNotInSeries: "Occurrence is not part of this synced series.",
+  syncedNeedsDate: "Synced occurrence completion requires an occurrence date.",
+  syncedNeedsStart: "Synced occurrence completion requires the occurrence start.",
+  syncedPlacement:
+    "This event is synced from an external calendar — it stays in its calendar folder.",
+  syncedReadonly:
+    "This event is synced from an external calendar — its title and schedule are read-only.",
+} as const;
+
+const {
+  intoCalendarFolder: INTO_CALENDAR_FOLDER_MSG,
+  noOccurrence: NO_OCCURRENCE_MSG,
+  notRecurring: NOT_RECURRING_MSG,
+  occurrenceNotInSeries: OCCURRENCE_NOT_IN_SERIES_MSG,
+  syncedNeedsDate: SYNCED_NEEDS_DATE_MSG,
+  syncedNeedsStart: SYNCED_NEEDS_START_MSG,
+  syncedPlacement: SYNCED_PLACEMENT_MSG,
+  syncedReadonly: SYNCED_READONLY_MSG,
+} = MIRRORED_GUARD_MESSAGES;
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -88,6 +108,38 @@ function nextSortOrder(items: { sortOrder: number }[]): number {
   return items.length === 0 ? 0 : Math.max(...items.map((i) => i.sortOrder)) + 1;
 }
 
+/**
+ * Split text the way FTS5's unicode61 tokenizer does — runs of alphanumerics, with
+ * every other character a separator. Used for the query and the document alike,
+ * since `search_pages_impl` builds its MATCH from the same split.
+ *
+ * Substring matching was the obvious shortcut here and it is wrong in both
+ * directions: it finds "eeting" inside "Meeting", which the index never does, and
+ * it misses "team meeting" on a page holding both words apart, which the index
+ * always finds. An e2e written against either behaviour proves nothing.
+ */
+function ftsTokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean);
+}
+
+/** All terms must be present, the last one as a prefix — the shape of the query
+ *  `search_pages_impl` builds (implicit AND, trailing `*` on the final token). */
+function ftsMatches(terms: string[], document: string): boolean {
+  const docTokens = ftsTokens(document);
+  return terms.every((term, i) =>
+    i === terms.length - 1 ? docTokens.some((d) => d.startsWith(term)) : docTokens.includes(term)
+  );
+}
+
+function excerptAround(lowerText: string, terms: string[]): string {
+  const hit = terms.map((t) => lowerText.indexOf(t)).find((i) => i >= 0) ?? -1;
+  if (hit < 0) return "";
+  return lowerText.slice(Math.max(0, hit - 40), hit + 40);
+}
+
 function toSummary(page: Page): PageSummary {
   const { content: _, contentText: _ct, ...summary } = page;
   return summary;
@@ -111,7 +163,10 @@ function matchesFilter(page: Page, filter: PageFilter): boolean {
   if (filter.hasSchedule === true && page.scheduledStart == null) return false;
   if (filter.query !== undefined && filter.query.length > 0) {
     const q = filter.query.toLowerCase();
-    const haystack = `${page.title} ${page.subtitle ?? ""} ${page.content}`.toLowerCase();
+    // Title and extracted text only, matching the writer's `title LIKE … OR
+    // content_text LIKE …`. Searching the raw Tiptap JSON instead made "paragraph"
+    // and "doc" match every page here and nothing in the real database.
+    const haystack = `${page.title} ${page.contentText ?? ""}`.toLowerCase();
     if (!haystack.includes(q)) return false;
   }
   return true;
@@ -129,6 +184,9 @@ export class MockStorageAdapter implements StorageAdapter {
   private syncCalendars = new Map<string, SyncCalendar>();
   // Disconnected (dormant) accounts: kept for reconnect re-link, hidden from status.
   private dormantAccounts = new Set<string>();
+  // Pages each calendar's own teardown severed, so a re-enable reclaims those and
+  // not whatever else in the folder happens to be detached — see `_relinkCalendar`.
+  private detachedByCalendar = new Map<string, string[]>();
   // `page_sync.user_modified`: set by the editor path, never by sync. One half of
   // the ownership predicate teardown and export share — see `_isOwned`.
   private userModified = new Set<string>();
@@ -144,6 +202,7 @@ export class MockStorageAdapter implements StorageAdapter {
     this.syncAccounts.clear();
     this.syncCalendars.clear();
     this.dormantAccounts.clear();
+    this.detachedByCalendar.clear();
     this.userModified.clear();
   }
 
@@ -230,9 +289,33 @@ export class MockStorageAdapter implements StorageAdapter {
     });
   }
 
+  /**
+   * Test-only (NOT on `StorageAdapter`): park the head on a date the derivation
+   * disagrees with. A session left open across midnight produces exactly this, and
+   * no adapter method can — `updatePage` refuses a locked mirror's schedule, which
+   * is the case the foreground heal most needs to be tested on.
+   */
+  setHeadScheduleForTest(pageId: string, scheduledStart: string): void {
+    const page = this.pages.get(pageId);
+    if (page) this.pages.set(pageId, { ...page, scheduledStart });
+  }
+
   updatePage(id: string, updates: PageUpdate): Promise<Page> {
     const existing = this.pages.get(id);
     if (!existing) return Promise.reject(new Error(`Page not found: ${id}`));
+    // Placement lock, keyed on the live sync link rather than the folder: nothing
+    // moves into a calendar folder, and an actively-synced page can't leave. Once
+    // detached it is the user's and files anywhere. The reclaim path writes the
+    // folder directly, as the reconciler does, so it isn't stopped by this.
+    if (updates.folderId !== undefined) {
+      const target = updates.folderId != null ? this.folders.get(updates.folderId) : undefined;
+      if (target?.isExternalCalendar) {
+        return Promise.reject(new StorageError("Conflict", INTO_CALENDAR_FOLDER_MSG));
+      }
+      if (existing.scheduleLocked) {
+        return Promise.reject(new StorageError("Conflict", SYNCED_PLACEMENT_MSG));
+      }
+    }
     // Locked mirror: title + schedule are calendar-owned on a synced page.
     // Body/meta/status/tags stay editable (matches update_page_impl, pages.rs).
     if (
@@ -260,6 +343,11 @@ export class MockStorageAdapter implements StorageAdapter {
 
   deletePage(id: string): Promise<void> {
     this.pages.delete(id);
+    // The schema cascades everything hanging off a page; without this the mock
+    // keeps orphan rows the real database cannot hold.
+    for (const [rid, r] of this.reminders) if (r.pageId === id) this.reminders.delete(rid);
+    for (const [sid, s] of this.schedules) if (s.pageId === id) this.schedules.delete(sid);
+    for (const [rid, r] of this.rules) if (r.pageId === id) this.rules.delete(rid);
     return Promise.resolve();
   }
 
@@ -351,68 +439,50 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   searchPages(query: string, includeCompleted?: boolean): Promise<SearchResponse> {
-    const q = query.toLowerCase().trim();
-    if (!q) return Promise.resolve({ completedCount: 0, results: [] });
+    const terms = ftsTokens(query);
+    if (terms.length === 0) return Promise.resolve({ completedCount: 0, results: [] });
     const titleResults: SearchResult[] = [];
     const contentResults: SearchResult[] = [];
     let completedCount = 0;
     for (const page of this.pages.values()) {
       if (this.softDeleted.has(page.id)) continue;
-      const titleMatch = page.title.toLowerCase().includes(q);
-      // Match against subtitle + extracted plain text — never the raw Tiptap
-      // JSON. Rust's FTS index sees the same surface, so the mock returning
-      // pages because the user typed "paragraph" or "type" would be a lie.
-      const text = `${page.subtitle ?? ""} ${page.contentText ?? ""}`.toLowerCase();
-      const contentMatch = text.includes(q);
-      if (!titleMatch && !contentMatch) continue;
+      // Title, subtitle, body text and tags are one indexed document, so a query
+      // spanning two of them still matches. Extracted text, never the raw Tiptap
+      // JSON — the index never returns a page because the user typed "paragraph".
+      const text = `${page.subtitle ?? ""} ${page.contentText ?? ""}`;
+      if (!ftsMatches(terms, [page.title, text, page.tags.join(" ")].join(" "))) continue;
       if (isDone(page)) {
         completedCount++;
         if (!includeCompleted) continue;
       }
-      const bodyText = (page.contentText ?? "").slice(0, 80);
+      // Labelling is the writer's own post-selection heuristic (search.rs), which
+      // is a looser substring test than selection — a row is already a hit by here.
+      const lower = text.toLowerCase();
+      const titleLower = page.title.toLowerCase();
+      const titleMatch = terms.some((t) => titleLower.includes(t));
+      const contentMatch = terms.some((t) => lower.includes(t));
       const meta = {
-        contentPreview: bodyText,
+        contentPreview: (page.contentText ?? "").slice(0, 80),
         priority: page.priority,
         scheduledDate: page.scheduledStart ?? null,
         status: page.status,
         subtitle: page.subtitle ?? null,
         tags: page.tags,
       } as const;
-      if (titleMatch && contentMatch) {
-        const idx = text.indexOf(q);
-        const start = Math.max(0, idx - 40);
-        const end = Math.min(text.length, idx + q.length + 40);
-        const excerpt = text.slice(start, end);
-        titleResults.push({
-          excerpt,
-          id: page.id,
-          matchSource: "both",
-          title: page.title,
-          ...meta,
-        });
-      } else if (titleMatch) {
-        titleResults.push({
-          excerpt: "",
-          id: page.id,
-          matchSource: "title",
-          title: page.title,
-          ...meta,
-        });
-      } else if (contentMatch) {
-        const idx = text.indexOf(q);
-        const start = Math.max(0, idx - 40);
-        const end = Math.min(text.length, idx + q.length + 40);
-        const excerpt = text.slice(start, end);
-        contentResults.push({
-          excerpt,
-          id: page.id,
-          matchSource: "content",
-          title: page.title,
-          ...meta,
-        });
-      }
+      const excerpt = contentMatch ? excerptAround(lower, terms) : "";
+      const result: SearchResult = {
+        excerpt,
+        id: page.id,
+        matchSource: titleMatch && contentMatch ? "both" : titleMatch ? "title" : "content",
+        title: page.title,
+        ...meta,
+      };
+      if (titleMatch) titleResults.push(result);
+      else contentResults.push(result);
     }
-    // Title matches first (mimics bm25 weighting)
+    // Title matches first. Deliberately not a bm25 reproduction: the weighted rank
+    // is not reachable without the index, so order here is an approximation and no
+    // test should assert on it beyond title-before-content.
     const results = [...titleResults, ...contentResults].slice(0, 20);
     return Promise.resolve({ completedCount, results });
   }
@@ -697,8 +767,11 @@ export class MockStorageAdapter implements StorageAdapter {
     ];
     // Oldest-open = first occurrence not excluded, on/after the base: seek strictly
     // after the day before the base (nextOccurrenceAfter is day-level strict-after).
+    // Synced series floor at their connect day — see `synced_head_floor`.
     const base = parseLocalISO(rule.scheduledStart);
-    const next = nextOccurrenceAfter(rule.rrule, rule.scheduledStart, subDays(base, 1), exclusions);
+    const floor = head.syncedSince ? parseLocalISO(head.syncedSince) : null;
+    const from = floor && floor > base ? floor : base;
+    const next = nextOccurrenceAfter(rule.rrule, rule.scheduledStart, subDays(from, 1), exclusions);
     const before = { end: head.scheduledEnd, start: head.scheduledStart, status: head.status };
     if (next) {
       const scheduledEnd = rule.scheduledEnd
@@ -847,8 +920,8 @@ export class MockStorageAdapter implements StorageAdapter {
     const changed: PageSummary[] = [];
     for (const rule of this.rules.values()) {
       if (this.softDeleted.has(rule.pageId)) continue;
-      // Synced series are reconciler-owned — never recompute their head.
-      if (this.pages.get(rule.pageId)?.scheduleLocked) continue;
+      // Active mirrors are healed too, never skipped as reconciler-owned — the
+      // reason is on `recompute_recurring_schedules_impl`.
       if (this.recomputeHead(rule.pageId)) {
         const head = this.pages.get(rule.pageId);
         if (head) changed.push(toSummary(head));
@@ -1080,15 +1153,14 @@ export class MockStorageAdapter implements StorageAdapter {
     return { ...account, calendars: this._calendarsFor(account.id) };
   }
 
-  disconnectSyncAccount(accountId: string): Promise<void> {
-    // Dormant, not deleted: tear down each calendar but keep the account + calendar
-    // rows so a reconnect re-links them. Hidden from getSyncStatus.
+  async disconnectSyncAccount(accountId: string): Promise<void> {
+    // Dormant, not deleted (`go_dormant`). Severing the folder link here rather than
+    // leaving it to disable stranded the detached pages: a reconnect then minted a
+    // second folder beside them.
     for (const cal of this._calendarsFor(accountId)) {
-      const detachedPages = cal.folderId ? this._teardownCalendar(cal.folderId) : 0;
-      this.syncCalendars.set(cal.id, { ...cal, detachedPages, enabled: false, folderId: null });
+      await this.toggleSyncCalendar(cal.id, false, cal.color);
     }
     this.dormantAccounts.add(accountId);
-    return Promise.resolve();
   }
 
   /** Ownership, as `PAGE_OWNED_SQL` defines it: anything of the user's on the page.
@@ -1109,8 +1181,8 @@ export class MockStorageAdapter implements StorageAdapter {
    *  as a plain folder. Returns how many pages detached (the re-enable confirm's
    *  count). A tombstoned page keeps its trashed copy and loses only the link, so a
    *  resync recreates the event. */
-  private _teardownCalendar(folderId: string): number {
-    let detached = 0;
+  private _teardownCalendar(folderId: string): string[] {
+    const detached: string[] = [];
     for (const page of [...this.pages.values()]) {
       if (page.folderId !== folderId || !page.syncState) continue;
       if (page.syncState === "detached") continue;
@@ -1120,7 +1192,7 @@ export class MockStorageAdapter implements StorageAdapter {
       }
       if (this._isOwned(page)) {
         this.pages.set(page.id, { ...page, scheduleLocked: false, syncState: "detached" });
-        detached += 1;
+        detached.push(page.id);
       } else {
         this.pages.delete(page.id);
       }
@@ -1136,6 +1208,22 @@ export class MockStorageAdapter implements StorageAdapter {
     return detached;
   }
 
+  /** What a backfill converges to with no provider to re-read from: the calendar
+   *  reclaims the pages its own teardown detached, and a re-linked page is a locked
+   *  mirror again (`find_relink` + `reclaim_calendar_folder`). Trashed pages stay
+   *  severed — the real re-link skips them so a resync can't pull one back.
+   *
+   *  Scoped to what this teardown severed rather than to everything detached in the
+   *  folder: a page severed some other way is one the provider is no longer sending,
+   *  and a re-link that reclaims it describes a state sync cannot reach. */
+  private _relinkCalendar(pageIds: string[]): void {
+    for (const pageId of pageIds) {
+      const page = this.pages.get(pageId);
+      if (!page || page.syncState !== "detached" || this.softDeleted.has(pageId)) continue;
+      this.pages.set(pageId, { ...page, scheduleLocked: true, syncState: "active" });
+    }
+  }
+
   listSyncCalendars(accountId: string): Promise<SyncCalendar[]> {
     return Promise.resolve(this._calendarsFor(accountId));
   }
@@ -1148,7 +1236,6 @@ export class MockStorageAdapter implements StorageAdapter {
     const cal = this.syncCalendars.get(syncCalendarId);
     if (!cal) return Promise.reject(new Error(`Sync calendar not found: ${syncCalendarId}`));
     let folderId = cal.folderId;
-    // A re-enable re-links them, so nothing is left detached once sync resumes.
     let detachedPages = enabled ? 0 : cal.detachedPages;
     if (enabled && !folderId) {
       const folder: Folder = {
@@ -1164,7 +1251,9 @@ export class MockStorageAdapter implements StorageAdapter {
       this.folders.set(folder.id, folder);
       folderId = folder.id;
     } else if (!enabled && folderId) {
-      detachedPages = this._teardownCalendar(folderId);
+      const severed = this._teardownCalendar(folderId);
+      this.detachedByCalendar.set(syncCalendarId, severed);
+      detachedPages = severed.length;
       // Keep the link while the de-flagged folder survives, so a re-enable re-flags
       // that one in place. Dropping it mints a second folder of the same name and
       // strands the detached pages in the first.
@@ -1183,6 +1272,8 @@ export class MockStorageAdapter implements StorageAdapter {
           ...(color != null ? { color } : {}),
         });
       }
+      this._relinkCalendar(this.detachedByCalendar.get(syncCalendarId) ?? []);
+      this.detachedByCalendar.delete(syncCalendarId);
     }
     const updated: SyncCalendar = { ...cal, color, detachedPages, enabled, folderId };
     this.syncCalendars.set(syncCalendarId, updated);

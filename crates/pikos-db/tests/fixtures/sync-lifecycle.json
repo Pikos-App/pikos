@@ -1,0 +1,537 @@
+{
+  "scenarios": [
+    {
+      "name": "enable materializes the calendar folder",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        }
+      ],
+      "expect": {
+        "accountVisible": true,
+        "calendars": [
+          {
+            "name": "Personal",
+            "enabled": true,
+            "hasFolder": true,
+            "detachedPages": 0
+          },
+          {
+            "name": "Work",
+            "enabled": false,
+            "hasFolder": false,
+            "detachedPages": 0
+          }
+        ],
+        "folder": {
+          "calendar": "Personal",
+          "exists": true,
+          "isExternalCalendar": true
+        }
+      }
+    },
+    {
+      "name": "a bare mirror is destroyed on disable and takes the empty folder with it",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        },
+        {
+          "op": "disable",
+          "calendar": "Personal"
+        }
+      ],
+      "expect": {
+        "accountVisible": true,
+        "calendars": [
+          {
+            "name": "Personal",
+            "enabled": false,
+            "hasFolder": false,
+            "detachedPages": 0
+          }
+        ],
+        "folder": {
+          "calendar": "Personal",
+          "exists": false
+        },
+        "pages": [
+          {
+            "uid": "evt-1",
+            "exists": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "an owned page detaches in place and the folder survives as a plain folder",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-2",
+          "title": "Retro"
+        },
+        {
+          "op": "own",
+          "uid": "evt-1"
+        },
+        {
+          "op": "disable",
+          "calendar": "Personal"
+        }
+      ],
+      "expect": {
+        "accountVisible": true,
+        "calendars": [
+          {
+            "name": "Personal",
+            "enabled": false,
+            "hasFolder": true,
+            "detachedPages": 1
+          }
+        ],
+        "folder": {
+          "calendar": "Personal",
+          "exists": true,
+          "isExternalCalendar": false
+        },
+        "pages": [
+          {
+            "uid": "evt-1",
+            "exists": true,
+            "syncState": "detached",
+            "scheduleLocked": false,
+            "inCalendarFolder": true
+          },
+          {
+            "uid": "evt-2",
+            "exists": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "completing a page owns it just as an edit does",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        },
+        {
+          "op": "complete",
+          "uid": "evt-1"
+        },
+        {
+          "op": "disable",
+          "calendar": "Personal"
+        }
+      ],
+      "expect": {
+        "calendars": [
+          {
+            "name": "Personal",
+            "enabled": false,
+            "hasFolder": true,
+            "detachedPages": 1
+          }
+        ],
+        "pages": [
+          {
+            "uid": "evt-1",
+            "exists": true,
+            "syncState": "detached"
+          }
+        ]
+      }
+    },
+    {
+      "name": "re-enable re-flags the same folder and re-links what it detached",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        },
+        {
+          "op": "own",
+          "uid": "evt-1"
+        },
+        {
+          "op": "disable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        }
+      ],
+      "expect": {
+        "calendars": [
+          {
+            "name": "Personal",
+            "enabled": true,
+            "hasFolder": true,
+            "detachedPages": 0
+          }
+        ],
+        "folder": {
+          "calendar": "Personal",
+          "exists": true,
+          "isExternalCalendar": true
+        },
+        "folderCount": 1,
+        "pages": [
+          {
+            "uid": "evt-1",
+            "exists": true,
+            "syncState": "active",
+            "scheduleLocked": true,
+            "inCalendarFolder": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "connecting an account that is already live reuses it rather than minting a twin",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        }
+      ],
+      "expect": {
+        "accountCount": 1,
+        "accountVisible": true,
+        "calendars": [
+          {
+            "name": "Personal",
+            "enabled": true,
+            "hasFolder": true,
+            "detachedPages": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "disconnect hides the account and tears its calendars down, keeping owned work",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        },
+        {
+          "op": "own",
+          "uid": "evt-1"
+        },
+        {
+          "op": "disconnect"
+        }
+      ],
+      "expect": {
+        "accountVisible": false,
+        "pages": [
+          {
+            "uid": "evt-1",
+            "exists": true,
+            "syncState": "detached",
+            "scheduleLocked": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "reconnecting a disconnected account re-links its detached pages, one folder throughout",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        },
+        {
+          "op": "own",
+          "uid": "evt-1"
+        },
+        {
+          "op": "disconnect"
+        },
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        }
+      ],
+      "expect": {
+        "accountCount": 1,
+        "accountVisible": true,
+        "folderCount": 1,
+        "pages": [
+          {
+            "uid": "evt-1",
+            "exists": true,
+            "syncState": "active",
+            "scheduleLocked": true,
+            "inCalendarFolder": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "a page of the user's cannot be filed into a calendar's folder",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        },
+        {
+          "op": "nativePage",
+          "uid": "mine",
+          "title": "My note"
+        },
+        {
+          "op": "movePage",
+          "page": "mine",
+          "target": "calendarFolder",
+          "rejectedWith": "Pages cannot be moved into an external calendar folder"
+        }
+      ],
+      "expect": {
+        "pages": [
+          {
+            "uid": "mine",
+            "exists": true,
+            "inCalendarFolder": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "a live mirror cannot be filed out of its calendar folder",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        },
+        {
+          "op": "movePage",
+          "page": "evt-1",
+          "target": "inbox",
+          "rejectedWith": "This event is synced from an external calendar \u2014 it stays in its calendar folder."
+        }
+      ],
+      "expect": {
+        "pages": [
+          {
+            "uid": "evt-1",
+            "exists": true,
+            "inCalendarFolder": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "once detached the page is the user's and files anywhere",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup"
+        },
+        {
+          "op": "own",
+          "uid": "evt-1"
+        },
+        {
+          "op": "disable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "movePage",
+          "page": "evt-1",
+          "target": "inbox"
+        }
+      ],
+      "expect": {
+        "pages": [
+          {
+            "uid": "evt-1",
+            "exists": true,
+            "inCalendarFolder": false
+          }
+        ]
+      }
+    }
+  ]
+}

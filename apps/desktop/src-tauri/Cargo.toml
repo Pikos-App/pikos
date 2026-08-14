@@ -63,4 +63,7 @@ tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 # Pull in pikos-db's test_pool + insert_test_* fixtures so the desktop tests
 # share the same migration tree as production — no parallel migrations dir.
 pikos-db = { path = "../../../crates/pikos-db", features = ["test-support"] }
+# `test` brings MockRuntime, for the one thing that cannot be reached below the
+# command shims: the IPC boundary itself (see db/ipc_tests.rs).
+tauri = { version = "2", features = ["test"] }
 

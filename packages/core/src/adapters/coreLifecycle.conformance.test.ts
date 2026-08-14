@@ -1,0 +1,163 @@
+// Core-lifecycle conformance — the mock half of the page/folder/reminder/search
+// table. Why the table exists, and why search dominates it:
+// `core_conformance_tests.rs`, beside the fixture.
+
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { beforeEach, describe, expect, it } from "vitest";
+
+import type { PageStatus } from "../types";
+import { MockStorageAdapter } from "./MockStorageAdapter";
+
+const TABLE_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../crates/pikos-db/tests/fixtures/core-lifecycle.json"
+);
+
+interface Step {
+  op:
+    | "page"
+    | "folder"
+    | "softDeletePage"
+    | "restorePage"
+    | "softDeleteFolder"
+    | "deletePage"
+    | "reminder"
+    | "setStatus";
+  id?: string;
+  title?: string;
+  name?: string;
+  contentText?: string;
+  tags?: string[];
+  folder?: string;
+  page?: string;
+  pages?: string[];
+  status?: PageStatus;
+  minutesBefore?: number;
+}
+
+interface Scenario {
+  name: string;
+  steps: Step[];
+  expect: {
+    search?: {
+      query: string;
+      includeCompleted?: boolean;
+      matches: string[];
+      completedCount?: number;
+    };
+    listQuery?: { query: string; matches: string[] };
+    visiblePages?: string[];
+    reminderCount?: { page: string; count: number };
+  };
+}
+
+const table = JSON.parse(readFileSync(TABLE_PATH, "utf8")) as { scenarios: Scenario[] };
+
+async function apply(
+  adapter: MockStorageAdapter,
+  ids: Map<string, string>,
+  step: Step
+): Promise<void> {
+  switch (step.op) {
+    case "page": {
+      const page = await adapter.createPage({
+        // Real editor markup, not an empty string: the words the user never typed
+        // ("paragraph", "doc", "type") only exist here, and a filter that reaches
+        // into this shape is what one of the rows below is looking for.
+        content: JSON.stringify({
+          content: [
+            { content: [{ text: step.contentText ?? "", type: "text" }], type: "paragraph" },
+          ],
+          type: "doc",
+        }),
+        contentText: step.contentText ?? "",
+        folderId: step.folder ? (ids.get(step.folder) ?? null) : null,
+        priority: 0,
+        status: "not_started",
+        tags: step.tags ?? [],
+        title: step.title!,
+      });
+      ids.set(step.id!, page.id);
+      return;
+    }
+    case "folder": {
+      const folder = await adapter.createFolder({ name: step.name!, parentId: null });
+      ids.set(step.id!, folder.id);
+      return;
+    }
+    case "softDeletePage":
+      await adapter.softDeletePage(ids.get(step.page!)!);
+      return;
+    case "restorePage":
+      await adapter.restorePage(ids.get(step.page!)!);
+      return;
+    case "softDeleteFolder":
+      await adapter.softDeleteFolder(ids.get(step.folder!)!);
+      return;
+    case "deletePage":
+      await adapter.deletePage(ids.get(step.page!)!);
+      return;
+    case "reminder":
+      await adapter.createPageReminder({
+        minutesBefore: step.minutesBefore!,
+        pageId: ids.get(step.page!)!,
+      });
+      return;
+    case "setStatus":
+      await adapter.setPagesStatus(
+        step.pages!.map((p) => ids.get(p)!),
+        step.status!,
+        new Date().toISOString()
+      );
+      return;
+  }
+}
+
+describe("core lifecycle conformance", () => {
+  let adapter: MockStorageAdapter;
+
+  beforeEach(() => {
+    adapter = new MockStorageAdapter();
+    adapter.clear();
+  });
+
+  it("the table has scenarios", () => {
+    expect(table.scenarios.length).toBeGreaterThan(0);
+  });
+
+  for (const scenario of table.scenarios) {
+    it(scenario.name, async () => {
+      const ids = new Map<string, string>();
+      for (const step of scenario.steps) await apply(adapter, ids, step);
+
+      const named = (real: string) => [...ids.entries()].find(([, v]) => v === real)?.[0] ?? real;
+      const { expect: want } = scenario;
+
+      if (want.search) {
+        const res = await adapter.searchPages(want.search.query, want.search.includeCompleted);
+        expect(res.results.map((r) => named(r.id)).sort()).toEqual([...want.search.matches].sort());
+        if (want.search.completedCount !== undefined) {
+          expect(res.completedCount).toBe(want.search.completedCount);
+        }
+      }
+
+      if (want.listQuery) {
+        const listed = await adapter.listPages({ query: want.listQuery.query });
+        expect(listed.map((p) => named(p.id)).sort()).toEqual([...want.listQuery.matches].sort());
+      }
+
+      if (want.visiblePages) {
+        const listed = await adapter.listPages();
+        expect(listed.map((p) => named(p.id)).sort()).toEqual([...want.visiblePages].sort());
+      }
+
+      if (want.reminderCount) {
+        const reminders = await adapter.listPageReminders(ids.get(want.reminderCount.page)!);
+        expect(reminders).toHaveLength(want.reminderCount.count);
+      }
+    });
+  }
+});

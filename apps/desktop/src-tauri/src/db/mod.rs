@@ -205,3 +205,7 @@ async fn open_pool(path: &str) -> AppResult<SqlitePool> {
 #[cfg(test)]
 #[path = "workflows_tests.rs"]
 mod workflows_tests;
+
+#[cfg(test)]
+#[path = "ipc_tests.rs"]
+mod ipc_tests;

@@ -59,7 +59,11 @@ pub fn on_focus(app: &AppHandle) {
 
 /// A calendar was just enabled → immediate pass, so its initial backfill runs
 /// without waiting for the interval or a manual resync.
-pub fn poke(app: &AppHandle) {
+///
+/// Generic over the runtime so its caller can be too — a command taking a concrete
+/// `AppHandle` cannot be registered under `MockRuntime`, which puts it out of reach
+/// of the IPC argument tests (`db/ipc_tests.rs`).
+pub fn poke<R: tauri::Runtime>(app: &AppHandle<R>) {
     app.state::<SyncTriggerSender>().send(SyncTrigger::Poke);
 }
 

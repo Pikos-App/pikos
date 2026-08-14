@@ -107,6 +107,55 @@ appTest("enabling a calendar adds a sidebar folder, disabling removes it @tier1"
   await expect(sidebarFolder).not.toBeVisible();
 });
 
+// ─── tier2: turning a calendar back on reclaims what it kept ─────────────────
+//
+// Switching a calendar off keeps the pages the user worked in and destroys the
+// rest; switching it back on hands the kept ones back to the calendar, which is
+// the only toggle that overwrites the user's own arrangement — hence the confirm.
+// The whole round trip was manual QA until the mock learned to re-link.
+
+appTest("turning a calendar back on reclaims the pages it kept @tier2", async ({ app }) => {
+  await seedSynced(app);
+  await openCalendarMode(app);
+
+  // The seed stacks on the realistic one, which has its own Personal and Work
+  // folders — so the sidebar name is ambiguous and everything here goes through
+  // the calendar instead. What matters is that the count does not grow: a second
+  // folder is what a re-enable leaves behind when it mints one rather than
+  // reclaiming the de-flagged original, stranding the kept pages in the first.
+  const personalFolders = app.getByRole("button", { exact: true, name: "Personal" });
+  const foldersBefore = await personalFolders.count();
+
+  // Own one Personal mirror so teardown keeps it. A status change is the edit that
+  // lands immediately; a body edit waits on two debounces and would still be
+  // unowned by the time the teardown below runs.
+  const offsite = app.getByRole("button", { exact: true, name: "Company offsite" });
+  await offsite.click();
+  await app.getByRole("button", { name: "Mark done" }).click();
+  await app.keyboard.press("Escape");
+
+  await openSyncPanel(app);
+  await app.getByRole("switch", { name: "Sync Personal" }).click();
+  await expect(app.getByRole("switch", { name: "Sync Personal" })).not.toBeChecked();
+
+  // Back on: the confirm names what is waiting rather than flipping silently.
+  await app.getByRole("switch", { name: "Sync Personal" }).click();
+  const confirm = app.getByRole("alertdialog", { name: "Turn Personal back on?" });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByText(/You kept 1 page/)).toBeVisible();
+  await confirm.getByRole("button", { name: "Turn on" }).click();
+  await expect(app.getByRole("switch", { name: "Sync Personal" })).toBeChecked();
+  await app.keyboard.press("Escape");
+
+  await expect(personalFolders).toHaveCount(foldersBefore);
+
+  // The kept page is a live mirror again: its title is calendar-owned once more.
+  await offsite.click();
+  const title = app.getByPlaceholder("Untitled");
+  await expect(title).toHaveValue("Company offsite");
+  await expect(title).toHaveAttribute("readonly", "");
+});
+
 // ─── tier2: recolor ──────────────────────────────────────────────────────────
 
 appTest("recolor a synced calendar from the swatch palette @tier2", async ({ app }) => {

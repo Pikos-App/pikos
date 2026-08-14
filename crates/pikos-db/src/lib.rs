@@ -44,3 +44,15 @@ pub use sync::*;
 pub use sync_commands::*;
 pub use sync_delta::*;
 pub use tags::*;
+
+#[cfg(test)]
+#[path = "sync_conformance_tests.rs"]
+mod sync_conformance_tests;
+
+#[cfg(test)]
+#[path = "recurrence_conformance_tests.rs"]
+mod recurrence_conformance_tests;
+
+#[cfg(test)]
+#[path = "core_conformance_tests.rs"]
+mod core_conformance_tests;

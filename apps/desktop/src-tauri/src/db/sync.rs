@@ -93,9 +93,9 @@ pub async fn list_sync_calendars(
 }
 
 #[tauri::command]
-pub async fn toggle_sync_calendar(
+pub async fn toggle_sync_calendar<R: tauri::Runtime>(
     state: State<'_, DbState>,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
     sync_calendar_id: String,
     enabled: bool,
     color: Option<String>,

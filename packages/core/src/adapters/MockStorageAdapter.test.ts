@@ -376,7 +376,9 @@ describe("matchesFilter (via listPages)", () => {
   });
 
   it("filters by query (title + content search)", async () => {
-    await createTestPage({ content: "lorem ipsum", title: "notes" });
+    // `contentText`, not `content`: the writer's LIKE reads the extracted text
+    // column, so a body the editor has not projected yet is not searchable.
+    await createTestPage({ contentText: "lorem ipsum", title: "notes" });
     await createTestPage({ title: "unrelated" });
 
     const results = await adapter.listPages({ query: "ipsum" });
@@ -680,7 +682,9 @@ describe("completeRecurringPage", () => {
       scheduledStart: "2026-03-16T09:00:00",
       timezone: "America/New_York",
     });
-    adapter.markPageSynced(head.id, { state: "detached" });
+    // Connected long before the series' own dates, so the head floor never binds and
+    // the assertion below is about the occurrence path rather than about the floor.
+    adapter.markPageSynced(head.id, { state: "detached", syncedSince: "2000-01-01" });
 
     const result = await adapter.completeRecurringPage({
       occurrenceDate: "2026-03-23",
