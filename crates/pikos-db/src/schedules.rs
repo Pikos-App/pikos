@@ -51,8 +51,9 @@ impl From<PageScheduleRow> for PageSchedule {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct NewPageSchedule {
     pub page_id: String,
     pub scheduled_start: String,
@@ -62,11 +63,14 @@ pub struct NewPageSchedule {
     pub original_date: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct PageScheduleUpdate {
     pub scheduled_start: Option<String>,
+    #[ts(type = "string | null", optional)]
     pub scheduled_end: Option<serde_json::Value>, // Value::Null clears it
+    #[ts(type = "'not_started' | 'done' | 'skipped'", optional)]
     pub status: Option<String>,
 }
 
@@ -116,24 +120,28 @@ impl From<RecurrenceRuleRow> for PageRecurrenceRule {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct NewRecurrenceRule {
     pub page_id: String,
     pub rrule: String,
     #[serde(default)]
+    #[ts(as = "Option<Vec<String>>", optional)]
     pub rrule_exdates: Vec<String>,
     pub scheduled_start: String,
     pub scheduled_end: Option<String>,
     pub timezone: String,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct RecurrenceRuleUpdate {
     pub rrule: Option<String>,
     pub rrule_exdates: Option<Vec<String>>,
     pub scheduled_start: Option<String>,
+    #[ts(type = "string | null", optional)]
     pub scheduled_end: Option<serde_json::Value>, // Value::Null clears it
     pub timezone: Option<String>,
 }

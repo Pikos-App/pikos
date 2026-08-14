@@ -1,3 +1,7 @@
+import type { Folder } from "./generated/Folder";
+import type { PageSummary } from "./generated/PageSummary";
+import type { SearchResult } from "./generated/SearchResult";
+
 // ─── Workspace ───────────────────────────────────────────────────────────────
 // Multi-workspace: each workspace is a separate SQLite file. The list of known
 // workspaces lives in @tauri-apps/plugin-store (JSON config, not SQLite).
@@ -12,78 +16,23 @@ export interface Workspace {
 
 // ─── Folder ──────────────────────────────────────────────────────────────────
 
-export interface Folder {
-  id: string; // UUID
-  name: string;
-  parentId: string | null; // always null in v1; reserved for nested folders
-  sortOrder: number; // manual position in the flat folder list
-  color?: string | null;
-  icon?: string | null;
-  // System-managed: drives the placement lock + separate sidebar area.
-  isExternalCalendar: boolean;
-  createdAt: string; // ISO 8601
-  updatedAt: string; // ISO 8601
-}
-
 // ─── Page ────────────────────────────────────────────────────────────────────
+
+// Wire types are generated from the Rust structs that produce them — see
+// scripts/gen-ts-bindings.sh. Re-exported here so consumers keep one import path
+// and the shapes cannot drift from the backend.
+export type { Folder } from "./generated/Folder";
+export type { Page } from "./generated/Page";
+export type { PageRecurrenceRule } from "./generated/PageRecurrenceRule";
+export type { PageReminder } from "./generated/PageReminder";
+export type { PageSchedule } from "./generated/PageSchedule";
+export type { PageSummary } from "./generated/PageSummary";
+export type { SearchResult } from "./generated/SearchResult";
 
 export type PageStatus = "not_started" | "done";
 
 // 0 = none  1 = urgent  2 = high  3 = medium  4 = low
 export type PagePriority = 0 | 1 | 2 | 3 | 4;
-
-export interface Page {
-  id: string; // UUID
-  folderId: string | null;
-  title: string;
-  subtitle?: string | null; // one-sentence summary; shown in page list + calendar blocks; in FTS
-  content: string; // Tiptap JSON string (NOT markdown)
-  // Internal FTS denorm — extracted plain text from Tiptap JSON.
-  // Written by the adapter on every content save; never rendered in UI directly.
-  contentText?: string | null;
-  status: PageStatus;
-  priority: PagePriority;
-  tags: string[]; // normalized in tags/page_tags tables; denorm JSON on pages row
-  sortOrder: number; // manual position within folder (or inbox)
-  scheduledStart?: string | null; // ISO 8601 — denorm of next upcoming page_schedules row
-  scheduledEnd?: string | null; // ISO 8601 — denorm of next upcoming page_schedules row
-  completedAt?: string | null; // ISO 8601
-  links?: string[]; // [[wikilink]] target page UUIDs; stored as JSON array
-  parentId?: string | null; // sub-page nesting
-  lastOpenedAt?: string | null; // ISO 8601; updated on open → drives recent-pages query
-  deletedAt?: string | null; // ISO 8601; NULL = not deleted, set = trashed
-  createdAt: string; // ISO 8601
-  updatedAt: string; // ISO 8601
-  scheduleLocked: boolean; // derived: active page_sync row owns the schedule → render read-only
-  // Derived from the rule's existence. The Today predicate needs it to spare a
-  // past synced one-off from overdue while leaving recurring heads alone.
-  isRecurring: boolean;
-  // Derived from page_sync.sync_state (null for native pages); 'detached' → broken-sync treatment.
-  syncState?: "active" | "detached" | "tombstoned" | null;
-  // Source/authoring IANA zone (from the schedule/rule). Consumed at render only
-  // for synced (locked) pages — they show absolute in the viewer's zone; native floats.
-  timezone?: string | null;
-  // Completion map for a RECURRING series (native + synced): occurrence-date
-  // (YYYY-MM-DD) → done-clone page id. Expansion hides completed occurrences; an
-  // uncomplete is routed by the clone id. Null/absent for non-recurring.
-  completedOccurrences?: Record<string, string> | null;
-  // Dismissed occurrence dates (YYYY-MM-DD) for a recurring series, from skip_set.
-  // Excluded from expansion. Null/absent when nothing is skipped.
-  skippedOccurrences?: string[] | null;
-  // Calendar-owned read-only mirror metadata (from page_sync). Rendered only while
-  // the page is locked (active sync); null/absent for native pages.
-  mirrorLocation?: string | null;
-  mirrorAttendees?: string[] | null; // attendee emails
-  // Upstream description change withheld because the user edited the body; drives
-  // the editor's passive "calendar description changed" notice. Null = nothing pending.
-  pendingDescription?: string | null;
-  // Local day this page first synced; absent on a native page. The render floor
-  // for a synced series — occurrences before it are expanded from the provider's
-  // original DTSTART over a period whose cancellations were never fetched, and
-  // sit below the head floor, so they can't be actioned. Same anchor as that
-  // floor, so what renders and what can become the head agree.
-  syncedSince?: string | null;
-}
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────
 // One explicit calendar block (from page_schedules table).
@@ -93,32 +42,9 @@ export interface Page {
 // ruleId + originalDate are only set when this row overrides a virtual
 // recurrence occurrence; both are null for plain one-off schedules.
 
-export interface PageSchedule {
-  id: string; // UUID
-  pageId: string;
-  scheduledStart: string; // 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS' local wall-clock
-  scheduledEnd?: string | null; // same format; null = single day or 1h default
-  timezone?: string | null; // IANA source zone; metadata only, not consumed by expansion
-  ruleId?: string | null; // links override rows back to their PageRecurrenceRule
-  originalDate?: string | null; // the virtual rrule date this row overrides ('YYYY-MM-DD')
-  status: "not_started" | "done" | "skipped";
-  createdAt: string; // ISO 8601
-}
-
 // ─── PageRecurrenceRule ────────────────────────────────────────────────────────
 // One row per recurring page. Calendar expands virtual occurrences via rrule.js.
 // Exceptions: rruleExdates (skip) or a page_schedules row with ruleId set (override).
-
-export interface PageRecurrenceRule {
-  id: string; // UUID
-  pageId: string;
-  rrule: string; // iCal RRULE string e.g. 'FREQ=WEEKLY;BYDAY=MO'
-  rruleExdates: string[]; // ISO date strings excluded from expansion
-  scheduledStart: string; // base occurrence start (local wall-clock)
-  scheduledEnd?: string | null; // base occurrence end; undefined = 1h default
-  timezone: string; // IANA source zone; metadata only, not consumed by expansion
-  createdAt: string; // ISO 8601
-}
 
 /** One raw rrule occurrence from a batched engine expansion — rule-level EXDATEs
  * applied, but NOT the completed/skip exclusion union (that stays client-side). */
@@ -138,13 +64,6 @@ export interface RawRuleExpansion {
 
 // ─── PageReminder ────────────────────────────────────────────────────────────
 
-export interface PageReminder {
-  id: string; // UUID
-  pageId: string;
-  minutesBefore: number; // 0 = at start, 5, 10, 15, 30, etc.
-  createdAt: string; // ISO 8601
-}
-
 // ─── FolderNode ───────────────────────────────────────────────────────────────
 // In v1, children is always [] (flat list); the type supports nesting for later.
 
@@ -161,19 +80,6 @@ export interface Tag {
 }
 
 // ─── Search ──────────────────────────────────────────────────────────────────
-
-export interface SearchResult {
-  id: string;
-  title: string;
-  excerpt: string; // plain text snippet from FTS5 — frontend handles highlighting
-  matchSource: "title" | "content" | "subtitle" | "both";
-  status: PageStatus;
-  subtitle?: string | null;
-  scheduledDate?: string | null; // ISO 8601 — denorm scheduled_start from pages
-  priority: PagePriority;
-  tags: string[];
-  contentPreview: string; // first ~80 chars of body — fallback line 2 when no metadata
-}
 
 export interface SearchResponse {
   results: SearchResult[];
@@ -196,8 +102,6 @@ export interface FocusSession {
 // Lightweight projection for list views — excludes content and contentText.
 // Used by listPages / listPagesToday to avoid pulling large Tiptap JSON
 // blobs over IPC for every page in a folder.
-
-export type PageSummary = Omit<Page, "content" | "contentText">;
 
 // ─── Recurring completion ────────────────────────────────────────────────────
 

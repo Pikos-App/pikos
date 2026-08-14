@@ -56,8 +56,9 @@ impl From<FolderRow> for Folder {
 
 // ─── Input types ──────────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct NewFolder {
     pub name: String,
     pub parent_id: Option<String>,
@@ -65,13 +66,18 @@ pub struct NewFolder {
     pub icon: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct FolderUpdate {
     pub name: Option<String>,
+    #[ts(type = "string | null", optional)]
     pub parent_id: Option<serde_json::Value>,
+    #[ts(type = "string | null", optional)]
     pub color: Option<serde_json::Value>,
+    #[ts(type = "string | null", optional)]
     pub icon: Option<serde_json::Value>,
+    #[ts(type = "number", optional)]
     pub sort_order: Option<i64>,
 }
 

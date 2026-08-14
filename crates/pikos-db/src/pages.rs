@@ -7,6 +7,10 @@ use crate::{now_iso, now_local_iso};
 /// - Missing field → `None` (via `#[serde(default)]` on the struct)
 /// - Explicit `null` → `Some(Value::Null)`
 /// - Any other value → `Some(value)`
+///
+/// ts-rs can't read `deserialize_with` and says so on every build; each field using
+/// this carries an explicit `#[ts(type = "…", optional)]` because of it, since the
+/// `serde_json::Value` it would otherwise export says nothing about the wire.
 fn deserialize_nullable<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
 where
     D: Deserializer<'de>,
@@ -334,8 +338,9 @@ const SYNC_DERIVED_SELECT: &str = ", EXISTS(SELECT 1 FROM page_sync \
 
 // ─── Input types ──────────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct NewPage {
     pub folder_id: Option<String>,
     pub title: String,
@@ -343,6 +348,7 @@ pub struct NewPage {
     pub content: String,
     pub content_text: Option<String>,
     pub status: String,
+    #[ts(type = "number")]
     pub priority: i64,
     #[serde(default)]
     pub tags: Vec<String>,
@@ -350,6 +356,7 @@ pub struct NewPage {
     pub scheduled_end: Option<String>,
     pub completed_at: Option<String>,
     #[serde(default)]
+    #[ts(as = "Option<Vec<String>>", optional)]
     pub links: Vec<String>,
     pub parent_id: Option<String>,
     pub last_opened_at: Option<String>,
@@ -358,39 +365,54 @@ pub struct NewPage {
 }
 
 /// `serde_json::Value` fields can be explicitly set to null (vs. omitted = unchanged).
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct PageUpdate {
     #[serde(default, deserialize_with = "deserialize_nullable")]
+    #[ts(type = "string | null", optional)]
     pub folder_id: Option<serde_json::Value>,
     pub title: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nullable")]
+    #[ts(type = "string | null", optional)]
     pub subtitle: Option<serde_json::Value>,
     pub content: Option<String>,
     pub content_text: Option<String>,
+    #[ts(type = "'not_started' | 'done'", optional)]
     pub status: Option<String>,
+    #[ts(type = "number", optional)]
     pub priority: Option<i64>,
     pub tags: Option<Vec<String>>,
+    #[ts(type = "number", optional)]
     pub sort_order: Option<i64>,
     #[serde(default, deserialize_with = "deserialize_nullable")]
+    #[ts(type = "string | null", optional)]
     pub scheduled_start: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "deserialize_nullable")]
+    #[ts(type = "string | null", optional)]
     pub scheduled_end: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "deserialize_nullable")]
+    #[ts(type = "string | null", optional)]
     pub completed_at: Option<serde_json::Value>,
     pub links: Option<Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_nullable")]
+    #[ts(type = "string | null", optional)]
     pub parent_id: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "deserialize_nullable")]
+    #[ts(type = "string | null", optional)]
     pub last_opened_at: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct PageFilter {
     /// None = no folder filter; Value::Null = inbox (folder_id IS NULL); Value::String = specific folder
+    #[ts(type = "string | null", optional)]
     pub folder_id: Option<serde_json::Value>,
+    #[ts(type = "'not_started' | 'done'", optional)]
     pub status: Option<String>,
+    #[ts(type = "number", optional)]
     pub priority: Option<i64>,
     pub tags: Option<Vec<String>>,
     pub query: Option<String>,
@@ -1041,12 +1063,16 @@ pub async fn set_pages_status_impl(
 
 // ─── Completed pages (lazy-loaded, paginated) ────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct CompletedPagesFilter {
+    #[ts(type = "string | null", optional)]
     pub folder_id: Option<serde_json::Value>, // null = inbox, missing = all
-    pub completed_since: Option<String>,      // ISO date for "today" filter
+    pub completed_since: Option<String>, // ISO date for "today" filter
+    #[ts(type = "number")]
     pub limit: i64,
+    #[ts(type = "number")]
     pub offset: i64,
 }
 
@@ -1116,8 +1142,9 @@ pub async fn list_completed_pages_impl(
 
 // ─── Recurring page completion ───────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct CompleteRecurringInput {
     pub page_id: String,
     /// Synced series only: the client-rendered occurrence being completed (the
@@ -1498,8 +1525,9 @@ async fn drop_completed_occurrence_tx(
     Ok(true)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct UncompleteRecurringInput {
     pub page_id: String,
     pub occurrence_date: String,
@@ -1524,8 +1552,9 @@ pub async fn uncomplete_recurring_occurrence_impl(
     .await
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct SkipOccurrenceInput {
     pub page_id: String,
     /// The rrule occurrence date to dismiss (YYYY-MM-DD).
@@ -1632,8 +1661,9 @@ pub async fn recompute_recurring_schedules_impl(
     Ok(rows.into_iter().map(PageSummary::from).collect())
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct RescheduleVirtualInput {
     pub rule_id: String,
     /// The rule-generated date being detached (YYYY-MM-DD) — merged into the
