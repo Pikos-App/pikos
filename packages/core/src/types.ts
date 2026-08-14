@@ -17,8 +17,8 @@ export interface Folder {
   name: string;
   parentId: string | null; // always null in v1; reserved for nested folders
   sortOrder: number; // manual position in the flat folder list
-  color?: string;
-  icon?: string;
+  color?: string | null;
+  icon?: string | null;
   // System-managed: drives the placement lock + separate sidebar area.
   isExternalCalendar: boolean;
   createdAt: string; // ISO 8601
@@ -40,7 +40,7 @@ export interface Page {
   content: string; // Tiptap JSON string (NOT markdown)
   // Internal FTS denorm — extracted plain text from Tiptap JSON.
   // Written by the adapter on every content save; never rendered in UI directly.
-  contentText?: string;
+  contentText?: string | null;
   status: PageStatus;
   priority: PagePriority;
   tags: string[]; // normalized in tags/page_tags tables; denorm JSON on pages row
@@ -97,10 +97,10 @@ export interface PageSchedule {
   id: string; // UUID
   pageId: string;
   scheduledStart: string; // 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS' local wall-clock
-  scheduledEnd?: string; // same format; null = single day or 1h default
-  timezone?: string; // IANA source zone; metadata only, not consumed by expansion
-  ruleId?: string; // links override rows back to their PageRecurrenceRule
-  originalDate?: string; // the virtual rrule date this row overrides ('YYYY-MM-DD')
+  scheduledEnd?: string | null; // same format; null = single day or 1h default
+  timezone?: string | null; // IANA source zone; metadata only, not consumed by expansion
+  ruleId?: string | null; // links override rows back to their PageRecurrenceRule
+  originalDate?: string | null; // the virtual rrule date this row overrides ('YYYY-MM-DD')
   status: "not_started" | "done" | "skipped";
   createdAt: string; // ISO 8601
 }
@@ -115,7 +115,7 @@ export interface PageRecurrenceRule {
   rrule: string; // iCal RRULE string e.g. 'FREQ=WEEKLY;BYDAY=MO'
   rruleExdates: string[]; // ISO date strings excluded from expansion
   scheduledStart: string; // base occurrence start (local wall-clock)
-  scheduledEnd?: string; // base occurrence end; undefined = 1h default
+  scheduledEnd?: string | null; // base occurrence end; undefined = 1h default
   timezone: string; // IANA source zone; metadata only, not consumed by expansion
   createdAt: string; // ISO 8601
 }

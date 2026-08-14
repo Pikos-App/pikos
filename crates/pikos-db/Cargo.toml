@@ -17,6 +17,7 @@ thiserror = "2"
 tokio = { version = "1", features = ["time"] }
 pikos-recurrence = { path = "../pikos-recurrence" }
 log = "0.4"
+ts-rs = "12.0.1"
 
 [features]
 # Re-exports test_pool + insert_test_* helpers so downstream crates (the desktop

@@ -45,6 +45,7 @@ function page(): PageSummary {
     folderId: null,
     id: "page-1",
     isRecurring: true,
+    links: [],
     priority: 0,
     scheduledEnd: null,
     scheduledStart: null,

@@ -50,22 +50,29 @@ struct PageRow {
 
 // ─── Output type (camelCase for TypeScript) ───────────────────────────────────
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct Page {
     pub id: String,
+    #[ts(optional = false)]
     pub folder_id: Option<String>,
     pub title: String,
     pub subtitle: Option<String>,
     pub content: String,
     pub content_text: Option<String>,
+    #[ts(type = "'not_started' | 'done'")]
     pub status: String,
+    #[ts(type = "0 | 1 | 2 | 3 | 4")]
+    #[ts(type = "number")]
     pub priority: i64,
     pub tags: Vec<String>,
+    #[ts(type = "number")]
     pub sort_order: i64,
     pub scheduled_start: Option<String>,
     pub scheduled_end: Option<String>,
     pub completed_at: Option<String>,
+    #[ts(as = "Option<Vec<String>>", optional)]
     pub links: Vec<String>,
     pub parent_id: Option<String>,
     pub last_opened_at: Option<String>,
@@ -76,6 +83,7 @@ pub struct Page {
     pub schedule_locked: bool,
     /// Derived from `page_sync.sync_state` ('active' | 'detached' | 'tombstoned'),
     /// `None` for native pages. Drives detached treatment (dim + broken-sync icon).
+    #[ts(type = "'active' | 'detached' | 'tombstoned' | null", optional)]
     pub sync_state: Option<String>,
     /// Source/authoring IANA zone (schedule or recurrence rule). Synced pages render
     /// it absolute in the viewer's zone at read time; native pages float and ignore it.
@@ -206,20 +214,27 @@ struct PageSummaryRow {
     is_recurring: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct PageSummary {
     pub id: String,
+    #[ts(optional = false)]
     pub folder_id: Option<String>,
     pub title: String,
     pub subtitle: Option<String>,
+    #[ts(type = "'not_started' | 'done'")]
     pub status: String,
+    #[ts(type = "0 | 1 | 2 | 3 | 4")]
+    #[ts(type = "number")]
     pub priority: i64,
     pub tags: Vec<String>,
+    #[ts(type = "number")]
     pub sort_order: i64,
     pub scheduled_start: Option<String>,
     pub scheduled_end: Option<String>,
     pub completed_at: Option<String>,
+    #[ts(as = "Option<Vec<String>>", optional)]
     pub links: Vec<String>,
     pub parent_id: Option<String>,
     pub last_opened_at: Option<String>,
@@ -228,6 +243,7 @@ pub struct PageSummary {
     /// Derived (not a stored column) — see `Page::schedule_locked`.
     pub schedule_locked: bool,
     /// See `Page::sync_state`.
+    #[ts(type = "'active' | 'detached' | 'tombstoned' | null", optional)]
     pub sync_state: Option<String>,
     /// See `Page::timezone`.
     pub timezone: Option<String>,
@@ -1034,10 +1050,12 @@ pub struct CompletedPagesFilter {
     pub offset: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct CompletedPagesResponse {
     pub pages: Vec<PageSummary>,
+    #[ts(type = "number")]
     pub total: i64,
 }
 
@@ -1113,8 +1131,9 @@ pub struct CompleteRecurringInput {
     pub scheduled_end: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct CompleteRecurringResult {
     /// The newly created completed clone page.
     pub clone: PageSummary,
@@ -1626,8 +1645,9 @@ pub struct RescheduleVirtualInput {
     pub timezone: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct RescheduleVirtualResult {
     /// The independent clone page materialized at the new time. `None` when the
     /// occurrence already had an override row and that row moved in place.

@@ -51,3 +51,7 @@ CLAUDE.md
 
 # OS generated files
 Thumbs.db
+
+# ts-rs writes here when TS_RS_EXPORT_DIR is unset (a bare `cargo test`); the
+# committed copy lives in packages/core/src/generated via scripts/gen-ts-bindings.sh.
+crates/pikos-db/bindings/

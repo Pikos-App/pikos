@@ -247,6 +247,41 @@ jobs:
         continue-on-error: true
         run: cargo audit
 
+  # packages/core/src/generated mirrors pikos-db's wire structs and is committed, so
+  # it drifts the moment a Rust field changes without a regeneration — with every
+  # other gate still green, since both sides typecheck fine in isolation. Same
+  # artifact-freshness shape as the wasm job below.
+  bindings:
+    name: Bindings Freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate the committed bindings
+        run: scripts/gen-ts-bindings.sh
+
+      - name: Fail if the bindings are stale
+        run: |
+          if [ -n "$(git status --porcelain packages/core/src/generated)" ]; then
+            echo "::error::packages/core/src/generated does not match pikos-db. Run scripts/gen-ts-bindings.sh and commit the result."
+            git --no-pager diff -- packages/core/src/generated
+            exit 1
+          fi
+
   # packages/recurrence-wasm/pkg is a committed build artifact, so it can drift
   # from the crate it was generated from with every other gate still green: the
   # Rust tests cover the crate, the JS tests cover the stale pkg. Rebuilding and

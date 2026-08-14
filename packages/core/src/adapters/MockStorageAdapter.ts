@@ -178,6 +178,7 @@ export class MockStorageAdapter implements StorageAdapter {
 
   createPage(data: NewPage): Promise<Page> {
     const page: Page = {
+      links: [],
       ...data,
       // Mirror the Rust adapter, which extracts plain text from Tiptap JSON on
       // every save so FTS indexes the visible body, not the structural tokens.
@@ -549,7 +550,7 @@ export class MockStorageAdapter implements StorageAdapter {
       // Mirrors Rust: schedules of a soft-deleted page are excluded (the SQL
       // joins pages and filters `deleted_at IS NULL`).
       if (this.softDeleted.has(s.pageId)) return false;
-      return s.ruleId !== undefined && wanted.has(s.ruleId);
+      return s.ruleId != null && wanted.has(s.ruleId);
     });
     return Promise.resolve(
       results.sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart))

@@ -2,24 +2,30 @@ use serde::Serialize;
 
 use crate::error::AppResult;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct SearchResponse {
     pub results: Vec<SearchResult>,
     /// Number of completed pages matching the query (always counted, even when excluded).
+    #[ts(type = "number")]
     pub completed_count: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct SearchResult {
     pub id: String,
     pub title: String,
     pub excerpt: String,
+    #[ts(type = "'title' | 'content' | 'subtitle' | 'both'")]
     pub match_source: String,
+    #[ts(type = "'not_started' | 'done'")]
     pub status: String,
     pub subtitle: Option<String>,
     pub scheduled_date: Option<String>,
+    #[ts(type = "0 | 1 | 2 | 3 | 4")]
     pub priority: i32,
     pub tags: Vec<String>,
     /// First ~80 chars of body content — used as fallback line 2 when no metadata exists

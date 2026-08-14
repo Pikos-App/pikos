@@ -19,8 +19,9 @@ struct PageScheduleRow {
     created_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct PageSchedule {
     pub id: String,
     pub page_id: String,
@@ -29,6 +30,7 @@ pub struct PageSchedule {
     pub timezone: Option<String>,
     pub rule_id: Option<String>,
     pub original_date: Option<String>,
+    #[ts(type = "'not_started' | 'done' | 'skipped'")]
     pub status: String,
     pub created_at: String,
 }
@@ -83,8 +85,9 @@ struct RecurrenceRuleRow {
     created_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct PageRecurrenceRule {
     pub id: String,
     pub page_id: String,

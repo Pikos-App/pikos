@@ -20,12 +20,15 @@ struct FolderRow {
 
 // ─── Output type ──────────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct Folder {
     pub id: String,
     pub name: String,
+    #[ts(optional = false)]
     pub parent_id: Option<String>,
+    #[ts(type = "number")]
     pub sort_order: i64,
     pub color: Option<String>,
     pub icon: Option<String>,

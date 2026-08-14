@@ -9,8 +9,9 @@ use crate::error::{AppError, AppResult};
 use crate::now_iso;
 use crate::reconciler::teardown_calendar;
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, sqlx::FromRow, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct SyncAccount {
     pub id: String,
     pub provider: String,
@@ -23,8 +24,9 @@ pub struct SyncAccount {
     pub reconnect_needed: bool,
 }
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct SyncCalendar {
     pub id: String,
     pub account_id: String,
@@ -33,17 +35,20 @@ pub struct SyncCalendar {
     pub color: Option<String>,
     pub enabled: bool,
     pub last_synced_at: Option<String>,
+    #[ts(optional = false)]
     pub folder_id: Option<String>,
     /// Pages this calendar left behind when it was unsynced — owned, so teardown
     /// detached them instead of deleting. Derived, not stored. Re-enabling re-links
     /// them and overwrites their mirror fields, so the panel confirms first; a zero
     /// here means there is nothing to warn about and the toggle stays instant.
+    #[ts(type = "number")]
     pub detached_pages: i64,
 }
 
 /// One account plus its calendars — the panel's account-centric read.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct AccountWithCalendars {
     #[serde(flatten)]
     pub account: SyncAccount,
