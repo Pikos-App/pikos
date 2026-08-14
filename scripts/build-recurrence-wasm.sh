@@ -11,7 +11,7 @@
 # engine or bindings change, and commit the regenerated pkg/.
 #
 # Requirements:
-#   - rustup with the wasm32-unknown-unknown target (installed on demand)
+#   - rustup (the pinned toolchain and the wasm32 target install on demand)
 #   - wasm-bindgen CLI matching the version pinned in
 #     crates/pikos-recurrence-wasm/Cargo.toml
 #     (cargo install wasm-bindgen-cli --version <pin>, or a prebuilt release)
@@ -21,6 +21,15 @@ cd "$(dirname "$0")/.."
 
 PKG_DIR="packages/recurrence-wasm/pkg"
 WASM_BINDGEN_PIN=$(sed -n 's/^wasm-bindgen = "=\(.*\)"$/\1/p' crates/pikos-recurrence-wasm/Cargo.toml)
+
+# CI re-runs this script and fails on any diff against the committed pkg/, so
+# the output has to be byte-identical on every machine that builds it. rustc's
+# version moves both codegen and the embedded panic line tables, so tracking
+# `stable` would go red the day it bumps and stay red while a developer's rustc
+# and CI's disagree. Those panic locations also bake in source paths carrying
+# $HOME and the host triple — remapped to fixed stand-ins below, as is any
+# ambient RUSTFLAGS, for the same reason.
+RUSTC_PIN="1.93.1"
 
 if ! command -v wasm-bindgen >/dev/null; then
   echo "wasm-bindgen CLI not found. Install with:" >&2
@@ -34,7 +43,13 @@ if [ "$CLI_VERSION" != "$WASM_BINDGEN_PIN" ]; then
   exit 1
 fi
 
-rustup target add wasm32-unknown-unknown >/dev/null 2>&1 || true
+export RUSTUP_TOOLCHAIN="$RUSTC_PIN"
+rustup toolchain install "$RUSTC_PIN" \
+  --profile minimal \
+  --target wasm32-unknown-unknown \
+  --no-self-update >/dev/null
+
+export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}/registry/src=/cargo --remap-path-prefix=$(rustc --print sysroot)=/rustc"
 
 cargo build \
   -p pikos-recurrence-wasm \

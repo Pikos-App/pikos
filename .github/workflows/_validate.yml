@@ -1,9 +1,10 @@
 name: Validate
 
 # Reusable validation gate shared by CI (on PR/main push) and Release (on tag).
-# Three parallel jobs: verify (typecheck/lint/unit), e2e (Playwright tier1+tier2),
-# rust (fmt/check/clippy/test). Warn-only audit steps stay here so release runs
-# emit the same signals CI does.
+# Parallel jobs: verify (typecheck/lint), coverage (unit + thresholds), e2e
+# (Playwright tier1+tier2), rust (fmt/check/clippy/test), wasm (committed
+# recurrence pkg matches its crate). Warn-only audit steps stay here so release
+# runs emit the same signals CI does.
 
 on:
   workflow_call:
@@ -245,3 +246,39 @@ jobs:
       - name: Cargo audit
         continue-on-error: true
         run: cargo audit
+
+  # packages/recurrence-wasm/pkg is a committed build artifact, so it can drift
+  # from the crate it was generated from with every other gate still green: the
+  # Rust tests cover the crate, the JS tests cover the stale pkg. Rebuilding and
+  # diffing is what ties them together — the build is pinned and path-remapped
+  # (see the script) so a Linux runner reproduces an artifact built on a Mac.
+  wasm:
+    name: Wasm Freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Install the pinned wasm-bindgen CLI
+        run: |
+          PIN=$(sed -n 's/^wasm-bindgen = "=\(.*\)"$/\1/p' crates/pikos-recurrence-wasm/Cargo.toml)
+          DIR="$RUNNER_TEMP/wasm-bindgen"
+          mkdir -p "$DIR"
+          curl -fsSL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${PIN}/wasm-bindgen-${PIN}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar xz --strip-components=1 -C "$DIR"
+          echo "$DIR" >> "$GITHUB_PATH"
+
+      - name: Rebuild the committed pkg
+        run: scripts/build-recurrence-wasm.sh
+
+      - name: Fail if pkg is stale
+        run: |
+          if [ -n "$(git status --porcelain packages/recurrence-wasm/pkg)" ]; then
+            echo "::error::packages/recurrence-wasm/pkg does not match the recurrence crate. Run scripts/build-recurrence-wasm.sh and commit the result."
+            git status --porcelain packages/recurrence-wasm/pkg
+            exit 1
+          fi
+          echo "✓ pkg matches the crate"

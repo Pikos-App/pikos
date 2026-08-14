@@ -33,6 +33,13 @@ step "source audit" "secrets, XSS, SQL, Tauri capabilities"
 pnpm audit:source
 
 # ── rust job ──────────────────────────────────────────────────────────────────
+step "wasm freshness" "committed recurrence pkg matches its crate"
+"$ROOT/scripts/build-recurrence-wasm.sh" >/dev/null
+if [ -n "$(git -C "$ROOT" status --porcelain packages/recurrence-wasm/pkg)" ]; then
+  echo "packages/recurrence-wasm/pkg was stale — the rebuild is in your working tree. Commit it."
+  exit 1
+fi
+
 # Two Cargo trees. The root workspace is `crates/*` and *excludes*
 # apps/desktop/src-tauri, so `--all` inside src-tauri covers that crate alone —
 # gating only there leaves pikos-db, -cli, -calendar-sync and -recurrence unchecked.
