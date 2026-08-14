@@ -178,21 +178,34 @@ appTest("same-named calendars on two accounts separate under account headings @t
 // A seed slot collision fails silently: the loser collapses into the "+N more"
 // pill and stops existing for every other check here. Three of the five did.
 
-appTest("every seeded Personal synced event renders as its own block @tier2", async ({ app }) => {
+appTest("every seeded synced event that lands on today renders as its own block @tier2", async ({
+  app,
+}) => {
   await seedSynced(app);
   await openCalendarMode(app);
 
   // The trailing time is what a grid block has and the page-list item doesn't.
   for (const name of [
+    /Swim class \(term ends\), /,
+    /Detached sprint, /,
+    /Release countdown, /,
+    /Recurring review, /,
     /Team standup, /,
     /Weekly 1:1 \(London\), /,
-    /Recurring review, /,
+    /Contractor call \(no zone\), /,
+    /Old planning \(detached\), /,
     /Design review \(LA team\), /,
+    // 10 AM tomorrow in Tokyo is tonight under the pinned viewer zone.
+    /Tokyo sync, /,
   ]) {
-    await expect(app.getByRole("button", { name })).toBeVisible();
+    // A series can yield several occurrences inside the visible week; one legible
+    // block is what a collision would take away.
+    await expect(app.getByRole("button", { name }).first()).toBeVisible();
   }
   // All-day events sit in their own bar, with no time.
-  await expect(app.getByRole("button", { name: "Company offsite" })).toBeVisible();
+  for (const name of ["Company offsite", "Product summit", "On-call rotation"]) {
+    await expect(app.getByRole("button", { name, exact: true }).first()).toBeVisible();
+  }
 });
 
 // ─── tier2: synced-block treatment ───────────────────────────────────────────

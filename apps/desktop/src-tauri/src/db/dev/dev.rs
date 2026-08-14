@@ -1,5 +1,6 @@
 //! Developer/settings commands: stats, reset, export, seed helpers.
 
+use chrono::Datelike;
 use pikos_calendar_sync::Keychain;
 use serde::{Deserialize, Serialize};
 use sqlx::{Column, Row};
@@ -315,6 +316,8 @@ pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
 // content array crashes the editor on open. Match the app's EMPTY_TIPTAP_DOC.
 const EMPTY_DOC: &str = r#"{"type":"doc","content":[{"type":"paragraph"}]}"#;
 const MOCK_ACCOUNT_NAME: &str = "Mock Calendar (dev)";
+/// What an all-day series' rule row carries — see the reconciler's `SENTINEL_TZ`.
+const ZONELESS_RULE_TZ: &str = "UTC";
 
 /// Read-only mirror layer for a seeded synced page. `pending_description` is what
 /// drives the "calendar description changed" notice; all fields default to empty
@@ -417,6 +420,10 @@ struct SyncedSeries<'a> {
     /// Cancelled occurrences, in the same basis as [`MovedInstance::original`].
     exdates: &'a [&'a str],
     moved: Option<MovedInstance<'a>>,
+    /// `page_sync.created_at` when the series must read as connected before the
+    /// seed run — the anchor both the head floor and the render floor key on.
+    /// `None` stamps the run's own timestamp, as a fresh connect would.
+    connected_at: Option<&'a str>,
 }
 
 impl Default for SyncedSeries<'_> {
@@ -425,6 +432,7 @@ impl Default for SyncedSeries<'_> {
             sync_state: "active",
             exdates: &[],
             moved: None,
+            connected_at: None,
         }
     }
 }
@@ -438,7 +446,7 @@ async fn insert_synced_recurring(
     title: &str,
     base_start: &str,
     base_end: &str,
-    timezone: &str,
+    timezone: Option<&str>,
     rrule: &str,
     series: SyncedSeries<'_>,
     sort_order: i64,
@@ -474,7 +482,7 @@ async fn insert_synced_recurring(
     .bind(serde_json::to_string(series.exdates).unwrap_or_else(|_| "[]".to_string()))
     .bind(base_start)
     .bind(base_end)
-    .bind(timezone)
+    .bind(timezone.unwrap_or(ZONELESS_RULE_TZ))
     .bind(now)
     .execute(&mut **tx)
     .await?;
@@ -510,7 +518,7 @@ async fn insert_synced_recurring(
     .bind(&ext)
     .bind(&ext)
     .bind(series.sync_state)
-    .bind(now)
+    .bind(series.connected_at.unwrap_or(now))
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -594,12 +602,12 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
     let (personal, personal_cal) = &folder_ids[0];
     let (work, work_cal) = &folder_ids[1];
 
-    // Personal: same-day timed (NY), cross-zone (LA), all-day, weekly recurring (London).
     // "Team standup" carries the full read-only mirror surface: location, attendees,
     // a user-edited body, and a withheld upstream description → shows the notice.
     //
-    // Times mirror the TS seed (`shared/seeds/syncedCalendar.ts`), which places each
-    // event in a lane the realistic seed leaves free — see the note there.
+    // Times and shapes mirror the TS seed (`shared/seeds/syncedCalendar.ts`), which
+    // places each event in a lane the realistic seed leaves free and records what
+    // each shape is here to make reachable — see the note there.
     let standup_body = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"My prep: land the calendar-sync PR before we demo."}]}]}"#;
     insert_synced_page(
         &mut tx,
@@ -657,6 +665,21 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         &now,
     )
     .await?;
+    insert_synced_page(
+        &mut tx,
+        personal,
+        &account_id,
+        personal_cal,
+        "Product summit",
+        &day(0),
+        Some(&day(2)),
+        None,
+        "active",
+        3,
+        SyncedMirror::default(),
+        &now,
+    )
+    .await?;
     insert_synced_recurring(
         &mut tx,
         personal,
@@ -665,10 +688,10 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         "Weekly 1:1 (London)",
         &at(0, "17:00"),
         &at(0, "17:30"),
-        "Europe/London",
+        Some("Europe/London"),
         "FREQ=WEEKLY",
         SyncedSeries::default(),
-        3,
+        4,
         &now,
     )
     .await?;
@@ -684,7 +707,7 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         "Recurring review",
         &at(0, "10:00"),
         &at(0, "10:30"),
-        "America/New_York",
+        Some("America/New_York"),
         "FREQ=WEEKLY",
         SyncedSeries {
             exdates: &[&at(7, "10:00")],
@@ -695,13 +718,32 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
             }),
             ..SyncedSeries::default()
         },
-        4,
+        5,
+        &now,
+    )
+    .await?;
+    insert_synced_recurring(
+        &mut tx,
+        personal,
+        &account_id,
+        personal_cal,
+        "Swim class (term ends)",
+        &at(0, "06:00"),
+        &at(0, "06:30"),
+        Some("America/New_York"),
+        &format!(
+            "FREQ=WEEKLY;UNTIL={}T113000",
+            (today + chrono::Duration::days(21)).format("%Y%m%d")
+        ),
+        SyncedSeries {
+            sync_state: "detached",
+            ..SyncedSeries::default()
+        },
+        6,
         &now,
     )
     .await?;
 
-    // Work: cross-zone (Tokyo), a past one-off (stays in Today until ticked), and a
-    // detached page (sync severed → editable, broken-sync icon).
     insert_synced_page(
         &mut tx,
         work,
@@ -747,6 +789,21 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         &now,
     )
     .await?;
+    insert_synced_page(
+        &mut tx,
+        work,
+        &account_id,
+        work_cal,
+        "Contractor call (no zone)",
+        &at(0, "13:30"),
+        Some(&at(0, "14:00")),
+        None,
+        "active",
+        3,
+        SyncedMirror::default(),
+        &now,
+    )
+    .await?;
     // A detached series carrying a provider-moved instance: its occurrences stay
     // in-series as override rows rather than cloning out, so the moved block is
     // unlocked and a re-link can reclaim the slot. Times mirror the TS seed.
@@ -758,7 +815,7 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
         "Detached sprint",
         &at(0, "07:15"),
         &at(0, "07:45"),
-        "America/New_York",
+        Some("America/New_York"),
         "FREQ=WEEKLY",
         SyncedSeries {
             sync_state: "detached",
@@ -769,14 +826,91 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
             }),
             ..SyncedSeries::default()
         },
-        3,
+        4,
+        &now,
+    )
+    .await?;
+    // Backdated: its passed occurrences read as missed, so the head is overdue.
+    let connected_five_days_ago = (chrono::Utc::now() - chrono::Duration::days(5))
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
+    insert_synced_recurring(
+        &mut tx,
+        work,
+        &account_id,
+        work_cal,
+        "Release countdown",
+        &at(-5, "08:30"),
+        &at(-5, "09:00"),
+        Some("America/New_York"),
+        "FREQ=DAILY;COUNT=6",
+        SyncedSeries {
+            connected_at: Some(&connected_five_days_ago),
+            ..SyncedSeries::default()
+        },
+        5,
+        &now,
+    )
+    .await?;
+    insert_synced_recurring(
+        &mut tx,
+        work,
+        &account_id,
+        work_cal,
+        "On-call rotation",
+        &day(0),
+        &day(0),
+        None,
+        "FREQ=WEEKLY",
+        SyncedSeries {
+            sync_state: "detached",
+            moved: Some(MovedInstance {
+                original: &day(14),
+                start: &day(15),
+                end: &day(15),
+            }),
+            ..SyncedSeries::default()
+        },
+        6,
+        &now,
+    )
+    .await?;
+    let month_end = last_day_of_month(today);
+    insert_synced_recurring(
+        &mut tx,
+        work,
+        &account_id,
+        work_cal,
+        "Month-end close",
+        &format!("{month_end}T12:30:00"),
+        &format!("{month_end}T13:00:00"),
+        Some("America/New_York"),
+        "FREQ=MONTHLY;BYMONTHDAY=-1",
+        SyncedSeries {
+            sync_state: "detached",
+            ..SyncedSeries::default()
+        },
+        7,
         &now,
     )
     .await?;
 
     tx.commit().await?;
-    log::info!("dev_seed_synced_calendar: seeded mock account + 2 calendars + 9 pages");
+    log::info!("dev_seed_synced_calendar: seeded mock account + 2 calendars + 15 pages");
     Ok(())
+}
+
+fn last_day_of_month(day: chrono::NaiveDate) -> String {
+    let first_next = if day.month() == 12 {
+        chrono::NaiveDate::from_ymd_opt(day.year() + 1, 1, 1)
+    } else {
+        chrono::NaiveDate::from_ymd_opt(day.year(), day.month() + 1, 1)
+    };
+    first_next
+        .and_then(|d| d.pred_opt())
+        .unwrap_or(day)
+        .format("%Y-%m-%d")
+        .to_string()
 }
 
 /// User-facing "Delete All Data": wipes the entire on-disk footprint of the

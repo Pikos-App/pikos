@@ -975,16 +975,16 @@ fn collect_asset_paths_finds_nested_images_only() {
 
 /// The seed's whole point is exercising surfaces no unit test reaches, so what it
 /// *contains* is the contract — and its TS twin (`shared/seeds/syncedCalendar.ts`)
-/// claims to mirror it. The recurring half drifted apart unnoticed once already,
-/// which is what this pins: both series, and the occurrence deltas that make them
-/// worth seeding at all.
+/// claims to mirror it. The recurring half drifted apart unnoticed once already.
+/// Each series below is the only way to reach some synced or detached behavior by
+/// hand, so dropping one costs a QA check silently.
 #[tokio::test]
-async fn seed_synced_calendar_carries_both_recurring_series_with_their_deltas() {
+async fn seed_synced_calendar_carries_every_recurring_shape_qa_needs() {
     let pool = test_pool().await;
     dev_seed_synced_calendar_impl(&pool).await.unwrap();
 
-    let series: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT p.title, ps.sync_state, r.rrule_exdates
+    let series: Vec<(String, String, String, String)> = sqlx::query_as(
+        "SELECT p.title, ps.sync_state, r.rrule_exdates, r.rrule
          FROM page_recurrence_rules r
          JOIN pages p ON p.id = r.page_id
          JOIN page_sync ps ON ps.page_id = r.page_id
@@ -993,21 +993,44 @@ async fn seed_synced_calendar_carries_both_recurring_series_with_their_deltas() 
     .fetch_all(&pool)
     .await
     .unwrap();
-    let titles: Vec<&str> = series.iter().map(|(t, _, _)| t.as_str()).collect();
+    let by_title = |title: &str| {
+        series
+            .iter()
+            .find(|(t, _, _, _)| t == title)
+            .unwrap_or_else(|| panic!("seed dropped the {title} series"))
+            .clone()
+    };
+    let titles: Vec<&str> = series.iter().map(|(t, _, _, _)| t.as_str()).collect();
     assert_eq!(
         titles,
-        vec!["Detached sprint", "Recurring review", "Weekly 1:1 (London)"]
+        vec![
+            "Detached sprint",
+            "Month-end close",
+            "On-call rotation",
+            "Recurring review",
+            "Release countdown",
+            "Swim class (term ends)",
+            "Weekly 1:1 (London)",
+        ]
     );
-    assert_eq!(series[0].1, "detached");
-    assert_eq!(series[1].1, "active");
+
+    // The edit lock is derived from a round-trip, so QA needs one rule of each
+    // verdict: a mid-day UNTIL locks the chip, BYMONTHDAY=-1 stays editable.
+    assert!(by_title("Swim class (term ends)").3.contains("T113000"));
+    assert_eq!(by_title("Month-end close").1, "detached");
+    assert!(by_title("Month-end close").3.contains("BYMONTHDAY=-1"));
+    // Finite, so the series can actually be driven to its terminal state.
+    assert!(by_title("Release countdown").3.contains("COUNT="));
 
     // Timed, not date-only: a date-only exdate matches whether or not the render
     // layer day-keys, so it would pin nothing.
-    let exdates: Vec<String> = serde_json::from_str(&series[1].2).unwrap();
+    let exdates: Vec<String> = serde_json::from_str(&by_title("Recurring review").2).unwrap();
     assert_eq!(exdates.len(), 1);
     assert!(exdates[0].contains("T10:00:00"), "{}", exdates[0]);
 
-    // One provider-moved instance per series, keyed to an occurrence of its rule.
+    // A provider-moved instance keyed to an occurrence of its rule — in the rule's
+    // own basis, so the all-day series' key is date-only where the timed ones carry
+    // a time of day.
     let moved: Vec<(String, String)> = sqlx::query_as(
         "SELECT p.title, s.original_date FROM page_schedules s
          JOIN pages p ON p.id = s.page_id
@@ -1016,11 +1039,77 @@ async fn seed_synced_calendar_carries_both_recurring_series_with_their_deltas() 
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(moved.len(), 2);
+    assert_eq!(moved.len(), 3);
     assert_eq!(moved[0].0, "Detached sprint");
     assert!(moved[0].1.contains("T07:15:00"), "{}", moved[0].1);
-    assert_eq!(moved[1].0, "Recurring review");
-    assert!(moved[1].1.contains("T10:00:00"), "{}", moved[1].1);
+    assert_eq!(moved[1].0, "On-call rotation");
+    assert_eq!(moved[1].1.len(), 10, "{}", moved[1].1);
+    assert_eq!(moved[2].0, "Recurring review");
+    assert!(moved[2].1.contains("T10:00:00"), "{}", moved[2].1);
+}
+
+/// The head floor and the render floor both key on `page_sync.created_at`, so a
+/// series seeded with the run's own timestamp can never read as overdue — and the
+/// synced arm of the gap dialog has no other way to be reached on a dev machine.
+#[tokio::test]
+async fn seed_synced_calendar_backdates_the_countdown_series_connect_day() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+
+    let connected: String = sqlx::query_scalar(
+        "SELECT ps.created_at FROM page_sync ps
+         JOIN pages p ON p.id = ps.page_id
+         WHERE p.title = 'Release countdown'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let floor = pikos_db::sync::local_day_of(&connected).expect("UTC-parseable connect day");
+    let expected = (chrono::Local::now() - chrono::Duration::days(5))
+        .format("%Y-%m-%d")
+        .to_string();
+    assert_eq!(floor, expected);
+
+    let base: String = sqlx::query_scalar("SELECT scheduled_start FROM pages WHERE title = ?")
+        .bind("Release countdown")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(base.starts_with(&expected), "{base}");
+}
+
+/// Two one-off shapes with no other source: a multi-day all-day span (whose
+/// inclusive end is what a double-decrement would shorten) and a zone-less timed
+/// mirror (which floats, and whose reminders come from a third query).
+#[tokio::test]
+async fn seed_synced_calendar_carries_the_all_day_span_and_a_zoneless_mirror() {
+    let pool = test_pool().await;
+    dev_seed_synced_calendar_impl(&pool).await.unwrap();
+
+    let (start, end): (String, String) =
+        sqlx::query_as("SELECT scheduled_start, scheduled_end FROM pages WHERE title = ?")
+            .bind("Product summit")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let day = |offset: i64| {
+        (chrono::Local::now().date_naive() + chrono::Duration::days(offset))
+            .format("%Y-%m-%d")
+            .to_string()
+    };
+    assert_eq!(start, day(0));
+    assert_eq!(end, day(2));
+
+    let zone: Option<String> = sqlx::query_scalar(
+        "SELECT s.timezone FROM page_schedules s
+         JOIN pages p ON p.id = s.page_id
+         WHERE p.title = 'Contractor call (no zone)'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(zone, None);
 }
 
 /// Re-seeding drops the prior mock account and everything it owns — the dev
