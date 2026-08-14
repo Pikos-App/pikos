@@ -31,6 +31,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ),
     ("008", include_str!("../migrations/008_tags_nocase.sql")),
     ("009", include_str!("../migrations/009_tags_lowercase.sql")),
+    ("010", include_str!("../migrations/010_calendar_sync.sql")),
 ];
 
 async fn single_conn_memory_pool() -> SqlitePool {
@@ -192,6 +193,98 @@ async fn stepwise_preserves_seeded_data() {
             .await
             .unwrap();
     assert_eq!(denorm_tag, "work", "denorm tag must be lowercased");
+}
+
+/// The upgrade every existing install performs when 0.4.0 lands. `open_pool` runs
+/// the same tree against whatever the user already has, and 010 is the first
+/// migration to arrive after a real launch — so this is the one step whose failure
+/// mode is other people's data, with no rollback behind an auto-update.
+///
+/// The stepwise test above proves rows *survive* each migration; this one proves
+/// the workspace still **works** afterwards: pre-existing pages keep their
+/// schedules, rules and reminders, the new tables are usable, and a page that
+/// predates sync reads as unsynced rather than as anything ambiguous.
+///
+/// Note 010 is **not** idempotent — `ALTER TABLE ADD COLUMN` takes no `IF NOT
+/// EXISTS` and re-running errors on the duplicate column. It doesn't need to be:
+/// sqlx records each applied version and runs each migration in a transaction, so
+/// a failure rolls back whole and a retry starts from a clean 009. Don't "fix" it
+/// by making the ALTER conditional; the guarantee lives in the migrator.
+#[tokio::test]
+async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
+    let pool = single_conn_memory_pool().await;
+    for (name, sql) in &MIGRATIONS[..9] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
+    }
+
+    // A workspace with the shapes 010 has to carry across: a foldered page, a
+    // schedule, a recurrence rule, and a reminder (007 recreated that table, and
+    // the stepwise seed leaves it empty — so this is also the first time 007's
+    // recreate is asked to preserve a row).
+    sqlx::query("INSERT INTO folders (id, name, sort_order, created_at, updated_at) VALUES ('f1', 'Work', 0, '2026-01-01', '2026-01-01')")
+        .execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO pages
+         (id, folder_id, title, content, content_text, status, priority, tags,
+          sort_order, created_at, updated_at)
+         VALUES ('p1', 'f1', 'Weekly review', '{}', '', 'not_started', 0, '[\"work\"]',
+                 0, '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO page_schedules (id, page_id, scheduled_start, scheduled_end, timezone, status, created_at) VALUES ('s1', 'p1', '2026-06-01T09:00:00', '2026-06-01T09:30:00', 'America/New_York', 'not_started', '2026-01-01')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO page_recurrence_rules (id, page_id, rrule, rrule_exdates, scheduled_start, timezone, created_at) VALUES ('r1', 'p1', 'FREQ=WEEKLY', '[]', '2026-06-01T09:00:00', 'America/New_York', '2026-01-01')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO page_reminders (id, page_id, minutes_before, created_at) VALUES ('rem1', 'p1', 30, '2026-01-01')")
+        .execute(&pool).await.unwrap();
+
+    sqlx::raw_sql(MIGRATIONS[9].1).execute(&pool).await.unwrap();
+
+    // Nothing the user had is gone.
+    for (table, id) in [
+        ("pages", "p1"),
+        ("folders", "f1"),
+        ("page_schedules", "s1"),
+        ("page_recurrence_rules", "r1"),
+        ("page_reminders", "rem1"),
+    ] {
+        let found: i64 =
+            sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE id = '{id}'"))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(found, 1, "{table} lost its row across 010");
+    }
+
+    // The folder gained the flag, defaulted off — an existing folder is nobody's
+    // calendar, and a default of 1 would lock every folder the user already had.
+    let external: i64 =
+        sqlx::query_scalar("SELECT is_external_calendar FROM folders WHERE id = 'f1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(external, 0);
+
+    // A page from before sync existed has no link, so it reads as native.
+    let linked: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE page_id = 'p1'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(linked, 0);
+
+    // The new tables accept writes against the pre-existing page — a broken FK or
+    // a missed table would only surface the first time sync or a completion ran.
+    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES ('p1', '2026-06-01', 'clone-1')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES ('p1', '2026-06-08')")
+        .execute(&pool)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
