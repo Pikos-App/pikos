@@ -102,6 +102,30 @@ describe("MetadataHeader — locked title", () => {
   });
 });
 
+// The other half of the lock, and the half nothing else asserts. A synced page is
+// meant to be first-class apart from its title and schedule, so the byline keeps
+// every control the calendar does not own. Widening the lock to the whole header
+// is the easy regression — it looks safer, it reads as "synced means read-only",
+// and the read-only tests above all keep passing while the page goes inert.
+describe("MetadataHeader — a locked mirror keeps what the calendar doesn't own", () => {
+  const mirror = () => makePage({ scheduleLocked: true, syncState: "active", tags: ["work"] });
+
+  it("offers the priority picker", async () => {
+    await renderHeader(mirror());
+    expect(screen.getByRole("button", { name: /^Priority:/ })).toBeEnabled();
+  });
+
+  it("offers the tag picker", async () => {
+    await renderHeader(mirror());
+    expect(screen.getByRole("button", { name: /^Tags:/ })).toBeEnabled();
+  });
+
+  it("offers the status toggle", async () => {
+    await renderHeader(mirror());
+    expect(screen.getByRole("button", { name: "Mark done" })).toBeEnabled();
+  });
+});
+
 describe("MetadataHeader — detached notice", () => {
   it("shows the disconnected notice for a detached page", async () => {
     await renderHeader(makePage({ scheduleLocked: false, syncState: "detached" }));

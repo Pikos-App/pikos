@@ -607,18 +607,16 @@ appTest("overdue tick → everything before today clones one done page per day @
 // dialog buried in a completion card. Both arms write the skip-set, so nothing
 // is minted as done.
 
-appTest("deleting a past occurrence → everything before today clears the gap @tier2", async ({
-  page,
-}) => {
-  await seedOverdueDailyRecurring(page);
+/** Open the backlog scope dialog by deleting the first overdue virtual, and hand
+ *  back the calendar plus the block count from before it was asked. The head (Mon)
+ *  renders as a real block, so the first virtual is Tue — inside the backlog, which
+ *  is what summons the dialog rather than deleting outright. */
+async function deleteFirstOverdueVirtual(page: import("@playwright/test").Page) {
   await openCalendarMode(page);
-
   const calendar = calendarRegion(page);
   await expect(calendar.getByLabel("Recurring").first()).toBeVisible({ timeout: 5_000 });
   const before = await calendar.getByLabel("Recurring").count();
 
-  // The head (Mon) renders as a real block, so the first virtual is Tue — inside
-  // the backlog, which is what opens the dialog.
   const firstVirtual = calendar
     .getByRole("button", { name: /^standup/i })
     .filter({ has: page.getByLabel("Recurring") })
@@ -626,13 +624,50 @@ appTest("deleting a past occurrence → everything before today clears the gap @
   await firstVirtual.scrollIntoViewIfNeeded();
   await firstVirtual.click();
   await page.getByRole("button", { name: "Delete this occurrence" }).click();
-
   await expect(page.getByText(/2 earlier days are still open/)).toBeVisible();
+
+  return { before, calendar };
+}
+
+/** No done clone was minted — the assertion that separates a delete from a tick,
+ *  and the one thing both arms of this dialog must agree on. */
+async function expectNothingCompleted(
+  page: import("@playwright/test").Page,
+  items: ReturnType<import("@playwright/test").Page["locator"]>
+) {
+  await page.getByRole("button", { name: "Completed", exact: true }).click();
+  await expect(items.filter({ has: page.getByRole("checkbox", { name: /Mark not done/i }) })).toHaveCount(0);
+}
+
+appTest("deleting a past occurrence → everything before today clears the gap @tier2", async ({
+  page,
+}) => {
+  const items = await seedOverdueDailyRecurring(page);
+  const { before, calendar } = await deleteFirstOverdueVirtual(page);
+
   await page.getByRole("button", { name: /This and everything before today/ }).click();
 
   // Tue and Wed are dismissed, and today's occurrence stops being a virtual — the
   // head advanced onto it once Mon went to the skip-set.
   await expect(calendar.getByLabel("Recurring")).toHaveCount(before - 3);
+  await expectNothingCompleted(page, items);
+});
+
+appTest("deleting a past occurrence → just this one leaves the rest of the gap open @tier2", async ({
+  page,
+}) => {
+  const items = await seedOverdueDailyRecurring(page);
+  const { before, calendar } = await deleteFirstOverdueVirtual(page);
+
+  await expect(page.getByRole("button", { name: /Just this one/ })).toBeVisible();
+  await page.getByRole("button", { name: /Just this one/ }).click();
+
+  // Only the day that was clicked goes. The head's own Monday and the Wednesday
+  // after it stay open — the backlog surviving is the whole difference from the
+  // arm above, and the head cannot advance while its own day is neither ticked
+  // nor dismissed.
+  await expect(calendar.getByLabel("Recurring")).toHaveCount(before - 1);
+  await expectNothingCompleted(page, items);
 });
 
 // ─── Stop repeating removes the rule ───────────────────────────────────────
