@@ -6,18 +6,10 @@
 // is no "sync resumes" call to make: everything a backfill would converge to has to
 // fall out of the adapter methods the app actually calls.
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { readConformanceTable, unhandledStep } from "./conformanceTable";
 import { MockStorageAdapter } from "./MockStorageAdapter";
-
-const TABLE_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../../../crates/pikos-db/tests/fixtures/sync-lifecycle.json"
-);
 
 interface Step {
   op:
@@ -29,13 +21,19 @@ interface Step {
     | "disable"
     | "disconnect"
     | "nativePage"
-    | "movePage";
+    | "movePage"
+    | "createPageIn"
+    | "nativeFolder"
+    | "folderEdit";
   displayName?: string;
   calendars?: string[];
   calendar?: string;
   uid?: string;
   title?: string;
   page?: string;
+  folder?: string;
+  parent?: string;
+  change?: "delete" | "softDelete" | "moveToRoot" | "nestUnder" | "rename";
   target?: "calendarFolder" | "inbox";
   rejectedWith?: string;
 }
@@ -68,7 +66,16 @@ interface Scenario {
   };
 }
 
-const table = JSON.parse(readFileSync(TABLE_PATH, "utf8")) as { scenarios: Scenario[] };
+const EXPECT_KEYS = [
+  "accountVisible",
+  "accountCount",
+  "folderCount",
+  "calendars",
+  "folder",
+  "pages",
+] as const;
+
+const table = readConformanceTable<Scenario>("sync", EXPECT_KEYS);
 
 /** Ids the steps produce and the expectations refer to by name. `folders` outlives
  *  the calendar's own link on purpose — teardown clears it, and a scenario still
@@ -115,7 +122,7 @@ async function apply(adapter: MockStorageAdapter, world: World, step: Step): Pro
       // Reactivating here instead would hand the mock a re-link the adapter itself
       // never performs, and the table would pass against a mock that cannot.
       if (world.pages.has(step.uid!)) return;
-      const page = await adapter.createPage({
+      const page = await adapter.seedMirrorPage({
         content: "",
         contentText: "",
         folderId,
@@ -160,15 +167,65 @@ async function apply(adapter: MockStorageAdapter, world: World, step: Step): Pro
 
     case "movePage": {
       const folderId = step.target === "calendarFolder" ? [...world.folders.values()][0]! : null;
-      const move = adapter.updatePage(world.pages.get(step.page!)!, { folderId });
-      if (step.rejectedWith) {
-        await expect(move).rejects.toThrow(step.rejectedWith);
-      } else {
-        await move;
-      }
+      await verdict(adapter.updatePage(world.pages.get(step.page!)!, { folderId }), step);
       return;
     }
+
+    case "createPageIn": {
+      const folderId = step.target === "calendarFolder" ? [...world.folders.values()][0]! : null;
+      const created = adapter.createPage({
+        content: "",
+        contentText: "",
+        folderId,
+        priority: 0,
+        status: "not_started",
+        tags: [],
+        title: step.title!,
+      });
+      const page = await verdict(created, step);
+      if (page) world.pages.set(step.uid!, page.id);
+      return;
+    }
+
+    case "nativeFolder": {
+      const folder = await adapter.createFolder({ name: step.folder!, parentId: null });
+      world.folders.set(step.folder!, folder.id);
+      return;
+    }
+
+    case "folderEdit": {
+      const id = world.folders.get(step.folder!)!;
+      const edit = (): Promise<unknown> => {
+        switch (step.change!) {
+          case "delete":
+            return adapter.deleteFolder(id);
+          case "softDelete":
+            return adapter.softDeleteFolder(id);
+          case "moveToRoot":
+            return adapter.updateFolder(id, { parentId: null });
+          case "nestUnder":
+            return adapter.updateFolder(id, { parentId: world.folders.get(step.parent!)! });
+          case "rename":
+            return adapter.updateFolder(id, { name: "Renamed" });
+        }
+      };
+      await verdict(edit(), step);
+      return;
+    }
+
+    default:
+      return unhandledStep("sync", step.op);
   }
+}
+
+/** `rejectedWith` present means the mock must refuse with that exact message,
+ *  absent means it must allow the write and hand back its result. */
+async function verdict<T>(work: Promise<T>, step: Step): Promise<T | undefined> {
+  if (step.rejectedWith) {
+    await expect(work).rejects.toThrow(step.rejectedWith);
+    return undefined;
+  }
+  return await work;
 }
 
 describe("sync lifecycle conformance", () => {

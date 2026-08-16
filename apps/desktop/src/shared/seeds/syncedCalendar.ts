@@ -98,7 +98,7 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
     } = {}
   ): Promise<void> => {
     const { body, ...mirrorMeta } = mirror;
-    const page = await adapter.createPage({
+    const page = await mock.seedMirrorPage({
       content: body ?? "",
       folderId,
       priority: 0,
@@ -129,7 +129,7 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
       syncedSince?: string;
     } = {}
   ): Promise<void> => {
-    const page = await adapter.createPage({
+    const page = await mock.seedMirrorPage({
       content: "",
       folderId,
       priority: 0,

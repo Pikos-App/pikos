@@ -2,18 +2,10 @@
 // Why the table exists, and what an origin means: `recurrence_conformance_tests.rs`,
 // beside the fixture.
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { readConformanceTable, unhandledStep } from "./conformanceTable";
 import { MockStorageAdapter } from "./MockStorageAdapter";
-
-const TABLE_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../../../crates/pikos-db/tests/fixtures/recurrence-lifecycle.json"
-);
 
 // Matches the Rust runner's `TEST_CONNECTED_LONG_AGO`: old enough that the synced
 // head floor never binds, so these scenarios test the occurrence sets and nothing else.
@@ -53,7 +45,17 @@ interface Scenario {
   };
 }
 
-const table = JSON.parse(readFileSync(TABLE_PATH, "utf8")) as {
+const EXPECT_KEYS = [
+  "head",
+  "completedDates",
+  "skippedDates",
+  "exdates",
+  "clones",
+  "cloneCount",
+  "overrideCount",
+] as const;
+
+const table = readConformanceTable<Scenario>("recurrence", EXPECT_KEYS) as {
   series: { rrule: string; start: string; end: string; timezone: string };
   scenarios: Scenario[];
 };
@@ -103,6 +105,8 @@ async function apply(
     case "recompute":
       await adapter.recomputeRecurringSchedules();
       return;
+    default:
+      return unhandledStep("recurrence", step.op);
   }
 }
 

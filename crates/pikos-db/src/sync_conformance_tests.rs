@@ -80,6 +80,28 @@ enum Step {
         target: MoveTarget,
         rejected_with: Option<String>,
     },
+    /// Create a page against the placement lock, asserting like `MovePage`. The
+    /// create arm is a separate guard from the move arm because a page created in
+    /// a calendar folder is trapped rather than merely misfiled — the move guard
+    /// then refuses to let it back out.
+    #[serde(rename_all = "camelCase")]
+    CreatePageIn {
+        target: MoveTarget,
+        uid: String,
+        title: String,
+        rejected_with: Option<String>,
+    },
+    /// A folder the user made, to nest against the placement lock.
+    NativeFolder {
+        folder: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    FolderEdit {
+        folder: String,
+        change: FolderChange,
+        parent: Option<String>,
+        rejected_with: Option<String>,
+    },
     Disable {
         calendar: String,
     },
@@ -91,6 +113,16 @@ enum Step {
 enum MoveTarget {
     CalendarFolder,
     Inbox,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+enum FolderChange {
+    Delete,
+    SoftDelete,
+    MoveToRoot,
+    NestUnder,
+    Rename,
 }
 
 #[derive(Deserialize)]
@@ -287,18 +319,92 @@ async fn apply(pool: &sqlx::SqlitePool, world: &mut World, step: &Step) {
                 },
             )
             .await;
-            match rejected_with {
-                Some(msg) => {
-                    let err = result.err().expect("the move should have been refused");
-                    assert!(
-                        format!("{err}").contains(msg.as_str()),
-                        "wrong refusal: {err}"
-                    );
-                }
-                None => {
-                    result.expect("the move should have been allowed");
-                }
+            assert_verdict("move", result, rejected_with);
+        }
+
+        Step::CreatePageIn {
+            target,
+            uid,
+            title,
+            rejected_with,
+        } => {
+            let folder_id = match target {
+                MoveTarget::CalendarFolder => Some(world.folders.values().next().unwrap().clone()),
+                MoveTarget::Inbox => None,
+            };
+            let result = crate::pages::create_page_impl(
+                pool,
+                crate::pages::NewPage {
+                    folder_id,
+                    ..new_page(title)
+                },
+            )
+            .await;
+            if let Ok(page) = &result {
+                world.pages.insert(uid.clone(), page.id.clone());
             }
+            assert_verdict("create", result, rejected_with);
+        }
+
+        Step::NativeFolder { folder } => {
+            let created = crate::folders::create_folder_impl(
+                pool,
+                crate::folders::NewFolder {
+                    name: folder.clone(),
+                    parent_id: None,
+                    color: None,
+                    icon: None,
+                },
+            )
+            .await
+            .unwrap();
+            world.folders.insert(folder.clone(), created.id);
+        }
+
+        Step::FolderEdit {
+            folder,
+            change,
+            parent,
+            rejected_with,
+        } => {
+            let id = world.folders[folder].clone();
+            let updates = |parent_id: Option<serde_json::Value>, name: Option<String>| {
+                crate::folders::FolderUpdate {
+                    parent_id,
+                    name,
+                    ..Default::default()
+                }
+            };
+            let result = match change {
+                FolderChange::Delete => crate::folders::delete_folder_impl(pool, id).await,
+                FolderChange::SoftDelete => crate::folders::soft_delete_folder_impl(pool, id).await,
+                FolderChange::MoveToRoot => crate::folders::update_folder_impl(
+                    pool,
+                    id,
+                    updates(Some(serde_json::Value::Null), None),
+                )
+                .await
+                .map(|_| ()),
+                FolderChange::NestUnder => {
+                    let target =
+                        world.folders[parent.as_ref().expect("nestUnder needs a parent")].clone();
+                    crate::folders::update_folder_impl(
+                        pool,
+                        id,
+                        updates(Some(serde_json::Value::String(target)), None),
+                    )
+                    .await
+                    .map(|_| ())
+                }
+                FolderChange::Rename => crate::folders::update_folder_impl(
+                    pool,
+                    id,
+                    updates(None, Some("Renamed".into())),
+                )
+                .await
+                .map(|_| ()),
+            };
+            assert_verdict("folder edit", result, rejected_with);
         }
 
         // The local half of a disconnect: unsync each calendar, then hide the account.
@@ -314,6 +420,28 @@ async fn apply(pool: &sqlx::SqlitePool, world: &mut World, step: &Step) {
             mark_account_disconnected_impl(pool, &world.account_id)
                 .await
                 .unwrap();
+        }
+    }
+}
+
+/// `rejected_with` present means the writer must refuse with that exact message,
+/// absent means it must allow the write.
+fn assert_verdict<T>(what: &str, result: crate::error::AppResult<T>, rejected_with: &Option<String>)
+where
+    T: std::fmt::Debug,
+{
+    match rejected_with {
+        Some(msg) => {
+            let err = result
+                .err()
+                .unwrap_or_else(|| panic!("the {what} should have been refused"));
+            assert!(
+                format!("{err}").contains(msg.as_str()),
+                "wrong refusal: {err}"
+            );
+        }
+        None => {
+            result.unwrap_or_else(|e| panic!("the {what} should have been allowed: {e}"));
         }
     }
 }

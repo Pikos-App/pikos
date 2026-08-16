@@ -2,19 +2,11 @@
 // table. Why the table exists, and why search dominates it:
 // `core_conformance_tests.rs`, beside the fixture.
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { PageStatus } from "../types";
+import { readConformanceTable, unhandledStep } from "./conformanceTable";
 import { MockStorageAdapter } from "./MockStorageAdapter";
-
-const TABLE_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../../../crates/pikos-db/tests/fixtures/core-lifecycle.json"
-);
 
 interface Step {
   op:
@@ -54,7 +46,9 @@ interface Scenario {
   };
 }
 
-const table = JSON.parse(readFileSync(TABLE_PATH, "utf8")) as { scenarios: Scenario[] };
+const EXPECT_KEYS = ["search", "listQuery", "visiblePages", "reminderCount"] as const;
+
+const table = readConformanceTable<Scenario>("core", EXPECT_KEYS);
 
 async function apply(
   adapter: MockStorageAdapter,
@@ -113,6 +107,8 @@ async function apply(
         new Date().toISOString()
       );
       return;
+    default:
+      return unhandledStep("core", step.op);
   }
 }
 

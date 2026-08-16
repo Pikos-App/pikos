@@ -51,10 +51,14 @@ import { computeNextEnd, nextOccurrenceAfter, rawExpandRule } from "../utils/rec
  * mis-routed write fails identically in test mode and in prod. The mock is the
  * only place e2e and unit tests ever see these rejections, so a message the
  * backend has since reworded still reads as correct here and the test asserting
- * it still passes — against words no user is shown. `guardMessages.test.ts`
- * checks each one against the Rust source rather than trusting lockstep edits.
+ * it still passes — against words no user is shown. `guardMessages.test.ts` checks
+ * this table against the Rust source rather than trusting lockstep edits, and
+ * sweeps the writers for refusals missing from it.
  */
 export const MIRRORED_GUARD_MESSAGES = {
+  createdInCalendarFolder: "Pages cannot be created in an external calendar folder",
+  externalFolderLocked:
+    "External calendar folders are system-managed — use the Calendar Sync settings to disconnect.",
   intoCalendarFolder: "Pages cannot be moved into an external calendar folder",
   noOccurrence: "Recurring page has no scheduled occurrence to complete.",
   notRecurring: "Occurrence completion applies only to a recurring series.",
@@ -68,6 +72,8 @@ export const MIRRORED_GUARD_MESSAGES = {
 } as const;
 
 const {
+  createdInCalendarFolder: CREATED_IN_CALENDAR_FOLDER_MSG,
+  externalFolderLocked: EXTERNAL_FOLDER_LOCKED_MSG,
   intoCalendarFolder: INTO_CALENDAR_FOLDER_MSG,
   noOccurrence: NO_OCCURRENCE_MSG,
   notRecurring: NOT_RECURRING_MSG,
@@ -236,6 +242,27 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   createPage(data: NewPage): Promise<Page> {
+    // Only the reconciler seeds into a calendar folder — a page created there is
+    // trapped by updatePage's placement lock (matches create_page_impl, pages.rs).
+    if (data.folderId != null && this.folders.get(data.folderId)?.isExternalCalendar) {
+      return Promise.reject(new StorageError("Conflict", CREATED_IN_CALENDAR_FOLDER_MSG));
+    }
+    return Promise.resolve(this.insertPage(data));
+  }
+
+  /**
+   * Test/seed-only (NOT on `StorageAdapter`): create a page inside a calendar
+   * folder, which `createPage` refuses. Stands for the reconciler, whose raw SQL
+   * is the only writer that seeds a mirror — the command-layer guard exists so
+   * that nothing reachable from the UI can. Seeding through `createPage` instead
+   * would mean the guard could never be turned on here without breaking every
+   * synced fixture, which is how it stayed unmirrored.
+   */
+  seedMirrorPage(data: NewPage): Promise<Page> {
+    return Promise.resolve(this.insertPage(data));
+  }
+
+  private insertPage(data: NewPage): Page {
     const page: Page = {
       links: [],
       ...data,
@@ -250,7 +277,7 @@ export class MockStorageAdapter implements StorageAdapter {
       updatedAt: now(),
     };
     this.pages.set(page.id, page);
-    return Promise.resolve(page);
+    return page;
   }
 
   /**
@@ -509,6 +536,15 @@ export class MockStorageAdapter implements StorageAdapter {
   updateFolder(id: string, updates: FolderUpdate): Promise<Folder> {
     const existing = this.folders.get(id);
     if (!existing) return Promise.reject(new Error(`Folder not found: ${id}`));
+    // Placement lock: a calendar folder can't be reparented and nothing nests under
+    // one; name and colour stay editable (matches update_folder_impl, folders.rs).
+    if (updates.parentId !== undefined) {
+      const intoExternal =
+        updates.parentId != null && this.folders.get(updates.parentId)?.isExternalCalendar;
+      if (intoExternal || existing.isExternalCalendar) {
+        return Promise.reject(new StorageError("Conflict", EXTERNAL_FOLDER_LOCKED_MSG));
+      }
+    }
     const updated: Folder = { ...existing, ...updates, id, updatedAt: now() };
     this.folders.set(id, updated);
     // Mirrors the real writer: a sidebar recolour reaches the calendar too.
@@ -521,6 +557,9 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   deleteFolder(id: string): Promise<void> {
+    if (this.folders.get(id)?.isExternalCalendar) {
+      return Promise.reject(new StorageError("Conflict", EXTERNAL_FOLDER_LOCKED_MSG));
+    }
     // Soft-delete all pages in this folder (mirrors Rust backend behavior)
     for (const page of this.pages.values()) {
       if (page.folderId === id) this.softDeleted.add(page.id);
@@ -530,6 +569,9 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   softDeleteFolder(id: string): Promise<void> {
+    if (this.folders.get(id)?.isExternalCalendar) {
+      return Promise.reject(new StorageError("Conflict", EXTERNAL_FOLDER_LOCKED_MSG));
+    }
     this.softDeletedFolders.add(id);
     for (const page of this.pages.values()) {
       if (page.folderId === id) this.softDeleted.add(page.id);

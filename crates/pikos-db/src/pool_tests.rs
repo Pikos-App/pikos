@@ -34,6 +34,35 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ("010", include_str!("../migrations/010_calendar_sync.sql")),
 ];
 
+/// `include_str!` needs a literal path, so the list above is written by hand while
+/// the migrator reads the directory — and a migration added to the directory alone
+/// is still applied to every user's database with no test replaying it. The
+/// stepwise tests would keep passing, one version short, which reads as coverage.
+#[test]
+fn the_replay_list_holds_every_migration_on_disk() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let mut on_disk: Vec<String> = std::fs::read_dir(&dir)
+        .expect("migrations directory")
+        .map(|e| e.expect("dir entry").file_name().to_string_lossy().into())
+        .filter(|name: &String| name.ends_with(".sql"))
+        .collect();
+    on_disk.sort();
+
+    let listed: Vec<String> = MIGRATIONS.iter().map(|(v, _)| (*v).to_string()).collect();
+    let versions: Vec<String> = on_disk
+        .iter()
+        .map(|name| name.split('_').next().unwrap_or_default().to_string())
+        .collect();
+
+    assert_eq!(
+        listed,
+        versions,
+        "MIGRATIONS is out of step with {}: add the new file to the list so the \
+         stepwise and populated-workspace replays actually reach it",
+        dir.display()
+    );
+}
+
 async fn single_conn_memory_pool() -> SqlitePool {
     let opts = SqliteConnectOptions::from_str(":memory:")
         .expect("parse :memory: opts")

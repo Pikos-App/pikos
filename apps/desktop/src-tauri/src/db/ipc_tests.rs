@@ -83,8 +83,27 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
             "complete_recurring_page",
             json!({ "data": { "pageId": "p1" } }),
         ),
+        (
+            "expand_recurrence_range",
+            json!({ "rules": [], "rangeStart": "2026-06-01", "rangeEnd": "2026-06-30" }),
+        ),
+        ("export_csv", json!({ "includeSynced": false })),
+        ("export_markdown", json!({ "includeSynced": false })),
     ]
 }
+
+/// Multi-word commands the wire test deliberately does not drive. Reaching the
+/// handler is the whole assertion, so anything whose handler leaves the process
+/// on the way to failing is worse than untested — these each go out to the
+/// network, the login keychain, or the user's disk before they can refuse.
+const NOT_DRIVEN: &[(&str, &str)] = &[
+    ("connect_caldav_account", "performs CalDAV discovery"),
+    ("reconnect_caldav_account", "performs CalDAV discovery"),
+    ("refresh_sync_account", "polls the provider"),
+    ("resync_sync_account", "polls the provider"),
+    ("disconnect_sync_account", "opens the login keychain"),
+    ("save_asset", "copies a file into the app data dir"),
+];
 
 /// `mock_context` resolves an empty ACL, so every invoke is refused before it
 /// reaches a handler. Tauri's own `__allow_command` grants windows but leaves
@@ -135,6 +154,9 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::sync::list_sync_calendars,
             super::sync::set_sync_calendar_color,
             super::sync::toggle_sync_calendar,
+            super::schedules::expand_recurrence_range,
+            super::dev::export_csv,
+            super::dev::export_markdown,
         ])
         .build(ctx)
         .unwrap();
@@ -181,6 +203,164 @@ fn every_command_accepts_the_body_the_adapter_sends() {
             );
         }
     }
+}
+
+/// `wire_cases` is written by hand, and a command added tomorrow with a multi-word
+/// parameter is precisely what it exists to catch — but its own absence from the
+/// list is not something any test notices. The table then narrows as the command
+/// surface grows, while still reading as "every command".
+///
+/// So the set to check is read out of the source, not listed: the registrations in
+/// `lib.rs` intersected with the `#[tauri::command]` signatures, minus the
+/// parameters Tauri injects rather than deserializes.
+#[test]
+fn every_multi_word_command_has_a_wire_case() {
+    let covered: BTreeMap<_, _> = wire_cases().into_iter().collect();
+    let excused: BTreeMap<_, _> = NOT_DRIVEN.iter().copied().collect();
+
+    let missing: Vec<String> = registered_commands()
+        .into_iter()
+        .filter(|(cmd, params)| {
+            params.iter().any(|p| p.contains('_'))
+                && !covered.contains_key(cmd.as_str())
+                && !excused.contains_key(cmd.as_str())
+        })
+        .map(|(cmd, params)| format!("{cmd}({})", params.join(", ")))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "these commands take a multi-word parameter and no wire case covers them, so a \
+         camelCase⇄snake_case rename in either would go unnoticed:\n  {}\n\
+         Add a case to `wire_cases` (and the handler list in `build_app`), or record it \
+         in NOT_DRIVEN with the reason its handler can't be reached in a test.",
+        missing.join("\n  ")
+    );
+}
+
+/// Every command `lib.rs` registers, mapped to the parameters Tauri deserializes
+/// out of the invoke body.
+fn registered_commands() -> BTreeMap<String, Vec<String>> {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let lib = std::fs::read_to_string(src.join("lib.rs")).expect("read lib.rs");
+    let registered = registered_names(&lib);
+
+    let mut sources = Vec::new();
+    collect_sources(&src, &mut sources);
+
+    let mut out = BTreeMap::new();
+    for text in &sources {
+        for (name, params) in command_signatures(text) {
+            if registered.contains(&name) {
+                out.insert(name, params);
+            }
+        }
+    }
+    assert!(
+        out.len() >= registered.len(),
+        "{} registered commands but only {} signatures found — the source scan has \
+         drifted from how commands are written, not the commands themselves",
+        registered.len(),
+        out.len()
+    );
+    out
+}
+
+fn collect_sources(dir: &std::path::Path, out: &mut Vec<String>) {
+    for entry in std::fs::read_dir(dir).expect("read src dir") {
+        let path = entry.expect("dir entry").path();
+        if path.is_dir() {
+            collect_sources(&path, out);
+        } else if path.extension().is_some_and(|e| e == "rs")
+            && !path.to_string_lossy().contains("_tests")
+        {
+            out.push(std::fs::read_to_string(&path).expect("read source"));
+        }
+    }
+}
+
+/// The names inside `generate_handler![…]`, last path segment only.
+fn registered_names(lib: &str) -> std::collections::BTreeSet<String> {
+    let start = lib
+        .find("generate_handler![")
+        .expect("lib.rs registers commands")
+        + "generate_handler![".len();
+    let len = lib[start..].find(']').expect("unterminated handler list");
+    lib[start..start + len]
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or_default())
+        .flat_map(|line| line.split(','))
+        .map(|name| name.trim().rsplit("::").next().unwrap_or_default().trim())
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// `(name, body-deserialized parameter names)` for each `#[tauri::command]`.
+/// `State`, `AppHandle` and the window types are injected by Tauri and never
+/// appear in the body, so they are dropped by type rather than by name.
+fn command_signatures(text: &str) -> Vec<(String, Vec<String>)> {
+    const MARKER: &str = "#[tauri::command]";
+    const INJECTED: &[&str] = &["State<", "AppHandle", "Window", "Webview"];
+
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.find(MARKER) {
+        rest = &rest[at + MARKER.len()..];
+        let Some(fk) = rest.find("fn ") else { break };
+        let after = &rest[fk + "fn ".len()..];
+        let Some(open) = after.find('(') else { break };
+        let name = after[..open]
+            .split('<')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+
+        let mut depth = 0i32;
+        let mut close = open;
+        for (i, c) in after[open..].char_indices() {
+            match c {
+                '(' | '<' | '[' => depth += 1,
+                ')' | '>' | ']' => depth -= 1,
+                _ => {}
+            }
+            if depth == 0 {
+                close = open + i;
+                break;
+            }
+        }
+
+        let params = split_top_level(&after[open + 1..close])
+            .into_iter()
+            .filter(|p| !INJECTED.iter().any(|marker| p.contains(marker)))
+            .filter_map(|p| Some(p.split(':').next()?.trim().to_string()))
+            .filter(|p| !p.is_empty())
+            .collect();
+        out.push((name, params));
+        rest = &after[close..];
+    }
+    out
+}
+
+fn split_top_level(params: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut depth = 0i32;
+    let mut current = String::new();
+    for c in params.chars() {
+        match c {
+            '(' | '<' | '[' => depth += 1,
+            ')' | '>' | ']' => depth -= 1,
+            ',' if depth == 0 => {
+                parts.push(std::mem::take(&mut current));
+                continue;
+            }
+            _ => {}
+        }
+        current.push(c);
+    }
+    parts.push(current);
+    parts.into_iter().filter(|p| !p.trim().is_empty()).collect()
 }
 
 /// The other half of the boundary: a command reached with no pool must surface the

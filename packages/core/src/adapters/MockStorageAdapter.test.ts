@@ -1735,7 +1735,7 @@ describe("calendar sync — teardown keeps the user's work", () => {
     const account = await adapter.connectCaldavAccount(conn);
     const cal = account.calendars[0]!;
     const enabled = await adapter.toggleSyncCalendar(cal.id, true, "#7c9cf0");
-    const page = await adapter.createPage({
+    const page = await adapter.seedMirrorPage({
       content: "",
       folderId: enabled.folderId!,
       priority: 0,

@@ -475,7 +475,7 @@
           "op": "movePage",
           "page": "evt-1",
           "target": "inbox",
-          "rejectedWith": "This event is synced from an external calendar \u2014 it stays in its calendar folder."
+          "rejectedWith": "This event is synced from an external calendar — it stays in its calendar folder."
         }
       ],
       "expect": {
@@ -529,6 +529,111 @@
             "uid": "evt-1",
             "exists": true,
             "inCalendarFolder": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "a page of the user's cannot be created inside a calendar's folder",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "createPageIn",
+          "target": "calendarFolder",
+          "uid": "mine",
+          "title": "My note",
+          "rejectedWith": "Pages cannot be created in an external calendar folder"
+        },
+        {
+          "op": "nativePage",
+          "uid": "mine",
+          "title": "My note"
+        }
+      ],
+      "expect": {
+        "pages": [
+          {
+            "uid": "mine",
+            "exists": true,
+            "inCalendarFolder": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "a calendar's folder resists every hand edit but a rename",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": [
+            "Personal",
+            "Work"
+          ]
+        },
+        {
+          "op": "enable",
+          "calendar": "Personal"
+        },
+        {
+          "op": "nativeFolder",
+          "folder": "Projects"
+        },
+        {
+          "op": "folderEdit",
+          "folder": "Personal",
+          "change": "delete",
+          "rejectedWith": "External calendar folders are system-managed — use the Calendar Sync settings to disconnect."
+        },
+        {
+          "op": "folderEdit",
+          "folder": "Personal",
+          "change": "softDelete",
+          "rejectedWith": "External calendar folders are system-managed — use the Calendar Sync settings to disconnect."
+        },
+        {
+          "op": "folderEdit",
+          "folder": "Personal",
+          "change": "moveToRoot",
+          "rejectedWith": "External calendar folders are system-managed — use the Calendar Sync settings to disconnect."
+        },
+        {
+          "op": "folderEdit",
+          "folder": "Projects",
+          "change": "nestUnder",
+          "parent": "Personal",
+          "rejectedWith": "External calendar folders are system-managed — use the Calendar Sync settings to disconnect."
+        },
+        {
+          "op": "folderEdit",
+          "folder": "Personal",
+          "change": "rename"
+        }
+      ],
+      "expect": {
+        "folderCount": 2,
+        "folder": {
+          "calendar": "Personal",
+          "exists": true,
+          "isExternalCalendar": true
+        },
+        "calendars": [
+          {
+            "name": "Personal",
+            "enabled": true,
+            "hasFolder": true,
+            "detachedPages": 0
           }
         ]
       }
