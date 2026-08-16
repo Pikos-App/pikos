@@ -45,17 +45,78 @@ interface Scenario {
   };
 }
 
-const EXPECT_KEYS = [
-  "head",
-  "completedDates",
-  "skippedDates",
-  "exdates",
-  "clones",
-  "cloneCount",
-  "overrideCount",
-] as const;
+type Expect = Scenario["expect"];
 
-const table = readConformanceTable<Scenario>("recurrence", EXPECT_KEYS) as {
+interface World {
+  adapter: MockStorageAdapter;
+  headId: string;
+}
+
+/** The clones a scenario left behind, oldest first. Shared by the two checkers that
+ *  read them, so the ordering they both assume has one definition. */
+async function clonesOf(adapter: MockStorageAdapter, headId: string) {
+  return (await adapter.listPages())
+    .filter((p) => p.id !== headId)
+    .sort((a, b) => (a.scheduledStart ?? "").localeCompare(b.scheduledStart ?? ""));
+}
+
+/** One assertion per expectation key. `Record<keyof Expect, …>` is the point: a key
+ *  added to `Expect` does not compile until it has a checker here, and
+ *  `readConformanceTable` rejects a fixture key that is in neither. A declared list
+ *  of key names could drift from the assertions; these are the assertions. */
+const CHECKS: Record<keyof Expect, (want: Expect, world: World) => Promise<void>> = {
+  cloneCount: async (want, { adapter, headId }) => {
+    if (want.cloneCount === undefined) return;
+    expect(await clonesOf(adapter, headId)).toHaveLength(want.cloneCount);
+  },
+
+  clones: async (want, { adapter, headId }) => {
+    if (!want.clones) return;
+    const clones = await clonesOf(adapter, headId);
+    expect(clones).toHaveLength(want.clones.length);
+    clones.forEach((got, i) => {
+      expect(got.scheduledStart).toBe(want.clones![i]!.scheduledStart);
+      expect(got.status).toBe(want.clones![i]!.status);
+    });
+  },
+
+  completedDates: async (want, { adapter, headId }) => {
+    if (!want.completedDates) return;
+    const after = (await adapter.getPage(headId))!;
+    expect(Object.keys(after.completedOccurrences ?? {}).sort()).toEqual(want.completedDates);
+  },
+
+  exdates: async (want, { adapter, headId }) => {
+    if (!want.exdates) return;
+    const stored = await adapter.getRecurrenceRule(headId);
+    expect(stored?.rruleExdates ?? []).toEqual(want.exdates);
+  },
+
+  head: async (want, { adapter, headId }) => {
+    if (!want.head) return;
+    const after = (await adapter.getPage(headId))!;
+    if (want.head.scheduledStart !== undefined) {
+      expect(after.scheduledStart).toBe(want.head.scheduledStart);
+    }
+    if (want.head.status !== undefined) expect(after.status).toBe(want.head.status);
+  },
+
+  overrideCount: async (want, { adapter, headId }) => {
+    if (want.overrideCount === undefined) return;
+    const overrides = (await adapter.listPageSchedules(headId)).filter(
+      (s) => s.originalDate != null
+    );
+    expect(overrides).toHaveLength(want.overrideCount);
+  },
+
+  skippedDates: async (want, { adapter, headId }) => {
+    if (!want.skippedDates) return;
+    const after = (await adapter.getPage(headId))!;
+    expect([...(after.skippedOccurrences ?? [])].sort()).toEqual(want.skippedDates);
+  },
+};
+
+const table = readConformanceTable<Scenario>("recurrence", Object.keys(CHECKS)) as {
   series: { rrule: string; start: string; end: string; timezone: string };
   scenarios: Scenario[];
 };
@@ -153,48 +214,8 @@ describe("recurrence lifecycle conformance", () => {
 
       for (const step of scenario.steps) await apply(adapter, head.id, rule.id, step);
 
-      const { expect: want } = scenario;
-      const after = (await adapter.getPage(head.id))!;
-
-      if (want.head?.scheduledStart !== undefined) {
-        expect(after.scheduledStart).toBe(want.head.scheduledStart);
-      }
-      if (want.head?.status !== undefined) {
-        expect(after.status).toBe(want.head.status);
-      }
-
-      if (want.completedDates) {
-        expect(Object.keys(after.completedOccurrences ?? {}).sort()).toEqual(want.completedDates);
-      }
-      if (want.skippedDates) {
-        expect([...(after.skippedOccurrences ?? [])].sort()).toEqual(want.skippedDates);
-      }
-      if (want.exdates) {
-        const stored = await adapter.getRecurrenceRule(head.id);
-        expect(stored?.rruleExdates ?? []).toEqual(want.exdates);
-      }
-
-      const clones = (await adapter.listPages())
-        .filter((p) => p.id !== head.id)
-        .sort((a, b) => (a.scheduledStart ?? "").localeCompare(b.scheduledStart ?? ""));
-
-      if (want.cloneCount !== undefined) {
-        expect(clones).toHaveLength(want.cloneCount);
-      }
-      if (want.clones) {
-        expect(clones).toHaveLength(want.clones.length);
-        clones.forEach((got, i) => {
-          expect(got.scheduledStart).toBe(want.clones![i]!.scheduledStart);
-          expect(got.status).toBe(want.clones![i]!.status);
-        });
-      }
-
-      if (want.overrideCount !== undefined) {
-        const overrides = (await adapter.listPageSchedules(head.id)).filter(
-          (s) => s.originalDate != null
-        );
-        expect(overrides).toHaveLength(want.overrideCount);
-      }
+      const world: World = { adapter, headId: head.id };
+      for (const check of Object.values(CHECKS)) await check(scenario.expect, world);
     });
   }
 });

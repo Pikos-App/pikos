@@ -28,13 +28,12 @@ interface Scenario {
 }
 
 /**
- * Load `<name>-lifecycle.json` and reject any expectation key this runner does
- * not read. `expectKeys` is the runner's own contract, so it belongs beside the
- * assertions it describes rather than here.
+ * Load `<name>-lifecycle.json` and reject any expectation key this runner does not
+ * read. Callers pass `Object.keys(CHECKS)` — the keys of the record that holds the
+ * assertions — so the set cannot name a key nothing asserts.
  *
- * Step ops are deliberately *not* checked here: a `default:` arm that throws
- * covers them at the point of dispatch, where the set is the switch itself and
- * cannot be listed wrongly.
+ * Step ops are deliberately *not* checked here: a `default:` arm that throws covers
+ * them at the point of dispatch, where the set is the switch itself.
  */
 export function readConformanceTable<T extends Scenario>(
   name: string,

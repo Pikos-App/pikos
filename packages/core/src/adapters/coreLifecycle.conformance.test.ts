@@ -46,9 +46,49 @@ interface Scenario {
   };
 }
 
-const EXPECT_KEYS = ["search", "listQuery", "visiblePages", "reminderCount"] as const;
+type Expect = Scenario["expect"];
 
-const table = readConformanceTable<Scenario>("core", EXPECT_KEYS);
+interface World {
+  adapter: MockStorageAdapter;
+  ids: Map<string, string>;
+  /** The fixture's name for a real id, so a failure reads in the table's terms. */
+  named: (real: string) => string;
+}
+
+/** One assertion per expectation key. `Record<keyof Expect, …>` is the point: a key
+ *  added to `Expect` does not compile until it has a checker here, and
+ *  `readConformanceTable` rejects a fixture key that is in neither. A declared list
+ *  of key names could drift from the assertions; these are the assertions. */
+const CHECKS: Record<keyof Expect, (want: Expect, world: World) => Promise<void>> = {
+  listQuery: async (want, { adapter, named }) => {
+    if (!want.listQuery) return;
+    const listed = await adapter.listPages({ query: want.listQuery.query });
+    expect(listed.map((p) => named(p.id)).sort()).toEqual([...want.listQuery.matches].sort());
+  },
+
+  reminderCount: async (want, { adapter, ids }) => {
+    if (!want.reminderCount) return;
+    const reminders = await adapter.listPageReminders(ids.get(want.reminderCount.page)!);
+    expect(reminders).toHaveLength(want.reminderCount.count);
+  },
+
+  search: async (want, { adapter, named }) => {
+    if (!want.search) return;
+    const res = await adapter.searchPages(want.search.query, want.search.includeCompleted);
+    expect(res.results.map((r) => named(r.id)).sort()).toEqual([...want.search.matches].sort());
+    if (want.search.completedCount !== undefined) {
+      expect(res.completedCount).toBe(want.search.completedCount);
+    }
+  },
+
+  visiblePages: async (want, { adapter, named }) => {
+    if (!want.visiblePages) return;
+    const listed = await adapter.listPages();
+    expect(listed.map((p) => named(p.id)).sort()).toEqual([...want.visiblePages].sort());
+  },
+};
+
+const table = readConformanceTable<Scenario>("core", Object.keys(CHECKS));
 
 async function apply(
   adapter: MockStorageAdapter,
@@ -130,30 +170,9 @@ describe("core lifecycle conformance", () => {
       for (const step of scenario.steps) await apply(adapter, ids, step);
 
       const named = (real: string) => [...ids.entries()].find(([, v]) => v === real)?.[0] ?? real;
-      const { expect: want } = scenario;
+      const world: World = { adapter, ids, named };
 
-      if (want.search) {
-        const res = await adapter.searchPages(want.search.query, want.search.includeCompleted);
-        expect(res.results.map((r) => named(r.id)).sort()).toEqual([...want.search.matches].sort());
-        if (want.search.completedCount !== undefined) {
-          expect(res.completedCount).toBe(want.search.completedCount);
-        }
-      }
-
-      if (want.listQuery) {
-        const listed = await adapter.listPages({ query: want.listQuery.query });
-        expect(listed.map((p) => named(p.id)).sort()).toEqual([...want.listQuery.matches].sort());
-      }
-
-      if (want.visiblePages) {
-        const listed = await adapter.listPages();
-        expect(listed.map((p) => named(p.id)).sort()).toEqual([...want.visiblePages].sort());
-      }
-
-      if (want.reminderCount) {
-        const reminders = await adapter.listPageReminders(ids.get(want.reminderCount.page)!);
-        expect(reminders).toHaveLength(want.reminderCount.count);
-      }
+      for (const check of Object.values(CHECKS)) await check(scenario.expect, world);
     });
   }
 });

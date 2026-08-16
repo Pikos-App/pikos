@@ -66,16 +66,73 @@ interface Scenario {
   };
 }
 
-const EXPECT_KEYS = [
-  "accountVisible",
-  "accountCount",
-  "folderCount",
-  "calendars",
-  "folder",
-  "pages",
-] as const;
+type Expect = Scenario["expect"];
 
-const table = readConformanceTable<Scenario>("sync", EXPECT_KEYS);
+/** One assertion per expectation key. `Record<keyof Expect, …>` is the point: a key
+ *  added to `Expect` does not compile until it has a checker here, and
+ *  `readConformanceTable` rejects a fixture key that is in neither. A declared list
+ *  of key names could drift from the assertions; these are the assertions. */
+const CHECKS: Record<
+  keyof Expect,
+  (want: Expect, adapter: MockStorageAdapter, world: World) => Promise<void>
+> = {
+  accountCount: async (want, adapter) => {
+    if (want.accountCount === undefined) return;
+    expect(await adapter.getSyncStatus()).toHaveLength(want.accountCount);
+  },
+
+  accountVisible: async (want, adapter, world) => {
+    if (want.accountVisible === undefined) return;
+    const status = await adapter.getSyncStatus();
+    expect(status.some((a) => a.id === world.accountId)).toBe(want.accountVisible);
+  },
+
+  calendars: async (want, adapter, world) => {
+    if (!want.calendars) return;
+    const rows = await adapter.listSyncCalendars(world.accountId);
+    for (const wantCal of want.calendars) {
+      const row = rows.find((c) => c.displayName === wantCal.name);
+      expect(row, `no calendar named ${wantCal.name}`).toBeDefined();
+      expect(row!.enabled).toBe(wantCal.enabled);
+      expect(row!.folderId != null).toBe(wantCal.hasFolder);
+      expect(row!.detachedPages).toBe(wantCal.detachedPages);
+    }
+  },
+
+  folder: async (want, adapter, world) => {
+    if (!want.folder) return;
+    const folderId = world.folders.get(want.folder.calendar)!;
+    const folder = (await adapter.listFolders()).find((f) => f.id === folderId);
+    expect(folder !== undefined).toBe(want.folder.exists);
+    if (want.folder.isExternalCalendar !== undefined && folder) {
+      expect(folder.isExternalCalendar ?? false).toBe(want.folder.isExternalCalendar);
+    }
+  },
+
+  folderCount: async (want, adapter) => {
+    if (want.folderCount === undefined) return;
+    expect(await adapter.listFolders()).toHaveLength(want.folderCount);
+  },
+
+  pages: async (want, adapter, world) => {
+    for (const wantPage of want.pages ?? []) {
+      const page = await adapter.getPage(world.pages.get(wantPage.uid)!);
+      expect(page !== null, `${wantPage.uid} exists`).toBe(wantPage.exists);
+      if (!page) continue;
+
+      if (wantPage.syncState !== undefined) expect(page.syncState).toBe(wantPage.syncState);
+      if (wantPage.scheduleLocked !== undefined) {
+        expect(page.scheduleLocked ?? false).toBe(wantPage.scheduleLocked);
+      }
+      if (wantPage.inCalendarFolder !== undefined) {
+        const inCalendarFolder = [...world.folders.values()].includes(page.folderId ?? "");
+        expect(inCalendarFolder).toBe(wantPage.inCalendarFolder);
+      }
+    }
+  },
+};
+
+const table = readConformanceTable<Scenario>("sync", Object.keys(CHECKS));
 
 /** Ids the steps produce and the expectations refer to by name. `folders` outlives
  *  the calendar's own link on purpose — teardown clears it, and a scenario still
@@ -250,57 +307,7 @@ describe("sync lifecycle conformance", () => {
       };
       for (const step of scenario.steps) await apply(adapter, world, step);
 
-      const { expect: want } = scenario;
-      const status = await adapter.getSyncStatus();
-
-      if (want.accountVisible !== undefined) {
-        expect(status.some((a) => a.id === world.accountId)).toBe(want.accountVisible);
-      }
-
-      if (want.accountCount !== undefined) {
-        expect(status).toHaveLength(want.accountCount);
-      }
-
-      if (want.folderCount !== undefined) {
-        expect(await adapter.listFolders()).toHaveLength(want.folderCount);
-      }
-
-      if (want.calendars) {
-        const rows = await adapter.listSyncCalendars(world.accountId);
-        for (const wantCal of want.calendars) {
-          const row = rows.find((c) => c.displayName === wantCal.name);
-          expect(row, `no calendar named ${wantCal.name}`).toBeDefined();
-          expect(row!.enabled).toBe(wantCal.enabled);
-          expect(row!.folderId != null).toBe(wantCal.hasFolder);
-          expect(row!.detachedPages).toBe(wantCal.detachedPages);
-        }
-      }
-
-      if (want.folder) {
-        const folderId = world.folders.get(want.folder.calendar)!;
-        const folder = (await adapter.listFolders()).find((f) => f.id === folderId);
-        expect(folder !== undefined).toBe(want.folder.exists);
-        if (want.folder.isExternalCalendar !== undefined && folder) {
-          expect(folder.isExternalCalendar ?? false).toBe(want.folder.isExternalCalendar);
-        }
-      }
-
-      for (const wantPage of want.pages ?? []) {
-        const page = await adapter.getPage(world.pages.get(wantPage.uid)!);
-        expect(page !== null, `${wantPage.uid} exists`).toBe(wantPage.exists);
-        if (!page) continue;
-
-        if (wantPage.syncState !== undefined) {
-          expect(page.syncState).toBe(wantPage.syncState);
-        }
-        if (wantPage.scheduleLocked !== undefined) {
-          expect(page.scheduleLocked ?? false).toBe(wantPage.scheduleLocked);
-        }
-        if (wantPage.inCalendarFolder !== undefined) {
-          const inCalendarFolder = [...world.folders.values()].includes(page.folderId ?? "");
-          expect(inCalendarFolder).toBe(wantPage.inCalendarFolder);
-        }
-      }
+      for (const check of Object.values(CHECKS)) await check(scenario.expect, adapter, world);
     });
   }
 });
