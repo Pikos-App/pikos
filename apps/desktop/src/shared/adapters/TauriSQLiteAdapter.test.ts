@@ -4,8 +4,9 @@
 // A mutating command left out of `WRITE_COMMANDS` still works — it just lets the
 // DB watcher mistake the app's own echo for someone else's write and refetch the
 // workspace on top of the user's action. Nothing fails, nothing logs; the user sees
-// a flicker after a bulk complete or a drag. So the test is not "is the list
-// right", which nobody can eyeball, but "is every command classified at all".
+// a flicker after a bulk complete or a drag. So the test here is "is every command
+// classified at all" — whether a classification is *true* depends on what the Rust
+// handler does, and is proved by driving it (`db/ipc_tests.rs`).
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

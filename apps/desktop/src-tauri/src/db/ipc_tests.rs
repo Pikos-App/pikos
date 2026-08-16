@@ -12,6 +12,10 @@
 //! terms (no such page, no such account) still passes: reaching the handler at all
 //! is the proof the wire agreed. Only an argument error fails the test.
 //!
+//! Being able to invoke for real also settles a question the TypeScript cannot: the
+//! adapter's read/write classification is a claim about what each handler *does*,
+//! and the probe below holds it to a live database.
+//!
 //! Debug-only, because `RuntimeAuthority::new` takes the ACL manifest argument
 //! solely under `debug_assertions`. `cargo test` builds debug; a release test build
 //! skips the module rather than failing to compile.
@@ -105,6 +109,62 @@ const NOT_DRIVEN: &[(&str, &str)] = &[
     ("save_asset", "copies a file into the app data dir"),
 ];
 
+/// Bodies for the read commands `wire_cases` does not already carry. Split that
+/// way so a command reachable from both tests has one body, not two that drift.
+///
+/// These name the ids [`seed_probe_workspace`] plants, unlike the wire cases, whose
+/// ids deliberately match nothing. The probe measures whether a handler wrote, so a
+/// body that resolves to no row would let a misfiled writer pass by finding nothing
+/// to write to.
+fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
+    vec![
+        ("get_page", json!({ "id": PROBE_PAGE })),
+        ("list_pages", json!({ "filter": null })),
+        ("list_pages_today", json!({})),
+        (
+            "list_completed_pages",
+            json!({ "filter": { "limit": 10, "offset": 0 } }),
+        ),
+        ("search_tags", json!({ "query": "work" })),
+        ("get_folder", json!({ "id": PROBE_FOLDER })),
+        ("list_folders", json!({})),
+        ("list_recurrence_rules", json!({})),
+        ("get_sync_status", json!({})),
+        ("google_sync_available", json!({})),
+    ]
+}
+
+const PROBE_PAGE: &str = "probe-page";
+const PROBE_FOLDER: &str = "probe-folder";
+
+/// One row in each table a read command can reach, so the reads do real work and a
+/// misfiled writer has something to destroy.
+async fn seed_probe_workspace(pool: &sqlx::SqlitePool) {
+    pikos_db::insert_test_folder(pool, PROBE_FOLDER, "Work")
+        .await
+        .unwrap();
+    let mut page = pikos_db::TestPage::new(PROBE_PAGE, "Weekly review");
+    page.folder_id = Some(PROBE_FOLDER);
+    page.tags_json = r#"["work"]"#;
+    page.scheduled_start = Some("2026-06-01T09:00:00");
+    pikos_db::insert_test_page(pool, page).await.unwrap();
+}
+
+/// Read commands the probe below cannot drive, with the reason.
+const NOT_PROBED: &[(&str, &str)] = &[(
+    "connect_db",
+    "opens a pool and migrates it — writing is the whole point, and it would \
+     swap the pool the probe measures",
+)];
+
+fn probe_body(cmd: &str) -> Option<serde_json::Value> {
+    wire_cases()
+        .into_iter()
+        .chain(extra_read_bodies())
+        .find(|(name, _)| *name == cmd)
+        .map(|(_, body)| body)
+}
+
 /// `mock_context` resolves an empty ACL, so every invoke is refused before it
 /// reaches a handler. Tauri's own `__allow_command` grants windows but leaves
 /// webviews empty, and the authority requires a match on both — hence the entries
@@ -112,6 +172,7 @@ const NOT_DRIVEN: &[(&str, &str)] = &[
 fn permissive_authority() -> RuntimeAuthority {
     let allowed_commands: BTreeMap<_, _> = wire_cases()
         .into_iter()
+        .chain(extra_read_bodies())
         .map(|(cmd, _)| {
             (
                 cmd.to_string(),
@@ -157,6 +218,16 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::schedules::expand_recurrence_range,
             super::dev::export_csv,
             super::dev::export_markdown,
+            super::pages::get_page,
+            super::pages::list_pages,
+            super::pages::list_pages_today,
+            super::pages::list_completed_pages,
+            super::tags::search_tags,
+            super::folders::get_folder,
+            super::folders::list_folders,
+            super::schedules::list_recurrence_rules,
+            super::sync::get_sync_status,
+            super::sync::google_sync_available,
         ])
         .build(ctx)
         .unwrap();
@@ -203,6 +274,108 @@ fn every_command_accepts_the_body_the_adapter_sends() {
             );
         }
     }
+}
+
+/// `TauriSQLiteAdapter` splits every command into `WRITE_COMMANDS` and
+/// `READ_COMMANDS`, and issuing a write opens a window that tells the DB watcher to
+/// ignore the change event it is about to see. Misfile a mutating command as a read
+/// and the watcher takes the app's own echo for somebody else's write and refetches
+/// the workspace on top of what the user just did — a flicker after a bulk complete
+/// or a drag, with nothing failing and nothing logged. Six commands were missing
+/// from the write set once already.
+///
+/// The adapter's own test pins that every command is classified; it cannot pin that
+/// the classification is *true*, because that fact lives in the Rust handler. So
+/// this drives each declared read against a real single-connection pool and asserts
+/// SQLite counted no row changes. A writer sitting in `READ_COMMANDS` fails here.
+///
+/// The opposite misfiling — a read declared a write — costs only a needless
+/// suppression window, so it is not worth the seed data it would take to detect.
+#[test]
+fn a_command_the_adapter_calls_a_read_changes_no_rows() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let pool = rt.block_on(test_pool());
+    rt.block_on(seed_probe_workspace(&pool));
+    let app = build_app(pool.clone());
+    let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+
+    let excused: BTreeMap<_, _> = NOT_PROBED.iter().copied().collect();
+    let mut unprobed = Vec::new();
+
+    for cmd in declared_read_commands() {
+        if excused.contains_key(cmd.as_str()) {
+            continue;
+        }
+        let Some(body) = probe_body(&cmd) else {
+            unprobed.push(cmd);
+            continue;
+        };
+
+        let before = rt.block_on(total_changes(&pool));
+        let _ = invoke(&webview, &cmd, body);
+        let after = rt.block_on(total_changes(&pool));
+
+        assert_eq!(
+            before,
+            after,
+            "{cmd} is in READ_COMMANDS but changed {} row(s). Either it belongs in \
+             WRITE_COMMANDS, or the watcher will refetch the workspace on top of the \
+             user's own action every time it runs.",
+            after - before
+        );
+    }
+
+    assert!(
+        unprobed.is_empty(),
+        "these commands are declared reads and nothing proves they read: {}\n\
+         Add a body to `extra_read_bodies`, or record it in NOT_PROBED with why it \
+         cannot be driven.",
+        unprobed.join(", ")
+    );
+}
+
+/// Rows changed on this connection since it opened. Meaningful only because
+/// `test_pool` caps the pool at one connection — `total_changes()` is per-connection,
+/// so a multi-connection pool would report whichever one the probe happened to get.
+async fn total_changes(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar::<_, i64>("SELECT total_changes()")
+        .fetch_one(pool)
+        .await
+        .expect("total_changes()")
+}
+
+/// `READ_COMMANDS` as the adapter declares it. Read out of the TypeScript rather
+/// than restated here, since a copy would agree with itself while the real list
+/// moved on — the same reason the guard-message check reads the Rust source.
+fn declared_read_commands() -> Vec<String> {
+    let adapter = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../src/shared/adapters/TauriSQLiteAdapter.ts");
+    let source = std::fs::read_to_string(&adapter)
+        .unwrap_or_else(|e| panic!("read {}: {e}", adapter.display()));
+
+    const ANCHOR: &str = "READ_COMMANDS = new Set([";
+    let start = source.find(ANCHOR).expect("adapter declares READ_COMMANDS") + ANCHOR.len();
+    let len = source[start..]
+        .find("]);")
+        .expect("unterminated READ_COMMANDS");
+
+    let commands: Vec<String> = source[start..start + len]
+        .split(',')
+        .filter_map(|entry| {
+            let open = entry.find('"')?;
+            let rest = &entry[open + 1..];
+            Some(rest[..rest.find('"')?].to_string())
+        })
+        .collect();
+    assert!(
+        commands.len() > 10,
+        "only parsed {} read commands — the extraction has drifted from how the \
+         adapter declares them",
+        commands.len()
+    );
+    commands
 }
 
 /// `wire_cases` is written by hand, and a command added tomorrow with a multi-word
