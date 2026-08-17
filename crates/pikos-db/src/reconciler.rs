@@ -1128,7 +1128,9 @@ fn mirror_values(core: &EventCore) -> (Option<String>, Option<String>) {
 /// `011_mirror_search_text.sql` for why the index takes one column and not one
 /// per field. **A new searchable field is added here and nowhere else**, with two
 /// copies of this shape to keep in step: the mock's `mirrorSearchText` twin, and
-/// that migration's frozen SQL backfill.
+/// that migration's frozen SQL backfill. The blob is also read back verbatim as a
+/// search result's excerpt (`build_mirror_excerpt`, search.rs), so a field added
+/// here is shown to the user and not merely matched on.
 ///
 /// Takes the **stored** column shapes rather than an [`EventCore`] so a caller
 /// with rows and no provider payload — the dev seeder, a future re-projection —

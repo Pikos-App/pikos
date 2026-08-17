@@ -42,6 +42,7 @@ struct SearchRow {
     scheduled_start: Option<String>,
     priority: i32,
     tags: Option<String>,
+    mirror_search_text: Option<String>,
 }
 
 fn char_to_byte(s: &str, char_idx: usize) -> usize {
@@ -54,14 +55,34 @@ fn char_to_byte(s: &str, char_idx: usize) -> usize {
 /// Build an excerpt centered on the first occurrence of any search token.
 /// Strips the title and subtitle from the beginning of content_text so the
 /// excerpt only shows body content.
-/// All indexing is char-based to avoid panics on multi-byte UTF-8.
 fn build_excerpt(
     content_text: Option<&str>,
     title: &str,
     subtitle: Option<&str>,
     tokens: &[String],
 ) -> String {
-    let body = strip_title_subtitle(content_text, title, subtitle);
+    excerpt_around(strip_title_subtitle(content_text, title, subtitle), tokens)
+}
+
+/// A mirror's calendar-owned metadata as the excerpt, for a hit that lands only
+/// there — the room or an attendee. Fills the same `excerpt` rather than adding a
+/// metadata arm to `match_source`, so the row's existing quote-and-highlight path
+/// renders it unchanged; an empty excerpt leaves the row showing the page's date,
+/// which names nothing the query asked for.
+///
+/// The stored blob is newline-joined (`mirror_search_text`, reconciler.rs) and the
+/// row is one truncated line, so the parts are rejoined for display.
+fn build_mirror_excerpt(mirror_search_text: Option<&str>, tokens: &[String]) -> String {
+    let Some(text) = mirror_search_text else {
+        return String::new();
+    };
+    excerpt_around(&text.replace('\n', " \u{00B7} "), tokens)
+}
+
+/// Window `body` around the first occurrence of any token, snapped to word
+/// boundaries and elided at both cut edges. Empty when no token is present.
+/// All indexing is char-based to avoid panics on multi-byte UTF-8.
+fn excerpt_around(body: &str, tokens: &[String]) -> String {
     if body.is_empty() {
         return String::new();
     }
@@ -117,10 +138,7 @@ fn build_excerpt(
             };
             format!("{prefix}{slice}{suffix}")
         }
-        None => {
-            // No token found in body — match was in title/subtitle/tags only.
-            String::new()
-        }
+        None => String::new(),
     }
 }
 
@@ -263,7 +281,8 @@ pub async fn search_pages_impl(
     // both notes and tasks).
     let sql = if include_completed {
         "SELECT pages.id, pages.title, pages.subtitle, pages.content_text,
-                pages.status, pages.scheduled_start, pages.priority, pages.tags
+                pages.status, pages.scheduled_start, pages.priority, pages.tags,
+                pages.mirror_search_text
          FROM pages_fts
          JOIN pages ON pages.rowid = pages_fts.rowid
          WHERE pages_fts MATCH ?1
@@ -274,7 +293,8 @@ pub async fn search_pages_impl(
          LIMIT 20"
     } else {
         "SELECT pages.id, pages.title, pages.subtitle, pages.content_text,
-                pages.status, pages.scheduled_start, pages.priority, pages.tags
+                pages.status, pages.scheduled_start, pages.priority, pages.tags,
+                pages.mirror_search_text
          FROM pages_fts
          JOIN pages ON pages.rowid = pages_fts.rowid
          WHERE pages_fts MATCH ?1
@@ -306,12 +326,17 @@ pub async fn search_pages_impl(
     let results = rows
         .into_iter()
         .map(|row| {
-            let excerpt = build_excerpt(
+            let body_excerpt = build_excerpt(
                 row.content_text.as_deref(),
                 &row.title,
                 row.subtitle.as_deref(),
                 &tokens,
             );
+            let excerpt = if body_excerpt.is_empty() {
+                build_mirror_excerpt(row.mirror_search_text.as_deref(), &tokens)
+            } else {
+                body_excerpt
+            };
 
             let title_lower = row.title.to_lowercase();
             let title_hit = tokens

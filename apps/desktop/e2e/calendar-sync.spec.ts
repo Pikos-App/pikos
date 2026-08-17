@@ -774,6 +774,20 @@ appTest("search finds a synced page @tier2", async ({ app }) => {
   await expect(dialog.getByText("Team standup")).toBeVisible();
 });
 
+// The row has to show what it matched: the query hits calendar-owned metadata and
+// nothing in the body, so the excerpt is the only place "Zoom" can appear. An exact
+// text match is the highlight — the word is its own element only once highlighted.
+appTest("search by room quotes the room on the result row @tier2", async ({ app }) => {
+  await seedSynced(app);
+
+  await app.keyboard.press(mod("Mod+k"));
+  const dialog = app.getByRole("dialog", { name: "Search pages" });
+  await expect(dialog).toBeVisible();
+  await app.keyboard.type("Zoom");
+  await expect(dialog.getByText("Team standup")).toBeVisible();
+  await expect(dialog.getByText("Zoom", { exact: true })).toBeVisible();
+});
+
 // ─── tier2: the page list honours the mirror lock ────────────────────────────
 //
 // DOM-level proof for the list side of the lock, mirroring "a synced block can't

@@ -141,11 +141,18 @@ struct Expect {
 
 /// Matches are named by the uid that produced the page, since a scenario never
 /// sees the generated page id.
+///
+/// `excerpt_contains` is checked case-insensitively against every matched row, and
+/// with it that the row calls itself a content match — an excerpt the label does not
+/// let the palette render is not shown. Containment rather than equality because the
+/// two windowers are deliberately unequal: the mock's is a fixed-width approximation
+/// of the writer's word-snapped one.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SearchExpect {
     query: String,
     matches: Vec<String>,
+    excerpt_contains: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -641,21 +648,41 @@ async fn check(pool: &sqlx::SqlitePool, world: &World, scenario: &Scenario) {
         let res = crate::search::search_pages_impl(pool, want.query.clone(), None)
             .await
             .unwrap();
-        let mut got: Vec<String> = res
+        let named: Vec<(String, &crate::search::SearchResult)> = res
             .results
             .iter()
             .map(|r| {
-                world
+                let uid = world
                     .pages
                     .iter()
                     .find(|(_, id)| id.as_str() == r.id)
                     .map(|(uid, _)| uid.clone())
-                    .unwrap_or_else(|| r.id.clone())
+                    .unwrap_or_else(|| r.id.clone());
+                (uid, r)
             })
             .collect();
+        let mut got: Vec<String> = named.iter().map(|(uid, _)| uid.clone()).collect();
         got.sort();
         let mut expected = want.matches.clone();
         expected.sort();
         assert_eq!(got, expected, "{at}: search hits for {:?}", want.query);
+
+        if let Some(fragment) = &want.excerpt_contains {
+            for uid in &want.matches {
+                let (_, row) = named.iter().find(|(name, _)| name == uid).unwrap();
+                assert!(
+                    row.excerpt
+                        .to_lowercase()
+                        .contains(&fragment.to_lowercase()),
+                    "{at}: {uid}'s excerpt is {:?}, wanted {fragment:?}",
+                    row.excerpt
+                );
+                assert!(
+                    row.match_source == "content" || row.match_source == "both",
+                    "{at}: {uid} is labelled {:?}, so its excerpt never renders",
+                    row.match_source
+                );
+            }
+        }
     }
 }

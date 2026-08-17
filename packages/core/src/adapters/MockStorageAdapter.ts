@@ -124,10 +124,11 @@ function ftsMatches(terms: string[], document: string): boolean {
   );
 }
 
-function excerptAround(lowerText: string, terms: string[]): string {
-  const hit = terms.map((t) => lowerText.indexOf(t)).find((i) => i >= 0) ?? -1;
+function excerptAround(text: string, terms: string[]): string {
+  const lower = text.toLowerCase();
+  const hit = terms.map((t) => lower.indexOf(t)).find((i) => i >= 0) ?? -1;
   if (hit < 0) return "";
-  return lowerText.slice(Math.max(0, hit - 40), hit + 40);
+  return text.slice(Math.max(0, hit - 40), hit + 40);
 }
 
 function toSummary(page: Page): PageSummary {
@@ -478,10 +479,13 @@ export class MockStorageAdapter implements StorageAdapter {
       }
       // Labelling is the writer's own post-selection heuristic (search.rs), which
       // is a looser substring test than selection — a row is already a hit by here.
-      const lower = text.toLowerCase();
       const titleLower = page.title.toLowerCase();
       const titleMatch = terms.some((t) => titleLower.includes(t));
-      const contentMatch = terms.some((t) => lower.includes(t));
+      // A hit only in the mirror metadata quotes the metadata — same fallback and
+      // display join as `build_mirror_excerpt` (search.rs), which owns why.
+      const excerpt =
+        excerptAround(text, terms) || excerptAround(mirror.replace(/\n/g, " · "), terms);
+      const contentMatch = excerpt !== "";
       const meta = {
         contentPreview: (page.contentText ?? "").slice(0, 80),
         priority: page.priority,
@@ -490,7 +494,6 @@ export class MockStorageAdapter implements StorageAdapter {
         subtitle: page.subtitle ?? null,
         tags: page.tags,
       } as const;
-      const excerpt = contentMatch ? excerptAround(lower, terms) : "";
       const result: SearchResult = {
         excerpt,
         id: page.id,

@@ -664,7 +664,8 @@
       "expect": {
         "search": {
           "query": "weyland",
-          "matches": ["evt-1"]
+          "matches": ["evt-1"],
+          "excerptContains": "Weyland Room"
         }
       }
     },
@@ -695,7 +696,8 @@
       "expect": {
         "search": {
           "query": "priya",
-          "matches": ["evt-1"]
+          "matches": ["evt-1"],
+          "excerptContains": "priya@example.com"
         }
       }
     },
@@ -721,7 +723,8 @@
       "expect": {
         "search": {
           "query": "weyland",
-          "matches": ["evt-1"]
+          "matches": ["evt-1"],
+          "excerptContains": "Weyland Room"
         }
       }
     }

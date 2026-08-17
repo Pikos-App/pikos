@@ -65,7 +65,7 @@ interface Scenario {
     calendars?: CalExpect[];
     folder?: { calendar: string; exists: boolean; isExternalCalendar?: boolean };
     pages?: PageExpect[];
-    search?: { query: string; matches: string[] };
+    search?: { query: string; matches: string[]; excerptContains?: string };
   };
 }
 
@@ -138,8 +138,16 @@ const CHECKS: Record<
     if (!want.search) return;
     const byId = new Map([...world.pages].map(([uid, id]) => [id, uid]));
     const { results } = await adapter.searchPages(want.search.query);
-    const got = results.map((r) => byId.get(r.id) ?? r.id).sort();
-    expect(got).toEqual([...want.search.matches].sort());
+    const named = results.map((r) => [byId.get(r.id) ?? r.id, r] as const);
+    expect(named.map(([uid]) => uid).sort()).toEqual([...want.search.matches].sort());
+
+    const fragment = want.search.excerptContains;
+    if (fragment === undefined) return;
+    for (const uid of want.search.matches) {
+      const row = named.find(([name]) => name === uid)![1];
+      expect(row.excerpt.toLowerCase(), `${uid}'s excerpt`).toContain(fragment.toLowerCase());
+      expect(["both", "content"], `${uid}'s excerpt never renders`).toContain(row.matchSource);
+    }
   },
 };
 

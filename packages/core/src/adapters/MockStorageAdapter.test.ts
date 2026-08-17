@@ -325,6 +325,30 @@ describe("searchPages", () => {
     const { results } = await adapter.searchPages("deleted");
     expect(results).toHaveLength(0);
   });
+
+  it("quotes a mirror's metadata when that is all the query hit", async () => {
+    const page = await createTestPage({ title: "Standup" });
+    adapter.markPageSynced(page.id, {
+      attendees: ["priya@example.com"],
+      location: "Weyland Room",
+      state: "active",
+    });
+
+    for (const query of ["weyland", "priya"]) {
+      const { results } = await adapter.searchPages(query);
+      expect(results[0]!.excerpt.toLowerCase()).toContain(query);
+      expect(results[0]!.matchSource).toBe("content");
+    }
+  });
+
+  it("prefers the body over a mirror's metadata for the excerpt", async () => {
+    const page = await createTestPage({ contentText: "moved to the annex", title: "Standup" });
+    adapter.markPageSynced(page.id, { location: "Annex Room", state: "active" });
+
+    const { results } = await adapter.searchPages("annex");
+    expect(results[0]!.excerpt).toContain("moved to the annex");
+    expect(results[0]!.excerpt).not.toContain("Annex Room");
+  });
 });
 
 // ─── matchesFilter (tested via listPages) ────────────────────────────────────
