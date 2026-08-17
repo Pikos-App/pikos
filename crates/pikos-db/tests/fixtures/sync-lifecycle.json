@@ -637,6 +637,93 @@
           }
         ]
       }
+    },
+    {
+      "name": "a room name finds the mirror that is held in it",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": ["Personal"]
+        },
+        { "op": "enable", "calendar": "Personal" },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup",
+          "location": "Weyland Room"
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-2",
+          "title": "Retro"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "weyland",
+          "matches": ["evt-1"]
+        }
+      }
+    },
+    {
+      "name": "an attendee finds the mirror they are invited to",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": ["Personal"]
+        },
+        { "op": "enable", "calendar": "Personal" },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup",
+          "attendees": ["priya@example.com", "sam@example.com"]
+        },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-2",
+          "title": "Retro",
+          "attendees": ["sam@example.com"]
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "priya",
+          "matches": ["evt-1"]
+        }
+      }
+    },
+    {
+      "name": "a detached page keeps the metadata it was mirroring",
+      "steps": [
+        {
+          "op": "connect",
+          "displayName": "you@example.com",
+          "calendars": ["Personal"]
+        },
+        { "op": "enable", "calendar": "Personal" },
+        {
+          "op": "syncEvent",
+          "calendar": "Personal",
+          "uid": "evt-1",
+          "title": "Standup",
+          "location": "Weyland Room"
+        },
+        { "op": "own", "uid": "evt-1" },
+        { "op": "disable", "calendar": "Personal" }
+      ],
+      "expect": {
+        "search": {
+          "query": "weyland",
+          "matches": ["evt-1"]
+        }
+      }
     }
   ]
 }

@@ -17,3 +17,18 @@ export function ftsTokens(text: string): string[] {
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean);
 }
+
+/**
+ * The calendar-owned metadata a mirror page contributes to the index, as one
+ * blob. Twin of `mirror_search_text` in `reconciler.rs`, which writes it to the
+ * `pages.mirror_search_text` denorm `pages_fts` reads — a field added on one side
+ * and not the other is a page findable in the app and not in test mode.
+ * Null when there is nothing to index.
+ */
+export function mirrorSearchText(
+  location: string | null | undefined,
+  attendees: readonly string[] | null | undefined
+): string | null {
+  const parts = [location ?? "", ...(attendees ?? [])].filter((p) => p.trim() !== "");
+  return parts.length > 0 ? parts.join("\n") : null;
+}

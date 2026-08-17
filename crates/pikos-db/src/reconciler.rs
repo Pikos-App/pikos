@@ -139,11 +139,12 @@ async fn apply_event(
     // that copy severed in the trash — reactivating it would rewrite an invisible
     // (`deleted_at`) row and re-lock it on restore. Drop the stale link so its
     // `external_id` frees, then fall through to mirror the live event fresh.
-    if let Some((page_sync_id, _, _, _, true)) = &existing {
+    if let Some((page_sync_id, page_id, _, _, true)) = &existing {
         sqlx::query("DELETE FROM page_sync WHERE id = ?")
             .bind(page_sync_id)
             .execute(&mut **tx)
             .await?;
+        set_mirror_search_text(tx, page_id, None).await?;
         existing = None;
     }
 
@@ -202,6 +203,8 @@ async fn apply_event(
         (page_id, true)
     };
 
+    let mirror_search = mirror_search_text(mirror_location.as_deref(), mirror_attendees.as_deref());
+    set_mirror_search_text(tx, &page_id, mirror_search.as_deref()).await?;
     if !is_new {
         reclaim_calendar_folder(tx, &page_id, &ctx.folder_id).await?;
     }
@@ -774,6 +777,7 @@ async fn teardown_page_batch(
                     .bind(&page_sync_id)
                     .execute(&mut *tx)
                     .await?;
+                set_mirror_search_text(&mut tx, &page_id, None).await?;
             }
             // Already severed by a prior upstream removal — keep its dormant identity.
             "detached" => {}
@@ -1117,6 +1121,47 @@ fn mirror_values(core: &EventCore) -> (Option<String>, Option<String>) {
         serde_json::to_string(&core.attendees).ok()
     };
     (core.location.clone(), attendees)
+}
+
+/// Every searchable piece of mirror metadata as one blob, for the
+/// `pages.mirror_search_text` denorm the FTS index reads — see
+/// `011_mirror_search_text.sql` for why the index takes one column and not one
+/// per field. **A new searchable field is added here and nowhere else**, with two
+/// copies of this shape to keep in step: the mock's `mirrorSearchText` twin, and
+/// that migration's frozen SQL backfill.
+///
+/// Takes the **stored** column shapes rather than an [`EventCore`] so a caller
+/// with rows and no provider payload — the dev seeder, a future re-projection —
+/// cannot derive a value the columns don't support. Returns None when there is
+/// nothing to index, so the denorm reads like the two columns it projects.
+pub fn mirror_search_text(location: Option<&str>, attendees_json: Option<&str>) -> Option<String> {
+    let attendees: Vec<String> = attendees_json
+        .and_then(|j| serde_json::from_str(j).ok())
+        .unwrap_or_default();
+    let parts: Vec<&str> = std::iter::once(location.unwrap_or(""))
+        .chain(attendees.iter().map(String::as_str))
+        .filter(|p| !p.trim().is_empty())
+        .collect();
+    if parts.is_empty() {
+        return None;
+    }
+    Some(parts.join("\n"))
+}
+
+/// Keep the search denorm level with the `page_sync` mirror columns written in
+/// the same transaction. Deliberately does not touch `updated_at`: sync owns this
+/// value, so refreshing it is not a page edit.
+async fn set_mirror_search_text(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+    text: Option<&str>,
+) -> AppResult<()> {
+    sqlx::query("UPDATE pages SET mirror_search_text = ? WHERE id = ?")
+        .bind(text)
+        .bind(page_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 async fn update_page_title(

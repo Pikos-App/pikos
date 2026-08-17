@@ -1028,6 +1028,70 @@ async fn mirror_metadata_is_written_read_only() {
 }
 
 #[tokio::test]
+async fn mirror_metadata_is_searchable() {
+    let pool = setup().await;
+    reconcile(
+        &pool,
+        &ctx(),
+        &delta(vec![single_full(
+            "/ev.ics",
+            "uid-1",
+            "v1",
+            "Lunch",
+            None,
+            Some("Cafe Rio"),
+            &["priya@example.com"],
+        )]),
+    )
+    .await
+    .unwrap();
+    let (page_id, _, _) = only_page_sync(&pool).await;
+
+    for q in ["Rio", "priya"] {
+        let hits = crate::search::search_pages_impl(&pool, q.into(), None)
+            .await
+            .unwrap();
+        let ids: Vec<&str> = hits.results.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec![page_id.as_str()],
+            "\"{q}\" should find the mirror"
+        );
+    }
+}
+
+#[tokio::test]
+async fn upstream_metadata_change_reindexes() {
+    let pool = setup().await;
+    let event = |etag: &str, location: &str| {
+        delta(vec![single_full(
+            "/ev.ics",
+            "uid-1",
+            etag,
+            "Lunch",
+            None,
+            Some(location),
+            &[],
+        )])
+    };
+    reconcile(&pool, &ctx(), &event("v1", "Cafe Rio"))
+        .await
+        .unwrap();
+    reconcile(&pool, &ctx(), &event("v2", "Bar Luca"))
+        .await
+        .unwrap();
+
+    let stale = crate::search::search_pages_impl(&pool, "Rio".into(), None)
+        .await
+        .unwrap();
+    assert!(stale.results.is_empty(), "the old room stays indexed");
+    let fresh = crate::search::search_pages_impl(&pool, "Luca".into(), None)
+        .await
+        .unwrap();
+    assert_eq!(fresh.results.len(), 1);
+}
+
+#[tokio::test]
 async fn empty_attendees_store_null_not_empty_array() {
     let pool = setup().await;
     reconcile(

@@ -60,6 +60,8 @@ enum Step {
         calendar: String,
         uid: String,
         title: String,
+        location: Option<String>,
+        attendees: Option<Vec<String>>,
     },
     Own {
         uid: String,
@@ -134,6 +136,16 @@ struct Expect {
     calendars: Option<Vec<CalExpect>>,
     folder: Option<FolderExpect>,
     pages: Option<Vec<PageExpect>>,
+    search: Option<SearchExpect>,
+}
+
+/// Matches are named by the uid that produced the page, since a scenario never
+/// sees the generated page id.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SearchExpect {
+    query: String,
+    matches: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -244,6 +256,8 @@ async fn apply(pool: &sqlx::SqlitePool, world: &mut World, step: &Step) {
             calendar,
             uid,
             title,
+            location,
+            attendees,
         } => {
             let cal_id = &world.calendars[calendar];
             let cal = list_sync_calendars_impl(pool, &world.account_id)
@@ -258,9 +272,8 @@ async fn apply(pool: &sqlx::SqlitePool, world: &mut World, step: &Step) {
                 provider: PROVIDER.into(),
                 folder_id: cal.folder_id.clone().expect("enable it before syncing"),
             };
-            reconcile(pool, &ctx, &event_delta(uid, title))
-                .await
-                .unwrap();
+            let delta = event_delta(uid, title, location.as_deref(), attendees.as_deref());
+            reconcile(pool, &ctx, &delta).await.unwrap();
             let page_id = page_id_for(pool, &ctx, uid).await;
             world.pages.insert(uid.clone(), page_id);
         }
@@ -467,7 +480,12 @@ fn new_page(title: &str) -> crate::pages::NewPage {
     }
 }
 
-fn event_delta(uid: &str, title: &str) -> SyncDelta {
+fn event_delta(
+    uid: &str,
+    title: &str,
+    location: Option<&str>,
+    attendees: Option<&[String]>,
+) -> SyncDelta {
     SyncDelta {
         upserts: vec![UpsertItem::Event(EventUpsert {
             core: EventCore {
@@ -476,8 +494,8 @@ fn event_delta(uid: &str, title: &str) -> SyncDelta {
                 etag: Some(format!("etag-{uid}")),
                 title: title.into(),
                 description: None,
-                location: None,
-                attendees: vec![],
+                location: location.map(Into::into),
+                attendees: attendees.unwrap_or_default().to_vec(),
             },
             schedule: EventSchedule {
                 start: "2026-06-15T09:00:00".into(),
@@ -617,5 +635,27 @@ async fn check(pool: &sqlx::SqlitePool, world: &World, scenario: &Scenario) {
                 want.uid
             );
         }
+    }
+
+    if let Some(want) = &expect.search {
+        let res = crate::search::search_pages_impl(pool, want.query.clone(), None)
+            .await
+            .unwrap();
+        let mut got: Vec<String> = res
+            .results
+            .iter()
+            .map(|r| {
+                world
+                    .pages
+                    .iter()
+                    .find(|(_, id)| id.as_str() == r.id)
+                    .map(|(uid, _)| uid.clone())
+                    .unwrap_or_else(|| r.id.clone())
+            })
+            .collect();
+        got.sort();
+        let mut expected = want.matches.clone();
+        expected.sort();
+        assert_eq!(got, expected, "{at}: search hits for {:?}", want.query);
     }
 }

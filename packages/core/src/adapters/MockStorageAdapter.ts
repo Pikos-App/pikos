@@ -45,7 +45,7 @@ import { dateKey, formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/da
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
 import { computeNextEnd, nextOccurrenceAfter, rawExpandRule } from "../utils/recurrence";
-import { ftsTokens } from "../utils/search";
+import { ftsTokens, mirrorSearchText } from "../utils/search";
 
 /**
  * Command-layer guard messages, mirrored verbatim from the Rust writers so a
@@ -465,11 +465,13 @@ export class MockStorageAdapter implements StorageAdapter {
     let completedCount = 0;
     for (const page of this.pages.values()) {
       if (this.softDeleted.has(page.id)) continue;
-      // Title, subtitle, body text and tags are one indexed document, so a query
-      // spanning two of them still matches. Extracted text, never the raw Tiptap
-      // JSON — the index never returns a page because the user typed "paragraph".
+      // Title, subtitle, body text, tags and a mirror's calendar-owned metadata
+      // are one indexed document, so a query spanning two of them still matches.
+      // Extracted text, never the raw Tiptap JSON — the index never returns a
+      // page because the user typed "paragraph".
       const text = `${page.subtitle ?? ""} ${page.contentText ?? ""}`;
-      if (!ftsMatches(terms, [page.title, text, page.tags.join(" ")].join(" "))) continue;
+      const mirror = mirrorSearchText(page.mirrorLocation, page.mirrorAttendees) ?? "";
+      if (!ftsMatches(terms, [page.title, text, page.tags.join(" "), mirror].join(" "))) continue;
       if (isDone(page)) {
         completedCount++;
         if (!includeCompleted) continue;

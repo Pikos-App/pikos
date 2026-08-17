@@ -375,8 +375,8 @@ async fn insert_synced_page(
     let page_id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
-            sort_order, scheduled_start, scheduled_end, links, created_at, updated_at)
-         VALUES (?, ?, ?, ?, '', 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?)",
+            sort_order, scheduled_start, scheduled_end, links, mirror_search_text, created_at, updated_at)
+         VALUES (?, ?, ?, ?, '', 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?, ?)",
     )
     .bind(&page_id)
     .bind(folder_id)
@@ -385,6 +385,10 @@ async fn insert_synced_page(
     .bind(sort_order)
     .bind(scheduled_start)
     .bind(scheduled_end)
+    .bind(pikos_db::mirror_search_text(
+        mirror.location,
+        mirror.attendees,
+    ))
     .bind(now)
     .bind(now)
     .execute(&mut **tx)

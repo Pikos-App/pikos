@@ -32,6 +32,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ("008", include_str!("../migrations/008_tags_nocase.sql")),
     ("009", include_str!("../migrations/009_tags_lowercase.sql")),
     ("010", include_str!("../migrations/010_calendar_sync.sql")),
+    (
+        "011",
+        include_str!("../migrations/011_mirror_search_text.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -314,6 +318,77 @@ async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
         .execute(&pool)
         .await
         .unwrap();
+}
+
+/// The reconciler only rewrites an event whose etag moved, so a mirror synced
+/// before 011 would stay out of the index forever if the migration didn't
+/// backfill it. That backfill is a second, frozen copy of `mirror_search_text`'s
+/// projection written in SQL — this is what catches the two drifting apart.
+#[tokio::test]
+async fn the_search_migration_backfills_mirrors_synced_before_it() {
+    let pool = single_conn_memory_pool().await;
+    for (name, sql) in &MIGRATIONS[..10] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
+    }
+
+    sqlx::query(
+        "INSERT INTO pages
+         (id, title, content, content_text, status, priority, tags, sort_order, created_at, updated_at)
+         VALUES ('p1', 'Standup', '{}', '', 'not_started', 0, '[]', 0, '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO sync_account
+         (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('a1', 'caldav', 'you@example.com', 'basic', '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_sync
+         (id, page_id, account_id, provider, calendar_id, external_id, ical_uid,
+          mirror_location, mirror_attendees, created_at)
+         VALUES ('ps1', 'p1', 'a1', 'caldav', 'cal', '/ev.ics', 'uid-1',
+                 'Weyland Room', '[\"priya@example.com\"]', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::raw_sql(MIGRATIONS[10].1)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let projected: Option<String> =
+        sqlx::query_scalar("SELECT mirror_search_text FROM pages WHERE id = 'p1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        projected,
+        crate::reconciler::mirror_search_text(
+            Some("Weyland Room"),
+            Some(r#"["priya@example.com"]"#)
+        ),
+        "the migration's SQL projection drifted from the writer's"
+    );
+
+    for term in ["weyland", "priya"] {
+        let hits: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pages_fts WHERE pages_fts MATCH ?")
+                .bind(term)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(hits, 1, "the rebuilt index missed \"{term}\"");
+    }
 }
 
 #[tokio::test]

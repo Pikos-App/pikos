@@ -254,7 +254,8 @@ pub async fn search_pages_impl(
         .collect::<Vec<_>>()
         .join(" ");
 
-    // bm25() weights: title=10, subtitle=5, content_text=1, tags=3
+    // bm25() weights: title=10, subtitle=5, content_text=1, tags=3,
+    // mirror_search_text=3 (structured and short, like tags)
     // Fetch raw content_text — excerpt is built in Rust for accurate windowing
     // deleted_at IS NULL is unconditional — trashed pages never appear in search.
     // When include_completed is false, completed pages are excluded entirely.
@@ -267,7 +268,7 @@ pub async fn search_pages_impl(
          JOIN pages ON pages.rowid = pages_fts.rowid
          WHERE pages_fts MATCH ?1
            AND pages.deleted_at IS NULL
-         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0),
+         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0, 3.0),
                   CASE WHEN pages.status = 'done' THEN 1 ELSE 0 END,
                   pages.updated_at DESC
          LIMIT 20"
@@ -279,7 +280,7 @@ pub async fn search_pages_impl(
          WHERE pages_fts MATCH ?1
            AND pages.deleted_at IS NULL
            AND pages.status != 'done'
-         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0),
+         ORDER BY bm25(pages_fts, 10.0, 5.0, 1.0, 3.0, 3.0),
                   pages.updated_at DESC
          LIMIT 20"
     };

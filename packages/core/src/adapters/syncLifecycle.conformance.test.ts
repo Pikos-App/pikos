@@ -30,6 +30,8 @@ interface Step {
   calendar?: string;
   uid?: string;
   title?: string;
+  location?: string;
+  attendees?: string[];
   page?: string;
   folder?: string;
   parent?: string;
@@ -63,6 +65,7 @@ interface Scenario {
     calendars?: CalExpect[];
     folder?: { calendar: string; exists: boolean; isExternalCalendar?: boolean };
     pages?: PageExpect[];
+    search?: { query: string; matches: string[] };
   };
 }
 
@@ -130,6 +133,14 @@ const CHECKS: Record<
       }
     }
   },
+
+  search: async (want, adapter, world) => {
+    if (!want.search) return;
+    const byId = new Map([...world.pages].map(([uid, id]) => [id, uid]));
+    const { results } = await adapter.searchPages(want.search.query);
+    const got = results.map((r) => byId.get(r.id) ?? r.id).sort();
+    expect(got).toEqual([...want.search.matches].sort());
+  },
 };
 
 const table = readConformanceTable<Scenario>("sync", Object.keys(CHECKS));
@@ -188,7 +199,11 @@ async function apply(adapter: MockStorageAdapter, world: World, step: Step): Pro
         tags: [],
         title: step.title!,
       });
-      adapter.markPageSynced(page.id, { state: "active" });
+      adapter.markPageSynced(page.id, {
+        attendees: step.attendees ?? null,
+        location: step.location ?? null,
+        state: "active",
+      });
       world.pages.set(step.uid!, page.id);
       return;
     }
