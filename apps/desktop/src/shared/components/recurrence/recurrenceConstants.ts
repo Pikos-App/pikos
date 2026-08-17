@@ -1,4 +1,5 @@
 import type { RecurrenceFreq, RecurrenceOptions, RecurrenceWeekday } from "@pikos/core";
+import { getDaysInMonth } from "date-fns";
 
 export const FREQ_UNIT_LABELS: Record<RecurrenceFreq, { singular: string; plural: string }> = {
   DAILY: { plural: "Days", singular: "Day" },
@@ -41,6 +42,24 @@ const MONTH_NAMES_SHORT = [
 /** Convert JS Date.getDay() (0=Sun) to rrule.js index (0=Mon). */
 function jsDayToRrule(jsDay: number): RecurrenceWeekday {
   return ((jsDay + 6) % 7) as RecurrenceWeekday;
+}
+
+/**
+ * The anchor's BYDAY ordinal — `2` for a second Tuesday, `-1` for a last one.
+ *
+ * An anchor in the final seven days of its month takes `-1` rather than its cardinal
+ * position: that late in the month it almost always means "month end", and a
+ * 5th-position rule would skip every month holding only four of that weekday. The cost
+ * is a genuine "4th Monday" that happens to also be the last one, which the preset
+ * can't author — its detail text says which reading it took before it's clicked.
+ */
+function byweekdayOrdinal(anchor: Date): number {
+  const dayOfMonth = anchor.getDate();
+  return dayOfMonth + 7 > getDaysInMonth(anchor) ? -1 : Math.ceil(dayOfMonth / 7);
+}
+
+function positionLabel(ordinal: number): string {
+  return ordinal === -1 ? "last" : `${ordinal}${ordinalSuffix(ordinal)}`;
 }
 
 function ordinalSuffix(n: number): string {
@@ -95,6 +114,7 @@ export function computePresets(anchor: Date): Preset[] {
   const weekday = jsDayToRrule(anchor.getDay());
   const weekdayAbbr = WEEKDAYS[weekday]!.abbr;
   const dayOfMonth = anchor.getDate();
+  const position = byweekdayOrdinal(anchor);
   const monthName = MONTH_NAMES_SHORT[anchor.getMonth()]!;
   return [
     { id: "daily", label: "Daily", options: { freq: "DAILY", interval: 1 } },
@@ -115,6 +135,17 @@ export function computePresets(anchor: Date): Preset[] {
       id: "monthly",
       label: "Monthly",
       options: { freq: "MONTHLY", interval: 1 },
+    },
+    {
+      detail: `${positionLabel(position)} ${weekdayAbbr}`,
+      id: "monthly-weekday",
+      label: "Monthly",
+      options: {
+        byweekday: [weekday],
+        byweekdayOrdinals: [position],
+        freq: "MONTHLY",
+        interval: 1,
+      },
     },
     {
       detail: `${monthName} ${dayOfMonth}`,

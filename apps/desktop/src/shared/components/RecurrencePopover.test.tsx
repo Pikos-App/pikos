@@ -9,13 +9,17 @@ import { RecurrencePopover } from "./RecurrencePopover";
 afterEach(cleanup);
 
 // A Monday anchor keeps "on Fridays" / "on the 15th" off the generated presets.
+// It is also July's *first* Monday, so the by-position preset reads "1st Mon".
 const ANCHOR = "2026-07-06T09:00:00";
+// July 2026's last Monday — in the final seven days, so the ordinal is -1, not 4.
+const LAST_MONDAY = "2026-07-27T09:00:00";
 
 const MONTHLY_ON_FRIDAYS = "FREQ=MONTHLY;BYDAY=FR";
 const MONTHLY_ON_THE_15TH = "FREQ=MONTHLY;BYMONTHDAY=15";
 const MONTHLY_ON_THE_LAST_DAY = "FREQ=MONTHLY;BYMONTHDAY=-1";
 const THIRD_FRIDAY_BYSETPOS = "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3";
 const THIRD_TUESDAY_BYDAY = "FREQ=MONTHLY;BYDAY=3TU";
+const FIRST_MONDAY_BYDAY = "FREQ=MONTHLY;BYDAY=1MO";
 const FIFTEENTH_OF_MARCH = "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15";
 
 // Outside the engine's envelope, so no round-trip can carry them.
@@ -123,7 +127,48 @@ describe("RecurrencePopover preset matching", () => {
 
     openTrigger();
 
-    expect(screen.getByRole("button", { name: /^Monthly/ })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Monthly, 6th" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+  });
+
+  it("authors a by-position rule from the anchor's place in its month", () => {
+    const onChange = vi.fn();
+    renderPopover("FREQ=DAILY", onChange);
+
+    openTrigger();
+    fireEvent.click(screen.getByRole("button", { name: "Monthly, 1st Mon" }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.stringContaining("BYDAY=1MO"));
+  });
+
+  it("offers the last weekday, not a 5th, for a month-end anchor", () => {
+    const onChange = vi.fn();
+    render(
+      <AppSettingsProvider>
+        <TooltipProvider>
+          <RecurrencePopover anchorDate={LAST_MONDAY} onChange={onChange} rrule="FREQ=DAILY" />
+        </TooltipProvider>
+      </AppSettingsProvider>
+    );
+
+    openTrigger();
+    fireEvent.click(screen.getByRole("button", { name: "Monthly, last Mon" }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.stringContaining("BYDAY=-1MO"));
+  });
+
+  it("marks the by-position preset active for a provider rule that matches it", () => {
+    renderPopover(FIRST_MONDAY_BYDAY, vi.fn());
+
+    openTrigger();
+
+    expect(screen.getByRole("button", { name: "Monthly, 1st Mon" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Monthly, 6th" })).toHaveAttribute(
       "aria-pressed",
       "false"
     );
