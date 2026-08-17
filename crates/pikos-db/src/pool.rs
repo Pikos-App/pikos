@@ -309,7 +309,11 @@ pub(crate) fn extract_text_from_tiptap(content: &str) -> String {
 }
 
 fn walk_tiptap_node(node: &serde_json::Value, parts: &mut Vec<String>) {
-    if let Some(text) = node.get("text").and_then(|t| t.as_str()) {
+    if let Some(text) = node
+        .get("text")
+        .and_then(|t| t.as_str())
+        .filter(|t| !t.is_empty())
+    {
         parts.push(text.to_string());
         return;
     }

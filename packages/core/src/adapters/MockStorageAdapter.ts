@@ -45,6 +45,7 @@ import { dateKey, formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/da
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
 import { computeNextEnd, nextOccurrenceAfter, rawExpandRule } from "../utils/recurrence";
+import { ftsTokens } from "../utils/search";
 
 /**
  * Command-layer guard messages, mirrored verbatim from the Rust writers so a
@@ -112,23 +113,6 @@ function originalDateInRuleBasis(occurrenceDate: string, ruleStart: string): str
 
 function nextSortOrder(items: { sortOrder: number }[]): number {
   return items.length === 0 ? 0 : Math.max(...items.map((i) => i.sortOrder)) + 1;
-}
-
-/**
- * Split text the way FTS5's unicode61 tokenizer does — runs of alphanumerics, with
- * every other character a separator. Used for the query and the document alike,
- * since `search_pages_impl` builds its MATCH from the same split.
- *
- * Substring matching was the obvious shortcut here and it is wrong in both
- * directions: it finds "eeting" inside "Meeting", which the index never does, and
- * it misses "team meeting" on a page holding both words apart, which the index
- * always finds. An e2e written against either behaviour proves nothing.
- */
-function ftsTokens(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9]+/i)
-    .filter(Boolean);
 }
 
 /** All terms must be present, the last one as a prefix — the shape of the query

@@ -2,7 +2,7 @@
 // content matches show a snippet below. Frontend handles highlighting.
 
 import type { SearchResult } from "@pikos/core";
-import { isDone } from "@pikos/core";
+import { ftsTokens, isDone } from "@pikos/core";
 import { FileText, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -168,7 +168,9 @@ export function SearchPalette() {
   const clampedIdx = Math.min(selectedIdx, Math.max(0, displayItems.length - 1));
 
   const trimmedQuery = query.trim();
-  const queryWords = trimmedQuery ? trimmedQuery.split(/\s+/).filter(Boolean) : [];
+  // Highlight what the index matched, not what the user typed — "multi-color" is two
+  // tokens to FTS, so a page holding "multi color" is a hit with nothing to mark.
+  const queryWords = ftsTokens(trimmedQuery);
 
   function handleSelect(id: string) {
     openPage(id);

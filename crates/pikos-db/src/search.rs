@@ -194,6 +194,26 @@ fn strip_prefix_ci<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
     }
 }
 
+/// Split a query into runs of alphanumeric chars, every other character a separator.
+///
+/// This is FTS5's default `unicode61` tokenizer, reproduced — the index is the
+/// authority, not this function, so a query for "multi-color" finds the same rows as
+/// "multi color". It also keeps FTS5 from reading `-` as a NOT operator or column
+/// qualifier (`multi-color` → "no such column: color") and `'` as a phrase delimiter
+/// (`don't` → syntax error). The highlighter mirrors it through `ftsTokens`; both
+/// answer to `tests/fixtures/search-tokenization.json`.
+pub fn fts_tokens(query: &str) -> Vec<String> {
+    query
+        .split_whitespace()
+        .flat_map(|word| {
+            word.split(|c: char| !c.is_alphanumeric())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 /// Unified search: queries all FTS5 columns with bm25() weighting so title
 /// matches rank above content matches. Supports prefix matching on the last
 /// token (e.g. "morn" → "morning"). Returns up to 20 results with plain text
@@ -212,24 +232,7 @@ pub async fn search_pages_impl(
         });
     }
 
-    // Sanitize and build FTS5 prefix query.
-    // Split each whitespace-separated word into runs of alphanumeric chars;
-    // any other character (hyphen, apostrophe, paren, etc.) is treated as a
-    // token separator. This matches what FTS5's default unicode61 tokenizer
-    // does when indexing, so a query for "multi-color" finds the same docs as
-    // "multi color". Critically, it also prevents FTS5 from interpreting `-`
-    // as a NOT operator / column qualifier (e.g. `multi-color` → "no such
-    // column: color") or `'` as a phrase delimiter (`don't` → syntax error).
-    // The last token gets a trailing `*` for prefix matching.
-    let tokens: Vec<String> = q
-        .split_whitespace()
-        .flat_map(|word| {
-            word.split(|c: char| !c.is_alphanumeric())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>()
-        })
-        .collect();
+    let tokens = fts_tokens(q);
 
     if tokens.is_empty() {
         return Ok(SearchResponse {

@@ -1,6 +1,10 @@
 // MD path: markdown string → parseMarkdownVault → convertMarkdownToTiptap → editor.getJSON()
 //          → editor.storage.markdown.getMarkdown() → parseMarkdownVault → verify metadata + content
 //
+// Both ends of that loop are tiptap-markdown, so it says nothing about the Markdown a
+// vault *export* writes — that is the Rust exporter, covered by
+// markdownExport.conformance.test.ts.
+//
 // CSV path: CSV string → prepareCSVRows + applyMappings → verify metadata fields
 //           → build CSV from output → re-parse → verify round-trip
 

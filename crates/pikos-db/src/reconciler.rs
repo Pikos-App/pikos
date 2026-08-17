@@ -1168,8 +1168,14 @@ async fn insert_schedule_row(
 
 /// Version of the `content_text` projection. Persisted with each
 /// `seeded_description_hash` so a projection change re-seeds pristine bodies
-/// instead of reading the whole synced corpus as "user edited". Bump on any change
-/// to `build_tiptap_doc` or `extract_text_from_tiptap`.
+/// instead of reading the whole synced corpus as "user edited".
+///
+/// Bump when `build_tiptap_doc` or the projection starts producing different output
+/// for a document the editor can hold — not on every edit to them, since a bump
+/// discards a precise signal for the coarse `user_modified` fallback on every synced
+/// page. The projection is two implementations, not one: the hash below is compared
+/// against `pages.content_text`, which the editor writes through TypeScript
+/// `extractText`. Both answer to `tests/fixtures/content-text-projection.json`.
 const CONTENT_TEXT_PROJECTION_VERSION: i64 = 1;
 
 /// Seed the external description into the body, conflict-aware: (over)write only

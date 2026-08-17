@@ -27,6 +27,11 @@ interface Scenario {
   expect: Record<string, unknown>;
 }
 
+/** Read a table out of the shared fixture directory the Rust runners `include_str!`. */
+export function readFixture<T>(fileName: string): T {
+  return JSON.parse(readFileSync(resolve(FIXTURES, fileName), "utf8")) as T;
+}
+
 /**
  * Load `<name>-lifecycle.json` and reject any expectation key this runner does not
  * read. Callers pass `Object.keys(CHECKS)` — the keys of the record that holds the
@@ -39,9 +44,7 @@ export function readConformanceTable<T extends Scenario>(
   name: string,
   expectKeys: readonly string[]
 ): { scenarios: T[] } & Record<string, unknown> {
-  const table = JSON.parse(readFileSync(resolve(FIXTURES, `${name}-lifecycle.json`), "utf8")) as {
-    scenarios: T[];
-  } & Record<string, unknown>;
+  const table = readFixture<{ scenarios: T[] } & Record<string, unknown>>(`${name}-lifecycle.json`);
 
   if (!Array.isArray(table.scenarios) || table.scenarios.length === 0) {
     throw new Error(`${name}-lifecycle.json has no scenarios`);

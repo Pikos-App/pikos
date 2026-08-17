@@ -1,0 +1,195 @@
+{
+  "cases": [
+    {
+      "name": "a heading and a paragraph survive as separate blocks",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": { "level": 2 },
+            "content": [{ "type": "text", "text": "Title" }]
+          },
+          { "type": "paragraph", "content": [{ "type": "text", "text": "Body text." }] }
+        ]
+      },
+      "markdown": "## Title\n\nBody text.\n",
+      "blocks": [
+        { "type": "heading", "text": "Title" },
+        { "type": "paragraph", "text": "Body text." }
+      ]
+    },
+    {
+      "name": "inline marks survive",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              { "type": "text", "text": "bold", "marks": [{ "type": "bold" }] },
+              { "type": "text", "text": " and " },
+              { "type": "text", "text": "italic", "marks": [{ "type": "italic" }] }
+            ]
+          }
+        ]
+      },
+      "markdown": "**bold** and *italic*\n",
+      "blocks": [{ "type": "paragraph", "text": "bold and italic" }]
+    },
+    {
+      "name": "a link keeps its text",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "click here",
+                "marks": [
+                  { "type": "bold" },
+                  { "type": "link", "attrs": { "href": "https://example.com" } }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "[**click here**](https://example.com)\n",
+      "blocks": [{ "type": "paragraph", "text": "click here" }]
+    },
+    {
+      "name": "task items keep their checked state",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "taskList",
+            "content": [
+              {
+                "type": "taskItem",
+                "attrs": { "checked": true },
+                "content": [
+                  { "type": "paragraph", "content": [{ "type": "text", "text": "Done" }] }
+                ]
+              },
+              {
+                "type": "taskItem",
+                "attrs": { "checked": false },
+                "content": [
+                  { "type": "paragraph", "content": [{ "type": "text", "text": "Todo" }] }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "- [x] Done\n- [ ] Todo\n",
+      "blocks": [{ "type": "taskList", "text": "Done\nTodo" }]
+    },
+    {
+      "name": "a bullet list stays a bullet list",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "bulletList",
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  { "type": "paragraph", "content": [{ "type": "text", "text": "one" }] }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  { "type": "paragraph", "content": [{ "type": "text", "text": "two" }] }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "- one\n- two\n",
+      "blocks": [{ "type": "bulletList", "text": "one\ntwo" }]
+    },
+    {
+      "name": "an ordered list keeps its numbering",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "orderedList",
+            "attrs": { "start": 1 },
+            "content": [
+              {
+                "type": "listItem",
+                "content": [
+                  { "type": "paragraph", "content": [{ "type": "text", "text": "first" }] }
+                ]
+              },
+              {
+                "type": "listItem",
+                "content": [
+                  { "type": "paragraph", "content": [{ "type": "text", "text": "second" }] }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "markdown": "1. first\n2. second\n",
+      "blocks": [{ "type": "orderedList", "text": "first\nsecond" }]
+    },
+    {
+      "name": "a fenced code block keeps its language and body",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "codeBlock",
+            "attrs": { "language": "rust" },
+            "content": [{ "type": "text", "text": "fn main() {}" }]
+          }
+        ]
+      },
+      "markdown": "```rust\nfn main() {}\n```\n",
+      "blocks": [{ "type": "codeBlock", "text": "fn main() {}" }]
+    },
+    {
+      "name": "a blockquote stays quoted",
+      "doc": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "blockquote",
+            "content": [
+              { "type": "paragraph", "content": [{ "type": "text", "text": "Quoted" }] }
+            ]
+          }
+        ]
+      },
+      "markdown": "> Quoted\n",
+      "blocks": [{ "type": "blockquote", "text": "Quoted" }]
+    },
+    {
+      "name": "one blank line between paragraphs stays one blank line",
+      "doc": {
+        "type": "doc",
+        "content": [
+          { "type": "paragraph", "content": [{ "type": "text", "text": "a" }] },
+          { "type": "paragraph" },
+          { "type": "paragraph", "content": [{ "type": "text", "text": "b" }] }
+        ]
+      },
+      "markdown": "a\n\nb\n",
+      "blocks": [
+        { "type": "paragraph", "text": "a" },
+        { "type": "paragraph", "text": "b" }
+      ]
+    }
+  ]
+}

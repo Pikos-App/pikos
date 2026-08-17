@@ -56,3 +56,11 @@ mod recurrence_conformance_tests;
 #[cfg(test)]
 #[path = "core_conformance_tests.rs"]
 mod core_conformance_tests;
+
+#[cfg(test)]
+#[path = "content_text_conformance_tests.rs"]
+mod content_text_conformance_tests;
+
+#[cfg(test)]
+#[path = "search_tokenization_conformance_tests.rs"]
+mod search_tokenization_conformance_tests;

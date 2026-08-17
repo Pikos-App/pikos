@@ -42,6 +42,7 @@ export type {
   RecurrenceWeekday,
   VirtualOccurrence,
 } from "./utils/recurrence";
+export { ftsTokens } from "./utils/search";
 export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";
 export { resolveSyncedInstant } from "./utils/syncedTime";
 export {
