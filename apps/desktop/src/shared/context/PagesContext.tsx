@@ -24,10 +24,9 @@ import {
   formatLocalISO,
   getLocalTimezone,
   isTimedIso,
-  parseLocalISO,
   resolveSyncedInstant,
   rruleEditWouldDegrade,
-  snapAnchorToRule,
+  snapScheduleToRule,
   toStorageError,
 } from "@pikos/core";
 import type {
@@ -36,7 +35,6 @@ import type {
   PageUpdate,
   RecurrenceRuleUpdate,
 } from "@pikos/core";
-import { addDays, differenceInCalendarDays } from "date-fns";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
 import { createLogger } from "@/shared/logger";
@@ -74,6 +72,8 @@ export interface PagesContextValue {
   updatePage: (id: string, patch: PageUpdate) => void;
   flushPage: (id: string) => Promise<void>;
   deletePage: (id: string) => Promise<void>;
+  /** Resolve the "calendar description changed" notice — see the adapter method. */
+  clearPendingDescription: (id: string) => Promise<void>;
   /** Soft-delete: sets deleted_at. Page is hidden everywhere but recoverable via restorePage. */
   softDeletePage: (id: string) => Promise<void>;
   /** Restore a soft-deleted page — clears deleted_at and re-adds to pages list. */
@@ -404,6 +404,11 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     emit("page:deleted", id);
   }
 
+  async function clearPendingDescription(id: string) {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, pendingDescription: null } : p)));
+    await adapter.clearPendingDescription(id);
+  }
+
   async function softDeletePage(id: string) {
     const timer = debounceTimers.current.get(id);
     if (timer !== undefined) clearTimeout(timer);
@@ -536,22 +541,9 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     // (the realign above already fixes the day) and for non-recurring pages.
     // Set-excluded dates still resolve wrong here; the recompute adopted below
     // converges those.
-    const snappedStart = ruleSnapshot
-      ? snapAnchorToRule(alignedRrule ?? ruleSnapshot.rrule, start)
-      : start;
-    // Preserve the block's duration across a snap (snap shifts whole days, keeping
-    // the wall-clock time), so a shifted start never leaves the end before it.
-    const shiftDays =
-      snappedStart !== start
-        ? differenceInCalendarDays(parseLocalISO(snappedStart), parseLocalISO(start))
-        : 0;
-    const snappedEnd =
-      end !== undefined && shiftDays !== 0
-        ? (() => {
-            const shifted = addDays(parseLocalISO(end), shiftDays);
-            return isTimedIso(end) ? formatLocalISO(shifted) : formatDateOnly(shifted);
-          })()
-        : end;
+    const { end: snappedEnd, start: snappedStart } = ruleSnapshot
+      ? snapScheduleToRule(alignedRrule ?? ruleSnapshot.rrule, start, end)
+      : { end, start };
 
     setPages((prev) =>
       prev.map((p) =>
@@ -1116,6 +1108,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
 
   const value: PagesContextValue = {
     clearPageError,
+    clearPendingDescription,
     clearSchedule,
     completeRecurringPage,
     completeRecurringToToday,

@@ -19,6 +19,7 @@ export {
   parseLocalISO,
 } from "./utils/dates";
 export { extractText } from "./utils/extractText";
+export { fuzzyMatchFolder } from "./utils/fuzzyMatchFolder";
 export { isDone, isOpen } from "./utils/page";
 export {
   alignWeeklyRuleToAnchor,
@@ -35,6 +36,7 @@ export {
   rruleToLabel,
   rruleToShortLabel,
   snapAnchorToRule,
+  snapScheduleToRule,
 } from "./utils/recurrence";
 export type {
   RecurrenceFreq,

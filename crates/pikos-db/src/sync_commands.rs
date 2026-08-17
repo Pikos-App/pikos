@@ -262,6 +262,28 @@ pub async fn clear_sync_cursors_impl(pool: &sqlx::SqlitePool, account_id: &str) 
     .await
 }
 
+/// Drop a withheld upstream description once the user has dealt with it — they
+/// folded it into the body, or decided against it. Both resolutions clear the
+/// same column; nothing distinguishes them afterwards, and nothing needs to.
+///
+/// Deliberately does not touch `seeded_description_hash`. The hash says what sync
+/// last wrote, so leaving it stale is what keeps the body reading as the user's:
+/// re-seeding here would make the next upstream change overwrite their notes
+/// silently instead of parking. Resolving a notice is not a re-seed.
+pub async fn clear_pending_description_impl(
+    pool: &sqlx::SqlitePool,
+    page_id: &str,
+) -> AppResult<()> {
+    crate::tx::retry_on_busy(|| async {
+        sqlx::query("UPDATE page_sync SET pending_description = NULL WHERE page_id = ?")
+            .bind(page_id)
+            .execute(pool)
+            .await?;
+        Ok(())
+    })
+    .await
+}
+
 /// Record a colour the **user** picked, from either surface — latching
 /// `color_user_set` (see the column) and repainting the folder to match.
 pub async fn set_sync_calendar_color_impl(

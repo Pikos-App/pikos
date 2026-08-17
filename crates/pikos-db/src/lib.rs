@@ -64,3 +64,11 @@ mod content_text_conformance_tests;
 #[cfg(test)]
 #[path = "search_tokenization_conformance_tests.rs"]
 mod search_tokenization_conformance_tests;
+
+#[cfg(test)]
+#[path = "folder_matching_conformance_tests.rs"]
+mod folder_matching_conformance_tests;
+
+#[cfg(test)]
+#[path = "schedule_snap_conformance_tests.rs"]
+mod schedule_snap_conformance_tests;

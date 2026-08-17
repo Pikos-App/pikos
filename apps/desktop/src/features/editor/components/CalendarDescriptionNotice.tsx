@@ -3,15 +3,27 @@ import { useState } from "react";
 
 interface CalendarDescriptionNoticeProps {
   text: string;
+  onAppend: () => void;
+  onDismiss: () => void;
 }
 
 /**
  * Shown when the event's description changed upstream but the user had already
  * edited the body — the reconciler parks the change (`page_sync.pending_description`)
- * rather than clobber it. Renders the parked text as-is; folding it in is manual
- * and one-way.
+ * rather than clobber it.
+ *
+ * Append adds the parked text to the end of the body; Dismiss drops it. There is
+ * deliberately no "replace": the notice only ever appears *because* the user
+ * edited the body, so replacing destroys the very thing that raised it, with no
+ * undo but the trash. Dismiss is final — the next upstream change raises a fresh
+ * notice, and keeping this one retrievable would rebuild the parked state the
+ * actions exist to clear.
  */
-export function CalendarDescriptionNotice({ text }: CalendarDescriptionNoticeProps) {
+export function CalendarDescriptionNotice({
+  onAppend,
+  onDismiss,
+  text,
+}: CalendarDescriptionNoticeProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -25,6 +37,18 @@ export function CalendarDescriptionNotice({ text }: CalendarDescriptionNoticePro
           onClick={() => setOpen((v) => !v)}
         >
           {open ? "Hide" : "View"}
+        </button>
+        <button
+          className="type-ui-sm rounded underline-offset-2 hover:underline focus:outline-none"
+          onClick={onAppend}
+        >
+          Append
+        </button>
+        <button
+          className="type-ui-sm rounded underline-offset-2 hover:underline focus:outline-none"
+          onClick={onDismiss}
+        >
+          Dismiss
         </button>
       </div>
       {open && (

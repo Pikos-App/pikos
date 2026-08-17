@@ -345,6 +345,31 @@ pub async fn list_folders_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<Folder>
     Ok(rows.into_iter().map(Folder::from).collect())
 }
 
+/// Resolve a parsed `folderQuery` to one of `folders`, in three tiers of
+/// precedence: exact case-insensitive, then prefix, then substring. `None` when
+/// nothing matches — the caller decides what a miss means.
+///
+/// Twin of the TS core's `fuzzyMatchFolder`, which the desktop's Quick Add runs
+/// over the same queries out of the same parser. Both answer to
+/// `tests/fixtures/folder-matching.json`; a tier that exists on one side only
+/// files the same string into different folders depending on which binary the
+/// user typed it into.
+pub fn fuzzy_match_folder<'a>(query: &str, folders: &'a [Folder]) -> Option<&'a Folder> {
+    if query.is_empty() {
+        return None;
+    }
+    let q = query.to_lowercase();
+    folders
+        .iter()
+        .find(|f| f.name.to_lowercase() == q)
+        .or_else(|| {
+            folders
+                .iter()
+                .find(|f| f.name.to_lowercase().starts_with(&q))
+        })
+        .or_else(|| folders.iter().find(|f| f.name.to_lowercase().contains(&q)))
+}
+
 pub async fn reorder_folders_impl(
     pool: &sqlx::SqlitePool,
     ordered_ids: &[String],

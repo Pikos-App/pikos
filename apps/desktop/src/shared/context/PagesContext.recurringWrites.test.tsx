@@ -673,6 +673,23 @@ describe("scheduleOnce head-drag snapping (U6-F1)", () => {
     });
     expect(head(hook, pageId).scheduledStart).toBe("2099-01-07T10:00:00");
   });
+
+  // Asserted on the rule row, not the head: the head is re-derived from the rule,
+  // and that derivation rebuilds the end from its time-of-day — so it repairs an
+  // end that landed before its start and hides the very thing under test.
+  it("carries the block's end the same distance, so it can't precede the start", async () => {
+    const { hook, pageId } = await setupWeeklyMWF();
+    await act(async () => {
+      await hook.result.current.pages.scheduleOnce(
+        pageId,
+        "2099-01-06T10:00:00",
+        "2099-01-06T11:30:00"
+      );
+    });
+    const rule = hook.result.current.pages.recurrenceRules.find((r) => r.pageId === pageId)!;
+    expect(rule.scheduledStart).toBe("2099-01-07T10:00:00");
+    expect(rule.scheduledEnd).toBe("2099-01-07T11:30:00");
+  });
 });
 
 // ─── The realign rewrites BYDAY through parse→build ──────────────────────────

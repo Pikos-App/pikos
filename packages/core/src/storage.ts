@@ -110,6 +110,13 @@ export interface StorageAdapter {
   createPage(data: NewPage): Promise<Page>;
   updatePage(id: string, updates: PageUpdate): Promise<Page>;
   deletePage(id: string): Promise<void>;
+  /**
+   * Drop a withheld upstream description once the user has resolved its notice,
+   * by folding it into the body or by deciding against it. Clears only that
+   * column: the seed hash stays stale on purpose, so the body keeps reading as
+   * the user's and the next upstream change parks rather than overwrites.
+   */
+  clearPendingDescription(id: string): Promise<void>;
   /** Soft-delete: sets deleted_at timestamp. Page is hidden from all queries but recoverable. */
   softDeletePage(id: string): Promise<void>;
   restorePage(id: string): Promise<void>;

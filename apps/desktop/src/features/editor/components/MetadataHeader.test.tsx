@@ -47,9 +47,11 @@ type WorkspaceApi = ReturnType<typeof useWorkspace>;
 
 function Harness({
   onApi,
+  onAppendToBody,
   page,
 }: {
   onApi: (api: PagesApi, ws: WorkspaceApi) => void;
+  onAppendToBody: (text: string) => void;
   page: Page;
 }) {
   const pages = usePages();
@@ -59,14 +61,14 @@ function Harness({
     <AppSettingsProvider>
       <EditorSettingsProvider>
         <TooltipProvider>
-          <MetadataHeader onFocusEditor={vi.fn()} page={page} />
+          <MetadataHeader onAppendToBody={onAppendToBody} onFocusEditor={vi.fn()} page={page} />
         </TooltipProvider>
       </EditorSettingsProvider>
     </AppSettingsProvider>
   );
 }
 
-async function renderHeader(page: Page) {
+async function renderHeader(page: Page, onAppendToBody: (text: string) => void = vi.fn()) {
   let pagesApi!: PagesApi;
   let workspaceApi!: WorkspaceApi;
   const utils = renderWithProviders(
@@ -75,6 +77,7 @@ async function renderHeader(page: Page) {
         pagesApi = p;
         workspaceApi = w;
       }}
+      onAppendToBody={onAppendToBody}
       page={page}
     />
   );
@@ -187,6 +190,49 @@ describe("MetadataHeader — calendar description-changed notice", () => {
   it("omits the notice on a native page even if a stale pendingDescription is present", async () => {
     await renderHeader(makePage({ pendingDescription: "stale", scheduleLocked: false }));
     expect(screen.queryByText(/calendar description changed/i)).not.toBeInTheDocument();
+  });
+
+  it("hands the parked text to the editor on Append", async () => {
+    const append = vi.fn();
+    await renderHeader(
+      makePage({
+        pendingDescription: "New agenda for the meeting.",
+        scheduleLocked: true,
+        syncState: "active",
+      }),
+      append
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Append" }));
+    expect(append).toHaveBeenCalledWith("New agenda for the meeting.");
+  });
+
+  it("leaves the body alone on Dismiss", async () => {
+    const append = vi.fn();
+    await renderHeader(
+      makePage({
+        pendingDescription: "New agenda for the meeting.",
+        scheduleLocked: true,
+        syncState: "active",
+      }),
+      append
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(append).not.toHaveBeenCalled();
+  });
+
+  // No replace action, deliberately: the notice only fires because the user
+  // edited the body, so replacing destroys what raised it.
+  it("offers no action that overwrites the body", async () => {
+    await renderHeader(
+      makePage({
+        pendingDescription: "New agenda.",
+        scheduleLocked: true,
+        syncState: "active",
+      })
+    );
+    expect(screen.queryByRole("button", { name: /replace|use the calendar/i })).toBeNull();
   });
 });
 

@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use chrono::{Datelike, NaiveDate, Weekday};
 use pikos_db::{create_page_impl, open_pool, NewPage};
 use serde_json::Value;
 
@@ -713,6 +714,123 @@ async fn done_recurring_advances_and_clones() {
         .iter()
         .any(|r| r["status"] == "done");
     assert!(has_done, "expected a completed Standup clone");
+}
+
+/// An explicit date *plus* a weekday cadence is the only input that reaches the
+/// CLI off-pattern — a bare "every monday" is resolved to a Monday by the parser
+/// itself, and a cadence with no weekday (`FREQ=DAILY`, `FREQ=MONTHLY`) yields
+/// whatever day it is anchored on. Naming both is what disagrees, and the app
+/// snaps it before writing the rule.
+#[tokio::test]
+async fn add_recurring_snaps_an_off_pattern_anchor_onto_the_rule() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+
+    let Some(add) = cli_bridge(
+        dbs,
+        &[
+            "add",
+            "Gym on wednesday every monday from 9am to 11am",
+            "--json",
+        ],
+    ) else {
+        eprintln!("skipped: @pikos/bridge not built");
+        return;
+    };
+    assert!(
+        add.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&add.stderr)
+    );
+    let id = json(&add)["created"][0]["id"].as_str().unwrap().to_string();
+    let base: String = scalar(
+        dbs,
+        &format!("SELECT scheduled_start FROM page_recurrence_rules WHERE page_id = '{id}'"),
+    )
+    .await;
+
+    let date = NaiveDate::parse_from_str(&base[..10], "%Y-%m-%d").unwrap();
+    assert_eq!(date.weekday(), Weekday::Mon, "rule anchored off-pattern");
+    // The end has to travel with the start, or it lands days before it.
+    let end: String = scalar(
+        dbs,
+        &format!("SELECT scheduled_end FROM page_recurrence_rules WHERE page_id = '{id}'"),
+    )
+    .await;
+    assert_eq!(&end[..10], &base[..10], "end left behind on the parsed day");
+    assert!(end > base, "end precedes start");
+    // The head is the derivation's to write once the rule exists — a CLI-side
+    // denorm write on top of it is what put the parsed Wednesday back.
+    assert_eq!(
+        scheduled_start(dbs, &id).await.as_deref(),
+        Some(base.as_str()),
+        "head disagrees with the rule it was derived from"
+    );
+}
+
+async fn make_folder(db: &str, name: &str) -> String {
+    let pool = open_pool(db).await.unwrap();
+    pikos_db::create_folder_impl(
+        &pool,
+        pikos_db::NewFolder {
+            name: name.to_string(),
+            parent_id: None,
+            color: None,
+            icon: None,
+        },
+    )
+    .await
+    .unwrap()
+    .id
+}
+
+/// `~proj` used to reach only an exact "proj" folder and fall through to Inbox,
+/// while Quick Add prefix-matched it — the same string filing two ways depending
+/// on the binary.
+#[tokio::test]
+async fn add_files_into_a_prefix_matched_folder() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let projects = make_folder(dbs, "Projects").await;
+
+    let Some(add) = cli_bridge(dbs, &["add", "Ship the thing ~proj", "--json"]) else {
+        eprintln!("skipped: @pikos/bridge not built");
+        return;
+    };
+    assert!(
+        add.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&add.stderr)
+    );
+    assert_eq!(json(&add)["created"][0]["folderId"], projects.as_str());
+}
+
+/// The word carries no privilege: it resolves to a folder named for it, and only
+/// falls through to the Inbox view when nothing is.
+#[tokio::test]
+async fn add_prefers_a_real_inbox_folder_over_the_inbox_view() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let inbox = make_folder(dbs, "Inbox Zero").await;
+
+    let Some(add) = cli_bridge(dbs, &["add", "Sort mail ~inbox", "--json"]) else {
+        eprintln!("skipped: @pikos/bridge not built");
+        return;
+    };
+    assert!(add.status.success());
+    assert_eq!(json(&add)["created"][0]["folderId"], inbox.as_str());
+
+    let db2 = unique_db();
+    let dbs2 = db2.to_str().unwrap();
+    seed(dbs2, vec![]).await;
+    let Some(bare) = cli_bridge(dbs2, &["add", "Sort mail ~inbox", "--json"]) else {
+        return;
+    };
+    assert!(bare.status.success());
+    assert!(json(&bare)["created"][0]["folderId"].is_null());
 }
 
 // ─── done: the synced guard sits on the series, not the origin ─────────────────

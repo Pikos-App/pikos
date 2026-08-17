@@ -1243,6 +1243,7 @@ dependencies = [
  "chrono",
  "clap",
  "pikos-db",
+ "pikos-recurrence",
  "serde",
  "serde_json",
  "sqlx",

@@ -93,6 +93,7 @@ function watchdog(command: string): void {
 export const WRITE_COMMANDS = new Set([
   "create_page",
   "update_page",
+  "clear_pending_description",
   "delete_page",
   "soft_delete_page",
   "restore_page",
@@ -192,6 +193,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   deletePage(id: string): Promise<void> {
     return invoke<void>("delete_page", { id });
+  }
+
+  clearPendingDescription(id: string): Promise<void> {
+    return invoke<void>("clear_pending_description", { id });
   }
 
   softDeletePage(id: string): Promise<void> {

@@ -190,18 +190,23 @@ function Byline({
 interface MetadataHeaderProps {
   page: Page;
   onFocusEditor: () => void;
+  /** Appends text to the end of the body through the editor's own insert path,
+   *  so the write marks the page owned exactly as typing would. */
+  onAppendToBody: (text: string) => void;
   contentSaveError?: Error | null;
   onRetryContent?: () => void;
 }
 
 export function MetadataHeader({
   contentSaveError,
+  onAppendToBody,
   onFocusEditor,
   onRetryContent,
   page,
 }: MetadataHeaderProps) {
   const {
     clearPageError,
+    clearPendingDescription,
     createRecurrence,
     deleteRecurrence,
     flushPage,
@@ -408,7 +413,16 @@ export function MetadataHeader({
             </span>
           </div>
         )}
-        {showDescriptionNotice && <CalendarDescriptionNotice text={page.pendingDescription!} />}
+        {showDescriptionNotice && (
+          <CalendarDescriptionNotice
+            onAppend={() => {
+              onAppendToBody(page.pendingDescription!);
+              void clearPendingDescription(page.id);
+            }}
+            onDismiss={() => void clearPendingDescription(page.id)}
+            text={page.pendingDescription!}
+          />
+        )}
         <div className={detached || showDescriptionNotice ? "pt-2 pb-1" : "pt-12 pb-1"}>
           {titleFocused && !titleLocked ? (
             <textarea

@@ -569,6 +569,24 @@ describe("softDelete / restore", () => {
   });
 });
 
+describe("clearPendingDescription", () => {
+  it("drops the parked text and leaves the rest of the mirror alone", async () => {
+    const page = await createTestPage({ title: "Team sync" });
+    adapter.markPageSynced(page.id, {
+      attendees: ["ana@example.com"],
+      location: "Room 4B",
+      pendingDescription: "New agenda.",
+    });
+
+    await adapter.clearPendingDescription(page.id);
+
+    const after = await adapter.getPage(page.id);
+    expect(after?.pendingDescription).toBeNull();
+    expect(after?.mirrorLocation).toBe("Room 4B");
+    expect(after?.scheduleLocked).toBe(true);
+  });
+});
+
 // ─── completeRecurringPage ───────────────────────────────────────────────────
 
 describe("completeRecurringPage", () => {

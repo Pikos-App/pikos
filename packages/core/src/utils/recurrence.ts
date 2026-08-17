@@ -19,9 +19,10 @@
 //   scheduledStart/scheduledEnd for that specific occurrence.
 
 import * as engine from "@pikos/recurrence-wasm";
+import { addDays, differenceInCalendarDays } from "date-fns";
 
 import type { PageRecurrenceRule, PageSchedule, PageSummary, RawOccurrence } from "../types";
-import { dateKey, formatLocalISO } from "./dates";
+import { dateKey, formatDateOnly, formatLocalISO, isTimedIso, parseLocalISO } from "./dates";
 
 export interface VirtualOccurrence extends PageSummary {
   /** True for virtual rrule-expanded occurrences (not materialised in page_schedules). */
@@ -188,6 +189,34 @@ export function nextOccurrenceAfter(
  */
 export function snapAnchorToRule(rruleStr: string, anchor: string): string {
   return engine.snapAnchorToRule(rruleStr, anchor);
+}
+
+/**
+ * Snaps `start` onto the rule and carries `end` the same whole-day distance, so
+ * the span the user described survives the snap.
+ *
+ * Shifting by whole days rather than rebuilding the end from the new start is
+ * what keeps a multi-day range intact — {@link computeNextEnd} puts the end's
+ * time on the start's date, which is right for advancing an occurrence and wrong
+ * here, where it would collapse "Mon to Wed" into a single day. Without any shift
+ * the end stays where it was parsed and can precede the snapped start.
+ *
+ * Twin of `pikos_recurrence::snap_schedule_to_rule`, which the CLI calls on the
+ * same parser output; both answer to `tests/fixtures/schedule-snap.json`.
+ */
+export function snapScheduleToRule(
+  rruleStr: string,
+  start: string,
+  end?: string
+): { start: string; end: string | undefined } {
+  const snapped = snapAnchorToRule(rruleStr, start);
+  if (end === undefined || snapped === start) return { end, start: snapped };
+  const days = differenceInCalendarDays(parseLocalISO(snapped), parseLocalISO(start));
+  const shifted = addDays(parseLocalISO(end), days);
+  return {
+    end: isTimedIso(end) ? formatLocalISO(shifted) : formatDateOnly(shifted),
+    start: snapped,
+  };
 }
 
 /**

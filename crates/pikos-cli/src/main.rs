@@ -14,13 +14,13 @@ use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
 use pikos_db::{
-    complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl, get_page,
-    get_recurrence_rule_impl, hard_delete_page_impl, hard_delete_would_resurrect,
-    list_folders_impl, list_page_schedules_impl, list_pages_impl, list_pages_today_impl,
-    migration_versions, now_local_iso, open_pool, search_pages_impl, soft_delete_page_impl,
-    today_local, update_page_impl, update_page_schedule_impl, AppError, CompleteRecurringInput,
-    NewPage, NewPageSchedule, NewRecurrenceRule, Page, PageFilter, PageSummary, PageUpdate,
-    SearchResponse,
+    complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl,
+    fuzzy_match_folder, get_page, get_recurrence_rule_impl, hard_delete_page_impl,
+    hard_delete_would_resurrect, list_folders_impl, list_page_schedules_impl, list_pages_impl,
+    list_pages_today_impl, migration_versions, now_local_iso, open_pool, search_pages_impl,
+    soft_delete_page_impl, today_local, update_page_impl, update_page_schedule_impl, AppError,
+    CompleteRecurringInput, NewPage, NewPageSchedule, NewRecurrenceRule, Page, PageFilter,
+    PageSummary, PageUpdate, SearchResponse,
 };
 
 /// Debug builds address the `.dev` workspace the dev desktop app writes, mirroring
@@ -532,14 +532,16 @@ async fn resolve_folder(
         Some(q) if !q.is_empty() => q,
         _ => return Ok(None),
     };
-    if q.eq_ignore_ascii_case("inbox") {
-        return Ok(None);
-    }
-    let folders = list_folders_impl(pool).await?;
-    Ok(folders
+    // Calendar folders are off the candidate list, as they are in Quick Add:
+    // matching one would resolve to a folder `create_page_impl` then refuses.
+    let folders: Vec<_> = list_folders_impl(pool)
+        .await?
         .into_iter()
-        .find(|f| f.name.eq_ignore_ascii_case(q))
-        .map(|f| f.id))
+        .filter(|f| !f.is_external_calendar)
+        .collect();
+    // A real folder outranks the literal word, matching Quick Add: "inbox" names
+    // the view only when nothing is named for it.
+    Ok(fuzzy_match_folder(q, &folders).map(|f| f.id.clone()))
 }
 
 async fn schedule_once(
@@ -657,31 +659,28 @@ async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
             apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
                 .await
                 .map_err(classify)?;
-            let rule_start = input.scheduled_start.clone().unwrap_or_else(today_local);
+            let (rule_start, rule_end) = pikos_recurrence::snap_schedule_to_rule(
+                &rrule,
+                &input.scheduled_start.clone().unwrap_or_else(today_local),
+                input.scheduled_end.as_deref(),
+            );
+            // No denorm write here: creating the rule hands `pages.scheduled_start`
+            // to the derivation, which materialises the oldest-open occurrence in
+            // the same transaction. Writing the parsed values over it is what let
+            // the anchor sit off-pattern.
             create_recurrence_rule_impl(
                 pool,
                 NewRecurrenceRule {
                     page_id: page.id.clone(),
                     rrule,
                     rrule_exdates: Vec::new(),
-                    scheduled_start: rule_start.clone(),
-                    scheduled_end: input.scheduled_end.clone(),
+                    scheduled_start: rule_start,
+                    scheduled_end: rule_end,
                     timezone: local_tz(),
                 },
             )
             .await
             .map_err(classify)?;
-            let denorm = PageUpdate {
-                scheduled_start: Some(Value::String(rule_start)),
-                scheduled_end: input
-                    .scheduled_end
-                    .as_ref()
-                    .map(|e| Value::String(e.clone())),
-                ..Default::default()
-            };
-            update_page_impl(pool, page.id.clone(), denorm)
-                .await
-                .map_err(classify)?;
             created.push(require_page(pool, &page.id).await?);
         }
         ParseResult::Finite { inputs } => {

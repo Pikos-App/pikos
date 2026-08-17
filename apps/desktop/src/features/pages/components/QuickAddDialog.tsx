@@ -6,7 +6,13 @@
 // remounts the body, which resets all its state via useState initializers —
 // no reset effect, no eslint-disable, no flicker.
 
-import { getLocalTimezone, localToday, parseInput, snapAnchorToRule } from "@pikos/core";
+import {
+  fuzzyMatchFolder,
+  getLocalTimezone,
+  localToday,
+  parseInput,
+  snapScheduleToRule,
+} from "@pikos/core";
 import type { PagePriority, PageUpdate, ParseResult } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -25,7 +31,6 @@ import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 import { useQuickAddPlaceholder } from "../hooks/useQuickAddPlaceholder";
-import { fuzzyMatchFolder } from "../utils/fuzzyMatchFolder";
 
 function BylineSeparator() {
   return (
@@ -314,20 +319,26 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
       const tz = getLocalTimezone();
       // Snap onto the first date the rule permits — a chip-set M/W/F rule on a
-      // Sunday date must start Monday, not render a stray Sunday head. (NLP-set
-      // rrules already arrive snapped from the parser; snapping is idempotent.)
-      const ruleStart = snapAnchorToRule(rruleValue, resolvedDate ?? localToday());
+      // Sunday date must start Monday, not render a stray Sunday head. An NLP
+      // rrule can land here off-pattern too, when the input names a date *and* a
+      // cadence ("on wednesday every monday"); the end travels with the start so
+      // it can't end up before it.
+      const { end: ruleEnd, start: ruleStart } = snapScheduleToRule(
+        rruleValue,
+        resolvedDate ?? localToday(),
+        parsed?.scheduledEnd
+      );
       await createRecurrence({
         pageId: page.id,
         rrule: rruleValue,
         scheduledStart: ruleStart,
-        ...(parsed?.scheduledEnd ? { scheduledEnd: parsed.scheduledEnd } : {}),
+        ...(ruleEnd ? { scheduledEnd: ruleEnd } : {}),
         timezone: tz,
       });
       // Set head's scheduledStart denorm so it appears in Today/calendar
       updatePage(page.id, {
         scheduledStart: ruleStart,
-        ...(parsed?.scheduledEnd ? { scheduledEnd: parsed.scheduledEnd } : {}),
+        ...(ruleEnd ? { scheduledEnd: ruleEnd } : {}),
       });
       return { id: page.id, title };
     }

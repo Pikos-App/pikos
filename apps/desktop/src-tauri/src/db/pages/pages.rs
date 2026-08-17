@@ -28,6 +28,12 @@ pub async fn update_page(
 }
 
 #[tauri::command]
+pub async fn clear_pending_description(state: State<'_, DbState>, id: String) -> AppResult<()> {
+    let pool = state.get_pool().await?;
+    clear_pending_description_impl(&pool, &id).await
+}
+
+#[tauri::command]
 pub async fn delete_page(state: State<'_, DbState>, id: String) -> AppResult<()> {
     let pool = state.get_pool().await?;
     delete_page_impl(&pool, &id).await

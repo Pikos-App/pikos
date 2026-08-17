@@ -362,6 +362,14 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve();
   }
 
+  clearPendingDescription(id: string): Promise<void> {
+    const page = this.pages.get(id);
+    // Only the column, matching the writer: the seeded hash the mock stands in
+    // for stays where it was, so the body keeps reading as the user's.
+    if (page) this.pages.set(id, { ...page, pendingDescription: null });
+    return Promise.resolve();
+  }
+
   softDeletePage(id: string): Promise<void> {
     this.softDeleted.add(id);
     return Promise.resolve();

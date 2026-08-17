@@ -8,7 +8,7 @@
 
 use std::collections::HashSet;
 
-use chrono::{Datelike, Days, NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{Datelike, Days, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta};
 
 use crate::rule::{build_rrule, parse_rrule, ByDay, Freq, ParsedRule, RecurrenceError};
 use crate::WallClock;
@@ -398,6 +398,37 @@ pub fn snap_anchor_to_rule(rrule: &str, anchor: &str) -> String {
         Some(o) => o.format(),
         None => anchor.to_string(),
     }
+}
+
+/// Snaps `start` onto the rule and carries `end` the same whole-day distance, so
+/// the span the user described survives the snap. Mirrors `snapScheduleToRule`.
+///
+/// Shifting by whole days rather than rebuilding the end from the new start is
+/// what keeps a multi-day range intact — [`compute_next_end`] puts the end's time
+/// on the start's date, which is right for advancing an occurrence and wrong
+/// here, where it would collapse "Mon to Wed" into a single day. Without any
+/// shift the end stays where it was parsed and can precede the snapped start.
+pub fn snap_schedule_to_rule(
+    rrule: &str,
+    start: &str,
+    end: Option<&str>,
+) -> (String, Option<String>) {
+    let snapped = snap_anchor_to_rule(rrule, start);
+    let shifted = end.map(|e| {
+        let Some((from, to, wc)) = WallClock::parse(start)
+            .zip(WallClock::parse(&snapped))
+            .zip(WallClock::parse(e))
+            .map(|((from, to), wc)| (from, to, wc))
+        else {
+            return e.to_string();
+        };
+        let days = (to.date - from.date).num_days();
+        match wc.date.checked_add_signed(TimeDelta::days(days)) {
+            Some(date) => WallClock { date, ..wc }.format(),
+            None => e.to_string(),
+        }
+    });
+    (snapped, shifted)
 }
 
 /// Realigns a single-BYDAY weekly rule's weekday to a moved anchor. Mirrors

@@ -1,6 +1,6 @@
-import type { Folder } from "@pikos/core";
 import { describe, expect, it } from "vitest";
 
+import type { Folder } from "../types";
 import { fuzzyMatchFolder } from "./fuzzyMatchFolder";
 
 function makeFolder(name: string, id: string = name.toLowerCase()): Folder {
