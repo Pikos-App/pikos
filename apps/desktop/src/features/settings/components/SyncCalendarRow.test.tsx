@@ -53,10 +53,25 @@ describe("SyncCalendarRow", () => {
     expect(onToggle).not.toHaveBeenCalled();
   });
 
-  // Turning sync OFF is the safe direction — it detaches rather than overwrites.
-  it("turns a synced calendar off without asking", () => {
+  // Off hard-deletes every mirror the user never actioned; only the ones they did
+  // something with detach and survive. It asks every time, where the on direction
+  // asks only when pages are waiting.
+  it("confirms before turning a calendar off, with nothing left behind", () => {
+    const onToggle = render_({ enabled: true, folderId: "f1" });
+    fireEvent.click(screen.getByRole("switch", { name: "Sync Personal" }));
+
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("Turn Personal off?");
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+    expect(onToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("leaves the calendar on when the off confirm is cancelled", () => {
     const onToggle = render_({ detachedPages: 3, enabled: true, folderId: "f1" });
     fireEvent.click(screen.getByRole("switch", { name: "Sync Personal" }));
-    expect(onToggle).toHaveBeenCalledWith(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onToggle).not.toHaveBeenCalled();
   });
 });

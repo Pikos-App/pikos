@@ -25,6 +25,7 @@ export function SyncCalendarRow({
 }: SyncCalendarRowProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmOffOpen, setConfirmOffOpen] = useState(false);
   // Re-render each minute so "synced N ago" and the stale dot stay current
   // without a user interaction, since both derive from the wall clock.
   useMinuteTick();
@@ -32,12 +33,21 @@ export function SyncCalendarRow({
   const swatch = calendar.color ?? "var(--text-tertiary)";
   const kept = calendar.detachedPages;
 
-  // Turning a calendar back on is the one toggle that overwrites work the user did
-  // while it was off, and nothing else warns them — the page-level banner says the
-  // opposite ("a regular page you can edit"). Only asks when pages are actually
-  // waiting to be reclaimed; every other flip stays instant.
+  // Both directions move the user's work, and a switch advertises neither.
+  //
+  // ON overwrites what they changed while the calendar was off, and nothing else
+  // warns them — the page-level banner says the opposite ("a regular page you can
+  // edit"). It only asks when pages are actually waiting to be reclaimed.
+  //
+  // OFF is a sync teardown, not a visibility toggle: it hard-deletes every mirror
+  // the user never actioned. It always asks, because it always removes something,
+  // and that silence is what made the switch read as show/hide.
   function toggle(next: boolean) {
-    if (next && kept > 0) {
+    if (!next) {
+      setConfirmOffOpen(true);
+      return;
+    }
+    if (kept > 0) {
       setConfirmOpen(true);
       return;
     }
@@ -106,6 +116,18 @@ export function SyncCalendarRow({
         onOpenChange={setConfirmOpen}
         open={confirmOpen}
         title={`Turn ${calendar.displayName} back on?`}
+      />
+
+      <ConfirmDialog
+        confirmLabel="Turn off"
+        description="Its events leave Pikos until you turn it back on. Anything you've changed stays."
+        onConfirm={() => {
+          setConfirmOffOpen(false);
+          onToggle(false);
+        }}
+        onOpenChange={setConfirmOffOpen}
+        open={confirmOffOpen}
+        title={`Turn ${calendar.displayName} off?`}
       />
     </div>
   );
