@@ -453,46 +453,135 @@ async fn update_due_accepts_a_date_and_a_local_timed_iso() {
     );
 }
 
-/// `--due` writes a start and nothing else, so a date-only value against a timed
-/// event converts it to all-day *and* drops the end — an hour-long meeting becomes
-/// a whole day, with no warning and no way to put the end back from the CLI. The
-/// matrix carries it as a ⚠️, and whether it should refuse instead is an open call
-/// (C61-A7); this pins the current behavior so a change to it is deliberate.
-#[tokio::test]
-async fn update_due_with_a_bare_date_converts_a_timed_page_and_drops_its_end() {
-    let db = unique_db();
-    let dbs = db.to_str().unwrap();
-    let ids = seed(dbs, vec![base_page("Review")]).await;
+async fn scheduled_end(db: &str, id: &str) -> Option<String> {
+    scalar(
+        db,
+        &format!("SELECT scheduled_end FROM pages WHERE id = '{id}'"),
+    )
+    .await
+}
+
+/// A two-hour meeting, through the flags a user would actually type.
+async fn seed_timed_meeting(db: &str) -> String {
+    let ids = seed(db, vec![base_page("Review")]).await;
     assert!(cli(
-        dbs,
-        &["update", &ids[0], "--due", "2026-09-01T14:00:00", "--json"]
+        db,
+        &[
+            "update",
+            &ids[0],
+            "--due",
+            "2026-09-01T14:00:00",
+            "--end",
+            "2026-09-01T16:00:00",
+            "--json",
+        ],
     )
     .status
     .success());
-    let pool = open_pool(dbs).await.unwrap();
-    sqlx::query("UPDATE pages SET scheduled_end = '2026-09-01T15:00:00' WHERE id = ?")
-        .bind(&ids[0])
-        .execute(&pool)
-        .await
-        .unwrap();
+    ids.into_iter().next().unwrap()
+}
+
+#[tokio::test]
+async fn update_moves_a_timed_page_and_keeps_its_length() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_timed_meeting(dbs).await;
+
+    assert!(cli(
+        dbs,
+        &["update", &id, "--due", "2026-09-02T09:00:00", "--json"]
+    )
+    .status
+    .success());
+    assert_eq!(
+        scheduled_start(dbs, &id).await.as_deref(),
+        Some("2026-09-02T09:00:00")
+    );
+    assert_eq!(
+        scheduled_end(dbs, &id).await.as_deref(),
+        Some("2026-09-02T11:00:00"),
+        "still two hours long"
+    );
+}
+
+#[tokio::test]
+async fn update_refuses_a_bare_date_against_a_timed_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_timed_meeting(dbs).await;
+
+    let out = cli(dbs, &["update", &id, "--due", "2026-09-02", "--json"]);
+    assert_eq!(code(&out), 2);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("--all-day 2026-09-02"), "{stderr}");
+    assert!(stderr.contains("--due 2026-09-02THH:MM:SS"), "{stderr}");
+    assert_eq!(
+        scheduled_start(dbs, &id).await.as_deref(),
+        Some("2026-09-01T14:00:00"),
+        "the refusal landed before any write"
+    );
+}
+
+#[tokio::test]
+async fn update_all_day_is_how_a_timed_page_converts() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_timed_meeting(dbs).await;
 
     assert!(
-        cli(dbs, &["update", &ids[0], "--due", "2026-09-02", "--json"])
+        cli(dbs, &["update", &id, "--all-day", "2026-09-02", "--json"])
             .status
             .success()
     );
-
     assert_eq!(
-        scheduled_start(dbs, &ids[0]).await.as_deref(),
-        Some("2026-09-02"),
-        "now all-day"
+        scheduled_start(dbs, &id).await.as_deref(),
+        Some("2026-09-02")
     );
-    let end: Option<String> = scalar(
+    assert_eq!(scheduled_end(dbs, &id).await, None);
+}
+
+#[tokio::test]
+async fn update_end_alone_extends_without_moving() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let id = seed_timed_meeting(dbs).await;
+
+    assert!(cli(
         dbs,
-        &format!("SELECT scheduled_end FROM pages WHERE id = '{}'", ids[0]),
+        &["update", &id, "--end", "2026-09-01T17:00:00", "--json"]
     )
-    .await;
-    assert_eq!(end, None, "the end is gone, not converted");
+    .status
+    .success());
+    assert_eq!(
+        scheduled_start(dbs, &id).await.as_deref(),
+        Some("2026-09-01T14:00:00")
+    );
+    assert_eq!(
+        scheduled_end(dbs, &id).await.as_deref(),
+        Some("2026-09-01T17:00:00")
+    );
+}
+
+#[tokio::test]
+async fn update_rejects_due_and_all_day_together() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Task")]).await;
+
+    let out = cli(
+        dbs,
+        &[
+            "update",
+            &ids[0],
+            "--due",
+            "2026-09-01T14:00:00",
+            "--all-day",
+            "2026-09-01",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 2);
+    assert_eq!(scheduled_start(dbs, &ids[0]).await, None);
 }
 
 #[tokio::test]

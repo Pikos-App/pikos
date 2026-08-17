@@ -41,9 +41,14 @@ Run `pikos <command> --help` for each surface. Global flags: `--json`,
 destroys it instead, and refuses on a page whose calendar is still connected
 (the next poll would recreate it).
 
-`update --due` takes `YYYY-MM-DD` for an all-day start or `YYYY-MM-DDTHH:MM:SS`
-for a local timed one — the CLI's only way to set a time of day. It refuses on a
-recurring or synced page, whose head belongs to the series or the calendar.
+`update` schedules with three flags, and none of them reshapes a page by
+inference. `--due` moves it — `YYYY-MM-DDTHH:MM:SS` for a local time, or
+`YYYY-MM-DD` if the page isn't already timed. `--all-day YYYY-MM-DD` is the only
+way to drop a time. `--end` sets the end in the page's own shape, and is valid on
+its own to extend a page without moving it. A bare date aimed at a timed page is
+refused rather than silently converted; a move keeps the length the page had.
+All three refuse on a recurring or synced page, whose head belongs to the series
+or the calendar.
 
 ## Exit codes
 

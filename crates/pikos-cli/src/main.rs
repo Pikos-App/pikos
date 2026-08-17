@@ -96,8 +96,22 @@ enum CliCommand {
         content: Option<String>,
         #[arg(long)]
         status: Option<String>,
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Move the page: YYYY-MM-DDTHH:MM:SS, or YYYY-MM-DD if it isn't already timed"
+        )]
         due: Option<String>,
+        #[arg(
+            long = "all-day",
+            conflicts_with = "due",
+            help = "Make the page all-day on YYYY-MM-DD — the only way to drop an existing time"
+        )]
+        all_day: Option<String>,
+        #[arg(
+            long,
+            help = "Set when the page ends, in the page's own shape. Valid on its own"
+        )]
+        end: Option<String>,
         #[arg(long)]
         priority: Option<i64>,
     },
@@ -621,25 +635,162 @@ fn parse_due(due: &str) -> Result<(String, String), CliError> {
     Ok((due.to_string(), end_of(due)))
 }
 
-/// Validate `update --due`, a single instant rather than [`parse_due`]'s filter
-/// range. The timed form is accepted rather than rejected as "not a date" because
-/// the CLI has nothing else that sets a time of day. Everything else is refused:
+/// All-day or timed, the distinction the whole schedule model turns on — a
+/// date-only string is all-day, a full local timestamp is timed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Shape {
+    AllDay,
+    Timed,
+}
+
+/// The shape of a stored or supplied schedule value, or None if it is neither.
+///
+/// The lengths pin zero-padding, which chrono's `%m`/`%d` do not: "2026-9-1"
+/// parses fine and then sorts before every padded date it should follow.
 /// `scheduled_start` carries no CHECK, so an unparsed "tomorrow" would sit in the
-/// column sorting as garbage against every date compare and rendering nowhere.
-/// Neither form writes an end, matching `add` — its parser only emits one for a
-/// stated duration or range.
-fn validate_due(due: &str) -> Result<(), CliError> {
-    // Lengths pin zero-padding, which chrono's %m/%d do not: "2026-9-1" parses
-    // fine and then sorts before every padded date it should follow.
-    let ok = (due.len() == 10 && chrono::NaiveDate::parse_from_str(due, "%Y-%m-%d").is_ok())
-        || (due.len() == 19
-            && chrono::NaiveDateTime::parse_from_str(due, "%Y-%m-%dT%H:%M:%S").is_ok());
-    if ok {
-        return Ok(());
+/// column reading as garbage against every date compare and rendering nowhere.
+fn shape_of(value: &str) -> Option<Shape> {
+    if value.len() == 10 && chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok() {
+        return Some(Shape::AllDay);
     }
-    Err(CliError::usage(format!(
-        "--due must be YYYY-MM-DD for all-day or YYYY-MM-DDTHH:MM:SS for a local time (got \"{due}\")"
-    )))
+    if value.len() == 19
+        && chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S").is_ok()
+    {
+        return Some(Shape::Timed);
+    }
+    None
+}
+
+/// What `update` will write to the schedule.
+#[derive(Debug)]
+struct ScheduleChange {
+    start: String,
+    end: Option<String>,
+}
+
+/// Resolve `--due` / `--all-day` / `--end` against the page's current schedule.
+///
+/// The rule is that a flag never silently changes a page's *shape*. A bare date
+/// aimed at a timed page is refused rather than quietly converting it, because
+/// that conversion also destroys the time and the end, and nothing in the command
+/// said so; `--all-day` is the one way to ask for it, and a timestamp is the one
+/// way to ask for the reverse. `--end` alone extends a page without moving it.
+///
+/// Duration is the deliberate exception: a bare timed `--due` keeps the length
+/// the page already had, because dragging a block in the app keeps its length and
+/// dropping the end silently is the same defect this refusal exists to prevent.
+/// Explicit governs the shape, not the length — which is also why `--all-day`
+/// only clears an end it cannot represent (a timed one), and preserves a span it
+/// can.
+fn resolve_schedule_change(
+    current: Option<(&str, Option<&str>)>,
+    due: Option<&str>,
+    all_day: Option<&str>,
+    end: Option<&str>,
+) -> Result<Option<ScheduleChange>, CliError> {
+    if due.is_none() && all_day.is_none() && end.is_none() {
+        return Ok(None);
+    }
+    let current_shape = current.and_then(|(s, _)| shape_of(s));
+
+    if let Some(v) = all_day {
+        if shape_of(v) != Some(Shape::AllDay) {
+            return Err(CliError::usage(format!(
+                "--all-day must be YYYY-MM-DD — use --due for a time of day (got \"{v}\")"
+            )));
+        }
+    }
+    if let Some(v) = due {
+        match shape_of(v) {
+            None => {
+                return Err(CliError::usage(format!(
+                    "--due must be YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS (got \"{v}\")"
+                )))
+            }
+            Some(Shape::AllDay) if current_shape == Some(Shape::Timed) => {
+                return Err(CliError::usage(format!(
+                    "This page is scheduled at a time of day, and \"{v}\" names only a date. \
+                     Use --due {v}THH:MM:SS to move it and keep the time, or --all-day {v} to \
+                     make it an all-day page."
+                )))
+            }
+            _ => {}
+        }
+    }
+
+    let (start, start_shape) =
+        match (due, all_day) {
+            (Some(v), _) => (v.to_string(), shape_of(v).expect("validated above")),
+            (_, Some(v)) => (v.to_string(), Shape::AllDay),
+            // A start the shape check can't read counts as no start: the page has
+            // nothing `--end` can extend either way.
+            (None, None) => match (current, current_shape) {
+                (Some((s, _)), Some(shape)) => (s.to_string(), shape),
+                _ => return Err(CliError::usage(
+                    "--end needs a page that is already scheduled — pass --due or --all-day too.",
+                )),
+            },
+        };
+
+    let end = match end {
+        Some(v) => Some(validated_end(v, &start, start_shape)?),
+        None => carried_end(current, &start, start_shape),
+    };
+    Ok(Some(ScheduleChange { start, end }))
+}
+
+/// An explicit `--end`, refused unless it matches the start's shape and follows
+/// it. An all-day end is the last day the page covers, so it may equal the start.
+fn validated_end(value: &str, start: &str, start_shape: Shape) -> Result<String, CliError> {
+    if shape_of(value) != Some(start_shape) {
+        return Err(CliError::usage(match start_shape {
+            Shape::AllDay => {
+                format!("--end must be YYYY-MM-DD to match an all-day page (got \"{value}\")")
+            }
+            Shape::Timed => {
+                format!("--end must be YYYY-MM-DDTHH:MM:SS to match a timed page (got \"{value}\")")
+            }
+        }));
+    }
+    let too_early = match start_shape {
+        Shape::AllDay => value < start,
+        Shape::Timed => value <= start,
+    };
+    if too_early {
+        return Err(CliError::usage(format!(
+            "--end \"{value}\" is not after the start \"{start}\"."
+        )));
+    }
+    Ok(value.to_string())
+}
+
+/// The end a page keeps when `--end` wasn't given.
+fn carried_end(
+    current: Option<(&str, Option<&str>)>,
+    start: &str,
+    start_shape: Shape,
+) -> Option<String> {
+    let (current_start, current_end) = current?;
+    let current_end = current_end?;
+    if shape_of(current_start) != Some(start_shape) || shape_of(current_end) != Some(start_shape) {
+        return None;
+    }
+    match start_shape {
+        Shape::AllDay => (current_end >= start).then(|| current_end.to_string()),
+        Shape::Timed => {
+            let parse =
+                |v: &str| chrono::NaiveDateTime::parse_from_str(v, "%Y-%m-%dT%H:%M:%S").ok();
+            let duration = parse(current_end)? - parse(current_start)?;
+            if duration <= chrono::TimeDelta::zero() {
+                return None;
+            }
+            Some(
+                (parse(start)? + duration)
+                    .format("%Y-%m-%dT%H:%M:%S")
+                    .to_string(),
+            )
+        }
+    }
 }
 
 async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
@@ -894,13 +1045,15 @@ async fn run(cli: Cli) -> Result<(), CliError> {
             content,
             status,
             due,
+            all_day,
+            end,
             priority,
         } => {
             let page = require_page(&pool, &id).await?;
-            // Every --due rejection is settled before the first write, so a bad
+            // Every schedule rejection is settled before the first write, so a bad
             // flag can't leave --title and --priority half-applied.
-            if let Some(d) = &due {
-                validate_due(d)?;
+            let touches_schedule = due.is_some() || all_day.is_some() || end.is_some();
+            if touches_schedule {
                 if page.schedule_locked {
                     return Err(CliError::conflict(
                         "This event comes from a connected calendar — reschedule it in the Pikos app.",
@@ -919,6 +1072,23 @@ async fn run(cli: Cli) -> Result<(), CliError> {
                     ));
                 }
             }
+            let existing = if touches_schedule {
+                list_page_schedules_impl(&pool, &id)
+                    .await
+                    .map_err(classify)?
+                    .into_iter()
+                    .find(|s| s.rule_id.is_none())
+            } else {
+                None
+            };
+            let change = resolve_schedule_change(
+                existing
+                    .as_ref()
+                    .map(|s| (s.scheduled_start.as_str(), s.scheduled_end.as_deref())),
+                due.as_deref(),
+                all_day.as_deref(),
+                end.as_deref(),
+            )?;
             let mut upd = PageUpdate::default();
             if let Some(t) = title {
                 upd.title = Some(t);
@@ -950,8 +1120,10 @@ async fn run(cli: Cli) -> Result<(), CliError> {
             update_page_impl(&pool, id.clone(), upd)
                 .await
                 .map_err(classify)?;
-            if let Some(d) = &due {
-                schedule_once(&pool, &id, d, None).await.map_err(classify)?;
+            if let Some(change) = &change {
+                schedule_once(&pool, &id, &change.start, change.end.as_deref())
+                    .await
+                    .map_err(classify)?;
             }
             let page = require_page(&pool, &id).await?;
             if json {
@@ -1127,5 +1299,136 @@ mod tests {
         let cli = classify(err);
         assert_eq!(cli.kind, "SchemaTooNew");
         assert_eq!(cli.code, 6);
+    }
+
+    const TIMED: Option<(&str, Option<&str>)> =
+        Some(("2026-05-20T09:00:00", Some("2026-05-20T11:00:00")));
+    const ALL_DAY_SPAN: Option<(&str, Option<&str>)> = Some(("2026-05-20", Some("2026-05-22")));
+
+    fn resolve(
+        current: Option<(&str, Option<&str>)>,
+        due: Option<&str>,
+        all_day: Option<&str>,
+        end: Option<&str>,
+    ) -> (String, Option<String>) {
+        let change = resolve_schedule_change(current, due, all_day, end)
+            .unwrap()
+            .expect("a flag was passed");
+        (change.start, change.end)
+    }
+
+    #[test]
+    fn no_schedule_flag_leaves_the_schedule_alone() {
+        assert!(resolve_schedule_change(TIMED, None, None, None)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn a_bare_timed_due_carries_the_duration() {
+        let (start, end) = resolve(TIMED, Some("2026-06-01T14:00:00"), None, None);
+        assert_eq!(start, "2026-06-01T14:00:00");
+        assert_eq!(end.as_deref(), Some("2026-06-01T16:00:00"));
+    }
+
+    #[test]
+    fn a_bare_date_on_a_timed_page_is_refused() {
+        let err = resolve_schedule_change(TIMED, Some("2026-06-01"), None, None).unwrap_err();
+        assert_eq!(err.kind, "Usage");
+        assert!(err.message.contains("--due 2026-06-01THH:MM:SS"));
+        assert!(err.message.contains("--all-day 2026-06-01"));
+    }
+
+    #[test]
+    fn all_day_converts_a_timed_page_and_drops_the_end_it_cannot_hold() {
+        let (start, end) = resolve(TIMED, None, Some("2026-06-01"), None);
+        assert_eq!(start, "2026-06-01");
+        assert_eq!(end, None);
+    }
+
+    #[test]
+    fn moving_an_all_day_page_keeps_its_span() {
+        let (_, kept) = resolve(ALL_DAY_SPAN, Some("2026-05-21"), None, None);
+        assert_eq!(kept.as_deref(), Some("2026-05-22"));
+        let (_, shifted) = resolve(ALL_DAY_SPAN, None, Some("2026-05-21"), None);
+        assert_eq!(shifted.as_deref(), Some("2026-05-22"));
+    }
+
+    #[test]
+    fn a_span_left_behind_by_the_move_is_dropped() {
+        let (_, end) = resolve(ALL_DAY_SPAN, Some("2026-06-01"), None, None);
+        assert_eq!(end, None);
+    }
+
+    #[test]
+    fn all_day_rejects_a_timestamp() {
+        let err =
+            resolve_schedule_change(TIMED, None, Some("2026-06-01T09:00:00"), None).unwrap_err();
+        assert_eq!(err.kind, "Usage");
+        assert!(err.message.contains("--due"));
+    }
+
+    #[test]
+    fn end_alone_extends_without_moving() {
+        let (start, end) = resolve(TIMED, None, None, Some("2026-05-20T17:00:00"));
+        assert_eq!(start, "2026-05-20T09:00:00");
+        assert_eq!(end.as_deref(), Some("2026-05-20T17:00:00"));
+    }
+
+    #[test]
+    fn end_must_match_the_shape_it_is_extending() {
+        let err = resolve_schedule_change(TIMED, None, None, Some("2026-05-21")).unwrap_err();
+        assert!(err.message.contains("YYYY-MM-DDTHH:MM:SS"));
+        let err = resolve_schedule_change(ALL_DAY_SPAN, None, None, Some("2026-05-21T09:00:00"))
+            .unwrap_err();
+        assert!(err.message.contains("YYYY-MM-DD to match an all-day page"));
+    }
+
+    #[test]
+    fn end_must_follow_the_start() {
+        let err =
+            resolve_schedule_change(TIMED, None, None, Some("2026-05-20T09:00:00")).unwrap_err();
+        assert_eq!(err.kind, "Usage");
+        // An all-day end is the last day covered, so the start's own day is fine.
+        let (_, same_day) = resolve(ALL_DAY_SPAN, None, None, Some("2026-05-20"));
+        assert_eq!(same_day.as_deref(), Some("2026-05-20"));
+    }
+
+    #[test]
+    fn end_alone_needs_something_to_extend() {
+        let err = resolve_schedule_change(None, None, None, Some("2026-05-21")).unwrap_err();
+        assert_eq!(err.kind, "Usage");
+    }
+
+    #[test]
+    fn converting_all_day_to_timed_starts_a_fresh_duration() {
+        let (start, end) = resolve(ALL_DAY_SPAN, Some("2026-05-21T09:00:00"), None, None);
+        assert_eq!(start, "2026-05-21T09:00:00");
+        assert_eq!(end, None);
+    }
+
+    #[test]
+    fn scheduling_an_unscheduled_page_still_works_both_ways() {
+        assert_eq!(
+            resolve(None, Some("2026-06-01"), None, None).0,
+            "2026-06-01"
+        );
+        assert_eq!(
+            resolve(None, Some("2026-06-01T09:00:00"), None, None).0,
+            "2026-06-01T09:00:00"
+        );
+        assert_eq!(
+            resolve(None, None, Some("2026-06-01"), None).0,
+            "2026-06-01"
+        );
+    }
+
+    #[test]
+    fn due_still_rejects_an_unparseable_date() {
+        for bad in ["tomorrow", "2026-5-1", "2026-06-01T09:00"] {
+            let err = resolve_schedule_change(None, Some(bad), None, None).unwrap_err();
+            assert_eq!(err.kind, "Usage", "{bad}");
+            assert_eq!(err.code, 2, "{bad}");
+        }
     }
 }
