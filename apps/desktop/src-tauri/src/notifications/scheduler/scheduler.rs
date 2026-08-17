@@ -14,6 +14,7 @@
 //!    disabled. This is also the catch-up mechanism for reminders that would
 //!    have fired during quiet hours.
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use chrono::{Datelike, NaiveDate, Timelike};
@@ -69,7 +70,7 @@ impl NotificationSettingsState {
 }
 
 /// In-memory scheduler state carried across ticks.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct SchedulerRuntime {
     /// Local date of the last fired daily summary. Fast-path dedup; the DB
     /// marker row is the source of truth across restarts.
@@ -236,7 +237,110 @@ fn should_fire_daily_summary(
     now_hm >= settings.summary_time
 }
 
-/// Query for due reminders and fire OS notifications.
+/// Everything one tick found due, resolved before any of it is delivered.
+struct DueBatch {
+    reminders: Vec<DueReminder>,
+    summary: DueSummary,
+}
+
+/// The daily summary's fate on one tick.
+#[derive(Debug, PartialEq)]
+enum DueSummary {
+    NotDue,
+    /// Due, but the log already carries today's marker: deliver nothing, and
+    /// consume the day in memory so the rest of it stays query-free.
+    AlreadyLogged,
+    /// Due and counted. Zero counts suppress the notification, not the marker —
+    /// otherwise every remaining tick today re-runs the counts.
+    Due {
+        today_count: i64,
+        overdue_count: i64,
+    },
+}
+
+/// Resolve everything due at `now` without delivering any of it.
+///
+/// Quiet hours gate the five reminder classes here, not at the call site: a
+/// suppressed tick has to return an empty batch rather than a full one the
+/// caller is trusted to drop. Those reminders resurface in the next summary as
+/// overdue. The summary is evaluated above the gate because it defers rather
+/// than skips — `should_fire_daily_summary` owns that rule.
+async fn collect_due(
+    pool: &SqlitePool,
+    settings: &NotificationSettings,
+    runtime: &SchedulerRuntime,
+    now: &chrono::DateTime<chrono::Local>,
+) -> Result<DueBatch, sqlx::Error> {
+    let now_quiet = is_quiet_hours(settings, now);
+
+    let summary = if should_fire_daily_summary(runtime, settings, now_quiet, now) {
+        collect_daily_summary(pool, now).await?
+    } else {
+        DueSummary::NotDue
+    };
+
+    if now_quiet {
+        return Ok(DueBatch {
+            reminders: Vec::new(),
+            summary,
+        });
+    }
+
+    // Use space separator to match SQLite's datetime() output format.
+    // datetime() returns 'YYYY-MM-DD HH:MM:SS' — BETWEEN comparisons are
+    // lexicographic, so both sides must use the same separator.
+    let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let window_start = (*now - chrono::Duration::seconds(60))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let minutes = settings.default_minutes_before;
+    let now_utc = now.to_utc();
+
+    let mut reminders = pikos_db::due_explicit_reminders(pool, &window_start, &now_ts).await?;
+    reminders.extend(pikos_db::due_default_reminders(pool, minutes, &window_start, &now_ts).await?);
+    reminders.extend(
+        pikos_db::due_recurring_reminders(pool, now.naive_local(), now_utc, minutes).await?,
+    );
+    reminders.extend(pikos_db::due_synced_reminders(pool, now_utc, minutes).await?);
+    reminders.extend(pikos_db::due_synced_override_reminders(pool, now_utc, minutes).await?);
+
+    // Backstop: the five partition the schedules by construction, but nothing
+    // logs between them any more, so an overlap would now deliver twice.
+    let mut seen = HashSet::new();
+    reminders.retain(|r| seen.insert(r.schedule_id.clone()));
+
+    Ok(DueBatch { reminders, summary })
+}
+
+/// Counts behind the daily summary — see `pikos_db::today_scheduled_count` and
+/// `pikos_db::overdue_count` for what each measures.
+async fn collect_daily_summary(
+    pool: &SqlitePool,
+    now: &chrono::DateTime<chrono::Local>,
+) -> Result<DueSummary, sqlx::Error> {
+    let today = now.format("%Y-%m-%d").to_string();
+    if pikos_db::daily_summary_fired_on(pool, &today).await? {
+        return Ok(DueSummary::AlreadyLogged);
+    }
+
+    let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let stale_cutoff = (*now - chrono::Duration::hours(24))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+
+    Ok(DueSummary::Due {
+        today_count: pikos_db::today_scheduled_count(pool, &today).await?,
+        overdue_count: pikos_db::overdue_count(
+            pool,
+            &now_ts,
+            &stale_cutoff,
+            now.with_timezone(&chrono::Utc),
+        )
+        .await?,
+    })
+}
+
+/// One tick: resolve what's due, then show it.
 ///
 /// Internal scheduler fns return `sqlx::Error` directly (not `String`) so the
 /// run-loop log site can use `classify_sqlx` to log a stable error class
@@ -260,188 +364,47 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
         }
     };
 
-    let now = chrono::Local::now();
-    let now_quiet = is_quiet_hours(&settings, &now);
-
-    // Daily summary decision uses current runtime state; we mutate after.
-    let fire_summary = {
+    let runtime = {
         let runtime_state = app.state::<SchedulerRuntimeState>();
         let guard = runtime_state.lock().await;
-        should_fire_daily_summary(&guard, &settings, now_quiet, &now)
+        guard.clone()
     };
 
-    if fire_summary {
-        // Populate last_summary_date even if nothing to report, so we don't
-        // keep re-querying for the rest of the day.
-        let _ = fire_daily_summary(app, &pool, &now).await?;
-        let runtime_state = app.state::<SchedulerRuntimeState>();
-        let mut guard = runtime_state.lock().await;
-        guard.last_summary_date = Some(now.date_naive());
+    let now = chrono::Local::now();
+    let batch = collect_due(&pool, &settings, &runtime, &now).await?;
+
+    match batch.summary {
+        DueSummary::NotDue => {}
+        DueSummary::AlreadyLogged => mark_summary_fired(app, &now).await,
+        DueSummary::Due {
+            today_count,
+            overdue_count,
+        } => {
+            // Local time, consistent with the date(fired_at) dedup read.
+            let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
+            pikos_db::log_daily_summary(&pool, &now_ts).await?;
+            if today_count > 0 || overdue_count > 0 {
+                deliver(
+                    app,
+                    &format_summary_title(&now),
+                    &format_summary_body(today_count, overdue_count),
+                );
+            }
+            mark_summary_fired(app, &now).await;
+        }
     }
 
-    // During quiet hours, suppress individual per-reminder notifications.
-    // They'll be surfaced via tomorrow's daily summary as overdue.
-    if now_quiet {
-        return Ok(());
-    }
-
-    // Use space separator to match SQLite's datetime() output format.
-    // datetime() returns 'YYYY-MM-DD HH:MM:SS' — BETWEEN comparisons are
-    // lexicographic, so both sides must use the same separator.
-    let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
-    let window_start = (now - chrono::Duration::seconds(60))
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
-
-    fire_explicit_reminders(app, &pool, &window_start, &now_ts).await?;
-    fire_default_reminders(app, &pool, &settings, &window_start, &now_ts).await?;
-    fire_recurring_reminders(app, &pool, &settings, now.naive_local(), now.to_utc()).await?;
-    fire_synced_reminders(app, &pool, &settings, now.to_utc()).await?;
-    fire_synced_override_reminders(app, &pool, &settings, now.to_utc()).await?;
-
-    Ok(())
-}
-
-/// Synced events are absolute — their reminders fire on the instant resolved
-/// from the source zone, not the device-local reading of the wall-clock. The
-/// naive `fire_*` paths above exclude active-synced pages; this covers them.
-async fn fire_synced_reminders(
-    app: &AppHandle,
-    pool: &SqlitePool,
-    settings: &NotificationSettings,
-    now_utc: chrono::DateTime<chrono::Utc>,
-) -> Result<(), sqlx::Error> {
-    let due =
-        pikos_db::due_synced_reminders(pool, now_utc, settings.default_minutes_before).await?;
-    for row in due {
-        fire_reminder(app, pool, &row).await?;
-    }
-    Ok(())
-}
-
-/// Fires a moved/single-edited synced occurrence at its absolute instant; see
-/// `due_synced_override_reminders`.
-async fn fire_synced_override_reminders(
-    app: &AppHandle,
-    pool: &SqlitePool,
-    settings: &NotificationSettings,
-    now_utc: chrono::DateTime<chrono::Utc>,
-) -> Result<(), sqlx::Error> {
-    let due =
-        pikos_db::due_synced_override_reminders(pool, now_utc, settings.default_minutes_before)
-            .await?;
-    for row in due {
-        fire_reminder(app, pool, &row).await?;
-    }
-    Ok(())
-}
-
-/// Pages that have rows in page_reminders — use those specific lead times.
-/// All-day events (scheduled_start like 'YYYY-MM-DD', no 'T') are excluded.
-async fn fire_explicit_reminders(
-    app: &AppHandle,
-    pool: &SqlitePool,
-    window_start: &str,
-    now_ts: &str,
-) -> Result<(), sqlx::Error> {
-    let due = pikos_db::due_explicit_reminders(pool, window_start, now_ts).await?;
-
-    for row in due {
-        fire_reminder(app, pool, &row).await?;
+    for row in &batch.reminders {
+        fire_reminder(app, &pool, row).await?;
     }
 
     Ok(())
 }
 
-/// Pages without page_reminders rows — use the global default lead time.
-/// All-day events are excluded (see `fire_explicit_reminders`).
-async fn fire_default_reminders(
-    app: &AppHandle,
-    pool: &SqlitePool,
-    settings: &NotificationSettings,
-    window_start: &str,
-    now_ts: &str,
-) -> Result<(), sqlx::Error> {
-    let minutes = settings.default_minutes_before;
-
-    let due = pikos_db::due_default_reminders(pool, minutes, window_start, now_ts).await?;
-
-    for row in due {
-        fire_reminder(app, pool, &row).await?;
-    }
-
-    Ok(())
-}
-
-/// Recurring (rrule-backed) pages — see `due_recurring_reminders` for the firing
-/// semantics. Both clocks are passed, not a formatted window, because a series can
-/// have more than one occurrence due at once, and native vs. synced occurrences
-/// compare against different clocks.
-async fn fire_recurring_reminders(
-    app: &AppHandle,
-    pool: &SqlitePool,
-    settings: &NotificationSettings,
-    now_local: chrono::NaiveDateTime,
-    now_utc: chrono::DateTime<chrono::Utc>,
-) -> Result<(), sqlx::Error> {
-    let minutes = settings.default_minutes_before;
-    let due = pikos_db::due_recurring_reminders(pool, now_local, now_utc, minutes).await?;
-    for row in due {
-        fire_reminder(app, pool, &row).await?;
-    }
-
-    Ok(())
-}
-
-/// Daily summary — one notification per local day. Returns true if delivered.
-///
-/// Dedup: a marker row in notification_log with `type='overdue'`,
-/// `page_id IS NULL`, `schedule_id IS NULL`. The marker is always inserted
-/// even if there's nothing to report, so we don't keep re-querying.
-///
-/// Counts:
-/// - `today_count` — pages scheduled today (timed or all-day), status != done.
-/// - `overdue_count` — timed events with scheduled_start in [now-24h, now),
-///   status != done, minus freshly created pages (`pikos_db::overdue_count`).
-async fn fire_daily_summary(
-    app: &AppHandle,
-    pool: &SqlitePool,
-    now: &chrono::DateTime<chrono::Local>,
-) -> Result<bool, sqlx::Error> {
-    let today = now.format("%Y-%m-%d").to_string();
-
-    // Persistent dedup across restarts.
-    if pikos_db::daily_summary_fired_on(pool, &today).await? {
-        return Ok(false);
-    }
-
-    let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
-    let stale_cutoff = (*now - chrono::Duration::hours(24))
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
-
-    let today_count = pikos_db::today_scheduled_count(pool, &today).await?;
-
-    let overdue_count = pikos_db::overdue_count(
-        pool,
-        &now_ts,
-        &stale_cutoff,
-        now.with_timezone(&chrono::Utc),
-    )
-    .await?;
-
-    // Insert marker row (local time, consistent with date(fired_at)=today above).
-    pikos_db::log_daily_summary(pool, &now_ts).await?;
-
-    if today_count == 0 && overdue_count == 0 {
-        return Ok(false);
-    }
-
-    let title = format_summary_title(now);
-    let body = format_summary_body(today_count, overdue_count);
-    deliver(app, &title, &body);
-
-    Ok(true)
+async fn mark_summary_fired(app: &AppHandle, now: &chrono::DateTime<chrono::Local>) {
+    let runtime_state = app.state::<SchedulerRuntimeState>();
+    let mut guard = runtime_state.lock().await;
+    guard.last_summary_date = Some(now.date_naive());
 }
 
 // ─── Delivery ────────────────────────────────────────────────────────────────

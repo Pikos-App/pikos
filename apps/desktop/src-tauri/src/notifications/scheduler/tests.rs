@@ -1,5 +1,6 @@
 use super::*;
 use chrono::TimeZone;
+use pikos_db::{insert_test_page, insert_test_page_sync, test_pool, TestPage};
 
 fn settings_with_quiet(start: &str, end: &str) -> NotificationSettings {
     NotificationSettings {
@@ -194,6 +195,199 @@ fn summary_fires_next_day_after_previous() {
         false,
         &local_at(2026, 4, 18, 8, 0)
     ));
+}
+
+// ─── collect_due ─────────────────────────────────────────────────────
+
+/// Device-local wall-clock `offset_min` from the tick clock — the form a native
+/// `page_schedules` row stores.
+fn local_wall(now: &chrono::DateTime<chrono::Local>, offset_min: i64) -> String {
+    (*now + chrono::Duration::minutes(offset_min))
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
+}
+
+/// The same instant read in UTC — the fixtures' source zone. A zone that never
+/// shifts keeps the expected instants independent of the machine's own zone.
+fn utc_wall(now: &chrono::DateTime<chrono::Local>, offset_min: i64) -> String {
+    (now.to_utc() + chrono::Duration::minutes(offset_min))
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
+}
+
+async fn insert_schedule(
+    pool: &SqlitePool,
+    id: &str,
+    page_id: &str,
+    scheduled_start: &str,
+    timezone: Option<&str>,
+) {
+    sqlx::query(
+        "INSERT INTO page_schedules (id, page_id, scheduled_start, timezone, status, created_at)
+         VALUES (?, ?, ?, ?, 'not_started', '2026-05-01T00:00:00')",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(scheduled_start)
+    .bind(timezone)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_override(
+    pool: &SqlitePool,
+    id: &str,
+    page_id: &str,
+    scheduled_start: &str,
+    original_date: &str,
+    timezone: &str,
+) {
+    sqlx::query(
+        "INSERT INTO page_schedules
+         (id, page_id, scheduled_start, timezone, rule_id, original_date, status, created_at)
+         VALUES (?, ?, ?, ?, (SELECT id FROM page_recurrence_rules WHERE page_id = ?), ?,
+                 'not_started', '2026-05-01T00:00:00')",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(scheduled_start)
+    .bind(timezone)
+    .bind(page_id)
+    .bind(original_date)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_rule(pool: &SqlitePool, page_id: &str, base_start: &str) {
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules
+         (id, page_id, rrule, scheduled_start, timezone, created_at)
+         VALUES (?, ?, 'FREQ=DAILY', ?, 'UTC', '2026-05-01T00:00:00')",
+    )
+    .bind(format!("rule-{page_id}"))
+    .bind(page_id)
+    .bind(base_start)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_reminder(pool: &SqlitePool, page_id: &str, minutes_before: i64) {
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES (?, ?, ?, '2026-05-01T00:00:00')",
+    )
+    .bind(format!("rem-{page_id}"))
+    .bind(page_id)
+    .bind(minutes_before)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// One page per class the tick asks about — explicit lead, global default,
+/// native recurring, synced one-off, synced moved occurrence — every one of them
+/// due at `now` under a 10-minute global default.
+async fn seed_every_due_class(pool: &SqlitePool, now: &chrono::DateTime<chrono::Local>) {
+    for id in ["explicit", "default", "rec", "synced", "moved"] {
+        insert_test_page(pool, TestPage::new(id, id)).await.unwrap();
+    }
+
+    insert_schedule(pool, "s-explicit", "explicit", &local_wall(now, 15), None).await;
+    insert_reminder(pool, "explicit", 15).await;
+
+    insert_schedule(pool, "s-default", "default", &local_wall(now, 10), None).await;
+
+    insert_rule(pool, "rec", &local_wall(now, 30)).await;
+    insert_reminder(pool, "rec", 30).await;
+
+    insert_test_page_sync(pool, "synced", "active").await.unwrap();
+    insert_schedule(pool, "s-synced", "synced", &utc_wall(now, 10), Some("UTC")).await;
+
+    insert_test_page_sync(pool, "moved", "active").await.unwrap();
+    insert_rule(pool, "moved", &utc_wall(now, 0)).await;
+    insert_override(
+        pool,
+        "s-moved",
+        "moved",
+        &utc_wall(now, 10),
+        &utc_wall(now, 0),
+        "UTC",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn one_tick_collects_every_due_class_into_one_batch() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+
+    let batch = collect_due(&pool, &settings, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+
+    let mut found: Vec<&str> = batch
+        .reminders
+        .iter()
+        .map(|r| r.schedule_id.as_str())
+        .collect();
+    found.sort_unstable();
+    let recurring = format!("rec@{}#30", local_wall(&now, 30));
+    let mut expected = vec![
+        "s-explicit#15",
+        "s-default",
+        recurring.as_str(),
+        "s-synced#10",
+        "s-moved#10",
+    ];
+    expected.sort_unstable();
+    assert_eq!(found, expected);
+    assert!(matches!(batch.summary, DueSummary::Due { .. }));
+}
+
+/// The in-memory `last_summary_date` is lost on restart, so the log marker is
+/// what stops a second summary the same day.
+#[tokio::test]
+async fn a_summary_already_in_the_log_is_not_counted_again() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    pikos_db::log_daily_summary(&pool, &now.format("%Y-%m-%d %H:%M:%S").to_string())
+        .await
+        .unwrap();
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+
+    let batch = collect_due(&pool, &settings, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+
+    assert_eq!(batch.summary, DueSummary::AlreadyLogged);
+    assert_eq!(batch.reminders.len(), 5);
+}
+
+#[tokio::test]
+async fn quiet_hours_empty_the_batch_and_hold_the_summary() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+
+    let batch = collect_due(
+        &pool,
+        &settings_with_quiet("08:00", "10:00"),
+        &SchedulerRuntime::default(),
+        &now,
+    )
+    .await
+    .unwrap();
+
+    assert!(batch.reminders.is_empty());
+    assert_eq!(batch.summary, DueSummary::NotDue);
 }
 
 // ─── format helpers ──────────────────────────────────────────────────
