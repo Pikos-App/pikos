@@ -36,6 +36,18 @@ async function connectCaldav(app: Page, username = "me@example.com") {
   await expect(app.getByRole("switch", { name: "Sync Personal" }).first()).toBeVisible();
 }
 
+/** Turn a calendar off through the confirm it always raises (SyncCalendarRow owns
+ *  why); turning one on only confirms when pages are waiting to be reclaimed. */
+async function disableCalendar(app: Page, name: string) {
+  const toggle = app.getByRole("switch", { name: `Sync ${name}` });
+  await toggle.click();
+  await app
+    .getByRole("alertdialog", { name: `Turn ${name} off?` })
+    .getByRole("button", { name: "Turn off" })
+    .click();
+  await expect(toggle).not.toBeChecked();
+}
+
 /** Wipe + load the mock synced-calendar seed via the Developer settings tab. */
 async function seedSynced(app: Page) {
   await app.getByRole("button", { name: "Open settings" }).click();
@@ -101,8 +113,7 @@ appTest("enabling a calendar adds a sidebar folder, disabling removes it @tier1"
   await expect(sidebarFolder).toBeVisible();
 
   await openSyncPanel(app);
-  await app.getByRole("switch", { name: "Sync Personal" }).click();
-  await expect(app.getByRole("switch", { name: "Sync Personal" })).not.toBeChecked();
+  await disableCalendar(app, "Personal");
   await app.keyboard.press("Escape");
   await expect(sidebarFolder).not.toBeVisible();
 });
@@ -135,10 +146,9 @@ appTest("turning a calendar back on reclaims the pages it kept @tier2", async ({
   await app.keyboard.press("Escape");
 
   await openSyncPanel(app);
-  await app.getByRole("switch", { name: "Sync Personal" }).click();
-  await expect(app.getByRole("switch", { name: "Sync Personal" })).not.toBeChecked();
+  await disableCalendar(app, "Personal");
 
-  // Back on: the confirm names what is waiting rather than flipping silently.
+  // Back on: the confirm names what is waiting to be reclaimed.
   await app.getByRole("switch", { name: "Sync Personal" }).click();
   const confirm = app.getByRole("alertdialog", { name: "Turn Personal back on?" });
   await expect(confirm).toBeVisible();
@@ -243,8 +253,7 @@ appTest("disabling a calendar keeps an edited mirror and its folder @tier2", asy
   await expect(personalFolders).toHaveCount(2);
 
   await openSyncPanel(app);
-  await app.getByRole("switch", { name: "Sync Personal" }).click();
-  await expect(app.getByRole("switch", { name: "Sync Personal" })).not.toBeChecked();
+  await disableCalendar(app, "Personal");
   await app.keyboard.press("Escape");
 
   // Still two, so the calendar's folder stayed behind rather than being deleted
