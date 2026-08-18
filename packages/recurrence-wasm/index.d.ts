@@ -10,6 +10,7 @@ export {
   listOccurrences,
   missedOccurrencesBetween,
   nextOccurrenceAfter,
+  oldestOpenOccurrence,
   parseRruleOptions,
   rruleToLabel,
   rruleToShortLabel,

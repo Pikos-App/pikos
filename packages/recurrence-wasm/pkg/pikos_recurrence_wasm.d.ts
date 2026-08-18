@@ -1,18 +1,21 @@
 /* tslint:disable */
 /* eslint-disable */
-export function alignWeeklyRuleToAnchor(rrule: string, anchor_start: string): string;
 /**
- * Human-readable label ("every week on Monday"), or undefined when the rule
- * can't be reduced to the phrased subset (callers fall back to the raw
- * string).
+ * JSON array of YYYY-MM-DD strings strictly between `after` and `before`.
  */
-export function rruleToLabel(rrule: string): string | undefined;
-export function computeNextEnd(base_end: string, next_start: string): string | undefined;
+export function missedOccurrencesBetween(rrule: string, scheduled_start: string, after: string, before: string, exdates_json: string): string;
+/**
+ * Builds an RRULE string from a JSON options object. Returns undefined when
+ * the JSON doesn't deserialize into valid options.
+ */
+export function buildRrule(options_json: string): string | undefined;
+export function alignWeeklyRuleToAnchor(rrule: string, anchor_start: string): string;
 /**
  * Next occurrence's scheduledStart strictly after the day of `after`, or
  * undefined when the rule is exhausted or invalid.
  */
 export function nextOccurrenceAfter(rrule: string, scheduled_start: string, after: string, exdates_json: string): string | undefined;
+export function computeNextEnd(base_end: string, next_start: string): string | undefined;
 /**
  * Typed options as a JSON object (`{freq, interval, byweekday?,
  * byweekdayOrdinals?, bysetpos?, bymonthday?, bymonth?, wkst?, count?,
@@ -20,30 +23,34 @@ export function nextOccurrenceAfter(rrule: string, scheduled_start: string, afte
  */
 export function parseRruleOptions(rrule: string): string | undefined;
 /**
- * Builds an RRULE string from a JSON options object. Returns undefined when
- * the JSON doesn't deserialize into valid options.
+ * Human-readable label ("every week on Monday"), or undefined when the rule
+ * can't be reduced to the phrased subset (callers fall back to the raw
+ * string).
  */
-export function buildRrule(options_json: string): string | undefined;
+export function rruleToLabel(rrule: string): string | undefined;
 /**
  * Compact byline label ("Weekly", "Every 2 weeks × 10"). Falls back to the
  * raw RRULE string on parse failure, mirroring the native helper.
  */
 export function rruleToShortLabel(rrule: string): string;
 /**
- * First `limit` occurrences anchored at `dtstart`, as a JSON array of local
- * ISO datetimes.
- */
-export function listOccurrences(rrule: string, dtstart: string, limit: number): string;
-/**
  * Occurrences of a rule within [rangeStart, rangeEnd) as a JSON array of
  * `{originalDate, scheduledStart, scheduledEnd}`.
  */
 export function expandRange(rrule: string, scheduled_start: string, scheduled_end: string | null | undefined, range_start: string, range_end: string, exdates_json: string): string;
+/**
+ * The oldest occurrence not in `exclusions` and not before `floor`, as a JSON
+ * `{originalDate, scheduledStart, scheduledEnd}` — the head derivation, shared
+ * with the backend so a derived head carries the same end on both sides.
+ * Undefined when the series is exhausted or the rule is out of envelope.
+ */
+export function oldestOpenOccurrence(rrule: string, scheduled_start: string, scheduled_end: string | null | undefined, exclusions_json: string, floor?: string | null): string | undefined;
 export function snapAnchorToRule(rrule: string, anchor: string): string;
 /**
- * JSON array of YYYY-MM-DD strings strictly between `after` and `before`.
+ * First `limit` occurrences anchored at `dtstart`, as a JSON array of local
+ * ISO datetimes.
  */
-export function missedOccurrencesBetween(rrule: string, scheduled_start: string, after: string, before: string, exdates_json: string): string;
+export function listOccurrences(rrule: string, dtstart: string, limit: number): string;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
@@ -56,6 +63,7 @@ export interface InitOutput {
   readonly listOccurrences: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
   readonly missedOccurrencesBetween: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
   readonly nextOccurrenceAfter: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
+  readonly oldestOpenOccurrence: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
   readonly parseRruleOptions: (a: number, b: number, c: number) => void;
   readonly rruleToLabel: (a: number, b: number, c: number) => void;
   readonly rruleToShortLabel: (a: number, b: number, c: number) => void;

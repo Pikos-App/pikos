@@ -30,12 +30,21 @@ interface Step {
   date?: string;
 }
 
+interface Series {
+  rrule: string;
+  start: string;
+  end: string;
+  timezone: string;
+}
+
 interface Scenario {
   name: string;
   origin: "native" | "active" | "detached";
+  /** Replaces the table-level series for this row — see the Rust runner's `Scenario`. */
+  series?: Series;
   steps: Step[];
   expect: {
-    head?: { scheduledStart?: string; status?: string };
+    head?: { scheduledStart?: string; scheduledEnd?: string; status?: string };
     completedDates?: string[];
     skippedDates?: string[];
     exdates?: string[];
@@ -98,6 +107,9 @@ const CHECKS: Record<keyof Expect, (want: Expect, world: World) => Promise<void>
     if (want.head.scheduledStart !== undefined) {
       expect(after.scheduledStart).toBe(want.head.scheduledStart);
     }
+    if (want.head.scheduledEnd !== undefined) {
+      expect(after.scheduledEnd).toBe(want.head.scheduledEnd);
+    }
     if (want.head.status !== undefined) expect(after.status).toBe(want.head.status);
   },
 
@@ -117,7 +129,7 @@ const CHECKS: Record<keyof Expect, (want: Expect, world: World) => Promise<void>
 };
 
 const table = readConformanceTable<Scenario>("recurrence", Object.keys(CHECKS)) as {
-  series: { rrule: string; start: string; end: string; timezone: string };
+  series: Series;
   scenarios: Scenario[];
 };
 
@@ -125,6 +137,7 @@ async function apply(
   adapter: MockStorageAdapter,
   pageId: string,
   ruleId: string,
+  series: Series,
   step: Step
 ): Promise<void> {
   switch (step.op) {
@@ -156,7 +169,7 @@ async function apply(
         originalDate: step.originalDate!,
         ruleId,
         scheduledStart: step.scheduledStart!,
-        timezone: table.series.timezone,
+        timezone: series.timezone,
         ...(step.scheduledEnd !== undefined && { scheduledEnd: step.scheduledEnd }),
       });
       return;
@@ -185,7 +198,7 @@ describe("recurrence lifecycle conformance", () => {
 
   for (const scenario of table.scenarios) {
     it(scenario.name, async () => {
-      const { series } = table;
+      const series = scenario.series ?? table.series;
       const head = await adapter.createPage({
         content: "",
         contentText: "",
@@ -212,7 +225,7 @@ describe("recurrence lifecycle conformance", () => {
         });
       }
 
-      for (const step of scenario.steps) await apply(adapter, head.id, rule.id, step);
+      for (const step of scenario.steps) await apply(adapter, head.id, rule.id, series, step);
 
       const world: World = { adapter, headId: head.id };
       for (const check of Object.values(CHECKS)) await check(scenario.expect, world);

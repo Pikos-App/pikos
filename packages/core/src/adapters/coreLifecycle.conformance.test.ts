@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { PageStatus } from "../types";
+import type { PageStatus, SearchResult } from "../types";
 import { readConformanceTable, unhandledStep } from "./conformanceTable";
 import { MockStorageAdapter } from "./MockStorageAdapter";
 
@@ -20,6 +20,7 @@ interface Step {
     | "setStatus";
   id?: string;
   title?: string;
+  subtitle?: string;
   name?: string;
   contentText?: string;
   tags?: string[];
@@ -38,6 +39,9 @@ interface Scenario {
       query: string;
       includeCompleted?: boolean;
       matches: string[];
+      /** Checked against every matched row — see the Rust runner's `SearchExpect`. */
+      matchSource?: SearchResult["matchSource"];
+      excerpt?: string;
       completedCount?: number;
     };
     listQuery?: { query: string; matches: string[] };
@@ -76,6 +80,14 @@ const CHECKS: Record<keyof Expect, (want: Expect, world: World) => Promise<void>
     if (!want.search) return;
     const res = await adapter.searchPages(want.search.query, want.search.includeCompleted);
     expect(res.results.map((r) => named(r.id)).sort()).toEqual([...want.search.matches].sort());
+    for (const row of res.results) {
+      if (want.search.matchSource !== undefined) {
+        expect(row.matchSource, `${named(row.id)}'s match source`).toBe(want.search.matchSource);
+      }
+      if (want.search.excerpt !== undefined) {
+        expect(row.excerpt, `${named(row.id)}'s excerpt`).toBe(want.search.excerpt);
+      }
+    }
     if (want.search.completedCount !== undefined) {
       expect(res.completedCount).toBe(want.search.completedCount);
     }
@@ -111,6 +123,7 @@ async function apply(
         folderId: step.folder ? (ids.get(step.folder) ?? null) : null,
         priority: 0,
         status: "not_started",
+        subtitle: step.subtitle ?? null,
         tags: step.tags ?? [],
         title: step.title!,
       });

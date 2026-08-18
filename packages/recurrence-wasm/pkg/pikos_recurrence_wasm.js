@@ -93,6 +93,67 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr, len);
 }
 /**
+ * JSON array of YYYY-MM-DD strings strictly between `after` and `before`.
+ * @param {string} rrule
+ * @param {string} scheduled_start
+ * @param {string} after
+ * @param {string} before
+ * @param {string} exdates_json
+ * @returns {string}
+ */
+export function missedOccurrencesBetween(rrule, scheduled_start, after, before, exdates_json) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(scheduled_start, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(after, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(before, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(exdates_json, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len4 = WASM_VECTOR_LEN;
+        wasm.missedOccurrencesBetween(retptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred6_0 = r0;
+        deferred6_1 = r1;
+        return getStringFromWasm0(r0, r1);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export_2(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
+ * Builds an RRULE string from a JSON options object. Returns undefined when
+ * the JSON doesn't deserialize into valid options.
+ * @param {string} options_json
+ * @returns {string | undefined}
+ */
+export function buildRrule(options_json) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(options_json, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.buildRrule(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        let v2;
+        if (r0 !== 0) {
+            v2 = getStringFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
+        }
+        return v2;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
  * @param {string} rrule
  * @param {string} anchor_start
  * @returns {string}
@@ -115,58 +176,6 @@ export function alignWeeklyRuleToAnchor(rrule, anchor_start) {
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
         wasm.__wbindgen_export_2(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * Human-readable label ("every week on Monday"), or undefined when the rule
- * can't be reduced to the phrased subset (callers fall back to the raw
- * string).
- * @param {string} rrule
- * @returns {string | undefined}
- */
-export function rruleToLabel(rrule) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.rruleToLabel(retptr, ptr0, len0);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        let v2;
-        if (r0 !== 0) {
-            v2 = getStringFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
-        }
-        return v2;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
-}
-
-/**
- * @param {string} base_end
- * @param {string} next_start
- * @returns {string | undefined}
- */
-export function computeNextEnd(base_end, next_start) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(base_end, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(next_start, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len1 = WASM_VECTOR_LEN;
-        wasm.computeNextEnd(retptr, ptr0, len0, ptr1, len1);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        let v3;
-        if (r0 !== 0) {
-            v3 = getStringFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
-        }
-        return v3;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
     }
 }
 
@@ -205,6 +214,32 @@ export function nextOccurrenceAfter(rrule, scheduled_start, after, exdates_json)
 }
 
 /**
+ * @param {string} base_end
+ * @param {string} next_start
+ * @returns {string | undefined}
+ */
+export function computeNextEnd(base_end, next_start) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(base_end, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(next_start, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.computeNextEnd(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        let v3;
+        if (r0 !== 0) {
+            v3 = getStringFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
+        }
+        return v3;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
  * Typed options as a JSON object (`{freq, interval, byweekday?,
  * byweekdayOrdinals?, bysetpos?, bymonthday?, bymonth?, wkst?, count?,
  * until?}`), or undefined when unparseable or the FREQ is unsupported.
@@ -231,17 +266,18 @@ export function parseRruleOptions(rrule) {
 }
 
 /**
- * Builds an RRULE string from a JSON options object. Returns undefined when
- * the JSON doesn't deserialize into valid options.
- * @param {string} options_json
+ * Human-readable label ("every week on Monday"), or undefined when the rule
+ * can't be reduced to the phrased subset (callers fall back to the raw
+ * string).
+ * @param {string} rrule
  * @returns {string | undefined}
  */
-export function buildRrule(options_json) {
+export function rruleToLabel(rrule) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(options_json, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
         const len0 = WASM_VECTOR_LEN;
-        wasm.buildRrule(retptr, ptr0, len0);
+        wasm.rruleToLabel(retptr, ptr0, len0);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         let v2;
@@ -277,35 +313,6 @@ export function rruleToShortLabel(rrule) {
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
         wasm.__wbindgen_export_2(deferred2_0, deferred2_1, 1);
-    }
-}
-
-/**
- * First `limit` occurrences anchored at `dtstart`, as a JSON array of local
- * ISO datetimes.
- * @param {string} rrule
- * @param {string} dtstart
- * @param {number} limit
- * @returns {string}
- */
-export function listOccurrences(rrule, dtstart, limit) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(dtstart, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len1 = WASM_VECTOR_LEN;
-        wasm.listOccurrences(retptr, ptr0, len0, ptr1, len1, limit);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        deferred3_0 = r0;
-        deferred3_1 = r1;
-        return getStringFromWasm0(r0, r1);
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export_2(deferred3_0, deferred3_1, 1);
     }
 }
 
@@ -353,6 +360,45 @@ export function expandRange(rrule, scheduled_start, scheduled_end, range_start, 
 }
 
 /**
+ * The oldest occurrence not in `exclusions` and not before `floor`, as a JSON
+ * `{originalDate, scheduledStart, scheduledEnd}` — the head derivation, shared
+ * with the backend so a derived head carries the same end on both sides.
+ * Undefined when the series is exhausted or the rule is out of envelope.
+ * @param {string} rrule
+ * @param {string} scheduled_start
+ * @param {string | null | undefined} scheduled_end
+ * @param {string} exclusions_json
+ * @param {string | null} [floor]
+ * @returns {string | undefined}
+ */
+export function oldestOpenOccurrence(rrule, scheduled_start, scheduled_end, exclusions_json, floor) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(scheduled_start, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len1 = WASM_VECTOR_LEN;
+        var ptr2 = isLikeNone(scheduled_end) ? 0 : passStringToWasm0(scheduled_end, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        var len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(exclusions_json, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len3 = WASM_VECTOR_LEN;
+        var ptr4 = isLikeNone(floor) ? 0 : passStringToWasm0(floor, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        var len4 = WASM_VECTOR_LEN;
+        wasm.oldestOpenOccurrence(retptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        let v6;
+        if (r0 !== 0) {
+            v6 = getStringFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
+        }
+        return v6;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
  * @param {string} rrule
  * @param {string} anchor
  * @returns {string}
@@ -379,38 +425,31 @@ export function snapAnchorToRule(rrule, anchor) {
 }
 
 /**
- * JSON array of YYYY-MM-DD strings strictly between `after` and `before`.
+ * First `limit` occurrences anchored at `dtstart`, as a JSON array of local
+ * ISO datetimes.
  * @param {string} rrule
- * @param {string} scheduled_start
- * @param {string} after
- * @param {string} before
- * @param {string} exdates_json
+ * @param {string} dtstart
+ * @param {number} limit
  * @returns {string}
  */
-export function missedOccurrencesBetween(rrule, scheduled_start, after, before, exdates_json) {
-    let deferred6_0;
-    let deferred6_1;
+export function listOccurrences(rrule, dtstart, limit) {
+    let deferred3_0;
+    let deferred3_1;
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
         const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(scheduled_start, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const ptr1 = passStringToWasm0(dtstart, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
         const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(after, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(before, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(exdates_json, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len4 = WASM_VECTOR_LEN;
-        wasm.missedOccurrencesBetween(retptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        wasm.listOccurrences(retptr, ptr0, len0, ptr1, len1, limit);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        deferred6_0 = r0;
-        deferred6_1 = r1;
+        deferred3_0 = r0;
+        deferred3_1 = r1;
         return getStringFromWasm0(r0, r1);
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export_2(deferred6_0, deferred6_1, 1);
+        wasm.__wbindgen_export_2(deferred3_0, deferred3_1, 1);
     }
 }
 

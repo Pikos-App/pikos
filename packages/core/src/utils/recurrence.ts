@@ -172,6 +172,35 @@ export function nextOccurrenceAfter(
 }
 
 /**
+ * The occurrence a recurring head sits on: the oldest one the rule yields that
+ * isn't excluded and isn't before `floor` (a synced series' connect day; null
+ * for native). Returns null when the series is exhausted or out of envelope.
+ *
+ * The head derivation itself, not a reimplementation of it — `recompute_recurring_schedule`
+ * (recurrence_derive.rs) calls the same engine function, so a head derived in test
+ * mode carries the same start and end as one the writer derives.
+ *
+ * @param exclusions - Completed ∪ skipped ∪ EXDATEs ∪ materialised overrides,
+ *   matched on the day alone.
+ */
+export function oldestOpenOccurrence(
+  rruleStr: string,
+  scheduledStart: string,
+  scheduledEnd: string | null,
+  exclusions: readonly string[],
+  floor: string | null
+): RawOccurrence | null {
+  const occ = engine.oldestOpenOccurrence(
+    rruleStr,
+    scheduledStart,
+    scheduledEnd ?? undefined,
+    JSON.stringify(exclusions),
+    floor ?? undefined
+  );
+  return occ === undefined ? null : (JSON.parse(occ) as RawOccurrence);
+}
+
+/**
  * Snaps an anchor date to the first occurrence the rule actually permits, on or
  * after the anchor itself, preserving the anchor's wall-clock time.
  *
@@ -246,8 +275,11 @@ export function missedOccurrencesBetween(
 }
 
 /**
- * Computes the next occurrence's scheduledEnd given a base rule with start+end times.
- * Preserves the original duration by applying the base end's time to the new date.
+ * Puts the base end's time-of-day on `nextStart`'s date, rolling to the day after
+ * when that would land at or before the start. Null for an all-day base.
+ *
+ * Not how a head's end is derived — that is {@link oldestOpenOccurrence}, which
+ * carries the base span's length instead of its clock time.
  */
 export function computeNextEnd(baseEnd: string, nextStart: string): string | null {
   return engine.computeNextEnd(baseEnd, nextStart) ?? null;

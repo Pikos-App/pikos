@@ -45,6 +45,9 @@ struct Series {
 struct Scenario {
     name: String,
     origin: Origin,
+    /// Replaces the table-level series for this row, for a shape the shared one
+    /// can't carry — a span running over more than one day, say.
+    series: Option<Series>,
     steps: Vec<Step>,
     expect: Expect,
 }
@@ -116,6 +119,7 @@ struct Expect {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct HeadExpect {
     scheduled_start: Option<String>,
+    scheduled_end: Option<String>,
     status: Option<String>,
 }
 
@@ -131,7 +135,7 @@ async fn writers_satisfy_the_recurrence_lifecycle_table() {
     let table: Table = serde_json::from_str(TABLE).expect("recurrence-lifecycle.json parses");
     assert!(!table.scenarios.is_empty());
     for scenario in &table.scenarios {
-        run(&table.series, scenario).await;
+        run(scenario.series.as_ref().unwrap_or(&table.series), scenario).await;
     }
 }
 
@@ -286,8 +290,8 @@ async fn check(pool: &sqlx::SqlitePool, scenario: &Scenario) {
     let expect = &scenario.expect;
 
     if let Some(want) = &expect.head {
-        let (start, status): (Option<String>, String) =
-            sqlx::query_as("SELECT scheduled_start, status FROM pages WHERE id = ?")
+        let (start, end, status): (Option<String>, Option<String>, String) =
+            sqlx::query_as("SELECT scheduled_start, scheduled_end, status FROM pages WHERE id = ?")
                 .bind(PAGE_ID)
                 .fetch_one(pool)
                 .await
@@ -298,6 +302,9 @@ async fn check(pool: &sqlx::SqlitePool, scenario: &Scenario) {
                 Some(want_start.as_str()),
                 "{at}: head start"
             );
+        }
+        if let Some(want_end) = &want.scheduled_end {
+            assert_eq!(end.as_deref(), Some(want_end.as_str()), "{at}: head end");
         }
         if let Some(want_status) = &want.status {
             assert_eq!(&status, want_status, "{at}: head status");

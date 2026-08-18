@@ -323,6 +323,28 @@
           "matches": []
         }
       }
+    },
+    {
+      "name": "a hit in the subtitle is labelled by that field and left out of the excerpt",
+      "steps": [
+        {
+          "op": "page",
+          "id": "p1",
+          "title": "Standup",
+          "subtitle": "Weekly platform sync",
+          "contentText": "agenda and notes"
+        }
+      ],
+      "expect": {
+        "search": {
+          "query": "platform",
+          "matches": [
+            "p1"
+          ],
+          "matchSource": "subtitle",
+          "excerpt": ""
+        }
+      }
     }
   ]
 }

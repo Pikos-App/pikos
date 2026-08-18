@@ -43,6 +43,7 @@ enum Step {
     Page {
         id: String,
         title: String,
+        subtitle: Option<String>,
         content_text: Option<String>,
         tags: Option<Vec<String>>,
         folder: Option<String>,
@@ -93,12 +94,17 @@ struct ListQueryExpect {
     matches: Vec<String>,
 }
 
+/// `match_source` and `excerpt` are checked against every matched row: the label
+/// picks which arm of the palette renders the row, so the pair is what makes a hit's
+/// rendering testable rather than only its presence in the list.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SearchExpect {
     query: String,
     include_completed: Option<bool>,
     matches: Vec<String>,
+    match_source: Option<String>,
+    excerpt: Option<String>,
     completed_count: Option<i64>,
 }
 
@@ -135,6 +141,7 @@ async fn apply(pool: &sqlx::SqlitePool, ids: &mut HashMap<String, String>, step:
         Step::Page {
             id,
             title,
+            subtitle,
             content_text,
             tags,
             folder,
@@ -144,7 +151,7 @@ async fn apply(pool: &sqlx::SqlitePool, ids: &mut HashMap<String, String>, step:
                 NewPage {
                     folder_id: folder.as_ref().map(|f| ids[f].clone()),
                     title: title.clone(),
-                    subtitle: None,
+                    subtitle: subtitle.clone(),
                     content: "{}".into(),
                     content_text: content_text.clone(),
                     status: "not_started".into(),
@@ -223,6 +230,15 @@ async fn check(pool: &sqlx::SqlitePool, ids: &HashMap<String, String>, scenario:
         let mut expected = want.matches.clone();
         expected.sort();
         assert_eq!(got, expected, "{at}: search hits for {:?}", want.query);
+        for row in &res.results {
+            let name = named(&row.id);
+            if let Some(source) = &want.match_source {
+                assert_eq!(&row.match_source, source, "{at}: {name}'s match source");
+            }
+            if let Some(excerpt) = &want.excerpt {
+                assert_eq!(&row.excerpt, excerpt, "{at}: {name}'s excerpt");
+            }
+        }
         if let Some(count) = want.completed_count {
             assert_eq!(res.completed_count, count, "{at}: completed count");
         }

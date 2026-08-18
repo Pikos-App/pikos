@@ -557,10 +557,10 @@ export function PagesProvider({ children }: { children: ReactNode }) {
         prev.map((r) => {
           if (r.id !== ruleSnapshot.id) return r;
           // Mirror the head denorm exactly — including CLEARING the end when
-          // the move drops it. Leaving the old end in place desyncs the rule
-          // (end < start), and completion's computeNextEnd then inflates it
-          // into a multi-hour / 24h block. (scheduledEnd is optional, not
-          // nullable, so we delete rather than assign null.)
+          // the move drops it. An end left behind the new start gives the rule a
+          // negative span, which every occurrence derived from it then carries.
+          // (scheduledEnd is optional, not nullable, so we delete rather than
+          // assign null.)
           const next: PageRecurrenceRule = {
             ...r,
             rrule: alignedRrule ?? r.rrule,

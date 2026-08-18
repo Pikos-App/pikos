@@ -62,6 +62,30 @@ pub fn next_occurrence_after(
     .map(|(start, _end)| start)
 }
 
+/// The oldest occurrence not in `exclusions` and not before `floor`, as a JSON
+/// `{originalDate, scheduledStart, scheduledEnd}` — the head derivation, shared
+/// with the backend so a derived head carries the same end on both sides.
+/// Undefined when the series is exhausted or the rule is out of envelope.
+#[wasm_bindgen(js_name = oldestOpenOccurrence)]
+pub fn oldest_open_occurrence(
+    rrule: &str,
+    scheduled_start: &str,
+    scheduled_end: Option<String>,
+    exclusions_json: &str,
+    floor: Option<String>,
+) -> Option<String> {
+    pikos_recurrence::oldest_open_occurrence(
+        rrule,
+        scheduled_start,
+        scheduled_end.as_deref(),
+        &parse_exdates(exclusions_json),
+        floor.as_deref(),
+    )
+    .ok()
+    .flatten()
+    .and_then(|occ| serde_json::to_string(&occ).ok())
+}
+
 #[wasm_bindgen(js_name = snapAnchorToRule)]
 pub fn snap_anchor_to_rule(rrule: &str, anchor: &str) -> String {
     pikos_recurrence::snap_anchor_to_rule(rrule, anchor)

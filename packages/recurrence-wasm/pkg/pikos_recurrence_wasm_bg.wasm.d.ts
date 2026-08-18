@@ -8,6 +8,7 @@ export const expandRange: (a: number, b: number, c: number, d: number, e: number
 export const listOccurrences: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const missedOccurrencesBetween: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
 export const nextOccurrenceAfter: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
+export const oldestOpenOccurrence: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
 export const parseRruleOptions: (a: number, b: number, c: number) => void;
 export const rruleToLabel: (a: number, b: number, c: number) => void;
 export const rruleToShortLabel: (a: number, b: number, c: number) => void;

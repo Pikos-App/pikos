@@ -1,7 +1,5 @@
 // In-memory StorageAdapter for tests — injected via VITE_TEST_MODE.
 
-import { subDays } from "date-fns";
-
 import { StorageError } from "../errors";
 import type {
   FolderUpdate,
@@ -44,7 +42,7 @@ import type {
 import { dateKey, formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
-import { computeNextEnd, nextOccurrenceAfter, rawExpandRule } from "../utils/recurrence";
+import { oldestOpenOccurrence, rawExpandRule } from "../utils/recurrence";
 import { ftsTokens, mirrorSearchText } from "../utils/search";
 
 /**
@@ -470,9 +468,12 @@ export class MockStorageAdapter implements StorageAdapter {
       // are one indexed document, so a query spanning two of them still matches.
       // Extracted text, never the raw Tiptap JSON — the index never returns a
       // page because the user typed "paragraph".
-      const text = `${page.subtitle ?? ""} ${page.contentText ?? ""}`;
+      const subtitle = page.subtitle ?? "";
+      const body = page.contentText ?? "";
       const mirror = mirrorSearchText(page.mirrorLocation, page.mirrorAttendees) ?? "";
-      if (!ftsMatches(terms, [page.title, text, page.tags.join(" "), mirror].join(" "))) continue;
+      if (!ftsMatches(terms, [page.title, subtitle, body, page.tags.join(" "), mirror].join(" "))) {
+        continue;
+      }
       if (isDone(page)) {
         completedCount++;
         if (!includeCompleted) continue;
@@ -481,11 +482,22 @@ export class MockStorageAdapter implements StorageAdapter {
       // is a looser substring test than selection — a row is already a hit by here.
       const titleLower = page.title.toLowerCase();
       const titleMatch = terms.some((t) => titleLower.includes(t));
+      const subtitleLower = subtitle.toLowerCase();
+      const subtitleMatch = terms.some((t) => subtitleLower.includes(t));
+      // Matched on, never quoted: the excerpt is body only (`build_excerpt`, search.rs).
       // A hit only in the mirror metadata quotes the metadata — same fallback and
       // display join as `build_mirror_excerpt` (search.rs), which owns why.
       const excerpt =
-        excerptAround(text, terms) || excerptAround(mirror.replace(/\n/g, " · "), terms);
+        excerptAround(body, terms) || excerptAround(mirror.replace(/\n/g, " · "), terms);
       const contentMatch = excerpt !== "";
+      const matchSource =
+        titleMatch && contentMatch
+          ? "both"
+          : titleMatch
+            ? "title"
+            : subtitleMatch
+              ? "subtitle"
+              : "content";
       const meta = {
         contentPreview: (page.contentText ?? "").slice(0, 80),
         priority: page.priority,
@@ -497,7 +509,7 @@ export class MockStorageAdapter implements StorageAdapter {
       const result: SearchResult = {
         excerpt,
         id: page.id,
-        matchSource: titleMatch && contentMatch ? "both" : titleMatch ? "title" : "content",
+        matchSource,
         title: page.title,
         ...meta,
       };
@@ -799,27 +811,24 @@ export class MockStorageAdapter implements StorageAdapter {
       ...(head.skippedOccurrences ?? []),
       // Materialised overrides, matching exclusion_union (recurrence_derive.rs) —
       // without them the head can land back on an occurrence that moved away.
-      // Day-keyed: nextOccurrenceAfter matches exclusions on the date alone.
       ...[...this.schedules.values()]
         .filter((s) => s.ruleId === rule.id && s.originalDate)
-        .map((s) => dateKey(s.originalDate!)),
+        .map((s) => s.originalDate!),
     ];
-    // Oldest-open = first occurrence not excluded, on/after the base: seek strictly
-    // after the day before the base (nextOccurrenceAfter is day-level strict-after).
     // Synced series floor at their connect day — see `synced_head_floor`.
-    const base = parseLocalISO(rule.scheduledStart);
-    const floor = head.syncedSince ? parseLocalISO(head.syncedSince) : null;
-    const from = floor && floor > base ? floor : base;
-    const next = nextOccurrenceAfter(rule.rrule, rule.scheduledStart, subDays(from, 1), exclusions);
+    const next = oldestOpenOccurrence(
+      rule.rrule,
+      rule.scheduledStart,
+      rule.scheduledEnd ?? null,
+      exclusions,
+      head.syncedSince ?? null
+    );
     const before = { end: head.scheduledEnd, start: head.scheduledStart, status: head.status };
     if (next) {
-      const scheduledEnd = rule.scheduledEnd
-        ? computeNextEnd(rule.scheduledEnd, next.scheduledStart)
-        : null;
       this.pages.set(pageId, {
         ...head,
         completedAt: head.status === "done" ? null : (head.completedAt ?? null),
-        scheduledEnd,
+        scheduledEnd: next.scheduledEnd,
         scheduledStart: next.scheduledStart,
         status: head.status === "done" ? "not_started" : head.status,
         updatedAt: now(),
