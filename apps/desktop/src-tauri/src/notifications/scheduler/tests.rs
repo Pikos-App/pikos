@@ -303,10 +303,14 @@ async fn seed_every_due_class(pool: &SqlitePool, now: &chrono::DateTime<chrono::
     insert_rule(pool, "rec", &local_wall(now, 30)).await;
     insert_reminder(pool, "rec", 30).await;
 
-    insert_test_page_sync(pool, "synced", "active").await.unwrap();
+    insert_test_page_sync(pool, "synced", "active")
+        .await
+        .unwrap();
     insert_schedule(pool, "s-synced", "synced", &utc_wall(now, 10), Some("UTC")).await;
 
-    insert_test_page_sync(pool, "moved", "active").await.unwrap();
+    insert_test_page_sync(pool, "moved", "active")
+        .await
+        .unwrap();
     insert_rule(pool, "moved", &utc_wall(now, 0)).await;
     insert_override(
         pool,
