@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
 use pikos_db::{
-    complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl,
+    build_tiptap_doc, complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl,
     fuzzy_match_folder, get_page, get_recurrence_rule_impl, hard_delete_page_impl,
     hard_delete_would_resurrect, list_folders_impl, list_page_schedules_impl, list_pages_impl,
     list_pages_today_impl, migration_versions, now_local_iso, open_pool, search_pages_impl,
@@ -22,6 +22,7 @@ use pikos_db::{
     CompleteRecurringInput, NewPage, NewPageSchedule, NewRecurrenceRule, Page, PageFilter,
     PageSummary, PageUpdate, SearchResponse,
 };
+use pikos_recurrence::WallClock;
 
 /// Debug builds address the `.dev` workspace the dev desktop app writes, mirroring
 /// `tauri.conf.dev.json`: branch work must not be able to migrate the real
@@ -592,19 +593,12 @@ async fn schedule_once(
     Ok(())
 }
 
+/// `--content` text → the (Tiptap doc, `content_text`) pair a page write takes.
+/// The doc itself comes from [`pikos_db::build_tiptap_doc`], the same builder the
+/// reconciler seeds descriptions with, so a CLI-written body is byte-identical to
+/// one the app wrote.
 fn text_to_tiptap(text: &str) -> (String, String) {
-    let content: Vec<Value> = text
-        .split('\n')
-        .map(|line| {
-            if line.is_empty() {
-                json!({ "type": "paragraph" })
-            } else {
-                json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
-            }
-        })
-        .collect();
-    let doc = json!({ "type": "doc", "content": content });
-    (doc.to_string(), text.to_string())
+    (build_tiptap_doc(text), text.to_string())
 }
 
 // ─── Command handlers ─────────────────────────────────────────────────────────
@@ -617,7 +611,7 @@ async fn require_page(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
 }
 
 fn parse_due(due: &str) -> Result<(String, String), CliError> {
-    let is_date = |s: &str| s.len() == 10 && s.as_bytes()[4] == b'-' && s.as_bytes()[7] == b'-';
+    let is_date = |s: &str| shape_of(s) == Some(Shape::AllDay);
     let end_of = |d: &str| format!("{d}T23:59:59");
     if let Some((a, b)) = due.split_once("..") {
         if !is_date(a) || !is_date(b) {
@@ -650,15 +644,11 @@ enum Shape {
 /// `scheduled_start` carries no CHECK, so an unparsed "tomorrow" would sit in the
 /// column reading as garbage against every date compare and rendering nowhere.
 fn shape_of(value: &str) -> Option<Shape> {
-    if value.len() == 10 && chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok() {
-        return Some(Shape::AllDay);
+    match WallClock::parse(value)? {
+        w if w.is_all_day() && value.len() == 10 => Some(Shape::AllDay),
+        w if !w.is_all_day() && value.len() == 19 => Some(Shape::Timed),
+        _ => None,
     }
-    if value.len() == 19
-        && chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S").is_ok()
-    {
-        return Some(Shape::Timed);
-    }
-    None
 }
 
 /// What `update` will write to the schedule.
@@ -778,17 +768,12 @@ fn carried_end(
     match start_shape {
         Shape::AllDay => (current_end >= start).then(|| current_end.to_string()),
         Shape::Timed => {
-            let parse =
-                |v: &str| chrono::NaiveDateTime::parse_from_str(v, "%Y-%m-%dT%H:%M:%S").ok();
+            let parse = |v: &str| WallClock::parse(v).map(|w| w.as_datetime());
             let duration = parse(current_end)? - parse(current_start)?;
             if duration <= chrono::TimeDelta::zero() {
                 return None;
             }
-            Some(
-                (parse(start)? + duration)
-                    .format("%Y-%m-%dT%H:%M:%S")
-                    .to_string(),
-            )
+            Some(WallClock::timed(parse(start)? + duration).format())
         }
     }
 }
