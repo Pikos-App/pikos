@@ -20,7 +20,6 @@ import type {
 import {
   anchorMoveUpdate,
   applyAnchorMove,
-  deriveTags,
   getLocalTimezone,
   resolveAnchorMove,
   toPageSummary,
@@ -31,8 +30,10 @@ import type {
   PageUpdate,
   RecurrenceRuleUpdate,
 } from "@pikos/core";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 
+import { useFolderWrites } from "./useFolderWrites";
+import { usePagesStore } from "./usePagesStore";
 import { usePageWriteQueue } from "./usePageWriteQueue";
 import { type GapRunOptions, useRecurringWrites } from "./useRecurringWrites";
 import { useWorkspaceInternal } from "./WorkspaceContext";
@@ -174,55 +175,21 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   const { adapter, eventBus, registerDataLoader } = useWorkspaceInternal();
   const { emit } = eventBus;
 
-  const [pages, setPages] = useState<PageSummary[]>([]);
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [recurrenceRules, setRecurrenceRules] = useState<PageRecurrenceRule[]>([]);
-
-  // Latest-state mirrors for the write closures: a mutation that reads `pages`
-  // from its own closure would snapshot whatever the render that created it saw,
-  // and these closures outlive their render (debounce timers, queued writes,
-  // promise continuations). The write is deliberately render-phase, not
-  // effect-phase — a handler handed out by THIS render must already read this
-  // render's data, and an effect-time mirror would leave it one commit behind.
-  const pagesRef = useRef(pages);
-  const foldersRef = useRef(folders);
-  const recurrenceRulesRef = useRef(recurrenceRules);
-  /* eslint-disable react-hooks/refs -- deliberate latest-state mirror; see above */
-  pagesRef.current = pages;
-  foldersRef.current = folders;
-  recurrenceRulesRef.current = recurrenceRules;
-  /* eslint-enable react-hooks/refs */
-
-  // Loads only active pages at init; completed pages are fetched lazily —
-  // via useCompletedPages for the per-folder Completed section, and via
-  // CalendarView for the visible date range.
-  async function loadData(): Promise<void> {
-    // Heal the recurring display cache before reading it: an out-of-process writer
-    // (CLI/mobile) or a prior bug can leave pages.scheduled_start stale. In steady
-    // state (every in-session write already recomputes) this is a no-op.
-    await adapter.recomputeRecurringSchedules();
-    const [loadedPages, loadedFolders, loadedRules] = await Promise.all([
-      adapter.listPages({ status: "not_started" }),
-      adapter.listFolders(),
-      adapter.listRecurrenceRules(),
-    ]);
-    setPages(loadedPages);
-    setFolders(loadedFolders);
-    setRecurrenceRules(loadedRules);
-  }
-
-  // Register the loader with WorkspaceContext so its init/selectWorkspace/
-  // resetAndSeed can dispatch a data load at the right moment in their
-  // sequence. The registered closure reaches the latest adapter via the
-  // useWorkspaceInternal() call above.
-  const loadDataLatestRef = useRef(loadData);
-  useEffect(() => {
-    loadDataLatestRef.current = loadData;
-  });
-  useEffect(() => {
-    registerDataLoader(() => loadDataLatestRef.current());
-    return () => registerDataLoader(null);
-  }, [registerDataLoader]);
+  // Collections, their latest-state mirrors, derived tags, and the loader
+  // WorkspaceContext dispatches on init/reload/resetAndSeed.
+  const {
+    folders,
+    foldersRef,
+    mergePages,
+    pages,
+    pagesRef,
+    recurrenceRules,
+    recurrenceRulesRef,
+    setFolders,
+    setPages,
+    setRecurrenceRules,
+    tags,
+  } = usePagesStore({ adapter, registerDataLoader });
 
   // Debounce, per-page write serialisation, rollback snapshots, pageErrors, and
   // the optimistic-write shape every mutation below goes through.
@@ -248,6 +215,17 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     setRecurrenceRules,
     updatePage,
   });
+
+  // Folder CRUD + ordering, which also prunes/restores the pages they hold.
+  const {
+    createFolder,
+    deleteFolder,
+    patchFolderColor,
+    reorderFolders,
+    restoreFolder,
+    softDeleteFolder,
+    updateFolder,
+  } = useFolderWrites({ adapter, foldersRef, optimistic, setFolders, setPages });
 
   // ─── Pages ────────────────────────────────────────────────────────────────
 
@@ -313,14 +291,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function mergePages(incoming: PageSummary[]) {
-    setPages((prev) => {
-      const existing = new Set(prev.map((p) => p.id));
-      const newPages = incoming.filter((p) => !existing.has(p.id));
-      return newPages.length > 0 ? [...prev, ...newPages] : prev;
-    });
-  }
-
   async function reorderPages(folderId: string | null, orderedIds: string[]) {
     const snapshot = [...pagesRef.current];
     await optimistic({
@@ -337,51 +307,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
       rollback: () => setPages(snapshot),
       write: () => adapter.reorderPages(folderId, orderedIds),
     });
-  }
-
-  // ─── Folders ──────────────────────────────────────────────────────────────
-
-  async function createFolder({ color, name }: { name: string; color?: string }) {
-    const folder = await adapter.createFolder({
-      name,
-      ...(color !== undefined && { color }),
-      parentId: null,
-    });
-    setFolders((prev) => [...prev, folder]);
-    return folder;
-  }
-
-  async function updateFolder(id: string, updates: FolderUpdate) {
-    setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
-    const updated = await adapter.updateFolder(id, updates);
-    setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)));
-  }
-
-  function patchFolderColor(folderId: string, color: string) {
-    setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, color } : f)));
-  }
-
-  async function deleteFolder(id: string) {
-    await adapter.deleteFolder(id);
-    setFolders((prev) => prev.filter((f) => f.id !== id));
-    // Pages in the deleted folder are soft-deleted by the adapter
-    setPages((prev) => prev.filter((p) => p.folderId !== id));
-  }
-
-  async function softDeleteFolder(id: string) {
-    await adapter.softDeleteFolder(id);
-    setFolders((prev) => prev.filter((f) => f.id !== id));
-    setPages((prev) => prev.filter((p) => p.folderId !== id));
-  }
-
-  async function restoreFolder(id: string) {
-    await adapter.restoreFolder(id);
-    const [loadedPages, loadedFolders] = await Promise.all([
-      adapter.listPages({ status: "not_started" }),
-      adapter.listFolders(),
-    ]);
-    setPages(loadedPages);
-    setFolders(loadedFolders);
   }
 
   async function scheduleOnce(pageId: string, start: string, end?: string): Promise<void> {
@@ -511,25 +436,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  async function reorderFolders(orderedIds: string[]) {
-    const snapshot = [...foldersRef.current];
-    await optimistic({
-      apply: () => {
-        const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
-        setFolders((prev) =>
-          [...prev].sort((a, b) => {
-            const ai = indexMap.get(a.id) ?? a.sortOrder;
-            const bi = indexMap.get(b.id) ?? b.sortOrder;
-            return ai - bi;
-          })
-        );
-      },
-      label: "reorderFolders",
-      rollback: () => setFolders(snapshot),
-      write: () => adapter.reorderFolders(orderedIds),
-    });
-  }
-
   // ─── Adapter pass-throughs ─────────────────────────────────────────────────
 
   function getPage(id: string): Promise<Page | null> {
@@ -547,8 +453,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   function searchTags(query: string): Promise<string[]> {
     return adapter.searchTags(query);
   }
-
-  const tags = deriveTags(pages);
 
   // Named one by one rather than spread: `recurring` also carries
   // patchRecomputedHead, which is internal to the write paths and must not
