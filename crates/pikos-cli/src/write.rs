@@ -33,6 +33,34 @@ pub fn base_page(folder_id: Option<String>, title: String) -> NewPage {
     }
 }
 
+/// [`base_page`] with a parsed `//` body already in it, so the page is written
+/// once rather than created empty and immediately patched.
+pub fn page_with_body(folder_id: Option<String>, title: String, body: Option<&String>) -> NewPage {
+    let mut page = base_page(folder_id, title);
+    if let Some(text) = body.filter(|t| !t.is_empty()) {
+        let (doc, plain) = text_to_tiptap(text);
+        page.content = doc;
+        page.content_text = Some(plain);
+    }
+    page
+}
+
+/// Write a parsed page's reminder rows. The values arrive already resolved
+/// against the schedule shape, which is why this goes to `pikos_db` directly
+/// rather than through `ops::add_reminder` — that one guards the hand-typed
+/// `reminders add` range, where -2 would be a typo rather than the all-day
+/// anchor.
+pub async fn write_reminders(
+    pool: &SqlitePool,
+    page_id: &str,
+    minutes: &[i64],
+) -> Result<(), AppError> {
+    for m in minutes {
+        pikos_db::create_page_reminder(pool, page_id, *m).await?;
+    }
+    Ok(())
+}
+
 pub fn priority_num(word: &Option<String>) -> i64 {
     match word.as_deref() {
         Some("urgent") => 1,

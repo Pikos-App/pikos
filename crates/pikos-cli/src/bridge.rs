@@ -77,6 +77,13 @@ pub struct ParsedInput {
     #[serde(rename = "folderQuery")]
     pub folder_query: Option<String>,
     pub priority: Option<String>,
+    /// Reminder rows to write, as `minutes_before` values — already resolved by
+    /// the parser against the schedule shape, so -2 (the all-day day-before
+    /// anchor) arrives as itself rather than as a lead to reinterpret here.
+    #[serde(default, rename = "reminderMinutes")]
+    pub reminder_minutes: Vec<i64>,
+    /// Page body, plain text, from the `//` separator.
+    pub content: Option<String>,
 }
 
 #[derive(Deserialize)]

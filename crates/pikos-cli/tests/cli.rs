@@ -1266,3 +1266,126 @@ async fn add_dry_run_prints_the_parse_and_writes_nothing() {
         "a dry run must not write"
     );
 }
+
+// ─── add: reminders and the "//" body ────────────────────────────────────────
+
+#[tokio::test]
+async fn add_writes_the_parsed_reminder_lead() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let Some(add) = cli_bridge(
+        dbs,
+        &["add", "Dentist tomorrow at 3pm remind 30m before", "--json"],
+    ) else {
+        eprintln!("skipped: @pikos/bridge not built");
+        return;
+    };
+    assert!(
+        add.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&add.stderr)
+    );
+    let v = json(&add);
+    assert_eq!(v["created"][0]["title"], "Dentist");
+    let id = v["created"][0]["id"].as_str().unwrap().to_string();
+
+    let reminders = json(&cli(dbs, &["reminders", "list", &id, "--json"]));
+    let rows = reminders.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["minutesBefore"], 30);
+}
+
+/// An all-day page takes the day-before anchor (-2), which `reminders add`
+/// itself refuses — the parser resolved it, so the row is written directly.
+#[tokio::test]
+async fn add_writes_the_day_before_anchor_for_an_all_day_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let Some(add) = cli_bridge(
+        dbs,
+        &["add", "Dentist tomorrow remind day before", "--json"],
+    ) else {
+        eprintln!("skipped: @pikos/bridge not built");
+        return;
+    };
+    assert!(add.status.success());
+    let id = json(&add)["created"][0]["id"].as_str().unwrap().to_string();
+
+    let reminders = json(&cli(dbs, &["reminders", "list", &id, "--json"]));
+    assert_eq!(reminders[0]["minutesBefore"], -2);
+}
+
+#[tokio::test]
+async fn add_writes_the_text_after_the_separator_as_the_body() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let Some(add) = cli_bridge(
+        dbs,
+        &[
+            "add",
+            "Buy a gift // she likes the #blue one\nask her sister",
+            "--json",
+        ],
+    ) else {
+        eprintln!("skipped: @pikos/bridge not built");
+        return;
+    };
+    assert!(
+        add.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&add.stderr)
+    );
+    let v = json(&add);
+    assert_eq!(v["created"][0]["title"], "Buy a gift");
+    // The body is verbatim — the "#blue" in it never became a tag.
+    assert!(v["created"][0]["tags"].as_array().unwrap().is_empty());
+    let id = v["created"][0]["id"].as_str().unwrap().to_string();
+
+    let page = json(&cli(dbs, &["read", &id, "--json"]));
+    assert_eq!(
+        page["contentText"],
+        "she likes the #blue one\nask her sister"
+    );
+    let doc: Value = serde_json::from_str(page["content"].as_str().unwrap()).unwrap();
+    assert_eq!(doc["type"], "doc");
+    assert_eq!(
+        doc["content"][0]["content"][0]["text"],
+        "she likes the #blue one"
+    );
+    assert_eq!(doc["content"][1]["content"][0]["text"], "ask her sister");
+}
+
+#[tokio::test]
+async fn add_dry_run_previews_the_reminder_and_the_body() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let Some(out) = cli_bridge(
+        dbs,
+        &[
+            "add",
+            "Dentist tomorrow at 3pm remind 1h before // bring the card",
+            "--dry-run",
+            "--json",
+        ],
+    ) else {
+        eprintln!("skipped: @pikos/bridge not built");
+        return;
+    };
+    assert!(out.status.success());
+    let v = json(&out);
+    assert_eq!(v["input"]["title"], "Dentist");
+    assert_eq!(v["input"]["reminderMinutes"][0], 60);
+    assert_eq!(v["input"]["content"], "bring the card");
+
+    assert!(
+        json(&cli(dbs, &["list", "--json"]))
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "a dry run must not write"
+    );
+}
