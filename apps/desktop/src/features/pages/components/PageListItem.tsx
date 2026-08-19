@@ -22,108 +22,12 @@ import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 import { formatDateRange } from "@/shared/utils/formatDateRange";
-
-/** Always-minutes format: 2:00p, 2:30p, 10:00a, 12:15p. */
-function formatTime(date: Date): string {
-  const hours = date.getHours() % 12 || 12;
-  const minutes = date.getMinutes().toString().padStart(2, "0");
-  const period = date.getHours() >= 12 ? "p" : "a";
-  return `${hours}:${minutes}${period}`;
-}
-
-function isDueSoon(iso: string): boolean {
-  const date = parseLocalISO(iso);
-  const now = new Date();
-  const threeDaysOut = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3, 23, 59, 59);
-  return date > now && date <= threeDaysOut;
-}
-
-function formatDate(iso: string): { label: string; isPast: boolean; tooltip: string } {
-  const isAllDay = isAllDayIso(iso);
-  const date = parseLocalISO(iso);
-  const now = new Date();
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrowMidnight = new Date(todayMidnight.getTime() + 86400000);
-  const isPast = isAllDay ? date < todayMidnight : date < now;
-  const isToday = date >= todayMidnight && date < tomorrowMidnight;
-
-  const tooltip = isAllDay
-    ? date.toLocaleDateString("en-US", {
-        day: "numeric",
-        month: "long",
-        weekday: "long",
-        year: "numeric",
-      })
-    : date.toLocaleString("en-US", {
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        month: "long",
-        weekday: "long",
-        year: "numeric",
-      });
-
-  // Timed events today always show the time (past ones in red, upcoming as muted).
-  // This keeps them visually distinct from any all-day event on the same date.
-  if (!isAllDay && isToday) {
-    return { isPast, label: formatTime(date), tooltip };
-  }
-
-  const dateLabel = date.toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
-  });
-
-  // Timed non-today: show date only; time is available on hover via tooltip
-  const label = dateLabel;
-  return { isPast, label, tooltip };
-}
-
-function formatRelativeTime(iso: string): { label: string; isPast: boolean; tooltip: string } {
-  const isAllDay = isAllDayIso(iso);
-  const tooltipDate = parseLocalISO(iso);
-  const tooltip = isAllDay
-    ? tooltipDate.toLocaleDateString("en-US", {
-        day: "numeric",
-        month: "long",
-        weekday: "long",
-        year: "numeric",
-      })
-    : tooltipDate.toLocaleString("en-US", {
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        month: "long",
-        weekday: "long",
-        year: "numeric",
-      });
-
-  if (isAllDay) {
-    const date = parseLocalISO(iso);
-    const todayMidnight = new Date();
-    todayMidnight.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((date.getTime() - todayMidnight.getTime()) / 86400000);
-    if (diffDays === 0) return { isPast: false, label: "today", tooltip };
-    if (diffDays < 0) return { isPast: true, label: `${Math.abs(diffDays)}d`, tooltip };
-    return { isPast: false, label: `${diffDays}d`, tooltip };
-  }
-
-  const date = parseLocalISO(iso);
-  const diffMs = date.getTime() - Date.now();
-  const isPast = diffMs < 0;
-  const abs = Math.abs(diffMs);
-  const absMins = Math.round(abs / 60000);
-
-  // Within the hour → relative only (already time-informative)
-  if (absMins < 60)
-    return { isPast: isPast && absMins > 0, label: absMins === 0 ? "now" : `${absMins}m`, tooltip };
-  const absHours = Math.round(abs / 3600000);
-  // Within the day → relative only
-  if (absHours < 24) return { isPast, label: `${absHours}hr`, tooltip };
-  const days = Math.round(abs / 86400000);
-  return { isPast, label: `${days}d`, tooltip };
-}
+import {
+  formatLongDate,
+  formatPageDate,
+  formatPageRelativeTime,
+  isDueSoon,
+} from "@/shared/utils/pageDateLabel";
 
 interface PageListItemProps {
   page: PageSummary;
@@ -320,23 +224,18 @@ export function PageListItem({
                       page.scheduledEnd > page.scheduledStart;
                     const { isPast, label, tooltip } = isAllDaySpan
                       ? (() => {
-                          const d = formatDate(page.scheduledStart);
+                          const d = formatPageDate(page.scheduledStart);
                           return {
                             isPast: d.isPast,
                             label: formatDateRange(page.scheduledStart, page.scheduledEnd),
-                            tooltip: `${d.tooltip} – ${parseLocalISO(
-                              page.scheduledEnd!
-                            ).toLocaleDateString("en-US", {
-                              day: "numeric",
-                              month: "long",
-                              weekday: "long",
-                              year: "numeric",
-                            })}`,
+                            tooltip: `${d.tooltip} – ${formatLongDate(
+                              parseLocalISO(page.scheduledEnd!)
+                            )}`,
                           };
                         })()
                       : !isCompleted && showRelative
-                        ? formatRelativeTime(page.scheduledStart)
-                        : formatDate(page.scheduledStart);
+                        ? formatPageRelativeTime(page.scheduledStart)
+                        : formatPageDate(page.scheduledStart);
                     const dueSoon = !isCompleted && !isPast && isDueSoon(page.scheduledStart);
                     return (
                       <button

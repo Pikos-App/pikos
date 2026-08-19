@@ -47,7 +47,7 @@ function formatShortDate(iso: string): string {
   const [y, m, d] = datePart.split("-").map(Number);
   if (!y || !m || !d) return iso;
   const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
 /** Second-line summary for title-only matches: date · priority · tags, falling back to subtitle, then content preview. */
