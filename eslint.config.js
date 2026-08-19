@@ -69,6 +69,35 @@ export default tseslint.config(
       "perfectionist/sort-objects": ["error", { type: "natural" }],
       "perfectionist/sort-jsx-props": ["error", { type: "natural" }],
       "react-compiler/react-compiler": "error",
+      // The React Compiler memoizes for us (see react-compiler/react-compiler
+      // above), so hand-written useMemo/useCallback is at best redundant and at
+      // worst a stale-closure bug the compiler would not have written. The
+      // codebase has zero of them today — this keeps it that way rather than
+      // letting the convention live only in the maintainer's head.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "react",
+              importNames: ["useMemo", "useCallback"],
+              message:
+                "The React Compiler handles memoization — drop the useMemo/useCallback and write the plain value or function. If a specific hot path really needs manual memoization, suspend this rule inline with a comment saying which measurement justified it.",
+            },
+          ],
+        },
+      ],
+      // Same convention, the other spelling: no-restricted-imports only sees the
+      // import statement, so a namespaced `React.useMemo(...)` would walk past it.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "MemberExpression[object.name='React'][property.name=/^(useMemo|useCallback)$/]",
+          message:
+            "The React Compiler handles memoization — drop the React.useMemo/React.useCallback and write the plain value or function.",
+        },
+      ],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": [
         "error",
@@ -93,10 +122,16 @@ export default tseslint.config(
       "no-console": "off",
     },
   },
-  // shadcn/ui components export CVA variants alongside components — intentional pattern
+  // shadcn/ui components export CVA variants alongside components — intentional pattern.
+  // They also open with the vendored `import * as React from "react"`, which
+  // no-restricted-imports flags purely for *containing* useMemo/useCallback in the
+  // namespace — nothing here calls them. The namespaced-call half of the ban
+  // (no-restricted-syntax, on React.useMemo/React.useCallback) stays on, so the
+  // convention is still enforced where it can actually be violated.
   {
     files: ["**/components/ui/**/*.tsx"],
     rules: {
+      "no-restricted-imports": "off",
       "react-refresh/only-export-components": "off",
     },
   },
