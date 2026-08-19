@@ -76,6 +76,18 @@ export type { CalendarBlock, OverflowPill, RemappedBlocks } from "./calendar/cal
 export { formatMultiDayTimeRange, formatTimeRange } from "./calendar/calendarTimeFormat";
 export { clampDayCount, dayCountColumns, dayCountNavStep } from "./calendar/dayCount";
 export type { CalendarDayCount, CalendarDensity } from "./calendar/dayCount";
+export {
+  buildMonthGrid,
+  MONTH_CELL_MAX_EVENTS,
+  monthGridDays,
+  placeMonthCellEvents,
+} from "./calendar/monthGrid";
+export type {
+  CalendarViewMode,
+  MonthCell,
+  MonthCellEvent,
+  MonthCellPlacement,
+} from "./calendar/monthGrid";
 // ── Shared palettes and priority labels ──
 export { defaultColorForProvider, PALETTE_COLORS } from "./constants/colors";
 export type { PaletteColor } from "./constants/colors";
@@ -154,7 +166,7 @@ export type {
   BuildPageListRowsResult,
   VirtualRow,
 } from "./layout/buildPageListRows";
-export { parseInput } from "./nlp/parser";
+export { DAY_BEFORE_MINUTES, parseInput } from "./nlp/parser";
 export type { ParseResult, ParsedInput } from "./nlp/parser";
 export { buildSearchFilter, parseSearchQuery } from "./nlp/searchQuery";
 export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
