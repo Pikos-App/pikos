@@ -10,18 +10,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+import type { SeedScenario } from "@/shared/seeds/seedLoaders";
 
 const logger = createLogger("DeveloperSettings");
-
-type SeedScenario =
-  | "tutorial"
-  | "realistic"
-  | "stress"
-  | "notifications"
-  | "calendar"
-  | "calendar-colors"
-  | "calendar-edges"
-  | "synced";
 
 const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[] = [
   {

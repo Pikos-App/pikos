@@ -18,20 +18,11 @@ import {
   type WorkspaceEventPayloadMap,
 } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
+import { launchSeedLoader, SEED_LOADERS, type SeedScenario } from "@/shared/seeds/seedLoaders";
 
 const log = createLogger("WorkspaceContext");
 
 type DataLoader = () => Promise<void>;
-
-type SeedScenario =
-  | "tutorial"
-  | "realistic"
-  | "stress"
-  | "notifications"
-  | "calendar"
-  | "calendar-colors"
-  | "calendar-edges"
-  | "synced";
 
 export interface WorkspaceContextValue {
   workspace: Workspace | null;
@@ -88,6 +79,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return nav;
   }
 
+  function setPendingNavigation(nav: { pageId: string; folderId: string }) {
+    pendingNavigationRef.current = nav;
+  }
+
   const eventBusRef = useRef(createWorkspaceEventBus());
   const eventBus = eventBusRef.current;
 
@@ -114,38 +109,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     async function runInit(): Promise<void> {
       if (import.meta.env["VITE_TEST_MODE"] === "true") {
+        // The workspace identity below keys off the raw flag, not off whether a
+        // seed actually ran — an unrecognised VITE_SEED still names a seed
+        // workspace, as it always has.
         const seedScenario = import.meta.env["VITE_SEED"] as string | undefined;
-        if (seedScenario === "tutorial") {
-          const { seedTutorial } = await import("@/shared/seeds/tutorial");
-          const result = await seedTutorial(adapter);
-          if (result) {
-            pendingNavigationRef.current = {
-              folderId: result.folderId,
-              pageId: result.welcomePageId,
-            };
-          }
-        } else if (import.meta.env.DEV && seedScenario === "marketing") {
-          const { seedMarketing } = await import("@/shared/seeds/marketing");
-          await seedMarketing(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "realistic") {
-          const { seedRealistic } = await import("@/shared/seeds/realistic");
-          await seedRealistic(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "stress") {
-          const { seedStress } = await import("@/shared/seeds/stress");
-          await seedStress(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "calendar") {
-          const { seedCalendar } = await import("@/shared/seeds/calendar");
-          await seedCalendar(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "calendar-colors") {
-          const { seedCalendarColors } = await import("@/shared/seeds/calendarColors");
-          await seedCalendarColors(adapter);
-        } else if (import.meta.env.DEV && seedScenario === "calendar-edges") {
-          const { seedCalendarEdgeCases } = await import("@/shared/seeds/calendarEdgeCases");
-          await seedCalendarEdgeCases(adapter);
-        } else if (seedScenario === "synced") {
-          const { seedSyncedCalendar } = await import("@/shared/seeds/syncedCalendar");
-          await seedSyncedCalendar(adapter);
-        }
+        await launchSeedLoader(seedScenario)?.({ adapter, phase: "launch", setPendingNavigation });
         await dataLoaderRef.current();
         setWorkspace({
           createdAt: new Date().toISOString(),
@@ -293,48 +261,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("reset_db");
     }
-    if (scenario === "tutorial") {
-      const { seedTutorial } = await import("@/shared/seeds/tutorial");
-      const result = await seedTutorial(adapter);
-      if (result) {
-        pendingNavigationRef.current = {
-          folderId: result.folderId,
-          pageId: result.welcomePageId,
-        };
-      }
-    } else if (scenario === "realistic") {
-      const { seedRealistic } = await import("@/shared/seeds/realistic");
-      await seedRealistic(adapter);
-    } else if (scenario === "stress") {
-      const { seedStress } = await import("@/shared/seeds/stress");
-      await seedStress(adapter);
-    } else if (scenario === "notifications") {
-      const { seedNotifications } = await import("@/shared/seeds/notifications");
-      await seedNotifications(adapter);
-    } else if (scenario === "calendar") {
-      const { seedCalendar } = await import("@/shared/seeds/calendar");
-      await seedCalendar(adapter);
-    } else if (scenario === "calendar-colors") {
-      const { seedCalendarColors } = await import("@/shared/seeds/calendarColors");
-      await seedCalendarColors(adapter);
-    } else if (scenario === "calendar-edges") {
-      const { seedCalendarEdgeCases } = await import("@/shared/seeds/calendarEdgeCases");
-      await seedCalendarEdgeCases(adapter);
-    } else if (scenario === "synced") {
-      // Believable native data + a mock external-calendar sync on top, so the
-      // synced treatment can be spot-checked alongside normal pages. The mock
-      // adapter seeds synced rows directly; the real app routes through the
-      // dev Tauri command (no network/keychain).
-      const { seedRealistic } = await import("@/shared/seeds/realistic");
-      await seedRealistic(adapter);
-      if (import.meta.env["VITE_TEST_MODE"] === "true") {
-        const { seedSyncedCalendar } = await import("@/shared/seeds/syncedCalendar");
-        await seedSyncedCalendar(adapter);
-      } else {
-        const { invoke } = await import("@tauri-apps/api/core");
-        await invoke("dev_seed_synced_calendar");
-      }
-    }
+    await SEED_LOADERS[scenario]({ adapter, phase: "reset", setPendingNavigation });
     await dataLoaderRef.current();
   }
 
