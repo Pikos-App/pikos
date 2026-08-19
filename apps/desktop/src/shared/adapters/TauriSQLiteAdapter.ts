@@ -19,6 +19,7 @@ import type {
   SearchResponse,
   SkipOccurrenceInput,
   SyncCalendar,
+  TrashedPage,
   UncompleteRecurringInput,
 } from "@pikos/core";
 import type {
@@ -98,6 +99,7 @@ export const WRITE_COMMANDS = new Set([
   "delete_page",
   "soft_delete_page",
   "restore_page",
+  "purge_trashed_pages",
   "reorder_pages",
   "set_pages_status",
   "complete_recurring_page",
@@ -141,6 +143,7 @@ export const READ_COMMANDS = new Set([
   "get_page",
   "list_pages",
   "list_pages_today",
+  "list_trashed_pages",
   "list_completed_pages",
   "search_pages",
   "search_tags",
@@ -207,6 +210,14 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   restorePage(id: string): Promise<void> {
     return invoke<void>("restore_page", { id });
+  }
+
+  listTrashedPages(): Promise<TrashedPage[]> {
+    return invoke<TrashedPage[]>("list_trashed_pages");
+  }
+
+  purgeTrashedPages(olderThanDays: number): Promise<number> {
+    return invoke<number>("purge_trashed_pages", { olderThanDays });
   }
 
   listPages(filter?: PageFilter): Promise<PageSummary[]> {

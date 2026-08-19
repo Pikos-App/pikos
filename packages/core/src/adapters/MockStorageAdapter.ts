@@ -38,6 +38,7 @@ import type {
   SkipOccurrenceInput,
   SyncAccount,
   SyncCalendar,
+  TrashedPage,
   UncompleteRecurringInput,
 } from "../types";
 import { dateKey, formatDateOnly, nowLocalISO, parseLocalISO } from "../utils/dates";
@@ -172,7 +173,11 @@ export class MockStorageAdapter implements StorageAdapter {
   // no twin here (nothing in test mode ticks a clock or talks to the OS), so
   // this stays empty unless a test seeds it via `seedNotificationHistory`.
   private notificationHistory: NotificationHistoryEntry[] = [];
-  private softDeleted = new Set<string>();
+  // `pages.deleted_at`: the id mapped to *when* it was trashed, not just that it
+  // was. The trash sorts on that stamp and the retention sweep compares against
+  // it, so a Set (which is all the hidden-from-lists behaviour ever needed) would
+  // leave both of those untestable here.
+  private softDeleted = new Map<string, string>();
   private softDeletedFolders = new Set<string>();
   private syncAccounts = new Map<string, SyncAccount>();
   private syncCalendars = new Map<string, SyncCalendar>();
@@ -376,13 +381,53 @@ export class MockStorageAdapter implements StorageAdapter {
   }
 
   softDeletePage(id: string): Promise<void> {
-    this.softDeleted.add(id);
+    // Guarded like the writer: a second delete must not overwrite the original
+    // stamp and hand the page another 30 days.
+    if (!this.softDeleted.has(id)) this.softDeleted.set(id, now());
     return Promise.resolve();
   }
 
   restorePage(id: string): Promise<void> {
     this.softDeleted.delete(id);
     return Promise.resolve();
+  }
+
+  listTrashedPages(): Promise<TrashedPage[]> {
+    const rows: TrashedPage[] = [];
+    for (const [id, deletedAt] of this.softDeleted) {
+      const page = this.pages.get(id);
+      if (!page) continue;
+      const folder = page.folderId == null ? null : this.folders.get(page.folderId);
+      rows.push({
+        deletedAt,
+        // A folder trashed with the page has no surviving name to show — the
+        // Rust subquery filters on `folders.deleted_at IS NULL` for the same reason.
+        folderName: folder && !this.softDeletedFolders.has(folder.id) ? folder.name : null,
+        id,
+        // `EXISTS(page_sync)`: any link at all, which is the predicate the delete
+        // path diverts on — not just an active one.
+        isSynced: page.syncState != null,
+        title: page.title,
+      });
+    }
+    return Promise.resolve(rows.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)));
+  }
+
+  purgeTrashedPages(olderThanDays: number): Promise<number> {
+    const cutoff = new Date(Date.now() - Math.max(0, olderThanDays) * 86_400_000).toISOString();
+    let purged = 0;
+    for (const [id, deletedAt] of [...this.softDeleted]) {
+      if (deletedAt > cutoff) continue;
+      const page = this.pages.get(id);
+      // A mirror keeps its place in the trash: destroying the row would take the
+      // tombstone with it and the next sync pass would re-create the event
+      // (`purge_trashed_pages_older_than`, which reuses the same divert).
+      if (page && page.syncState != null) continue;
+      this.softDeleted.delete(id);
+      void this.deletePage(id);
+      purged++;
+    }
+    return Promise.resolve(purged);
   }
 
   listPages(filter?: PageFilter): Promise<PageSummary[]> {
@@ -577,7 +622,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     // Soft-delete all pages in this folder (mirrors Rust backend behavior)
     for (const page of this.pages.values()) {
-      if (page.folderId === id) this.softDeleted.add(page.id);
+      if (page.folderId === id) this.softDeleted.set(page.id, now());
     }
     this.folders.delete(id);
     return Promise.resolve();
@@ -589,7 +634,7 @@ export class MockStorageAdapter implements StorageAdapter {
     }
     this.softDeletedFolders.add(id);
     for (const page of this.pages.values()) {
-      if (page.folderId === id) this.softDeleted.add(page.id);
+      if (page.folderId === id) this.softDeleted.set(page.id, now());
     }
     return Promise.resolve();
   }

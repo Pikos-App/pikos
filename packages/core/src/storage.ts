@@ -20,6 +20,7 @@ import type {
   SearchResponse,
   SkipOccurrenceInput,
   SyncCalendar,
+  TrashedPage,
   UncompleteRecurringInput,
 } from "./types";
 
@@ -121,6 +122,18 @@ export interface StorageAdapter {
   /** Soft-delete: sets deleted_at timestamp. Page is hidden from all queries but recoverable. */
   softDeletePage(id: string): Promise<void>;
   restorePage(id: string): Promise<void>;
+  /** The trash, newest deletion first: soft-deleted pages the retention sweep
+   *  has not destroyed yet. Restoring one is `restorePage`; destroying one is
+   *  `deletePage`, which is also the path that declines to destroy a mirror. */
+  listTrashedPages(): Promise<TrashedPage[]>;
+  /**
+   * Destroy trashed pages deleted more than `olderThanDays` ago; returns how
+   * many actually went. `0` empties the trash — the same sweep, not a second
+   * path. A synced mirror is kept and stays tombstoned: its row carries the
+   * suppression that stops the next sync pass re-creating the event, so the
+   * count can be lower than what the trash listed.
+   */
+  purgeTrashedPages(olderThanDays: number): Promise<number>;
   /** List pages without content — use getPage() for full content. */
   listPages(filter?: PageFilter): Promise<PageSummary[]>;
   /** Pages with any page_schedules row <= today, status != done, sorted by sortOrder. */
