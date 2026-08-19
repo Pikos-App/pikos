@@ -17,7 +17,7 @@ use db::{
     connect_db,
     dev::{
         backdate_page, backup_db, backup_db_before_import, dev_seed_synced_calendar, export_csv,
-        export_json, export_markdown, get_usage_stats, reset_db, wipe_app_data,
+        export_markdown, get_usage_stats, reset_db, wipe_app_data,
     },
     folders::{
         create_folder, delete_folder, get_folder, list_folders, reorder_folders, restore_folder,
@@ -40,7 +40,6 @@ use db::{
         update_page_schedule, update_recurrence_rule,
     },
     search::search_pages,
-    switch_workspace,
     sync::{
         connect_caldav_account, connect_google_account, disconnect_sync_account, get_sync_status,
         google_sync_available, list_sync_calendars, reconnect_caldav_account, refresh_sync_account,
@@ -318,7 +317,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // DB connection
             connect_db,
-            switch_workspace,
             // Pages
             get_page,
             create_page,
@@ -396,7 +394,6 @@ pub fn run() {
             backup_db,
             export_csv,
             backup_db_before_import,
-            export_json,
             export_markdown,
             get_usage_stats,
             reset_db,

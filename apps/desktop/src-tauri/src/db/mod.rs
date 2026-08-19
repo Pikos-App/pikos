@@ -28,7 +28,7 @@ mod watch;
 /// Tracks the canonical path of the currently-connected file so a repeated
 /// connect_db with the *same* path is a cheap no-op (frontend mount effect
 /// fires twice under React.StrictMode) while a *different* path is treated
-/// as a programming error — the caller should use `switch_workspace`.
+/// as a programming error — the app connects one workspace per launch.
 pub struct DbState {
     inner: Mutex<DbStateInner>,
 }
@@ -106,10 +106,11 @@ fn canonicalize_path(path: &str) -> PathBuf {
 ///
 /// Idempotent: a second call with the **same** canonical path is a fast
 /// no-op (the React.StrictMode double-mount path emits a WARN so future
-/// regressions stay visible). A call with a **different** path returns an
-/// error pointing the caller at `switch_workspace` — silently re-mapping
-/// the connection would surprise the frontend, which assumes connect_db
-/// is the one-time bootstrap.
+/// regressions stay visible). A call with a **different** path is refused —
+/// silently re-mapping the connection would surprise the frontend, which
+/// assumes connect_db is the one-time bootstrap, and there is no runtime
+/// swap to fall back on: `WorkspaceContext` connects once on mount and a
+/// different workspace means relaunching the app.
 ///
 /// The mutex is held across `open_pool` so a concurrent second call (the
 /// dev StrictMode double-mount) waits and then hits the idempotency
@@ -130,7 +131,7 @@ pub async fn connect_db(
             return Ok(());
         }
         return Err(AppError::Conflict(
-            "DB already connected to a different workspace; call switch_workspace".into(),
+            "DB already connected to a different workspace; relaunch to open another one".into(),
         ));
     }
 
@@ -147,44 +148,9 @@ pub async fn connect_db(
     Ok(())
 }
 
-/// Switch the workspace at runtime — close the current pool (flushes WAL),
-/// open the new file, run migrations.
-///
-/// Without this command, workspace switching requires an app restart since
-/// `connect_db` is intentionally idempotent. The mutex is held for the full
-/// close+open cycle so a stray query during the swap fails fast rather than
-/// hitting a half-closed pool.
-#[tauri::command]
-pub async fn switch_workspace(path: String, state: tauri::State<'_, DbState>) -> AppResult<()> {
-    let canonical = canonicalize_path(&path);
-
-    let mut guard = state.inner.lock().await;
-    // Fast-path: same workspace — nothing to do.
-    if guard.path.as_ref() == Some(&canonical) {
-        return Ok(());
-    }
-
-    // Close the existing pool first so the WAL is flushed and SQLite file
-    // handles release before we open the new file. On Windows this is
-    // mandatory; on Unix it's good hygiene.
-    if let Some(old) = guard.pool.take() {
-        old.close().await;
-        log::info!("DB pool closed for workspace switch");
-    }
-    guard.path = None;
-
-    let pool = open_pool(&path).await?;
-    *guard = DbStateInner {
-        pool: Some(pool),
-        path: Some(canonical),
-    };
-    log::info!("DB switched to new workspace, migrations applied");
-    Ok(())
-}
-
-/// Shared by `connect_db` and `switch_workspace`: open via pikos-db (schema,
-/// migrations, pragmas, content_text backfill, FTS rebuild all live there) then
-/// run app-only housekeeping.
+/// The one place a pool is opened: pikos-db handles schema, migrations,
+/// pragmas, content_text backfill and the FTS rebuild, then this runs the
+/// app-only housekeeping on top.
 async fn open_pool(path: &str) -> AppResult<SqlitePool> {
     let pool = pikos_db::open_pool(path).await?;
     crate::notifications::scheduler::prune_notification_log(&pool).await?;
