@@ -1,7 +1,18 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder, PagePriority, PageSummary } from "@pikos/core";
-import { isAllDayIso, isDone, isOpen, parseLocalISO } from "@pikos/core";
+import {
+  folderMoveTargets,
+  formatDateRange,
+  formatLongDate,
+  formatPageDate,
+  formatPageRelativeTime,
+  isAllDayIso,
+  isDone,
+  isDueSoon,
+  isOpen,
+  parseLocalISO,
+} from "@pikos/core";
 import type React from "react";
 
 import {
@@ -13,7 +24,6 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { folderMoveTargets } from "@/features/pages/utils/folderMoveTargets";
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
@@ -21,14 +31,6 @@ import { useListSettings } from "@/shared/context/ListSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
-import { formatDateRange } from "@/shared/utils/formatDateRange";
-import {
-  formatLongDate,
-  formatPageDate,
-  formatPageRelativeTime,
-  isDueSoon,
-} from "@/shared/utils/pageDateLabel";
-
 interface PageListItemProps {
   page: PageSummary;
   isActive: boolean;

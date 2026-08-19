@@ -4,10 +4,10 @@
 // rename affordance (the calendar's display name is authoritative).
 
 import type { Folder } from "@pikos/core";
+import { PALETTE_COLORS } from "@pikos/core";
 import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { PALETTE_COLORS } from "@/shared/constants/colors";
 import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
 import { renderWithProviders } from "@/test/renderWithProviders";
 

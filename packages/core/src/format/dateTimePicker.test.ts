@@ -1,10 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
+  computeEndTimeLabel,
+  formatDurationLabel,
+  formatTimeOfDay,
   formatTriggerLabel,
   parseCustomDurationStr,
   parseCustomTimeStr,
-} from "./DateTimePicker.utils";
+  TIME_SLOTS,
+  toISODateOnly,
+  toISODateTime,
+} from "./dateTimePicker";
 
 // `formatTriggerLabel` produces the chip's visible text (and aria-label suffix).
 // These cases guard the branches that caused the multi-day regression — the
@@ -126,5 +132,42 @@ describe("parseCustomTimeStr", () => {
     expect(parseCustomTimeStr("9:99")).toBeNull();
     expect(parseCustomTimeStr("13pm")).toBeNull();
     expect(parseCustomTimeStr("abc")).toBeNull();
+  });
+});
+
+describe("ISO builders", () => {
+  it("formats a date as a date-only ISO string", () => {
+    expect(toISODateOnly(new Date(2026, 2, 5))).toBe("2026-03-05");
+  });
+
+  it("pads hour and minute into a local datetime ISO string", () => {
+    expect(toISODateTime(new Date(2026, 2, 5), 9, 5)).toBe("2026-03-05T09:05:00");
+    expect(toISODateTime(new Date(2026, 2, 5), 23, 45)).toBe("2026-03-05T23:45:00");
+  });
+});
+
+describe("time and duration labels", () => {
+  it("renders 12-hour clock labels with a padded minute", () => {
+    expect(formatTimeOfDay(0, 0)).toBe("12:00 AM");
+    expect(formatTimeOfDay(9, 5)).toBe("9:05 AM");
+    expect(formatTimeOfDay(12, 30)).toBe("12:30 PM");
+    expect(formatTimeOfDay(23, 15)).toBe("11:15 PM");
+  });
+
+  it("drops the minute segment from whole-hour durations", () => {
+    expect(formatDurationLabel(45)).toBe("45m");
+    expect(formatDurationLabel(60)).toBe("1h");
+    expect(formatDurationLabel(150)).toBe("2h 30m");
+  });
+
+  it("adds a duration to a start time and wraps past midnight", () => {
+    expect(computeEndTimeLabel(9, 0, 90)).toBe("10:30 AM");
+    expect(computeEndTimeLabel(23, 30, 60)).toBe("12:30 AM");
+  });
+
+  it("builds a quarter-hour slot for every 15 minutes of the day", () => {
+    expect(TIME_SLOTS).toHaveLength(96);
+    expect(TIME_SLOTS[0]).toEqual({ hour24: 0, idx: 0, label: "12:00 AM", minute: 0 });
+    expect(TIME_SLOTS[95]).toEqual({ hour24: 23, idx: 95, label: "11:45 PM", minute: 45 });
   });
 });

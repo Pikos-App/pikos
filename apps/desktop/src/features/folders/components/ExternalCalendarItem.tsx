@@ -1,4 +1,5 @@
 import type { Folder } from "@pikos/core";
+import { PALETTE_COLORS } from "@pikos/core";
 import { CalendarSync } from "lucide-react";
 
 import {
@@ -11,8 +12,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { SidebarListItem } from "@/shared/components/SidebarListItem";
-import { PALETTE_COLORS } from "@/shared/constants/colors";
-
 // External-calendar folders never inline-rename — the calendar display name is
 // authoritative. SidebarListItem still requires the rename hooks, so pass no-ops.
 const NOOP = () => {};

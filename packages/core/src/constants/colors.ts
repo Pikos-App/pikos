@@ -31,7 +31,7 @@ export const PALETTE_COLORS: readonly PaletteColor[] = [
 
 // Default colour a calendar's folder takes on first enable, keyed by provider.
 // The user can recolour from the full palette afterwards.
-export const EXTERNAL_CALENDAR_DEFAULT_COLOR: Record<string, string> = {
+const EXTERNAL_CALENDAR_DEFAULT_COLOR: Record<string, string> = {
   caldav: "#A6C8E8", // Sky
   google: "#A8CDB4", // Sage
 };

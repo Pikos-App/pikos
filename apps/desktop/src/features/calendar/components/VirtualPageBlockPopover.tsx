@@ -1,17 +1,13 @@
 import type { VirtualOccurrence } from "@pikos/core";
-import { isDone } from "@pikos/core";
+import { isDone, normalizeEndInput, PRIORITY_LABELS, syncedScheduleLabel } from "@pikos/core";
 import { CalendarX, ExternalLink } from "lucide-react";
 
 import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
-import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-import { normalizeEndInput } from "@/shared/utils/schedule";
-import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
-
 interface VirtualPageBlockPopoverProps {
   page: VirtualOccurrence;
   onClose?: () => void;

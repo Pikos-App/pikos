@@ -4,12 +4,12 @@
 // could reach `ensure_rule_row_unlocked` and surface a raw Conflict.
 
 import type { PageRecurrenceRule, VirtualOccurrence } from "@pikos/core";
+import { syncedScheduleLabel } from "@pikos/core";
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
-import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";

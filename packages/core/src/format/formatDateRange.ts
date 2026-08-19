@@ -1,5 +1,6 @@
-import { parseLocalISO } from "@pikos/core";
 import { format, isSameMonth, isSameYear } from "date-fns";
+
+import { parseLocalISO } from "../utils/dates";
 
 /**
  * Formats an all-day date range as a compact chip label.
