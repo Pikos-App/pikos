@@ -27,9 +27,9 @@
 
 use chrono::{DateTime, Duration, Utc};
 use pikos_db::error::{AppError, AppResult};
-use pikos_db::now_iso;
 use pikos_db::reconciler::{reconcile, MissingMaster, ReconcileContext, ReconcileOutcome};
 use pikos_db::sync::{SyncAccountRow, SyncCalendarRow};
+use pikos_db::sync_commands::{advance_calendar_cursor_impl, mark_calendar_polled_impl};
 use pikos_db::sync_delta::{CalendarProvider, SyncDelta, SyncToken, UpsertItem};
 use pikos_db::tx::retry_on_busy;
 
@@ -106,7 +106,7 @@ async fn run<P: CalendarProvider>(
         provider.current_ctag(calendar).await.unwrap_or(None)
     };
     if !had_cursor && can_skip_enumerate(calendar, ctag.as_deref()) {
-        persist_skip(pool, &calendar.id).await?;
+        mark_calendar_polled_impl(pool, &calendar.id).await?;
         return Ok(SyncOutcome::Synced {
             full_resync: false,
             changed: false,
@@ -138,7 +138,8 @@ async fn run<P: CalendarProvider>(
         // next poll re-enumerates and retries — wasteful but convergent, never wrong.
         None => provider.current_sync_token(calendar).await.unwrap_or(None),
     };
-    persist_progress(pool, &calendar.id, next.as_ref(), was_full, ctag.as_deref()).await?;
+    advance_calendar_cursor_impl(pool, &calendar.id, next.as_ref(), was_full, ctag.as_deref())
+        .await?;
 
     Ok(SyncOutcome::Synced {
         full_resync: was_full && had_cursor,
@@ -317,60 +318,4 @@ fn force_full_due(last_full_sync_at: Option<&str>) -> bool {
     };
     Utc::now().signed_duration_since(ts.with_timezone(&Utc))
         >= Duration::hours(FORCE_FULL_INTERVAL_HOURS)
-}
-
-/// Stamp a no-op poll's freshness clock without touching the cursor, ctag, or
-/// full-sync mark — the ctag matched, so nothing was enumerated.
-async fn persist_skip(pool: &sqlx::SqlitePool, calendar_id: &str) -> AppResult<()> {
-    let now = now_iso();
-    sqlx::query("UPDATE sync_calendar SET last_synced_at = ?, updated_at = ? WHERE id = ?")
-        .bind(&now)
-        .bind(&now)
-        .bind(calendar_id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
-/// Advance the stored cursor and freshness clocks — the single writer of
-/// `sync_calendar`'s sync state, run only after a fully successful poll. `ctag` is
-/// recorded on a full enumerate so the next token-less poll can diff against it;
-/// incremental polls leave it untouched.
-async fn persist_progress(
-    pool: &sqlx::SqlitePool,
-    calendar_id: &str,
-    token: Option<&SyncToken>,
-    was_full: bool,
-    ctag: Option<&str>,
-) -> AppResult<()> {
-    let now = now_iso();
-    let token_str = token.map(|t| t.0.as_str());
-    if was_full {
-        sqlx::query(
-            "UPDATE sync_calendar
-             SET sync_token = ?, ctag = ?, last_full_sync_at = ?, last_synced_at = ?, updated_at = ?
-             WHERE id = ?",
-        )
-        .bind(token_str)
-        .bind(ctag)
-        .bind(&now)
-        .bind(&now)
-        .bind(&now)
-        .bind(calendar_id)
-        .execute(pool)
-        .await?;
-    } else {
-        sqlx::query(
-            "UPDATE sync_calendar
-             SET sync_token = ?, last_synced_at = ?, updated_at = ?
-             WHERE id = ?",
-        )
-        .bind(token_str)
-        .bind(&now)
-        .bind(&now)
-        .bind(calendar_id)
-        .execute(pool)
-        .await?;
-    }
-    Ok(())
 }

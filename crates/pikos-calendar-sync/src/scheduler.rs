@@ -14,6 +14,7 @@ use sqlx::SqlitePool;
 
 use pikos_db::error::AppError;
 use pikos_db::sync::SyncAccountRow;
+use pikos_db::sync_commands::pollable_account_rows_impl;
 use pikos_db::sync_delta::CalendarProvider;
 
 use crate::commands::resync_account;
@@ -119,7 +120,7 @@ where
     F: Fn(&SyncAccountRow) -> P,
 {
     let mut report = PassReport::default();
-    let accounts = match load_accounts(pool).await {
+    let accounts = match pollable_account_rows_impl(pool).await {
         Ok(a) => a,
         Err(e) => {
             report.errors.push(("<account enumeration>".into(), e));
@@ -135,16 +136,4 @@ where
         }
     }
     report
-}
-
-/// Accounts the background pass polls — excludes those flagged `reconnect_needed`
-/// (a rejected credential); a manual resync clears the flag and re-includes them.
-async fn load_accounts(pool: &SqlitePool) -> Result<Vec<SyncAccountRow>, AppError> {
-    Ok(
-        sqlx::query_as::<_, SyncAccountRow>(
-            "SELECT * FROM sync_account WHERE reconnect_needed = 0",
-        )
-        .fetch_all(pool)
-        .await?,
-    )
 }

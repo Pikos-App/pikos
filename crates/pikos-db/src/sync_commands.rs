@@ -8,6 +8,8 @@ use serde::Serialize;
 use crate::error::{AppError, AppResult};
 use crate::now_iso;
 use crate::reconciler::teardown_calendar;
+use crate::sync::{SyncAccountRow, SyncCalendarRow};
+use crate::sync_delta::SyncToken;
 
 #[derive(Debug, Serialize, sqlx::FromRow, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -404,6 +406,155 @@ async fn disable_sync_calendar(
     })
     .await?;
     fetch_calendar(pool, sync_calendar_id).await
+}
+
+// ─── poll engine ────────────────────────────────────────────────────────────────
+//
+// The rows and cursor writes `pikos-calendar-sync` works from. They live here for
+// the same reason the panel's writers do: this crate owns the schema, so every
+// statement against `sync_account`/`sync_calendar` is readable in one place and
+// the provider crate stays pure orchestration.
+
+/// One account, as the providers and the poll engine need it (credentials keyed
+/// by its id). `NotFound` when the row is gone — a caller holding a stale id has
+/// nothing to poll.
+pub async fn sync_account_row_impl(
+    pool: &sqlx::SqlitePool,
+    account_id: &str,
+) -> AppResult<SyncAccountRow> {
+    sqlx::query_as::<_, SyncAccountRow>("SELECT * FROM sync_account WHERE id = ?")
+        .bind(account_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("sync account not found: {account_id}")))
+}
+
+/// The accounts a background pass may poll — everything except those flagged
+/// `reconnect_needed` (a rejected credential); a manual resync clears the flag
+/// and re-includes them.
+pub async fn pollable_account_rows_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<SyncAccountRow>> {
+    Ok(
+        sqlx::query_as::<_, SyncAccountRow>(
+            "SELECT * FROM sync_account WHERE reconnect_needed = 0",
+        )
+        .fetch_all(pool)
+        .await?,
+    )
+}
+
+/// Every account as `(id, provider, dormant)`, dormant rows included — the wipe
+/// path's list, where it both disconnects what is still live and releases every
+/// credential. A dormant row's secret should already be gone, but a wipe is the
+/// last chance to be sure.
+pub async fn all_account_identities_impl(
+    pool: &sqlx::SqlitePool,
+) -> AppResult<Vec<(String, String, bool)>> {
+    Ok(sqlx::query_as::<_, (String, String, bool)>(
+        "SELECT id, provider, disconnected FROM sync_account",
+    )
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Which provider an account speaks, or `None` when the row is gone.
+pub async fn account_provider_impl(
+    pool: &sqlx::SqlitePool,
+    account_id: &str,
+) -> AppResult<Option<String>> {
+    Ok(
+        sqlx::query_scalar::<_, String>("SELECT provider FROM sync_account WHERE id = ?")
+            .bind(account_id)
+            .fetch_optional(pool)
+            .await?,
+    )
+}
+
+/// Raise or clear the account-wide stale-credential flag (see
+/// [`SyncAccount::reconnect_needed`]).
+pub async fn set_reconnect_needed_impl(
+    pool: &sqlx::SqlitePool,
+    account_id: &str,
+    needed: bool,
+) -> AppResult<()> {
+    sqlx::query("UPDATE sync_account SET reconnect_needed = ?, updated_at = ? WHERE id = ?")
+        .bind(needed)
+        .bind(now_iso())
+        .bind(account_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// The calendars a poll covers — an account's opted-in ones, cursors included.
+pub async fn enabled_calendar_rows_impl(
+    pool: &sqlx::SqlitePool,
+    account_id: &str,
+) -> AppResult<Vec<SyncCalendarRow>> {
+    Ok(sqlx::query_as::<_, SyncCalendarRow>(
+        "SELECT * FROM sync_calendar WHERE account_id = ? AND enabled = 1",
+    )
+    .bind(account_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Stamp a no-op poll's freshness clock without touching the cursor, ctag, or
+/// full-sync mark — the change tag matched, so nothing was enumerated.
+pub async fn mark_calendar_polled_impl(
+    pool: &sqlx::SqlitePool,
+    sync_calendar_id: &str,
+) -> AppResult<()> {
+    let now = now_iso();
+    sqlx::query("UPDATE sync_calendar SET last_synced_at = ?, updated_at = ? WHERE id = ?")
+        .bind(&now)
+        .bind(&now)
+        .bind(sync_calendar_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Advance a calendar's stored cursor and freshness clocks after a fully
+/// successful poll. `ctag` and `last_full_sync_at` are recorded only on a full
+/// enumerate, so the next token-less poll can diff against the tag; an
+/// incremental poll leaves both untouched.
+pub async fn advance_calendar_cursor_impl(
+    pool: &sqlx::SqlitePool,
+    sync_calendar_id: &str,
+    token: Option<&SyncToken>,
+    was_full: bool,
+    ctag: Option<&str>,
+) -> AppResult<()> {
+    let now = now_iso();
+    let sync_token = token.map(|t| t.0.as_str());
+    if was_full {
+        sqlx::query(
+            "UPDATE sync_calendar
+             SET sync_token = ?, ctag = ?, last_full_sync_at = ?, last_synced_at = ?, updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(sync_token)
+        .bind(ctag)
+        .bind(&now)
+        .bind(&now)
+        .bind(&now)
+        .bind(sync_calendar_id)
+        .execute(pool)
+        .await?;
+    } else {
+        sqlx::query(
+            "UPDATE sync_calendar
+             SET sync_token = ?, last_synced_at = ?, updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(sync_token)
+        .bind(&now)
+        .bind(&now)
+        .bind(sync_calendar_id)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
 }
 
 // ─── internal ───────────────────────────────────────────────────────────────────

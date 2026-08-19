@@ -7,12 +7,13 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 
 use pikos_db::error::{AppError, AppResult};
-use pikos_db::sync::{SyncAccountRow, SyncCalendarRow, PROVIDER_CALDAV, PROVIDER_GOOGLE};
+use pikos_db::sync::{PROVIDER_CALDAV, PROVIDER_GOOGLE};
 use pikos_db::sync_commands::{
-    clear_sync_cursors_impl, find_account_by_identity_impl, get_sync_account_impl,
+    account_provider_impl, all_account_identities_impl, clear_sync_cursors_impl,
+    enabled_calendar_rows_impl, find_account_by_identity_impl, get_sync_account_impl,
     insert_sync_account_impl, list_sync_calendars_impl, mark_account_disconnected_impl,
-    reactivate_account_impl, toggle_sync_calendar_impl, upsert_sync_calendar_impl,
-    AccountWithCalendars,
+    reactivate_account_impl, set_reconnect_needed_impl, sync_account_row_impl,
+    toggle_sync_calendar_impl, upsert_sync_calendar_impl, AccountWithCalendars,
 };
 use pikos_db::sync_delta::CalendarProvider;
 
@@ -105,7 +106,7 @@ pub async fn reconnect_caldav(
     account_id: &str,
     password: String,
 ) -> AppResult<AccountWithCalendars> {
-    let row = load_account_row(pool, account_id).await?;
+    let row = sync_account_row_impl(pool, account_id).await?;
     if row.provider != PROVIDER_CALDAV {
         return Err(AppError::Invalid(
             "only a CalDAV account reconnects with a password".into(),
@@ -212,7 +213,9 @@ pub async fn disconnect_account(
     account_id: &str,
 ) -> AppResult<()> {
     go_dormant(pool, account_id).await?;
-    let provider = provider_of(pool, account_id).await?.unwrap_or_default();
+    let provider = account_provider_impl(pool, account_id)
+        .await?
+        .unwrap_or_default();
     release_credential(&keychain, account_id, &provider).await;
     Ok(())
 }
@@ -222,7 +225,7 @@ pub async fn disconnect_account(
 /// keeps a poll from writing pages back over the wipe — and then every credential
 /// is released, dormant rows included.
 pub async fn disconnect_all_accounts(pool: &SqlitePool, keychain: Keychain) -> AppResult<()> {
-    for (id, _, disconnected) in all_accounts(pool).await? {
+    for (id, _, disconnected) in all_account_identities_impl(pool).await? {
         // Best-effort: a calendar that won't tear down must not block the wipe.
         if !disconnected {
             if let Err(e) = go_dormant(pool, &id).await {
@@ -250,7 +253,7 @@ async fn go_dormant(pool: &SqlitePool, account_id: &str) -> AppResult<()> {
 /// The keychain lives outside `app_data_dir`, so a wipe on its own would strand a
 /// usable refresh token keyed to an account id nothing references any more.
 pub async fn release_all_credentials(pool: &SqlitePool, keychain: Keychain) -> AppResult<()> {
-    for (id, provider, _) in all_accounts(pool).await? {
+    for (id, provider, _) in all_account_identities_impl(pool).await? {
         release_credential(&keychain, &id, &provider).await;
     }
     Ok(())
@@ -269,25 +272,6 @@ async fn release_credential(keychain: &Keychain, account_id: &str, provider: &st
     let _ = keychain.delete(account_id);
 }
 
-/// Every account, dormant ones included — a dormant row's credential should
-/// already be gone, but a wipe is the last chance to be sure.
-async fn all_accounts(pool: &SqlitePool) -> AppResult<Vec<(String, String, bool)>> {
-    Ok(sqlx::query_as::<_, (String, String, bool)>(
-        "SELECT id, provider, disconnected FROM sync_account",
-    )
-    .fetch_all(pool)
-    .await?)
-}
-
-async fn provider_of(pool: &SqlitePool, account_id: &str) -> AppResult<Option<String>> {
-    Ok(
-        sqlx::query_scalar::<_, String>("SELECT provider FROM sync_account WHERE id = ?")
-            .bind(account_id)
-            .fetch_optional(pool)
-            .await?,
-    )
-}
-
 /// Resync an account through whichever provider its `provider` column names.
 /// The manual-resync entry point; the scheduler resolves the provider itself so
 /// it can reuse one per pass.
@@ -296,7 +280,7 @@ pub async fn resync_account_auto(
     keychain: Keychain,
     account_id: &str,
 ) -> AppResult<Vec<CalendarSyncResult>> {
-    let account = load_account_row(pool, account_id).await?;
+    let account = sync_account_row_impl(pool, account_id).await?;
     let provider = AnyProvider::for_account(&account, keychain);
     resync_account(pool, &provider, account_id).await
 }
@@ -310,8 +294,8 @@ pub async fn resync_account<P: CalendarProvider>(
     provider: &P,
     account_id: &str,
 ) -> AppResult<Vec<CalendarSyncResult>> {
-    let account = load_account_row(pool, account_id).await?;
-    let calendars = load_enabled_calendar_rows(pool, account_id).await?;
+    let account = sync_account_row_impl(pool, account_id).await?;
+    let calendars = enabled_calendar_rows_impl(pool, account_id).await?;
 
     let mut results = Vec::with_capacity(calendars.len());
     let mut any_reconnect = false;
@@ -339,7 +323,7 @@ pub async fn resync_account<P: CalendarProvider>(
         account.reconnect_needed
     };
     if next != account.reconnect_needed {
-        set_reconnect_needed(pool, account_id, next).await?;
+        set_reconnect_needed_impl(pool, account_id, next).await?;
     }
     Ok(results)
 }
@@ -351,7 +335,7 @@ pub async fn refresh_account_auto(
     keychain: Keychain,
     account_id: &str,
 ) -> AppResult<Vec<CalendarSyncResult>> {
-    let account = load_account_row(pool, account_id).await?;
+    let account = sync_account_row_impl(pool, account_id).await?;
     let provider = AnyProvider::for_account(&account, keychain);
     refresh_account(pool, &provider, account_id).await
 }
@@ -378,36 +362,6 @@ pub async fn refresh_account<P: CalendarProvider>(
 ) -> AppResult<Vec<CalendarSyncResult>> {
     clear_sync_cursors_impl(pool, account_id).await?;
     resync_account(pool, provider, account_id).await
-}
-
-async fn set_reconnect_needed(pool: &SqlitePool, account_id: &str, needed: bool) -> AppResult<()> {
-    sqlx::query("UPDATE sync_account SET reconnect_needed = ?, updated_at = ? WHERE id = ?")
-        .bind(needed)
-        .bind(pikos_db::now_iso())
-        .bind(account_id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
-async fn load_account_row(pool: &SqlitePool, account_id: &str) -> AppResult<SyncAccountRow> {
-    sqlx::query_as::<_, SyncAccountRow>("SELECT * FROM sync_account WHERE id = ?")
-        .bind(account_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("sync account not found: {account_id}")))
-}
-
-async fn load_enabled_calendar_rows(
-    pool: &SqlitePool,
-    account_id: &str,
-) -> AppResult<Vec<SyncCalendarRow>> {
-    Ok(sqlx::query_as::<_, SyncCalendarRow>(
-        "SELECT * FROM sync_calendar WHERE account_id = ? AND enabled = 1",
-    )
-    .bind(account_id)
-    .fetch_all(pool)
-    .await?)
 }
 
 #[cfg(test)]
