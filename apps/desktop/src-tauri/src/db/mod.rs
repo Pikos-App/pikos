@@ -154,6 +154,20 @@ pub async fn connect_db(
 async fn open_pool(path: &str) -> AppResult<SqlitePool> {
     let pool = pikos_db::open_pool(path).await?;
     crate::notifications::scheduler::prune_notification_log(&pool).await?;
+    // The trash's other half. Soft-delete keeps a page forever on its own, so
+    // without a sweep the file only ever grows with work the user deleted — and
+    // "kept for 30 days", which the trash tells them, would be a promise nothing
+    // enforces. Once per launch beside the log prune, for the same reason it is
+    // there: retention is housekeeping, not something to make the user ask for,
+    // and a pool that has just opened is the one moment nothing else is writing.
+    let purged =
+        pikos_db::purge_trashed_pages_older_than(&pool, pikos_db::TRASH_RETENTION_DAYS).await?;
+    if purged > 0 {
+        log::info!(
+            "trash swept: {purged} page(s) past {TRASH_RETENTION_DAYS}-day retention destroyed",
+            TRASH_RETENTION_DAYS = pikos_db::TRASH_RETENTION_DAYS
+        );
+    }
     Ok(pool)
 }
 
