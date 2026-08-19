@@ -21,6 +21,7 @@ use calcard::icalendar::{
 use calcard::{Entry, Parser};
 use chrono::{FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz as ChronoTz;
+use pikos_recurrence::{zoned, WallClock};
 
 use pikos_db::sync_delta::{
     EventCore, EventSchedule, EventUpsert, ExclusiveEnd, OccurrenceFidelity, OccurrenceOverride,
@@ -326,6 +327,12 @@ fn instant_wall_clock(
 /// Resolve `pdt` to an absolute instant (from its `Z`/offset or its `TZID`), then
 /// render it as wall-clock in `src`. `None` if any component is missing or the
 /// local time is non-existent/ambiguous — the caller falls back to the literal.
+///
+/// Only the render half is shared with `zoned`. Resolution stays on `single()`
+/// rather than that module's earliest-pass reading, because the zone here comes
+/// from the resource's own VTIMEZONE through calcard's resolver and the literal
+/// the caller falls back to is already a legitimate wall clock — better than a
+/// guessed pass through a fold the publisher's own tz data may not agree on.
 fn convert_to_zone(
     pdt: &PartialDateTime,
     tzid: Option<&str>,
@@ -351,12 +358,7 @@ fn convert_to_zone(
             .single()?
             .with_timezone(&Utc)
     };
-    Some(
-        instant
-            .with_timezone(&src.chrono)
-            .format("%Y-%m-%dT%H:%M:%S")
-            .to_string(),
-    )
+    Some(WallClock::timed(zoned::wall_clock_at(src.chrono, instant)).format())
 }
 
 /// `start + DURATION` → an end wall-clock string, `None` if there's no DURATION.
@@ -375,11 +377,14 @@ fn duration_end(
         _ => return None,
     };
     let end = naive_dt(start)?.checked_add_signed(delta)?;
-    Some(if all_day {
-        end.format("%Y-%m-%d").to_string()
-    } else {
-        end.format("%Y-%m-%dT%H:%M:%S").to_string()
-    })
+    Some(
+        if all_day {
+            WallClock::all_day(end.date())
+        } else {
+            WallClock::timed(end)
+        }
+        .format(),
+    )
 }
 
 /// `PartialDateTime` → a `NaiveDateTime`; an absent time defaults to midnight so
