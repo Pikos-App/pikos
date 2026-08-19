@@ -656,7 +656,7 @@ async fn reconnect_caldav_keeps_the_working_credential_when_the_new_password_fai
     let account = insert_sync_account_impl(&pool, PROVIDER_CALDAV, "you · https://x", "basic")
         .await
         .unwrap();
-    set_reconnect_needed(&pool, &account.id, true)
+    set_reconnect_needed_impl(&pool, &account.id, true)
         .await
         .unwrap();
     // A malformed stored URL fails discovery at the parse step, no network — and
@@ -743,7 +743,7 @@ async fn an_offline_pass_leaves_the_reconnect_flag_where_it_was() {
     for already_flagged in [false, true] {
         let pool = test_pool().await;
         let (account_id, _) = synced_account(&pool).await;
-        set_reconnect_needed(&pool, &account_id, already_flagged)
+        set_reconnect_needed_impl(&pool, &account_id, already_flagged)
             .await
             .unwrap();
 
