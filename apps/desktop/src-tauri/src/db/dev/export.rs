@@ -7,35 +7,16 @@ use crate::db::DbState;
 use crate::error::{AppError, AppResult};
 use crate::markdown::prosemirror_to_markdown;
 
-/// Export all user data as a JSON file to ~/Downloads/.
-/// Includes folders, pages (excluding soft-deleted), schedules, recurrence rules,
-/// and focus sessions. Page content is included as both ProseMirror JSON and plain text.
-#[tauri::command]
-pub async fn export_json(state: tauri::State<'_, DbState>) -> AppResult<String> {
-    let pool = state.get_pool().await?;
-
-    let export = build_export_json_impl(&pool).await?;
-    let pages_len = export["pages"].as_array().map_or(0, |a| a.len());
-    let folders_len = export["folders"].as_array().map_or(0, |a| a.len());
-
-    let home =
-        std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
-    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
-    let dest = format!("{home}/Downloads/pikos-export-{timestamp}.json");
-
-    let json_str = serde_json::to_string_pretty(&export)?;
-    std::fs::write(&dest, json_str)?;
-
-    log::info!(
-        "export_json pages={pages_len} folders={folders_len} dest={}",
-        dest.replacen(&home, "~", 1)
-    );
-    Ok(dest)
-}
-
-/// Build the full export object (every table as an array of dynamic-column
-/// objects, plus referenced asset paths). Split from `export_json` so the
-/// data shape is testable without touching the filesystem.
+/// Build the full export object: every table as an array of dynamic-column
+/// objects, plus the asset paths its pages reference. Includes folders, pages
+/// (excluding soft-deleted), schedules, recurrence rules and focus sessions;
+/// page content is carried as both ProseMirror JSON and plain text.
+///
+/// No command wraps this — the JSON snapshot is not offered in the UI. It is
+/// the shape the export → re-import round-trip tests assert against, and the
+/// one place to start from if a JSON export is ever exposed again, which is
+/// why it survives the removal of its command rather than being deleted with it.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) async fn build_export_json_impl(
     pool: &sqlx::SqlitePool,
 ) -> AppResult<serde_json::Value> {
