@@ -4,7 +4,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@pikos/core": ["../../packages/core/src/index.ts"],
-      "@pikos/core/*": ["../../packages/core/src/*"]
+      "@pikos/core/*": ["../../packages/core/src/*"],
+      "@pikos/ui": ["../../packages/ui/src/index.ts"]
     }
   },
   "references": [
