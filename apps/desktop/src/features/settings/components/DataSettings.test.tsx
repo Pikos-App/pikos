@@ -65,17 +65,28 @@ describe("DataSettings export", () => {
     );
   });
 
-  it("includes them in both text exports once the toggle is on", async () => {
+  it("exports the calendar without the synced events by default", async () => {
+    renderDataSettings();
+    fireEvent.click(await screen.findByRole("button", { name: "Export as Calendar" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("export_ics", { includeSynced: false })
+    );
+  });
+
+  it("includes them in every page export once the toggle is on", async () => {
     renderDataSettings(true);
     await connectAndEnableCalendar();
 
     fireEvent.click(await screen.findByLabelText("Include synced calendar events"));
     fireEvent.click(screen.getByRole("button", { name: "Export as CSV" }));
     fireEvent.click(screen.getByRole("button", { name: "Export as Markdown" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export as Calendar" }));
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith("export_csv", { includeSynced: true });
       expect(invoke).toHaveBeenCalledWith("export_markdown", { includeSynced: true });
+      expect(invoke).toHaveBeenCalledWith("export_ics", { includeSynced: true });
     });
   });
 });

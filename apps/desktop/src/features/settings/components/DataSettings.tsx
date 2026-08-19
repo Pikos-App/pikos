@@ -1,4 +1,4 @@
-import { storageErrorUserMessage, toStorageError } from "@pikos/core";
+import { formatTimeAgo, storageErrorUserMessage, toStorageError } from "@pikos/core";
 import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Download, Trash2 } from "lucide-react";
@@ -9,7 +9,6 @@ import { Switch } from "@/components/ui/switch";
 import { TypedConfirmDialog } from "@/components/ui/typed-confirm-dialog";
 import { ImportSection } from "@/features/import";
 import type { ImportState, LastImportResult } from "@/features/import";
-import { formatTimeAgo } from "@/features/import/parsers/utils";
 import { deleteAllData } from "@/lib/data/deleteAllData";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
@@ -129,6 +128,7 @@ export function DataSettings({
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
   const [csvExport, setCsvExport] = useState<ExportState>({ status: "idle" });
   const [markdownExport, setMarkdownExport] = useState<ExportState>({ status: "idle" });
+  const [icsExport, setIcsExport] = useState<ExportState>({ status: "idle" });
   const [includeSynced, setIncludeSynced] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -186,6 +186,19 @@ export function DataSettings({
     } catch (e: unknown) {
       setMarkdownExport({
         message: storageErrorUserMessage(toStorageError(e), "exporting your Markdown"),
+        status: "error",
+      });
+    }
+  }
+
+  async function handleExportIcs() {
+    setIcsExport({ status: "saving" });
+    try {
+      const dest = await invoke<string>("export_ics", { includeSynced });
+      setIcsExport({ path: dest, status: "done" });
+    } catch (e: unknown) {
+      setIcsExport({
+        message: storageErrorUserMessage(toStorageError(e), "exporting your calendar"),
         status: "error",
       });
     }
@@ -265,6 +278,13 @@ export function DataSettings({
             onExport={() => void handleExportMarkdown()}
             state={markdownExport}
           />
+          <ExportRow
+            description="Scheduled pages as an .ics file. Opens in any calendar app."
+            disabled={!workspace}
+            label="Export as Calendar"
+            onExport={() => void handleExportIcs()}
+            state={icsExport}
+          />
           {hasSyncedCalendar && (
             <div className="flex items-center justify-between gap-6 py-3">
               <div className="min-w-0">
@@ -272,8 +292,8 @@ export function DataSettings({
                   Include synced calendar events
                 </label>
                 <p className="text-xs text-muted-foreground">
-                  Adds events Pikos reads in from your connected calendars to the Markdown and CSV
-                  exports. Ones you've completed or edited are always included.
+                  Adds events Pikos reads in from your connected calendars to the Markdown, CSV and
+                  Calendar exports. Ones you've completed or edited are always included.
                 </p>
               </div>
               <Switch

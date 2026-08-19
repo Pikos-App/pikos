@@ -22,7 +22,7 @@ Pikos is a local-first desktop app that combines a rich text editor, task manage
 - **Quick capture** — Natural language input: "Call dentist tomorrow high priority #health" creates a page with title, date, priority, and tag set automatically.
 - **Keyboard-first** — Every action has a shortcut. Navigate, create, schedule, and search without reaching for the mouse.
 - **Private by default** — Everything stored locally in SQLite. No accounts, no telemetry. The only network request is a version check at launch. Updates are never installed without your approval.
-- **Export** — SQLite backup, Markdown folder, or CSV at any time. Your data is portable.
+- **Export** — SQLite backup, Markdown folder, CSV, or an `.ics` calendar of your scheduled pages, at any time. Your data is portable.
 
 ## Stack
 
