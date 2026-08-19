@@ -1,11 +1,18 @@
 {
   "files": [],
   "compilerOptions": {
+    // Solution-style config: `files: []` means tsc compiles nothing here, so
+    // these options only serve tooling that reads this file. baseUrl is what
+    // makes `paths` resolvable for dependency-cruiser (see
+    // .dependency-cruiser.cjs); it is a no-op for tsc and for vite, which
+    // carries its own aliases.
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@pikos/core": ["../../packages/core/src/index.ts"],
       "@pikos/core/*": ["../../packages/core/src/*"],
-      "@pikos/ui": ["../../packages/ui/src/index.ts"]
+      "@pikos/ui": ["../../packages/ui/src/index.ts"],
+      "@seeds/*": ["./seeds/*"]
     }
   },
   "references": [
