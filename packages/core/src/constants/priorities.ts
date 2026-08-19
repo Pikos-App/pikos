@@ -1,4 +1,4 @@
-import type { PagePriority } from "@pikos/core";
+import type { PagePriority } from "../types";
 
 export const PRIORITY_LABELS: Record<PagePriority, string> = {
   0: "None",

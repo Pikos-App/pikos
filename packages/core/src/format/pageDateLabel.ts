@@ -5,7 +5,7 @@
 // Locale is left to the system (no explicit locale argument) so these read the
 // way the rest of the app does — see UsageStats and the settings surfaces.
 
-import { isAllDayIso, parseLocalISO } from "@pikos/core";
+import { isAllDayIso, parseLocalISO } from "../utils/dates";
 
 export interface PageDateLabel {
   label: string;

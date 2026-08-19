@@ -1,12 +1,11 @@
 import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
-import { isDone, isTimedIso, rruleToLabel } from "@pikos/core";
+import { isDone, isTimedIso, rruleToLabel, syncedScheduleLabel } from "@pikos/core";
 import { AlertTriangle, CalendarDays, CalendarSync } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { type MetadataChip, PageMetadataChips } from "@/shared/components/PageMetadataChips";
 import { usePages } from "@/shared/context/PagesContext";
-import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
 
 import { DateSchedulePopover } from "./DateSchedulePopover";
 
@@ -117,16 +116,15 @@ export function Byline({
             boxed: true,
             chips: [
               scheduleChip,
-              // Reminders only apply to timed events — all-day schedules have no
-              // start time to fire "minutes before" against, so the scheduler
-              // ignores them (see notifications/scheduler). Hide the bell to match.
+              // A timed page reminds on a lead time; an all-day page has no start
+              // time to count back from, so its dropdown offers the day-before
+              // anchor instead (see notifications/scheduler's day-before arm).
               // Reminders stay user-editable on every synced event, one-off or
               // recurring, since synced occurrences now fire per-occurrence.
-              !!page.scheduledStart &&
-                isTimedIso(page.scheduledStart) && {
-                  kind: "reminder",
-                  props: { pageId: page.id },
-                },
+              !!page.scheduledStart && {
+                kind: "reminder",
+                props: { allDay: !isTimedIso(page.scheduledStart), pageId: page.id },
+              },
               recurrenceChip,
               onOpenInCalendar && {
                 id: "open-in-calendar",

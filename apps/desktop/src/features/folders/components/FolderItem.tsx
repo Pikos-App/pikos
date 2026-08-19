@@ -2,6 +2,7 @@ import { useDndMonitor } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder } from "@pikos/core";
+import { PALETTE_COLORS } from "@pikos/core";
 import { useState } from "react";
 
 import {
@@ -14,7 +15,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { SidebarListItem } from "@/shared/components/SidebarListItem";
-import { PALETTE_COLORS } from "@/shared/constants/colors";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 
 export interface FolderItemProps {

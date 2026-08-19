@@ -1,7 +1,8 @@
-import type { PageSummary } from "@pikos/core";
-import { formatLocalISO, isDone, isTimedIso, resolveSyncedInstant } from "@pikos/core";
-
-import { formatTriggerLabel } from "@/shared/components/DateTimePicker.utils";
+import type { PageSummary } from "../types";
+import { formatLocalISO, isTimedIso } from "../utils/dates";
+import { isDone } from "../utils/page";
+import { resolveSyncedInstant } from "../utils/syncedTime";
+import { formatTriggerLabel } from "./dateTimePicker";
 
 /**
  * Read-only schedule label for a synced (locked) event, shared by the editor

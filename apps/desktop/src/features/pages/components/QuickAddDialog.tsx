@@ -6,21 +6,21 @@
 // remounts the body, which resets all its state via useState initializers —
 // no reset effect, no eslint-disable, no flicker.
 
+import type { PagePriority, PageUpdate, ParseResult } from "@pikos/core";
 import {
   fuzzyMatchFolder,
   getLocalTimezone,
   localToday,
+  NLP_PRIORITY_MAP,
   parseInput,
   snapScheduleToRule,
 } from "@pikos/core";
-import type { PagePriority, PageUpdate, ParseResult } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
-import { NLP_PRIORITY_MAP } from "@/shared/constants/priorities";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";

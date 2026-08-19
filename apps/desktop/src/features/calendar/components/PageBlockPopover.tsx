@@ -1,5 +1,14 @@
 import type { PagePriority, PageSummary } from "@pikos/core";
-import { getLocalTimezone, isDone, isTimedIso, rruleToLabel, snapAnchorToRule } from "@pikos/core";
+import {
+  computeScheduleTransition,
+  getLocalTimezone,
+  isDone,
+  isTimedIso,
+  normalizeEndInput,
+  rruleToLabel,
+  snapAnchorToRule,
+  syncedScheduleLabel,
+} from "@pikos/core";
 import { CalendarOff, CalendarX, ExternalLink, Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -11,9 +20,6 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 import { useKeyboardScope, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-import { computeScheduleTransition, normalizeEndInput } from "@/shared/utils/schedule";
-import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
-
 interface PageBlockPopoverProps {
   page: PageSummary;
   onClose?: () => void;

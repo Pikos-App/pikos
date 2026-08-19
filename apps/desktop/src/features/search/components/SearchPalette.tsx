@@ -12,14 +12,19 @@ import type {
   SearchResult,
   StorageAdapter,
 } from "@pikos/core";
-import { buildSearchFilter, ftsTokens, isDone, parseSearchQuery } from "@pikos/core";
+import {
+  buildSearchFilter,
+  ftsTokens,
+  isDone,
+  parseSearchQuery,
+  PRIORITY_LABELS,
+} from "@pikos/core";
 import { Command, FileText, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/shared/components/EmptyState";
-import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
