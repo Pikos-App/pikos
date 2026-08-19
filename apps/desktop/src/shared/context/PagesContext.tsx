@@ -28,7 +28,6 @@ import {
   getLocalTimezone,
   resolveAnchorMove,
   toPageSummary,
-  toStorageError,
 } from "@pikos/core";
 import type {
   FolderUpdate,
@@ -38,11 +37,8 @@ import type {
 } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
-import { createLogger } from "@/shared/logger";
-
+import { usePageWriteQueue } from "./usePageWriteQueue";
 import { useWorkspaceInternal } from "./WorkspaceContext";
-
-const log = createLogger("PagesContext");
 
 /** Chaining + bound for a "complete everything to today" run. `fromHead` carries
  * the recomputed head returned by the gesture that opened the run — `pages` state
@@ -230,9 +226,18 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     return () => registerDataLoader(null);
   }, [registerDataLoader]);
 
-  const pendingPatches = useRef<Map<string, PageUpdate>>(new Map());
-  const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const snapshotsRef = useRef<Map<string, PageSummary>>(new Map());
+  // Debounce, per-page write serialisation, rollback snapshots, pageErrors, and
+  // the optimistic-write shape every mutation below goes through.
+  const {
+    cancelPendingWrite,
+    clearPageError,
+    enqueue,
+    flushPage,
+    optimistic,
+    pageErrors,
+    updatePage,
+  } = usePageWriteQueue({ adapter, emit, pagesRef, setPages });
+
   // In-flight recurring writes that mint a clone (completion by page id,
   // virtual reschedule by ruleId|originalDate). The backend creates one clone
   // per call and both UI paths are fire-and-forget with no disabled state, so a
@@ -245,112 +250,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   const completingSyncedRef = useRef<Set<string>>(new Set());
   const reschedulingVirtualRef = useRef<Set<string>>(new Set());
   const [overridesVersion, setOverridesVersion] = useState(0);
-  const [pageErrors, setPageErrors] = useState<Map<string, StorageError>>(new Map());
-
-  // ─── Per-page mutation queue ───────────────────────────────────────────────
-  // Serialises concurrent DB writes for the same page so that a fast debounced
-  // write and a concurrent scheduleOnce can never interleave or clobber each other.
-
-  const mutationQueues = useRef<Map<string, Promise<unknown>>>(new Map());
-
-  function enqueue<T>(pageId: string, fn: () => Promise<T>): Promise<T> {
-    const prev = mutationQueues.current.get(pageId) ?? Promise.resolve();
-    // Pass fn as both fulfilment and rejection handler so the queue never stalls
-    // on a previous error.
-    const next = prev.then(fn, fn);
-    mutationQueues.current.set(pageId, next);
-    return next;
-  }
-
-  function clearPageError(id: string): void {
-    setPageErrors((prev) => {
-      const next = new Map(prev);
-      next.delete(id);
-      return next;
-    });
-  }
-
-  function updatePage(id: string, patch: PageUpdate): void {
-    if (!pendingPatches.current.has(id)) {
-      const current = pagesRef.current.find((p) => p.id === id);
-      if (current) snapshotsRef.current.set(id, current);
-    }
-
-    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-
-    const existing = pendingPatches.current.get(id) ?? {};
-    pendingPatches.current.set(id, { ...existing, ...patch });
-
-    const prevTimer = debounceTimers.current.get(id);
-    if (prevTimer !== undefined) clearTimeout(prevTimer);
-
-    // Status changes gate the native notification scheduler, which reads
-    // pages.status directly from SQLite. Flushing them immediately — instead of
-    // after the 800ms debounce — closes a race where a reminder could fire for
-    // a page the user just marked done. Status toggles are deliberate and
-    // low-frequency, so the immediate write has no perceptible cost. flushPage
-    // records any DB error in pageErrors, so the rethrow is safe to swallow.
-    if ("status" in patch) {
-      void flushPage(id).catch(() => {});
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      const accumulated = pendingPatches.current.get(id);
-      if (!accumulated) return;
-      pendingPatches.current.delete(id);
-      debounceTimers.current.delete(id);
-
-      void enqueue(id, async () => {
-        try {
-          const updated = await adapter.updatePage(id, accumulated);
-          snapshotsRef.current.delete(id);
-          const { content: _, contentText: _ct, ...summary } = updated;
-          setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
-          emit("page:updated", updated);
-        } catch (err: unknown) {
-          log.error(`updatePage(${id}) debounce write failed; rolling back`, err);
-          const snapshot = snapshotsRef.current.get(id);
-          snapshotsRef.current.delete(id);
-          if (snapshot) {
-            setPages((prev) => prev.map((p) => (p.id === id ? snapshot : p)));
-          }
-          setPageErrors((prev) => new Map(prev).set(id, toStorageError(err)));
-        }
-      });
-    }, 800);
-
-    debounceTimers.current.set(id, timer);
-  }
-
-  async function flushPage(id: string): Promise<void> {
-    const timer = debounceTimers.current.get(id);
-    if (timer !== undefined) clearTimeout(timer);
-    debounceTimers.current.delete(id);
-
-    const accumulated = pendingPatches.current.get(id);
-    if (!accumulated) return;
-    pendingPatches.current.delete(id);
-
-    return enqueue(id, async () => {
-      try {
-        const updated = await adapter.updatePage(id, accumulated);
-        snapshotsRef.current.delete(id);
-        const summary = toPageSummary(updated);
-        setPages((prev) => prev.map((p) => (p.id === id ? summary : p)));
-        emit("page:updated", updated);
-      } catch (err) {
-        log.error(`flushPage(${id}) failed; rolling back`, err);
-        const snapshot = snapshotsRef.current.get(id);
-        snapshotsRef.current.delete(id);
-        if (snapshot) {
-          setPages((prev) => prev.map((p) => (p.id === id ? snapshot : p)));
-        }
-        setPageErrors((prev) => new Map(prev).set(id, toStorageError(err)));
-        throw err;
-      }
-    });
-  }
 
   // ─── Pages ────────────────────────────────────────────────────────────────
 
@@ -370,11 +269,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   }
 
   async function deletePage(id: string) {
-    const timer = debounceTimers.current.get(id);
-    if (timer !== undefined) clearTimeout(timer);
-    debounceTimers.current.delete(id);
-    pendingPatches.current.delete(id);
-
+    cancelPendingWrite(id);
     await adapter.deletePage(id);
     setPages((prev) => prev.filter((p) => p.id !== id));
     emit("page:deleted", id);
@@ -386,27 +281,27 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   }
 
   async function softDeletePage(id: string) {
-    const timer = debounceTimers.current.get(id);
-    if (timer !== undefined) clearTimeout(timer);
-    debounceTimers.current.delete(id);
-    pendingPatches.current.delete(id);
-
-    // Remove from local state synchronously, BEFORE the await. If the removal
-    // waits on the adapter, a fast Undo (restorePage) can interleave with this
-    // pending await and re-add the page while it's still present — duplicating
-    // it in the derived active/completed lists (and confusing the virtualizer).
+    // `apply` runs synchronously, BEFORE the await. If the removal waited on the
+    // adapter, a fast Undo (restorePage) could interleave with the pending await
+    // and re-add the page while it's still present — duplicating it in the
+    // derived active/completed lists (and confusing the virtualizer).
     const snapshot = pagesRef.current.find((p) => p.id === id);
-    setPages((prev) => prev.filter((p) => p.id !== id));
-    try {
-      await adapter.softDeletePage(id);
-    } catch (err) {
-      log.error(`softDeletePage(${id}) failed; restoring optimistic removal`, err);
-      if (snapshot) {
-        setPages((prev) => (prev.some((p) => p.id === id) ? prev : [...prev, snapshot]));
-      }
-      return;
-    }
-    emit("page:deleted", id);
+    await optimistic({
+      apply: () => {
+        cancelPendingWrite(id);
+        setPages((prev) => prev.filter((p) => p.id !== id));
+      },
+      label: `softDeletePage(${id})`,
+      rollback: () => {
+        if (snapshot) {
+          setPages((prev) => (prev.some((p) => p.id === id) ? prev : [...prev, snapshot]));
+        }
+      },
+      write: async () => {
+        await adapter.softDeletePage(id);
+        emit("page:deleted", id);
+      },
+    });
   }
 
   async function restorePage(id: string) {
@@ -430,19 +325,20 @@ export function PagesProvider({ children }: { children: ReactNode }) {
 
   async function reorderPages(folderId: string | null, orderedIds: string[]) {
     const snapshot = [...pagesRef.current];
-    setPages((prev) => {
-      const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
-      return prev.map((p) => {
-        const newOrder = indexMap.get(p.id);
-        return newOrder !== undefined ? { ...p, sortOrder: newOrder } : p;
-      });
+    await optimistic({
+      apply: () => {
+        const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
+        setPages((prev) =>
+          prev.map((p) => {
+            const newOrder = indexMap.get(p.id);
+            return newOrder !== undefined ? { ...p, sortOrder: newOrder } : p;
+          })
+        );
+      },
+      label: "reorderPages",
+      rollback: () => setPages(snapshot),
+      write: () => adapter.reorderPages(folderId, orderedIds),
     });
-    try {
-      await adapter.reorderPages(folderId, orderedIds);
-    } catch (err) {
-      log.error("reorderPages failed; rolling back optimistic order", err);
-      setPages(snapshot);
-    }
   }
 
   // ─── Folders ──────────────────────────────────────────────────────────────
@@ -506,24 +402,38 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     const move = resolveAnchorMove(ruleSnapshot, start, end);
     const { end: snappedEnd, start: snappedStart } = move;
 
-    setPages((prev) =>
-      prev.map((p) =>
-        p.id === pageId
-          ? { ...p, scheduledEnd: snappedEnd ?? null, scheduledStart: snappedStart }
-          : p
-      )
-    );
-    if (ruleSnapshot) {
-      setRecurrenceRules((prev) =>
-        prev.map((r) => (r.id === ruleSnapshot.id ? applyAnchorMove(r, move) : r))
-      );
-    }
-
-    return enqueue(pageId, async () => {
-      try {
+    await optimistic({
+      apply: () => {
+        setPages((prev) =>
+          prev.map((p) =>
+            p.id === pageId
+              ? { ...p, scheduledEnd: snappedEnd ?? null, scheduledStart: snappedStart }
+              : p
+          )
+        );
+        if (ruleSnapshot) {
+          setRecurrenceRules((prev) =>
+            prev.map((r) => (r.id === ruleSnapshot.id ? applyAnchorMove(r, move) : r))
+          );
+        }
+      },
+      errorIds: [pageId],
+      label: `scheduleOnce(${pageId})`,
+      queueOn: pageId,
+      rethrow: true,
+      rollback: () => {
+        if (snapshot) {
+          setPages((prev) => prev.map((p) => (p.id === pageId ? snapshot : p)));
+        }
+        if (ruleSnapshot) {
+          setRecurrenceRules((prev) =>
+            prev.map((r) => (r.id === ruleSnapshot.id ? ruleSnapshot : r))
+          );
+        }
+      },
+      write: async () => {
         const schedules = await adapter.listPageSchedules(pageId);
         const existing = schedules.find((s) => !s.ruleId);
-        const tz = getLocalTimezone();
         if (existing) {
           await adapter.updatePageSchedule(existing.id, {
             scheduledEnd: snappedEnd ?? null,
@@ -534,7 +444,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
             pageId,
             scheduledStart: snappedStart,
             ...(snappedEnd !== undefined && { scheduledEnd: snappedEnd }),
-            timezone: tz,
+            timezone: getLocalTimezone(),
           });
         }
         if (ruleSnapshot) {
@@ -545,40 +455,33 @@ export function PagesProvider({ children }: { children: ReactNode }) {
           // the head the backend actually derived.
           await patchRecomputedHead(pageId);
         }
-      } catch (e) {
-        log.error(`scheduleOnce(${pageId}) failed; rolling back optimistic schedule`, e);
-        if (snapshot) {
-          setPages((prev) => prev.map((p) => (p.id === pageId ? snapshot : p)));
-        }
-        if (ruleSnapshot) {
-          setRecurrenceRules((prev) =>
-            prev.map((r) => (r.id === ruleSnapshot.id ? ruleSnapshot : r))
-          );
-        }
-        setPageErrors((prev) => new Map(prev).set(pageId, toStorageError(e)));
-        throw e;
-      }
+      },
     });
   }
 
   async function clearSchedule(pageId: string): Promise<void> {
     const snapshot = pagesRef.current.find((p) => p.id === pageId);
-    setPages((prev) =>
-      prev.map((p) => (p.id === pageId ? { ...p, scheduledEnd: null, scheduledStart: null } : p))
-    );
-    return enqueue(pageId, async () => {
-      try {
-        const schedules = await adapter.listPageSchedules(pageId);
-        const oneOffs = schedules.filter((s) => !s.ruleId);
-        await Promise.all(oneOffs.map((s) => adapter.deletePageSchedule(s.id)));
-      } catch (e) {
-        log.error(`clearSchedule(${pageId}) failed; rolling back`, e);
+    await optimistic({
+      apply: () =>
+        setPages((prev) =>
+          prev.map((p) =>
+            p.id === pageId ? { ...p, scheduledEnd: null, scheduledStart: null } : p
+          )
+        ),
+      errorIds: [pageId],
+      label: `clearSchedule(${pageId})`,
+      queueOn: pageId,
+      rethrow: true,
+      rollback: () => {
         if (snapshot) {
           setPages((prev) => prev.map((p) => (p.id === pageId ? snapshot : p)));
         }
-        setPageErrors((prev) => new Map(prev).set(pageId, toStorageError(e)));
-        throw e;
-      }
+      },
+      write: async () => {
+        const schedules = await adapter.listPageSchedules(pageId);
+        const oneOffs = schedules.filter((s) => !s.ruleId);
+        await Promise.all(oneOffs.map((s) => adapter.deletePageSchedule(s.id)));
+      },
     });
   }
 
@@ -901,50 +804,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     return true;
   }
 
-  // ─── Flush on window close ────────────────────────────────────────────────
-  // Tauri's Rust side calls prevent_close() so we get a chance here to flush
-  // any debounced writes, wait for all in-flight mutations, then destroy.
-
-  useEffect(() => {
-    if (import.meta.env["VITE_TEST_MODE"] === "true") return;
-
-    let unlisten: (() => void) | undefined;
-
-    async function register() {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      const win = getCurrentWindow();
-      unlisten = await win.onCloseRequested(async (event) => {
-        event.preventDefault();
-
-        for (const id of Array.from(pendingPatches.current.keys())) {
-          const timer = debounceTimers.current.get(id);
-          if (timer !== undefined) clearTimeout(timer);
-          debounceTimers.current.delete(id);
-          const accumulated = pendingPatches.current.get(id);
-          if (!accumulated) continue;
-          pendingPatches.current.delete(id);
-          // Inline enqueue: best-effort write, swallow errors since we're closing
-          const prev = mutationQueues.current.get(id) ?? Promise.resolve();
-          const next = prev
-            .then(() => adapter.updatePage(id, accumulated))
-            .then(
-              () => undefined,
-              () => undefined
-            );
-          mutationQueues.current.set(id, next);
-        }
-
-        await Promise.allSettled(Array.from(mutationQueues.current.values()));
-        await win.destroy();
-      });
-    }
-
-    void register();
-    return () => {
-      unlisten?.();
-    };
-  }, [adapter]);
-
   async function setPagesStatus(
     ids: string[],
     status: PageStatus,
@@ -952,45 +811,44 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   ): Promise<void> {
     if (ids.length === 0) return;
     const idSet = new Set(ids);
-
     const snapshot = pagesRef.current.filter((p) => idSet.has(p.id));
-    setPages((prev) => prev.map((p) => (idSet.has(p.id) ? { ...p, completedAt, status } : p)));
 
-    try {
-      const updated = await adapter.setPagesStatus(ids, status, completedAt);
-      // Reconcile from the DB truth (e.g. updatedAt) for the rows that actually
-      // changed; soft-deleted ids are absent from `updated` and left as-is.
-      const byId = new Map(updated.map((p) => [p.id, p]));
-      setPages((prev) => prev.map((p) => byId.get(p.id) ?? p));
-    } catch (err) {
-      log.error(`setPagesStatus failed for ${ids.length} pages; rolling back`, err);
-      const byId = new Map(snapshot.map((p) => [p.id, p]));
-      setPages((prev) => prev.map((p) => byId.get(p.id) ?? p));
-      const storageErr = toStorageError(err);
-      setPageErrors((prev) => {
-        const next = new Map(prev);
-        for (const id of ids) next.set(id, storageErr);
-        return next;
-      });
-    }
+    await optimistic({
+      apply: () =>
+        setPages((prev) => prev.map((p) => (idSet.has(p.id) ? { ...p, completedAt, status } : p))),
+      errorIds: ids,
+      label: `setPagesStatus for ${ids.length} pages`,
+      rollback: () => {
+        const byId = new Map(snapshot.map((p) => [p.id, p]));
+        setPages((prev) => prev.map((p) => byId.get(p.id) ?? p));
+      },
+      write: async () => {
+        const updated = await adapter.setPagesStatus(ids, status, completedAt);
+        // Reconcile from the DB truth (e.g. updatedAt) for the rows that actually
+        // changed; soft-deleted ids are absent from `updated` and left as-is.
+        const byId = new Map(updated.map((p) => [p.id, p]));
+        setPages((prev) => prev.map((p) => byId.get(p.id) ?? p));
+      },
+    });
   }
 
   async function reorderFolders(orderedIds: string[]) {
     const snapshot = [...foldersRef.current];
-    setFolders((prev) => {
-      const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
-      return [...prev].sort((a, b) => {
-        const ai = indexMap.get(a.id) ?? a.sortOrder;
-        const bi = indexMap.get(b.id) ?? b.sortOrder;
-        return ai - bi;
-      });
+    await optimistic({
+      apply: () => {
+        const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
+        setFolders((prev) =>
+          [...prev].sort((a, b) => {
+            const ai = indexMap.get(a.id) ?? a.sortOrder;
+            const bi = indexMap.get(b.id) ?? b.sortOrder;
+            return ai - bi;
+          })
+        );
+      },
+      label: "reorderFolders",
+      rollback: () => setFolders(snapshot),
+      write: () => adapter.reorderFolders(orderedIds),
     });
-    try {
-      await adapter.reorderFolders(orderedIds);
-    } catch (err) {
-      log.error("reorderFolders failed; rolling back optimistic order", err);
-      setFolders(snapshot);
-    }
   }
 
   // ─── Adapter pass-throughs ─────────────────────────────────────────────────
