@@ -266,6 +266,36 @@ pub fn extract_until(rrule: &str) -> Option<NaiveDateTime> {
         .and_then(parse_until)
 }
 
+/// Rewrite an RRULE's `UNTIL` value in place, leaving every other field byte-for
+/// byte intact.
+///
+/// The one home for the surgical edit each zone-shifting caller needs: a parse
+/// round-trip through [`parse_rrule`]/[`build_rrule`] drops the fields those
+/// options don't carry (BYSETPOS, BYMONTHDAY, …), so a rule that only needed its
+/// bound moved would come back mutilated. `f` receives the raw `UNTIL` value and
+/// returns its replacement, or `None` to leave the token as it stands — the
+/// shapes a given caller can't convert (date-only, floating, unparseable) are
+/// already in the frame it wants.
+///
+/// Token matching follows [`extract_until`]: `;`-separated parts, key compared
+/// case-insensitively, original key spelling preserved.
+pub fn rewrite_until_with<F>(rrule: &str, mut f: F) -> String
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    rrule
+        .split(';')
+        .map(|part| match part.split_once('=') {
+            Some((key, value)) if key.eq_ignore_ascii_case("UNTIL") => match f(value) {
+                Some(rewritten) => format!("{key}={rewritten}"),
+                None => part.to_string(),
+            },
+            _ => part.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
 /// A single BYDAY term: an optional ordinal (`1` in `1MO`, `-1` in `-1FR`) and
 /// the weekday index (0 = Monday … 6 = Sunday).
 #[derive(Debug, Clone, Copy)]
