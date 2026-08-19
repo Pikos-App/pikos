@@ -1,4 +1,5 @@
-import { AlertTriangle, X } from "lucide-react";
+import type { NotificationHistoryEntry } from "@pikos/core";
+import { AlertTriangle, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -12,7 +13,11 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { ReminderLeadTime } from "@/shared/context/AppSettingsContext";
+import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+
+import { NotificationHistory } from "./NotificationHistory";
 
 const log = createLogger("NotificationSettings");
 
@@ -22,7 +27,14 @@ const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
   { id: 10, label: "10 min before" },
   { id: 15, label: "15 min before" },
   { id: 30, label: "30 min before" },
+  { id: 60, label: "1 hour before" },
+  { id: 120, label: "2 hours before" },
+  { id: 1440, label: "1 day before" },
 ];
+
+/** Enough to cover the log's 30-day retention for a normal week of reminders
+ *  without turning the settings panel into an unbounded list. */
+const HISTORY_LIMIT = 50;
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
 
@@ -61,9 +73,35 @@ export function NotificationSettings() {
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [permissionError, setPermissionError] = useState(false);
 
+  const { storage } = useWorkspace();
+  const ui = useUI();
+  const [history, setHistory] = useState<NotificationHistoryEntry[]>([]);
+
   useEffect(() => {
     void checkPermission();
   }, []);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [storage]);
+
+  /** The scheduler writes the log from Rust on its own tick, so the panel can
+   *  only ever show a snapshot — hence the explicit refresh alongside the load. */
+  async function loadHistory() {
+    if (!storage) return;
+    try {
+      setHistory(await storage.listNotificationHistory(HISTORY_LIMIT));
+    } catch (e) {
+      // Nothing here is load-bearing for the settings the user came for, so a
+      // failed read leaves the section empty rather than taking the panel down.
+      log.warn("loadHistory failed", e instanceof Error ? e.name : "unknown");
+    }
+  }
+
+  function handleOpenPage(pageId: string) {
+    ui.setSettingsOpen(false);
+    ui.openPage(pageId);
+  }
 
   async function checkPermission() {
     try {
@@ -317,6 +355,26 @@ export function NotificationSettings() {
               </div>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Recent notifications */}
+      <section className="mb-8">
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Recent notifications</h2>
+          <button
+            aria-label="Refresh notification history"
+            className="rounded-md border border-border bg-background p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            onClick={() => void loadHistory()}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <p className="mb-4 text-sm text-muted-foreground">
+          What Pikos sent you over the last 30 days, including anything quiet hours silenced.
+        </p>
+        <div className="rounded-lg border border-border bg-card px-4">
+          <NotificationHistory entries={history} onOpenPage={handleOpenPage} />
         </div>
       </section>
     </div>
