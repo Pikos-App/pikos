@@ -7,7 +7,6 @@ use crate::error::{AppError, AppResult};
 
 #[path = "assets/assets.rs"]
 pub mod assets;
-#[path = "dev/dev.rs"]
 pub mod dev;
 #[path = "folders/folders.rs"]
 pub mod folders;
