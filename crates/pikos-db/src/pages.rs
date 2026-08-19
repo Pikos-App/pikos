@@ -856,6 +856,104 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
     .await
 }
 
+// ─── Trash ────────────────────────────────────────────────────────────────────
+
+/// How long a trashed page is kept before the auto-sweep destroys it.
+///
+/// 30 days matches the notification log's retention and the span every
+/// mainstream trash uses, which is the point: the number is a promise shown to
+/// the user ("kept for 30 days"), so it wants to be the one they already expect
+/// rather than one this app invented. Long enough that a delete regretted a week
+/// later is still recoverable; short enough that the file does not carry deleted
+/// work indefinitely.
+pub const TRASH_RETENTION_DAYS: i64 = 30;
+
+/// One row of the trash — enough to decide whether to bring a page back, without
+/// loading the page itself.
+#[derive(Debug, Serialize, ts_rs::TS, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct TrashedPage {
+    pub id: String,
+    pub title: String,
+    /// The folder the page would return to. `null` when it was in the Inbox, and
+    /// also when its folder was trashed along with it — there is no surviving
+    /// name to show, and restoring the page alone would not bring the folder back.
+    pub folder_name: Option<String>,
+    /// When it was trashed (UTC ISO, as [`soft_delete_page_impl`] writes it).
+    /// Drives both the "deleted N days ago" label and the auto-purge clock.
+    pub deleted_at: String,
+    /// True while a `page_sync` row still exists — deliberately the same predicate
+    /// [`delete_page_impl`] diverts on. A row flagged here is one the trash cannot
+    /// destroy: it carries the tombstone suppressing the upstream event, so
+    /// deleting it outright would hand the next sync pass a page to resurrect.
+    /// Restoring one gives it back to its calendar.
+    pub is_synced: bool,
+}
+
+/// The trash, newest deletion first: every soft-deleted page still on disk.
+///
+/// Reads the folder name through a correlated subquery rather than a JOIN so a
+/// page whose folder was trashed with it still lists (with no folder name) —
+/// exactly the case a JOIN would drop, and the one where the row matters most.
+pub async fn list_trashed_pages_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<TrashedPage>> {
+    let rows = sqlx::query_as::<_, TrashedPage>(
+        "SELECT p.id, p.title, p.deleted_at,
+                (SELECT f.name FROM folders f
+                  WHERE f.id = p.folder_id AND f.deleted_at IS NULL) AS folder_name,
+                EXISTS(SELECT 1 FROM page_sync ps WHERE ps.page_id = p.id) AS is_synced
+           FROM pages p
+          WHERE p.deleted_at IS NOT NULL
+          ORDER BY p.deleted_at DESC, p.id ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Destroy trashed pages deleted more than `days` ago. Returns how many rows
+/// actually went.
+///
+/// Each eligible row goes through [`delete_page_impl`] — the app's one delete,
+/// which already knows the sync question — rather than a `DELETE` of its own. A
+/// mirror is therefore left exactly as that path leaves it: soft-deleted and
+/// tombstoned, still in the trash. Destroying it would take its `page_sync` row
+/// with it (FK cascade), and with it the tombstone suppressing the upstream
+/// event, so the next poll would re-create the page the user deleted (see
+/// [`crate::sync::hard_delete_would_resurrect`]). Keeping the row is what keeps
+/// the deletion.
+///
+/// `days = 0` is "empty the trash now" and is the same sweep, not a second path.
+pub async fn purge_trashed_pages_older_than(pool: &sqlx::SqlitePool, days: i64) -> AppResult<i64> {
+    let cutoff = (chrono::Utc::now() - chrono::Duration::days(days.max(0)))
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
+
+    let ids: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM pages WHERE deleted_at IS NOT NULL AND deleted_at <= ?")
+            .bind(&cutoff)
+            .fetch_all(pool)
+            .await?;
+    let eligible = ids.len() as i64;
+
+    for id in &ids {
+        delete_page_impl(pool, id).await?;
+    }
+
+    // What the diverted rows left behind, counted the same way they were chosen.
+    // `deleted_at` is untouched by the divert (its UPDATE is guarded on
+    // `deleted_at IS NULL`), so re-running the selection counts precisely the
+    // mirrors this sweep declined to destroy.
+    let kept: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pages WHERE deleted_at IS NOT NULL AND deleted_at <= ?",
+    )
+    .bind(&cutoff)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(eligible - kept)
+}
+
 /// List pages with an optional filter (folder, status, priority, scheduled
 /// range, etc.).
 ///

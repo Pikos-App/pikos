@@ -3521,3 +3521,191 @@ async fn the_foreground_heal_is_a_no_op_on_a_fresh_cache() {
         .unwrap();
     assert_eq!(before, after, "and nothing was rewritten");
 }
+
+// ─── Trash ───────────────────────────────────────────────────────────────────
+
+fn days_ago(n: i64) -> String {
+    (chrono::Utc::now() - chrono::Duration::days(n))
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
+}
+
+/// Trash `id` through the real writer (so a mirror is tombstoned exactly as
+/// production tombstones it), then backdate the stamp the sweep reads.
+async fn trash_at(pool: &sqlx::SqlitePool, id: &str, deleted_at: &str) {
+    soft_delete_page_impl(pool, id).await.unwrap();
+    sqlx::query("UPDATE pages SET deleted_at = ? WHERE id = ?")
+        .bind(deleted_at)
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn the_trash_lists_newest_first_with_folder_and_mirror_marked() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "work", "Work")
+        .await
+        .unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some("work"),
+            ..TestPage::new("filed", "Filed page")
+        },
+    )
+    .await
+    .unwrap();
+    insert_test_page(&pool, TestPage::new("loose", "Inbox page"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("mirror", "Standup"))
+        .await
+        .unwrap();
+    mark_synced(&pool, "mirror", "active").await;
+    insert_test_page(&pool, TestPage::new("alive", "Still here"))
+        .await
+        .unwrap();
+
+    trash_at(&pool, "filed", &days_ago(5)).await;
+    trash_at(&pool, "loose", &days_ago(1)).await;
+    trash_at(&pool, "mirror", &days_ago(3)).await;
+
+    let trash = list_trashed_pages_impl(&pool).await.unwrap();
+
+    let ids: Vec<&str> = trash.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        vec!["loose", "mirror", "filed"],
+        "newest deletion first, and a live page is not in the trash"
+    );
+    assert_eq!(trash[2].folder_name.as_deref(), Some("Work"));
+    assert_eq!(
+        trash[0].folder_name, None,
+        "an Inbox page has no folder to name"
+    );
+    assert!(trash[1].is_synced, "the mirror is marked as its calendar's");
+    assert!(!trash[2].is_synced);
+    assert_eq!(
+        sync_state(&pool, "mirror").await.as_deref(),
+        Some("tombstoned"),
+        "and trashing it suppressed the upstream event"
+    );
+}
+
+#[tokio::test]
+async fn a_page_trashed_with_its_folder_lists_without_a_folder_name() {
+    // The cascade case: deleting the folder trashes its pages too. A JOIN would
+    // drop these rows entirely — the user would lose the page from the trash as
+    // well as from the sidebar.
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "gone", "Old project")
+        .await
+        .unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some("gone"),
+            ..TestPage::new("p", "Inside it")
+        },
+    )
+    .await
+    .unwrap();
+
+    crate::soft_delete_folder_impl(&pool, "gone".into())
+        .await
+        .unwrap();
+
+    let trash = list_trashed_pages_impl(&pool).await.unwrap();
+    assert_eq!(trash.len(), 1);
+    assert_eq!(trash[0].id, "p");
+    assert_eq!(
+        trash[0].folder_name, None,
+        "the folder is trashed too, so there is no surviving name to show"
+    );
+}
+
+#[tokio::test]
+async fn the_sweep_destroys_pages_past_retention_and_leaves_younger_ones() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("old", "Long gone"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("young", "Deleted yesterday"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("alive", "Never deleted"))
+        .await
+        .unwrap();
+    trash_at(&pool, "old", &days_ago(31)).await;
+    trash_at(&pool, "young", &days_ago(1)).await;
+
+    let purged = purge_trashed_pages_older_than(&pool, TRASH_RETENTION_DAYS)
+        .await
+        .unwrap();
+
+    assert_eq!(purged, 1);
+    assert!(!page_exists(&pool, "old").await);
+    assert!(
+        page_exists(&pool, "young").await,
+        "a page inside the window still has its 30 days"
+    );
+    assert!(
+        page_exists(&pool, "alive").await,
+        "and a live page is never in scope"
+    );
+}
+
+#[tokio::test]
+async fn the_sweep_leaves_a_mirror_in_the_trash_rather_than_resurrecting_it() {
+    // Destroying the row would cascade its page_sync tombstone away, and the next
+    // poll would re-create the event the user deleted. The mirror keeps its place
+    // in the trash instead — the same divert `delete_page_impl` makes.
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("mirror", "Standup"))
+        .await
+        .unwrap();
+    mark_synced(&pool, "mirror", "active").await;
+    insert_test_page(&pool, TestPage::new("native", "My note"))
+        .await
+        .unwrap();
+    trash_at(&pool, "mirror", &days_ago(90)).await;
+    trash_at(&pool, "native", &days_ago(90)).await;
+
+    let purged = purge_trashed_pages_older_than(&pool, TRASH_RETENTION_DAYS)
+        .await
+        .unwrap();
+
+    assert_eq!(purged, 1, "only the native page was destroyed");
+    assert!(!page_exists(&pool, "native").await);
+    assert!(page_exists(&pool, "mirror").await);
+    assert_eq!(
+        sync_state(&pool, "mirror").await.as_deref(),
+        Some("tombstoned"),
+        "still suppressed, so the calendar cannot bring it back"
+    );
+    assert!(
+        crate::sync::hard_delete_would_resurrect(&pool, "mirror")
+            .await
+            .unwrap(),
+        "which is exactly why the sweep declined to destroy it"
+    );
+    let trash = list_trashed_pages_impl(&pool).await.unwrap();
+    assert_eq!(trash.len(), 1, "and it is still listed, honestly");
+    assert!(trash[0].is_synced);
+}
+
+#[tokio::test]
+async fn emptying_the_trash_is_the_same_sweep_at_zero_days() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("a", "Just deleted"))
+        .await
+        .unwrap();
+    soft_delete_page_impl(&pool, "a").await.unwrap();
+
+    let purged = purge_trashed_pages_older_than(&pool, 0).await.unwrap();
+
+    assert_eq!(purged, 1);
+    assert!(list_trashed_pages_impl(&pool).await.unwrap().is_empty());
+}

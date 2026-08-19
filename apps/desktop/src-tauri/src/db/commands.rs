@@ -160,6 +160,15 @@ db_commands! {
         delete_page(id: String) -> () = delete_page_impl(&id);
         soft_delete_page(id: String) -> () = soft_delete_page_impl(&id);
         restore_page(id: String) -> () = restore_page_impl(&id);
+        /// The trash, newest deletion first. Read-only: everything that puts a
+        /// page in it or takes one out is an existing command.
+        list_trashed_pages() -> Vec<TrashedPage> = list_trashed_pages_impl();
+        /// Destroy trashed pages deleted more than `older_than_days` ago,
+        /// returning how many actually went. `0` is "Empty Trash"; the app's
+        /// start-up sweep passes the retention window. A mirror is kept and
+        /// stays tombstoned — see the writer.
+        purge_trashed_pages(older_than_days: i64) -> i64
+            = purge_trashed_pages_older_than(older_than_days);
         list_pages(filter: Option<PageFilter>) -> Vec<PageSummary> = list_pages_impl(filter);
         list_pages_today() -> Vec<PageSummary> = list_pages_today_impl();
         list_completed_pages(filter: CompletedPagesFilter) -> CompletedPagesResponse
