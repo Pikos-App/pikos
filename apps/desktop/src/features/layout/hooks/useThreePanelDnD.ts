@@ -7,11 +7,10 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { Folder, PageSummary } from "@pikos/core";
-import { isDone, isTimedIso, parseLocalISO } from "@pikos/core";
+import { getVisiblePages, isDone, isTimedIso, parseLocalISO, sortPages } from "@pikos/core";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
-import { getVisiblePages, sortPages } from "@/features/pages";
 import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
 import { usePages } from "@/shared/context/PagesContext";

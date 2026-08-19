@@ -1,6 +1,6 @@
-import type { PageSummary } from "@pikos/core";
 import { describe, expect, it, vi } from "vitest";
 
+import type { PageSummary } from "../types";
 import {
   belongsToView,
   getCompletedTodayPages,

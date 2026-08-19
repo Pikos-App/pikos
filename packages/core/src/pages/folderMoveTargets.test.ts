@@ -1,6 +1,6 @@
-import type { Folder } from "@pikos/core";
 import { describe, expect, it } from "vitest";
 
+import type { Folder } from "../types";
 import { folderMoveTargets } from "./folderMoveTargets";
 
 function makeFolder(name: string, isExternalCalendar = false): Folder {

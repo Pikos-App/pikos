@@ -1,4 +1,4 @@
-import type { PageSummary } from "@pikos/core";
+import type { PageSummary } from "../types";
 
 type SectionHeaderRow = {
   type: "section-header";

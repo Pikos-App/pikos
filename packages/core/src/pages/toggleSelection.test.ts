@@ -1,6 +1,6 @@
-import type { PageStatus } from "@pikos/core";
 import { describe, expect, it } from "vitest";
 
+import type { PageStatus } from "../types";
 import { partitionToggleSelection } from "./toggleSelection";
 
 const page = (id: string, status: PageStatus) => ({ id, status });

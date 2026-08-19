@@ -5,6 +5,7 @@ import {
   DragOverlay,
   pointerWithin,
 } from "@dnd-kit/core";
+import { shouldHideSidebar, shouldOverlayPageList } from "@pikos/core";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
@@ -14,7 +15,7 @@ import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
 
-import { shouldHideSidebar, shouldOverlayPageList, useLayoutMode } from "../breakpoints";
+import { useLayoutMode } from "../breakpoints";
 import { usePanelResize } from "../hooks/usePanelResize";
 import { useThreePanelDnD } from "../hooks/useThreePanelDnD";
 import { EditorPanel } from "./EditorPanel";

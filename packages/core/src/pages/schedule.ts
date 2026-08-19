@@ -2,7 +2,7 @@
 // date-picker chip. Pure date-string transforms — no calendar layout deps —
 // so they belong in shared/ rather than features/calendar/utils.
 
-import { formatLocalISO, isAllDayIso, isTimedIso, parseLocalISO } from "@pikos/core";
+import { formatLocalISO, isAllDayIso, isTimedIso, parseLocalISO } from "../utils/dates";
 
 /**
  * Decides what to do with an event's end when the user picks a new start ISO

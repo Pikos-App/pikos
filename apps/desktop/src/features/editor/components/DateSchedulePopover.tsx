@@ -1,10 +1,8 @@
 import type { Page } from "@pikos/core";
-import { isDone } from "@pikos/core";
+import { computeScheduleTransition, isDone, normalizeEndInput } from "@pikos/core";
 
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { usePages } from "@/shared/context/PagesContext";
-import { computeScheduleTransition, normalizeEndInput } from "@/shared/utils/schedule";
-
 interface DateSchedulePopoverProps {
   page: Page;
 }
