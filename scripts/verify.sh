@@ -49,6 +49,10 @@ run_check "typecheck-desktop" pnpm --filter @pikos/desktop typecheck &
 run_check "typecheck-core"    pnpm --filter @pikos/core typecheck &
 run_check "lint"              pnpm exec turbo lint &
 run_check "depcruise"         pnpm exec depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs &
+# Every Playwright project is grep-scoped by tag, so an untagged test runs in no
+# project at all — silently. Text scan, no Playwright runtime: cheap enough to
+# ride along here (and so pre-commit and CI's verify job) instead of a new job.
+run_check "e2e-tags"          node scripts/check-e2e-tags.mjs &
 
 # Only the specs the working-tree diff can reach. Safe because the workspace
 # resolves `@pikos/core` to its *source* (`exports: "./src/index.ts"`), so
@@ -86,7 +90,7 @@ fi
 wait
 
 # ── Report results ────────────────────────────────────────────────────────────
-for name in typecheck-desktop typecheck-core lint prettier depcruise tests; do
+for name in typecheck-desktop typecheck-core lint prettier depcruise e2e-tags tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then
