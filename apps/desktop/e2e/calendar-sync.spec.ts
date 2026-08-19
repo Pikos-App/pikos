@@ -137,9 +137,11 @@ appTest("turning a calendar back on reclaims the pages it kept @tier2", async ({
   const personalFolders = app.getByRole("button", { exact: true, name: "Personal" });
   const foldersBefore = await personalFolders.count();
 
-  // Own one Personal mirror so teardown keeps it. A status change is the edit that
-  // lands immediately; a body edit waits on two debounces and would still be
-  // unowned by the time the teardown below runs.
+  // Own one more Personal mirror so teardown keeps it. A status change is the edit
+  // that lands immediately; a body edit waits on two debounces and would still be
+  // unowned by the time the teardown below runs. The seed already ships one owned
+  // mirror in this calendar — "Team standup", whose parked description implies the
+  // user edited it — so the kept count below is two, not one.
   const offsite = app.getByRole("button", { exact: true, name: "Company offsite" });
   await offsite.click();
   await app.getByRole("button", { name: "Mark done" }).click();
@@ -152,7 +154,7 @@ appTest("turning a calendar back on reclaims the pages it kept @tier2", async ({
   await app.getByRole("switch", { name: "Sync Personal" }).click();
   const confirm = app.getByRole("alertdialog", { name: "Turn Personal back on?" });
   await expect(confirm).toBeVisible();
-  await expect(confirm.getByText(/You kept 1 page/)).toBeVisible();
+  await expect(confirm.getByText(/You kept 2 pages/)).toBeVisible();
   await confirm.getByRole("button", { name: "Turn on" }).click();
   await expect(app.getByRole("switch", { name: "Sync Personal" })).toBeChecked();
   await app.keyboard.press("Escape");
@@ -235,8 +237,12 @@ appTest("disabling a calendar keeps an edited mirror and its folder @tier2", asy
   await seedSynced(app);
   await openPersonalFolder(app);
 
-  const standup = app.locator("[data-page-list-item]").getByText("Team standup").first();
-  await standup.click();
+  // Deliberately not "Team standup": the seed plants that one already owned (its
+  // parked description implies an edit), so an edit there would prove nothing —
+  // it would detach whether or not this test typed a character. This mirror is
+  // bare until the keystrokes below, which is what the survivors arm is about.
+  const edited = app.locator("[data-page-list-item]").getByText("Design review (LA team)").first();
+  await edited.click();
   // A locked title renders as static text; unlocking turns it into a button.
   const editableTitle = app.getByRole("button", { name: "Page title" });
   await expect(editableTitle).toHaveCount(0);
@@ -260,7 +266,7 @@ appTest("disabling a calendar keeps an edited mirror and its folder @tier2", asy
   // with the sync. That it is now an ordinary folder is unit-pinned on the writer.
   await expect(personalFolders).toHaveCount(2);
 
-  await standup.click();
+  await edited.click();
   await expect(editableTitle).toBeVisible();
 });
 

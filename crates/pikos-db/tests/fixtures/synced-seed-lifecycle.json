@@ -10,7 +10,11 @@
       "is the last day of the run's local month, and both runners resolve them, so the",
       "table says nothing about the day it is run on.",
       "A calendar is named by a substring of its folder name, because only the display",
-      "names differ (see excludes)."
+      "names differ (see excludes).",
+      "`userModified` is `page_sync.user_modified` — ownership. Both seeders derive it",
+      "the same way (a parked description implies the user edited the body), and it is",
+      "what decides whether a calendar turn-off keeps the page or destroys it, so a",
+      "side that forgets it silently loses a mirror during QA."
     ],
     "excludes": [
       "Calendar/folder display names: the dev command names them 'Personal (synced)' and",
@@ -25,11 +29,6 @@
       "the page either way; the stored zone comes from whichever row holds it.",
       "sync_calendar.last_synced_at: the dev command stamps it so the panel reads fresh;",
       "the mock has no seam to stamp it from a seed.",
-      "page_sync.user_modified: the dev command marks 'Team standup' owned because a",
-      "parked description can only exist on a page the user has edited. The mock has no",
-      "seam that stamps ownership from a seed (markPageSynced does not), and the",
-      "calendar-sync e2e specs own a mirror by hand and count what teardown keeps, so",
-      "closing this needs the mock seam and those specs, not the seed alone.",
       "pages.mirror_search_text: a dev-command column with no mock counterpart. The",
       "location and attendees it is built from are asserted instead."
     ]
@@ -100,7 +99,8 @@
             "location": "Zoom",
             "attendees": ["alex@example.com", "sam@example.com", "jordan@example.com"],
             "pendingDescription": "Agenda updated: demo the new sync panel, then round-table blockers.",
-            "bodyText": "My prep: land the calendar-sync PR before we demo."
+            "bodyText": "My prep: land the calendar-sync PR before we demo.",
+            "userModified": true
           },
           {
             "title": "Design review (LA team)",

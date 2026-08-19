@@ -293,11 +293,22 @@ export class MockStorageAdapter implements StorageAdapter {
       pendingDescription?: string | null;
       /** Local day the page first synced; defaults to today, as a fresh sync would. */
       syncedSince?: string | null;
+      /**
+       * `page_sync.user_modified`. In the app only the editor path sets it, so a
+       * fixture that needs an already-owned mirror could not build one — the
+       * seeded state was unreachable, and teardown destroyed a page the real
+       * writer keeps. Seeds pass it the way the SQL seeder binds the column
+       * (db/dev/seed.rs); nothing on `StorageAdapter` can.
+       */
+      userModified?: boolean;
     } = {}
   ): void {
     const page = this.pages.get(pageId);
     if (!page) return;
     const state = opts.state ?? "active";
+    // Sticky, like the column: once the user owns a mirror, a later re-stamp of
+    // its provenance (a resync writing fresh mirror metadata) never disowns it.
+    if (opts.userModified) this.userModified.add(pageId);
     this.pages.set(pageId, {
       ...page,
       mirrorAttendees: opts.attendees ?? page.mirrorAttendees ?? null,
@@ -308,6 +319,15 @@ export class MockStorageAdapter implements StorageAdapter {
       syncState: state,
       timezone: opts.timezone ?? page.timezone ?? null,
     });
+  }
+
+  /**
+   * Test/seed-only (NOT on `StorageAdapter`): read `page_sync.user_modified` back.
+   * The flag is otherwise only observable through what teardown does with the page,
+   * which is too coarse for the seed-conformance table to name it.
+   */
+  isPageUserModified(pageId: string): boolean {
+    return this.userModified.has(pageId);
   }
 
   /**
