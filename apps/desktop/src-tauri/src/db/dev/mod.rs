@@ -3,6 +3,7 @@
 //! - [`stats`] — the Settings → Data usage panel.
 //! - [`maintenance`] — reset, wipe, backup/vacuum, and dev backdating.
 //! - [`export`] — the JSON, Markdown and CSV exports.
+//! - [`ics`] — the `.ics` calendar export of the scheduled pages.
 //! - [`seed`] — the mock calendar-sync seed.
 //!
 //! The globs below re-export each submodule's surface at `db::dev::*`, which is
@@ -12,14 +13,18 @@
 //! for a path-qualified registration — travelling with their functions.
 
 mod export;
+mod ics;
 mod maintenance;
 mod seed;
 mod stats;
 
 pub use export::*;
+pub use ics::*;
 pub use maintenance::*;
 pub use seed::*;
 pub use stats::*;
 
+#[cfg(test)]
+mod seed_conformance_tests;
 #[cfg(test)]
 mod tests;

@@ -92,6 +92,7 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
             json!({ "rules": [], "rangeStart": "2026-06-01", "rangeEnd": "2026-06-30" }),
         ),
         ("export_csv", json!({ "includeSynced": false })),
+        ("export_ics", json!({ "includeSynced": false })),
         ("export_markdown", json!({ "includeSynced": false })),
     ]
 }
@@ -217,6 +218,7 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::sync::toggle_sync_calendar,
             super::schedules::expand_recurrence_range,
             super::dev::export_csv,
+            super::dev::export_ics,
             super::dev::export_markdown,
             super::pages::get_page,
             super::pages::list_pages,
