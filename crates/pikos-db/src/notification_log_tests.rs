@@ -1815,3 +1815,75 @@ async fn a_suppressed_reminder_is_logged_without_pinning_the_dedup() {
         "a suppression must not act as a dedup anchor"
     );
 }
+
+// ─── Click-through ───────────────────────────────────────────────────────────
+
+async fn action_of(pool: &sqlx::SqlitePool, id: &str) -> Option<String> {
+    sqlx::query_scalar::<_, Option<String>>("SELECT action FROM notification_log WHERE id = ?")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn clicking_a_reminder_records_opened_and_names_its_page() {
+    let pool = test_pool().await;
+    insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
+    let id = log_reminder_fired(&pool, "p1", "s1#10", NOW_TS)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mark_notification_opened(&pool, &id)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("p1")
+    );
+    assert_eq!(action_of(&pool, &id).await.as_deref(), Some("opened"));
+}
+
+#[tokio::test]
+async fn clicking_the_daily_summary_records_opened_but_names_no_page() {
+    let pool = test_pool().await;
+    let id = log_daily_summary(&pool, NOW_TS).await.unwrap();
+
+    assert_eq!(mark_notification_opened(&pool, &id).await.unwrap(), None);
+    assert_eq!(action_of(&pool, &id).await.as_deref(), Some("opened"));
+}
+
+#[tokio::test]
+async fn a_second_click_neither_errors_nor_rewrites_the_action() {
+    let pool = test_pool().await;
+    insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
+    let id = log_reminder_fired(&pool, "p1", "s1#10", NOW_TS)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE notification_log SET action = 'done' WHERE id = ?")
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // The page still routes, but a recorded outcome is not overwritten by a click.
+    assert_eq!(
+        mark_notification_opened(&pool, &id)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("p1")
+    );
+    assert_eq!(action_of(&pool, &id).await.as_deref(), Some("done"));
+}
+
+#[tokio::test]
+async fn clicking_a_pruned_notification_is_a_no_op() {
+    // A banner can outlive its log row (the 30-day prune, or a re-import). The
+    // click must not fail — it just has nothing to open.
+    let pool = test_pool().await;
+    assert_eq!(
+        mark_notification_opened(&pool, "not-a-row").await.unwrap(),
+        None
+    );
+}

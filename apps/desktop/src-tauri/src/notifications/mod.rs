@@ -1,3 +1,5 @@
+pub mod click;
+
 #[path = "scheduler/scheduler.rs"]
 pub mod scheduler;
 

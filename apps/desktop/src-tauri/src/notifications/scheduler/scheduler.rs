@@ -387,12 +387,13 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
         } => {
             // Local time, consistent with the date(fired_at) dedup read.
             let now_ts = now.format("%Y-%m-%d %H:%M:%S").to_string();
-            pikos_db::log_daily_summary(&pool, &now_ts).await?;
+            let log_id = pikos_db::log_daily_summary(&pool, &now_ts).await?;
             if today_count > 0 || overdue_count > 0 {
                 deliver(
                     app,
                     &format_summary_title(&now),
                     &format_summary_body(today_count, overdue_count),
+                    &log_id,
                 );
             }
             mark_summary_fired(app, &now).await;
@@ -427,15 +428,22 @@ async fn mark_summary_fired(app: &AppHandle, now: &chrono::DateTime<chrono::Loca
 /// path is unavailable (unbundled `tauri dev` binary), we fall through to the
 /// plugin. All other platforms use the plugin directly.
 ///
+/// `log_id` is the `notification_log` row this banner came from; the UN path
+/// carries it as the notification's OS identifier so a click can find its way
+/// back (see `notifications::click`). The plugin's desktop builder takes no
+/// identifier and reports no clicks, so on every other platform it goes nowhere.
+///
 /// Requires a properly signed app bundle — unsigned dev builds will
 /// silently drop notifications. Use osascript fallback for dev testing.
-fn deliver(app: &AppHandle, title: &str, body: &str) {
+fn deliver(app: &AppHandle, title: &str, body: &str, log_id: &str) {
     #[cfg(target_os = "macos")]
     {
-        if crate::notifications::macos::deliver(title, body) {
+        if crate::notifications::macos::deliver(title, body, log_id) {
             return;
         }
     }
+    #[cfg(not(target_os = "macos"))]
+    let _ = log_id;
 
     if let Ok(()) = app
         .notification()
@@ -563,11 +571,13 @@ async fn fire_reminder(
         format!("Starts {lead} · {time_str}")
     };
 
-    // Log to prevent re-firing.
+    // Log to prevent re-firing. The row id doubles as the notification's OS
+    // identifier, so a click routes back to this page (see `notifications::click`).
     let fired_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    pikos_db::log_reminder_fired(pool, &row.page_id, &row.schedule_id, &fired_at).await?;
+    let log_id =
+        pikos_db::log_reminder_fired(pool, &row.page_id, &row.schedule_id, &fired_at).await?;
 
-    deliver(app, &row.title, &body);
+    deliver(app, &row.title, &body, &log_id);
 
     // Reminder actually fired — meaningful audit anchor at INFO. Empty
     // ticks are silent (most ticks find nothing).
