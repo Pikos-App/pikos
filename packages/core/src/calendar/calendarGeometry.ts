@@ -12,8 +12,6 @@ import {
   startOfWeek,
 } from "date-fns";
 
-import type { CalendarDayCount, CalendarDensity } from "@/shared/constants/calendar";
-
 import {
   type CalendarCollapseConfig,
   COLLAPSED_BAND_HEIGHT,
@@ -25,6 +23,7 @@ import {
   MIN_VISIBLE_HOURS,
   VISIBLE_HOURS,
 } from "./calendarConstants";
+import type { CalendarDayCount, CalendarDensity } from "./dayCount";
 
 /** Snapshot of the layout constants that scale with density. */
 export interface CalendarMetrics {

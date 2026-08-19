@@ -1,6 +1,6 @@
 import { format, getHours } from "date-fns";
 
-import { formatTime12h } from "@/shared/utils/formatTime";
+import { formatTime12h } from "../format/formatTime";
 
 /**
  * Formats a time range for display in a PageBlock. Uses an unspaced en-dash

@@ -4,11 +4,10 @@
 // Mirrored with unlocked blocks to prove the guards, not a dead harness.
 
 import type { PageSummary } from "@pikos/core";
+import { buildCollapseGeometry, DEFAULT_COLLAPSE_CONFIG, DEFAULT_METRICS } from "@pikos/core";
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_COLLAPSE_CONFIG } from "../utils/calendarConstants";
-import { buildCollapseGeometry, DEFAULT_METRICS } from "../utils/calendarGeometry";
 import { useAllDayDrag } from "./useAllDayDrag";
 
 function makePage(scheduleLocked: boolean): PageSummary {

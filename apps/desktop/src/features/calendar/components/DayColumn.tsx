@@ -1,4 +1,17 @@
-import type { PageSummary } from "@pikos/core";
+import type { CalendarBlock, OverflowPill as OverflowPillData, PageSummary } from "@pikos/core";
+import {
+  buildDayBlocks,
+  collapsedBandPillHeight,
+  collapseUnderWidth,
+  COMPACT_MODE_WIDTH_PX,
+  DRAG_THRESHOLD,
+  formatTimeRange,
+  GRID_END_HOUR,
+  GRID_START_HOUR,
+  mapHourToY,
+  mapYToDate,
+  remapBlocksForCollapse,
+} from "@pikos/core";
 import { isSameDay } from "date-fns";
 import { Check } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -8,21 +21,6 @@ import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 
 import { chipFolderStyle } from "../utils/calendarColors";
-import {
-  COMPACT_MODE_WIDTH_PX,
-  DRAG_THRESHOLD,
-  GRID_END_HOUR,
-  GRID_START_HOUR,
-} from "../utils/calendarConstants";
-import { collapsedBandPillHeight, mapHourToY, mapYToDate } from "../utils/calendarGeometry";
-import {
-  buildDayBlocks,
-  type CalendarBlock,
-  collapseUnderWidth,
-  type OverflowPill as OverflowPillData,
-  remapBlocksForCollapse,
-} from "../utils/calendarLayout";
-import { formatTimeRange } from "../utils/calendarTimeFormat";
 import { NowIndicator } from "./NowIndicator";
 import { OverflowPill } from "./OverflowPill";
 import { PageBlock } from "./PageBlock";

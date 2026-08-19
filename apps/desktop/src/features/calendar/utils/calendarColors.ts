@@ -1,6 +1,5 @@
+import { DEFAULT_EVENT_COLOR } from "@pikos/core";
 import type { CSSProperties } from "react";
-
-import { DEFAULT_EVENT_COLOR } from "./calendarConstants";
 
 /** Accepts #RRGGBB or RRGGBB; falls back to muted indigo if the hex cannot be parsed. */
 export function hexToRgba(hex: string, alpha: number): string {

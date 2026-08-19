@@ -1,5 +1,13 @@
-import type { VirtualOccurrence } from "@pikos/core";
-import { isDone } from "@pikos/core";
+import type { CalendarBlock, VirtualOccurrence } from "@pikos/core";
+import {
+  CHIP_BASE_CLASSES,
+  crossingMidnightsCount,
+  DEFAULT_EVENT_COLOR,
+  formatMultiDayTimeRange,
+  formatTimeRange,
+  isDone,
+  snapY,
+} from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -11,12 +19,8 @@ import { useUI } from "@/shared/context/UIContext";
 
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
-import { crossingMidnightsCount } from "../utils/allDayLayout";
+import { beginDragThreshold } from "../utils/beginDragThreshold";
 import { chipFolderStyle } from "../utils/calendarColors";
-import { CHIP_BASE_CLASSES, DEFAULT_EVENT_COLOR } from "../utils/calendarConstants";
-import { snapY } from "../utils/calendarGeometry";
-import { beginDragThreshold, type CalendarBlock } from "../utils/calendarLayout";
-import { formatMultiDayTimeRange, formatTimeRange } from "../utils/calendarTimeFormat";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 

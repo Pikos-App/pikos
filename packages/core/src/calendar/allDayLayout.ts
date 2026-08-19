@@ -1,8 +1,7 @@
-import type { PageSummary } from "@pikos/core";
-import { isAllDayIso } from "@pikos/core";
 import { addDays, differenceInCalendarDays, format, parseISO, startOfDay } from "date-fns";
-import type { CSSProperties } from "react";
 
+import type { PageSummary } from "../types";
+import { isAllDayIso } from "../utils/dates";
 import { ALL_DAY_ROW_HEIGHT, ALL_DAY_TOP_PADDING } from "./calendarConstants";
 
 /**
@@ -347,10 +346,22 @@ export function computeAllDayEdgeResize(
 }
 
 /**
+ * Absolute-position box for one all-day bar. Structurally a subset of React's
+ * `CSSProperties` so a caller can spread it straight onto a `style` prop —
+ * spelled out locally because core stays framework-agnostic and may not name
+ * a React type, not even in an `import type`.
+ */
+export interface AllDayBarPosition {
+  left: string;
+  top: number;
+  width: string;
+}
+
+/**
  * Keeps the `AllDayBar` component ignorant of column-count math — only the
  * section that owns layout needs to know.
  */
-export function barPositionStyle(bar: AllDayBar, columnCount: number): CSSProperties {
+export function barPositionStyle(bar: AllDayBar, columnCount: number): AllDayBarPosition {
   const widthPct = (bar.span / columnCount) * 100;
   const leftPct = (bar.startCol / columnCount) * 100;
   return {

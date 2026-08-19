@@ -1,10 +1,8 @@
-import type { PageSummary } from "@pikos/core";
+import type { OverflowPill as OverflowPillData, PageSummary } from "@pikos/core";
+import { formatTimeRange } from "@pikos/core";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-
-import type { OverflowPill as OverflowPillData } from "../utils/calendarLayout";
-import { formatTimeRange } from "../utils/calendarTimeFormat";
 
 interface OverflowPillProps {
   pill: OverflowPillData;

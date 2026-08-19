@@ -1,8 +1,8 @@
+import { buildCalendarDays, clampDayCount, getCalendarDayCount } from "@pikos/core";
 import { addDays, format, isSameDay } from "date-fns";
 import { useEffect, useState } from "react";
 
-import { getCalendarDayCount, useLayoutMode } from "@/features/layout/breakpoints";
-import { clampDayCount } from "@/shared/constants/calendar";
+import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
@@ -11,7 +11,6 @@ import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import { useRecurrenceExpansion } from "../hooks/useRecurrenceExpansion";
-import { buildCalendarDays } from "../utils/calendarGeometry";
 import { WeekGrid } from "./WeekGrid";
 
 /**

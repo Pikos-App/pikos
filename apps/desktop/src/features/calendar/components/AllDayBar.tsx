@@ -1,5 +1,5 @@
-import type { VirtualOccurrence } from "@pikos/core";
-import { isDone } from "@pikos/core";
+import type { AllDayBar as AllDayBarData, VirtualOccurrence } from "@pikos/core";
+import { CHIP_BASE_CLASSES, isDone } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 import type { CSSProperties } from "react";
 
@@ -10,10 +10,8 @@ import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
-import type { AllDayBar as AllDayBarData } from "../utils/allDayLayout";
+import { beginDragThreshold } from "../utils/beginDragThreshold";
 import { chipFolderStyle } from "../utils/calendarColors";
-import { CHIP_BASE_CLASSES } from "../utils/calendarConstants";
-import { beginDragThreshold } from "../utils/calendarLayout";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
