@@ -23,12 +23,25 @@ export type VirtualRow =
   | { type: "load-more"; key: string }
   | { type: "empty-completed"; key: string };
 
+/** One day's worth of the Upcoming view — see core `groupUpcomingPages`. */
+export interface PageListDaySection {
+  date: string;
+  label: string;
+  pages: PageSummary[];
+}
+
 export interface BuildPageListRowsInput {
   visiblePages: PageSummary[];
   isTodayView: boolean;
   overdue: PageSummary[];
   today: PageSummary[];
   overdueCollapsed: boolean;
+  /**
+   * Day sections for the Upcoming view; empty everywhere else. Unlike Today's
+   * two fixed sections, these are open-ended and every one keeps its header even
+   * when it is the only one — the day IS the information the view exists to give.
+   */
+  daySections?: PageListDaySection[];
   completedCollapsed: boolean;
   completedPages: PageSummary[];
   completedHasMore: boolean;
@@ -45,6 +58,7 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
     completedCollapsed,
     completedHasMore,
     completedPages,
+    daySections = [],
     isTodayView,
     overdue,
     overdueCollapsed,
@@ -57,6 +71,20 @@ export function buildPageListRows(input: BuildPageListRowsInput): BuildPageListR
 
   if (visiblePages.length === 0) {
     rows.push({ key: "empty-state", type: "empty-state" });
+  } else if (daySections.length > 0) {
+    for (const section of daySections) {
+      rows.push({
+        collapsible: false,
+        count: section.pages.length,
+        key: `day-${section.date}`,
+        label: section.label,
+        type: "section-header",
+      });
+      for (const p of section.pages) {
+        pageToRowIndex.set(p.id, rows.length);
+        rows.push({ key: p.id, page: p, type: "page" });
+      }
+    }
   } else if (isTodayView) {
     if (overdue.length > 0) {
       rows.push({

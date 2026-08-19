@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { PageSummary } from "../types";
 import {
   belongsToView,
+  folderIdForView,
   getCompletedTodayPages,
   getCompletedViewPages,
   getVisiblePages,
   groupTodayPages,
+  isDateGroupedView,
+  isSmartViewId,
   sortPages,
 } from "./pageFilters";
 
@@ -148,6 +151,24 @@ describe("getVisiblePages", () => {
     expect(visible.map((p) => p.title)).toEqual(["Inbox item"]);
   });
 
+  it("upcoming — today through today+6, excludes done and overdue", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 25, 12, 0, 0));
+
+    const pages = [
+      makePage({ scheduledStart: "2026-03-24", title: "Overdue" }),
+      makePage({ scheduledStart: "2026-03-25", title: "Today" }),
+      makePage({ scheduledStart: "2026-03-31T08:00:00", title: "Day seven" }),
+      makePage({ scheduledStart: "2026-04-01", title: "Day eight" }),
+      makePage({ scheduledStart: "2026-03-26", status: "done", title: "Done tomorrow" }),
+      makePage({ scheduledStart: null, title: "Unscheduled" }),
+    ];
+    const visible = getVisiblePages(pages, "upcoming");
+    expect(visible.map((p) => p.title)).toEqual(["Today", "Day seven"]);
+
+    vi.useRealTimers();
+  });
+
   it("folder ID — matches folderId, excludes done", () => {
     const pages = [
       makePage({ folderId: "f1", status: "not_started", title: "Match" }),
@@ -156,6 +177,32 @@ describe("getVisiblePages", () => {
     ];
     const visible = getVisiblePages(pages, "f1");
     expect(visible.map((p) => p.title)).toEqual(["Match"]);
+  });
+});
+
+// ─── View identity helpers ───────────────────────────────────────────────────
+
+describe("smart view helpers", () => {
+  it("isSmartViewId covers exactly the three computed views", () => {
+    expect(isSmartViewId("today")).toBe(true);
+    expect(isSmartViewId("upcoming")).toBe(true);
+    expect(isSmartViewId("inbox")).toBe(true);
+    expect(isSmartViewId("550e8400-e29b-41d4-a716-446655440000")).toBe(false);
+  });
+
+  it("folderIdForView resolves a smart view to no folder", () => {
+    expect(folderIdForView("today")).toBeNull();
+    expect(folderIdForView("upcoming")).toBeNull();
+    expect(folderIdForView("inbox")).toBeNull();
+    expect(folderIdForView("f1")).toBe("f1");
+  });
+
+  it("isDateGroupedView marks the views whose order is derived", () => {
+    expect(isDateGroupedView("today")).toBe(true);
+    expect(isDateGroupedView("upcoming")).toBe(true);
+    // Inbox is a plain list — the user's sort choice still means something there.
+    expect(isDateGroupedView("inbox")).toBe(false);
+    expect(isDateGroupedView("f1")).toBe(false);
   });
 });
 
