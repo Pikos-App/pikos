@@ -1,184 +1,28 @@
 // key={page.id} in parent resets all state on page switch.
 
-import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
+import type { Page, PagePriority, PageStatus } from "@pikos/core";
 import {
   getLocalTimezone,
-  isDone,
   isTimedIso,
   localToday,
   parseLocalISO,
-  rruleToLabel,
   snapAnchorToRule,
   storageErrorUserMessage,
   toStorageError,
 } from "@pikos/core";
-import { AlertTriangle, CalendarDays, CalendarOff, CalendarSync } from "lucide-react";
+import { CalendarOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { BylineSeparator } from "@/shared/components/BylineSeparator";
-import { FolderChip } from "@/shared/components/FolderChip";
-import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
-import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
-import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
-import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
 import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
 import { SyncedLockHint } from "@/shared/components/SyncedLockHint";
-import { TagsPopover } from "@/shared/components/TagsPopover";
-import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
-import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
 
+import { Byline } from "./Byline";
 import { CalendarDescriptionNotice } from "./CalendarDescriptionNotice";
-import { DateSchedulePopover } from "./DateSchedulePopover";
-
-function Byline({
-  allTags,
-  folders,
-  onErrorClick,
-  onFolderChange,
-  onOpenInCalendar,
-  onPriorityChange,
-  onRecurrenceChange,
-  onStatusChange,
-  onTagToggle,
-  page,
-  saveError,
-}: {
-  page: Page;
-  folders: Folder[];
-  allTags: string[];
-  onStatusChange: (status: PageStatus) => void;
-  onFolderChange: (folderId: string | null) => void;
-  onPriorityChange: (priority: PagePriority) => void;
-  onTagToggle: (name: string) => void;
-  onRecurrenceChange: (rrule: string | null) => void;
-  onOpenInCalendar?: () => void;
-  saveError?: string | null;
-  onErrorClick?: () => void;
-}) {
-  const done = isDone(page);
-  const { recurrenceRules } = usePages();
-  const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
-
-  // Synced events lock title, folder placement, schedule, and recurrence to the
-  // mirror; body, status, reminders, priority, and tags stay user-editable.
-  const locked = page.scheduleLocked;
-  const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "Calendar";
-  const lockedSchedule = locked ? syncedScheduleLabel(page) : null;
-  const lockedRecurrenceLabel =
-    locked && recurrenceRule ? rruleToLabel(recurrenceRule.rrule) : null;
-
-  return (
-    <div className="type-ui-sm flex items-center gap-2 overflow-hidden pt-2 pb-4 text-subtle">
-      <button
-        aria-label={done ? "Mark not done" : "Mark done"}
-        className="group/status inline-flex items-center gap-1.5 rounded transition-colors hover:text-muted-foreground focus:outline-none"
-        onClick={() => onStatusChange(done ? "not_started" : "done")}
-      >
-        <TaskCheckbox
-          as="span"
-          checked={done}
-          className={!done ? "group-hover/status:border-foreground/60" : undefined}
-          onChange={() => onStatusChange(done ? "not_started" : "done")}
-        />
-        <span className="inline-block w-[2.5rem]">{done ? "Done" : "Open"}</span>
-      </button>
-
-      <BylineSeparator />
-      {locked ? (
-        <span className="inline-flex min-w-0 cursor-default items-center gap-1 text-subtle">
-          <CalendarSync aria-hidden="true" className="shrink-0" size={13} />
-          <span className="max-w-[140px] truncate">{calendarName}</span>
-        </span>
-      ) : (
-        <FolderChip folders={folders} onChange={onFolderChange} value={page.folderId} />
-      )}
-
-      <BylineSeparator />
-      <div className="inline-flex shrink-0 items-center gap-2">
-        {locked ? (
-          lockedSchedule && (
-            <span aria-label={`Scheduled: ${lockedSchedule}`} className="cursor-default">
-              {lockedSchedule}
-            </span>
-          )
-        ) : (
-          <DateSchedulePopover page={page} />
-        )}
-        {/* Reminders only apply to timed events — all-day schedules have no
-            start time to fire "minutes before" against, so the scheduler
-            ignores them (see notifications/scheduler). Hide the bell to match.
-            Reminders stay user-editable on every synced event, one-off or
-            recurring, since synced occurrences now fire per-occurrence. */}
-        {!!page.scheduledStart && isTimedIso(page.scheduledStart) && (
-          <ReminderDropdown pageId={page.id} />
-        )}
-        {locked ? (
-          lockedRecurrenceLabel && (
-            <span className="cursor-default truncate text-subtle">{lockedRecurrenceLabel}</span>
-          )
-        ) : (
-          <RecurrencePopover
-            anchorDate={page.scheduledStart ?? null}
-            onChange={onRecurrenceChange}
-            rrule={recurrenceRule?.rrule ?? null}
-            variant="icon"
-          />
-        )}
-        {onOpenInCalendar && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                aria-label="View in calendar"
-                className="inline-flex items-center rounded transition-colors hover:text-muted-foreground focus:outline-none"
-                onClick={onOpenInCalendar}
-              >
-                <CalendarDays size={13} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <span className="inline-flex items-center gap-1.5">
-                View in calendar <KeyboardShortcut shortcut="mod+shift+c" />
-              </span>
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-
-      <BylineSeparator />
-      <PriorityDropdown onSelect={onPriorityChange} priority={page.priority} variant="byline" />
-
-      <BylineSeparator />
-      <TagsPopover allTags={allTags} onToggle={onTagToggle} selected={page.tags} />
-
-      {saveError != null && (
-        <>
-          <BylineSeparator />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                aria-label="Save failed — click to retry"
-                className="inline-flex items-center gap-1 rounded text-amber-500/70 transition-colors hover:text-amber-500 focus:outline-none"
-                onClick={onErrorClick}
-              >
-                <AlertTriangle size={12} strokeWidth={2} />
-                <span>Not saved</span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-[260px]" side="bottom">
-              {saveError}
-            </TooltipContent>
-          </Tooltip>
-        </>
-      )}
-    </div>
-  );
-}
 
 interface MetadataHeaderProps {
   page: Page;

@@ -51,7 +51,7 @@ const PRIORITY_CONFIG: Record<PagePriority, PriorityConfig> = {
 
 const ALL_PRIORITIES: PagePriority[] = [0, 1, 2, 3, 4];
 
-interface PriorityDropdownProps {
+export interface PriorityDropdownProps {
   priority: PagePriority;
   onSelect: (priority: PagePriority) => void;
   /** "byline" = text+icon in metadata header row; "badge" = compact icon-only badge for lists */

@@ -22,7 +22,7 @@ const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
   { id: 30, label: "30 min before" },
 ];
 
-interface ReminderDropdownProps {
+export interface ReminderDropdownProps {
   pageId: string;
   /** Icon size in pixels. Default 14 (3.5 tailwind). */
   iconSize?: number;
