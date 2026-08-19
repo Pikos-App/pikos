@@ -86,6 +86,69 @@ pub async fn due_explicit_reminders(
     .await
 }
 
+/// The `page_reminders.minutes_before` value that means "the day before, at
+/// [`DAY_BEFORE_HOUR`]:00 local" rather than a lead time in minutes.
+///
+/// An all-day page has no start time, so no number of minutes-before can anchor
+/// its reminder — every timed arm above skips it (`scheduled_start LIKE '%T%'`)
+/// for exactly that reason. This sentinel sits beside 007's `-1` ("never remind")
+/// in the same column so an all-day reminder is still one `page_reminders` row,
+/// with the same shape the UI, the adapters and the mock twin already carry;
+/// [`due_day_before_reminders`] is the arm that resolves it against the date.
+/// Every lead-time arm filters `minutes_before >= 0`, so it can never be read as
+/// a two-minute lead.
+pub const DAY_BEFORE_MINUTES: i64 = -2;
+
+/// Local hour a [`DAY_BEFORE_MINUTES`] reminder fires on the preceding day.
+const DAY_BEFORE_HOUR: i64 = 9;
+
+/// All-day pages carrying an explicit [`DAY_BEFORE_MINUTES`] reminder whose
+/// 09:00-on-D-1 anchor lands in `(window_start, now_ts]`.
+///
+/// Device-local wall-clock throughout, like [`due_explicit_reminders`]: the
+/// anchor is derived from the event's *date*, so there is no instant to resolve
+/// and nothing for a source zone to shift — which is also why active-synced rows
+/// stay on this path instead of being handed to the absolute arms (those exclude
+/// all-day outright, so excluding them here would leave a synced all-day event
+/// with no arm at all). Rule-backed series are out of scope for the same reason
+/// the enumeration is: it only walks timed series (`scheduled_start LIKE '%T%'`).
+///
+/// Dedups on `<id>#-2`, the same per-lead composite the explicit arm uses, so a
+/// moved all-day row re-arms through [`clear_reminder_log_tx`] like any other.
+pub async fn due_day_before_reminders(
+    pool: &SqlitePool,
+    window_start: &str,
+    now_ts: &str,
+) -> Result<Vec<DueReminder>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT ps.id || '#' || pr.minutes_before AS schedule_id, ps.page_id, p.title,
+                ps.scheduled_start, pr.minutes_before
+         FROM page_schedules ps
+         JOIN pages p ON p.id = ps.page_id
+         JOIN page_reminders pr ON pr.page_id = ps.page_id
+         WHERE p.status != 'done'
+           AND p.deleted_at IS NULL
+           AND ps.status != 'done'
+           AND pr.minutes_before = {DAY_BEFORE_MINUTES}
+           AND ps.scheduled_start NOT LIKE '%T%'
+           AND NOT (
+             ps.rule_id IS NULL
+             AND EXISTS (SELECT 1 FROM page_recurrence_rules r WHERE r.page_id = ps.page_id)
+           )
+           AND datetime(date(ps.scheduled_start), '-1 day', '+{DAY_BEFORE_HOUR} hours')
+               BETWEEN ? AND ?
+           AND NOT EXISTS (
+             SELECT 1 FROM notification_log nl
+             WHERE nl.schedule_id = ps.id || '#' || pr.minutes_before
+               AND nl.type = 'reminder'
+           )"
+    ))
+    .bind(window_start)
+    .bind(now_ts)
+    .fetch_all(pool)
+    .await
+}
+
 /// Pages *without* `page_reminders` rows — use the global `default_minutes`
 /// lead time. All-day events and already-fired reminders are excluded as above.
 pub async fn due_default_reminders(
@@ -504,6 +567,34 @@ pub async fn log_reminder_fired(
     Ok(())
 }
 
+/// Record that a reminder came due inside quiet hours and was therefore never
+/// delivered.
+///
+/// `type='suppressed'`, not `'reminder'`: every dedup predicate reads
+/// `type = 'reminder'`, so this row is invisible to them and suppression stays
+/// what it always was — the notification is dropped, and the day's summary
+/// counts it as overdue exactly as before. What changes is only that the history
+/// panel can now say the reminder existed and was silenced, instead of the user
+/// finding no trace of it anywhere.
+pub async fn log_reminder_suppressed(
+    pool: &SqlitePool,
+    page_id: &str,
+    schedule_id: &str,
+    fired_at: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
+         VALUES (?, ?, ?, 'suppressed', ?)",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(page_id)
+    .bind(schedule_id)
+    .bind(fired_at)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Drop a schedule row's already-fired dedup anchors so its reminders re-arm at
 /// the row's new time.
 ///
@@ -526,17 +617,19 @@ pub(crate) async fn clear_reminder_log_tx(
     Ok(())
 }
 
-/// Insert the daily-summary marker row (one per local day).
-pub async fn log_daily_summary(pool: &SqlitePool, fired_at: &str) -> Result<(), sqlx::Error> {
+/// Insert the daily-summary marker row (one per local day). Returns the row id,
+/// for the same reason [`log_reminder_fired`] does.
+pub async fn log_daily_summary(pool: &SqlitePool, fired_at: &str) -> Result<String, sqlx::Error> {
+    let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
          VALUES (?, NULL, NULL, 'overdue', ?)",
     )
-    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&id)
     .bind(fired_at)
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(id)
 }
 
 pub async fn prune_notification_log(pool: &SqlitePool, cutoff: &str) -> Result<(), sqlx::Error> {

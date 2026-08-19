@@ -36,6 +36,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "011",
         include_str!("../migrations/011_mirror_search_text.sql"),
     ),
+    (
+        "012",
+        include_str!("../migrations/012_notification_reach.sql"),
+    ),
 ];
 
 /// `include_str!` needs a literal path, so the list above is written by hand while
@@ -389,6 +393,83 @@ async fn the_search_migration_backfills_mirrors_synced_before_it() {
                 .unwrap();
         assert_eq!(hits, 1, "the rebuilt index missed \"{term}\"");
     }
+}
+
+/// 012 recreates both notification tables to widen their CHECK constraints, and
+/// a recreate is the migration shape that loses data when a column list drifts.
+/// The reminder row and the fired-notification row here are what a user upgrading
+/// mid-week actually has: dropping either would re-fire every reminder already
+/// delivered and forget every per-page lead.
+#[tokio::test]
+async fn the_reach_migration_keeps_reminders_and_the_fired_log() {
+    let pool = single_conn_memory_pool().await;
+    for (name, sql) in &MIGRATIONS[..11] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
+    }
+
+    sqlx::query(
+        "INSERT INTO pages
+         (id, title, content, content_text, status, priority, tags, sort_order, created_at, updated_at)
+         VALUES ('p1', 'Standup', '{}', '', 'not_started', 0, '[]', 0, '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES ('r1', 'p1', 15, '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at, action)
+         VALUES ('n1', 'p1', 's1#15', 'reminder', '2026-01-02 08:45:00', 'opened')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::raw_sql(MIGRATIONS[11].1)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let lead: i64 = sqlx::query_scalar("SELECT minutes_before FROM page_reminders WHERE id = 'r1'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(lead, 15, "the per-page lead did not survive the recreate");
+    let logged: (String, String) =
+        sqlx::query_as("SELECT schedule_id, action FROM notification_log WHERE id = 'n1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        logged,
+        ("s1#15".to_string(), "opened".to_string()),
+        "the dedup anchor did not survive the recreate"
+    );
+
+    // Both widenings are usable immediately after the migration, not just
+    // declared — a CHECK typo would only surface on the first real write.
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES ('r2', 'p1', -2, '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .expect("the day-before sentinel must be storable");
+    sqlx::query(
+        "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
+         VALUES ('n2', 'p1', 's2#10', 'suppressed', '2026-01-02 22:10:00')",
+    )
+    .execute(&pool)
+    .await
+    .expect("a quiet-hours suppression must be storable");
 }
 
 #[tokio::test]
