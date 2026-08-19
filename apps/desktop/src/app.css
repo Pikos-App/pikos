@@ -75,6 +75,9 @@ button,
 
 @custom-variant dark (&:is(.dark *));
 
+/* GENERATED: design tokens — emitted from packages/ui/src/tokens.ts by scripts/gen-ui-tokens.mjs.
+   Edit the tokens, then re-run the generator; scripts/check-ui-tokens.sh fails the build on drift. */
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    PRIMITIVE COLOR SCALES
    Static values — available as Tailwind utilities (e.g. bg-primary-500).
@@ -429,6 +432,8 @@ button,
   --color-titlebar: var(--titlebar);
   --color-titlebar-border: var(--titlebar-border);
 }
+
+/* GENERATED: end design tokens */
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    BASE STYLES

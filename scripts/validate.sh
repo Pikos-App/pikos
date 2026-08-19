@@ -44,6 +44,12 @@ if [ -n "$(git -C "$ROOT" status --porcelain packages/core/src/generated)" ]; th
   exit 1
 fi
 
+# app.css is the same arrangement one tier up: its token blocks are rendered from
+# packages/ui/src/tokens.ts, and a stale block is a wrong color in the shipped
+# build that no typecheck can see. Cheap enough to sit next to the bindings gate.
+step "token freshness" "committed app.css matches packages/ui tokens"
+"$ROOT/scripts/check-ui-tokens.sh"
+
 # ── rust job ──────────────────────────────────────────────────────────────────
 step "wasm freshness" "committed recurrence pkg matches its crate"
 "$ROOT/scripts/build-recurrence-wasm.sh" >/dev/null
