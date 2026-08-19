@@ -1,7 +1,18 @@
-// PagesContext — owns all data state and CRUD: pages, folders, tags,
-// recurrenceRules, plus debounced writes and per-page mutation queue.
+// PagesContext — the single data surface for pages, folders, tags and
+// recurrence rules. This file declares that surface (PagesContextValue, the
+// contract every consumer reads) and composes it; the work is split across
+// modules beside it, one per job:
+//
+//   usePagesStore       the collections, their latest-state refs, the loader
+//   usePageWriteQueue   debounce, per-page write serialisation, rollback
+//                       snapshots, pageErrors, and the one optimistic() shape
+//   usePageWrites       page CRUD + bulk status
+//   useFolderWrites     folder CRUD + ordering
+//   useScheduleWrites   the one-off schedule block (and the anchor move)
+//   useRecurringWrites  rules, completion, uncomplete, skips, virtual moves
+//
 // Workspace lifecycle (init, reload, resetAndSeed) lives in WorkspaceContext;
-// PagesProvider registers a data-loader so Workspace can dispatch reloads.
+// the store registers a data-loader so Workspace can dispatch reloads.
 // Import batch flow lives in ImportContext.
 
 import type {
@@ -17,13 +28,6 @@ import type {
   StorageError,
   Tag,
 } from "@pikos/core";
-import {
-  anchorMoveUpdate,
-  applyAnchorMove,
-  getLocalTimezone,
-  resolveAnchorMove,
-  toPageSummary,
-} from "@pikos/core";
 import type {
   FolderUpdate,
   NewRecurrenceRule,
@@ -35,7 +39,9 @@ import { createContext, type ReactNode, useContext } from "react";
 import { useFolderWrites } from "./useFolderWrites";
 import { usePagesStore } from "./usePagesStore";
 import { usePageWriteQueue } from "./usePageWriteQueue";
+import { usePageWrites } from "./usePageWrites";
 import { type GapRunOptions, useRecurringWrites } from "./useRecurringWrites";
+import { useScheduleWrites } from "./useScheduleWrites";
 import { useWorkspaceInternal } from "./WorkspaceContext";
 
 export type { GapRunOptions };
@@ -227,214 +233,27 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     updateFolder,
   } = useFolderWrites({ adapter, foldersRef, optimistic, setFolders, setPages });
 
-  // ─── Pages ────────────────────────────────────────────────────────────────
+  // Page CRUD: create, delete (hard + soft), restore, reorder, bulk status.
+  const {
+    clearPendingDescription,
+    createPage,
+    deletePage,
+    reorderPages,
+    restorePage,
+    setPagesStatus,
+    softDeletePage,
+  } = usePageWrites({ adapter, cancelPendingWrite, emit, optimistic, pagesRef, setPages });
 
-  async function createPage({ folderId, title }: { title?: string; folderId?: string | null }) {
-    const page = await adapter.createPage({
-      content: "",
-      contentText: "",
-      folderId: folderId ?? null,
-      priority: 0,
-      status: "not_started",
-      tags: [],
-      title: title ?? "",
-    });
-    setPages((prev) => [...prev, toPageSummary(page)]);
-    emit("page:created", page);
-    return page;
-  }
-
-  async function deletePage(id: string) {
-    cancelPendingWrite(id);
-    await adapter.deletePage(id);
-    setPages((prev) => prev.filter((p) => p.id !== id));
-    emit("page:deleted", id);
-  }
-
-  async function clearPendingDescription(id: string) {
-    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, pendingDescription: null } : p)));
-    await adapter.clearPendingDescription(id);
-  }
-
-  async function softDeletePage(id: string) {
-    // `apply` runs synchronously, BEFORE the await. If the removal waited on the
-    // adapter, a fast Undo (restorePage) could interleave with the pending await
-    // and re-add the page while it's still present — duplicating it in the
-    // derived active/completed lists (and confusing the virtualizer).
-    const snapshot = pagesRef.current.find((p) => p.id === id);
-    await optimistic({
-      apply: () => {
-        cancelPendingWrite(id);
-        setPages((prev) => prev.filter((p) => p.id !== id));
-      },
-      label: `softDeletePage(${id})`,
-      rollback: () => {
-        if (snapshot) {
-          setPages((prev) => (prev.some((p) => p.id === id) ? prev : [...prev, snapshot]));
-        }
-      },
-      write: async () => {
-        await adapter.softDeletePage(id);
-        emit("page:deleted", id);
-      },
-    });
-  }
-
-  async function restorePage(id: string) {
-    await adapter.restorePage(id);
-    const page = await adapter.getPage(id);
-    if (page) {
-      const summary = toPageSummary(page);
-      // Dedupe: never blind-append. If a copy is somehow still present
-      // (delete/undo race), replace it rather than create a duplicate.
-      setPages((prev) => [...prev.filter((p) => p.id !== id), summary]);
-    }
-  }
-
-  async function reorderPages(folderId: string | null, orderedIds: string[]) {
-    const snapshot = [...pagesRef.current];
-    await optimistic({
-      apply: () => {
-        const indexMap = new Map(orderedIds.map((id, i) => [id, i]));
-        setPages((prev) =>
-          prev.map((p) => {
-            const newOrder = indexMap.get(p.id);
-            return newOrder !== undefined ? { ...p, sortOrder: newOrder } : p;
-          })
-        );
-      },
-      label: "reorderPages",
-      rollback: () => setPages(snapshot),
-      write: () => adapter.reorderPages(folderId, orderedIds),
-    });
-  }
-
-  async function scheduleOnce(pageId: string, start: string, end?: string): Promise<void> {
-    const snapshot = pagesRef.current.find((p) => p.id === pageId);
-    // Recurring head: capture the rule snapshot so we can shift the rule's
-    // anchor in lockstep with the head's denorm. Without this, dragging the
-    // head from Mon to Wed leaves rule.scheduledStart pointed at Mon — the
-    // calendar then keeps emitting Mon-based virtuals (and any past dates
-    // before the new head linger), making the series feel detached from the
-    // user's most recent action.
-    const ruleSnapshot = recurrenceRulesRef.current.find((r) => r.pageId === pageId);
-    // Where the drop actually lands once the rule has had its say: a weekly
-    // BYDAY realigned to the moved weekday, and an off-pattern date snapped onto
-    // a day the rule yields. Both must settle BEFORE the optimistic update, else
-    // the next recompute silently reverts the dragged position.
-    const move = resolveAnchorMove(ruleSnapshot, start, end);
-    const { end: snappedEnd, start: snappedStart } = move;
-
-    await optimistic({
-      apply: () => {
-        setPages((prev) =>
-          prev.map((p) =>
-            p.id === pageId
-              ? { ...p, scheduledEnd: snappedEnd ?? null, scheduledStart: snappedStart }
-              : p
-          )
-        );
-        if (ruleSnapshot) {
-          setRecurrenceRules((prev) =>
-            prev.map((r) => (r.id === ruleSnapshot.id ? applyAnchorMove(r, move) : r))
-          );
-        }
-      },
-      errorIds: [pageId],
-      label: `scheduleOnce(${pageId})`,
-      queueOn: pageId,
-      rethrow: true,
-      rollback: () => {
-        if (snapshot) {
-          setPages((prev) => prev.map((p) => (p.id === pageId ? snapshot : p)));
-        }
-        if (ruleSnapshot) {
-          setRecurrenceRules((prev) =>
-            prev.map((r) => (r.id === ruleSnapshot.id ? ruleSnapshot : r))
-          );
-        }
-      },
-      write: async () => {
-        const schedules = await adapter.listPageSchedules(pageId);
-        const existing = schedules.find((s) => !s.ruleId);
-        if (existing) {
-          await adapter.updatePageSchedule(existing.id, {
-            scheduledEnd: snappedEnd ?? null,
-            scheduledStart: snappedStart,
-          });
-        } else {
-          await adapter.createPageSchedule({
-            pageId,
-            scheduledStart: snappedStart,
-            ...(snappedEnd !== undefined && { scheduledEnd: snappedEnd }),
-            timezone: getLocalTimezone(),
-          });
-        }
-        if (ruleSnapshot) {
-          await adapter.updateRecurrenceRule(ruleSnapshot.id, anchorMoveUpdate(ruleSnapshot, move));
-          // The rule update recomputes pages.scheduled_start backend-side (the
-          // derivation owns the recurring head). Adopt that result so a drop onto
-          // a set-excluded date — which the local snap can't detect — converges to
-          // the head the backend actually derived.
-          await recurring.patchRecomputedHead(pageId);
-        }
-      },
-    });
-  }
-
-  async function clearSchedule(pageId: string): Promise<void> {
-    const snapshot = pagesRef.current.find((p) => p.id === pageId);
-    await optimistic({
-      apply: () =>
-        setPages((prev) =>
-          prev.map((p) =>
-            p.id === pageId ? { ...p, scheduledEnd: null, scheduledStart: null } : p
-          )
-        ),
-      errorIds: [pageId],
-      label: `clearSchedule(${pageId})`,
-      queueOn: pageId,
-      rethrow: true,
-      rollback: () => {
-        if (snapshot) {
-          setPages((prev) => prev.map((p) => (p.id === pageId ? snapshot : p)));
-        }
-      },
-      write: async () => {
-        const schedules = await adapter.listPageSchedules(pageId);
-        const oneOffs = schedules.filter((s) => !s.ruleId);
-        await Promise.all(oneOffs.map((s) => adapter.deletePageSchedule(s.id)));
-      },
-    });
-  }
-
-  async function setPagesStatus(
-    ids: string[],
-    status: PageStatus,
-    completedAt: string | null
-  ): Promise<void> {
-    if (ids.length === 0) return;
-    const idSet = new Set(ids);
-    const snapshot = pagesRef.current.filter((p) => idSet.has(p.id));
-
-    await optimistic({
-      apply: () =>
-        setPages((prev) => prev.map((p) => (idSet.has(p.id) ? { ...p, completedAt, status } : p))),
-      errorIds: ids,
-      label: `setPagesStatus for ${ids.length} pages`,
-      rollback: () => {
-        const byId = new Map(snapshot.map((p) => [p.id, p]));
-        setPages((prev) => prev.map((p) => byId.get(p.id) ?? p));
-      },
-      write: async () => {
-        const updated = await adapter.setPagesStatus(ids, status, completedAt);
-        // Reconcile from the DB truth (e.g. updatedAt) for the rows that actually
-        // changed; soft-deleted ids are absent from `updated` and left as-is.
-        const byId = new Map(updated.map((p) => [p.id, p]));
-        setPages((prev) => prev.map((p) => byId.get(p.id) ?? p));
-      },
-    });
-  }
+  // The one-off schedule block — which is also how a recurring series' anchor moves.
+  const { clearSchedule, scheduleOnce } = useScheduleWrites({
+    adapter,
+    optimistic,
+    pagesRef,
+    patchRecomputedHead: recurring.patchRecomputedHead,
+    recurrenceRulesRef,
+    setPages,
+    setRecurrenceRules,
+  });
 
   // ─── Adapter pass-throughs ─────────────────────────────────────────────────
 
