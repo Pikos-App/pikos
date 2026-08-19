@@ -45,6 +45,17 @@ pub enum CliCommand {
         due: Option<String>,
         #[arg(long)]
         tag: Vec<String>,
+        #[arg(
+            long,
+            help = "Only pages in this folder, by name or id — \"inbox\" for unfiled"
+        )]
+        folder: Option<String>,
+        #[arg(long, help = "Only pages at this priority: 0 none — 4 low")]
+        priority: Option<i64>,
+        #[arg(long, help = "Only pages whose title or body contains this text")]
+        query: Option<String>,
+        #[arg(long = "has-schedule", help = "Only pages that are scheduled at all")]
+        has_schedule: bool,
         #[arg(long)]
         modified: bool,
         #[arg(long)]

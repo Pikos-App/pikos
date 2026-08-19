@@ -979,3 +979,81 @@ async fn done_refuses_a_synced_series_but_not_a_synced_one_off() {
     );
     assert_eq!(json(&allowed)["status"], "done");
 }
+
+// ─── list: the rest of the PageFilter ────────────────────────────────────────
+
+#[tokio::test]
+async fn list_filters_by_folder_name_id_and_inbox() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let projects = {
+        seed(dbs, vec![]).await;
+        make_folder(dbs, "Projects").await
+    };
+    let mut filed = base_page("Filed");
+    filed.folder_id = Some(projects.clone());
+    seed(dbs, vec![filed, base_page("Unfiled")]).await;
+
+    // A prefix of the name resolves the same way `add ~proj` does.
+    let by_name = json(&cli(dbs, &["list", "--folder", "proj", "--json"]));
+    assert_eq!(by_name.as_array().unwrap().len(), 1);
+    assert_eq!(by_name[0]["title"], "Filed");
+
+    let by_id = json(&cli(dbs, &["list", "--folder", &projects, "--json"]));
+    assert_eq!(by_id[0]["title"], "Filed");
+
+    // "inbox" names the unfiled view when no folder answers to it.
+    let inbox = json(&cli(dbs, &["list", "--folder", "inbox", "--json"]));
+    assert_eq!(inbox.as_array().unwrap().len(), 1);
+    assert_eq!(inbox[0]["title"], "Unfiled");
+}
+
+#[tokio::test]
+async fn list_folder_that_matches_nothing_exits_3() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Task")]).await;
+    let out = cli(dbs, &["list", "--folder", "nowhere", "--json"]);
+    assert_eq!(code(&out), 3);
+}
+
+#[tokio::test]
+async fn list_filters_by_priority_query_and_schedule() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let mut urgent = base_page("Urgent thing");
+    urgent.priority = 1;
+    let mut noted = base_page("Notes");
+    noted.content_text = Some("mentions an avocado".into());
+    let ids = seed(dbs, vec![urgent, noted, base_page("Plain")]).await;
+
+    let by_priority = json(&cli(dbs, &["list", "--priority", "1", "--json"]));
+    assert_eq!(by_priority.as_array().unwrap().len(), 1);
+    assert_eq!(by_priority[0]["title"], "Urgent thing");
+
+    // --query reaches the body, not just the title.
+    let by_query = json(&cli(dbs, &["list", "--query", "avocado", "--json"]));
+    assert_eq!(by_query.as_array().unwrap().len(), 1);
+    assert_eq!(by_query[0]["title"], "Notes");
+
+    assert!(json(&cli(dbs, &["list", "--has-schedule", "--json"]))
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(
+        cli(dbs, &["update", &ids[2], "--due", "2026-09-01", "--json"])
+            .status
+            .success()
+    );
+    let scheduled = json(&cli(dbs, &["list", "--has-schedule", "--json"]));
+    assert_eq!(scheduled.as_array().unwrap().len(), 1);
+    assert_eq!(scheduled[0]["title"], "Plain");
+}
+
+#[tokio::test]
+async fn list_rejects_a_priority_outside_the_scale_exit_2() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    assert_eq!(code(&cli(dbs, &["list", "--priority", "9", "--json"])), 2);
+}
