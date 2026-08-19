@@ -50,6 +50,15 @@ surface. Global flags: `--json`, `--db <path>`, `--yes`, `--migrate`.
 folder is named for it), `--query <text>` over titles and bodies,
 `--has-schedule`, plus `--modified` and `--limit`.
 
+`add` reads the same grammar Quick Add does, reminders and bodies included:
+`remind 30m before` / `remind me 2 hours before` / `!r30`, `!r1h`, `!r1d` set the
+lead, and `remind day before` asks for the morning-before anchor. A lead only
+sticks when the text also names a schedule — nothing else could anchor it — and
+an all-day page takes the day-before anchor whatever lead was typed, since it has
+no start time to count minutes back from. Everything after the first `//` that
+has whitespace on both sides becomes the page body, verbatim — no tag, date or
+cadence is read out of it, and a URL's slashes never split anything.
+
 `add --dry-run` runs the parser and prints what it made of the text — the exact
 shape `add` would then persist — without writing. It is the agent-preview mode:
 show the parse, then re-issue the same text to commit it.
@@ -126,7 +135,7 @@ Tools: `search_pages`, `read_page`, `list_pages` (the full filter set above),
 Two things the protocol deliberately does not offer. **Hard delete**:
 `delete_page` only trashes, and `restore_page` undoes it, so nothing an agent
 does is unrecoverable. **Migration**: `pikos mcp --migrate` is refused outright,
-and a workspace behind this build fails the *tool call* with a
+and a workspace behind this build fails the _tool call_ with a
 `MigrationRequired` error rather than the handshake — the client stays connected
 and reads why. Upgrading the schema is one-way and locks the installed app out
 until it is updated too, so it stays a decision a person makes at a prompt.
