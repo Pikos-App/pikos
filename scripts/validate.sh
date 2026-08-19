@@ -32,6 +32,18 @@ pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
 step "source audit" "secrets, XSS, SQL, Tauri capabilities"
 pnpm audit:source
 
+# ── bindings job ──────────────────────────────────────────────────────────────
+# packages/core/src/generated is committed, so it drifts the moment a pikos-db
+# wire struct changes without a regeneration — with every gate above still green,
+# because both sides typecheck fine in isolation. First of the two cargo steps:
+# it builds pikos-db natively, which warms the cache the rust steps below reuse.
+step "bindings freshness" "committed core/generated matches pikos-db"
+"$ROOT/scripts/gen-ts-bindings.sh" >/dev/null
+if [ -n "$(git -C "$ROOT" status --porcelain packages/core/src/generated)" ]; then
+  echo "packages/core/src/generated was stale — the regeneration is in your working tree. Commit it."
+  exit 1
+fi
+
 # ── rust job ──────────────────────────────────────────────────────────────────
 step "wasm freshness" "committed recurrence pkg matches its crate"
 "$ROOT/scripts/build-recurrence-wasm.sh" >/dev/null
