@@ -6,7 +6,7 @@
 // one, the page trash for a real page.
 
 import type { PageSummary, VirtualOccurrence } from "@pikos/core";
-import { MockStorageAdapter } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

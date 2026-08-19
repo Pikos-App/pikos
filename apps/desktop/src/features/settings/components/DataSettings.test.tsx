@@ -2,7 +2,7 @@
 // MockStorageAdapter the provider tree builds. Spying on the prototype reads
 // the arguments each Export button sends without stubbing the whole context.
 
-import { MockStorageAdapter } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

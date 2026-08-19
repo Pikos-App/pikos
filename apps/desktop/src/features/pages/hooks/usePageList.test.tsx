@@ -1,5 +1,5 @@
 import type { Page } from "@pikos/core";
-import { MockStorageAdapter } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, waitFor } from "@testing-library/react";
 import { format } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

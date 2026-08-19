@@ -9,7 +9,7 @@
 // the user pointed at.
 
 import type { PageSchedule, PageSummary } from "@pikos/core";
-import { MockStorageAdapter } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

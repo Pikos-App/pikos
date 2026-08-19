@@ -3,7 +3,7 @@
 // asserted against the adapter, because that is where they land — the dialog
 // closes immediately and has no state left to inspect.
 
-import { MockStorageAdapter } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

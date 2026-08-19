@@ -9,8 +9,9 @@
 // page_schedules row, and a series' head is *derived* from the rule where the writer
 // stamps it. The table names the outcome, so each side answers in its own basis.
 
-import { formatDateOnly, getLocalTimezone, MockStorageAdapter } from "@pikos/core";
+import { formatDateOnly, getLocalTimezone } from "@pikos/core";
 import type { Page } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { addDays, endOfMonth, format } from "date-fns";
 import { describe, expect, it } from "vitest";
 

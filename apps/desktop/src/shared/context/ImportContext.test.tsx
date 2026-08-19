@@ -5,7 +5,7 @@
 // hook exposes workspace + pages + import APIs so a test can seed folders and
 // read back state without a second render.
 
-import { MockStorageAdapter } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
