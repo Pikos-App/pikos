@@ -622,6 +622,58 @@ pub async fn log_reminder_suppressed(
     Ok(())
 }
 
+/// One row of the notification history panel: what fired, when, for which page.
+///
+/// `page_title` is joined in rather than stored, so a renamed page reads under
+/// its current name and a deleted one reads as `None` (the log row outlives the
+/// page — `notification_log.page_id` carries no foreign key, by design: the log
+/// is a dedup ledger first).
+#[derive(Debug, sqlx::FromRow, serde::Serialize, PartialEq, Eq, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
+pub struct NotificationHistoryEntry {
+    pub id: String,
+    pub page_id: Option<String>,
+    pub page_title: Option<String>,
+    pub schedule_id: Option<String>,
+    /// `reminder` (delivered), `suppressed` (quiet hours ate it) or `overdue`
+    /// (the daily summary marker). Named `kind` because `type` is a Rust keyword;
+    /// the column is `type`.
+    pub kind: String,
+    pub fired_at: String,
+    /// `opened` once the user clicks the notification through; `None` otherwise.
+    pub action: Option<String>,
+}
+
+/// The notification log, newest first, capped at `limit`.
+///
+/// Reads the whole 30-day retention window the prune leaves behind — no separate
+/// retention for the panel, so what the user sees is exactly what the dedup
+/// ledger still holds. A soft-deleted page still names itself here: the row
+/// records something that was really delivered, and blanking it would read as a
+/// bug rather than as history.
+///
+/// `AppResult`, not the bare `sqlx::Error` the rest of this module returns: this
+/// is the one read here that a *command* calls rather than the scheduler's run
+/// loop, so it errors the way every other command does. The run loop's
+/// content-free logging discipline (see the module doc) is unaffected.
+pub async fn list_notification_history(
+    pool: &SqlitePool,
+    limit: i64,
+) -> crate::error::AppResult<Vec<NotificationHistoryEntry>> {
+    Ok(sqlx::query_as(
+        "SELECT nl.id, nl.page_id, p.title AS page_title, nl.schedule_id,
+                nl.type AS kind, nl.fired_at, nl.action
+         FROM notification_log nl
+         LEFT JOIN pages p ON p.id = nl.page_id
+         ORDER BY datetime(nl.fired_at) DESC, nl.rowid DESC
+         LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?)
+}
+
 /// Drop a schedule row's already-fired dedup anchors so its reminders re-arm at
 /// the row's new time.
 ///

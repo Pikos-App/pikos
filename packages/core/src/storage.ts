@@ -6,6 +6,7 @@ import type {
   CompleteRecurringInput,
   CompleteRecurringResult,
   Folder,
+  NotificationHistoryEntry,
   Page,
   PageFilter,
   PageRecurrenceRule,
@@ -221,6 +222,10 @@ export interface StorageAdapter {
   deletePageReminder(id: string): Promise<void>;
   /** Delete all reminders for a page (reset to global default). */
   deletePageReminders(pageId: string): Promise<void>;
+  /** The notification log, newest first, capped at `limit` — what the scheduler
+   * fired, and what quiet hours silenced. Read-only: the log's only writer is
+   * the Rust scheduler, so there is no create/update counterpart here. */
+  listNotificationHistory(limit: number): Promise<NotificationHistoryEntry[]>;
 
   // Calendar sync
   /** Validate a CalDAV connection (autodiscovery), then persist the account +

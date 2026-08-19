@@ -1816,6 +1816,60 @@ async fn a_suppressed_reminder_is_logged_without_pinning_the_dedup() {
     );
 }
 
+// ─── History ─────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn history_lists_every_kind_newest_first_with_the_page_title() {
+    let pool = test_pool().await;
+    insert_page(&pool, "p1", "not_started", "2026-05-01T00:00:00").await;
+    sqlx::query("UPDATE pages SET title = 'Standup' WHERE id = 'p1'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    log_reminder_fired(&pool, "p1", "s1#10", "2026-05-25 08:50:00")
+        .await
+        .unwrap();
+    log_reminder_suppressed(&pool, "p1", "s2#10", "2026-05-25 09:10:00")
+        .await
+        .unwrap();
+    log_daily_summary(&pool, "2026-05-25 07:00:00")
+        .await
+        .unwrap();
+
+    let history = list_notification_history(&pool, 50).await.unwrap();
+    assert_eq!(
+        history.iter().map(|h| h.kind.as_str()).collect::<Vec<_>>(),
+        ["suppressed", "reminder", "overdue"],
+        "newest first, across every type"
+    );
+    assert_eq!(history[0].page_title.as_deref(), Some("Standup"));
+    assert_eq!(history[0].schedule_id.as_deref(), Some("s2#10"));
+    // The summary marker carries no page at all.
+    assert_eq!(history[2].page_id, None);
+    assert_eq!(history[2].page_title, None);
+}
+
+#[tokio::test]
+async fn history_honours_its_limit_and_survives_a_missing_page() {
+    let pool = test_pool().await;
+    // No pages table row for 'gone' — the log outlives the page it names.
+    log_reminder_fired(&pool, "gone", "s1#10", "2026-05-25 08:50:00")
+        .await
+        .unwrap();
+    log_reminder_fired(&pool, "gone", "s2#10", "2026-05-25 08:51:00")
+        .await
+        .unwrap();
+
+    let history = list_notification_history(&pool, 1).await.unwrap();
+    assert_eq!(history.len(), 1, "the limit is applied");
+    assert_eq!(history[0].schedule_id.as_deref(), Some("s2#10"));
+    assert_eq!(
+        history[0].page_title, None,
+        "the outer join yields no title"
+    );
+}
+
 // ─── Click-through ───────────────────────────────────────────────────────────
 
 async fn action_of(pool: &sqlx::SqlitePool, id: &str) -> Option<String> {

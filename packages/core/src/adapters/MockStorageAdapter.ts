@@ -22,6 +22,7 @@ import type {
   CompleteRecurringInput,
   CompleteRecurringResult,
   Folder,
+  NotificationHistoryEntry,
   Page,
   PageFilter,
   PageRecurrenceRule,
@@ -167,6 +168,10 @@ export class MockStorageAdapter implements StorageAdapter {
   private schedules = new Map<string, PageSchedule>();
   private rules = new Map<string, PageRecurrenceRule>();
   private reminders = new Map<string, PageReminder>();
+  // The notification log. Its only real writer is the Rust scheduler, which has
+  // no twin here (nothing in test mode ticks a clock or talks to the OS), so
+  // this stays empty unless a test seeds it via `seedNotificationHistory`.
+  private notificationHistory: NotificationHistoryEntry[] = [];
   private softDeleted = new Set<string>();
   private softDeletedFolders = new Set<string>();
   private syncAccounts = new Map<string, SyncAccount>();
@@ -186,6 +191,7 @@ export class MockStorageAdapter implements StorageAdapter {
     this.schedules.clear();
     this.rules.clear();
     this.reminders.clear();
+    this.notificationHistory = [];
     this.softDeleted.clear();
     this.softDeletedFolders.clear();
     this.syncAccounts.clear();
@@ -1082,6 +1088,27 @@ export class MockStorageAdapter implements StorageAdapter {
       if (r.pageId === pageId) this.reminders.delete(id);
     }
     return Promise.resolve();
+  }
+
+  listNotificationHistory(limit: number): Promise<NotificationHistoryEntry[]> {
+    // Mirrors the writer's ORDER BY firedAt DESC, LIMIT — and, like it, joins the
+    // page title live so a renamed page reads under its current name and a
+    // deleted one reads as null.
+    const rows = [...this.notificationHistory]
+      .sort((a, b) => b.firedAt.localeCompare(a.firedAt))
+      .slice(0, Math.max(0, limit))
+      .map((entry) => ({
+        ...entry,
+        pageTitle: entry.pageId != null ? (this.pages.get(entry.pageId)?.title ?? null) : null,
+      }));
+    return Promise.resolve(rows);
+  }
+
+  /** Stand in for the Rust scheduler, the log's only writer, so tests and the
+   *  test-mode app can exercise the history surface. Not part of StorageAdapter:
+   *  nothing in the product writes this table from TypeScript. */
+  seedNotificationHistory(entries: NotificationHistoryEntry[]): void {
+    this.notificationHistory = [...entries];
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────────

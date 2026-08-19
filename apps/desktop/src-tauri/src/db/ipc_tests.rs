@@ -130,6 +130,7 @@ fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
         ("get_folder", json!({ "id": PROBE_FOLDER })),
         ("list_folders", json!({})),
         ("list_recurrence_rules", json!({})),
+        ("list_notification_history", json!({ "limit": 50 })),
         ("get_sync_status", json!({})),
         ("google_sync_available", json!({})),
     ]
