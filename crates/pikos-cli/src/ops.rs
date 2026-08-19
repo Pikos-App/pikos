@@ -22,7 +22,8 @@ use crate::bridge::{run_bridge, ParseResult};
 use crate::error::{classify, CliError};
 use crate::schedule::{parse_due, resolve_schedule_change};
 use crate::write::{
-    apply_patch, base_page, local_tz, priority_num, resolve_folder, schedule_once, text_to_tiptap,
+    apply_patch, local_tz, page_with_body, priority_num, resolve_folder, schedule_once,
+    text_to_tiptap, write_reminders,
 };
 
 pub async fn require_page(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
@@ -253,10 +254,16 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
             let folder = resolve_folder(pool, &input.folder_query)
                 .await
                 .map_err(classify)?;
-            let page = create_page_impl(pool, base_page(folder, input.title.clone()))
+            let page = create_page_impl(
+                pool,
+                page_with_body(folder, input.title.clone(), input.content.as_ref()),
+            )
+            .await
+            .map_err(classify)?;
+            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
                 .await
                 .map_err(classify)?;
-            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
+            write_reminders(pool, &page.id, &input.reminder_minutes)
                 .await
                 .map_err(classify)?;
             let (rule_start, rule_end) = pikos_recurrence::snap_schedule_to_rule(
@@ -288,10 +295,16 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
                 let folder = resolve_folder(pool, &inp.folder_query)
                     .await
                     .map_err(classify)?;
-                let page = create_page_impl(pool, base_page(folder, inp.title.clone()))
+                let page = create_page_impl(
+                    pool,
+                    page_with_body(folder, inp.title.clone(), inp.content.as_ref()),
+                )
+                .await
+                .map_err(classify)?;
+                apply_patch(pool, &page.id, priority_num(&inp.priority), &inp.tags)
                     .await
                     .map_err(classify)?;
-                apply_patch(pool, &page.id, priority_num(&inp.priority), &inp.tags)
+                write_reminders(pool, &page.id, &inp.reminder_minutes)
                     .await
                     .map_err(classify)?;
                 if let Some(start) = &inp.scheduled_start {
@@ -306,10 +319,16 @@ pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliErro
             let folder = resolve_folder(pool, &input.folder_query)
                 .await
                 .map_err(classify)?;
-            let page = create_page_impl(pool, base_page(folder, input.title.clone()))
+            let page = create_page_impl(
+                pool,
+                page_with_body(folder, input.title.clone(), input.content.as_ref()),
+            )
+            .await
+            .map_err(classify)?;
+            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
                 .await
                 .map_err(classify)?;
-            apply_patch(pool, &page.id, priority_num(&input.priority), &input.tags)
+            write_reminders(pool, &page.id, &input.reminder_minutes)
                 .await
                 .map_err(classify)?;
             if let Some(start) = &input.scheduled_start {

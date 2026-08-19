@@ -207,9 +207,9 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "create_page",
-            "Create pages from natural language, parsing dates, tags, priority, folder and repetition out of the text.",
+            "Create pages from natural language, parsing dates, tags, priority, folder, repetition and reminders out of the text.",
             json!({
-                "text": string_prop("What to create, e.g. \"Email Sam tomorrow 2pm #work !high ~projects\"."),
+                "text": string_prop("What to create, e.g. \"Email Sam tomorrow 2pm #work !high ~projects remind 30m before // what to ask him\" — everything after \" // \" becomes the page body, verbatim."),
                 "dryRun": { "type": "boolean", "description": "Return the parse for review and write nothing." },
             }),
             &["text"],
