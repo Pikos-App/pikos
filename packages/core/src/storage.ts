@@ -106,6 +106,50 @@ export interface RecurrenceRuleUpdate {
 
 // ─── StorageAdapter ───────────────────────────────────────────────────────────
 
+// ─── Workspace data lifecycle ─────────────────────────────────────────────────
+
+/** Formats the Export panel offers. A SQLite backup is `backupDatabase`, not
+ *  an export: it round-trips, the others are one-way renderings. */
+export type WorkspaceExportFormat = "csv" | "ics" | "markdown";
+
+export interface WorkspaceExportOptions {
+  /** Include events mirrored in from connected calendars. Ones the user has
+   *  completed or edited are always included regardless. */
+  includeSynced: boolean;
+}
+
+/** One bar of the "what you did" chart on the Data settings panel. */
+export interface WorkspaceWeekActivity {
+  week: string;
+  created: number;
+  edited: number;
+  completed: number;
+}
+
+/**
+ * Aggregate counts for the Data settings panel. snake_case throughout: this is
+ * the backend's serde shape, and renaming the keys here would only move the
+ * translation somewhere less visible.
+ */
+export interface WorkspaceUsageStats {
+  total_pages: number;
+  total_folders: number;
+  total_schedules: number;
+  total_focus_sessions: number;
+  total_focus_minutes: number;
+  total_completed: number;
+  total_words: number;
+  weekly_activity: WorkspaceWeekActivity[];
+  has_folders: boolean;
+  has_schedules: boolean;
+  has_recurring: boolean;
+  has_focus_sessions: boolean;
+  has_subtasks: boolean;
+  has_tags: boolean;
+  has_priorities: boolean;
+  first_page_date: string | null;
+}
+
 export interface StorageAdapter {
   // Pages
   getPage(id: string): Promise<Page | null>;
@@ -277,4 +321,29 @@ export interface StorageAdapter {
   refreshSyncAccount(accountId: string): Promise<CalendarSyncResult[]>;
   /** Account-centric status tree for the Calendar Sync panel. */
   getSyncStatus(): Promise<AccountWithCalendars[]>;
+
+  // Workspace data lifecycle
+  // These are storage operations, not shell ones: they read, copy, render or
+  // destroy the workspace's own data. The file dialog that shows the user
+  // where a backup landed is the platform's job; producing it is this one's.
+  /** Write a full database backup; resolves to where it landed. */
+  backupDatabase(): Promise<string>;
+  /** Snapshot taken before an import so the user can roll back. Best-effort at
+   *  the call site — an import must not fail because the backup did. */
+  backupBeforeImport(): Promise<void>;
+  /** Render the workspace into `format`; resolves to where it landed. */
+  exportWorkspace(format: WorkspaceExportFormat, options: WorkspaceExportOptions): Promise<string>;
+  /** Aggregate counts for the Data settings panel. */
+  getUsageStats(): Promise<WorkspaceUsageStats>;
+  /** Dev tool: empty every table so a seed scenario can start from nothing.
+   *  Leaves the database file and the workspace registry in place — unlike
+   *  `wipeAllData`, this is a truncate, not an uninstall. */
+  resetWorkspaceData(): Promise<void>;
+  /** Destroy the workspace: database, backups and assets. The caller relaunches
+   *  afterwards, so nothing here has to leave the app in a usable state. */
+  wipeAllData(): Promise<void>;
+  /** Drop the calendar-sync credentials this workspace's accounts hold in the
+   *  OS keychain. Must run before `wipeAllData` — the account ids it keys on
+   *  live in the database that call destroys. */
+  releaseSyncCredentials(): Promise<void>;
 }

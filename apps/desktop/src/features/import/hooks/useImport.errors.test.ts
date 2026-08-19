@@ -10,14 +10,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useImport } from "./useImport";
 
-vi.mock("@tauri-apps/plugin-fs", () => ({
+const platform = vi.hoisted(() => ({
   readDir: vi.fn(),
   readTextFile: vi.fn(),
+  saveAsset: vi.fn(),
 }));
-
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-}));
+vi.mock("@/shared/platform", () => ({ getPlatform: () => platform }));
 
 vi.mock("@pikos/core", async () => {
   const actual = await vi.importActual<typeof import("@pikos/core")>("@pikos/core");
@@ -27,8 +25,6 @@ vi.mock("@pikos/core", async () => {
     prepareCSVRows: vi.fn(actual.prepareCSVRows),
   };
 });
-
-import { readDir } from "@tauri-apps/plugin-fs";
 
 // useImport reads two contexts. We provide minimal stubs so the hook
 // constructs without spinning up the full provider tree.
@@ -52,6 +48,11 @@ vi.mock("@/shared/context/PagesContext", () => ({
   }),
 }));
 
+// WorkspaceContext — the hook only reads `storage` for the pre-import backup.
+vi.mock("@/shared/context/WorkspaceContext", () => ({
+  useWorkspace: () => ({ storage: { backupBeforeImport: vi.fn() } }),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -59,7 +60,7 @@ beforeEach(() => {
 describe("parseMarkdownDir error path", () => {
   it("translates readDir failures to friendly copy with the vault-read verb", async () => {
     // Real backend errors here can echo filesystem paths (incl. usernames).
-    vi.mocked(readDir).mockRejectedValueOnce(new Error("ENOENT: /tmp/secret-vault not found"));
+    platform.readDir.mockRejectedValueOnce(new Error("ENOENT: /tmp/secret-vault not found"));
 
     const { result } = renderHook(() => useImport());
 

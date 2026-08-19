@@ -35,6 +35,9 @@ import type {
   RawRuleExpansion,
   RecurrenceRuleUpdate,
   StorageAdapter,
+  WorkspaceExportFormat,
+  WorkspaceExportOptions,
+  WorkspaceUsageStats,
 } from "@pikos/core";
 import { toStorageError } from "@pikos/core";
 import { invoke as rawInvoke } from "@tauri-apps/api/core";
@@ -133,6 +136,11 @@ export const WRITE_COMMANDS = new Set([
   "set_sync_calendar_color",
   "resync_sync_account",
   "refresh_sync_account",
+  // Workspace lifecycle. All three mutate what the watcher watches — a truncate,
+  // an uninstall, and a credential purge — so the app's own echo must be ignored.
+  "reset_db",
+  "wipe_app_data",
+  "release_sync_credentials",
 ]);
 
 /** Commands that only read. Listed rather than inferred so a new command has to be
@@ -159,6 +167,14 @@ export const READ_COMMANDS = new Set([
   "get_sync_status",
   "list_sync_calendars",
   "google_sync_available",
+  // Backups and exports read the workspace and write somewhere else entirely,
+  // so they leave nothing for the watcher to react to.
+  "backup_db",
+  "backup_db_before_import",
+  "export_csv",
+  "export_ics",
+  "export_markdown",
+  "get_usage_stats",
 ]);
 
 // Rust commands serialize errors as { kind, message } (see
@@ -450,5 +466,48 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   getSyncStatus(): Promise<AccountWithCalendars[]> {
     return invoke<AccountWithCalendars[]>("get_sync_status");
+  }
+
+  // ─── Workspace data lifecycle ──────────────────────────────────────────────
+
+  backupDatabase(): Promise<string> {
+    return invoke<string>("backup_db");
+  }
+
+  async backupBeforeImport(): Promise<void> {
+    await invoke<void>("backup_db_before_import");
+  }
+
+  /** Each command spelled at its own call rather than dispatched through a
+   *  lookup table: the classification test scans this source for `invoke<…>("…")`
+   *  and a name assembled at runtime is a name it can't see. */
+  exportWorkspace(
+    format: WorkspaceExportFormat,
+    { includeSynced }: WorkspaceExportOptions
+  ): Promise<string> {
+    switch (format) {
+      case "csv":
+        return invoke<string>("export_csv", { includeSynced });
+      case "ics":
+        return invoke<string>("export_ics", { includeSynced });
+      case "markdown":
+        return invoke<string>("export_markdown", { includeSynced });
+    }
+  }
+
+  getUsageStats(): Promise<WorkspaceUsageStats> {
+    return invoke<WorkspaceUsageStats>("get_usage_stats");
+  }
+
+  async resetWorkspaceData(): Promise<void> {
+    await invoke<void>("reset_db");
+  }
+
+  async wipeAllData(): Promise<void> {
+    await invoke<void>("wipe_app_data");
+  }
+
+  async releaseSyncCredentials(): Promise<void> {
+    await invoke<void>("release_sync_credentials");
   }
 }

@@ -19,6 +19,7 @@ import {
   type WorkspaceEventPayloadMap,
 } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 const log = createLogger("WorkspaceContext");
 
@@ -148,8 +149,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         // connectDb uses create_if_missing — silently recreates if file is gone (stale path)
         await connectDb(ws.dbPath);
 
-        const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
-        await tauriInvoke("init_assets_dir");
+        await getPlatform().ensureAssetsDir();
 
         const now = new Date().toISOString();
         const updated: Workspace = { ...ws, lastOpenedAt: now };
@@ -211,8 +211,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       await connectDb(dbPath);
 
       // Ensure the workspace assets directory exists alongside the DB
-      const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
-      await tauriInvoke("init_assets_dir");
+      await getPlatform().ensureAssetsDir();
 
       // Seed tutorial data for first-time users (idempotent — skips if already seeded).
       // A seed failure must not block workspace creation: an empty workspace is
@@ -255,12 +254,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   async function resetAndSeed(scenario: SeedScenario): Promise<void> {
     if (!import.meta.env.DEV) return;
-    if (import.meta.env["VITE_TEST_MODE"] === "true") {
-      (adapter as MockStorageAdapter).clear();
-    } else {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("reset_db");
-    }
+    await adapter.resetWorkspaceData();
     await SEED_LOADERS[scenario]({ adapter, phase: "reset", setPendingNavigation });
     await dataLoaderRef.current();
   }

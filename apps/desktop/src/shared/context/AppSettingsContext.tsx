@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
+import { getPlatform } from "@/shared/platform";
 
 /** 0 = Sunday, 1 = Monday — matches date-fns weekStartsOn. */
 export type WeekStart = 0 | 1;
@@ -88,26 +89,22 @@ function useAppSettingsValue(): AppSettingsValue {
     "08:00"
   );
 
-  // Sync notification settings to the Rust scheduler whenever they change.
-  // Wrapped in catch — Tauri IPC is unavailable in test/non-Tauri environments.
+  // Sync notification settings to the host scheduler whenever they change.
+  // Wrapped in catch — the no-op platform resolves, but a real host can still
+  // reject (scheduler not started yet), and a settings toggle must not throw.
   useEffect(() => {
-    if (import.meta.env["VITE_TEST_MODE"] === "true") return;
-    void import("@tauri-apps/api/core")
-      .then(({ invoke }) =>
-        invoke("update_notification_settings", {
-          settings: {
-            defaultMinutesBefore: defaultReminderMinutes,
-            enabled: notificationsEnabled,
-            overdueAlerts,
-            quietHoursEnabled,
-            quietHoursEnd,
-            quietHoursStart,
-            summaryTime,
-          },
-        })
-      )
+    void getPlatform()
+      .applyNotificationSettings({
+        defaultMinutesBefore: defaultReminderMinutes,
+        enabled: notificationsEnabled,
+        overdueAlerts,
+        quietHoursEnabled,
+        quietHoursEnd,
+        quietHoursStart,
+        summaryTime,
+      })
       .catch(() => {
-        // Tauri runtime not available (test environment)
+        // Host scheduler unavailable — settings still persist locally.
       });
   }, [
     notificationsEnabled,

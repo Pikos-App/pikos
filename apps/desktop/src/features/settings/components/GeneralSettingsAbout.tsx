@@ -1,9 +1,9 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertCircle, CheckCircle, ExternalLink, Loader2 } from "lucide-react";
 
 import { Switch } from "@/components/ui/switch";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useUpdate } from "@/shared/context/UpdateContext";
+import { getPlatform } from "@/shared/platform";
 
 import { SettingsSection } from "./SettingsSection";
 
@@ -61,13 +61,13 @@ export function GeneralSettingsAbout() {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
           <button
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            onClick={() => void openUrl("https://pikos.app")}
+            onClick={() => void getPlatform().openExternal("https://pikos.app")}
           >
             Website <ExternalLink className="h-3 w-3" />
           </button>
           <button
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            onClick={() => void openUrl("https://pikos.app/release-notes")}
+            onClick={() => void getPlatform().openExternal("https://pikos.app/release-notes")}
           >
             Release Notes <ExternalLink className="h-3 w-3" />
           </button>
