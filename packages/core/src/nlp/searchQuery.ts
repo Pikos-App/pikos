@@ -6,8 +6,7 @@
 
 import { addDays } from "date-fns";
 
-import type { PageFilter } from "../generated/PageFilter";
-import type { Folder } from "../types";
+import type { Folder, PageFilter, PagePriority } from "../types";
 import { formatDateOnly } from "../utils/dates";
 import { fuzzyMatchFolder } from "../utils/fuzzyMatchFolder";
 
@@ -23,7 +22,7 @@ export interface ParsedSearchQuery {
   /** From `is:scheduled`. */
   scheduled: boolean;
   /** 0 (none) … 4 (low), from `priority:`. */
-  priority: number | null;
+  priority: PagePriority | null;
   /** Inclusive lower bound as "YYYY-MM-DD". */
   dueFrom: string | null;
   /** Inclusive upper bound as "YYYY-MM-DDT23:59:59" — mirrors the CLI's `parse_due`. */
@@ -39,7 +38,7 @@ export interface SearchFilterBuild {
 }
 
 /** Priority words and digits share the quick-add parser's scale: 1 = urgent … 4 = low, 0 = none. */
-const PRIORITY_VALUES: Record<string, number> = {
+const PRIORITY_VALUES: Record<string, PagePriority> = {
   "0": 0,
   "1": 1,
   "2": 2,
@@ -124,7 +123,7 @@ export function parseSearchQuery(raw: string, now?: Date): ParsedSearchQuery {
   let folder: string | null = null;
   let status: "done" | "not_started" | null = null;
   let scheduled = false;
-  let priority: number | null = null;
+  let priority: PagePriority | null = null;
   let dueFrom: string | null = null;
   let dueTo: string | null = null;
   let hasOperators = false;
