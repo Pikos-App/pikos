@@ -79,6 +79,69 @@ describe("computeScheduleTransition", () => {
       start: TIMED,
     });
   });
+
+  // ─── Cases migrated from the calendar aggregate suite ──────────────────────
+  it("all-day → timed: collapses to single day (end undefined)", () => {
+    const result = computeScheduleTransition(
+      { end: "2026-03-18", start: "2026-03-15" },
+      "2026-03-15T09:00:00"
+    );
+    expect(result).toEqual({ end: undefined, start: "2026-03-15T09:00:00" });
+  });
+
+  it("all-day → timed (single-day): end stays undefined", () => {
+    const result = computeScheduleTransition(
+      { end: undefined, start: "2026-03-15" },
+      "2026-03-15T14:30:00"
+    );
+    expect(result).toEqual({ end: undefined, start: "2026-03-15T14:30:00" });
+  });
+
+  it("timed → all-day: preserves date extent (strips time from end)", () => {
+    const result = computeScheduleTransition(
+      { end: "2026-03-16T17:00:00", start: "2026-03-15T09:00:00" },
+      "2026-03-15"
+    );
+    expect(result).toEqual({ end: "2026-03-16", start: "2026-03-15" });
+  });
+
+  it("timed → all-day where end date equals start date: end undefined (single day)", () => {
+    const result = computeScheduleTransition(
+      { end: "2026-03-15T17:00:00", start: "2026-03-15T09:00:00" },
+      "2026-03-15"
+    );
+    expect(result).toEqual({ end: undefined, start: "2026-03-15" });
+  });
+
+  it("timed → timed: preserves duration", () => {
+    const result = computeScheduleTransition(
+      { end: "2026-03-15T10:30:00", start: "2026-03-15T09:00:00" },
+      "2026-03-15T14:00:00"
+    );
+    // 90-min duration preserved.
+    expect(result).toEqual({ end: "2026-03-15T15:30:00", start: "2026-03-15T14:00:00" });
+  });
+
+  it("all-day → all-day: preserves end when still >= new start", () => {
+    const result = computeScheduleTransition(
+      { end: "2026-03-18", start: "2026-03-15" },
+      "2026-03-16"
+    );
+    expect(result).toEqual({ end: "2026-03-18", start: "2026-03-16" });
+  });
+
+  it("all-day → all-day: drops end when new start crosses past it", () => {
+    const result = computeScheduleTransition(
+      { end: "2026-03-18", start: "2026-03-15" },
+      "2026-03-20"
+    );
+    expect(result).toEqual({ end: undefined, start: "2026-03-20" });
+  });
+
+  it("no previous schedule (start null) → all-day only, no end", () => {
+    const result = computeScheduleTransition({ end: null, start: null }, "2026-03-15");
+    expect(result).toEqual({ end: undefined, start: "2026-03-15" });
+  });
 });
 
 describe("normalizeEndInput", () => {
@@ -97,6 +160,33 @@ describe("normalizeEndInput", () => {
   it("keeps a timed end after a timed start", () => {
     expect(normalizeEndInput("2026-05-23T10:00:00", "2026-05-23T11:00:00")).toBe(
       "2026-05-23T11:00:00"
+    );
+  });
+
+  // ─── Cases migrated from the calendar aggregate suite ──────────────────────
+  it("null end → undefined (end cleared)", () => {
+    expect(normalizeEndInput("2026-03-15", null)).toBeUndefined();
+  });
+
+  it("end > start (all-day) → passed through", () => {
+    expect(normalizeEndInput("2026-03-15", "2026-03-18")).toBe("2026-03-18");
+  });
+
+  it("end == start → undefined (single day)", () => {
+    expect(normalizeEndInput("2026-03-15", "2026-03-15")).toBeUndefined();
+  });
+
+  it("end < start → undefined (clamped)", () => {
+    expect(normalizeEndInput("2026-03-15", "2026-03-10")).toBeUndefined();
+  });
+
+  it("all-day start with datetime end → strips time to date-only", () => {
+    expect(normalizeEndInput("2026-03-15", "2026-03-18T09:00:00")).toBe("2026-03-18");
+  });
+
+  it("timed start with datetime end → passed through unchanged", () => {
+    expect(normalizeEndInput("2026-03-15T09:00:00", "2026-03-15T10:30:00")).toBe(
+      "2026-03-15T10:30:00"
     );
   });
 });
