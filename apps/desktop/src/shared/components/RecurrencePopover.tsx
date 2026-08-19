@@ -26,7 +26,7 @@ import { RecurrenceCustomEditor } from "./recurrence/RecurrenceCustomEditor";
 import { RecurrenceEndsEditor, type RecurrenceEndType } from "./recurrence/RecurrenceEndsEditor";
 import { RecurrencePresetList } from "./recurrence/RecurrencePresetList";
 
-interface RecurrencePopoverProps {
+export interface RecurrencePopoverProps {
   /** Current RRULE string (no "RRULE:" prefix) or null for "no recurrence". */
   rrule: string | null;
   /** Emit the new RRULE string, or null to clear the recurrence. */

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { usePages } from "@/shared/context/PagesContext";
 
-interface FolderChipProps {
+export interface FolderChipProps {
   folders: Folder[];
   /** Currently selected folder ID, or null for Inbox. */
   value: string | null;

@@ -19,12 +19,7 @@ import type React from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { BylineSeparator } from "@/shared/components/BylineSeparator";
-import { DateTimePicker } from "@/shared/components/DateTimePicker";
-import { FolderChip } from "@/shared/components/FolderChip";
-import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
-import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
-import { TagsPopover } from "@/shared/components/TagsPopover";
+import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
 import { NLP_PRIORITY_MAP } from "@/shared/constants/priorities";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
@@ -447,84 +442,114 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
       {/* Metadata chips + Add button */}
       <div className="flex items-center gap-2 border-t border-border/40 px-4 py-2.5 text-sm text-subtle">
-        <FolderChip
-          folders={folders}
-          onChange={(id) => {
-            setFolderValue(id);
-            setFolderManual(true);
-            // Synchronous refocus on selection — onCloseAutoFocus fires later
-            // (async, after Radix processes the close), so the keyboard-only
-            // flow "pick folder → press Enter to submit" needs this to land
-            // focus on the main input before the next keypress arrives.
-            refocusInput();
-          }}
-          onClose={refocusInput}
-          value={folderValue}
-        />
-
-        <BylineSeparator />
-
-        <DateTimePicker
-          endValue={endDateValue}
-          onChange={(d) => {
-            setDateValue(d);
-            setDateManual(true);
-          }}
-          onClose={refocusInput}
-          onEndChange={(d) => {
-            setEndDateValue(d);
-            setDateManual(true);
-          }}
-          value={dateValue}
-        />
-
-        <RecurrencePopover
-          anchorDate={dateValue}
-          onChange={(rrule) => {
-            setRruleValue(rrule);
-            setRruleManual(true);
-            // If the user picks a rule without a date set, anchor to today
-            // so the chip's implicit "Starts today" becomes concrete on the
-            // date chip too.
-            if (rrule && !dateValue) {
-              setDateValue(localToday());
-              setDateManual(true);
-            }
-            // See FolderChip — sync refocus on selection.
-            refocusInput();
-          }}
-          onClose={refocusInput}
-          rrule={rruleValue}
-          variant="compact"
-          {...(finiteLabel ? { overrideLabel: finiteLabel } : {})}
-        />
-
-        <BylineSeparator />
-
-        <PriorityDropdown
-          onClose={refocusInput}
-          onSelect={(p) => {
-            setPriorityValue(p);
-            setPriorityManual(true);
-          }}
-          priority={priorityValue}
-          variant="byline"
-        />
-
-        <BylineSeparator />
-
-        <TagsPopover
-          allTags={allTagNames}
-          onClose={refocusInput}
-          onToggle={(name) => {
-            if (tagsValue.includes(name)) {
-              setNlpTags((prev) => prev.filter((t) => t !== name));
-              setManualTags((prev) => prev.filter((t) => t !== name));
-            } else {
-              setManualTags((prev) => [...prev, name]);
-            }
-          }}
-          selected={tagsValue}
+        <PageMetadataChips
+          groups={[
+            {
+              chips: [
+                {
+                  kind: "folder",
+                  props: {
+                    folders,
+                    onChange: (id) => {
+                      setFolderValue(id);
+                      setFolderManual(true);
+                      // Synchronous refocus on selection — onCloseAutoFocus fires later
+                      // (async, after Radix processes the close), so the keyboard-only
+                      // flow "pick folder → press Enter to submit" needs this to land
+                      // focus on the main input before the next keypress arrives.
+                      refocusInput();
+                    },
+                    onClose: refocusInput,
+                    value: folderValue,
+                  },
+                },
+              ],
+              key: "folder",
+            },
+            {
+              chips: [
+                {
+                  kind: "date",
+                  props: {
+                    endValue: endDateValue,
+                    onChange: (d) => {
+                      setDateValue(d);
+                      setDateManual(true);
+                    },
+                    onClose: refocusInput,
+                    onEndChange: (d) => {
+                      setEndDateValue(d);
+                      setDateManual(true);
+                    },
+                    value: dateValue,
+                  },
+                },
+                {
+                  kind: "recurrence",
+                  props: {
+                    anchorDate: dateValue,
+                    onChange: (rrule) => {
+                      setRruleValue(rrule);
+                      setRruleManual(true);
+                      // If the user picks a rule without a date set, anchor to today
+                      // so the chip's implicit "Starts today" becomes concrete on the
+                      // date chip too.
+                      if (rrule && !dateValue) {
+                        setDateValue(localToday());
+                        setDateManual(true);
+                      }
+                      // See FolderChip — sync refocus on selection.
+                      refocusInput();
+                    },
+                    onClose: refocusInput,
+                    rrule: rruleValue,
+                    variant: "compact",
+                    ...(finiteLabel ? { overrideLabel: finiteLabel } : {}),
+                  },
+                },
+              ],
+              key: "schedule",
+            },
+            {
+              chips: [
+                {
+                  kind: "priority",
+                  props: {
+                    onClose: refocusInput,
+                    onSelect: (p) => {
+                      setPriorityValue(p);
+                      setPriorityManual(true);
+                    },
+                    priority: priorityValue,
+                    variant: "byline",
+                  },
+                },
+              ],
+              key: "priority",
+            },
+            {
+              chips: [
+                {
+                  kind: "tags",
+                  props: {
+                    allTags: allTagNames,
+                    onClose: refocusInput,
+                    onToggle: (name) => {
+                      if (tagsValue.includes(name)) {
+                        setNlpTags((prev) => prev.filter((t) => t !== name));
+                        setManualTags((prev) => prev.filter((t) => t !== name));
+                      } else {
+                        setManualTags((prev) => [...prev, name]);
+                      }
+                    },
+                    selected: tagsValue,
+                  },
+                },
+              ],
+              key: "tags",
+            },
+          ]}
+          layout="byline"
         />
 
         <button

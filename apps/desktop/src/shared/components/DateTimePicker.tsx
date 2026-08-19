@@ -35,7 +35,7 @@ import {
 } from "./DateTimePicker.utils";
 import { CAL_HEIGHT, MiniCalendar } from "./MiniCalendar";
 
-interface DateTimePickerProps {
+export interface DateTimePickerProps {
   /** ISO 8601 date (date-only or datetime) or null (no schedule). */
   value: string | null;
   /** Called with an ISO string when a date/time is selected, or null to clear. */

@@ -2,9 +2,7 @@ import type { VirtualOccurrence } from "@pikos/core";
 import { isDone } from "@pikos/core";
 import { CalendarX, ExternalLink } from "lucide-react";
 
-import { DateTimePicker } from "@/shared/components/DateTimePicker";
-import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
-import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { usePages } from "@/shared/context/PagesContext";
@@ -89,69 +87,78 @@ export function VirtualPageBlockPopover({ onClose, onDelete, page }: VirtualPage
       <p className="text-sm font-medium text-foreground">{page.title || "Untitled"}</p>
 
       <div className="flex flex-col gap-2">
-        {completable && (
-          <div className="flex items-center gap-3">
-            <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Status</span>
-            <button
-              aria-label="Mark done"
-              className="group/status inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
-              onClick={handleStatusToggle}
-            >
-              <TaskCheckbox
-                as="span"
-                checked={false}
-                className="group-hover/status:border-foreground/60"
-                onChange={handleStatusToggle}
-              />
-              <span>Open</span>
-            </button>
-          </div>
-        )}
-
-        {folder && (
-          <div className="flex items-center gap-3">
-            <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Folder</span>
-            <span className="text-sm text-muted-foreground">{folder.name}</span>
-          </div>
-        )}
-
-        <div className="flex items-center gap-3">
-          <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Date</span>
-          {locked ? (
-            lockedSchedule && (
-              <span className="text-sm text-muted-foreground">{lockedSchedule}</span>
-            )
-          ) : (
-            <DateTimePicker
-              endValue={page.scheduledEnd ?? null}
-              isDone={isDone(page)}
-              onChange={handleDateChange}
-              onEndChange={handleEndChange}
-              value={page.scheduledStart ?? null}
-            />
-          )}
-        </div>
-
-        {rule && (
-          <div className="flex items-center gap-3">
-            <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Repeats</span>
-            <RecurrencePopover
-              anchorDate={rule.scheduledStart}
-              onChange={() => undefined}
-              readOnly
-              rrule={rule.rrule}
-            />
-          </div>
-        )}
-
-        {page.priority > 0 && (
-          <div className="flex items-center gap-3">
-            <span className="w-14 shrink-0 text-xs text-muted-foreground/50">Priority</span>
-            <span className="text-sm text-muted-foreground">
-              {PRIORITY_LABELS[page.priority] ?? "None"}
-            </span>
-          </div>
-        )}
+        <PageMetadataChips
+          groups={[
+            completable && {
+              chips: [{ kind: "status", props: { checked: false, onToggle: handleStatusToggle } }],
+              key: "Status",
+            },
+            folder && {
+              chips: [
+                {
+                  id: "folder",
+                  kind: "node",
+                  node: <span className="text-sm text-muted-foreground">{folder.name}</span>,
+                },
+              ],
+              key: "Folder",
+            },
+            {
+              chips: [
+                locked
+                  ? lockedSchedule
+                    ? {
+                        id: "schedule",
+                        kind: "node",
+                        node: (
+                          <span className="text-sm text-muted-foreground">{lockedSchedule}</span>
+                        ),
+                      }
+                    : null
+                  : {
+                      kind: "date",
+                      props: {
+                        endValue: page.scheduledEnd ?? null,
+                        isDone: isDone(page),
+                        onChange: handleDateChange,
+                        onEndChange: handleEndChange,
+                        value: page.scheduledStart ?? null,
+                      },
+                    },
+              ],
+              key: "Date",
+            },
+            rule && {
+              chips: [
+                {
+                  kind: "recurrence",
+                  props: {
+                    anchorDate: rule.scheduledStart,
+                    onChange: () => undefined,
+                    readOnly: true,
+                    rrule: rule.rrule,
+                  },
+                },
+              ],
+              key: "Repeats",
+            },
+            page.priority > 0 && {
+              chips: [
+                {
+                  id: "priority",
+                  kind: "node",
+                  node: (
+                    <span className="text-sm text-muted-foreground">
+                      {PRIORITY_LABELS[page.priority] ?? "None"}
+                    </span>
+                  ),
+                },
+              ],
+              key: "Priority",
+            },
+          ]}
+          layout="rows"
+        />
       </div>
 
       <div className="flex items-center justify-between border-t border-border/40 pt-1">
