@@ -548,23 +548,50 @@ pub async fn overdue_count(
 }
 
 /// Record that a per-reminder notification fired (dedup anchor for future ticks).
+///
+/// Returns the row id. The scheduler hands it to the OS as the notification's
+/// own identifier, so a click months of ticks later still names the exact row to
+/// mark opened ([`mark_notification_opened`]) and the page to open — no
+/// in-memory table of live banners to keep, and nothing lost on a restart.
 pub async fn log_reminder_fired(
     pool: &SqlitePool,
     page_id: &str,
     schedule_id: &str,
     fired_at: &str,
-) -> Result<(), sqlx::Error> {
+) -> Result<String, sqlx::Error> {
+    let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
          VALUES (?, ?, ?, 'reminder', ?)",
     )
-    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&id)
     .bind(page_id)
     .bind(schedule_id)
     .bind(fired_at)
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(id)
+}
+
+/// Mark a delivered notification as opened, and answer with the page it named.
+///
+/// `None` covers every case where there is nothing to open: an id no row carries
+/// (a banner that outlived the 30-day prune), or the daily summary marker, which
+/// is deliberately page-less. `WHERE action IS NULL` keeps the first recorded
+/// outcome — a second click on the same banner is a no-op rather than a rewrite.
+pub async fn mark_notification_opened(
+    pool: &SqlitePool,
+    id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query("UPDATE notification_log SET action = 'opened' WHERE id = ? AND action IS NULL")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    sqlx::query_scalar("SELECT page_id FROM notification_log WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map(Option::flatten)
 }
 
 /// Record that a reminder came due inside quiet hours and was therefore never
@@ -618,7 +645,8 @@ pub(crate) async fn clear_reminder_log_tx(
 }
 
 /// Insert the daily-summary marker row (one per local day). Returns the row id,
-/// for the same reason [`log_reminder_fired`] does.
+/// for the same reason [`log_reminder_fired`] does — the summary names no page,
+/// so a click on it opens the calendar rather than a page.
 pub async fn log_daily_summary(pool: &SqlitePool, fired_at: &str) -> Result<String, sqlx::Error> {
     let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
