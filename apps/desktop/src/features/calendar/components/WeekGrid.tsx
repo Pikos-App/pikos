@@ -1,6 +1,7 @@
 import type { PageSummary } from "@pikos/core";
 import { useRef } from "react";
 
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import {
   CalendarSettingsContext,
   useCalendarSettings,
@@ -195,7 +196,7 @@ export function WeekGrid({
     defaultHeight: 60,
     max: 200,
     min: 30,
-    storageKey: "pikos:calendarAllDayHeight",
+    storageKey: STORAGE_KEYS.calendarAllDayHeight,
   });
 
   // Page list passed to AllDaySection, with live override for edge-resize

@@ -1,3 +1,4 @@
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
@@ -9,7 +10,7 @@ export interface ListSettingsValue {
 }
 
 function useListSettingsValue(): ListSettingsValue {
-  const [density, setDensity] = useLocalStorage<ListDensity>("pikos:listDensity", "cozy");
+  const [density, setDensity] = useLocalStorage<ListDensity>(STORAGE_KEYS.listDensity, "cozy");
 
   return { density, setDensity };
 }

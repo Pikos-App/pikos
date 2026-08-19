@@ -1,3 +1,4 @@
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
@@ -9,7 +10,7 @@ export interface EditorSettingsValue {
 }
 
 function useEditorSettingsValue(): EditorSettingsValue {
-  const [lineWidth, setLineWidth] = useLocalStorage<LineWidth>("pikos:lineWidth", "default");
+  const [lineWidth, setLineWidth] = useLocalStorage<LineWidth>(STORAGE_KEYS.lineWidth, "default");
 
   return { lineWidth, setLineWidth };
 }

@@ -8,6 +8,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -57,13 +58,13 @@ export function ThreePanelLayout() {
     defaultWidth: 180,
     max: 320,
     min: 180,
-    storageKey: "pikos:leftPanelWidth",
+    storageKey: STORAGE_KEYS.leftPanelWidth,
   });
   const mid = usePanelResize({
     defaultWidth: 280,
     max: 480,
     min: 240,
-    storageKey: "pikos:midPanelWidth",
+    storageKey: STORAGE_KEYS.midPanelWidth,
   });
   const {
     activeFolderData,

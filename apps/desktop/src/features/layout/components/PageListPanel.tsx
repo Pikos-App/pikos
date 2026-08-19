@@ -12,6 +12,7 @@ import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { partitionToggleSelection } from "@/features/pages/utils/toggleSelection";
 import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
 import { useListSettings } from "@/shared/context/ListSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
@@ -83,8 +84,11 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const sortMode = useActiveSortMode();
   const sidebarHidden = shouldHideSidebar(useLayoutMode());
   const { density } = useListSettings();
-  const [showRelative, setShowRelative] = useLocalStorage("pikos:showRelativeDates", false);
-  const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage("pikos:overdueCollapsed", true);
+  const [showRelative, setShowRelative] = useLocalStorage(STORAGE_KEYS.showRelativeDates, false);
+  const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage(
+    STORAGE_KEYS.overdueCollapsed,
+    true
+  );
   // Completed accordion resets to collapsed on every view navigation (no persistence).
   // Storing { viewId, collapsed } means the value auto-resets whenever activeViewId changes.
   const [completedCollapseState, setCompletedCollapseState] = useState<{

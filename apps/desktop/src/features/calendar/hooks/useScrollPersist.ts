@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { STORAGE_KEYS } from "@/shared/constants/storage";
+
 import { VISIBLE_HOURS } from "../utils/calendarConstants";
 import { type CollapseGeometry, mapHourToY, mapYToHour } from "../utils/calendarGeometry";
 
-const SCROLL_STORAGE_KEY = "pikos:calendarScrollHour";
 const SCROLL_PERSIST_DEBOUNCE_MS = 200;
 
 /** Values under 0.5h are treated as unset. An earlier scroll-clamp bug on
@@ -57,7 +58,7 @@ export function useScrollPersist({
   calendarScrollRequest,
   geometry,
   rightPanel,
-  storageKey = SCROLL_STORAGE_KEY,
+  storageKey = STORAGE_KEYS.calendarScrollHour,
 }: UseScrollPersistOptions): UseScrollPersistResult {
   const scrollRef = useRef<HTMLDivElement>(null);
 

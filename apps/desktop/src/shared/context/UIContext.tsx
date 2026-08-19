@@ -7,6 +7,7 @@ import type { PageSummary } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
 import type { SortMode } from "@/features/pages";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 /** 'today' | 'inbox' | folderId (UUID string) */
@@ -86,26 +87,29 @@ const UIContext = createContext<UIContextValue | null>(null);
 
 export function UIProvider({ children }: { children: ReactNode }) {
   const [activePageId, setActivePageId] = useLocalStorage<string | null>(
-    "pikos:lastActivePageId",
+    STORAGE_KEYS.lastActivePageId,
     null
   );
   const [activeViewId, setActiveViewId] = useLocalStorage<ActiveViewId>(
-    "pikos:lastActiveViewId",
+    STORAGE_KEYS.lastActiveViewId,
     "inbox"
   );
   const [rightPanel, setRightPanelRaw] = useLocalStorage<"editor" | "calendar">(
-    "pikos:rightPanel",
+    STORAGE_KEYS.rightPanel,
     "editor"
   );
   const [lastEditorPageId, setLastEditorPageId] = useLocalStorage<string | null>(
-    "pikos:lastEditorPageId",
+    STORAGE_KEYS.lastEditorPageId,
     null
   );
   const [referenceDateIso, setReferenceDateIso] = useLocalStorage<string>(
-    "pikos:calendarReferenceDate",
+    STORAGE_KEYS.calendarReferenceDate,
     new Date().toISOString()
   );
-  const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage("pikos:sidebarCollapsed", false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage(
+    STORAGE_KEYS.sidebarCollapsed,
+    false
+  );
   const [pageListDrawerOpen, setPageListDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
@@ -120,7 +124,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     if (id !== null) setSettingsOpen(false);
   }
   const [sortModes, setSortModes] = useLocalStorage<Record<string, SortMode>>(
-    "pikos:sortModes",
+    STORAGE_KEYS.sortModes,
     {}
   );
 
