@@ -66,13 +66,6 @@ export const DEFAULT_COLLAPSE_CONFIG: CalendarCollapseConfig = {
   topHour: 6,
 };
 
-/**
- * Shared Tailwind classes for event chips — used by both compact timed blocks and all-day items
- * so they stay visually identical. Import these instead of duplicating the string.
- */
-export const CHIP_BASE_CLASSES =
-  "type-body-sm h-[19px] overflow-hidden truncate rounded-sm border-l-[2px] px-1.5 leading-none font-medium text-foreground transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" as const;
-
 /** Default folder accent (Tailwind blue-500) used when a page has no folder
  * colour. Routed through the same `--event-color` CSS rule as folder colours
  * so every block fill is an opaque `color-mix` with the background — no
@@ -84,7 +77,9 @@ export const DEFAULT_EVENT_COLOR = "rgb(59 130 246)" as const;
 // `2 * ALL_DAY_TOP_PADDING + rowCount * ALL_DAY_ROW_HEIGHT` so the bottom edge
 // gets matching breathing room.
 
-/** Height of a single all-day bar (matches CHIP_BASE_CLASSES h-[19px]). */
+/** Height of a single all-day bar. The chip's own `h-[19px]` class must agree;
+ * it lives in the desktop app (see `calendarColors.ts`) because Tailwind only
+ * generates utilities it finds while scanning, and it does not scan this package. */
 export const ALL_DAY_BAR_HEIGHT = 19;
 /** Vertical gap between bars on consecutive rows. */
 const ALL_DAY_ROW_GAP = 2;

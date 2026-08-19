@@ -1,6 +1,5 @@
 import type { CalendarBlock, VirtualOccurrence } from "@pikos/core";
 import {
-  CHIP_BASE_CLASSES,
   crossingMidnightsCount,
   DEFAULT_EVENT_COLOR,
   formatMultiDayTimeRange,
@@ -20,7 +19,7 @@ import { useUI } from "@/shared/context/UIContext";
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
 import { beginDragThreshold } from "../utils/beginDragThreshold";
-import { chipFolderStyle } from "../utils/calendarColors";
+import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 

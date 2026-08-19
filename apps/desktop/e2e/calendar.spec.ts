@@ -227,6 +227,26 @@ appTest("drag right edge of multi-day chip extends the span @tier2", async ({ ap
   expect(extendedBox.width).toBeGreaterThan(chipBox.width);
 });
 
+appTest("all-day chip renders at its declared bar height @tier2", async ({ app }) => {
+  await openCalendarMode(app);
+  const at = await centerOf(lastAllDayColumn(app));
+  await app.mouse.move(at.x, at.y);
+  await app.mouse.down();
+  await app.mouse.up();
+  await app.getByPlaceholder("Untitled").fill("Height check");
+  await app.keyboard.press("Enter");
+
+  const chip = calendarRegion(app).getByRole("button", { name: "Height check" }).first();
+  await expect(chip).toBeVisible();
+  const box = await chip.boundingBox();
+  if (!box) throw new Error("chip missing");
+  // ALL_DAY_BAR_HEIGHT, which the absolute row pitch is derived from. Asserted in
+  // a real browser because the height arrives as a Tailwind utility: declare the
+  // class somewhere Tailwind does not scan and it silently generates no rule,
+  // leaving the chip to collapse to its text height with the class still on it.
+  expect(box.height).toBe(19);
+});
+
 appTest("drag bottom edge of a timed block resizes without moving it @tier2", async ({ app }) => {
   await quickAdd(app, "Standup today 10am");
   await openCalendarMode(app);

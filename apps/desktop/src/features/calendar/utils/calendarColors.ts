@@ -1,6 +1,20 @@
 import { DEFAULT_EVENT_COLOR } from "@pikos/core";
 import type { CSSProperties } from "react";
 
+/**
+ * Shared Tailwind classes for event chips — compact timed blocks, all-day bars and
+ * month chips all wear them, so they stay visually identical.
+ *
+ * Lives in the app rather than in `@pikos/core` beside the geometry it pairs with:
+ * Tailwind generates a utility only when it finds the literal while scanning, and its
+ * scan does not reach `packages/core`. Declared there, `h-[19px]` produced no rule at
+ * all and every chip silently collapsed to its text height — the class was present in
+ * the DOM and did nothing, which is why it read as a styling bug rather than a missing
+ * one. `ALL_DAY_BAR_HEIGHT` still owns the number; these two must agree.
+ */
+export const CHIP_BASE_CLASSES =
+  "type-body-sm h-[19px] overflow-hidden truncate rounded-sm border-l-[2px] px-1.5 leading-none font-medium text-foreground transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" as const;
+
 /** Accepts #RRGGBB or RRGGBB; falls back to muted indigo if the hex cannot be parsed. */
 export function hexToRgba(hex: string, alpha: number): string {
   const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;

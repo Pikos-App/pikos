@@ -1,5 +1,5 @@
 import type { MonthCellEvent, VirtualOccurrence } from "@pikos/core";
-import { CHIP_BASE_CLASSES, formatTime12h, isDone } from "@pikos/core";
+import { formatTime12h, isDone } from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,7 +9,7 @@ import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
-import { chipFolderStyle } from "../utils/calendarColors";
+import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
