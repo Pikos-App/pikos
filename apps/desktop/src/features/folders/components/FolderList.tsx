@@ -10,6 +10,7 @@ import {
   Inbox,
   Plus,
   Text,
+  Trash2,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import type React from "react";
@@ -58,7 +59,7 @@ export function FolderList() {
     todayCount,
   } = useFolderList();
   const calendarGroups = useCalendarAccountGroups(externalFolders);
-  const { openSortMenu, setOpenSortMenu } = useUI();
+  const { openSortMenu, setOpenDialog, setOpenSortMenu } = useUI();
   const { density } = useListSettings();
   const folderRowHeight = density === "compact" ? 28 : density === "spacious" ? 38 : 32;
   const [calendarsCollapsed, setCalendarsCollapsed] = useLocalStorage(
@@ -293,6 +294,21 @@ export function FolderList() {
               })}
           </div>
         )}
+      </div>
+
+      {/* Trash sits under everything, behind the same hairline the sidebar puts
+          above Settings. It reads as a smart view because it behaves like one —
+          a place you go to see pages — but it is not somewhere pages live and
+          nothing can be dropped into it, so it must not sit in the scrolling
+          list beside Inbox and the folders. */}
+      <div className="shrink-0 border-t border-border-subtle px-1 py-1">
+        <SmartViewEntry
+          icon={<Trash2 size={16} />}
+          id="nav-trash"
+          isActive={false}
+          label="Trash"
+          onSelect={() => setOpenDialog("trash")}
+        />
       </div>
     </div>
   );
