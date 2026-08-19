@@ -12,6 +12,7 @@
 
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
+use pikos_recurrence::{rewrite_until_with, zoned, WallClock};
 
 use self::allday_end::InclusiveEnd;
 use crate::error::AppResult;
@@ -20,6 +21,10 @@ use crate::sync_delta::{
     SyncDelta, UpsertItem,
 };
 use crate::{device_zone, now_iso};
+
+/// The compact form RFC 5545 spells an `UNTIL` instant in — the only place in
+/// this module that isn't a [`WallClock`].
+const UNTIL_FMT: &str = "%Y%m%dT%H%M%S";
 
 /// All-day recurring events have no meaningful zone, but
 /// `page_recurrence_rules.timezone` is NOT NULL. Stamp this when the event
@@ -991,46 +996,34 @@ async fn float_wall_clock(
 /// exist in the source zone (spring-forward gap) — the caller keeps the original
 /// rather than inventing a time.
 fn to_device_wall_clock(wall_clock: &str, source: Tz, device: Tz) -> Option<String> {
-    Some(
-        convert_instant(wall_clock, "%Y-%m-%dT%H:%M:%S", source, device)?
-            .format("%Y-%m-%dT%H:%M:%S")
-            .to_string(),
-    )
+    let wall = WallClock::parse(wall_clock).filter(|w| !w.is_all_day())?;
+    Some(WallClock::timed(convert_instant(wall.as_datetime(), source, device)?).format())
 }
 
 /// Shift a source-zone `UNTIL` token to device-local so the series' bound floats
 /// with the occurrences it bounds. The reconciler already rewrote any UTC `UNTIL`
 /// to source-zone wall-clock on ingest, so there is no `Z` left to handle; a
-/// date-only bound needs no shift. Surgical edit for the same reason as
-/// [`rewrite_until_to_wall_clock`] — a parse round-trip drops rule fields.
+/// date-only bound needs no shift.
 fn shift_until_to_device(rrule: &str, source: Tz, device: Tz) -> String {
-    rrule
-        .split(';')
-        .map(|part| match part.split_once('=') {
-            Some((key, value)) if key.eq_ignore_ascii_case("UNTIL") => {
-                match convert_instant(value, "%Y%m%dT%H%M%S", source, device) {
-                    Some(shifted) => format!("{key}={}", shifted.format("%Y%m%dT%H%M%S")),
-                    None => part.to_string(),
-                }
-            }
-            _ => part.to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join(";")
+    rewrite_until_with(rrule, |value| {
+        let naive = NaiveDateTime::parse_from_str(value, UNTIL_FMT).ok()?;
+        Some(
+            convert_instant(naive, source, device)?
+                .format(UNTIL_FMT)
+                .to_string(),
+        )
+    })
 }
 
-/// Re-express one wall-clock in another zone. `earliest()` for the same reason as
+/// Re-express one wall-clock in another zone. The fall-back/gap reading is
+/// [`zoned::wall_clock_instant`]'s, shared with
 /// [`crate::notification_log::synced_fire_instant`]: a fall-back-ambiguous hour
 /// resolves to its first pass rather than dropping the value entirely.
-fn convert_instant(value: &str, fmt: &str, source: Tz, device: Tz) -> Option<NaiveDateTime> {
-    let naive = NaiveDateTime::parse_from_str(value, fmt).ok()?;
-    Some(
-        source
-            .from_local_datetime(&naive)
-            .earliest()?
-            .with_timezone(&device)
-            .naive_local(),
-    )
+fn convert_instant(naive: NaiveDateTime, source: Tz, device: Tz) -> Option<NaiveDateTime> {
+    Some(zoned::wall_clock_at(
+        device,
+        zoned::wall_clock_instant(source, naive)?,
+    ))
 }
 
 /// Destroy a non-owned synced page. The FK cascade removes its `page_sync` link,
@@ -1336,24 +1329,9 @@ async fn write_seeded_body(
 /// identically whether the editor or reconciler last wrote it — which is why the
 /// hash is over `content_text`, not the ProseMirror JSON.
 fn project_description(text: &str) -> (String, String) {
-    let doc = build_tiptap_doc(text);
+    let doc = crate::pool::build_tiptap_doc(text);
     let projected = crate::pool::extract_text_from_tiptap(&doc);
     (doc, projected)
-}
-
-/// One paragraph per line — matches the doc the editor produces for pasted text.
-fn build_tiptap_doc(text: &str) -> String {
-    let content: Vec<serde_json::Value> = text
-        .split('\n')
-        .map(|line| {
-            if line.is_empty() {
-                serde_json::json!({ "type": "paragraph" })
-            } else {
-                serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
-            }
-        })
-        .collect();
-    serde_json::json!({ "type": "doc", "content": content }).to_string()
 }
 
 /// FNV-1a 64-bit hex — deterministic across builds (std `DefaultHasher` isn't)
@@ -1370,25 +1348,13 @@ fn fnv_hex(s: &str) -> String {
 /// Rewrite a UTC `UNTIL=…Z` token inside a raw RRULE to source-zone wall-clock,
 /// leaving every other field intact. Expansion matches occurrences by wall-clock
 /// string, so a UTC UNTIL clips the final occurrence(s) on the wrong day for
-/// viewers outside the source zone. Surgical edit, not a parse round-trip (that
-/// drops BYSETPOS/BYMONTHDAY); floating/date-only UNTIL is already wall-clock.
+/// viewers outside the source zone. Floating/date-only UNTIL is already
+/// wall-clock and passes through.
 fn rewrite_until_to_wall_clock(rrule: &str, tz: &str) -> String {
     let Ok(zone) = tz.parse::<Tz>() else {
         return rrule.to_string(); // unknown zone: leave raw rather than panic
     };
-    rrule
-        .split(';')
-        .map(|part| match part.split_once('=') {
-            Some((key, value)) if key.eq_ignore_ascii_case("UNTIL") => {
-                match until_utc_to_wall_clock(value, zone) {
-                    Some(local) => format!("{key}={local}"),
-                    None => part.to_string(),
-                }
-            }
-            _ => part.to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join(";")
+    rewrite_until_with(rrule, |value| until_utc_to_wall_clock(value, zone))
 }
 
 /// `20260315T100000Z` in `zone` → `20260315T060000` wall-clock, DST-correct per
@@ -1396,9 +1362,9 @@ fn rewrite_until_to_wall_clock(rrule: &str, tz: &str) -> String {
 /// unparseable) — already wall-clock, so the caller leaves it as-is.
 fn until_utc_to_wall_clock(value: &str, zone: Tz) -> Option<String> {
     let stamp = value.strip_suffix('Z')?;
-    let naive = NaiveDateTime::parse_from_str(stamp, "%Y%m%dT%H%M%S").ok()?;
-    let local = Utc.from_utc_datetime(&naive).with_timezone(&zone);
-    Some(local.format("%Y%m%dT%H%M%S").to_string())
+    let naive = NaiveDateTime::parse_from_str(stamp, UNTIL_FMT).ok()?;
+    let local = zoned::wall_clock_at(zone, Utc.from_utc_datetime(&naive));
+    Some(local.format(UNTIL_FMT).to_string())
 }
 
 /// The storage form of a provider [`ExclusiveEnd`], and the only bridge to it.
@@ -1411,7 +1377,8 @@ fn until_utc_to_wall_clock(value: &str, zone: Tz) -> Option<String> {
 /// provider form has no conversion of its own. A double application is a missing
 /// method, not a review catch.
 mod allday_end {
-    use chrono::{Days, NaiveDate};
+    use chrono::Days;
+    use pikos_recurrence::WallClock;
 
     use crate::sync_delta::ExclusiveEnd;
 
@@ -1420,15 +1387,16 @@ mod allday_end {
 
     impl InclusiveEnd {
         /// Only date-only ends carry the exclusivity convention; timed ends and
-        /// `None` pass through untouched.
+        /// `None` pass through untouched. The length gate pins zero-padding,
+        /// which [`WallClock::parse`] leaves to its caller.
         pub(super) fn from_provider(end: &ExclusiveEnd) -> Self {
             let Some(end) = end.as_deref() else {
                 return Self(None);
             };
             if end.len() == 10 {
-                if let Ok(date) = NaiveDate::parse_from_str(end, "%Y-%m-%d") {
-                    if let Some(inclusive) = date.checked_sub_days(Days::new(1)) {
-                        return Self(Some(inclusive.format("%Y-%m-%d").to_string()));
+                if let Some(wall) = WallClock::parse(end) {
+                    if let Some(inclusive) = wall.date.checked_sub_days(Days::new(1)) {
+                        return Self(Some(WallClock::all_day(inclusive).format()));
                     }
                 }
             }

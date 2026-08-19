@@ -13,6 +13,7 @@
 
 use std::collections::HashSet;
 
+use pikos_recurrence::{zoned, WallClock};
 use sqlx::SqlitePool;
 
 /// Recurrence-derivation failures reach the scheduler as a content-free
@@ -168,21 +169,17 @@ struct SyncedReminderRow {
 
 /// Source-zone wall-clock + lead time → the absolute UTC instant the reminder
 /// should fire. `None` only on an unparseable zone/timestamp or a wall-clock that
-/// doesn't exist in the zone (spring-forward gap, where `earliest()` is also
-/// None). For a fall-back-ambiguous wall-clock (the hour repeats), `earliest()`
-/// picks the first occurrence and fires once — `single()` would drop it entirely.
+/// doesn't exist in the zone (a spring-forward gap, which never fires) — the
+/// reading [`zoned::wall_clock_instant`] states once for every layer that stores
+/// an instant, including the reconciler's zone shifts.
 pub(crate) fn synced_fire_instant(
     wall_clock: &str,
     timezone: &str,
     minutes_before: i64,
 ) -> Option<chrono::DateTime<chrono::Utc>> {
-    use chrono::TimeZone;
-    let naive = chrono::NaiveDateTime::parse_from_str(wall_clock, "%Y-%m-%dT%H:%M:%S").ok()?;
+    let wall = WallClock::parse(wall_clock).filter(|w| !w.is_all_day())?;
     let zone: chrono_tz::Tz = timezone.parse().ok()?;
-    let instant = zone
-        .from_local_datetime(&naive)
-        .earliest()?
-        .with_timezone(&chrono::Utc);
+    let instant = zoned::wall_clock_instant(zone, wall.as_datetime())?;
     Some(instant - chrono::Duration::minutes(minutes_before))
 }
 

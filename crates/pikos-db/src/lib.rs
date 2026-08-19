@@ -29,7 +29,10 @@ pub use error::{AppError, AppResult};
 pub use folders::*;
 pub use notification_log::*;
 pub use pages::*;
-pub use pool::{device_zone, migration_versions, now_iso, now_local_iso, open_pool, today_local};
+pub use pool::{
+    build_tiptap_doc, device_zone, extract_text_from_tiptap, migration_versions, now_iso,
+    now_local_iso, open_pool, today_local,
+};
 #[cfg(any(test, feature = "test-support"))]
 pub use pool::{
     insert_test_folder, insert_test_page, insert_test_page_sync,
