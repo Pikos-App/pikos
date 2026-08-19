@@ -9,9 +9,10 @@ use std::collections::HashMap;
 use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
     create_recurrence_rule_impl, delete_page_reminder, fuzzy_match_folder, get_page,
-    get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_pages_impl,
-    now_local_iso, restore_page_impl, today_local, CompleteRecurringInput, Folder, NewFolder,
-    NewRecurrenceRule, Page, PageFilter, PageReminder, PageSummary, PageUpdate,
+    get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_page_schedules_impl,
+    list_pages_impl, now_local_iso, restore_page_impl, search_pages_impl, soft_delete_page_impl,
+    today_local, update_page_impl, CompleteRecurringInput, Folder, NewFolder, NewRecurrenceRule,
+    Page, PageFilter, PageReminder, PageSummary, PageUpdate, SearchResponse,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -19,8 +20,10 @@ use sqlx::SqlitePool;
 
 use crate::bridge::{run_bridge, ParseResult};
 use crate::error::{classify, CliError};
-use crate::schedule::parse_due;
-use crate::write::{apply_patch, base_page, local_tz, priority_num, resolve_folder, schedule_once};
+use crate::schedule::{parse_due, resolve_schedule_change};
+use crate::write::{
+    apply_patch, base_page, local_tz, priority_num, resolve_folder, schedule_once, text_to_tiptap,
+};
 
 pub async fn require_page(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
     get_page(pool, id)
@@ -332,7 +335,7 @@ pub async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
             completed_at: Some(Value::String(now_local_iso())),
             ..Default::default()
         };
-        return update_page(pool, id, upd).await;
+        return write_patch(pool, id, upd).await;
     }
 
     // A synced series' head is pinned at the series base, so the occurrence being
@@ -362,10 +365,145 @@ pub async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
     require_page(pool, id).await
 }
 
-async fn update_page(pool: &SqlitePool, id: &str, upd: PageUpdate) -> Result<Page, CliError> {
-    pikos_db::update_page_impl(pool, id.to_string(), upd)
+async fn write_patch(pool: &SqlitePool, id: &str, upd: PageUpdate) -> Result<Page, CliError> {
+    update_page_impl(pool, id.to_string(), upd)
         .await
         .map_err(classify)
+}
+
+/// Set a page's status without inventing a third word for it. `done` goes through
+/// [`mark_done`] so a recurring series still advances.
+pub async fn set_status(pool: &SqlitePool, id: &str, state: &str) -> Result<Page, CliError> {
+    validate_status(state)?;
+    if state == "done" {
+        return mark_done(pool, id).await;
+    }
+    require_page(pool, id).await?;
+    write_patch(
+        pool,
+        id,
+        PageUpdate {
+            status: Some("not_started".to_string()),
+            completed_at: Some(Value::Null),
+            ..Default::default()
+        },
+    )
+    .await
+}
+
+/// Move a page to the trash — recoverable, and the only removal an agent gets.
+pub async fn trash(pool: &SqlitePool, id: &str) -> Result<(), CliError> {
+    require_page(pool, id).await?;
+    soft_delete_page_impl(pool, id).await.map_err(classify)
+}
+
+pub async fn search(
+    pool: &SqlitePool,
+    query: &str,
+    include_completed: bool,
+    limit: Option<usize>,
+) -> Result<SearchResponse, CliError> {
+    let mut resp = search_pages_impl(pool, query.to_string(), Some(include_completed))
+        .await
+        .map_err(classify)?;
+    if let Some(n) = limit {
+        resp.results.truncate(n);
+    }
+    Ok(resp)
+}
+
+// ─── Updating ───────────────────────────────────────────────────────────────
+
+/// Everything `update` can change about a page. The three schedule fields carry
+/// the same meaning they do on the command line — see [`resolve_schedule_change`].
+#[derive(Default)]
+pub struct PageEdit {
+    pub title: Option<String>,
+    pub content: Option<String>,
+    pub status: Option<String>,
+    pub due: Option<String>,
+    pub all_day: Option<String>,
+    pub end: Option<String>,
+    pub priority: Option<i64>,
+}
+
+/// Apply an edit, settling every rejection before the first write so a bad field
+/// can't leave the title and priority half-applied.
+pub async fn update_page(pool: &SqlitePool, id: &str, edit: PageEdit) -> Result<Page, CliError> {
+    let page = require_page(pool, id).await?;
+    // clap enforces this pair for the CLI; MCP arguments arrive unguarded, and
+    // silently preferring one would reshape the page the caller didn't ask for.
+    if edit.due.is_some() && edit.all_day.is_some() {
+        return Err(CliError::usage(
+            "due and allDay name the same field in different shapes — pass one.",
+        ));
+    }
+    let touches_schedule = edit.due.is_some() || edit.all_day.is_some() || edit.end.is_some();
+    if touches_schedule {
+        if page.schedule_locked {
+            return Err(CliError::conflict(
+                "This event comes from a connected calendar — reschedule it in the Pikos app.",
+            ));
+        }
+        // schedule_once writes the rule-less anchor row, which a recurring page's
+        // denorm deliberately ignores — the write would land and move nothing.
+        if get_recurrence_rule_impl(pool, id)
+            .await
+            .map_err(classify)?
+            .is_some()
+        {
+            return Err(CliError::conflict(
+                "This page repeats — move the series in the Pikos app.",
+            ));
+        }
+    }
+    let existing = if touches_schedule {
+        list_page_schedules_impl(pool, id)
+            .await
+            .map_err(classify)?
+            .into_iter()
+            .find(|s| s.rule_id.is_none())
+    } else {
+        None
+    };
+    let change = resolve_schedule_change(
+        existing
+            .as_ref()
+            .map(|s| (s.scheduled_start.as_str(), s.scheduled_end.as_deref())),
+        edit.due.as_deref(),
+        edit.all_day.as_deref(),
+        edit.end.as_deref(),
+    )?;
+
+    let mut upd = PageUpdate::default();
+    if let Some(t) = edit.title {
+        upd.title = Some(t);
+    }
+    if let Some(c) = edit.content {
+        let (doc, txt) = text_to_tiptap(&c);
+        upd.content = Some(doc);
+        upd.content_text = Some(txt);
+    }
+    if let Some(s) = &edit.status {
+        validate_status(s)?;
+        upd.status = Some(s.clone());
+        upd.completed_at = Some(if s == "done" {
+            Value::String(now_local_iso())
+        } else {
+            Value::Null
+        });
+    }
+    if let Some(p) = edit.priority {
+        validate_priority(p)?;
+        upd.priority = Some(p);
+    }
+    write_patch(pool, id, upd).await?;
+    if let Some(change) = &change {
+        schedule_once(pool, id, &change.start, change.end.as_deref())
+            .await
+            .map_err(classify)?;
+    }
+    require_page(pool, id).await
 }
 
 pub async fn confirm(question: &str) -> bool {
