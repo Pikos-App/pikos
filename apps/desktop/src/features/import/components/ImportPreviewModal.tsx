@@ -1,6 +1,15 @@
 // Sits inside the settings content area (sidebar remains visible), not a modal.
 
-import { emojiAwareCompare, isDone, isOpen } from "@pikos/core";
+import type { ImportPage, ImportPlan } from "@pikos/core";
+import {
+  cleanTitle,
+  emojiAwareCompare,
+  formatSchedule,
+  isDone,
+  isOpen,
+  PRIORITY_COLORS,
+  PRIORITY_LABELS,
+} from "@pikos/core";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -16,11 +25,6 @@ import {
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
-import { PRIORITY_COLORS, PRIORITY_LABELS } from "@/shared/constants/priorities";
-
-import type { ImportPage, ImportPlan } from "../parsers/types";
-import { cleanTitle, formatSchedule } from "../parsers/utils";
-
 function sortPagesCompletedLast(pages: ImportPage[]): ImportPage[] {
   return [...pages].sort((a, b) => {
     if (isDone(a) && isOpen(b)) return 1;

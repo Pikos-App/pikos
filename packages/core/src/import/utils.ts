@@ -1,4 +1,4 @@
-import { isTimedIso } from "@pikos/core";
+import { isTimedIso } from "../utils/dates";
 
 /** Strip markdown formatting from titles before storing in DB or displaying in preview. */
 export function cleanTitle(title: string): string {
