@@ -16,11 +16,17 @@
 //!   pre-transition offset, shifting the wall clock forward by the gap
 //!   (matches Google Calendar).
 //! - Ambiguous wall times (fall-back repeat) resolve to the EARLIEST instant.
+//!
+//! Native storage layers additionally need the *strict* reading of that policy —
+//! [`wall_clock_instant`], which refuses a wall clock the zone never had instead
+//! of shifting it. It has no TS counterpart because nothing in the renderer
+//! stores instants; the twin claim above covers everything else in this module.
 
-use chrono::{Duration, LocalResult, NaiveDateTime, Offset, TimeZone};
+use chrono::{DateTime, Duration, LocalResult, NaiveDateTime, Offset, TimeZone, Utc};
 use chrono_tz::Tz;
 
 use crate::engine::expand_range;
+use crate::rule::rewrite_until_with;
 use crate::WallClock;
 
 /// One occurrence of a zone-aware recurrence, expressed for a viewer.
@@ -42,11 +48,7 @@ fn parse_naive(s: &str) -> Option<NaiveDateTime> {
 }
 
 fn format_datetime(dt: NaiveDateTime) -> String {
-    WallClock {
-        date: dt.date(),
-        time: Some(dt.time()),
-    }
-    .format()
+    WallClock::timed(dt).format()
 }
 
 fn offset_seconds_at(tz: &Tz, utc: NaiveDateTime) -> i64 {
@@ -77,31 +79,66 @@ pub fn wall_clock_to_utc(zone: &str, wall: NaiveDateTime) -> Option<NaiveDateTim
 /// name is unknown.
 pub fn utc_to_wall_clock(zone: &str, utc: NaiveDateTime) -> Option<NaiveDateTime> {
     let tz: Tz = zone.parse().ok()?;
-    Some(tz.from_utc_datetime(&utc).naive_local())
+    Some(wall_clock_at(tz, Utc.from_utc_datetime(&utc)))
+}
+
+// ─── stored instants (native only) ──────────────────────────────────────────────
+//
+// The renderer above may shift a wall clock the zone never had, because *some*
+// row has to be drawn. A layer that stores or fires on an instant may not: it
+// hands the undecidable case back to its caller instead. These two are the one
+// home for that reading — the reconciler's zone shifts and the notification
+// log's fire instants both resolve through them, so the fall-back/gap policy is
+// stated once rather than re-derived per call site.
+
+/// The absolute instant of a wall clock in `zone`, or `None` when the zone never
+/// had it (spring-forward gap) — the caller keeps the original rather than
+/// inventing a time, and a reminder never fires at a time that did not exist.
+///
+/// A fall-back-ambiguous wall clock (the hour repeats) resolves to its EARLIEST
+/// pass, as in [`wall_clock_to_utc`]: the value happened, once, and dropping it
+/// would silently lose a stored schedule or a reminder.
+pub fn wall_clock_instant(zone: Tz, wall: NaiveDateTime) -> Option<DateTime<Utc>> {
+    Some(
+        zone.from_local_datetime(&wall)
+            .earliest()?
+            .with_timezone(&Utc),
+    )
+}
+
+/// The wall clock `zone` shows at an absolute instant. Total, unlike
+/// [`wall_clock_instant`]: every instant has exactly one rendering in a zone.
+pub fn wall_clock_at(zone: Tz, instant: DateTime<Utc>) -> NaiveDateTime {
+    instant.with_timezone(&zone).naive_local()
 }
 
 /// RFC 5545 expresses a timed UNTIL in UTC when DTSTART carries a TZID. The
 /// engine compares occurrences in event-zone wall-clock, so rewrite the UNTIL
 /// bound into that frame before expansion. Date-only UNTILs and rules without
 /// UNTIL pass through unchanged, as does an unknown zone.
+///
+/// Edited in place through [`rewrite_until_with`] — every other field of the
+/// rule survives byte-for-byte, which a parse round-trip would not manage.
 pub fn normalize_until_to_zone(rrule: &str, event_zone: &str) -> String {
-    let Some(pos) = rrule.find("UNTIL=") else {
+    let Ok(tz) = event_zone.parse::<Tz>() else {
         return rrule.to_string();
     };
-    let value_start = pos + "UNTIL=".len();
-    let value_end = rrule[value_start..]
-        .find(';')
-        .map(|i| value_start + i)
-        .unwrap_or(rrule.len());
-    let value = &rrule[value_start..value_end];
+    rewrite_until_with(rrule, |value| {
+        // Only the UTC datetime form ('YYYYMMDDTHHMMSS' + optional Z) converts.
+        let utc = parse_compact_datetime(value)?;
+        let wall = wall_clock_at(tz, Utc.from_utc_datetime(&utc));
+        Some(format!("{}Z", wall.format("%Y%m%dT%H%M%S")))
+    })
+}
 
-    // Only the UTC datetime form ('YYYYMMDDTHHMMSS' + optional Z) converts.
+/// `20260701T035959`, with or without a trailing `Z`, → the datetime it spells.
+/// `None` for the date-only and otherwise-shaped values that carry no time to
+/// convert — they are already in the frame the caller wants.
+fn parse_compact_datetime(value: &str) -> Option<NaiveDateTime> {
     let compact = value.strip_suffix(['Z', 'z']).unwrap_or(value);
-    let Some((date, time)) = compact.split_once(['T', 't']) else {
-        return rrule.to_string();
-    };
-    if date.len() != 8 || time.len() != 6 {
-        return rrule.to_string();
+    let (date, time) = compact.split_once(['T', 't'])?;
+    if date.len() != 8 || time.len() != 6 || !compact.is_ascii() {
+        return None;
     }
     let iso = format!(
         "{}-{}-{}T{}:{}:{}",
@@ -112,18 +149,7 @@ pub fn normalize_until_to_zone(rrule: &str, event_zone: &str) -> String {
         &time[2..4],
         &time[4..6]
     );
-    let Some(utc) = parse_naive(&iso) else {
-        return rrule.to_string();
-    };
-    let Some(wall) = utc_to_wall_clock(event_zone, utc) else {
-        return rrule.to_string();
-    };
-    format!(
-        "{}UNTIL={}Z{}",
-        &rrule[..pos],
-        wall.format("%Y%m%dT%H%M%S"),
-        &rrule[value_end..]
-    )
+    parse_naive(&iso)
 }
 
 /// Expands a zone-aware recurrence (an externally synced event) into
@@ -263,6 +289,22 @@ mod tests {
         assert_eq!(
             wall_clock_to_utc("Not/AZone", dt("2026-01-15T09:00:00")),
             None
+        );
+    }
+
+    // Native-only: the strict reading stored instants take. No TS counterpart —
+    // the renderer never has to refuse a value.
+    #[test]
+    fn stored_instants_refuse_a_wall_clock_the_zone_never_had() {
+        let ny: Tz = NY.parse().unwrap();
+        assert_eq!(wall_clock_instant(ny, dt("2026-03-08T02:30:00")), None);
+        assert_eq!(
+            wall_clock_instant(ny, dt("2026-11-01T01:30:00")).map(|i| i.naive_utc()),
+            Some(dt("2026-11-01T05:30:00"))
+        );
+        assert_eq!(
+            wall_clock_at(ny, Utc.from_utc_datetime(&dt("2026-07-15T13:00:00"))),
+            dt("2026-07-15T09:00:00")
         );
     }
 
