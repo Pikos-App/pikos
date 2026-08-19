@@ -1226,6 +1226,7 @@ dependencies = [
  "log",
  "oauth2",
  "pikos-db",
+ "pikos-recurrence",
  "quick-xml",
  "reqwest",
  "serde",
