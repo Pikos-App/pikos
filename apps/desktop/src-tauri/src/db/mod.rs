@@ -7,21 +7,21 @@ use crate::error::{AppError, AppResult};
 
 #[path = "assets/assets.rs"]
 pub mod assets;
+pub mod commands;
 pub mod dev;
-#[path = "folders/folders.rs"]
-pub mod folders;
-pub mod notifications;
-#[path = "pages/pages.rs"]
-pub mod pages;
 #[path = "schedules/schedules.rs"]
 pub mod schedules;
-#[path = "search/search.rs"]
-pub mod search;
 pub mod sync;
 pub mod sync_loop;
-pub mod tags;
 #[path = "watch.rs"]
 mod watch;
+
+// The command modules `db_commands!` generates. They are declared in
+// `commands.rs` rather than written out per file, and surfaced here under the
+// names the rest of the app (and the IPC tests) know them by. `schedules` and
+// `sync` are not in this list because they also hold hand-written commands —
+// those modules pull their generated half in themselves.
+pub use commands::{folders, notifications, pages, search, tags};
 
 /// Shared database state. None until connect_db is called.
 ///

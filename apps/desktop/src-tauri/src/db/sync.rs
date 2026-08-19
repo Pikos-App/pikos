@@ -1,52 +1,17 @@
-//! Calendar-sync command shims. Thin wrappers over `pikos-calendar-sync`
-//! (networked orchestration: keychain + provider + engine) and `pikos-db`'s sync
-//! writers. The keychain is constructed per call — there's no shared sync state to
-//! hold; credentials live in the OS keychain, keyed by the account id.
+//! The calendar-sync commands that are not pure delegation. The other nine —
+//! connect/reconnect, disconnect, resync, refresh, status and the calendar
+//! reads — are declared in `commands.rs` and pulled in below, so `db::sync`
+//! still names every sync command.
 
 use tauri::State;
 
-use pikos_calendar_sync::{
-    connect_caldav, connect_google, disconnect_account, google, reconnect_caldav,
-    refresh_account_auto, release_all_credentials, resync_account_auto, CalendarSyncResult,
-    Keychain,
-};
-use pikos_db::sync_commands::{
-    get_sync_status_impl, list_sync_calendars_impl, set_sync_calendar_color_impl,
-    toggle_sync_calendar_impl, AccountWithCalendars, SyncCalendar,
-};
+use pikos_calendar_sync::{connect_google, google, Keychain};
+use pikos_db::sync_commands::{toggle_sync_calendar_impl, AccountWithCalendars, SyncCalendar};
+
+pub use super::commands::sync::*;
 
 use super::DbState;
 use crate::error::AppResult;
-
-#[tauri::command]
-pub async fn connect_caldav_account(
-    state: State<'_, DbState>,
-    base_url: String,
-    username: String,
-    password: String,
-    display_name: String,
-) -> AppResult<AccountWithCalendars> {
-    let pool = state.get_pool().await?;
-    connect_caldav(
-        &pool,
-        Keychain::system(),
-        base_url,
-        username,
-        password,
-        display_name,
-    )
-    .await
-}
-
-#[tauri::command]
-pub async fn reconnect_caldav_account(
-    state: State<'_, DbState>,
-    account_id: String,
-    password: String,
-) -> AppResult<AccountWithCalendars> {
-    let pool = state.get_pool().await?;
-    reconnect_caldav(&pool, Keychain::system(), &account_id, password).await
-}
 
 /// Whether this build carries the Google OAuth client. The panel disables the
 /// Google option when it doesn't, rather than offering a connect that can only fail.
@@ -66,32 +31,9 @@ pub async fn connect_google_account(state: State<'_, DbState>) -> AppResult<Acco
     .await
 }
 
-#[tauri::command]
-pub async fn disconnect_sync_account(
-    state: State<'_, DbState>,
-    account_id: String,
-) -> AppResult<()> {
-    let pool = state.get_pool().await?;
-    disconnect_account(&pool, Keychain::system(), &account_id).await
-}
-
-/// Credential teardown for a full data wipe — `wipe_app_data` doesn't reach the
-/// keychain.
-#[tauri::command]
-pub async fn release_sync_credentials(state: State<'_, DbState>) -> AppResult<()> {
-    let pool = state.get_pool().await?;
-    release_all_credentials(&pool, Keychain::system()).await
-}
-
-#[tauri::command]
-pub async fn list_sync_calendars(
-    state: State<'_, DbState>,
-    account_id: String,
-) -> AppResult<Vec<SyncCalendar>> {
-    let pool = state.get_pool().await?;
-    list_sync_calendars_impl(&pool, &account_id).await
-}
-
+/// Generic over the runtime so a `MockRuntime` test can invoke it — the wire
+/// test reaches this command's `syncCalendarId`, which a concrete `Wry` handle
+/// would put out of reach.
 #[tauri::command]
 pub async fn toggle_sync_calendar<R: tauri::Runtime>(
     state: State<'_, DbState>,
@@ -107,38 +49,4 @@ pub async fn toggle_sync_calendar<R: tauri::Runtime>(
         crate::db::sync_loop::poke(&app);
     }
     Ok(cal)
-}
-
-#[tauri::command]
-pub async fn set_sync_calendar_color(
-    state: State<'_, DbState>,
-    sync_calendar_id: String,
-    color: String,
-) -> AppResult<SyncCalendar> {
-    let pool = state.get_pool().await?;
-    set_sync_calendar_color_impl(&pool, &sync_calendar_id, &color).await
-}
-
-#[tauri::command]
-pub async fn resync_sync_account(
-    state: State<'_, DbState>,
-    account_id: String,
-) -> AppResult<Vec<CalendarSyncResult>> {
-    let pool = state.get_pool().await?;
-    resync_account_auto(&pool, Keychain::system(), &account_id).await
-}
-
-#[tauri::command]
-pub async fn refresh_sync_account(
-    state: State<'_, DbState>,
-    account_id: String,
-) -> AppResult<Vec<CalendarSyncResult>> {
-    let pool = state.get_pool().await?;
-    refresh_account_auto(&pool, Keychain::system(), &account_id).await
-}
-
-#[tauri::command]
-pub async fn get_sync_status(state: State<'_, DbState>) -> AppResult<Vec<AccountWithCalendars>> {
-    let pool = state.get_pool().await?;
-    get_sync_status_impl(&pool).await
 }
