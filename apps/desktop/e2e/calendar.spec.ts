@@ -6,7 +6,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, mod, test as appTest } from "./fixtures";
+import { expect, mod, quickAdd, test as appTest } from "./fixtures";
 
 async function openCalendarMode(app: Page) {
   // Click the right-panel header's "Calendar view" button rather than firing
@@ -225,6 +225,28 @@ appTest("drag right edge of multi-day chip extends the span @tier2", async ({ ap
   const extendedBox = await chips.first().boundingBox();
   if (!extendedBox) throw new Error("chip missing after resize");
   expect(extendedBox.width).toBeGreaterThan(chipBox.width);
+});
+
+appTest("drag bottom edge of a timed block resizes without moving it @tier2", async ({ app }) => {
+  await quickAdd(app, "Standup today 10am");
+  await openCalendarMode(app);
+
+  const block = app.locator("[data-cal-page-id]").filter({ hasText: "Standup" }).first();
+  await expect(block).toBeVisible();
+  const before = await block.boundingBox();
+  if (!before) throw new Error("block missing");
+
+  await app.mouse.move(before.x + before.width / 2, before.y + before.height - 2);
+  await app.mouse.down();
+  await app.mouse.move(before.x + before.width / 2, before.y + before.height + 60, { steps: 10 });
+  await app.mouse.up();
+
+  const after = await block.boundingBox();
+  if (!after) throw new Error("block missing after resize");
+  // Grew downward and kept its start: a handle press that also armed the
+  // block's move drag would slide the top edge instead.
+  expect(after.height).toBeGreaterThan(before.height);
+  expect(Math.abs(after.y - before.y)).toBeLessThan(4);
 });
 
 appTest(

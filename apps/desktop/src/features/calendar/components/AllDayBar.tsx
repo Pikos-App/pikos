@@ -111,6 +111,9 @@ export function AllDayBar({
   function startEdgeResize(edge: "start" | "end") {
     return (e: React.PointerEvent) => {
       if (!e.isPrimary || e.button !== 0) return;
+      // The handle is inside the chip: without this its move drag also arms,
+      // and the losing reschedule collapses the span to a single day.
+      e.stopPropagation();
       e.preventDefault();
       setPopoverOpen(false);
       suppressPendingClick();

@@ -202,6 +202,9 @@ export function PageBlock({
    */
   function handleResizeHandlePointerDown(e: React.PointerEvent) {
     if (!e.isPrimary || e.button !== 0) return;
+    // Keeps handleBlockPointerDown's "does not route through here" true — both
+    // thresholds would otherwise arm and fire on the same movement.
+    e.stopPropagation();
     if (!onResizeStart) return;
     markDragging();
     beginDragThreshold(e.clientX, e.clientY, {
