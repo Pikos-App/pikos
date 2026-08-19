@@ -1,6 +1,6 @@
 // Parsers produce an ImportPlan which the UI previews before committing to the DB.
 
-import type { PagePriority, PageStatus } from "@pikos/core";
+import type { PagePriority, PageStatus } from "../types";
 
 /** An image reference found in a markdown body. */
 export interface ImageRef {

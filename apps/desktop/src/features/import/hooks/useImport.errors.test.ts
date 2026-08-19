@@ -3,6 +3,8 @@
 // (a) making each underlying call throw with a leaky message, and
 // (b) verifying state.message contains the friendly verb but not the raw text.
 
+import type { CSVMappingConfig } from "@pikos/core";
+import { applyMappings, prepareCSVRows } from "@pikos/core";
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,8 +19,8 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
-vi.mock("../parsers/csv", async () => {
-  const actual = await vi.importActual<typeof import("../parsers/csv")>("../parsers/csv");
+vi.mock("@pikos/core", async () => {
+  const actual = await vi.importActual<typeof import("@pikos/core")>("@pikos/core");
   return {
     ...actual,
     applyMappings: vi.fn(actual.applyMappings),
@@ -27,9 +29,6 @@ vi.mock("../parsers/csv", async () => {
 });
 
 import { readDir } from "@tauri-apps/plugin-fs";
-
-import { applyMappings, prepareCSVRows } from "../parsers/csv";
-import type { CSVMappingConfig } from "../parsers/types";
 
 // useImport reads two contexts. We provide minimal stubs so the hook
 // constructs without spinning up the full provider tree.

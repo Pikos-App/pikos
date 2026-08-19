@@ -1,8 +1,7 @@
-import type { PagePriority, PageStatus } from "@pikos/core";
 import { format, isValid, parse } from "date-fns";
 
-import { NLP_PRIORITY_MAP } from "@/shared/constants/priorities";
-
+import { NLP_PRIORITY_MAP } from "../constants/priorities";
+import type { PagePriority, PageStatus } from "../types";
 import type {
   ImageRef,
   ImportFolder,
