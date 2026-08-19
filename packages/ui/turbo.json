@@ -1,0 +1,13 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      // The root `test` task declares `coverage/**`. This package's suite is a
+      // handful of assertions over static token data and carries no coverage
+      // thresholds, so it writes nothing there — without this override turbo
+      // warns about the missing outputs on every run.
+      "outputs": []
+    }
+  }
+}
