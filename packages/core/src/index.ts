@@ -5,6 +5,8 @@ export * from "./adapters/MockStorageAdapter";
 export * from "./errors";
 export { parseInput } from "./nlp/parser";
 export type { ParseResult, ParsedInput } from "./nlp/parser";
+export { buildSearchFilter, parseSearchQuery } from "./nlp/searchQuery";
+export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
 export * from "./storage";
 export * from "./types";
 export {
