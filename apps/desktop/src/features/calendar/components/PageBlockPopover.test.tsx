@@ -2,7 +2,7 @@
 // the reminder bell's one real boundary (timed vs all-day, on every origin).
 
 import type { PageRecurrenceRule, PageSummary } from "@pikos/core";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -119,7 +119,10 @@ describe("PageBlockPopover — reminder bell", () => {
     expect(screen.getByLabelText("Page reminders")).toBeInTheDocument();
   });
 
-  it("hides the bell on a locked all-day recurring series", () => {
+  // An all-day page has no start time to count a lead time back from, but it
+  // does have the day-before anchor — same split the editor byline makes, so
+  // the bell is offered here too and the dropdown carries the all-day options.
+  it("offers the day-before reminder on a locked all-day recurring series", async () => {
     mocks.recurrenceRules = [rule];
     renderPopover(
       makePage({
@@ -129,7 +132,20 @@ describe("PageBlockPopover — reminder bell", () => {
         syncState: "active",
       })
     );
-    expect(screen.queryByLabelText("Page reminders")).not.toBeInTheDocument();
+    const bell = screen.getByLabelText("Page reminders");
+    expect(bell).toBeInTheDocument();
+
+    fireEvent.pointerDown(bell, { button: 0, ctrlKey: false });
+    expect(await screen.findByRole("menuitem", { name: /Day before at 9:00/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /10 min before/ })).not.toBeInTheDocument();
+  });
+
+  it("offers lead times on a timed page", async () => {
+    renderPopover(makePage({}));
+
+    fireEvent.pointerDown(screen.getByLabelText("Page reminders"), { button: 0, ctrlKey: false });
+    expect(await screen.findByRole("menuitem", { name: /10 min before/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Day before at 9:00/ })).not.toBeInTheDocument();
   });
 });
 
