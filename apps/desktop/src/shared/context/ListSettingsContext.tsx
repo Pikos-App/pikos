@@ -1,5 +1,4 @@
-import { createContext, type ReactNode, useContext } from "react";
-
+import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 export type ListDensity = "compact" | "cozy" | "spacious";
@@ -9,19 +8,13 @@ export interface ListSettingsValue {
   setDensity: (v: ListDensity) => void;
 }
 
-const ListSettingsContext = createContext<ListSettingsValue | null>(null);
-
-export function ListSettingsProvider({ children }: { children: ReactNode }) {
+function useListSettingsValue(): ListSettingsValue {
   const [density, setDensity] = useLocalStorage<ListDensity>("pikos:listDensity", "cozy");
 
-  const value: ListSettingsValue = { density, setDensity };
-
-  return <ListSettingsContext.Provider value={value}>{children}</ListSettingsContext.Provider>;
+  return { density, setDensity };
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function useListSettings(): ListSettingsValue {
-  const ctx = useContext(ListSettingsContext);
-  if (!ctx) throw new Error("useListSettings must be used within <ListSettingsProvider>");
-  return ctx;
-}
+const listSettings = createSettingsContext("ListSettings", useListSettingsValue);
+
+export const ListSettingsProvider = listSettings.Provider;
+export const useListSettings = listSettings.useSettings;
