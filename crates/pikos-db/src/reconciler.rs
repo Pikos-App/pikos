@@ -1210,7 +1210,8 @@ async fn insert_schedule_row(
 /// `seeded_description_hash` so a projection change re-seeds pristine bodies
 /// instead of reading the whole synced corpus as "user edited".
 ///
-/// Bump when `build_tiptap_doc` or the projection starts producing different output
+/// Bump when [`crate::pool::build_tiptap_doc`] or the projection starts producing
+/// different output
 /// for a document the editor can hold — not on every edit to them, since a bump
 /// discards a precise signal for the coarse `user_modified` fallback on every synced
 /// page. The projection is two implementations, not one: the hash below is compared
@@ -1349,7 +1350,8 @@ fn fnv_hex(s: &str) -> String {
 /// leaving every other field intact. Expansion matches occurrences by wall-clock
 /// string, so a UTC UNTIL clips the final occurrence(s) on the wrong day for
 /// viewers outside the source zone. Floating/date-only UNTIL is already
-/// wall-clock and passes through.
+/// wall-clock and passes through. Edited in place through [`rewrite_until_with`],
+/// since a parse round-trip would drop BYSETPOS/BYMONTHDAY.
 fn rewrite_until_to_wall_clock(rrule: &str, tz: &str) -> String {
     let Ok(zone) = tz.parse::<Tz>() else {
         return rrule.to_string(); // unknown zone: leave raw rather than panic
