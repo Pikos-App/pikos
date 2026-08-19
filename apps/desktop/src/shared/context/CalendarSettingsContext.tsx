@@ -3,6 +3,7 @@ import type {
   CalendarDayCount,
   CalendarDensity,
   CalendarMetrics,
+  CalendarViewMode,
   CollapseGeometry,
 } from "@pikos/core";
 import {
@@ -18,11 +19,17 @@ import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
-export type { CalendarDayCount };
+export type { CalendarDayCount, CalendarViewMode };
 
 export interface CalendarSettingsValue {
   dayCount: CalendarDayCount;
   setDayCount: (v: CalendarDayCount) => void;
+  /** Which shape the calendar renders: the day-count time grid, or month view.
+   * Persisted alongside — not inside — `dayCount`, so switching to month view
+   * and back restores the user's day count untouched, and a value already in
+   * localStorage keeps meaning exactly what it meant before month view existed. */
+  viewMode: CalendarViewMode;
+  setViewMode: (v: CalendarViewMode) => void;
   density: CalendarDensity;
   setDensity: (v: CalendarDensity) => void;
   /** Derived from density — convenient so callers don't recompute. */
@@ -46,6 +53,10 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
   const [dayCount, setDayCount] = useLocalStorage<CalendarDayCount>(
     STORAGE_KEYS.calendarDayCount,
     7
+  );
+  const [viewMode, setViewMode] = useLocalStorage<CalendarViewMode>(
+    STORAGE_KEYS.calendarViewMode,
+    "time"
   );
   const [density, setDensity] = useLocalStorage<CalendarDensity>(
     STORAGE_KEYS.calendarDensity,
@@ -97,6 +108,8 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     setHoveredBand,
     setTopCollapsed: setTopCollapsedRaw,
     setTopHour,
+    setViewMode,
+    viewMode,
   };
 }
 

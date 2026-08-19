@@ -23,6 +23,7 @@ export const STORAGE_KEYS = {
   calendarScrollHour: "pikos:calendarScrollHour",
   calendarTopCollapsed: "pikos:calendarTopCollapsed",
   calendarTopHour: "pikos:calendarTopHour",
+  calendarViewMode: "pikos:calendarViewMode",
   defaultFolderId: "pikos:defaultFolderId",
   defaultReminderMinutes: "pikos:defaultReminderMinutes",
   lastActivePageId: "pikos:lastActivePageId",
