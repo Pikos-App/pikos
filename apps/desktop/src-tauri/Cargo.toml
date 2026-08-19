@@ -66,4 +66,8 @@ pikos-db = { path = "../../../crates/pikos-db", features = ["test-support"] }
 # `test` brings MockRuntime, for the one thing that cannot be reached below the
 # command shims: the IPC boundary itself (see db/ipc_tests.rs).
 tauri = { version = "2", features = ["test"] }
+# The same iCalendar parser the CalDAV provider reads real servers with, used to
+# read the `.ics` export back in db/dev/ics_tests.rs. A test-only dependency: the
+# app writes iCalendar here, it never parses it.
+calcard = "0.3.5"
 

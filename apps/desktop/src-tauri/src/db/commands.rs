@@ -144,6 +144,7 @@ db_commands! {
         crate::db::dev::backup_db,
         crate::db::dev::backup_db_before_import,
         crate::db::dev::export_csv,
+        crate::db::dev::export_ics,
         crate::db::dev::export_markdown,
         crate::db::dev::get_usage_stats,
         crate::db::dev::reset_db,
