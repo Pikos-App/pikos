@@ -4,8 +4,9 @@
 // - SQLite files in the workspace (default.sqlite + WAL/SHM, backups/, assets/,
 //   workspaces.json — everything under app_data_dir).
 // - Rotating log file under app_log_dir.
-// - All `pikos:*` keys in localStorage (theme, calendar/editor/list
-//   preferences, skipped update version, defaults).
+// - All `pikos:` keys in localStorage (calendar/editor/list preferences,
+//   skipped update version, defaults). The theme key predates that namespace
+//   (see shared/constants/storage.ts) and deliberately survives the wipe.
 // - Calendar-sync credentials in the OS keychain, and the OAuth grants they
 //   belong to. These sit outside app_data_dir, so they need their own pass.
 //
@@ -17,9 +18,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { load } from "@tauri-apps/plugin-store";
 
+import { STORAGE_KEY_PREFIX } from "@/shared/constants/storage";
 import { createLogger } from "@/shared/logger";
-
-const LOCAL_STORAGE_PREFIX = "pikos:";
 
 const log = createLogger("deleteAllData");
 
@@ -67,7 +67,7 @@ export async function deleteAllData(): Promise<void> {
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith(LOCAL_STORAGE_PREFIX)) keys.push(key);
+      if (key && key.startsWith(STORAGE_KEY_PREFIX)) keys.push(key);
     }
     for (const key of keys) localStorage.removeItem(key);
   } catch {

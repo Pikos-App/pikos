@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
@@ -45,38 +46,44 @@ export interface AppSettingsValue {
 }
 
 function useAppSettingsValue(): AppSettingsValue {
-  const [weekStart, setWeekStart] = useLocalStorage<WeekStart>("pikos:weekStart", 1);
+  const [weekStart, setWeekStart] = useLocalStorage<WeekStart>(STORAGE_KEYS.weekStart, 1);
   const [defaultFolderId, setDefaultFolderId] = useLocalStorage<string | null>(
-    "pikos:defaultFolderId",
+    STORAGE_KEYS.defaultFolderId,
     null
   );
   const [notificationsEnabled, setNotificationsEnabled] = useLocalStorage<boolean>(
-    "pikos:notificationsEnabled",
+    STORAGE_KEYS.notificationsEnabled,
     true
   );
   const [defaultReminderMinutes, setDefaultReminderMinutes] = useLocalStorage<ReminderLeadTime>(
-    "pikos:defaultReminderMinutes",
+    STORAGE_KEYS.defaultReminderMinutes,
     10
   );
   const [skippedVersion, setSkippedVersion] = useLocalStorage<string | null>(
-    "pikos:skippedVersion",
+    STORAGE_KEYS.skippedVersion,
     null
   );
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useLocalStorage<boolean>(
-    "pikos:autoUpdateEnabled",
+    STORAGE_KEYS.autoUpdateEnabled,
     true
   );
-  const [overdueAlerts, setOverdueAlerts] = useLocalStorage<boolean>("pikos:overdueAlerts", true);
-  const [summaryTime, setSummaryTime] = useLocalStorage<string>("pikos:summaryTime", "07:00");
+  const [overdueAlerts, setOverdueAlerts] = useLocalStorage<boolean>(
+    STORAGE_KEYS.overdueAlerts,
+    true
+  );
+  const [summaryTime, setSummaryTime] = useLocalStorage<string>(STORAGE_KEYS.summaryTime, "07:00");
   const [quietHoursEnabled, setQuietHoursEnabled] = useLocalStorage<boolean>(
-    "pikos:quietHoursEnabled",
+    STORAGE_KEYS.quietHoursEnabled,
     false
   );
   const [quietHoursStart, setQuietHoursStart] = useLocalStorage<string>(
-    "pikos:quietHoursStart",
+    STORAGE_KEYS.quietHoursStart,
     "22:00"
   );
-  const [quietHoursEnd, setQuietHoursEnd] = useLocalStorage<string>("pikos:quietHoursEnd", "08:00");
+  const [quietHoursEnd, setQuietHoursEnd] = useLocalStorage<string>(
+    STORAGE_KEYS.quietHoursEnd,
+    "08:00"
+  );
 
   // Sync notification settings to the Rust scheduler whenever they change.
   // Wrapped in catch — Tauri IPC is unavailable in test/non-Tauri environments.

@@ -13,6 +13,7 @@ import {
   computeCalendarMetrics,
 } from "@/features/calendar/utils/calendarGeometry";
 import type { CalendarDayCount, CalendarDensity } from "@/shared/constants/calendar";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
@@ -41,22 +42,28 @@ export interface CalendarSettingsValue {
 }
 
 function useCalendarSettingsValue(): CalendarSettingsValue {
-  const [dayCount, setDayCount] = useLocalStorage<CalendarDayCount>("pikos:calendarDayCount", 7);
-  const [density, setDensity] = useLocalStorage<CalendarDensity>("pikos:calendarDensity", "normal");
+  const [dayCount, setDayCount] = useLocalStorage<CalendarDayCount>(
+    STORAGE_KEYS.calendarDayCount,
+    7
+  );
+  const [density, setDensity] = useLocalStorage<CalendarDensity>(
+    STORAGE_KEYS.calendarDensity,
+    "normal"
+  );
   const [topCollapsed, setTopCollapsedRaw] = useLocalStorage<boolean>(
-    "pikos:calendarTopCollapsed",
+    STORAGE_KEYS.calendarTopCollapsed,
     DEFAULT_COLLAPSE_CONFIG.topCollapsed
   );
   const [bottomCollapsed, setBottomCollapsedRaw] = useLocalStorage<boolean>(
-    "pikos:calendarBottomCollapsed",
+    STORAGE_KEYS.calendarBottomCollapsed,
     DEFAULT_COLLAPSE_CONFIG.bottomCollapsed
   );
   const [topHour, setTopHourRaw] = useLocalStorage<number>(
-    "pikos:calendarTopHour",
+    STORAGE_KEYS.calendarTopHour,
     DEFAULT_COLLAPSE_CONFIG.topHour
   );
   const [bottomHour, setBottomHourRaw] = useLocalStorage<number>(
-    "pikos:calendarBottomHour",
+    STORAGE_KEYS.calendarBottomHour,
     DEFAULT_COLLAPSE_CONFIG.bottomHour
   );
 

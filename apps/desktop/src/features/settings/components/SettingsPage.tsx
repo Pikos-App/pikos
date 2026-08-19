@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import { CSVColumnMappingPage, ImportPreviewModal, useImport } from "@/features/import";
+import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useImportBatch } from "@/shared/context/ImportContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -23,7 +24,7 @@ const DeveloperSettings = import.meta.env.DEV
 
 function readLeftPanelWidth(): number {
   try {
-    const raw = localStorage.getItem("pikos:leftPanelWidth");
+    const raw = localStorage.getItem(STORAGE_KEYS.leftPanelWidth);
     return raw ? (JSON.parse(raw) as number) : 180;
   } catch {
     return 180;

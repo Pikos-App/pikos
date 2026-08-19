@@ -3,6 +3,8 @@
 
 import { useEffect, useState } from "react";
 
+import { STORAGE_KEYS } from "@/shared/constants/storage";
+
 /**
  * Ordered simple → complex so a new user sees plain titles first and is
  * gradually exposed to date, time, tag, priority, and recurrence syntax.
@@ -23,15 +25,13 @@ const EXAMPLES = [
 
 export const QUICK_ADD_PLACEHOLDER_EXAMPLES = EXAMPLES;
 
-const STORAGE_KEY = "pikos:quickAddPlaceholderIndex";
-
 function modIndex(n: number): number {
   return ((n % EXAMPLES.length) + EXAMPLES.length) % EXAMPLES.length;
 }
 
 function readIndex(): number {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEYS.quickAddPlaceholderIndex);
     if (raw === null) return 0;
     const parsed = JSON.parse(raw);
     return typeof parsed === "number" && Number.isFinite(parsed) ? modIndex(parsed) : 0;
@@ -42,7 +42,7 @@ function readIndex(): number {
 
 function writeIndex(value: number): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(modIndex(value)));
+    localStorage.setItem(STORAGE_KEYS.quickAddPlaceholderIndex, JSON.stringify(modIndex(value)));
   } catch {
     // localStorage unavailable (e.g. private browsing) — ignore
   }
