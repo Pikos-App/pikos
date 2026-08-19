@@ -45,6 +45,10 @@
 //   • RRULE validation                                ← rrule round-trip
 //
 // CROSS-CUTTING
+//   • reminder tokens — units and shorthand          ← table
+//   • reminder tokens — all-day vs timed resolution  ← table
+//   • reminder tokens — nothing to anchor to         ← table
+//   • body separator ("//")                          ← table
 //   • token stripping and title cleanliness
 //   • title leakage — finite window keywords
 //   • time-without-date weekday anchoring
@@ -2737,6 +2741,355 @@ describe("NL Page Creation Parser", () => {
           type: "recurring",
         },
         input: "  !urgent  every  other  tuesday  at  9am  for  30m  for  4  weeks  #a  #b  ~c  ",
+      },
+    ];
+    it.each(cases)("$input", runCase);
+  });
+
+  // ─── reminder tokens ───────────────────────────────────────────────────────
+  // The lead itself: every unit spelling, the !rN shorthand, and the filler
+  // words a person actually types around them.
+  describe("reminder tokens — units and shorthand", () => {
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { reminderMinutes: [30], scheduledStart: "2026-03-16T15:00:00", title: "Dentist" },
+          type: "single",
+        },
+        input: "Dentist tomorrow at 3pm remind 30m before",
+      },
+      {
+        expected: { input: { reminderMinutes: [30], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 30 min before",
+      },
+      {
+        expected: { input: { reminderMinutes: [45], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 45 minutes before",
+      },
+      {
+        expected: { input: { reminderMinutes: [5], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 5 mins before",
+      },
+      {
+        expected: { input: { reminderMinutes: [120], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 2h before",
+      },
+      {
+        expected: { input: { reminderMinutes: [60], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 1 hr before",
+      },
+      {
+        expected: { input: { reminderMinutes: [180], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 3 hours before",
+      },
+      {
+        expected: { input: { reminderMinutes: [90], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 1.5h before",
+      },
+      {
+        // A timed page keeps a day-lead as plain minutes — see the all-day block below.
+        expected: { input: { reminderMinutes: [1440], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 1d before",
+      },
+      {
+        expected: { input: { reminderMinutes: [2880], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 2 days before",
+      },
+      {
+        expected: { input: { reminderMinutes: [30], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm !r30",
+      },
+      {
+        expected: { input: { reminderMinutes: [90], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm !r90",
+      },
+      {
+        expected: { input: { reminderMinutes: [60], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm !r1h",
+      },
+      {
+        expected: { input: { reminderMinutes: [1440], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm !r1d",
+      },
+      {
+        expected: { input: { reminderMinutes: [30], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind me 30 min before",
+      },
+      {
+        expected: { input: { reminderMinutes: [15], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm reminder 15m before",
+      },
+      {
+        expected: { input: { reminderMinutes: [10], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind me please 10 minutes beforehand",
+      },
+      {
+        // "before" is optional — the word "remind" already said which direction.
+        expected: { input: { reminderMinutes: [30], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm remind 30m",
+      },
+      {
+        expected: { input: { reminderMinutes: [30], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow at 3pm REMIND 30M BEFORE",
+      },
+      {
+        expected: { input: { reminderMinutes: [1440], title: "Ping team" }, type: "single" },
+        input: "Ping team tomorrow at 2pm remind me a day before",
+      },
+    ];
+    it.each(cases)("$input", runCase);
+  });
+
+  // ─── reminder resolution against the schedule shape ────────────────────────
+  describe("reminder tokens — all-day vs timed resolution", () => {
+    const cases: ParserCase[] = [
+      {
+        // All-day: no start time to count back from, so the lead becomes the
+        // day-before anchor (pikos_db DAY_BEFORE_MINUTES = -2).
+        expected: {
+          input: { reminderMinutes: [-2], scheduledStart: "2026-03-16", title: "Dentist" },
+          type: "single",
+        },
+        input: "Dentist tomorrow remind day before",
+      },
+      {
+        expected: {
+          input: { reminderMinutes: [-2], scheduledStart: "2026-03-16", title: "Dentist" },
+          type: "single",
+        },
+        input: "Dentist tomorrow remind me the day before",
+      },
+      {
+        expected: { input: { reminderMinutes: [-2], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow remind 1d before",
+      },
+      {
+        // Even a minutes lead collapses: it is the only reminder an all-day page
+        // can carry, and a 30-minute row on it would never fire.
+        expected: { input: { reminderMinutes: [-2], title: "Dentist" }, type: "single" },
+        input: "Dentist tomorrow !r30",
+      },
+      {
+        expected: {
+          input: { reminderMinutes: [-2], scheduledEnd: "2026-04-25", title: "vacation" },
+          type: "single",
+        },
+        input: "vacation April 18-25 remind day before",
+      },
+      {
+        // Timed: "day before" is a plain 1440-minute lead.
+        expected: {
+          input: { reminderMinutes: [1440], scheduledStart: "2026-03-16T15:00:00" },
+          type: "single",
+        },
+        input: "Dentist tomorrow at 3pm remind day before",
+      },
+    ];
+    it.each(cases)("$input", runCase);
+
+    it("accumulates and dedupes multiple tokens, ascending", () => {
+      const r = parseInput("Ship it tomorrow at 3pm remind 1h before remind 30m before", NOW);
+      if (r.type !== "single") throw new Error("expected single");
+      expect(r.input.reminderMinutes).toEqual([30, 60]);
+      expect(r.input.title).toBe("Ship it");
+    });
+
+    it("dedupes a phrase and a shorthand naming the same lead", () => {
+      const r = parseInput("Ship it tomorrow at 3pm remind 30m before !r30", NOW);
+      if (r.type !== "single") throw new Error("expected single");
+      expect(r.input.reminderMinutes).toEqual([30]);
+    });
+
+    it("carries the lead onto a recurring page", () => {
+      const r = parseInput("Standup every weekday at 9am remind 15 min before", NOW);
+      if (r.type !== "recurring") throw new Error("expected recurring");
+      expect(r.input.reminderMinutes).toEqual([15]);
+      expect(r.input.title).toBe("Standup");
+    });
+
+    it("gives every page of a finite series its own copy of the lead", () => {
+      const r = parseInput("gym m/w/f 7am remind 30m before", NOW);
+      if (r.type !== "finite") throw new Error("expected finite");
+      expect(r.inputs.map((i) => i.reminderMinutes)).toEqual([[30], [30], [30]]);
+      expect(r.inputs[0]!.reminderMinutes).not.toBe(r.inputs[1]!.reminderMinutes);
+    });
+  });
+
+  describe("reminder tokens — nothing to anchor to", () => {
+    const cases: ParserCase[] = [
+      {
+        // No schedule, so the words stay in the title rather than becoming a row
+        // the scheduler could never fire.
+        expected: {
+          input: { title: "Call mom remind 30m before" },
+          inputAbsent: ["reminderMinutes", "scheduledStart"],
+          type: "single",
+        },
+        input: "Call mom remind 30m before",
+      },
+      {
+        expected: {
+          input: { title: "Call mom !r30" },
+          inputAbsent: ["reminderMinutes"],
+          type: "single",
+        },
+        input: "Call mom !r30",
+      },
+      {
+        // "remind me to …" names no unit, so it is ordinary title text.
+        expected: {
+          input: { scheduledStart: "2026-03-16", title: "remind me to buy milk" },
+          inputAbsent: ["reminderMinutes"],
+          type: "single",
+        },
+        input: "remind me to buy milk tomorrow",
+      },
+      {
+        // "in" is deliberately not a filler word, so chrono still gets the date.
+        expected: {
+          input: { scheduledStart: "2026-03-17", title: "Ping team remind me" },
+          inputAbsent: ["reminderMinutes"],
+          type: "single",
+        },
+        input: "Ping team remind me in 2 days",
+      },
+      {
+        // Composes with the rest of the grammar without eating it.
+        expected: {
+          input: {
+            durationMinutes: 120,
+            reminderMinutes: [30],
+            scheduledEnd: "2026-03-16T17:00:00",
+            scheduledStart: "2026-03-16T15:00:00",
+            title: "Groceries",
+          },
+          type: "single",
+        },
+        input: "Groceries for 2h tomorrow at 3pm remind 30 minutes before",
+      },
+      {
+        expected: {
+          input: {
+            priority: "high",
+            reminderMinutes: [15],
+            tags: ["work"],
+            title: "Ship",
+          },
+          type: "single",
+        },
+        input: "Ship #work !high tomorrow at 3pm !r15",
+      },
+    ];
+    it.each(cases)("$input", runCase);
+  });
+
+  // ─── title/body separator ("//") ───────────────────────────────────────────
+  describe("body separator", () => {
+    const cases: ParserCase[] = [
+      {
+        expected: {
+          input: { content: "she likes the blue one", title: "Buy a gift" },
+          type: "single",
+        },
+        input: "Buy a gift // she likes the blue one",
+      },
+      {
+        // The body is verbatim: no tag, folder, priority or date is read out of it.
+        expected: {
+          input: {
+            content: "remember #blue and ~folder !urgent tomorrow",
+            tags: [],
+            title: "Buy a gift",
+          },
+          inputAbsent: ["folderQuery", "priority", "scheduledStart"],
+          type: "single",
+        },
+        input: "Buy a gift // remember #blue and ~folder !urgent tomorrow",
+      },
+      {
+        // Only the FIRST separator splits — later ones belong to the body.
+        expected: { input: { content: "b // c", title: "a" }, type: "single" },
+        input: "a // b // c",
+      },
+      {
+        // A string edge counts as the boundary, so a body-only input is allowed.
+        expected: { input: { content: "just a note", title: "" }, type: "single" },
+        input: "// just a note",
+      },
+      {
+        // Nothing after the separator is no body at all.
+        expected: { input: { title: "Task" }, inputAbsent: ["content"], type: "single" },
+        input: "Task //",
+      },
+      {
+        expected: { input: { content: "line one\nline two", title: "Notes" }, type: "single" },
+        input: "Notes // line one\nline two",
+      },
+      {
+        // Whitespace on both sides is required — this is what keeps URLs intact.
+        expected: {
+          input: { scheduledStart: "2026-03-16", title: "check https://example.com/a//b" },
+          inputAbsent: ["content"],
+          type: "single",
+        },
+        input: "check https://example.com/a//b tomorrow",
+      },
+      {
+        expected: {
+          input: { title: "a//b" },
+          inputAbsent: ["content"],
+          type: "single",
+        },
+        input: "a//b",
+      },
+      {
+        expected: {
+          input: { content: "see https://example.com for #context", title: "Review PR" },
+          type: "single",
+        },
+        input: "Review PR tomorrow at 2pm // see https://example.com for #context",
+      },
+      {
+        expected: {
+          input: { content: "tomorrow at 3pm", title: "Call" },
+          inputAbsent: ["scheduledStart"],
+          type: "single",
+        },
+        input: "Call // tomorrow at 3pm",
+      },
+      {
+        // The title side keeps its full grammar.
+        expected: {
+          input: {
+            content: "ask about the trip",
+            scheduledStart: "2026-03-16T15:00:00",
+            tags: ["family"],
+            title: "Call mom",
+          },
+          type: "single",
+        },
+        input: "Call mom tomorrow at 3pm #family // ask about the trip",
+      },
+      {
+        expected: {
+          input: {
+            content: "bring the insurance card",
+            reminderMinutes: [30],
+            scheduledStart: "2026-03-16T15:00:00",
+            title: "Dentist",
+          },
+          type: "single",
+        },
+        input: "Dentist tomorrow at 3pm remind 30m before // bring the insurance card",
+      },
+      {
+        // The body travels onto every page of a finite series.
+        expected: {
+          count: 3,
+          eachInput: { content: "bring a towel", title: "gym" },
+          type: "finite",
+        },
+        input: "gym m/w/f 7am // bring a towel",
       },
     ];
     it.each(cases)("$input", runCase);

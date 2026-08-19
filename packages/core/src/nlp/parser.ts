@@ -16,6 +16,13 @@ import { listOccurrences, type RecurrenceFreq } from "../utils/recurrence";
 
 type PagePriority = "urgent" | "high" | "medium" | "low";
 
+/**
+ * The `page_reminders.minutes_before` value that means "the day before, at 09:00
+ * local" rather than a lead time in minutes — `pikos_db::DAY_BEFORE_MINUTES`,
+ * mirrored here so the parser can hand back the value the row will carry.
+ */
+export const DAY_BEFORE_MINUTES = -2;
+
 export interface ParsedInput {
   title: string;
   scheduledStart?: string; // ISO 8601 — date-only ("2026-03-16") or datetime ("2026-03-16T15:00:00")
@@ -24,6 +31,18 @@ export interface ParsedInput {
   tags: string[];
   folderQuery?: string;
   priority?: PagePriority | null; // null = explicitly cleared (!0); undefined = not mentioned
+  /**
+   * Reminder rows to write, as `minutes_before` values: ascending, deduped, and
+   * already resolved against the schedule shape (see the reminder section of
+   * `parseInput`). Absent when nothing was asked for — or when what was asked
+   * for has no schedule to anchor to, in which case the words stay in the title.
+   */
+  reminderMinutes?: number[];
+  /**
+   * Page body, plain text, taken verbatim from after the first ` // `. Absent
+   * when the input carried no separator (or nothing after it).
+   */
+  content?: string;
 }
 
 export type ParseResult =
@@ -146,7 +165,20 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     return { input: { tags: [], title: "" }, type: "single" };
   }
 
+  // --- -2. Body split: "buy a gift // she likes the blue one" ────────────────
+  // Everything after the FIRST whitespace-delimited "//" is the page body, kept
+  // verbatim: no tag, folder, date or cadence is read out of it, so a "#word" in
+  // a note stays literal text. The separator has to sit on a whitespace boundary
+  // (or a string edge) on both sides, which is what keeps "https://example.com"
+  // a URL and a later "//" part of the body it belongs to.
+  let content: string | undefined;
   let text = raw;
+  const bodySplit = /(?:^|\s)\/\/(?:\s|$)/.exec(raw);
+  if (bodySplit) {
+    text = raw.slice(0, bodySplit.index);
+    const body = raw.slice(bodySplit.index + bodySplit[0].length).trim();
+    if (body) content = body;
+  }
 
   // --- -1. Casual time-of-day mapping ───────────────────────────────────────
   // chrono sets a meridiem for "morning" / "afternoon" / "evening" / "night"
@@ -296,6 +328,58 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     }
     return " ";
   });
+
+  // --- 3.5. Reminders: "remind 30m before", "remind me the day before", "!r1h" ---
+  // Extracted before chrono so a lead ("1d before") is never mistaken for the
+  // event's own date, and stashed behind a placeholder rather than removed: a
+  // reminder needs a schedule to anchor to, and whether one exists isn't known
+  // until chrono has run. The placeholder is control characters only, so no rule
+  // between here and the restore can match inside it.
+  const REMINDER_UNIT_MINUTES: Record<string, number> = {
+    d: 1440,
+    day: 1440,
+    days: 1440,
+    h: 60,
+    hour: 60,
+    hours: 60,
+    hr: 60,
+    hrs: 60,
+    m: 1,
+    min: 1,
+    mins: 1,
+    minute: 1,
+    minutes: 1,
+  };
+  // Longest-first so "minutes" can't be consumed as a bare "m".
+  const REMINDER_UNIT = "(minutes|minute|mins|min|m|hours|hour|hrs|hr|h|days|day|d)";
+  const reminderLeads: number[] = [];
+  const reminderTokens: string[] = [];
+  const reminderPlaceholder = (index: number) => `\u0000${"\u0001".repeat(index + 1)}\u0000`;
+  function stashReminder(match: string, num: string | undefined, unit: string): string {
+    const per = REMINDER_UNIT_MINUTES[unit.toLowerCase()];
+    if (per === undefined) return match;
+    // A bare unit means one of it: "remind day before" is a one-day lead, which
+    // the resolution step below turns into the all-day anchor when it can.
+    const count = num === undefined ? 1 : parseFloat(num);
+    reminderLeads.push(Math.max(0, Math.round(count * per)));
+    reminderTokens.push(match.trim());
+    return ` ${reminderPlaceholder(reminderTokens.length - 1)} `;
+  }
+  // Shorthand: "!r30" (minutes by default), "!r1h", "!r1d".
+  text = text.replace(
+    new RegExp(`!r(\\d+(?:\\.\\d+)?)\\s*${REMINDER_UNIT}?\\b`, "gi"),
+    (match, num: string, unit: string | undefined) => stashReminder(match, num, unit ?? "m")
+  );
+  // Phrase: "remind"/"reminder" + generous filler + a strict unit, with the
+  // trailing "before" optional. Filler deliberately excludes "in", so
+  // "remind me in 2 days" stays a date for chrono rather than becoming a lead.
+  text = text.replace(
+    new RegExp(
+      `\\bremind(?:er)?s?\\b(?:\\s+(?:please|about|one|the|an|us|me|at|a))*\\s*(\\d+(?:\\.\\d+)?)?\\s*${REMINDER_UNIT}\\b(?:\\s+(?:beforehand|before|ahead|prior|early|in\\s+advance)\\b)?`,
+      "gi"
+    ),
+    (match, num: string | undefined, unit: string) => stashReminder(match, num, unit)
+  );
 
   // --- 4. Duration: for Xh, for Xmin, for X hours, for X minutes ---
   let durationMinutes: number | undefined;
@@ -687,6 +771,31 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     scheduledStart = formatDateOnly(target);
   }
 
+  // --- 8.5. Reminder resolution ---
+  // Every reminder arm of the scheduler joins `page_schedules`, so a lead on an
+  // unscheduled page could never fire: without a parsed schedule the words go
+  // back into the title verbatim rather than turning into a row that never
+  // rings. With one, the schedule's own shape decides what the row holds —
+  // resolved here, not by the consumer, because this is where the shape is known:
+  //   • all-day  → every lead collapses onto DAY_BEFORE_MINUTES, the single
+  //     anchor such a page can carry (an all-day page has no start time to count
+  //     minutes back from, which is why the reminder dropdown offers it one
+  //     option too);
+  //   • timed    → the minutes as typed, so "1d before" is a 1440-minute lead.
+  let reminderMinutes: number[] | undefined;
+  if (reminderTokens.length > 0) {
+    if (scheduledStart !== undefined) {
+      const leads = isAllDayIso(scheduledStart) ? [DAY_BEFORE_MINUTES] : reminderLeads;
+      reminderMinutes = [...new Set(leads)].sort((a, b) => a - b);
+    }
+    for (let i = 0; i < reminderTokens.length; i++) {
+      text = text.replace(
+        reminderPlaceholder(i),
+        reminderMinutes ? " " : ` ${reminderTokens[i]!} `
+      );
+    }
+  }
+
   // --- 9. Title: remaining text ---
   // Collapse runs of whitespace, then clean up punctuation orphans left
   // behind when inline tokens (#tag, !urgent, ~folder) were stripped:
@@ -711,6 +820,8 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     ...(folderQuery !== undefined && { folderQuery }),
     ...(priority !== undefined && { priority }),
     ...(durationMinutes !== undefined && { durationMinutes }),
+    ...(reminderMinutes !== undefined && { reminderMinutes }),
+    ...(content !== undefined && { content }),
   };
 
   if (scheduledStart !== undefined) {
@@ -842,9 +953,12 @@ export function parseInput(raw: string, now?: Date): ParseResult {
     ).map(parseLocalISO);
 
     const inputs: ParsedInput[] = dates.map((d) => {
+      // Arrays are copied, not shared: each page owns its own tags and reminders,
+      // so a later per-page edit can't reach into its siblings.
       const inp: ParsedInput = {
         ...baseInput,
         tags: [...tags],
+        ...(reminderMinutes !== undefined && { reminderMinutes: [...reminderMinutes] }),
       };
 
       if (hasTime && scheduledStart) {
