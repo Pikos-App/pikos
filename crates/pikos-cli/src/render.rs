@@ -1,7 +1,9 @@
 //! Human-readable rendering. `--json` bypasses all of this and prints the
 //! pikos-db types verbatim, so these are the plain-text surface only.
 
-use pikos_db::{Page, PageSummary, SearchResponse};
+use pikos_db::{Page, PageReminder, PageSummary, SearchResponse};
+
+use crate::ops::FolderEntry;
 
 pub fn priority_label(p: i64) -> &'static str {
     match p {
@@ -147,6 +149,45 @@ pub fn render_search(resp: &SearchResponse) -> String {
         ));
     }
     lines.join("\n")
+}
+
+pub fn render_folders(folders: &[FolderEntry]) -> String {
+    if folders.is_empty() {
+        return "No folders yet.".to_string();
+    }
+    folders
+        .iter()
+        .map(|e| {
+            // Calendar folders are Pikos-managed and can't be filed into, so say so
+            // rather than leave a reader wondering why `add ~name` skips them.
+            let origin = if e.folder.is_external_calendar {
+                "  (calendar)"
+            } else {
+                ""
+            };
+            format!(
+                "{}  {} page(s){origin}   id:{}",
+                e.folder.name, e.page_count, e.folder.id
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+pub fn render_reminders(reminders: &[PageReminder]) -> String {
+    if reminders.is_empty() {
+        return "No reminders on this page.".to_string();
+    }
+    reminders
+        .iter()
+        .map(|r| match r.minutes_before {
+            // -1 is pikos-db's "this page opts out" sentinel, not a time.
+            -1 => format!("none (opted out)   id:{}", r.id),
+            0 => format!("at the start   id:{}", r.id),
+            m => format!("{m} min before   id:{}", r.id),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub fn print_json<T: serde::Serialize>(value: &T) {
