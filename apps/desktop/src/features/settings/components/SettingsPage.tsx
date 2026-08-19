@@ -8,6 +8,7 @@ import { useImportBatch } from "@/shared/context/ImportContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
+import { getKeyValueStore } from "@/shared/kv";
 
 import { CalendarSyncSettings } from "./CalendarSyncSettings";
 import { DataSettings } from "./DataSettings";
@@ -23,7 +24,7 @@ const DeveloperSettings = import.meta.env.DEV
 
 function readLeftPanelWidth(): number {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.leftPanelWidth);
+    const raw = getKeyValueStore().getItem(STORAGE_KEYS.leftPanelWidth);
     return raw ? (JSON.parse(raw) as number) : 180;
   } catch {
     return 180;

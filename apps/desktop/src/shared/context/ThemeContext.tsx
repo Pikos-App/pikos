@@ -6,6 +6,7 @@ import { createContext, type ReactNode, useContext, useEffect, useState } from "
 
 import { IS_LINUX } from "@/shared/constants/platform";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { getKeyValueStore } from "@/shared/kv";
 import { createLogger } from "@/shared/logger";
 
 const log = createLogger("Theme");
@@ -17,7 +18,7 @@ export interface ThemeContextValue {
   mode: ThemeMode;
   /** Actual applied theme after resolving "system" to dark or light. */
   resolvedTheme: ResolvedTheme;
-  /** Change the theme mode. Persists to localStorage and applies immediately. */
+  /** Change the theme mode. Persists to the preference store and applies immediately. */
   setTheme: (mode: ThemeMode) => void;
 }
 
@@ -30,7 +31,7 @@ const META_COLORS: Record<ResolvedTheme, string> = {
 };
 
 function readStoredMode(): ThemeMode {
-  const t = localStorage.getItem(STORAGE_KEYS.theme);
+  const t = getKeyValueStore().getItem(STORAGE_KEYS.theme);
   // "system" not offered on Linux (see platform.ts); coerce existing values to dark.
   if (t === "system" && IS_LINUX) return "dark";
   if (t === "light" || t === "system") return t;
@@ -66,7 +67,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.classList.add("theme-transitioning");
 
     setModeState(next);
-    localStorage.setItem(STORAGE_KEYS.theme, next);
+    getKeyValueStore().setItem(STORAGE_KEYS.theme, next);
 
     const resolved = resolveTheme(next);
     setResolvedTheme(resolved);
