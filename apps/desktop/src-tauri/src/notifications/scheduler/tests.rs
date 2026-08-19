@@ -376,7 +376,7 @@ async fn a_summary_already_in_the_log_is_not_counted_again() {
 }
 
 #[tokio::test]
-async fn quiet_hours_empty_the_batch_and_hold_the_summary() {
+async fn quiet_hours_mark_the_batch_and_hold_the_summary() {
     let pool = test_pool().await;
     let now = local_at(2026, 5, 25, 9, 0);
     seed_every_due_class(&pool, &now).await;
@@ -390,8 +390,78 @@ async fn quiet_hours_empty_the_batch_and_hold_the_summary() {
     .await
     .unwrap();
 
-    assert!(batch.reminders.is_empty());
+    // The reminders are resolved so each can be recorded as silenced; `quiet` is
+    // what stops every one of them from being delivered.
+    assert!(batch.quiet);
+    assert_eq!(batch.reminders.len(), 5);
     assert_eq!(batch.summary, DueSummary::NotDue);
+}
+
+#[tokio::test]
+async fn a_quiet_hours_suppression_is_logged_without_arming_the_dedup() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    seed_every_due_class(&pool, &now).await;
+    let quiet = settings_with_quiet("08:00", "10:00");
+
+    let batch = collect_due(&pool, &quiet, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+    for row in &batch.reminders {
+        record_suppressed(&pool, row, &now).await.unwrap();
+    }
+
+    let suppressed: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM notification_log WHERE type = 'suppressed'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(suppressed, 5);
+    let fired: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM notification_log WHERE type = 'reminder'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(fired, 0, "a suppression is not a delivery");
+
+    // The same tick outside quiet hours still owes every one of them — the
+    // suppression rows are invisible to the dedup.
+    let mut loud = quiet.clone();
+    loud.quiet_hours_enabled = false;
+    let again = collect_due(&pool, &loud, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+    assert!(!again.quiet);
+    assert_eq!(again.reminders.len(), 5);
+}
+
+#[tokio::test]
+async fn an_all_day_page_reminds_the_day_before_at_nine() {
+    let pool = test_pool().await;
+    let now = local_at(2026, 5, 25, 9, 0);
+    insert_test_page(&pool, TestPage::new("allday", "allday"))
+        .await
+        .unwrap();
+    insert_schedule(&pool, "s-allday", "allday", "2026-05-26", None).await;
+    insert_reminder(&pool, "allday", pikos_db::DAY_BEFORE_MINUTES).await;
+    let mut settings = settings_with_quiet("22:00", "08:00");
+    settings.quiet_hours_enabled = false;
+
+    let batch = collect_due(&pool, &settings, &SchedulerRuntime::default(), &now)
+        .await
+        .unwrap();
+
+    let found: Vec<&str> = batch
+        .reminders
+        .iter()
+        .map(|r| r.schedule_id.as_str())
+        .collect();
+    assert_eq!(found, ["s-allday#-2"]);
+    // An all-day event has no clock time, so the body says the day, not a lead.
+    assert_eq!(
+        format_lead_time(batch.reminders[0].minutes_before),
+        "tomorrow"
+    );
 }
 
 // ─── format helpers ──────────────────────────────────────────────────
@@ -404,6 +474,10 @@ fn lead_time_boundaries() {
     assert_eq!(format_lead_time(60), "in 1 hour");
     assert_eq!(format_lead_time(120), "in 2 hours");
     assert_eq!(format_lead_time(180), "in 3 hours");
+    assert_eq!(format_lead_time(1440), "in 1 day");
+    assert_eq!(format_lead_time(2880), "in 2 days");
+    assert_eq!(format_lead_time(1500), "in 25 hours");
+    assert_eq!(format_lead_time(pikos_db::DAY_BEFORE_MINUTES), "tomorrow");
 }
 
 #[test]

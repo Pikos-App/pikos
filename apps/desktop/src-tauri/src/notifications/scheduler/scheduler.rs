@@ -240,6 +240,10 @@ fn should_fire_daily_summary(
 /// Everything one tick found due, resolved before any of it is delivered.
 struct DueBatch {
     reminders: Vec<DueReminder>,
+    /// Quiet hours were in force when this batch was resolved, so none of
+    /// `reminders` may be delivered — they are carried anyway so the tick can
+    /// record each as a suppression the history panel can show.
+    quiet: bool,
     summary: DueSummary,
 }
 
@@ -260,11 +264,14 @@ enum DueSummary {
 
 /// Resolve everything due at `now` without delivering any of it.
 ///
-/// Quiet hours gate the five reminder classes here, not at the call site: a
-/// suppressed tick has to return an empty batch rather than a full one the
-/// caller is trusted to drop. Those reminders resurface in the next summary as
-/// overdue. The summary is evaluated above the gate because it defers rather
-/// than skips — `should_fire_daily_summary` owns that rule.
+/// Quiet hours mark the batch `quiet` rather than emptying it: nothing in a
+/// quiet batch is ever delivered — that rule stays exactly where it was, in the
+/// one place the caller reads `quiet` — but the reminders are still resolved so
+/// each can be written to the log as a suppression. Before, a reminder silenced
+/// by quiet hours left no trace anywhere, and the user's only evidence was the
+/// notification that never came. They still resurface in the next summary as
+/// overdue, unchanged. The summary is evaluated above the gate because it defers
+/// rather than skips — `should_fire_daily_summary` owns that rule.
 async fn collect_due(
     pool: &SqlitePool,
     settings: &NotificationSettings,
@@ -279,13 +286,6 @@ async fn collect_due(
         DueSummary::NotDue
     };
 
-    if now_quiet {
-        return Ok(DueBatch {
-            reminders: Vec::new(),
-            summary,
-        });
-    }
-
     // Use space separator to match SQLite's datetime() output format.
     // datetime() returns 'YYYY-MM-DD HH:MM:SS' — BETWEEN comparisons are
     // lexicographic, so both sides must use the same separator.
@@ -298,18 +298,23 @@ async fn collect_due(
 
     let mut reminders = pikos_db::due_explicit_reminders(pool, &window_start, &now_ts).await?;
     reminders.extend(pikos_db::due_default_reminders(pool, minutes, &window_start, &now_ts).await?);
+    reminders.extend(pikos_db::due_day_before_reminders(pool, &window_start, &now_ts).await?);
     reminders.extend(
         pikos_db::due_recurring_reminders(pool, now.naive_local(), now_utc, minutes).await?,
     );
     reminders.extend(pikos_db::due_synced_reminders(pool, now_utc, minutes).await?);
     reminders.extend(pikos_db::due_synced_override_reminders(pool, now_utc, minutes).await?);
 
-    // Backstop: the five partition the schedules by construction, but nothing
+    // Backstop: the six partition the schedules by construction, but nothing
     // logs between them any more, so an overlap would now deliver twice.
     let mut seen = HashSet::new();
     reminders.retain(|r| seen.insert(r.schedule_id.clone()));
 
-    Ok(DueBatch { reminders, summary })
+    Ok(DueBatch {
+        reminders,
+        quiet: now_quiet,
+        summary,
+    })
 }
 
 /// Counts behind the daily summary — see `pikos_db::today_scheduled_count` and
@@ -395,7 +400,11 @@ async fn check_and_fire(app: &AppHandle) -> Result<(), sqlx::Error> {
     }
 
     for row in &batch.reminders {
-        fire_reminder(app, &pool, row).await?;
+        if batch.quiet {
+            record_suppressed(&pool, row, &now).await?;
+        } else {
+            fire_reminder(app, &pool, row).await?;
+        }
     }
 
     Ok(())
@@ -439,11 +448,45 @@ fn deliver(app: &AppHandle, title: &str, body: &str) {
     {}
 }
 
+/// Note a reminder that came due inside quiet hours and was therefore not shown.
+///
+/// Deliberately not a delivery path: no OS notification, and no `type='reminder'`
+/// dedup row — the reminder is dropped exactly as it always was, and the day's
+/// summary still counts the page as overdue. The row exists so "Recent
+/// notifications" can say the reminder happened and was silenced.
+async fn record_suppressed(
+    pool: &SqlitePool,
+    row: &DueReminder,
+    now: &chrono::DateTime<chrono::Local>,
+) -> Result<(), sqlx::Error> {
+    let fired_at = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    pikos_db::log_reminder_suppressed(pool, &row.page_id, &row.schedule_id, &fired_at).await?;
+    log::info!(
+        "notification_suppressed reason=quiet_hours page_id={} schedule_id={}",
+        row.page_id,
+        row.schedule_id
+    );
+    Ok(())
+}
+
 fn format_lead_time(minutes: i64) -> String {
-    if minutes == 0 {
+    if minutes == pikos_db::DAY_BEFORE_MINUTES {
+        // The all-day anchor, not a lead: it fired at 09:00 the day before, and
+        // "in 1440 min" would be both wrong and unreadable.
+        "tomorrow".to_string()
+    } else if minutes == 0 {
         "now".to_string()
     } else if minutes < 60 {
         format!("in {} min", minutes)
+    } else if minutes % 1440 == 0 {
+        // A whole number of days reads as days: the picker now offers a 1-day
+        // lead, and "in 24 hours" is the same span said less plainly.
+        let days = minutes / 1440;
+        if days == 1 {
+            "in 1 day".to_string()
+        } else {
+            format!("in {} days", days)
+        }
     } else {
         let hours = minutes / 60;
         if hours == 1 {
