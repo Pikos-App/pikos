@@ -36,35 +36,58 @@ export interface SeedContext {
 
 export type SeedLoader = (ctx: SeedContext) => Promise<void>;
 
+// The dev-only loaders live behind a static `import.meta.env.DEV` so Rollup
+// drops their `import()` calls — and therefore their chunks (stress alone
+// carries faker at ~400 KB) — from a user build. They are unreachable there
+// anyway: launchSeedLoader refuses dev-only names in a non-dev build, and the
+// only other caller is the developer menu, which is itself DEV-gated
+// (SettingsNav/SettingsPage). The stubs below keep every key present so
+// `isSeedName`'s `in` check stays truthful in both builds.
+const DEV_LOADERS: Partial<Record<SeedName, SeedLoader>> | undefined = import.meta.env.DEV
+  ? {
+      calendar: async ({ adapter }) => {
+        const { seedCalendar } = await import("./calendar");
+        await seedCalendar(adapter);
+      },
+      "calendar-colors": async ({ adapter }) => {
+        const { seedCalendarColors } = await import("./calendarColors");
+        await seedCalendarColors(adapter);
+      },
+      "calendar-edges": async ({ adapter }) => {
+        const { seedCalendarEdgeCases } = await import("./calendarEdgeCases");
+        await seedCalendarEdgeCases(adapter);
+      },
+      marketing: async ({ adapter }) => {
+        const { seedMarketing } = await import("./marketing");
+        await seedMarketing(adapter);
+      },
+      notifications: async ({ adapter }) => {
+        const { seedNotifications } = await import("./notifications");
+        await seedNotifications(adapter);
+      },
+      realistic: async ({ adapter }) => {
+        const { seedRealistic } = await import("./realistic");
+        await seedRealistic(adapter);
+      },
+      stress: async ({ adapter }) => {
+        const { seedStress } = await import("./stress");
+        await seedStress(adapter);
+      },
+    }
+  : undefined;
+
+const unavailable: SeedLoader = async () => {
+  // A dev-only fixture requested from a user build; nothing to plant.
+};
+
 export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
-  calendar: async ({ adapter }) => {
-    const { seedCalendar } = await import("./calendar");
-    await seedCalendar(adapter);
-  },
-  "calendar-colors": async ({ adapter }) => {
-    const { seedCalendarColors } = await import("./calendarColors");
-    await seedCalendarColors(adapter);
-  },
-  "calendar-edges": async ({ adapter }) => {
-    const { seedCalendarEdgeCases } = await import("./calendarEdgeCases");
-    await seedCalendarEdgeCases(adapter);
-  },
-  marketing: async ({ adapter }) => {
-    const { seedMarketing } = await import("./marketing");
-    await seedMarketing(adapter);
-  },
-  notifications: async ({ adapter }) => {
-    const { seedNotifications } = await import("./notifications");
-    await seedNotifications(adapter);
-  },
-  realistic: async ({ adapter }) => {
-    const { seedRealistic } = await import("./realistic");
-    await seedRealistic(adapter);
-  },
-  stress: async ({ adapter }) => {
-    const { seedStress } = await import("./stress");
-    await seedStress(adapter);
-  },
+  calendar: DEV_LOADERS?.calendar ?? unavailable,
+  "calendar-colors": DEV_LOADERS?.["calendar-colors"] ?? unavailable,
+  "calendar-edges": DEV_LOADERS?.["calendar-edges"] ?? unavailable,
+  marketing: DEV_LOADERS?.marketing ?? unavailable,
+  notifications: DEV_LOADERS?.notifications ?? unavailable,
+  realistic: DEV_LOADERS?.realistic ?? unavailable,
+  stress: DEV_LOADERS?.stress ?? unavailable,
   synced: async ({ adapter, phase }) => {
     // Believable native data + a mock external-calendar sync on top, so the
     // synced treatment can be spot-checked alongside normal pages. Only the
