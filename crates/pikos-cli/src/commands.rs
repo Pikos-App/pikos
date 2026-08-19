@@ -12,7 +12,8 @@ use crate::cli::{Cli, CliCommand, FolderCommand, ReminderCommand};
 use crate::error::{classify, CliError};
 use crate::ops::{
     add_reminder, cmd_add, confirm, create_folder, list_folders, list_pages, list_reminders,
-    mark_done, remove_reminder, require_page, validate_priority, validate_status, ListQuery,
+    mark_done, remove_reminder, require_page, restore, validate_priority, validate_status,
+    ListQuery,
 };
 use crate::render::{
     print_json, render_folders, render_page, render_reminders, render_search, render_summary_list,
@@ -276,6 +277,14 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 println!("Deleted {id}");
             } else {
                 println!("Moved {id} to the trash");
+            }
+        }
+        CliCommand::Restore { id } => {
+            let page = restore(&pool, &id).await?;
+            if json {
+                print_json(&page);
+            } else {
+                println!("{}", render_page(&page));
             }
         }
         CliCommand::Folders { command } => match command {
