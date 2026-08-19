@@ -1,3 +1,4 @@
+import type { WorkspaceUsageStats, WorkspaceWeekActivity } from "@pikos/core";
 import {
   BarChart3,
   BookOpen,
@@ -14,31 +15,9 @@ import {
 
 import { cn } from "@/lib/utils";
 
-interface WeekActivity {
-  week: string;
-  created: number;
-  edited: number;
-  completed: number;
-}
-
-export interface UsageStatsData {
-  total_pages: number;
-  total_folders: number;
-  total_schedules: number;
-  total_focus_sessions: number;
-  total_focus_minutes: number;
-  total_completed: number;
-  total_words: number;
-  weekly_activity: WeekActivity[];
-  has_folders: boolean;
-  has_schedules: boolean;
-  has_recurring: boolean;
-  has_focus_sessions: boolean;
-  has_subtasks: boolean;
-  has_tags: boolean;
-  has_priorities: boolean;
-  first_page_date: string | null;
-}
+/** The shape now lives on the storage seam (`getUsageStats`); this alias keeps
+ *  the panel's long-standing local name for it. */
+export type UsageStatsData = WorkspaceUsageStats;
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -87,7 +66,7 @@ function StatCard({
   );
 }
 
-function ActivityChart({ weeks }: { weeks: WeekActivity[] }) {
+function ActivityChart({ weeks }: { weeks: WorkspaceWeekActivity[] }) {
   const maxVal = Math.max(1, ...weeks.map((w) => Math.max(w.created, w.edited, w.completed)));
 
   return (

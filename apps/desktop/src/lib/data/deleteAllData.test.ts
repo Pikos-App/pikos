@@ -2,20 +2,28 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { StorageAdapter } from "@pikos/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deleteAllData } from "./deleteAllData";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────
 //
-// deleteAllData drives three Tauri boundaries: the release_sync_credentials and
-// wipe_app_data commands, the plugin-store (to neutralize the exit-save that
-// would otherwise resurrect the old workspace), and relaunch. We mock all three
-// and assert the order of effects — the store must be cleared so the relaunched
-// app boots first-run and reseeds the tutorial.
+// deleteAllData drives three boundaries: the storage adapter (credential
+// release + wipe), the plugin-store (to neutralize the exit-save that would
+// otherwise resurrect the old workspace), and the platform relaunch. We stand
+// in for all three and assert the order of effects — the store must be cleared
+// so the relaunched app boots first-run and reseeds the tutorial.
 
 const invoke = vi.fn<(cmd: string) => Promise<unknown>>();
 const relaunch = vi.fn<() => Promise<void>>();
+
+/** Storage double routing both calls through `invoke` so the existing
+ *  command-name assertions and ordering checks read unchanged. */
+const storage = {
+  releaseSyncCredentials: () => invoke("release_sync_credentials").then(() => undefined),
+  wipeAllData: () => invoke("wipe_app_data").then(() => undefined),
+} as unknown as StorageAdapter;
 const storeClear = vi.fn<() => Promise<void>>();
 const storeSet = vi.fn<(key: string, value: unknown) => Promise<void>>();
 const storeSave = vi.fn<() => Promise<void>>();
@@ -27,12 +35,8 @@ const load = vi.fn<
   }>
 >();
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (cmd: string): Promise<unknown> => invoke(cmd),
-}));
-
-vi.mock("@tauri-apps/plugin-process", () => ({
-  relaunch: (): Promise<void> => relaunch(),
+vi.mock("@/shared/platform", () => ({
+  getPlatform: () => ({ relaunch: (): Promise<void> => relaunch() }),
 }));
 
 vi.mock("@tauri-apps/plugin-store", () => ({
@@ -73,7 +77,7 @@ describe("deleteAllData", () => {
       return Promise.resolve();
     });
 
-    await deleteAllData();
+    await deleteAllData(storage);
 
     expect(invoke).toHaveBeenCalledWith("wipe_app_data");
     // The store clear must happen so the plugin's exit-save can't write the old
@@ -99,7 +103,7 @@ describe("deleteAllData", () => {
         : Promise.resolve(undefined)
     );
 
-    await deleteAllData();
+    await deleteAllData(storage);
 
     expect(invoke).toHaveBeenCalledWith("wipe_app_data");
     expect(relaunch).toHaveBeenCalledTimes(1);
@@ -110,7 +114,7 @@ describe("deleteAllData", () => {
     localStorage.setItem("pikos:listSort", "manual");
     localStorage.setItem("other-app:foo", "keep");
 
-    await deleteAllData();
+    await deleteAllData(storage);
 
     expect(localStorage.getItem("pikos:theme")).toBeNull();
     expect(localStorage.getItem("pikos:listSort")).toBeNull();
@@ -120,7 +124,7 @@ describe("deleteAllData", () => {
   it("still relaunches if clearing the store fails", async () => {
     load.mockRejectedValue(new Error("store unavailable"));
 
-    await deleteAllData();
+    await deleteAllData(storage);
 
     expect(invoke).toHaveBeenCalledWith("wipe_app_data");
     expect(relaunch).toHaveBeenCalledTimes(1);
@@ -132,7 +136,7 @@ describe("deleteAllData", () => {
     // fallback must still empty the store so the relaunch reseeds.
     storeClear.mockRejectedValue(new Error("store.clear not allowed"));
 
-    await deleteAllData();
+    await deleteAllData(storage);
 
     expect(storeSet).toHaveBeenCalledWith("workspaces", []);
     expect(storeSave).toHaveBeenCalledTimes(1);

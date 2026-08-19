@@ -13,6 +13,9 @@ import type {
   PageUpdate,
   RecurrenceRuleUpdate,
   StorageAdapter,
+  WorkspaceExportFormat,
+  WorkspaceExportOptions,
+  WorkspaceUsageStats,
 } from "../storage";
 import type {
   AccountWithCalendars,
@@ -189,6 +192,8 @@ export class MockStorageAdapter implements StorageAdapter {
   // `page_sync.user_modified`: set by the editor path, never by sync. One half of
   // the ownership predicate teardown and export share — see `_isOwned`.
   private userModified = new Set<string>();
+  /** The arguments of the most recent `exportWorkspace` call, for assertions. */
+  lastExport: { format: WorkspaceExportFormat; options: WorkspaceExportOptions } | null = null;
 
   clear(): void {
     this.pages.clear();
@@ -1452,6 +1457,66 @@ export class MockStorageAdapter implements StorageAdapter {
           calendars: this._calendarsFor(a.id),
         }))
     );
+  }
+
+  // ─── Workspace data lifecycle ──────────────────────────────────────────────
+  // No filesystem here, so the write-shaped calls resolve without doing
+  // anything and the path-returning ones hand back a stable fake — enough for
+  // the settings panel to render its "Saved to Downloads" row and for a test to
+  // assert the "Show in Finder" affordance appears.
+
+  backupDatabase(): Promise<string> {
+    return Promise.resolve("/mock/pikos-backup.sqlite");
+  }
+
+  backupBeforeImport(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  exportWorkspace(format: WorkspaceExportFormat, options: WorkspaceExportOptions): Promise<string> {
+    this.lastExport = { format, options };
+    return Promise.resolve(`/mock/pikos-export.${format}`);
+  }
+
+  /** Counted from the in-memory maps so the panel shows the seeded workspace
+   *  rather than zeroes. The activity chart has no source here and stays empty. */
+  getUsageStats(): Promise<WorkspaceUsageStats> {
+    const pages = [...this.pages.values()].filter((p) => !this.softDeleted.has(p.id));
+    const tags = new Set(pages.flatMap((p) => p.tags));
+    return Promise.resolve({
+      first_page_date: pages.map((p) => p.createdAt).sort()[0] ?? null,
+      has_focus_sessions: false,
+      has_folders: this.folders.size > 0,
+      has_priorities: pages.some((p) => p.priority != null),
+      has_recurring: this.rules.size > 0,
+      has_schedules: this.schedules.size > 0,
+      has_subtasks: false,
+      has_tags: tags.size > 0,
+      total_completed: pages.filter(isDone).length,
+      total_focus_minutes: 0,
+      total_focus_sessions: 0,
+      total_folders: this.folders.size,
+      total_pages: pages.length,
+      total_schedules: this.schedules.size,
+      total_words: 0,
+      weekly_activity: [],
+    });
+  }
+
+  /** Truncate, matching `reset_db` — same shape as `clear()`, which the dev
+   *  reseed path already called directly before this method existed. */
+  resetWorkspaceData(): Promise<void> {
+    this.clear();
+    return Promise.resolve();
+  }
+
+  wipeAllData(): Promise<void> {
+    this.clear();
+    return Promise.resolve();
+  }
+
+  releaseSyncCredentials(): Promise<void> {
+    return Promise.resolve();
   }
 
   private _pollAccount(accountId: string): CalendarSyncResult[] {

@@ -1,7 +1,9 @@
+import type { PlatformWindowAction } from "@pikos/core";
 import { Minus, Square, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { IS_MACOS, IS_TAURI } from "@/shared/constants/platform";
+import { getPlatform } from "@/shared/platform";
 
 const BAR_H = "h-[30px]";
 
@@ -13,16 +15,12 @@ export function TitleBar() {
   useEffect(() => {
     if (initialized.current || !IS_TAURI || IS_MACOS) return;
     initialized.current = true;
-    void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
-      void getCurrentWindow().setDecorations(false);
-    });
+    void getPlatform().setWindowDecorations(false);
   }, []);
 
-  const windowAction = (action: "minimize" | "toggleMaximize" | "close") => {
+  const windowAction = (action: PlatformWindowAction) => {
     if (!IS_TAURI) return;
-    void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
-      void getCurrentWindow()[action]();
-    });
+    void getPlatform().windowAction(action);
   };
 
   return (

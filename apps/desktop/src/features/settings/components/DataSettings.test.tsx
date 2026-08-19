@@ -1,7 +1,8 @@
-// The export commands are the one place the panel invokes Tauri directly rather
-// than going through the storage adapter, so `invoke` is mocked to read the
-// arguments each Export button sends.
+// Exports run through the storage adapter, which under VITE_TEST_MODE is the
+// MockStorageAdapter the provider tree builds. Spying on the prototype reads
+// the arguments each Export button sends without stubbing the whole context.
 
+import { MockStorageAdapter } from "@pikos/core";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,12 +11,11 @@ import { renderWithProviders } from "@/test/renderWithProviders";
 import { CalendarSyncSettings } from "./CalendarSyncSettings";
 import { DataSettings } from "./DataSettings";
 
-const invoke = vi.hoisted(() => vi.fn().mockResolvedValue("/tmp/pikos-export.csv"));
-vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+const exportWorkspace = vi.spyOn(MockStorageAdapter.prototype, "exportWorkspace");
 
 afterEach(() => {
   cleanup();
-  invoke.mockClear();
+  exportWorkspace.mockClear();
 });
 
 function renderDataSettings(withSyncPanel = false) {
@@ -61,7 +61,7 @@ describe("DataSettings export", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Export as CSV" }));
 
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("export_csv", { includeSynced: false })
+      expect(exportWorkspace).toHaveBeenCalledWith("csv", { includeSynced: false })
     );
   });
 
@@ -70,7 +70,7 @@ describe("DataSettings export", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Export as Calendar" }));
 
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("export_ics", { includeSynced: false })
+      expect(exportWorkspace).toHaveBeenCalledWith("ics", { includeSynced: false })
     );
   });
 
@@ -84,9 +84,9 @@ describe("DataSettings export", () => {
     fireEvent.click(screen.getByRole("button", { name: "Export as Calendar" }));
 
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("export_csv", { includeSynced: true });
-      expect(invoke).toHaveBeenCalledWith("export_markdown", { includeSynced: true });
-      expect(invoke).toHaveBeenCalledWith("export_ics", { includeSynced: true });
+      expect(exportWorkspace).toHaveBeenCalledWith("csv", { includeSynced: true });
+      expect(exportWorkspace).toHaveBeenCalledWith("markdown", { includeSynced: true });
+      expect(exportWorkspace).toHaveBeenCalledWith("ics", { includeSynced: true });
     });
   });
 });

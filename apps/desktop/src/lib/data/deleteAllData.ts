@@ -14,27 +14,27 @@
 // the notification scheduler, and every React context all start over from
 // nothing.
 
-import { invoke } from "@tauri-apps/api/core";
-import { relaunch } from "@tauri-apps/plugin-process";
+import type { StorageAdapter } from "@pikos/core";
 import { load } from "@tauri-apps/plugin-store";
 
 import { STORAGE_KEY_PREFIX } from "@/shared/constants/storage";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 const log = createLogger("deleteAllData");
 
-export async function deleteAllData(): Promise<void> {
+export async function deleteAllData(storage: StorageAdapter): Promise<void> {
   // Must precede the wipe: the account ids this keys on live in the DB it deletes.
   // Best-effort — an offline revoke can't strand the user with data they asked to
   // delete.
   try {
-    await invoke("release_sync_credentials");
+    await storage.releaseSyncCredentials();
   } catch (e) {
     log.error("could not release calendar-sync credentials — wiping anyway", e);
   }
 
-  // Rust side: drops the DB pool, then removes app_data_dir and app_log_dir.
-  await invoke("wipe_app_data");
+  // Drops the DB pool, then removes app_data_dir and app_log_dir.
+  await storage.wipeAllData();
 
   // Empty the in-memory workspaces store. wipe_app_data removed the file on
   // disk, but tauri-plugin-store re-saves every loaded store on RunEvent::Exit
@@ -74,5 +74,5 @@ export async function deleteAllData(): Promise<void> {
     // localStorage unavailable — nothing to clear.
   }
 
-  await relaunch();
+  await getPlatform().relaunch();
 }

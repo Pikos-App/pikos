@@ -1,5 +1,4 @@
 import { isOpen } from "@pikos/core";
-import { invoke } from "@tauri-apps/api/core";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 
@@ -41,7 +40,7 @@ export function SettingsPage() {
     settingsOpen,
     settingsSection: section,
   } = useUI();
-  const { workspace } = useWorkspace();
+  const { storage } = useWorkspace();
   const { clearLastImport, lastImportResult, undoLastImport } = useImportBatch();
 
   // Undo deletes the imported pages; if one is open in the editor, deselect it
@@ -65,11 +64,12 @@ export function SettingsPage() {
 
   // Fetch usage stats eagerly so the Data tab renders instantly.
   useEffect(() => {
-    if (!workspace) return;
-    invoke<UsageStatsData>("get_usage_stats")
+    if (!storage) return;
+    storage
+      .getUsageStats()
       .then(setUsageStats)
       .catch(() => {});
-  }, [workspace]);
+  }, [storage]);
 
   // Close on Escape — go back from mapping/preview first, then close settings
   useEffect(() => {

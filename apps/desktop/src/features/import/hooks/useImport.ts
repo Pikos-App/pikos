@@ -11,8 +11,6 @@ import {
   suggestValueMappings,
   toStorageError,
 } from "@pikos/core";
-import { invoke } from "@tauri-apps/api/core";
-import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import type { JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
@@ -29,7 +27,9 @@ import { Markdown } from "tiptap-markdown";
 
 import { useImportBatch } from "@/shared/context/ImportContext";
 import { usePages } from "@/shared/context/PagesContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
 const log = createLogger("useImport");
@@ -158,7 +158,7 @@ async function resolveImportImages(
     let saved = false;
     for (const candidate of candidates) {
       try {
-        const savedPath = await invoke<string>("save_asset", { sourcePath: candidate });
+        const savedPath = await getPlatform().saveAsset(candidate);
         pathToSaved.set(ref.sourcePath, savedPath);
         rewritten = rewriteImageRef(rewritten, ref, savedPath);
         saved = true;
@@ -240,7 +240,7 @@ async function readVaultFiles(dirPath: string): Promise<VaultReadResult> {
   let otherCount = 0;
 
   async function walk(path: string, prefix: string): Promise<void> {
-    const entries = await readDir(path);
+    const entries = await getPlatform().readDir(path);
     for (const entry of entries) {
       const fullPath = `${path}/${entry.name}`;
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -254,7 +254,7 @@ async function readVaultFiles(dirPath: string): Promise<VaultReadResult> {
       ) {
         excalidrawCount++;
       } else if (entry.name.toLowerCase().endsWith(".md")) {
-        const content = await readTextFile(fullPath);
+        const content = await getPlatform().readTextFile(fullPath);
         files.push({ content, path: relativePath });
       } else if (!entry.name.startsWith(".")) {
         otherCount++;
@@ -299,6 +299,7 @@ export function useImport() {
   const [state, setState] = useState<ImportState>({ step: "idle" });
   const { importBatch } = useImportBatch();
   const { softDeleteFolder, softDeletePage } = usePages();
+  const { storage } = useWorkspace();
 
   function reset() {
     setState({ step: "idle" });
@@ -385,7 +386,7 @@ export function useImport() {
     try {
       // Pre-import backup (non-blocking — don't fail the import if backup fails)
       try {
-        await invoke("backup_db_before_import");
+        await storage?.backupBeforeImport();
       } catch (err) {
         // Log so a missing backup file isn't a mystery if the user needs to roll back
         log.warn("pre-import backup failed; proceeding without rollback file", err);

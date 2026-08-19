@@ -1,8 +1,6 @@
 // The user-facing "Delete All Data" action lives in Data settings, not here.
 
 import type { SeedScenario } from "@seeds/seedLoaders";
-import { appLogDir, join } from "@tauri-apps/api/path";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { FileText } from "lucide-react";
 import { useState } from "react";
 
@@ -11,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 const logger = createLogger("DeveloperSettings");
 
@@ -92,8 +91,7 @@ export function DeveloperSettings() {
 
   async function handleOpenLogs() {
     try {
-      const path = await join(await appLogDir(), "pikos.log");
-      await openPath(path);
+      await getPlatform().openLogFile();
     } catch (err) {
       logger.warn("open logs failed", err);
     }

@@ -16,6 +16,7 @@ import type { ReminderLeadTime } from "@/shared/context/AppSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 import { NotificationHistory } from "./NotificationHistory";
 
@@ -77,6 +78,37 @@ export function NotificationSettings() {
   const ui = useUI();
   const [history, setHistory] = useState<NotificationHistoryEntry[]>([]);
 
+  /** The scheduler writes the log from Rust on its own tick, so the panel can
+   *  only ever show a snapshot — hence the explicit refresh alongside the load.
+   *  Written as a promise chain, not `await`: the mount effect below calls it,
+   *  and the state update has to land in a callback rather than in the effect
+   *  body for react-compiler to accept it. */
+  function loadHistory(): Promise<void> {
+    if (!storage) return Promise.resolve();
+    return storage
+      .listNotificationHistory(HISTORY_LIMIT)
+      .then(setHistory)
+      .catch((e: unknown) => {
+        // Nothing here is load-bearing for the settings the user came for, so a
+        // failed read leaves the section empty rather than taking the panel down.
+        log.warn("loadHistory failed", e instanceof Error ? e.name : "unknown");
+      });
+  }
+
+  /** `null` is the platform's "can't tell you" — no host shell (browser
+   *  preview) or an OS with no notion of the permission. Surfaced as warn since
+   *  the user expected notifications to work. Promise chain for the same reason
+   *  as loadHistory above. */
+  function checkPermission(): Promise<boolean | null> {
+    return getPlatform()
+      .checkNotificationPermission()
+      .then((granted) => {
+        if (granted === null) log.warn("checkPermission unavailable on this platform");
+        setPermissionGranted(granted);
+        return granted;
+      });
+  }
+
   useEffect(() => {
     void checkPermission();
   }, []);
@@ -85,44 +117,14 @@ export function NotificationSettings() {
     void loadHistory();
   }, [storage]);
 
-  /** The scheduler writes the log from Rust on its own tick, so the panel can
-   *  only ever show a snapshot — hence the explicit refresh alongside the load. */
-  async function loadHistory() {
-    if (!storage) return;
-    try {
-      setHistory(await storage.listNotificationHistory(HISTORY_LIMIT));
-    } catch (e) {
-      // Nothing here is load-bearing for the settings the user came for, so a
-      // failed read leaves the section empty rather than taking the panel down.
-      log.warn("loadHistory failed", e instanceof Error ? e.name : "unknown");
-    }
-  }
-
   function handleOpenPage(pageId: string) {
     ui.setSettingsOpen(false);
     ui.openPage(pageId);
   }
 
-  async function checkPermission() {
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const granted = await invoke<boolean>("check_notification_permission");
-      setPermissionGranted(granted);
-      return granted;
-    } catch (e) {
-      // Tauri unavailable (browser preview) or OS unsupported. Falls back
-      // to "unknown" UI state — surface as warn since the user expected
-      // notifications to work.
-      log.warn("checkPermission failed", e instanceof Error ? e.name : "unknown");
-      setPermissionGranted(null);
-      return null;
-    }
-  }
-
   async function handleRequestPermission() {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const granted = await invoke<boolean>("request_notification_permission");
+      const granted = await getPlatform().requestNotificationPermission();
       log.info(`Permission request: ${granted ? "granted" : "denied"}`);
       setPermissionGranted(granted);
       setPermissionError(false);

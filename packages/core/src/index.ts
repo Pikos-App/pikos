@@ -2,6 +2,7 @@
 // Zero Tauri / React / DOM dependencies
 
 export * from "./adapters/MockStorageAdapter";
+export * from "./adapters/NoopPlatformAdapter";
 // ── Calendar math: row/block layout, hour↔pixel geometry, grid constants ──
 export {
   assignAllDayRows,
@@ -164,6 +165,7 @@ export { buildPageListRows } from "./layout/buildPageListRows";
 export type {
   BuildPageListRowsInput,
   BuildPageListRowsResult,
+  PageListDaySection,
   VirtualRow,
 } from "./layout/buildPageListRows";
 export { DAY_BEFORE_MINUTES, parseInput } from "./nlp/parser";
@@ -172,18 +174,31 @@ export { buildSearchFilter, parseSearchQuery } from "./nlp/searchQuery";
 export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
 // ── Page list: view scoping, sorting, selection and schedule edits ──
 export { folderMoveTargets } from "./pages/folderMoveTargets";
+export { moveOverdueToTodayLabel, planMoveOverdueToToday } from "./pages/moveOverdueToToday";
+export type { OverdueMove, OverdueMovePlan } from "./pages/moveOverdueToToday";
 export {
   belongsToView,
+  compareByScheduledStart,
+  folderIdForView,
   getCompletedTodayPages,
   getCompletedViewPages,
   getVisiblePages,
   groupTodayPages,
+  isDateGroupedView,
+  isSmartViewId,
+  SMART_VIEW_IDS,
   sortPages,
+  UPCOMING_WINDOW_DAYS,
+  upcomingWindowEnd,
 } from "./pages/pageFilters";
-export type { SortMode } from "./pages/pageFilters";
+export type { SmartViewId, SortMode } from "./pages/pageFilters";
 export { computeScheduleTransition, normalizeEndInput } from "./pages/schedule";
 export { partitionToggleSelection } from "./pages/toggleSelection";
 export type { ToggleSelectionGroups } from "./pages/toggleSelection";
+export { groupUpcomingPages } from "./pages/upcoming";
+export type { UpcomingDaySection } from "./pages/upcoming";
+// ── Host-shell seam: everything the app asks of the machine, minus storage ──
+export * from "./platform";
 export * from "./storage";
 // ── Calendar sync health, derived from the read model ──
 export { accountConnectionState, calendarSyncDot, STALE_AFTER_MS } from "./sync/syncStatus";

@@ -1,6 +1,5 @@
+import type { WorkspaceExportFormat } from "@pikos/core";
 import { formatTimeAgo, storageErrorUserMessage, toStorageError } from "@pikos/core";
-import { invoke } from "@tauri-apps/api/core";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Download, Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -14,6 +13,7 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 import { UsageStats } from "./UsageStats";
 import type { UsageStatsData } from "./UsageStats";
@@ -80,7 +80,7 @@ function ExportRow({
         {done && (
           <button
             className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            onClick={() => void revealItemInDir(state.path)}
+            onClick={() => void getPlatform().revealInDir(state.path)}
           >
             Show in Finder
           </button>
@@ -122,7 +122,7 @@ export function DataSettings({
   resetImport,
   usageStats,
 }: DataSettingsProps) {
-  const { workspace } = useWorkspace();
+  const { storage, workspace } = useWorkspace();
   const { folders } = usePages();
   const { showNotice } = useUndoDelete();
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
@@ -136,14 +136,14 @@ export function DataSettings({
   const hasSyncedCalendar = folders.some((f) => f.isExternalCalendar);
 
   async function handleDeleteAll() {
-    if (deleting) return;
+    if (deleting || !storage) return;
     setDeleting(true);
     setDeleteOpen(false);
     showNotice("Deleting all data…", 5000);
     // Brief pause so the toast renders before relaunch tears down the WebView.
     await new Promise((r) => setTimeout(r, 800));
     try {
-      await deleteAllData();
+      await deleteAllData(storage);
       // On success, deleteAllData calls relaunch — no further UI needed.
     } catch (e) {
       log.error("deleteAllData failed", e);
@@ -152,56 +152,30 @@ export function DataSettings({
     }
   }
 
-  async function handleExportSqlite() {
-    setSqliteExport({ status: "saving" });
+  /** Every export row runs the same saving → done/error cycle; only the
+   *  adapter call and the failure verb differ. */
+  async function runExport(
+    setState: (next: ExportState) => void,
+    verb: string,
+    produce: () => Promise<string>
+  ) {
+    setState({ status: "saving" });
     try {
-      const dest = await invoke<string>("backup_db");
-      setSqliteExport({ path: dest, status: "done" });
+      setState({ path: await produce(), status: "done" });
     } catch (e: unknown) {
-      setSqliteExport({
-        message: storageErrorUserMessage(toStorageError(e), "exporting your SQLite backup"),
-        status: "error",
-      });
+      setState({ message: storageErrorUserMessage(toStorageError(e), verb), status: "error" });
     }
   }
 
-  async function handleExportCsv() {
-    setCsvExport({ status: "saving" });
-    try {
-      const dest = await invoke<string>("export_csv", { includeSynced });
-      setCsvExport({ path: dest, status: "done" });
-    } catch (e: unknown) {
-      setCsvExport({
-        message: storageErrorUserMessage(toStorageError(e), "exporting your CSV"),
-        status: "error",
-      });
-    }
-  }
-
-  async function handleExportMarkdown() {
-    setMarkdownExport({ status: "saving" });
-    try {
-      const dest = await invoke<string>("export_markdown", { includeSynced });
-      setMarkdownExport({ path: dest, status: "done" });
-    } catch (e: unknown) {
-      setMarkdownExport({
-        message: storageErrorUserMessage(toStorageError(e), "exporting your Markdown"),
-        status: "error",
-      });
-    }
-  }
-
-  async function handleExportIcs() {
-    setIcsExport({ status: "saving" });
-    try {
-      const dest = await invoke<string>("export_ics", { includeSynced });
-      setIcsExport({ path: dest, status: "done" });
-    } catch (e: unknown) {
-      setIcsExport({
-        message: storageErrorUserMessage(toStorageError(e), "exporting your calendar"),
-        status: "error",
-      });
-    }
+  function exportAs(
+    format: WorkspaceExportFormat,
+    setState: (next: ExportState) => void,
+    verb: string
+  ) {
+    void runExport(setState, verb, () => {
+      if (!storage) throw new Error("Workspace not ready");
+      return storage.exportWorkspace(format, { includeSynced });
+    });
   }
 
   return (
@@ -261,28 +235,33 @@ export function DataSettings({
             description="Full database backup. Best for restoring data."
             disabled={!workspace}
             label="Export as SQLite"
-            onExport={() => void handleExportSqlite()}
+            onExport={() =>
+              void runExport(setSqliteExport, "exporting your SQLite backup", () => {
+                if (!storage) throw new Error("Workspace not ready");
+                return storage.backupDatabase();
+              })
+            }
             state={sqliteExport}
           />
           <ExportRow
             description="Spreadsheet of all pages with metadata. Re-importable."
             disabled={!workspace}
             label="Export as CSV"
-            onExport={() => void handleExportCsv()}
+            onExport={() => exportAs("csv", setCsvExport, "exporting your CSV")}
             state={csvExport}
           />
           <ExportRow
             description="Markdown files with YAML frontmatter. Obsidian-compatible."
             disabled={!workspace}
             label="Export as Markdown"
-            onExport={() => void handleExportMarkdown()}
+            onExport={() => exportAs("markdown", setMarkdownExport, "exporting your Markdown")}
             state={markdownExport}
           />
           <ExportRow
             description="Scheduled pages as an .ics file. Opens in any calendar app."
             disabled={!workspace}
             label="Export as Calendar"
-            onExport={() => void handleExportIcs()}
+            onExport={() => exportAs("ics", setIcsExport, "exporting your calendar")}
             state={icsExport}
           />
           {hasSyncedCalendar && (
