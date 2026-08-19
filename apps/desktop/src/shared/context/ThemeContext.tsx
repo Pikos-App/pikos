@@ -1,6 +1,7 @@
 // Applies .dark class to <html>, listens for OS preference changes in system mode,
 // manages theme-transitioning class for smooth switches, and updates <meta name="theme-color">.
 
+import { tokenHex } from "@pikos/ui";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
 import { IS_LINUX } from "@/shared/constants/platform";
@@ -22,10 +23,10 @@ export interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-/** Surface colors used for <meta name="theme-color"> — must match app.css tokens. */
+/** Surface colors used for <meta name="theme-color">, read from the same tokens app.css is generated from. */
 const META_COLORS: Record<ResolvedTheme, string> = {
-  dark: "#161613",
-  light: "#ffffff",
+  dark: tokenHex("surface-primary", "dark"),
+  light: tokenHex("surface-primary", "light"),
 };
 
 function readStoredMode(): ThemeMode {
