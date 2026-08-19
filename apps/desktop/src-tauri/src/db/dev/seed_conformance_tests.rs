@@ -3,7 +3,7 @@
 //! The seed exists to make behaviours reachable by hand that no unit test covers, so
 //! what it *contains* is its contract — and it is written twice: here as SQL through
 //! [`dev_seed_synced_calendar_impl`], and again in TypeScript
-//! (`shared/seeds/syncedCalendar.ts`) against `MockStorageAdapter`, which is what test
+//! (`apps/desktop/seeds/syncedCalendar.ts`) against `MockStorageAdapter`, which is what test
 //! mode, the `VITE_SEED` harness and Playwright plant. The two halves drifted apart
 //! unnoticed once, and the manual QA pass runs against both, so a drift corrupts QA
 //! itself rather than failing a test.

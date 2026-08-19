@@ -346,7 +346,7 @@ pub(crate) async fn dev_seed_synced_calendar_impl(pool: &sqlx::SqlitePool) -> Ap
     // "Team standup" carries the full read-only mirror surface: location, attendees,
     // a user-edited body, and a withheld upstream description → shows the notice.
     //
-    // Times and shapes mirror the TS seed (`shared/seeds/syncedCalendar.ts`), which
+    // Times and shapes mirror the TS seed (`apps/desktop/seeds/syncedCalendar.ts`), which
     // places each event in a lane the realistic seed leaves free and records what
     // each shape is here to make reachable — see the note there.
     let standup_body = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"My prep: land the calendar-sync PR before we demo."}]}]}"#;

@@ -2,6 +2,12 @@
 // the launch flag (`VITE_SEED=…`, read once on mount) and the developer menu's
 // reset-and-seed. Each seed module is imported lazily so none of this reaches a
 // user build's main chunk.
+//
+// This directory sits beside `src/`, not inside it, and the app reaches it
+// through the `@seeds` alias (vite.config.ts, vitest.config.ts,
+// tsconfig.app.json). The fixtures are several thousand lines of data that no
+// production code path reads; keeping them out of the source tree keeps greps
+// and whole-tree reads pointed at real code.
 
 import type { StorageAdapter } from "@pikos/core";
 
@@ -32,31 +38,31 @@ export type SeedLoader = (ctx: SeedContext) => Promise<void>;
 
 export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
   calendar: async ({ adapter }) => {
-    const { seedCalendar } = await import("@/shared/seeds/calendar");
+    const { seedCalendar } = await import("./calendar");
     await seedCalendar(adapter);
   },
   "calendar-colors": async ({ adapter }) => {
-    const { seedCalendarColors } = await import("@/shared/seeds/calendarColors");
+    const { seedCalendarColors } = await import("./calendarColors");
     await seedCalendarColors(adapter);
   },
   "calendar-edges": async ({ adapter }) => {
-    const { seedCalendarEdgeCases } = await import("@/shared/seeds/calendarEdgeCases");
+    const { seedCalendarEdgeCases } = await import("./calendarEdgeCases");
     await seedCalendarEdgeCases(adapter);
   },
   marketing: async ({ adapter }) => {
-    const { seedMarketing } = await import("@/shared/seeds/marketing");
+    const { seedMarketing } = await import("./marketing");
     await seedMarketing(adapter);
   },
   notifications: async ({ adapter }) => {
-    const { seedNotifications } = await import("@/shared/seeds/notifications");
+    const { seedNotifications } = await import("./notifications");
     await seedNotifications(adapter);
   },
   realistic: async ({ adapter }) => {
-    const { seedRealistic } = await import("@/shared/seeds/realistic");
+    const { seedRealistic } = await import("./realistic");
     await seedRealistic(adapter);
   },
   stress: async ({ adapter }) => {
-    const { seedStress } = await import("@/shared/seeds/stress");
+    const { seedStress } = await import("./stress");
     await seedStress(adapter);
   },
   synced: async ({ adapter, phase }) => {
@@ -65,14 +71,14 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
     // reset path lays the native data down; the launch flag seeds the mirrors
     // alone, which is what the synced-calendar e2e fixtures expect.
     if (phase === "reset") {
-      const { seedRealistic } = await import("@/shared/seeds/realistic");
+      const { seedRealistic } = await import("./realistic");
       await seedRealistic(adapter);
     }
     // The mock adapter seeds synced rows directly; the real app routes through
     // the dev Tauri command (no network/keychain). The launch path only ever
     // runs under VITE_TEST_MODE, so it always takes the mock branch.
     if (import.meta.env["VITE_TEST_MODE"] === "true") {
-      const { seedSyncedCalendar } = await import("@/shared/seeds/syncedCalendar");
+      const { seedSyncedCalendar } = await import("./syncedCalendar");
       await seedSyncedCalendar(adapter);
     } else {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -80,7 +86,7 @@ export const SEED_LOADERS: Record<SeedName, SeedLoader> = {
     }
   },
   tutorial: async ({ adapter, setPendingNavigation }) => {
-    const { seedTutorial } = await import("@/shared/seeds/tutorial");
+    const { seedTutorial } = await import("./tutorial");
     const result = await seedTutorial(adapter);
     if (result) {
       setPendingNavigation({ folderId: result.folderId, pageId: result.welcomePageId });

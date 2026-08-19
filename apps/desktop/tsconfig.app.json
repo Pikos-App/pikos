@@ -11,8 +11,14 @@
       "@/*": ["./src/*"],
       "@pikos/core": ["../../packages/core/src/index.ts"],
       "@pikos/core/*": ["../../packages/core/src/*"],
-      "@pikos/ui": ["../../packages/ui/src/index.ts"]
+      "@pikos/ui": ["../../packages/ui/src/index.ts"],
+      "@seeds/*": ["./seeds/*"]
     }
   },
-  "include": ["src"]
+  // `seeds` sits alongside `src` rather than inside it: it is ~4k lines of
+  // dev/test fixture data that nothing in a user build reaches except through
+  // seedLoaders' lazy imports, so keeping it out of the app source keeps greps
+  // (and agent context) on real code. It still has to be compiled and linted,
+  // hence the second include entry.
+  "include": ["src", "seeds"]
 }
