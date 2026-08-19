@@ -21,6 +21,8 @@ const EXAMPLES = [
   "Water the plants every 3 days",
   "Stretch every morning for 4 weeks",
   "Date night every other friday 7pm",
+  "Flight thursday 6am remind 2h before",
+  "Call the plumber tomorrow // the leak is under the sink",
 ] as const;
 
 export const QUICK_ADD_PLACEHOLDER_EXAMPLES = EXAMPLES;
