@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { APP_PASSWORD_HELP, FORM_INPUT } from "./accountForm";
+import { CaldavCredentialForm } from "./CaldavCredentialForm";
 
 interface ReconnectAccountDialogProps {
   account: SyncAccount;
@@ -83,47 +83,22 @@ export function ReconnectAccountDialog({
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium">App password</span>
-              <input
-                autoFocus
-                className={FORM_INPUT}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="app-specific password"
-                type="password"
-                value={password}
-              />
-            </label>
-            <a
-              className="-mt-1.5 text-xs text-primary hover:underline"
-              href={APP_PASSWORD_HELP}
-              rel="noreferrer"
-              target="_blank"
-            >
-              How to generate an app password
-            </a>
-
-            {error && <p className="text-xs text-destructive">{error}</p>}
-
-            <div className="mt-1 flex justify-end gap-2">
-              <Button disabled={busy} onClick={() => close(false)} size="sm" variant="ghost">
-                Cancel
-              </Button>
-              <Button
-                disabled={!password || busy}
-                onClick={() =>
-                  void submit(
-                    () => onReconnect(password),
-                    "Could not connect. Check the password and try again."
-                  )
-                }
-                size="sm"
-              >
-                {busy ? "Reconnecting…" : "Reconnect"}
-              </Button>
-            </div>
-          </div>
+          <CaldavCredentialForm
+            busy={busy}
+            busyLabel="Reconnecting…"
+            error={error}
+            onPasswordChange={setPassword}
+            onSecondary={() => close(false)}
+            onSubmit={() =>
+              void submit(
+                () => onReconnect(password),
+                "Could not connect. Check the password and try again."
+              )
+            }
+            password={password}
+            secondaryLabel="Cancel"
+            submitLabel="Reconnect"
+          />
         )}
       </DialogContent>
     </Dialog>
