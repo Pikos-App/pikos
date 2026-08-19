@@ -29,6 +29,7 @@ export type { PageReminder } from "./generated/PageReminder";
 export type { PageSchedule } from "./generated/PageSchedule";
 export type { PageSummary } from "./generated/PageSummary";
 export type { SearchResult } from "./generated/SearchResult";
+export type { TrashedPage } from "./generated/TrashedPage";
 
 export type PageStatus = "not_started" | "done";
 

@@ -593,6 +593,88 @@ describe("softDelete / restore", () => {
   });
 });
 
+// ─── trash ───────────────────────────────────────────────────────────────────
+
+describe("trash", () => {
+  it("lists newest deletion first, names the folder, and marks a mirror", async () => {
+    const folder = await adapter.createFolder({ name: "Work", parentId: null });
+    const filed = await createTestPage({ folderId: folder.id, title: "Filed" });
+    const loose = await createTestPage({ title: "Loose" });
+    const mirror = await createTestPage({ title: "Standup" });
+    adapter.markPageSynced(mirror.id, { state: "active" });
+    await createTestPage({ title: "Still here" });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    await adapter.softDeletePage(filed.id);
+    vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
+    await adapter.softDeletePage(mirror.id);
+    vi.setSystemTime(new Date("2026-01-03T00:00:00Z"));
+    await adapter.softDeletePage(loose.id);
+    vi.useRealTimers();
+
+    const trash = await adapter.listTrashedPages();
+
+    expect(trash.map((t) => t.title)).toEqual(["Loose", "Standup", "Filed"]);
+    expect(trash[2]!.folderName).toBe("Work");
+    expect(trash[0]!.folderName).toBeNull();
+    expect(trash[1]!.isSynced).toBe(true);
+    expect(trash[2]!.isSynced).toBe(false);
+  });
+
+  it("lists a page trashed with its folder, with no folder name to show", async () => {
+    const folder = await adapter.createFolder({ name: "Old project", parentId: null });
+    await createTestPage({ folderId: folder.id, title: "Inside it" });
+
+    await adapter.softDeleteFolder(folder.id);
+
+    const trash = await adapter.listTrashedPages();
+    expect(trash).toHaveLength(1);
+    expect(trash[0]!.title).toBe("Inside it");
+    expect(trash[0]!.folderName).toBeNull();
+  });
+
+  it("restoring takes a page back out of the trash", async () => {
+    const page = await createTestPage({ title: "Second thoughts" });
+    await adapter.softDeletePage(page.id);
+    await adapter.restorePage(page.id);
+
+    expect(await adapter.listTrashedPages()).toHaveLength(0);
+  });
+
+  it("sweeps what is past retention and leaves the rest its 30 days", async () => {
+    const old = await createTestPage({ title: "Long gone" });
+    const young = await createTestPage({ title: "Deleted yesterday" });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    await adapter.softDeletePage(old.id);
+    vi.setSystemTime(new Date("2026-03-01T00:00:00Z"));
+    await adapter.softDeletePage(young.id);
+    const purged = await adapter.purgeTrashedPages(30);
+    vi.useRealTimers();
+
+    expect(purged).toBe(1);
+    expect((await adapter.listTrashedPages()).map((t) => t.title)).toEqual(["Deleted yesterday"]);
+    expect(await adapter.getPage(old.id)).toBeNull();
+  });
+
+  it("keeps a mirror in the trash rather than letting the calendar resurrect it", async () => {
+    const mirror = await createTestPage({ title: "Standup" });
+    adapter.markPageSynced(mirror.id, { state: "active" });
+    const native = await createTestPage({ title: "My note" });
+    await adapter.softDeletePage(mirror.id);
+    await adapter.softDeletePage(native.id);
+
+    const purged = await adapter.purgeTrashedPages(0);
+
+    expect(purged).toBe(1);
+    const trash = await adapter.listTrashedPages();
+    expect(trash.map((t) => t.title)).toEqual(["Standup"]);
+    expect(trash[0]!.isSynced).toBe(true);
+  });
+});
+
 describe("clearPendingDescription", () => {
   it("drops the parked text and leaves the rest of the mirror alone", async () => {
     const page = await createTestPage({ title: "Team sync" });
