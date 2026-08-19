@@ -1165,3 +1165,64 @@ async fn reminders_reject_minutes_below_the_opt_out_sentinel_exit_2() {
     );
     assert_eq!(code(&out), 2);
 }
+
+// ─── restore ─────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn restore_brings_a_trashed_page_back_into_the_listing() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Task")]).await;
+
+    assert!(cli(dbs, &["delete", &ids[0], "--yes", "--json"])
+        .status
+        .success());
+    assert!(json(&cli(dbs, &["list", "--json"]))
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    let out = cli(dbs, &["restore", &ids[0], "--json"]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(json(&out)["title"], "Task");
+    assert_eq!(
+        json(&cli(dbs, &["list", "--json"]))
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+/// Trashing a synced page tombstones its mirror; restoring must hand it back to
+/// the reconciler, or the page returns locally and stays suppressed upstream.
+#[tokio::test]
+async fn restore_resumes_syncing_a_tombstoned_page() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup")]).await;
+    mark_synced(dbs, &ids[0], "active").await;
+    assert!(cli(dbs, &["delete", &ids[0], "--yes", "--json"])
+        .status
+        .success());
+    assert_eq!(
+        sync_state(dbs, &ids[0]).await.as_deref(),
+        Some("tombstoned")
+    );
+
+    assert!(cli(dbs, &["restore", &ids[0], "--json"]).status.success());
+    assert_eq!(sync_state(dbs, &ids[0]).await.as_deref(), Some("active"));
+}
+
+#[tokio::test]
+async fn restore_of_a_missing_page_exits_3() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let out = cli(dbs, &["restore", "00000000-0000-0000-0000-000000000000"]);
+    assert_eq!(code(&out), 3);
+}

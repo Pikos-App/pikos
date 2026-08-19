@@ -106,6 +106,8 @@ pub enum CliCommand {
         )]
         hard: bool,
     },
+    /// Bring a trashed page back
+    Restore { id: String },
     /// Inspect and create folders
     Folders {
         #[command(subcommand)]

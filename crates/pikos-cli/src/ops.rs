@@ -10,8 +10,8 @@ use pikos_db::{
     complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
     create_recurrence_rule_impl, delete_page_reminder, fuzzy_match_folder, get_page,
     get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_pages_impl,
-    now_local_iso, today_local, CompleteRecurringInput, Folder, NewFolder, NewRecurrenceRule, Page,
-    PageFilter, PageReminder, PageSummary, PageUpdate,
+    now_local_iso, restore_page_impl, today_local, CompleteRecurringInput, Folder, NewFolder,
+    NewRecurrenceRule, Page, PageFilter, PageReminder, PageSummary, PageUpdate,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -210,6 +210,19 @@ pub async fn remove_reminder(pool: &SqlitePool, reminder_id: &str) -> Result<(),
     delete_page_reminder(pool, reminder_id)
         .await
         .map_err(classify)
+}
+
+// ─── Trash ──────────────────────────────────────────────────────────────────
+
+/// Un-trash a soft-deleted page — the other half of `delete`, which until now
+/// could put a page in the trash and never take it out.
+///
+/// Idempotent: a page that was never trashed comes back unchanged, which is why
+/// the result is the page rather than a verb.
+pub async fn restore(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
+    require_page(pool, id).await?;
+    restore_page_impl(pool, id).await.map_err(classify)?;
+    require_page(pool, id).await
 }
 
 /// Parse natural-language text into pages, then write them exactly as Quick Add
