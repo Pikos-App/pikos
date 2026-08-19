@@ -12,6 +12,7 @@ mod bridge;
 mod cli;
 mod commands;
 mod error;
+mod mcp;
 mod ops;
 mod render;
 mod schedule;

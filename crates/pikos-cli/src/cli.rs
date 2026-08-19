@@ -125,6 +125,8 @@ pub enum CliCommand {
         #[command(subcommand)]
         command: ReminderCommand,
     },
+    /// Speak the Model Context Protocol on stdio, for an agent to drive
+    Mcp,
 }
 
 #[derive(Subcommand)]
