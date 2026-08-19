@@ -4,7 +4,7 @@
 // - SQLite files in the workspace (default.sqlite + WAL/SHM, backups/, assets/,
 //   workspaces.json — everything under app_data_dir).
 // - Rotating log file under app_log_dir.
-// - All `pikos:` keys in localStorage (calendar/editor/list preferences,
+// - All `pikos:` keys in the preference store (calendar/editor/list preferences,
 //   skipped update version, defaults). The theme key predates that namespace
 //   (see shared/constants/storage.ts) and deliberately survives the wipe.
 // - Calendar-sync credentials in the OS keychain, and the OAuth grants they
@@ -18,6 +18,7 @@ import type { StorageAdapter } from "@pikos/core";
 import { load } from "@tauri-apps/plugin-store";
 
 import { STORAGE_KEY_PREFIX } from "@/shared/constants/storage";
+import { getKeyValueStore } from "@/shared/kv";
 import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
 
@@ -62,16 +63,12 @@ export async function deleteAllData(storage: StorageAdapter): Promise<void> {
     log.error("could not empty workspaces store — relaunch may not reseed", e);
   }
 
-  // localStorage isn't owned by Tauri — clear our keys here.
-  try {
-    const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(STORAGE_KEY_PREFIX)) keys.push(key);
-    }
-    for (const key of keys) localStorage.removeItem(key);
-  } catch {
-    // localStorage unavailable — nothing to clear.
+  // The preference store isn't part of the workspace the wipe destroys —
+  // clear our keys here. Theme survives: it predates the prefix (see
+  // shared/constants/storage.ts), so the sweep never names it.
+  const kv = getKeyValueStore();
+  for (const key of kv.keys()) {
+    if (key.startsWith(STORAGE_KEY_PREFIX)) kv.removeItem(key);
   }
 
   await getPlatform().relaunch();
