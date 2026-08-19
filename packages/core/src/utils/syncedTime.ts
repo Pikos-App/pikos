@@ -5,6 +5,7 @@
 // IANA id, but rendered in the *viewer's* current zone — a 3pm Los_Angeles event
 // shows at 6pm for a New_York viewer. Native pages float and never come here.
 
+import { formatLocalISO, isTimedIso } from "./dates";
 import { wallClockToUtc } from "./zoned";
 
 /**
@@ -18,4 +19,21 @@ import { wallClockToUtc } from "./zoned";
  */
 export function resolveSyncedInstant(wallClock: string, sourceZone: string): Date {
   return wallClockToUtc(sourceZone, wallClock);
+}
+
+/**
+ * The wall-clock a done clone of a synced occurrence should carry. The clone is
+ * a NATIVE (floating) page, so a timed zoned occurrence stores its start as the
+ * viewer-local wall-clock — the clone then floats at the same slot the absolute
+ * occurrence rendered (a 3pm PT event shown at 6pm ET keeps a 6pm clone).
+ * All-day / floating (no zone) occurrences keep the raw wall-clock.
+ *
+ * The completion map's KEY stays the source-zone date — that is what expansion
+ * suppresses by — so only the clone's own timestamps come through here.
+ */
+export function cloneWallClock(wallClock: string, timezone: string | null | undefined): string {
+  if (timezone && isTimedIso(wallClock)) {
+    return formatLocalISO(resolveSyncedInstant(wallClock, timezone));
+  }
+  return wallClock;
 }

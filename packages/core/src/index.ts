@@ -20,7 +20,13 @@ export {
 } from "./utils/dates";
 export { extractText } from "./utils/extractText";
 export { fuzzyMatchFolder } from "./utils/fuzzyMatchFolder";
-export { isDone, isOpen } from "./utils/page";
+export {
+  deriveTags,
+  findRecurringOccurrenceClone,
+  isDone,
+  isOpen,
+  toPageSummary,
+} from "./utils/page";
 export {
   alignWeeklyRuleToAnchor,
   buildRrule,
@@ -44,9 +50,11 @@ export type {
   RecurrenceWeekday,
   VirtualOccurrence,
 } from "./utils/recurrence";
+export { anchorMoveUpdate, applyAnchorMove, resolveAnchorMove } from "./utils/scheduleAnchor";
+export type { AnchorMove } from "./utils/scheduleAnchor";
 export { ftsTokens } from "./utils/search";
 export { emojiAwareCompare, stripLeadingEmoji } from "./utils/sort";
-export { resolveSyncedInstant } from "./utils/syncedTime";
+export { cloneWallClock, resolveSyncedInstant } from "./utils/syncedTime";
 export {
   expandRecurrenceInZone,
   normalizeUntilToZone,
