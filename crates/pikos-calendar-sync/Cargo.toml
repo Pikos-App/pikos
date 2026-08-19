@@ -7,6 +7,10 @@ description = "Pikos external calendar sync — HTTP + OS-keychain plumbing and 
 
 [dependencies]
 pikos-db = { path = "../pikos-db" }
+# WallClock (the stored date/date-time shapes) + zoned (instant ⇄ wall clock).
+# Providers normalize to the same wall clock the engine expands, so both come
+# from the one crate that defines them rather than being re-typed here.
+pikos-recurrence = { path = "../pikos-recurrence", features = ["tz"] }
 # The engine writes the per-calendar cursor/timestamps back through the same pool
 # pikos-db owns; same version/features so the SqlitePool type unifies.
 sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }

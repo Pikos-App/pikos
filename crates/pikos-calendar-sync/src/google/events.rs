@@ -18,6 +18,7 @@
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone};
 use chrono_tz::Tz;
+use pikos_recurrence::{zoned, WallClock};
 
 use pikos_db::sync_delta::{
     EventCore, EventSchedule, EventUpsert, ExclusiveEnd, OccurrenceDelta, OccurrenceFidelity,
@@ -28,7 +29,11 @@ use super::error::GoogleError;
 use super::model::{Event, EventDateTime};
 
 const CANCELLED: &str = "cancelled";
-const WALL_FMT: &str = "%Y-%m-%dT%H:%M:%S";
+
+/// A resolved instant in the shape every stored schedule value takes.
+fn wall(dt: NaiveDateTime) -> String {
+    WallClock::timed(dt).format()
+}
 
 /// What one page of events reduces to.
 #[derive(Default)]
@@ -308,13 +313,16 @@ fn wall_clock(field: &EventDateTime, zone: Option<&SourceZone>) -> Option<String
     let raw = field.date_time.as_ref()?;
     let parsed = DateTime::parse_from_rfc3339(raw).ok()?;
     Some(match zone {
-        Some(z) => parsed.with_timezone(&z.tz).format(WALL_FMT).to_string(),
+        Some(z) => wall(zoned::wall_clock_at(z.tz, parsed.to_utc())),
         // Floating: keep the offset's own wall-clock rather than shifting to UTC.
-        None => parsed.naive_local().format(WALL_FMT).to_string(),
+        None => wall(parsed.naive_local()),
     })
 }
 
 // ─── recurrence lines ───────────────────────────────────────────────────────────
+
+/// The compact form ICS spells a date-time in.
+const COMPACT_FMT: &str = "%Y%m%dT%H%M%S";
 
 /// The `RRULE` line's value, carried raw. Google may also send `EXRULE`/`RDATE`
 /// lines; only `RRULE` maps onto `page_recurrence_rules`.
@@ -357,29 +365,30 @@ fn exdate_values(lines: &[String], zone: Option<&SourceZone>) -> Vec<String> {
 /// `TZID` (or floating when it has none).
 fn normalize_exdate(value: &str, line_tz: Option<Tz>, zone: Option<&SourceZone>) -> Option<String> {
     if let Some(utc) = value.strip_suffix('Z') {
-        let naive = NaiveDateTime::parse_from_str(utc, "%Y%m%dT%H%M%S").ok()?;
+        let naive = NaiveDateTime::parse_from_str(utc, COMPACT_FMT).ok()?;
         let instant = chrono::Utc.from_utc_datetime(&naive);
         return Some(match zone {
-            Some(z) => instant.with_timezone(&z.tz).format(WALL_FMT).to_string(),
-            None => naive.format(WALL_FMT).to_string(),
+            Some(z) => wall(zoned::wall_clock_at(z.tz, instant)),
+            None => wall(naive),
         });
     }
-    if let Ok(naive) = NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S") {
+    if let Ok(naive) = NaiveDateTime::parse_from_str(value, COMPACT_FMT) {
         let Some(target) = zone else {
-            return Some(naive.format(WALL_FMT).to_string());
+            return Some(wall(naive));
         };
         return Some(match line_tz {
             // A foreign TZID is a real instant elsewhere — re-render it here.
-            Some(from) if from != target.tz => from
-                .from_local_datetime(&naive)
-                .single()?
-                .with_timezone(&target.tz)
-                .format(WALL_FMT)
-                .to_string(),
-            _ => naive.format(WALL_FMT).to_string(),
+            // `single()`, not the zoned module's earliest-pass reading: an EXDATE
+            // that the naming zone never had (or had twice) identifies no single
+            // occurrence, and a guessed instant would exclude the wrong one.
+            Some(from) if from != target.tz => wall(zoned::wall_clock_at(
+                target.tz,
+                from.from_local_datetime(&naive).single()?.to_utc(),
+            )),
+            _ => wall(naive),
         });
     }
     NaiveDate::parse_from_str(value, "%Y%m%d")
         .ok()
-        .map(|d| d.format("%Y-%m-%d").to_string())
+        .map(|d| WallClock::all_day(d).format())
 }
