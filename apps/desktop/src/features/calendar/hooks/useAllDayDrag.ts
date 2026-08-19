@@ -135,7 +135,10 @@ export function useAllDayDrag({
       title: page?.title ?? "Untitled",
     });
 
-    function onMove(ev: MouseEvent) {
+    function onMove(ev: PointerEvent) {
+      // A second finger landing mid-drag must not steer the gesture the first
+      // one started; mouse and pen are always primary.
+      if (!ev.isPrimary) return;
       const scrollEl = scrollRef.current;
       const columnsEl = dayColumnsRef.current;
       if (!scrollEl || !columnsEl) return;
@@ -184,9 +187,9 @@ export function useAllDayDrag({
       });
     }
 
-    function onUp(ev: MouseEvent) {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    function onUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       enableSelect();
       eatNextClick();
       cancelAnimationFrame(rafIdRef.current);
@@ -234,8 +237,29 @@ export function useAllDayDrag({
       );
     }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    /** Platform-cancelled gesture — unwind without rescheduling. */
+    function onCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      enableSelect();
+      cancelAnimationFrame(rafIdRef.current);
+      allDayDragRef.current = null;
+      allDayGhostPositionRef.current = null;
+      allDayHoverColumnRef.current = null;
+      setGhostContent(null);
+      setAllDayDraggingPageId(null);
+      setAllDayDragHoverIndex(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   }
 
   /**
@@ -269,7 +293,8 @@ export function useAllDayDrag({
     allDayEdgeResizePreviewRef.current = { endDate: endStr, pageId, startDate: startStr };
     setAllDayEdgeResizePreview({ endDate: endStr, pageId, startDate: startStr });
 
-    function onMove(ev: MouseEvent) {
+    function onMove(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
       const idx = dayIndexFromClientX(ev.clientX);
       if (idx === null) return;
       const grabbedDay = days[idx];
@@ -283,9 +308,9 @@ export function useAllDayDrag({
       setAllDayEdgeResizePreview(next);
     }
 
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    function onUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       enableSelect();
       eatNextClick();
       const final = allDayEdgeResizePreviewRef.current;
@@ -296,8 +321,24 @@ export function useAllDayDrag({
       onReschedule(final.pageId, final.startDate, endArg, originalDate);
     }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    /** Platform-cancelled gesture — drop the preview, keep the stored span. */
+    function onCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      enableSelect();
+      allDayEdgeResizePreviewRef.current = null;
+      setAllDayEdgeResizePreview(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   }
 
   return {

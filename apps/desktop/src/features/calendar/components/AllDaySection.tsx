@@ -32,7 +32,7 @@ interface AllDaySectionProps {
     pageId: string;
     originalDate?: string;
   }) => void;
-  /** Mousedown on empty all-day cells — WeekGrid decides click-vs-drag at mouseup. */
+  /** Press on empty all-day cells — WeekGrid decides click-vs-drag at release. */
   onCreateDragStart: (info: { clientX: number; clientY: number; dayIndex: number }) => void;
   onEdgeResizeStart: (info: {
     clientX: number;
@@ -42,7 +42,7 @@ interface AllDaySectionProps {
     originalDate?: string;
   }) => void;
   onPageDoubleClick: (pageId: string) => void;
-  onResizeStart: (e: React.MouseEvent) => void;
+  onResizeStart: (e: React.PointerEvent<HTMLElement>) => void;
   pages: PageSummary[];
   timedDragTarget: { dayIndex: number; folderColor: string | undefined } | null;
 }
@@ -90,7 +90,7 @@ export function AllDaySection({
     ? (bars.find((b) => b.page.id === autoOpenPageId && !b.continuesLeft)?.key ?? null)
     : null;
 
-  // Normalise create-preview bounds (mousedown could drag in either direction).
+  // Normalise create-preview bounds (the drag could go in either direction).
   const previewBounds = createPreview
     ? {
         hi: Math.max(createPreview.startDayIndex, createPreview.endDayIndex),
@@ -104,10 +104,10 @@ export function AllDaySection({
       firstFreeRowInSpan(slotsByDay, previewBounds.lo, previewBounds.hi) * ALL_DAY_ROW_HEIGHT
     : 0;
 
-  function handleColumnMouseDown(e: React.MouseEvent, dayIndex: number) {
-    if (e.button !== 0) return;
-    // Prevent the native mousedown from starting a text selection — dragging
-    // the cursor across nearby bar labels would otherwise highlight them.
+  function handleColumnPointerDown(e: React.PointerEvent, dayIndex: number) {
+    if (!e.isPrimary || e.button !== 0) return;
+    // Prevent the native press from starting a text selection — dragging the
+    // pointer across nearby bar labels would otherwise highlight them.
     e.preventDefault();
     onCreateDragStart({ clientX: e.clientX, clientY: e.clientY, dayIndex });
   }
@@ -139,7 +139,7 @@ export function AllDaySection({
                   )}
                   data-day-index={dayIndex}
                   key={day.toISOString()}
-                  onMouseDown={(e) => handleColumnMouseDown(e, dayIndex)}
+                  onPointerDown={(e) => handleColumnPointerDown(e, dayIndex)}
                   role="button"
                   tabIndex={-1}
                 />
@@ -192,12 +192,12 @@ export function AllDaySection({
       {/* Drag handle — bottom edge. Always-visible 3px bar so it stays
           grippable when the all-day section scrolls. `z-20` keeps it above
           the bars overlay so chips covering the bottom don't steal the
-          mousedown. */}
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- pointer-only resize, kbd control deferred to the post-launch a11y backlog */}
+          press. `touch-none` because the bar's only gesture is the resize —
+          without it the browser claims a touch drag here for a scroll. */}
       <div
         aria-label="Resize all-day section"
-        className="absolute inset-x-0 bottom-0 z-20 h-[3px] cursor-row-resize bg-border/25 transition-colors duration-[var(--transition-fast)] hover:bg-border/60 active:bg-border/80"
-        onMouseDown={onResizeStart}
+        className="absolute inset-x-0 bottom-0 z-20 h-[3px] cursor-row-resize touch-none bg-border/25 transition-colors duration-[var(--transition-fast)] hover:bg-border/60 active:bg-border/80"
+        onPointerDown={onResizeStart}
         role="separator"
       />
     </div>

@@ -182,10 +182,21 @@ export function DayColumn({
 
   const dragRef = useRef<{ startY: number; isDragging: boolean } | null>(null);
 
-  function handleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.button !== 0) return;
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!e.isPrimary || e.button !== 0) return;
     // Don't create a block if a context menu is open — the click is targeting the menu.
     if (document.querySelector('[role="menu"]')) return;
+    // Presses that belong to something else: an event block, the overflow pill,
+    // a collapsed-band expander — or, since React bubbles portal events through
+    // the component tree rather than the DOM one, a popover rendered outside
+    // this column entirely.
+    //
+    // Filtered here rather than by calling stopPropagation() at each of those
+    // controls: pointerdown is also how Radix decides an open popover was
+    // dismissed from outside, so swallowing it there would strand it open.
+    const target = e.target as HTMLElement;
+    if (!containerRef.current?.contains(target)) return;
+    if (target.closest("[data-cal-page-id],[data-cal-no-create]")) return;
     // Commit any open popover's title input: e.preventDefault() below suppresses
     // the default focus/blur behavior, so we must flush it manually before the
     // input unmounts — otherwise the typed title is lost and the auto-created
@@ -198,8 +209,8 @@ export function DayColumn({
     const startY = e.clientY - rect.top;
     dragRef.current = { isDragging: false, startY };
 
-    function onMouseMove(ev: MouseEvent) {
-      if (!dragRef.current) return;
+    function onPointerMove(ev: PointerEvent) {
+      if (!ev.isPrimary || !dragRef.current) return;
       const currentRect = containerRef.current?.getBoundingClientRect();
       if (!currentRect) return;
       const currentY = ev.clientY - currentRect.top;
@@ -217,21 +228,21 @@ export function DayColumn({
       }
     }
 
-    function onMouseUp(ev: MouseEvent) {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+    function onPointerUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       if (!dragRef.current) return;
 
-      const { isDragging, startY: mouseDownY } = dragRef.current;
+      const { isDragging, startY: pressY } = dragRef.current;
       dragRef.current = null;
       setDraft(null);
 
       const currentRect = containerRef.current?.getBoundingClientRect();
-      const upY = currentRect ? ev.clientY - currentRect.top : mouseDownY;
-      const start = mapYToDate(mouseDownY, day, geometry);
+      const upY = currentRect ? ev.clientY - currentRect.top : pressY;
+      const start = mapYToDate(pressY, day, geometry);
 
       if (isDragging) {
-        const endY = Math.max(upY, mouseDownY + minDragHeight);
+        const endY = Math.max(upY, pressY + minDragHeight);
         const end = mapYToDate(endY, day, geometry);
         void onCreatePage(day, start, end > start ? end : undefined);
       } else {
@@ -239,15 +250,30 @@ export function DayColumn({
         // `blocks` includes both visible blocks AND those collapsed into the
         // overflow pill, so clicks above or below the pill (which sit on top
         // of collapsed-event slots) don't fire phantom pages.
-        const yOccupied = blocks.some((b) => mouseDownY >= b.top && mouseDownY <= b.top + b.height);
+        const yOccupied = blocks.some((b) => pressY >= b.top && pressY <= b.top + b.height);
         if (!yOccupied) {
           void onCreatePage(day, start);
         }
       }
     }
 
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    /** Platform-cancelled gesture — drop the draft, create nothing. */
+    function onPointerCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      dragRef.current = null;
+      setDraft(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+    }
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
   }
 
   return (
@@ -300,10 +326,9 @@ export function DayColumn({
           Add). Tab/focus support deferred to the post-launch a11y backlog. Can't use
           role="button" here — it would nest inside the interactive page
           blocks rendered as children. */}
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- pointer-only drag-to-create; kbd path is Cmd+N */}
       <div
         className={cn("relative cursor-cell", isDropTarget && "bg-accent/30")}
-        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
         ref={containerRef}
         style={{ height: metrics.gridHeight }}
       >
@@ -320,11 +345,11 @@ export function DayColumn({
               "absolute inset-x-0 top-0 cursor-pointer",
               hoveredBand === "top" && "bg-foreground/[0.04]"
             )}
+            data-cal-no-create
             onClick={(e) => {
               e.stopPropagation();
               setTopCollapsed(false);
             }}
-            onMouseDown={(e) => e.stopPropagation()}
             onMouseEnter={() => setHoveredBand("top")}
             onMouseLeave={() => setHoveredBand(null)}
             style={{ height: geometry.topBandHeight }}
@@ -338,11 +363,11 @@ export function DayColumn({
               "absolute inset-x-0 cursor-pointer",
               hoveredBand === "bottom" && "bg-foreground/[0.04]"
             )}
+            data-cal-no-create
             onClick={(e) => {
               e.stopPropagation();
               setBottomCollapsed(false);
             }}
-            onMouseDown={(e) => e.stopPropagation()}
             onMouseEnter={() => setHoveredBand("bottom")}
             onMouseLeave={() => setHoveredBand(null)}
             style={{ height: geometry.bottomBandHeight, top: geometry.middleEnd }}

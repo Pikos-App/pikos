@@ -78,9 +78,11 @@ export function AllDayBar({
   // this just stops the cursor from advertising a move/resize that can't happen.
   const locked = page.scheduleLocked;
 
-  function handleMouseDown(e: React.MouseEvent) {
-    if (e.button !== 0) return;
-    e.stopPropagation();
+  function handlePointerDown(e: React.PointerEvent) {
+    if (!e.isPrimary || e.button !== 0) return;
+    // No stopPropagation: nothing above the bars overlay starts a gesture, and
+    // pointerdown is what Radix listens on to dismiss another open popover
+    // from outside — swallowing it would strand that one open.
     if (locked) return;
     // Prevent native text selection — the bar's content is mostly text and
     // dragging across it would otherwise highlight it.
@@ -107,9 +109,8 @@ export function AllDayBar({
   }
 
   function startEdgeResize(edge: "start" | "end") {
-    return (e: React.MouseEvent) => {
-      if (e.button !== 0) return;
-      e.stopPropagation();
+    return (e: React.PointerEvent) => {
+      if (!e.isPrimary || e.button !== 0) return;
       e.preventDefault();
       setPopoverOpen(false);
       suppressPendingClick();
@@ -150,7 +151,7 @@ export function AllDayBar({
           )}
           onClick={handleClick}
           onContextMenu={(e) => e.preventDefault()}
-          onMouseDown={handleMouseDown}
+          onPointerDown={handlePointerDown}
           style={{ ...chipStyle, ...position }}
         >
           {showsCheckbox ? (
@@ -173,17 +174,17 @@ export function AllDayBar({
           {showLeftEdgeHandle && (
             <span
               aria-hidden
-              className="absolute inset-y-0 left-0 w-1 cursor-ew-resize!"
+              className="absolute inset-y-0 left-0 w-1 cursor-ew-resize! touch-none"
               data-resize-edge="start"
-              onMouseDown={startEdgeResize("start")}
+              onPointerDown={startEdgeResize("start")}
             />
           )}
           {showRightEdgeHandle && (
             <span
               aria-hidden
-              className="absolute inset-y-0 right-0 w-1 cursor-ew-resize!"
+              className="absolute inset-y-0 right-0 w-1 cursor-ew-resize! touch-none"
               data-resize-edge="end"
-              onMouseDown={startEdgeResize("end")}
+              onPointerDown={startEdgeResize("end")}
             />
           )}
         </button>
@@ -192,7 +193,6 @@ export function AllDayBar({
         align="start"
         className="w-80 p-3"
         onClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
         side="bottom"
         sideOffset={4}
       >

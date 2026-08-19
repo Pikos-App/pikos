@@ -60,8 +60,12 @@ describe("useAllDayDrag — chip drag schedule lock guard", () => {
   it("does not reschedule a locked (synced) chip", () => {
     const { onReschedule, result } = setup(true);
     result.current.handleAllDayChipDragStart({ folderColor: undefined, pageId: "p1" });
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: -50 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: -50 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: -50, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: -50, isPrimary: true })
+    );
     expect(onReschedule).not.toHaveBeenCalled();
   });
 
@@ -69,8 +73,12 @@ describe("useAllDayDrag — chip drag schedule lock guard", () => {
     const { onReschedule, result } = setup(false);
     result.current.handleAllDayChipDragStart({ folderColor: undefined, pageId: "p1" });
     // Negative clientY keeps the cursor in the all-day strip (rect.top is 0 in jsdom).
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: -50 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: -50 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: -50, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: -50, isPrimary: true })
+    );
     expect(onReschedule).toHaveBeenCalledTimes(1);
   });
 });
@@ -88,8 +96,12 @@ describe("useAllDayDrag — occurrence identity", () => {
       originalDate: "2099-01-05",
       pageId: "p1",
     });
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: -50 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: -50 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: -50, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: -50, isPrimary: true })
+    );
 
     expect(onReschedule).toHaveBeenCalledWith(
       "p1",
@@ -102,8 +114,12 @@ describe("useAllDayDrag — occurrence identity", () => {
   it("leaves it undefined for a page that is not an occurrence", () => {
     const { onReschedule, result } = setup(false);
     result.current.handleAllDayChipDragStart({ folderColor: undefined, pageId: "p1" });
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: -50 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: -50 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: -50, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: -50, isPrimary: true })
+    );
 
     expect(onReschedule).toHaveBeenCalledWith(
       "p1",
@@ -123,8 +139,12 @@ describe("useAllDayDrag — edge resize schedule lock guard", () => {
       edge: "end",
       pageId: "p1",
     });
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: 5 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: 5 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: 5, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: 5, isPrimary: true })
+    );
     expect(onReschedule).not.toHaveBeenCalled();
   });
 
@@ -136,8 +156,12 @@ describe("useAllDayDrag — edge resize schedule lock guard", () => {
       edge: "end",
       pageId: "p1",
     });
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: 5 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: 5 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: 5, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: 5, isPrimary: true })
+    );
     expect(onReschedule).toHaveBeenCalledTimes(1);
   });
 });

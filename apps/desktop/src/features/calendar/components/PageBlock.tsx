@@ -51,7 +51,7 @@ interface PageBlockProps {
   isCompactWidth?: boolean;
   /** Called (with initial clientX/Y) when drag threshold is crossed on the block body. */
   onDragStart?: (clientX: number, clientY: number) => void;
-  /** Called when the user mousedowns in the bottom resize zone. */
+  /** Called when the user presses in the bottom resize zone. */
   onResizeStart?: () => void;
   /**
    * When set, overrides the rendered height of the block (px).
@@ -148,7 +148,7 @@ export function PageBlock({
   const isSplitSegment = isContinuationBefore || isContinuationAfter;
   const isSegmentB = isContinuationBefore === true;
   // Synced events have a locked schedule. The drag/resize hooks already no-op,
-  // but the gesture *affordances* (grab cursor on mousedown-hold, the resize
+  // but the gesture *affordances* (grab cursor on press-and-hold, the resize
   // handle + row-resize cursor) must be suppressed here too — otherwise the
   // cursor advertises a move/resize that can't happen.
   const locked = page.scheduleLocked;
@@ -173,9 +173,11 @@ export function PageBlock({
    * route through here. Segment B blocks the drag entirely so a two-segment
    * event can only be rescheduled from its start segment.
    */
-  function handleBlockMouseDown(e: React.MouseEvent) {
-    if (e.button !== 0) return; // let right-click reach ContextMenuTrigger unmodified
-    e.stopPropagation();
+  function handleBlockPointerDown(e: React.PointerEvent) {
+    if (!e.isPrimary || e.button !== 0) return; // let right-click reach ContextMenuTrigger unmodified
+    // No stopPropagation: DayColumn filters presses that land on a block by
+    // target instead, because pointerdown is what Radix listens on to dismiss
+    // an open popover from outside — see the note on its handler.
     if (!onDragStart) return;
     if (isSegmentB) return;
     // Locked (synced): don't begin the drag threshold — a click still opens the
@@ -198,9 +200,8 @@ export function PageBlock({
    * still suppresses the popover, then waits for the threshold before telling
    * the parent to start resizing.
    */
-  function handleResizeHandleMouseDown(e: React.MouseEvent) {
-    if (e.button !== 0) return;
-    e.stopPropagation();
+  function handleResizeHandlePointerDown(e: React.PointerEvent) {
+    if (!e.isPrimary || e.button !== 0) return;
     if (!onResizeStart) return;
     markDragging();
     beginDragThreshold(e.clientX, e.clientY, {
@@ -263,11 +264,14 @@ export function PageBlock({
   const isDetached = page.syncState === "detached";
 
   const resizeHandle = resizeEnabled ? (
+    // touch-none: the strip's only gesture is the resize, so the browser must
+    // not claim a touch drag here for a scroll. The block body deliberately
+    // does not set it — a touch drag there still scrolls the grid.
     <div
       aria-hidden
-      className="absolute right-0 bottom-0 left-0 cursor-row-resize!"
+      className="absolute right-0 bottom-0 left-0 cursor-row-resize! touch-none"
       onClick={(e) => e.stopPropagation()}
-      onMouseDown={handleResizeHandleMouseDown}
+      onPointerDown={handleResizeHandlePointerDown}
       style={{ height: resizeZoneFor(displayHeight) }}
     />
   ) : null;
@@ -295,9 +299,9 @@ export function PageBlock({
             )}
             data-cal-page-id={page.id}
             onClick={handleClick}
-            onMouseDown={handleBlockMouseDown}
             onMouseEnter={() => applyHoverLink(true)}
             onMouseLeave={() => applyHoverLink(false)}
+            onPointerDown={handleBlockPointerDown}
             style={sharedStyle}
           >
             {showLabel && checkbox}
@@ -339,9 +343,9 @@ export function PageBlock({
             )}
             data-cal-page-id={page.id}
             onClick={handleClick}
-            onMouseDown={handleBlockMouseDown}
             onMouseEnter={() => applyHoverLink(true)}
             onMouseLeave={() => applyHoverLink(false)}
+            onPointerDown={handleBlockPointerDown}
             style={sharedStyle}
           >
             {showLabel && (
@@ -369,13 +373,7 @@ export function PageBlock({
           </button>
         )}
       </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-80 p-3"
-        onMouseDown={(e) => e.stopPropagation()}
-        side="right"
-        sideOffset={8}
-      >
+      <PopoverContent align="start" className="w-80 p-3" side="right" sideOffset={8}>
         {isVirtual ? (
           <VirtualPageBlockPopover
             onClose={() => setPopoverOpen(false)}

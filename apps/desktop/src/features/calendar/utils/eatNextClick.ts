@@ -6,7 +6,7 @@ const EAT_CLICK_WINDOW_MS = 200;
  * Call at the end of a drag/resize gesture.
  *
  * The synthetic click belongs to the SAME gesture and fires within a few ms of
- * mouseup. A move-drag (mousedown and mouseup on different targets) often emits
+ * release. A move-drag (press and release on different targets) often emits
  * NO synthetic click at all — so the guard must not linger and swallow the
  * user's next *deliberate* click (e.g. a block's complete checkbox). That
  * lingering swallow was the "after moving a block, the first checkbox click

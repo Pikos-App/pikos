@@ -28,6 +28,7 @@ export function OverflowPill({ onOpen, pagesById, pill }: OverflowPillProps) {
             "transition-colors hover:border-border/80 hover:bg-accent hover:text-foreground",
             "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           )}
+          data-cal-no-create
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           style={{

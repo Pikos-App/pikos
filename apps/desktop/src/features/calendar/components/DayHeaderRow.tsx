@@ -14,7 +14,7 @@ export interface DayHeaderRowProps {
 }
 
 /**
- * Mousedown anywhere on a header cell starts the same drag-to-create gesture
+ * A press anywhere on a header cell starts the same drag-to-create gesture
  * as the all-day strip below it, so the header remains a clickable create
  * surface even when the all-day section is scrolled past the fold.
  */
@@ -33,8 +33,8 @@ export function DayHeaderRow({ days, onCreateDragStart, today }: DayHeaderRowPro
               isWeekend(day) ? "bg-white/[0.012]" : ""
             )}
             key={day.toISOString()}
-            onMouseDown={(e) => {
-              if (e.button !== 0) return;
+            onPointerDown={(e) => {
+              if (!e.isPrimary || e.button !== 0) return;
               e.preventDefault();
               onCreateDragStart({ clientX: e.clientX, clientY: e.clientY, dayIndex: i });
             }}

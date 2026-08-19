@@ -42,7 +42,8 @@ export function TimeGutter() {
   function startBoundaryDrag(which: "top" | "bottom", clientYStart: number) {
     const hourHeight = metrics.hourHeight;
     const startHour = which === "top" ? collapse.topHour : collapse.bottomHour;
-    function onMove(ev: MouseEvent) {
+    function onMove(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
       const deltaPx = ev.clientY - clientYStart;
       const deltaHours = Math.round(deltaPx / hourHeight);
       if (which === "top") {
@@ -53,14 +54,19 @@ export function TimeGutter() {
         if (next !== collapse.bottomHour) setBottomHour(next);
       }
     }
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    // pointerup and pointercancel end the gesture the same way: the boundary
+    // hour already committed on every move, so there is nothing to roll back.
+    function onEnd(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
       document.documentElement.classList.remove("dragging-resize");
     }
     document.documentElement.classList.add("dragging-resize");
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
   }
 
   return (
@@ -141,16 +147,15 @@ export function TimeGutter() {
       {/* Drag handle sits on the middle-area side of each boundary so the
           horizontal line never slices through the "6 AM" / "10 PM" label. */}
       {!collapse.topCollapsed && (
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- pointer-only collapse-boundary drag, kbd control deferred to the post-launch a11y backlog
         <div
           aria-label="Adjust top collapse boundary"
           className={cn(
-            "absolute inset-x-0 z-10 cursor-ns-resize",
+            "absolute inset-x-0 z-10 cursor-ns-resize touch-none",
             "before:absolute before:inset-x-1 before:top-1/2 before:h-px",
             "before:-translate-y-1/2 before:bg-foreground/30 hover:before:bg-foreground/60"
           )}
-          onMouseDown={(e) => {
-            if (e.button !== 0) return;
+          onPointerDown={(e) => {
+            if (!e.isPrimary || e.button !== 0) return;
             e.preventDefault();
             startBoundaryDrag("top", e.clientY);
           }}
@@ -163,16 +168,15 @@ export function TimeGutter() {
         />
       )}
       {!collapse.bottomCollapsed && (
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- pointer-only collapse-boundary drag, kbd control deferred to the post-launch a11y backlog
         <div
           aria-label="Adjust bottom collapse boundary"
           className={cn(
-            "absolute inset-x-0 z-10 cursor-ns-resize",
+            "absolute inset-x-0 z-10 cursor-ns-resize touch-none",
             "before:absolute before:inset-x-1 before:top-1/2 before:h-px",
             "before:-translate-y-1/2 before:bg-foreground/30 hover:before:bg-foreground/60"
           )}
-          onMouseDown={(e) => {
-            if (e.button !== 0) return;
+          onPointerDown={(e) => {
+            if (!e.isPrimary || e.button !== 0) return;
             e.preventDefault();
             startBoundaryDrag("bottom", e.clientY);
           }}
