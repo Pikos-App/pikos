@@ -31,9 +31,9 @@ export function CalendarHeader({
   const today = startOfDay(new Date());
   const isCurrentWeek = isWithinInterval(today, { end: addDays(last, 1), start: first });
 
-  useKeyboardShortcut("ArrowLeft", onPrevWeek);
-  useKeyboardShortcut("ArrowRight", onNextWeek);
-  useKeyboardShortcut("t", onToday);
+  useKeyboardShortcut("ArrowLeft", onPrevWeek, { group: "Calendar", label: "Previous week" });
+  useKeyboardShortcut("ArrowRight", onNextWeek, { group: "Calendar", label: "Next week" });
+  useKeyboardShortcut("t", onToday, { group: "Calendar", label: "Jump to today" });
 
   // Show visible range: "Mar 16 – 22, 2026" or "Mar 30 – Apr 5, 2026"
   const weekLabel = isSameMonth(first, last)

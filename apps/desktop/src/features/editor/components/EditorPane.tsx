@@ -228,7 +228,7 @@ export function EditorPane() {
       editor.view.dom.blur();
       setIsAddingLink(true);
     },
-    { allowInInputs: true, scope: "editor" }
+    { allowInInputs: true, group: "Editor", label: "Insert / edit link", scope: "editor" }
   );
 
   if (!page) {
