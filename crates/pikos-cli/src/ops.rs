@@ -5,15 +5,17 @@
 //! two that drift.
 
 use pikos_db::{
-    complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl, get_page,
-    get_recurrence_rule_impl, now_local_iso, today_local, CompleteRecurringInput,
-    NewRecurrenceRule, Page, PageUpdate,
+    complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl,
+    fuzzy_match_folder, get_page, get_recurrence_rule_impl, list_folders_impl, list_pages_impl,
+    now_local_iso, today_local, CompleteRecurringInput, Folder, NewRecurrenceRule, Page,
+    PageFilter, PageSummary, PageUpdate,
 };
 use serde_json::Value;
 use sqlx::SqlitePool;
 
 use crate::bridge::{run_bridge, ParseResult};
 use crate::error::{classify, CliError};
+use crate::schedule::parse_due;
 use crate::write::{apply_patch, base_page, local_tz, priority_num, resolve_folder, schedule_once};
 
 pub async fn require_page(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
@@ -21,6 +23,106 @@ pub async fn require_page(pool: &SqlitePool, id: &str) -> Result<Page, CliError>
         .await
         .map_err(classify)?
         .ok_or_else(|| CliError::not_found(format!("No page with id: {id}")))
+}
+
+/// The two words `status` may hold, checked before anything is written.
+pub fn validate_status(s: &str) -> Result<(), CliError> {
+    if s != "not_started" && s != "done" {
+        return Err(CliError::usage(format!(
+            "status must be \"not_started\" or \"done\" (got \"{s}\")"
+        )));
+    }
+    Ok(())
+}
+
+/// Priorities are the five the app offers — 0 (none) through 4 (low).
+pub fn validate_priority(p: i64) -> Result<(), CliError> {
+    if !(0..=4).contains(&p) {
+        return Err(CliError::usage(format!("priority must be 0–4 (got {p})")));
+    }
+    Ok(())
+}
+
+// ─── Listing ────────────────────────────────────────────────────────────────
+
+/// Every filter `list` can express, in the shape the flags (and the MCP tool
+/// arguments) arrive in. Translated to a [`PageFilter`] by [`list_pages`].
+#[derive(Default)]
+pub struct ListQuery {
+    pub folder: Option<String>,
+    pub status: Option<String>,
+    pub priority: Option<i64>,
+    pub query: Option<String>,
+    pub has_schedule: bool,
+    pub due: Option<String>,
+    pub tags: Vec<String>,
+    pub modified: bool,
+    pub limit: Option<usize>,
+}
+
+pub async fn list_pages(pool: &SqlitePool, q: ListQuery) -> Result<Vec<PageSummary>, CliError> {
+    let mut filter = PageFilter::default();
+    if let Some(s) = &q.status {
+        validate_status(s)?;
+        filter.status = Some(s.clone());
+    }
+    if let Some(p) = q.priority {
+        validate_priority(p)?;
+        filter.priority = Some(p);
+    }
+    if let Some(name) = &q.folder {
+        filter.folder_id = Some(resolve_folder_ref(pool, name).await?);
+    }
+    if let Some(d) = &q.due {
+        let (after, before) = parse_due(d)?;
+        filter.scheduled_after = Some(after);
+        filter.scheduled_before = Some(before);
+    }
+    if q.has_schedule {
+        filter.has_schedule = Some(true);
+    }
+    if let Some(text) = &q.query {
+        filter.query = Some(text.clone());
+    }
+    if !q.tags.is_empty() {
+        filter.tags = Some(q.tags.clone());
+    }
+    let mut pages = list_pages_impl(pool, Some(filter))
+        .await
+        .map_err(classify)?;
+    if q.modified {
+        pages.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    }
+    if let Some(n) = q.limit {
+        pages.truncate(n);
+    }
+    Ok(pages)
+}
+
+/// Resolve a `--folder` argument to the value a [`PageFilter`] wants: an exact id
+/// first, then the same fuzzy name match `add` uses for `~folder`.
+///
+/// `inbox` names the unfiled view (`folder_id IS NULL`), but only when no real
+/// folder answers to it — the same precedence Quick Add applies, so one string
+/// never means two things depending on which binary read it.
+pub async fn resolve_folder_ref(pool: &SqlitePool, needle: &str) -> Result<Value, CliError> {
+    let folders = list_folders_impl(pool).await.map_err(classify)?;
+    if let Some(exact) = folders.iter().find(|f| f.id == needle) {
+        return Ok(Value::String(exact.id.clone()));
+    }
+    let candidates: Vec<Folder> = folders
+        .into_iter()
+        .filter(|f| !f.is_external_calendar)
+        .collect();
+    if let Some(matched) = fuzzy_match_folder(needle, &candidates) {
+        return Ok(Value::String(matched.id.clone()));
+    }
+    if needle.eq_ignore_ascii_case("inbox") {
+        return Ok(Value::Null);
+    }
+    Err(CliError::not_found(format!(
+        "No folder matches \"{needle}\" — run `pikos folders list` to see them."
+    )))
 }
 
 /// Parse natural-language text into pages, then write them exactly as Quick Add

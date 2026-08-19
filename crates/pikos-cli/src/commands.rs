@@ -3,16 +3,19 @@
 
 use pikos_db::{
     get_recurrence_rule_impl, hard_delete_page_impl, hard_delete_would_resurrect,
-    list_page_schedules_impl, list_pages_impl, list_pages_today_impl, now_local_iso,
-    search_pages_impl, soft_delete_page_impl, update_page_impl, PageFilter, PageUpdate,
+    list_page_schedules_impl, list_pages_today_impl, now_local_iso, search_pages_impl,
+    soft_delete_page_impl, update_page_impl, PageUpdate,
 };
 use serde_json::{json, Value};
 
 use crate::cli::{Cli, CliCommand};
 use crate::error::{classify, CliError};
-use crate::ops::{cmd_add, confirm, mark_done, require_page};
+use crate::ops::{
+    cmd_add, confirm, list_pages, mark_done, require_page, validate_priority, validate_status,
+    ListQuery,
+};
 use crate::render::{print_json, render_page, render_search, render_summary_list};
-use crate::schedule::{parse_due, resolve_schedule_change};
+use crate::schedule::resolve_schedule_change;
 use crate::workspace::open_workspace;
 use crate::write::{schedule_once, text_to_tiptap};
 
@@ -50,35 +53,28 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
             status,
             due,
             tag,
+            folder,
+            priority,
+            query,
+            has_schedule,
             modified,
             limit,
         } => {
-            let mut filter = PageFilter::default();
-            if let Some(s) = &status {
-                if s != "not_started" && s != "done" {
-                    return Err(CliError::usage(format!(
-                        "--status must be \"not_started\" or \"done\" (got \"{s}\")"
-                    )));
-                }
-                filter.status = Some(s.clone());
-            }
-            if let Some(d) = &due {
-                let (after, before) = parse_due(d)?;
-                filter.scheduled_after = Some(after);
-                filter.scheduled_before = Some(before);
-            }
-            if !tag.is_empty() {
-                filter.tags = Some(tag);
-            }
-            let mut pages = list_pages_impl(&pool, Some(filter))
-                .await
-                .map_err(classify)?;
-            if modified {
-                pages.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-            }
-            if let Some(n) = limit {
-                pages.truncate(n);
-            }
+            let pages = list_pages(
+                &pool,
+                ListQuery {
+                    folder,
+                    status,
+                    priority,
+                    query,
+                    has_schedule,
+                    due,
+                    tags: tag,
+                    modified,
+                    limit,
+                },
+            )
+            .await?;
             if json {
                 print_json(&pages);
             } else {
@@ -174,11 +170,7 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 upd.content_text = Some(txt);
             }
             if let Some(s) = &status {
-                if s != "not_started" && s != "done" {
-                    return Err(CliError::usage(format!(
-                        "--status must be \"not_started\" or \"done\" (got \"{s}\")"
-                    )));
-                }
+                validate_status(s)?;
                 upd.status = Some(s.clone());
                 upd.completed_at = Some(if s == "done" {
                     Value::String(now_local_iso())
@@ -187,9 +179,7 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 });
             }
             if let Some(p) = priority {
-                if !(0..=4).contains(&p) {
-                    return Err(CliError::usage(format!("--priority must be 0–4 (got {p})")));
-                }
+                validate_priority(p)?;
                 upd.priority = Some(p);
             }
             update_page_impl(&pool, id.clone(), upd)
