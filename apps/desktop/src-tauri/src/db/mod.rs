@@ -164,9 +164,14 @@ async fn open_pool(path: &str) -> AppResult<SqlitePool> {
 
 // Cross-module workflow + real-pool integration tests. They drive pikos-db's
 // public API the way the app does (pages + folders + schedules + search through
-// one pool). They live in this crate, not pikos-db, because CI runs the Rust
-// suite from here — pikos-db's own #[cfg(test)] modules never execute in CI
-// (the root workspace excludes this package). See the file header for detail.
+// one pool). They live in this crate, not pikos-db, because what they assert is
+// how the *desktop app* composes those modules — that belongs beside the code
+// doing the composing, and this crate's dev-dependencies enable pikos-db's
+// `test-support` feature so the fixtures still come off the same migration tree.
+// Reaching CI is no longer part of the reason: `_validate.yml` gates both Cargo
+// trees, `cargo test --workspace` over the root (`crates/*`, which excludes this
+// package) and then this crate on its own, so pikos-db's `#[cfg(test)]` modules
+// run either way. See the file header for detail.
 #[cfg(test)]
 #[path = "workflows_tests.rs"]
 mod workflows_tests;
