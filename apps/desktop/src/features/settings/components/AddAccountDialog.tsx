@@ -2,7 +2,6 @@ import type { NewCaldavConnection } from "@pikos/core";
 import { CalendarDays, Server } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { APP_PASSWORD_HELP, FORM_INPUT } from "./accountForm";
+import { CaldavCredentialForm } from "./CaldavCredentialForm";
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -90,8 +89,6 @@ export function AddAccountDialog({
     }
   }
 
-  const canSubmit = serverUrl.trim() && username.trim() && password && !busy;
-
   return (
     <Dialog onOpenChange={close} open={open}>
       <DialogContent>
@@ -138,56 +135,23 @@ export function AddAccountDialog({
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium">Server URL</span>
-              <input
-                autoFocus
-                className={FORM_INPUT}
-                onChange={(e) => setServerUrl(e.target.value)}
-                placeholder="https://caldav.icloud.com"
-                value={serverUrl}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium">Username</span>
-              <input
-                className={FORM_INPUT}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="you@example.com"
-                value={username}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium">App password</span>
-              <input
-                className={FORM_INPUT}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="app-specific password"
-                type="password"
-                value={password}
-              />
-            </label>
-            <a
-              className="-mt-1.5 text-xs text-primary hover:underline"
-              href={APP_PASSWORD_HELP}
-              rel="noreferrer"
-              target="_blank"
-            >
-              How to generate an app password
-            </a>
-
-            {error && <p className="text-xs text-destructive">{error}</p>}
-
-            <div className="mt-1 flex justify-end gap-2">
-              <Button disabled={busy} onClick={() => setProvider("pick")} size="sm" variant="ghost">
-                Back
-              </Button>
-              <Button disabled={!canSubmit} onClick={() => void submit()} size="sm">
-                {busy ? "Connecting…" : "Connect"}
-              </Button>
-            </div>
-          </div>
+          <CaldavCredentialForm
+            busy={busy}
+            busyLabel="Connecting…"
+            error={error}
+            onPasswordChange={setPassword}
+            onSecondary={() => setProvider("pick")}
+            onSubmit={() => void submit()}
+            password={password}
+            secondaryLabel="Back"
+            server={{
+              onUrlChange: setServerUrl,
+              onUsernameChange: setUsername,
+              url: serverUrl,
+              username,
+            }}
+            submitLabel="Connect"
+          />
         )}
       </DialogContent>
     </Dialog>
