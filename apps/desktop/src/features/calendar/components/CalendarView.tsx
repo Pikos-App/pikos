@@ -1,4 +1,10 @@
-import { buildCalendarDays, clampDayCount, getCalendarDayCount } from "@pikos/core";
+import {
+  buildCalendarDays,
+  buildMonthGrid,
+  clampDayCount,
+  getCalendarDayCount,
+  monthGridDays,
+} from "@pikos/core";
 import { addDays, format, isSameDay } from "date-fns";
 import { useEffect, useState } from "react";
 
@@ -11,6 +17,7 @@ import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import { useRecurrenceExpansion } from "../hooks/useRecurrenceExpansion";
+import { MonthGrid } from "./MonthGrid";
 import { WeekGrid } from "./WeekGrid";
 
 /**
@@ -43,10 +50,10 @@ export function CalendarView() {
     scheduleOnce,
   } = usePages();
   const { storage } = useWorkspace();
-  const { activeViewId, openPage, referenceDate } = useUI();
+  const { activeViewId, openPage, referenceDate, setReferenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
   const { defaultFolderId: settingsDefaultFolder, weekStart } = useAppSettings();
-  const { dayCount: preferredDayCount } = useCalendarSettings();
+  const { dayCount: preferredDayCount, setViewMode, viewMode } = useCalendarSettings();
   const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
   const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
@@ -60,7 +67,14 @@ export function CalendarView() {
   // User preference wins, but breakpoint caps it — choosing 7 on a narrow window
   // would truncate day columns to unusable widths.
   const dayCount = clampDayCount(preferredDayCount, getCalendarDayCount(layoutMode));
-  const days = buildCalendarDays(referenceDate, dayCount, weekStart);
+  const isMonth = viewMode === "month";
+  // Month view's visible range is the padded grid (up to 42 days), not the
+  // month — recurrence expansion and the completed-page fetch below both key
+  // off `days`, so the padding rows get their occurrences too.
+  const monthWeeks = buildMonthGrid(referenceDate, weekStart);
+  const days = isMonth
+    ? monthGridDays(monthWeeks)
+    : buildCalendarDays(referenceDate, dayCount, weekStart);
   const today = new Date();
   const isCurrentWeek = days.some((d) => isSameDay(d, today));
 
@@ -105,6 +119,13 @@ export function CalendarView() {
 
   function handlePageDoubleClick(pageId: string) {
     openPage(pageId);
+  }
+
+  /** Month view's only navigation gesture: land on the picked day in the time
+   * grid, which is where every scheduling gesture lives. */
+  function handleOpenDay(day: Date) {
+    setReferenceDate(day);
+    setViewMode("time");
   }
 
   async function handleCreatePage(day: Date, start: Date, end?: Date) {
@@ -174,17 +195,26 @@ export function CalendarView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <WeekGrid
-        autoOpenPageId={autoOpenPageId}
-        days={days}
-        isCurrentWeek={isCurrentWeek}
-        onAutoOpenConsumed={handleAutoOpenConsumed}
-        onCreateAllDay={handleCreateAllDay}
-        onCreatePage={handleCreatePage}
-        onPageDoubleClick={handlePageDoubleClick}
-        onReschedule={handleReschedule}
-        pages={expandedPages}
-      />
+      {isMonth ? (
+        <MonthGrid
+          onOpenDay={handleOpenDay}
+          onPageDoubleClick={handlePageDoubleClick}
+          pages={expandedPages}
+          weeks={monthWeeks}
+        />
+      ) : (
+        <WeekGrid
+          autoOpenPageId={autoOpenPageId}
+          days={days}
+          isCurrentWeek={isCurrentWeek}
+          onAutoOpenConsumed={handleAutoOpenConsumed}
+          onCreateAllDay={handleCreateAllDay}
+          onCreatePage={handleCreatePage}
+          onPageDoubleClick={handlePageDoubleClick}
+          onReschedule={handleReschedule}
+          pages={expandedPages}
+        />
+      )}
     </div>
   );
 }

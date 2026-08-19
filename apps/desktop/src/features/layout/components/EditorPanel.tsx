@@ -1,5 +1,5 @@
 import { clampDayCount, dayCountNavStep, getCalendarDayCount } from "@pikos/core";
-import { addDays, subDays } from "date-fns";
+import { addDays, addMonths, startOfMonth, subDays, subMonths } from "date-fns";
 
 import { CalendarHeader, CalendarView } from "@/features/calendar";
 import { EditorPane } from "@/features/editor";
@@ -17,9 +17,10 @@ export function EditorPanel() {
   const ui = useUI();
   // Must match CalendarView's effective day count — otherwise prev/next step by
   // the breakpoint max (7) while the view renders fewer days, skipping dates.
-  const { dayCount: preferredDayCount } = useCalendarSettings();
+  const { dayCount: preferredDayCount, setViewMode, viewMode } = useCalendarSettings();
   const dayCount = clampDayCount(preferredDayCount, getCalendarDayCount(useLayoutMode()));
   const navStep = dayCountNavStep(dayCount);
+  const isMonth = viewMode === "month";
   const leftNav = useLeftNavToggle();
 
   useKeyboardShortcut(
@@ -36,12 +37,18 @@ export function EditorPanel() {
     label: "Toggle sidebar",
   });
 
+  // Month view steps a whole month at a time, anchored to the 1st so a long
+  // month never skips a short one (Jan 31 → Mar 3 under plain month addition).
   function handlePrevWeek() {
-    ui.setReferenceDate(subDays(ui.referenceDate, navStep));
+    ui.setReferenceDate(
+      isMonth ? startOfMonth(subMonths(ui.referenceDate, 1)) : subDays(ui.referenceDate, navStep)
+    );
   }
 
   function handleNextWeek() {
-    ui.setReferenceDate(addDays(ui.referenceDate, navStep));
+    ui.setReferenceDate(
+      isMonth ? startOfMonth(addMonths(ui.referenceDate, 1)) : addDays(ui.referenceDate, navStep)
+    );
   }
 
   function handleToday() {
@@ -57,7 +64,9 @@ export function EditorPanel() {
             onNextWeek={handleNextWeek}
             onPrevWeek={handlePrevWeek}
             onToday={handleToday}
+            onViewModeChange={setViewMode}
             referenceDate={ui.referenceDate}
+            viewMode={viewMode}
           />
         )}
       </RightPanelHeader>
