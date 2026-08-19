@@ -130,6 +130,37 @@ async fn insert_rule(pool: &SqlitePool, id: &str, page_id: &str) {
     .unwrap();
 }
 
+/// A rule with an explicit RRULE, for the CSV `Repeat` column tests — the
+/// `insert_rule` above hardcodes `FREQ=DAILY`.
+async fn insert_rule_with_rrule(pool: &SqlitePool, id: &str, page_id: &str, rrule: &str) {
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules
+         (id, page_id, rrule, scheduled_start, timezone, created_at)
+         VALUES (?, ?, ?, '2026-05-22T09:00:00', 'America/New_York', ?)",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(rrule)
+    .bind(now_iso())
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn insert_reminder(pool: &SqlitePool, id: &str, page_id: &str, minutes_before: i64) {
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(page_id)
+    .bind(minutes_before)
+    .bind(now_iso())
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 async fn insert_focus_session(pool: &SqlitePool, id: &str, page_id: &str, duration_s: i64) {
     sqlx::query(
         "INSERT INTO focus_sessions (id, page_id, started_at, ended_at, duration_s)
@@ -571,7 +602,7 @@ async fn export_csv_header_and_row_basics() {
 
     assert_eq!(
         lines[0],
-        "Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Created At,Updated At,Completed At"
+        "Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Repeat,Reminder,Created At,Updated At,Completed At"
     );
     assert_eq!(lines.len(), 2);
     let row = lines[1];
@@ -630,6 +661,91 @@ async fn export_csv_includes_completed_at() {
     let row = csv.lines().nth(1).unwrap();
     assert!(row.ends_with("2026-05-01T12:00:00Z"));
     assert!(row.contains(",done,"));
+}
+
+// ── CSV Repeat / Reminder columns ─────────────────────────────────────────────
+// The importer has understood both since it shipped (`repeat`/`rrule` and
+// `reminder` are in its header heuristics), but the export emitted neither, so
+// a recurring page or a page with reminders came back through import as a plain
+// one-off. These pin the two cells to the exact formats `csv.ts` parses:
+// a bare RRULE (it strips at most a leading `RRULE:` and hands the rest to
+// `parseRrule`) and ISO-8601 durations (`parseDurationToMinutes`).
+
+/// Cell `i` of the single data row, by header name.
+fn csv_cell(csv: &str, column: &str) -> String {
+    let mut lines = csv.lines();
+    let idx = lines
+        .next()
+        .expect("header")
+        .split(',')
+        .position(|h| h == column)
+        .unwrap_or_else(|| panic!("no {column} column in the export header"));
+    lines
+        .next()
+        .expect("one data row")
+        .split(',')
+        .nth(idx)
+        .unwrap_or_default()
+        .to_string()
+}
+
+#[tokio::test]
+async fn export_csv_emits_a_recurring_rule_the_importer_can_read_back() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Standup", "{}", "", 0, "[]").await;
+    // Semicolons inside an RRULE are why the cell has to survive CSV escaping.
+    insert_rule_with_rrule(&pool, "r1", "p1", "FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2").await;
+
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
+
+    // Verbatim and bare: no `RRULE:` prefix, no DTSTART — the anchor is the
+    // page's own Start Date column, which is how the importer pairs them.
+    assert!(
+        csv.contains("\"FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2\""),
+        "{csv}"
+    );
+}
+
+#[tokio::test]
+async fn export_csv_emits_reminders_as_iso_durations_soonest_first() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Review", "{}", "", 0, "[]").await;
+    insert_reminder(&pool, "rem-late", "p1", 60).await;
+    insert_reminder(&pool, "rem-early", "p1", 0).await;
+    insert_reminder(&pool, "rem-mid", "p1", 15).await;
+
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
+
+    // `PT0S` for at-start, negative minute durations for "before" — the three
+    // shapes `parseDurationToMinutes`'s own doc comment names. Semicolon-joined
+    // so the cell needs no quoting.
+    assert_eq!(csv_cell(&csv, "Reminder"), "PT0S;-PT15M;-PT60M");
+}
+
+/// The `-1` sentinel is "no reminders on this page", which has no ISO-8601
+/// spelling — it must not leave as `-PT1M`, which would import as a real
+/// one-minute-before reminder the user never set.
+#[tokio::test]
+async fn export_csv_leaves_the_no_reminders_sentinel_out_of_the_cell() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Quiet", "{}", "", 0, "[]").await;
+    insert_reminder(&pool, "rem-none", "p1", -1).await;
+
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
+    assert_eq!(csv_cell(&csv, "Reminder"), "");
+}
+
+#[tokio::test]
+async fn export_csv_leaves_repeat_and_reminder_empty_for_a_plain_page() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Plain", "{}", "", 0, "[]").await;
+
+    let csv = build_export_csv_impl(&pool, false).await.unwrap();
+    assert_eq!(csv_cell(&csv, "Repeat"), "");
+    assert_eq!(csv_cell(&csv, "Reminder"), "");
+    // The two empty cells sit between End Date and Created At, so a plain page's
+    // row still lines up with the header.
+    assert_eq!(csv.lines().nth(1).unwrap().split(',').count(), 13);
 }
 
 // ── build_frontmatter ──────────────────────────────────────────────────────────
