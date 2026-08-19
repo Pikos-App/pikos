@@ -225,12 +225,23 @@ pub async fn restore(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
     require_page(pool, id).await
 }
 
+/// Run the natural-language parser and hand back what it produced, verbatim,
+/// without writing anything.
+///
+/// This is the agent-preview mode behind `add --dry-run`: the shape is exactly
+/// what [`cmd_add`] would then persist, so a caller can show the parse for
+/// approval and re-issue the same text to commit it.
+pub fn parse_only(text: &str) -> Result<Value, CliError> {
+    let parsed = run_bridge("parse", text)?;
+    Ok(parsed["result"].clone())
+}
+
 /// Parse natural-language text into pages, then write them exactly as Quick Add
 /// would. Returns the created pages, re-read so the caller sees the derived
 /// denormalised schedule rather than what was asked for.
 pub async fn cmd_add(pool: &SqlitePool, text: &str) -> Result<Vec<Page>, CliError> {
-    let parsed = run_bridge("parse", text)?;
-    let result: ParseResult = serde_json::from_value(parsed["result"].clone())
+    let parsed = parse_only(text)?;
+    let result: ParseResult = serde_json::from_value(parsed)
         .map_err(|_| CliError::internal("could not interpret parser output"))?;
 
     let mut created: Vec<Page> = Vec::new();

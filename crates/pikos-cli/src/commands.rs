@@ -12,8 +12,8 @@ use crate::cli::{Cli, CliCommand, FolderCommand, ReminderCommand};
 use crate::error::{classify, CliError};
 use crate::ops::{
     add_reminder, cmd_add, confirm, create_folder, list_folders, list_pages, list_reminders,
-    mark_done, remove_reminder, require_page, restore, validate_priority, validate_status,
-    ListQuery,
+    mark_done, parse_only, remove_reminder, require_page, restore, validate_priority,
+    validate_status, ListQuery,
 };
 use crate::render::{
     print_json, render_folders, render_page, render_reminders, render_search, render_summary_list,
@@ -95,7 +95,13 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 );
             }
         }
-        CliCommand::Add { text } => {
+        CliCommand::Add { text, dry_run } => {
+            if dry_run {
+                // Agent-preview mode: show the parse and touch nothing. Always
+                // JSON — the parse tree has no plain-text rendering worth reading.
+                print_json(&parse_only(&text.join(" "))?);
+                return Ok(());
+            }
             let created = cmd_add(&pool, &text.join(" ")).await?;
             if json {
                 print_json(&json!({ "created": created }));

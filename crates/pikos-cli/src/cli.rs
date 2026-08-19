@@ -64,7 +64,14 @@ pub enum CliCommand {
     /// Pages due or scheduled on or before today (open only)
     Today,
     /// Create a page from natural-language text (same parser as Quick Add)
-    Add { text: Vec<String> },
+    Add {
+        text: Vec<String>,
+        #[arg(
+            long = "dry-run",
+            help = "Print what the parser made of the text and write nothing"
+        )]
+        dry_run: bool,
+    },
     /// Update a page's core fields
     Update {
         id: String,

@@ -1226,3 +1226,43 @@ async fn restore_of_a_missing_page_exits_3() {
     let out = cli(dbs, &["restore", "00000000-0000-0000-0000-000000000000"]);
     assert_eq!(code(&out), 3);
 }
+
+// ─── add --dry-run ───────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn add_dry_run_prints_the_parse_and_writes_nothing() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let Some(out) = cli_bridge(
+        dbs,
+        &[
+            "add",
+            "Buy milk tomorrow #errands !high",
+            "--dry-run",
+            "--json",
+        ],
+    ) else {
+        eprintln!("skipped: @pikos/bridge not built");
+        return;
+    };
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // The preview is the parser's own shape, which `add` would then persist.
+    let v = json(&out);
+    assert_eq!(v["type"], "single");
+    assert_eq!(v["input"]["title"], "Buy milk");
+    assert_eq!(v["input"]["priority"], "high");
+    assert_eq!(v["input"]["tags"][0], "errands");
+
+    assert!(
+        json(&cli(dbs, &["list", "--json"]))
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "a dry run must not write"
+    );
+}
