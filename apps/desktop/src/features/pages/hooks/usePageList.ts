@@ -1,5 +1,5 @@
 import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
-import { getVisiblePages, sortPages } from "@pikos/core";
+import { getVisiblePages, isDateGroupedView, sortPages } from "@pikos/core";
 import { useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
@@ -25,7 +25,10 @@ export function usePageList() {
   const completed = useCompletedPages(activeViewId);
 
   const filtered = getVisiblePages(pages, activeViewId).filter((p) => !hiddenIds.has(p.id));
-  const visiblePages = activeViewId === "today" ? filtered : sortPages(filtered, sortMode);
+  // Today and Upcoming are ordered by their sections (overdue/today, then day
+  // groups), so running sortPages here would only churn an order the section
+  // builders are about to replace.
+  const visiblePages = isDateGroupedView(activeViewId) ? filtered : sortPages(filtered, sortMode);
 
   const completedPages = completed.completedPages.filter((p) => !hiddenIds.has(p.id));
 

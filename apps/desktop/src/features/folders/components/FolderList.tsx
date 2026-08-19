@@ -4,6 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowUpDown,
   CalendarDays,
+  CalendarRange,
   ChevronRight,
   FolderPlus,
   Hash,
@@ -57,6 +58,7 @@ export function FolderList() {
     setSortOrder,
     sortOrder,
     todayCount,
+    upcomingCount,
   } = useFolderList();
   const calendarGroups = useCalendarAccountGroups(externalFolders);
   const { openSortMenu, setOpenDialog, setOpenSortMenu } = useUI();
@@ -124,6 +126,17 @@ export function FolderList() {
           isDragOver={isPageOverToday}
           label="Today"
           onSelect={() => setActiveViewId("today")}
+        />
+        {/* Between Today and Inbox: the three read as one horizon — what is on
+            me now, what is coming, what is unplaced. Not a drop target, because
+            "upcoming" is a range of days, not a date a dropped page could take. */}
+        <SmartViewEntry
+          badge={upcomingCount}
+          icon={<CalendarRange size={16} />}
+          id="nav-upcoming"
+          isActive={activeViewId === "upcoming"}
+          label="Upcoming"
+          onSelect={() => setActiveViewId("upcoming")}
         />
         <SmartViewEntry
           badge={inboxCount}

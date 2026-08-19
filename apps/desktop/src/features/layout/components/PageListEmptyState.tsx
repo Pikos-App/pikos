@@ -1,4 +1,4 @@
-import { CalendarSync, FilePlus, Inbox, Sun } from "lucide-react";
+import { CalendarRange, CalendarSync, FilePlus, Inbox, Sun } from "lucide-react";
 
 import { EmptyState } from "@/shared/components/EmptyState";
 import { MOD_KEY_LABEL } from "@/shared/constants/platform";
@@ -37,6 +37,15 @@ export function PageListEmptyState({ activeViewId, isExternalCalendar }: PageLis
     return (
       <div className="border-b border-border">
         <EmptyState icon={Sun} message="Nothing scheduled for today">
+          <CmdNHint />
+        </EmptyState>
+      </div>
+    );
+  }
+  if (activeViewId === "upcoming") {
+    return (
+      <div className="border-b border-border">
+        <EmptyState icon={CalendarRange} message="Nothing scheduled in the next 7 days">
           <CmdNHint />
         </EmptyState>
       </div>

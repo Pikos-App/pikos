@@ -1,7 +1,8 @@
-// Sort is hidden on the Today view — it's always grouped overdue → today,
-// not user-sortable.
+// Sort is hidden on the date-grouped views (Today, Upcoming) — their order comes
+// from the sections they render, not from a user choice.
 
 import type { Folder, SortMode } from "@pikos/core";
+import { isDateGroupedView } from "@pikos/core";
 import {
   ArrowUpDown,
   CalendarDays,
@@ -44,6 +45,7 @@ const SORT_OPTIONS: { value: SortMode; label: string; icon: React.ReactNode }[] 
 
 function viewName(activeViewId: string, folders: Folder[]): string {
   if (activeViewId === "today") return "Today";
+  if (activeViewId === "upcoming") return "Upcoming";
   if (activeViewId === "inbox") return "Inbox";
   return folders.find((f) => f.id === activeViewId)?.name ?? "Pages";
 }
@@ -75,7 +77,7 @@ export function PageListHeader({
           shortcut="mod+k"
           tabIndex={0}
         />
-        {activeViewId !== "today" && (
+        {!isDateGroupedView(activeViewId) && (
           <DropdownMenu
             onOpenChange={(open) => setOpenSortMenu(open ? "page-sort" : null)}
             open={openSortMenu === "page-sort"}
@@ -117,7 +119,7 @@ export function PageListHeader({
             label="New Page"
             onClick={() => onOpenDialog("quick-add")}
             shortcut="mod+n"
-            tabIndex={activeViewId === "today" ? 0 : -1}
+            tabIndex={isDateGroupedView(activeViewId) ? 0 : -1}
           />
         )}
       </IconToolbar>

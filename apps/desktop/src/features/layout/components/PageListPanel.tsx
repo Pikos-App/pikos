@@ -3,6 +3,7 @@ import type { PageSummary, VirtualRow } from "@pikos/core";
 import {
   buildPageListRows,
   groupTodayPages,
+  groupUpcomingPages,
   nowLocalISO,
   partitionToggleSelection,
   shouldHideSidebar,
@@ -13,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
-import { PageListItem, usePageList } from "@/features/pages";
+import { PageListItem, useMoveOverdueToToday, usePageList } from "@/features/pages";
 import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
 import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
@@ -84,6 +85,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     togglePageSelection,
   } = useSelection();
   const { isDraggingOverCalendar } = useCalendarDnD();
+  const { moveOverdueToToday } = useMoveOverdueToToday();
   const sortMode = useActiveSortMode();
   const sidebarHidden = shouldHideSidebar(useLayoutMode());
   const { density } = useListSettings();
@@ -124,16 +126,19 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const navRafRef = useRef<number | null>(null);
 
   const isTodayView = activeViewId === "today";
+  const isUpcomingView = activeViewId === "upcoming";
   // Re-renders once per minute so overdue/today grouping stays current as time passes.
   useMinuteTick();
   const { overdue, today } = isTodayView
     ? groupTodayPages(visiblePages)
     : { overdue: [], today: [] };
+  const daySections = isUpcomingView ? groupUpcomingPages(visiblePages) : [];
 
   const { pageToRowIndex, rows } = buildPageListRows({
     completedCollapsed,
     completedHasMore,
     completedPages,
+    daySections,
     isTodayView,
     overdue,
     overdueCollapsed,
@@ -418,30 +423,49 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
           />
         );
 
-      case "section-header":
+      case "section-header": {
+        // Overdue is the one header that also carries an action, so it can't be
+        // a single button any more — a button inside a button is invalid, and
+        // the collapse toggle has to stay the row-wide target it always was.
+        const isOverdueHeader = row.key === "overdue-header";
         return row.collapsible ? (
-          <button
-            className="type-ui-sm flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-muted-foreground hover:bg-accent/50"
-            onClick={row.key === "overdue-header" ? toggleOverdue : undefined}
-          >
-            <ChevronRight
-              className={cn("transition-transform", !row.collapsed && "rotate-90")}
-              size={12}
-            />
-            {row.label}
-            <span className="ml-1 tabular-nums">· {row.count}</span>
-          </button>
+          <div className="flex w-full items-center border-b border-border pr-2 text-muted-foreground">
+            <button
+              className="type-ui-sm flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left hover:text-foreground"
+              onClick={isOverdueHeader ? toggleOverdue : undefined}
+            >
+              <ChevronRight
+                className={cn("transition-transform", !row.collapsed && "rotate-90")}
+                size={12}
+              />
+              {row.label}
+              <span className="ml-1 tabular-nums">· {row.count}</span>
+            </button>
+            {isOverdueHeader && (
+              <button
+                className="type-ui-sm shrink-0 rounded px-1.5 py-0.5 text-text-tertiary transition-[background-color,color] duration-[var(--transition-fast)] hover:bg-surface-hover hover:text-text-secondary"
+                onClick={() => moveOverdueToToday(overdue)}
+              >
+                Move to today
+              </button>
+            )}
+          </div>
         ) : (
           <div className="type-ui-sm border-b border-border px-3 py-1.5 text-muted-foreground">
             {row.label}
             <span className="ml-1 tabular-nums">· {row.count}</span>
           </div>
         );
+      }
 
       case "page": {
         // Only show insertion line for active pages (not completed).
+        // Date-grouped views have no manual order to insert into.
         const showLine =
-          !isTodayView && insertBeforeId === row.page.id && pageIds.includes(row.page.id);
+          !isTodayView &&
+          !isUpcomingView &&
+          insertBeforeId === row.page.id &&
+          pageIds.includes(row.page.id);
         return (
           <div className="relative">
             {showLine && (
@@ -457,7 +481,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       case "completed-toggle":
         return (
           <div className="relative">
-            {!isTodayView && insertBeforeId === null && (
+            {!isTodayView && !isUpcomingView && insertBeforeId === null && (
               <div className="absolute top-0 right-0 left-0 z-10 -translate-y-1/2">
                 <InsertionLine />
               </div>

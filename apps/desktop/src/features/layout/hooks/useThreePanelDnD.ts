@@ -7,7 +7,15 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { Folder, PageSummary } from "@pikos/core";
-import { getVisiblePages, isDone, isTimedIso, parseLocalISO, sortPages } from "@pikos/core";
+import {
+  folderIdForView,
+  getVisiblePages,
+  isDateGroupedView,
+  isDone,
+  isTimedIso,
+  parseLocalISO,
+  sortPages,
+} from "@pikos/core";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -214,10 +222,10 @@ export function useThreePanelDnD() {
 
     if (at === "page" && ot === "page") {
       // Only reorder in manual sort mode — other modes lock DnD.
-      if (activeViewId === "today") return;
+      if (isDateGroupedView(activeViewId)) return;
       if (sortMode !== "manual") return;
       const visible = sortPages(getVisiblePages(pages, activeViewId), sortMode);
-      const folderId = activeViewId !== "today" && activeViewId !== "inbox" ? activeViewId : null;
+      const folderId = folderIdForView(activeViewId);
 
       if (idsToMove.length > 1) {
         // Multi-page reorder: remove all dragged pages, reinsert as group at drop target.
