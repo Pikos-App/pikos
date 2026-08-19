@@ -1,8 +1,18 @@
-// Single FTS5 query with bm25() weighting: title matches rank first,
-// content matches show a snippet below. Frontend handles highlighting.
+// Two ways in. A plain query is one FTS5 search with bm25() weighting: title
+// matches rank first, content matches show a snippet below, and the frontend
+// handles highlighting. A query carrying operators (`tag:`, `folder:`, `is:`,
+// `priority:`, `due:`) is a structured `listPages` filter instead — see
+// runFilteredSearch for how free text still reaches FTS5 on that path.
 
-import type { SearchResult } from "@pikos/core";
-import { ftsTokens, isDone } from "@pikos/core";
+import type {
+  Folder,
+  PageSummary,
+  ParsedSearchQuery,
+  SearchResponse,
+  SearchResult,
+  StorageAdapter,
+} from "@pikos/core";
+import { buildSearchFilter, ftsTokens, isDone, parseSearchQuery } from "@pikos/core";
 import { FileText, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -12,10 +22,16 @@ import { EmptyState } from "@/shared/components/EmptyState";
 import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { createLogger } from "@/shared/logger";
 
 const log = createLogger("SearchPalette");
+
+/** FTS5 needs something to prefix-match on; below this the query is too broad to run. */
+const MIN_QUERY_LENGTH = 2;
+
+type SearchPagesFn = (query: string, includeCompleted?: boolean) => Promise<SearchResponse>;
 
 function highlightText(text: string, queryWords: string[]): React.ReactNode {
   if (!text || queryWords.length === 0) return text;
@@ -76,9 +92,69 @@ function buildMetadataSummary(item: SearchResult): string {
   return "";
 }
 
+/** A row for a page the filter path returned — no bm25 excerpt exists, so the
+ *  metadata line carries the second line (the same shape recents use). */
+function summaryToResult(page: PageSummary): SearchResult {
+  return {
+    contentPreview: "",
+    excerpt: "",
+    id: page.id,
+    matchSource: "title" as const,
+    priority: page.priority,
+    scheduledDate: page.scheduledStart ?? null,
+    status: page.status,
+    subtitle: page.subtitle ?? null,
+    tags: page.tags,
+    title: page.title,
+  };
+}
+
+/**
+ * The operator path. `listPages` applies the structured filter; free text still
+ * goes through FTS5 and the two sets are intersected, so a mixed query keeps
+ * bm25 ranking and its excerpts. Residual text is deliberately not passed as
+ * `PageFilter.query` — that field is an unindexed LIKE scan list_pages_impl
+ * documents as test-only.
+ */
+async function runFilteredSearch(
+  parsed: ParsedSearchQuery,
+  opts: {
+    folders: Folder[];
+    includeCompleted: boolean;
+    searchPages: SearchPagesFn;
+    storage: StorageAdapter;
+  }
+): Promise<SearchResponse> {
+  const { filter, unresolvedFolder } = buildSearchFilter(parsed, opts.folders);
+  // A folder name nothing matches can't narrow to anything — returning the
+  // unfiltered set would quietly answer a different question.
+  if (unresolvedFolder !== null) return { completedCount: 0, results: [] };
+
+  const summaries = await opts.storage.listPages(filter);
+
+  let rows: SearchResult[];
+  if (parsed.text.length >= MIN_QUERY_LENGTH) {
+    const allowed = new Set(summaries.map((p) => p.id));
+    const { results } = await opts.searchPages(parsed.text, true);
+    rows = results.filter((r) => allowed.has(r.id));
+  } else {
+    // A single leftover character is below the FTS floor — match it on the title.
+    const needle = parsed.text.toLowerCase();
+    rows = summaries
+      .filter((p) => needle === "" || p.title.toLowerCase().includes(needle))
+      .map(summaryToResult);
+  }
+
+  return {
+    completedCount: rows.filter(isDone).length,
+    results: opts.includeCompleted ? rows : rows.filter((r) => !isDone(r)),
+  };
+}
+
 export function SearchPalette() {
   const { activePageId, dialogPrefill, openDialog, openPage, setOpenDialog } = useUI();
-  const { pages, searchPages } = usePages();
+  const { folders, pages, searchPages } = usePages();
+  const { storage } = useWorkspace();
 
   const isOpen = openDialog === "search";
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,7 +188,7 @@ export function SearchPalette() {
     () => {
       if (!isOpen) setOpenDialog("search");
     },
-    { allowInInputs: true }
+    { allowInInputs: true, group: "Navigation", label: "Search pages" }
   );
 
   // Focus input when palette opens.
@@ -126,10 +202,26 @@ export function SearchPalette() {
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) return;
+    const parsedQuery = parseSearchQuery(q);
+    // Operators carry their own meaning, so `tag:x` runs on its own; plain text
+    // still waits for two characters before hitting the index.
+    if (!parsedQuery.hasOperators && q.length < MIN_QUERY_LENGTH) return;
+    if (parsedQuery.hasOperators && !storage) return;
 
     const timer = setTimeout(() => {
-      searchPages(q, showCompleted || undefined)
+      const search =
+        parsedQuery.hasOperators && storage
+          ? runFilteredSearch(parsedQuery, {
+              folders,
+              // `is:done` asks for completed pages outright — honour it whatever
+              // the toggle says, and let the toggle report that below.
+              includeCompleted: showCompleted || parsedQuery.status === "done",
+              searchPages,
+              storage,
+            })
+          : searchPages(q, showCompleted || undefined);
+
+      search
         .then(({ completedCount: count, results: res }) => {
           setResults(res);
           setCompletedCount(count);
@@ -141,7 +233,7 @@ export function SearchPalette() {
         });
     }, 150);
     return () => clearTimeout(timer);
-  }, [query, showCompleted, searchPages]);
+  }, [query, showCompleted, searchPages, folders, storage]);
 
   // ── Recent pages (shown when input is empty) ────────────────────────────
 
@@ -151,26 +243,17 @@ export function SearchPalette() {
         .filter((p) => p.lastOpenedAt && p.id !== activePageId)
         .sort((a, b) => (b.lastOpenedAt ?? "").localeCompare(a.lastOpenedAt ?? ""))
         .slice(0, 10)
-        .map((p) => ({
-          contentPreview: "",
-          excerpt: "",
-          id: p.id,
-          matchSource: "title" as const,
-          priority: p.priority,
-          scheduledDate: p.scheduledStart ?? null,
-          status: p.status,
-          subtitle: p.subtitle ?? null,
-          tags: p.tags,
-          title: p.title,
-        }));
+        .map(summaryToResult);
 
   const displayItems = query.trim() ? results : recentItems;
   const clampedIdx = Math.min(selectedIdx, Math.max(0, displayItems.length - 1));
 
   const trimmedQuery = query.trim();
+  const parsed = parseSearchQuery(trimmedQuery);
   // Highlight what the index matched, not what the user typed — "multi-color" is two
   // tokens to FTS, so a page holding "multi color" is a hit with nothing to mark.
-  const queryWords = ftsTokens(trimmedQuery);
+  // On the operator path only the residual text reached the index.
+  const queryWords = ftsTokens(parsed.hasOperators ? parsed.text : trimmedQuery);
 
   function handleSelect(id: string) {
     openPage(id);
@@ -343,16 +426,23 @@ export function SearchPalette() {
           {/* Empty state — search returned nothing (and no completed matches either) */}
           {showEmpty && <EmptyState compact message="No pages found" />}
 
-          {/* Toggle to include/hide completed pages */}
-          {trimmedQuery && (showCompleted || completedCount > 0) && (
-            <button
-              className="w-full px-4 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
-              onClick={() => setShowCompleted((v) => !v)}
-              type="button"
-            >
-              {showCompleted ? "Hide completed" : `Show completed (${completedCount})`}
-            </button>
-          )}
+          {/* Toggle to include/hide completed pages. `is:done` already asked for
+              them, so the toggle reports that state instead of offering to fight it. */}
+          {trimmedQuery &&
+            (showCompleted || completedCount > 0) &&
+            (parsed.status === "done" ? (
+              <p className="px-4 py-1.5 text-xs text-muted-foreground/50">
+                Showing completed — is:done
+              </p>
+            ) : (
+              <button
+                className="w-full px-4 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
+                onClick={() => setShowCompleted((v) => !v)}
+                type="button"
+              >
+                {showCompleted ? "Hide completed" : `Show completed (${completedCount})`}
+              </button>
+            ))}
 
           {/* Empty state — no recent pages and no query */}
           {!trimmedQuery && recentItems.length === 0 && (
