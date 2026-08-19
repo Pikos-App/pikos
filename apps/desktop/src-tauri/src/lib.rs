@@ -12,48 +12,8 @@ mod menu;
 mod notifications;
 mod window_state;
 
-use db::{
-    assets::{init_assets_dir, save_asset, save_asset_bytes},
-    connect_db,
-    dev::{
-        backdate_page, backup_db, backup_db_before_import, dev_seed_synced_calendar, export_csv,
-        export_markdown, get_usage_stats, reset_db, wipe_app_data,
-    },
-    folders::{
-        create_folder, delete_folder, get_folder, list_folders, reorder_folders, restore_folder,
-        soft_delete_folder, update_folder,
-    },
-    notifications::{
-        create_page_reminder, delete_page_reminder, delete_page_reminders, list_page_reminders,
-    },
-    pages::{
-        clear_pending_description, complete_recurring_page, create_page, delete_page, get_page,
-        list_completed_pages, list_pages, list_pages_today, recompute_recurring_schedules,
-        reorder_pages, reschedule_virtual_occurrence, restore_page, set_pages_status,
-        skip_occurrence, soft_delete_page, uncomplete_recurring_occurrence, undo_skip_occurrence,
-        update_page,
-    },
-    schedules::{
-        add_rule_exdates, create_page_schedule, create_recurrence_rule, delete_page_schedule,
-        delete_recurrence_rule, expand_recurrence_range, get_recurrence_rule, list_page_schedules,
-        list_page_schedules_for_rules, list_recurrence_rules, remove_rule_exdate,
-        update_page_schedule, update_recurrence_rule,
-    },
-    search::search_pages,
-    sync::{
-        connect_caldav_account, connect_google_account, disconnect_sync_account, get_sync_status,
-        google_sync_available, list_sync_calendars, reconnect_caldav_account, refresh_sync_account,
-        release_sync_credentials, resync_sync_account, set_sync_calendar_color,
-        toggle_sync_calendar,
-    },
-    tags::search_tags,
-    DbState,
-};
-
-use notifications::scheduler::{
-    check_notification_permission, request_notification_permission, update_notification_settings,
-    NotificationSettingsState, SchedulerRuntimeState,
-};
+use db::DbState;
+use notifications::scheduler::{NotificationSettingsState, SchedulerRuntimeState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -87,7 +47,7 @@ pub fn run() {
 
     let (sync_trigger_tx, sync_trigger_rx) = db::sync_loop::SyncTriggerSender::new();
 
-    builder
+    let builder = builder
         .manage(DbState::new())
         .manage(NotificationSettingsState::new())
         .manage(SchedulerRuntimeState::new())
@@ -163,93 +123,11 @@ pub fn run() {
             }
         })
         .menu(menu::build)
-        .on_menu_event(menu::on_event)
-        .invoke_handler(tauri::generate_handler![
-            // DB connection
-            connect_db,
-            // Pages
-            get_page,
-            create_page,
-            update_page,
-            clear_pending_description,
-            delete_page,
-            soft_delete_page,
-            restore_page,
-            list_pages,
-            list_pages_today,
-            list_completed_pages,
-            reorder_pages,
-            set_pages_status,
-            complete_recurring_page,
-            uncomplete_recurring_occurrence,
-            skip_occurrence,
-            undo_skip_occurrence,
-            recompute_recurring_schedules,
-            reschedule_virtual_occurrence,
-            // Folders
-            get_folder,
-            create_folder,
-            update_folder,
-            delete_folder,
-            soft_delete_folder,
-            restore_folder,
-            list_folders,
-            reorder_folders,
-            // Schedules
-            create_page_schedule,
-            update_page_schedule,
-            delete_page_schedule,
-            list_page_schedules,
-            list_page_schedules_for_rules,
-            // Recurrence rules
-            create_recurrence_rule,
-            update_recurrence_rule,
-            add_rule_exdates,
-            remove_rule_exdate,
-            delete_recurrence_rule,
-            get_recurrence_rule,
-            list_recurrence_rules,
-            expand_recurrence_range,
-            // Search
-            search_pages,
-            // Tags
-            search_tags,
-            // Calendar sync
-            connect_caldav_account,
-            connect_google_account,
-            reconnect_caldav_account,
-            google_sync_available,
-            disconnect_sync_account,
-            list_sync_calendars,
-            toggle_sync_calendar,
-            set_sync_calendar_color,
-            resync_sync_account,
-            refresh_sync_account,
-            get_sync_status,
-            release_sync_credentials,
-            // Notifications / reminders
-            create_page_reminder,
-            list_page_reminders,
-            delete_page_reminder,
-            delete_page_reminders,
-            update_notification_settings,
-            request_notification_permission,
-            check_notification_permission,
-            // Assets
-            init_assets_dir,
-            save_asset,
-            save_asset_bytes,
-            // Dev / settings
-            backdate_page,
-            backup_db,
-            export_csv,
-            backup_db_before_import,
-            export_markdown,
-            get_usage_stats,
-            reset_db,
-            dev_seed_synced_calendar,
-            wipe_app_data,
-        ])
+        .on_menu_event(menu::on_event);
+
+    // The app's whole invoke surface, declared and registered in one place —
+    // `run()` names no commands, so none can be declared and left unregistered.
+    db::commands::register(builder)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

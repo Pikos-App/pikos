@@ -383,9 +383,10 @@ fn declared_read_commands() -> Vec<String> {
 /// list is not something any test notices. The table then narrows as the command
 /// surface grows, while still reading as "every command".
 ///
-/// So the set to check is read out of the source, not listed: the registrations in
-/// `lib.rs` intersected with the `#[tauri::command]` signatures, minus the
-/// parameters Tauri injects rather than deserializes.
+/// So the set to check is read out of the source, not listed: everything
+/// `db::commands::register` puts on the builder — the `db_commands!` declarations
+/// and the hand-written commands named beside them — against the parameters each
+/// one deserializes, minus the ones Tauri injects.
 #[test]
 fn every_multi_word_command_has_a_wire_case() {
     let covered: BTreeMap<_, _> = wire_cases().into_iter().collect();
@@ -411,17 +412,18 @@ fn every_multi_word_command_has_a_wire_case() {
     );
 }
 
-/// Every command `lib.rs` registers, mapped to the parameters Tauri deserializes
-/// out of the invoke body.
+/// Every command `db::commands::register` registers, mapped to the parameters
+/// Tauri deserializes out of the invoke body.
 fn registered_commands() -> BTreeMap<String, Vec<String>> {
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let lib = std::fs::read_to_string(src.join("lib.rs")).expect("read lib.rs");
-    let registered = registered_names(&lib);
+    let declarations = command_declarations(&src);
+    let registered = registered_names(&declarations);
 
     let mut sources = Vec::new();
     collect_sources(&src, &mut sources);
 
-    let mut out = BTreeMap::new();
+    let mut out: BTreeMap<String, Vec<String>> =
+        declared_signatures(&declarations).into_iter().collect();
     for text in &sources {
         for (name, params) in command_signatures(text) {
             if registered.contains(&name) {
@@ -452,21 +454,100 @@ fn collect_sources(dir: &std::path::Path, out: &mut Vec<String>) {
     }
 }
 
-/// The names inside `generate_handler![…]`, last path segment only.
-fn registered_names(lib: &str) -> std::collections::BTreeSet<String> {
-    let start = lib
-        .find("generate_handler![")
-        .expect("lib.rs registers commands")
-        + "generate_handler![".len();
-    let len = lib[start..].find(']').expect("unterminated handler list");
-    lib[start..start + len]
+/// The `db_commands!` invocation in `db/commands.rs` — the app's entire command
+/// surface, since the macro generates the `invoke_handler` call from it. Sliced
+/// from the invocation onward so the macro's own definition (whose pattern
+/// spells the same anchors in metavariables) is never what gets read.
+fn command_declarations(src: &std::path::Path) -> String {
+    let path = src.join("db/commands.rs");
+    let source = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path:?}: {e}"));
+    let at = source
+        .find("db_commands! {")
+        .expect("commands.rs declares the command surface");
+    source[at..].to_string()
+}
+
+/// Every name `register` puts on the builder: the hand-written commands listed
+/// in the `extras:` block (last path segment only), plus every command the macro
+/// declares — which it registers by construction.
+fn registered_names(declarations: &str) -> std::collections::BTreeSet<String> {
+    const ANCHOR: &str = "extras: [";
+    let start = declarations
+        .find(ANCHOR)
+        .expect("the declaration names its hand-written extras")
+        + ANCHOR.len();
+    let len = declarations[start..]
+        .find(']')
+        .expect("unterminated extras list");
+    declarations[start..start + len]
         .lines()
         .map(|line| line.split("//").next().unwrap_or_default())
         .flat_map(|line| line.split(','))
         .map(|name| name.trim().rsplit("::").next().unwrap_or_default().trim())
         .filter(|name| !name.is_empty())
         .map(str::to_string)
+        .chain(
+            declared_signatures(declarations)
+                .into_iter()
+                .map(|(n, _)| n),
+        )
         .collect()
+}
+
+/// `(name, body-deserialized parameter names)` for each `db_commands!`
+/// declaration. A declaration reads `name(arg: Ty, …) -> Ret = writer(…);` and
+/// carries exactly what a written-out signature would, so the two scans feed the
+/// same map. The `state` parameter is supplied by the macro, never declared, so
+/// there is nothing injected to filter out here.
+///
+/// A declaration is told from the writer call it expands into by the arrow: only
+/// the parameter list is followed by `->`.
+fn declared_signatures(declarations: &str) -> Vec<(String, Vec<String>)> {
+    let bytes = declarations.as_bytes();
+    let mut out = Vec::new();
+
+    for (close, _) in declarations.match_indices(')') {
+        if !declarations[close + 1..].trim_start().starts_with("->") {
+            continue;
+        }
+
+        let mut depth = 0i32;
+        let mut open = None;
+        for i in (0..=close).rev() {
+            match bytes[i] {
+                b')' => depth += 1,
+                b'(' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        open = Some(i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(open) = open else { continue };
+
+        let name: String = declarations[..open]
+            .chars()
+            .rev()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        if name.is_empty() {
+            continue;
+        }
+
+        let params = split_top_level(&declarations[open + 1..close])
+            .into_iter()
+            .filter_map(|p| Some(p.split(':').next()?.trim().to_string()))
+            .filter(|p| !p.is_empty())
+            .collect();
+        out.push((name, params));
+    }
+    out
 }
 
 /// `(name, body-deserialized parameter names)` for each `#[tauri::command]`.
