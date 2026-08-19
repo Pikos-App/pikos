@@ -95,6 +95,15 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
         ("export_csv", json!({ "includeSynced": false })),
         ("export_ics", json!({ "includeSynced": false })),
         ("export_markdown", json!({ "includeSynced": false })),
+        (
+            "create_focus_session",
+            json!({
+                "pageId": PROBE_PAGE,
+                "startedAt": "2026-06-01T09:00:00",
+                "endedAt": "2026-06-01T09:25:00",
+                "durationS": 1500,
+            }),
+        ),
     ]
 }
 
@@ -219,6 +228,7 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::pages::undo_skip_occurrence,
             super::pages::uncomplete_recurring_occurrence,
             super::search::search_pages,
+            super::focus::create_focus_session,
             super::folders::reorder_folders,
             super::schedules::list_page_schedules,
             super::schedules::list_page_schedules_for_rules,

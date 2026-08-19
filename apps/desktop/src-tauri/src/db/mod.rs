@@ -21,7 +21,7 @@ mod watch;
 // names the rest of the app (and the IPC tests) know them by. `schedules` and
 // `sync` are not in this list because they also hold hand-written commands —
 // those modules pull their generated half in themselves.
-pub use commands::{folders, notifications, pages, search, tags};
+pub use commands::{focus, folders, notifications, pages, search, tags};
 
 /// Shared database state. None until connect_db is called.
 ///

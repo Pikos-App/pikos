@@ -230,6 +230,19 @@ db_commands! {
             = search_pages_impl(query, include_completed);
     }
 
+    /// Focus sessions. Write-only from here: the totals the Data panel shows are
+    /// read through `get_usage_stats`, which aggregates the table rather than
+    /// listing it, so there is no read counterpart to this command.
+    mod focus {
+        create_focus_session(
+            page_id: String,
+            started_at: String,
+            ended_at: String,
+            duration_s: i64,
+        ) -> FocusSession
+            = pikos_db::create_focus_session(&page_id, &started_at, &ended_at, duration_s);
+    }
+
     mod tags {
         search_tags(query: String) -> Vec<String> = pikos_db::search_tags(&query);
     }

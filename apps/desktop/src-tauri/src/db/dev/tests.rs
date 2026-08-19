@@ -4,9 +4,9 @@ use super::seed::*;
 use super::stats::*;
 use crate::db::DbState;
 use pikos_db::{
-    create_folder_impl, create_page_impl, insert_test_folder, insert_test_page,
-    insert_test_page_sync, list_folders_impl, list_pages_impl, now_iso, test_pool, NewFolder,
-    NewPage, TestPage,
+    create_focus_session, create_folder_impl, create_page_impl, insert_test_folder,
+    insert_test_page, insert_test_page_sync, list_folders_impl, list_pages_impl, now_iso,
+    test_pool, NewFolder, NewPage, TestPage,
 };
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
@@ -177,6 +177,42 @@ async fn insert_focus_session(pool: &SqlitePool, id: &str, page_id: &str, durati
 }
 
 // ── get_usage_stats_impl ───────────────────────────────────────────────────────
+
+/// The card and its producer, end to end. Every other stats test here inserts the
+/// rows by hand, which measures the query and not the path a user's session takes;
+/// the "Focus time" card read zero for the whole life of the table, so the writer
+/// reaching it is the fact worth pinning.
+#[tokio::test]
+async fn usage_stats_count_sessions_written_by_the_focus_writer() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Deep work"))
+        .await
+        .unwrap();
+
+    create_focus_session(
+        &pool,
+        "p1",
+        "2026-06-01T09:00:00",
+        "2026-06-01T09:25:00",
+        1500,
+    )
+    .await
+    .unwrap();
+    create_focus_session(
+        &pool,
+        "p1",
+        "2026-06-01T14:00:00",
+        "2026-06-01T14:15:00",
+        900,
+    )
+    .await
+    .unwrap();
+
+    let s = get_usage_stats_impl(&pool).await.unwrap();
+    assert_eq!(s.total_focus_sessions, 2);
+    assert_eq!(s.total_focus_minutes, 40); // (1500 + 900) / 60
+    assert!(s.has_focus_sessions);
+}
 
 #[tokio::test]
 async fn usage_stats_empty_db_is_all_zeros() {
