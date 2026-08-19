@@ -255,13 +255,17 @@ export function PageBlockPopover({ onClose, onDelete, onRemoveDate, page }: Page
                         value: page.scheduledStart ?? null,
                       },
                     },
-                // Timed events only — all-day schedules don't fire reminders, so
-                // hide the bell (matches notifications/scheduler behaviour).
-                !!page.scheduledStart &&
-                  isTimedIso(page.scheduledStart) && {
-                    kind: "reminder",
-                    props: { iconSize: 12, pageId: page.id },
+                // A timed page reminds on a lead time; an all-day page has no
+                // start time to count back from, so its dropdown offers the
+                // day-before anchor instead — same split the editor byline makes.
+                !!page.scheduledStart && {
+                  kind: "reminder",
+                  props: {
+                    allDay: !isTimedIso(page.scheduledStart),
+                    iconSize: 12,
+                    pageId: page.id,
                   },
+                },
               ],
               key: "Date",
             },
