@@ -3627,6 +3627,80 @@ async fn a_page_trashed_with_its_folder_lists_without_a_folder_name() {
 }
 
 #[tokio::test]
+async fn restoring_a_page_whose_folder_is_still_trashed_lands_it_in_the_inbox() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "gone", "Old project")
+        .await
+        .unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some("gone"),
+            ..TestPage::new("p", "Inside it")
+        },
+    )
+    .await
+    .unwrap();
+
+    crate::soft_delete_folder_impl(&pool, "gone".into())
+        .await
+        .unwrap();
+    restore_page_impl(&pool, "p").await.unwrap();
+
+    let folder_id: Option<String> = sqlx::query_scalar("SELECT folder_id FROM pages WHERE id = ?")
+        .bind("p")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        folder_id, None,
+        "left on the trashed folder the page is in neither the inbox nor any listed \
+         folder, so it comes back invisible"
+    );
+
+    let inbox = list_pages_impl(
+        &pool,
+        Some(PageFilter {
+            folder_id: Some(serde_json::Value::Null),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    assert!(
+        inbox.iter().any(|page| page.id == "p"),
+        "the trash showed it as Inbox, so restore has to put it there"
+    );
+}
+
+#[tokio::test]
+async fn restoring_a_page_keeps_a_folder_that_is_still_alive() {
+    let pool = test_pool().await;
+    crate::pool::insert_test_folder(&pool, "live", "Still here")
+        .await
+        .unwrap();
+    insert_test_page(
+        &pool,
+        TestPage {
+            folder_id: Some("live"),
+            ..TestPage::new("p", "Inside it")
+        },
+    )
+    .await
+    .unwrap();
+
+    soft_delete_page_impl(&pool, "p").await.unwrap();
+    restore_page_impl(&pool, "p").await.unwrap();
+
+    let folder_id: Option<String> = sqlx::query_scalar("SELECT folder_id FROM pages WHERE id = ?")
+        .bind("p")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(folder_id.as_deref(), Some("live"));
+}
+
+#[tokio::test]
 async fn the_sweep_destroys_pages_past_retention_and_leaves_younger_ones() {
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("old", "Long gone"))

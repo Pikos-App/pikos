@@ -844,10 +844,30 @@ pub async fn restore_page_impl(pool: &sqlx::SqlitePool, id: &str) -> AppResult<(
         .bind(id)
         .execute(&mut *tx)
         .await?;
+        // Deleting a folder soft-deletes its pages, so restoring one of them alone
+        // would otherwise return it to a folder that is still in the trash: not in
+        // the Inbox (`folder_id` is set), not in any listed folder (that folder is
+        // gone). The page comes back invisible. Inbox is also what the trash view
+        // already shows for these rows — it resolves the folder name through a
+        // subquery that skips deleted folders — so this makes the restore match the
+        // destination the user was shown. Active mirrors are left alone: the
+        // reconciler owns their placement, and filing one out of its calendar folder
+        // is exactly what the placement guard forbids.
+        let synced = is_active_synced(&mut tx, id).await?;
+        if !synced {
+            sqlx::query(
+                "UPDATE pages SET folder_id = NULL WHERE id = ? AND folder_id IS NOT NULL \
+                 AND NOT EXISTS (SELECT 1 FROM folders f \
+                                  WHERE f.id = pages.folder_id AND f.deleted_at IS NULL)",
+            )
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        }
         // Sets survive soft-delete, so a restored recurring head must re-derive
         // (no-op if non-recurring). Skip active-synced heads — their cache is
         // reconciler-owned, and recomputing here would clobber a pinned provider head.
-        if !is_active_synced(&mut tx, id).await? {
+        if !synced {
             crate::recurrence_derive::recompute_recurring_schedule(&mut tx, id).await?;
         }
         tx.commit().await?;
