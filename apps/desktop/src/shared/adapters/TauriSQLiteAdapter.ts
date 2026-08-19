@@ -5,6 +5,7 @@ import type {
   CompletedPagesResponse,
   CompleteRecurringInput,
   CompleteRecurringResult,
+  FocusSession,
   Folder,
   NotificationHistoryEntry,
   Page,
@@ -25,6 +26,7 @@ import type {
 import type {
   FolderUpdate,
   NewCaldavConnection,
+  NewFocusSession,
   NewFolder,
   NewPage,
   NewPageReminder,
@@ -125,6 +127,7 @@ export const WRITE_COMMANDS = new Set([
   "delete_recurrence_rule",
   "add_rule_exdates",
   "remove_rule_exdate",
+  "create_focus_session",
   "create_page_reminder",
   "delete_page_reminder",
   "delete_page_reminders",
@@ -394,6 +397,20 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult> {
     return invoke<RescheduleVirtualResult>("reschedule_virtual_occurrence", { data });
+  }
+
+  // ─── Focus sessions ─────────────────────────────────────────────────────────
+
+  /** Flattened, not wrapped in `{ data }`: the command takes four scalars, which
+   *  is why `ipc_tests` carries a wire case for it — every one of them is
+   *  multi-word, so a camelCase⇄snake_case slip would be silent. */
+  createFocusSession(data: NewFocusSession): Promise<FocusSession> {
+    return invoke<FocusSession>("create_focus_session", {
+      durationS: data.durationS,
+      endedAt: data.endedAt,
+      pageId: data.pageId,
+      startedAt: data.startedAt,
+    });
   }
 
   // ─── Reminders ──────────────────────────────────────────────────────────────

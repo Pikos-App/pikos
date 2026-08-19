@@ -4,6 +4,7 @@ import { StorageError } from "../errors";
 import type {
   FolderUpdate,
   NewCaldavConnection,
+  NewFocusSession,
   NewFolder,
   NewPage,
   NewPageReminder,
@@ -24,6 +25,7 @@ import type {
   CompletedPagesResponse,
   CompleteRecurringInput,
   CompleteRecurringResult,
+  FocusSession,
   Folder,
   NotificationHistoryEntry,
   Page,
@@ -172,6 +174,9 @@ export class MockStorageAdapter implements StorageAdapter {
   private schedules = new Map<string, PageSchedule>();
   private rules = new Map<string, PageRecurrenceRule>();
   private reminders = new Map<string, PageReminder>();
+  // `focus_sessions`. Only the timer writes here and only on stop, so this holds
+  // finished sessions — a running one lives in the timer's own state, never here.
+  private focusSessions: FocusSession[] = [];
   // The notification log. Its only real writer is the Rust scheduler, which has
   // no twin here (nothing in test mode ticks a clock or talks to the OS), so
   // this stays empty unless a test seeds it via `seedNotificationHistory`.
@@ -201,6 +206,7 @@ export class MockStorageAdapter implements StorageAdapter {
     this.schedules.clear();
     this.rules.clear();
     this.reminders.clear();
+    this.focusSessions = [];
     this.notificationHistory = [];
     this.softDeleted.clear();
     this.softDeletedFolders.clear();
@@ -1128,6 +1134,35 @@ export class MockStorageAdapter implements StorageAdapter {
     return Promise.resolve({ clone: toSummary(clone), ruleExdates });
   }
 
+  // ─── Focus sessions ─────────────────────────────────────────────────────────
+
+  createFocusSession(data: NewFocusSession): Promise<FocusSession> {
+    // Both refusals mirror the Rust writer (`pikos_db::create_focus_session`).
+    // Kept here rather than let through, because a bad row is invisible: it
+    // lands in a sum on a settings card, not in anything a test would look at.
+    if (data.durationS <= 0) {
+      return Promise.reject(
+        new StorageError(
+          "Invalid",
+          `focus session duration must be positive, got ${data.durationS}`
+        )
+      );
+    }
+    if (!this.pages.has(data.pageId)) {
+      return Promise.reject(new StorageError("NotFound", `Page not found: ${data.pageId}`));
+    }
+    const session: FocusSession = { ...data, id: uuid() };
+    this.focusSessions.push(session);
+    return Promise.resolve(session);
+  }
+
+  /** Test-only (NOT on `StorageAdapter`): the sessions written so far. The
+   *  interface is write-only — the app reads these back as a total through
+   *  `getUsageStats` — so a test asserting the timer wrote needs this. */
+  listFocusSessionsForTest(): FocusSession[] {
+    return [...this.focusSessions];
+  }
+
   // ─── Reminders ──────────────────────────────────────────────────────────────
 
   createPageReminder(data: NewPageReminder): Promise<PageReminder> {
@@ -1483,9 +1518,12 @@ export class MockStorageAdapter implements StorageAdapter {
   getUsageStats(): Promise<WorkspaceUsageStats> {
     const pages = [...this.pages.values()].filter((p) => !this.softDeleted.has(p.id));
     const tags = new Set(pages.flatMap((p) => p.tags));
+    // Integer minutes, matching the backend's `SUM(duration_s) / 60` — SQLite
+    // integer division truncates, so rounding here would read higher than prod.
+    const focusSeconds = this.focusSessions.reduce((sum, s) => sum + s.durationS, 0);
     return Promise.resolve({
       first_page_date: pages.map((p) => p.createdAt).sort()[0] ?? null,
-      has_focus_sessions: false,
+      has_focus_sessions: this.focusSessions.length > 0,
       has_folders: this.folders.size > 0,
       has_priorities: pages.some((p) => p.priority != null),
       has_recurring: this.rules.size > 0,
@@ -1493,8 +1531,8 @@ export class MockStorageAdapter implements StorageAdapter {
       has_subtasks: false,
       has_tags: tags.size > 0,
       total_completed: pages.filter(isDone).length,
-      total_focus_minutes: 0,
-      total_focus_sessions: 0,
+      total_focus_minutes: Math.floor(focusSeconds / 60),
+      total_focus_sessions: this.focusSessions.length,
       total_folders: this.folders.size,
       total_pages: pages.length,
       total_schedules: this.schedules.size,

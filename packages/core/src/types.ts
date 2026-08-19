@@ -21,6 +21,7 @@ export interface Workspace {
 // Wire types are generated from the Rust structs that produce them — see
 // scripts/gen-ts-bindings.sh. Re-exported here so consumers keep one import path
 // and the shapes cannot drift from the backend.
+export type { FocusSession } from "./generated/FocusSession";
 export type { Folder } from "./generated/Folder";
 export type { NotificationHistoryEntry } from "./generated/NotificationHistoryEntry";
 export type { Page } from "./generated/Page";
@@ -90,15 +91,10 @@ export interface SearchResponse {
 }
 
 // ─── FocusSession ─────────────────────────────────────────────────────────────
-// Table exists; currently surfaced only in settings usage stats (no timer UI yet).
-
-export interface FocusSession {
-  id: string; // UUID
-  pageId?: string;
-  startedAt: string; // ISO 8601
-  endedAt?: string; // ISO 8601; undefined while in progress
-  durationS?: number; // denorm seconds; undefined while in progress
-}
+// The shape was hand-written and speculative while nothing wrote a row — every
+// field past `id` optional, for an in-progress session the table never held. The
+// writer only ever inserts finished sessions, so the generated type (re-exported
+// above) is the shape now, and the running one lives in the timer's own state.
 
 // ─── PageSummary ─────────────────────────────────────────────────────────
 // Lightweight projection for list views — excludes content and contentText.

@@ -2062,3 +2062,83 @@ describe("calendar sync — teardown keeps the user's work", () => {
     expect(folder?.isExternalCalendar).toBe(false);
   });
 });
+
+// ─── Focus sessions ──────────────────────────────────────────────────────────
+//
+// The mock is where every UI test sees this write, so its two refusals have to
+// match the Rust writer's — a mock that accepts a zero-second session lets a
+// timer bug through and only shows up as a settings total nobody can explain.
+
+describe("createFocusSession", () => {
+  it("records a session and counts it into the usage stats", async () => {
+    const page = await createTestPage({ title: "Deep work" });
+
+    await adapter.createFocusSession({
+      durationS: 1500,
+      endedAt: "2026-06-01T09:25:00",
+      pageId: page.id,
+      startedAt: "2026-06-01T09:00:00",
+    });
+    await adapter.createFocusSession({
+      durationS: 900,
+      endedAt: "2026-06-01T14:15:00",
+      pageId: page.id,
+      startedAt: "2026-06-01T14:00:00",
+    });
+
+    const stats = await adapter.getUsageStats();
+    expect(stats.total_focus_sessions).toBe(2);
+    expect(stats.total_focus_minutes).toBe(40); // (1500 + 900) / 60
+    expect(stats.has_focus_sessions).toBe(true);
+  });
+
+  it("truncates partial minutes the way SQLite integer division does", async () => {
+    const page = await createTestPage();
+    await adapter.createFocusSession({
+      durationS: 119,
+      endedAt: "2026-06-01T09:02:00",
+      pageId: page.id,
+      startedAt: "2026-06-01T09:00:00",
+    });
+    expect((await adapter.getUsageStats()).total_focus_minutes).toBe(1);
+  });
+
+  it("refuses a non-positive duration", async () => {
+    const page = await createTestPage();
+    for (const durationS of [0, -1]) {
+      await expect(
+        adapter.createFocusSession({
+          durationS,
+          endedAt: "2026-06-01T09:00:00",
+          pageId: page.id,
+          startedAt: "2026-06-01T09:00:00",
+        })
+      ).rejects.toThrow(/duration must be positive/);
+    }
+    expect(adapter.listFocusSessionsForTest()).toEqual([]);
+  });
+
+  it("refuses a session against a page that does not exist", async () => {
+    await expect(
+      adapter.createFocusSession({
+        durationS: 1500,
+        endedAt: "2026-06-01T09:25:00",
+        pageId: "ghost",
+        startedAt: "2026-06-01T09:00:00",
+      })
+    ).rejects.toThrow(/Page not found/);
+    expect(adapter.listFocusSessionsForTest()).toEqual([]);
+  });
+
+  it("clear() drops the sessions with everything else", async () => {
+    const page = await createTestPage();
+    await adapter.createFocusSession({
+      durationS: 1500,
+      endedAt: "2026-06-01T09:25:00",
+      pageId: page.id,
+      startedAt: "2026-06-01T09:00:00",
+    });
+    adapter.clear();
+    expect(adapter.listFocusSessionsForTest()).toEqual([]);
+  });
+});

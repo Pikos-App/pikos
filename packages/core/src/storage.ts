@@ -5,6 +5,7 @@ import type {
   CompletedPagesResponse,
   CompleteRecurringInput,
   CompleteRecurringResult,
+  FocusSession,
   Folder,
   NotificationHistoryEntry,
   Page,
@@ -83,6 +84,18 @@ export interface PageScheduleUpdate {
 export interface NewPageReminder {
   pageId: string;
   minutesBefore: number;
+}
+
+// ─── Focus session input helpers ─────────────────────────────────────────────
+
+/** One finished focus session. The caller times it and writes on stop, so the
+ *  wall-clock span is the user's, not the backend's — `durationS` is stored
+ *  rather than derived so a suspend or a clock change can't rewrite history. */
+export interface NewFocusSession {
+  pageId: string;
+  startedAt: string;
+  endedAt: string;
+  durationS: number;
 }
 
 // ─── Recurrence rule input helpers ────────────────────────────────────────────
@@ -271,6 +284,13 @@ export interface StorageAdapter {
   /** Materialize a virtual occurrence at a new time: clone head + schedule the
    * clone + exdate the original date, in ONE transaction. */
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult>;
+
+  // Focus sessions
+  /** Record a finished focus session. Write-only: the Data panel reads the
+   *  totals through `getUsageStats`, which aggregates the table rather than
+   *  listing it. Refuses a non-positive duration or a page that does not exist —
+   *  a bad row here would only ever surface as a total nobody can explain. */
+  createFocusSession(data: NewFocusSession): Promise<FocusSession>;
 
   // Reminders
   createPageReminder(data: NewPageReminder): Promise<PageReminder>;

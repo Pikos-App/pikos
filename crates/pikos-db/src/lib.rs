@@ -10,6 +10,7 @@
 #![allow(clippy::drop_non_drop)]
 
 pub mod error;
+pub mod focus;
 pub mod folders;
 pub mod notification_log;
 pub mod pages;
@@ -26,6 +27,7 @@ pub mod tags;
 pub mod tx;
 
 pub use error::{AppError, AppResult};
+pub use focus::*;
 pub use folders::*;
 pub use notification_log::*;
 pub use pages::*;
