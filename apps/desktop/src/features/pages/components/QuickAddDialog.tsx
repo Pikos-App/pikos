@@ -6,8 +6,9 @@
 // remounts the body, which resets all its state via useState initializers —
 // no reset effect, no eslint-disable, no flicker.
 
-import type { PagePriority, PageUpdate, ParseResult } from "@pikos/core";
+import type { PagePriority, PageUpdate, ParsedInput, ParseResult } from "@pikos/core";
 import {
+  DAY_BEFORE_MINUTES,
   fuzzyMatchFolder,
   getLocalTimezone,
   localToday,
@@ -15,6 +16,7 @@ import {
   parseInput,
   snapScheduleToRule,
 } from "@pikos/core";
+import { Bell } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
@@ -24,9 +26,38 @@ import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 import { useQuickAddPlaceholder } from "../hooks/useQuickAddPlaceholder";
+
+/**
+ * Plain body text → the Tiptap document a page stores, one paragraph per line —
+ * the same shape `pikos_db::build_tiptap_doc` writes, so a page the dialog gave
+ * a body to is indistinguishable from one the CLI or the reconciler wrote, and
+ * projects back through `extractText` to exactly the text that went in.
+ */
+function bodyToTiptap(text: string): string {
+  const content = text
+    .split("\n")
+    .map((line) =>
+      line ? { content: [{ text: line, type: "text" }], type: "paragraph" } : { type: "paragraph" }
+    );
+  return JSON.stringify({ content, type: "doc" });
+}
+
+/** How a parsed reminder lead reads on the preview chip. */
+function reminderChipLabel(minutes: number): string {
+  if (minutes === DAY_BEFORE_MINUTES) return "Day before";
+  if (minutes === 0) return "At time";
+  if (minutes < 60) return `${minutes} min before`;
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return `${days} day${days === 1 ? "" : "s"} before`;
+  }
+  const hours = minutes / 60;
+  return `${hours} hour${hours === 1 ? "" : "s"} before`;
+}
 
 // ── QuickAddDialog (shell) ────────────────────────────────────────────────────
 
@@ -79,6 +110,10 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const allTagNames = tags.map((t) => t.name);
   const { activeViewId, dialogPrefill, openPage } = useUI();
   const { defaultFolderId: settingsDefaultFolder } = useAppSettings();
+  // Reminder rows are raw CRUD — PagesContext doesn't carry them, so the new
+  // page's leads go straight to the adapter, the same call the reminder
+  // dropdown makes once the page is open.
+  const { storage } = useWorkspace();
 
   // External-calendar folders are placement-locked — a new native page can't land
   // in one, so they're never a quick-add target (chip, NLP, or active-view default).
@@ -115,6 +150,9 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const [rruleValue, setRruleValue] = useState<string | null>(null);
   const [rruleManual, setRruleManual] = useState(false);
   const [finiteLabel, setFiniteLabel] = useState<string | null>(null);
+  // Preview only — reminders have no chip to set them from here (the picker
+  // needs a page id), so the parse is the single source and submit re-reads it.
+  const [reminderPreview, setReminderPreview] = useState<number[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const placeholder = useQuickAddPlaceholder(true);
@@ -158,6 +196,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         setNlpTags([]);
         if (!rruleManual) setRruleValue(null);
         setFiniteLabel(null);
+        setReminderPreview([]);
         return;
       }
 
@@ -213,6 +252,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       }
 
       setNlpTags(parsed.tags.length > 0 ? [...new Set(parsed.tags)] : []);
+      setReminderPreview(parsed.reminderMinutes ?? []);
     }, 200);
 
     return () => clearTimeout(timer);
@@ -301,6 +341,20 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     const patch: PageUpdate = {};
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
     if (finalTags.length > 0) patch.tags = finalTags;
+    // Body from the "//" separator, written as the page's document so opening
+    // the page shows the note already typed out.
+    if (parsed?.content) {
+      patch.content = bodyToTiptap(parsed.content);
+      patch.contentText = parsed.content;
+    }
+
+    /** The parsed reminder leads, written as rows on a page that now exists. */
+    async function writeReminders(pageId: string, inp: ParsedInput | undefined) {
+      if (!storage) return;
+      for (const minutesBefore of inp?.reminderMinutes ?? []) {
+        await storage.createPageReminder({ minutesBefore, pageId });
+      }
+    }
 
     // Chip-set rrule takes precedence. Falls back to NLP-derived rrule when
     // the user hasn't touched the chip.
@@ -332,6 +386,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         scheduledStart: ruleStart,
         ...(ruleEnd ? { scheduledEnd: ruleEnd } : {}),
       });
+      await writeReminders(page.id, parsed);
       return { id: page.id, title };
     }
 
@@ -345,10 +400,15 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         if (resolvedPriority !== 0) finPatch.priority = resolvedPriority;
         const finTags = [...new Set([...inp.tags, ...manualTags])];
         if (finTags.length > 0) finPatch.tags = finTags;
+        if (inp.content) {
+          finPatch.content = bodyToTiptap(inp.content);
+          finPatch.contentText = inp.content;
+        }
         if (Object.keys(finPatch).length > 0) updatePage(pg.id, finPatch);
         if (inp.scheduledStart) {
           await scheduleOnce(pg.id, inp.scheduledStart, inp.scheduledEnd);
         }
+        await writeReminders(pg.id, inp);
       }
       return firstId ? { id: firstId, title } : null;
     }
@@ -361,6 +421,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       const resolvedEnd = parsed?.scheduledEnd ?? endDateValue ?? undefined;
       await scheduleOnce(page.id, resolvedDate, resolvedEnd);
     }
+    await writeReminders(page.id, parsed);
 
     return { id: page.id, title };
   }
@@ -397,6 +458,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     setRruleValue(null);
     setRruleManual(false);
     setFiniteLabel(null);
+    setReminderPreview([]);
     setDateManual(false);
     setPriorityManual(false);
     // Keep folderValue and folderManual — user stays in same folder scope.
@@ -510,6 +572,22 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
                     variant: "compact",
                     ...(finiteLabel ? { overrideLabel: finiteLabel } : {}),
                   },
+                },
+                // Read-only echo of the parsed lead: the reminder picker needs a
+                // page to attach to, so before there is one the input is the only
+                // way to set this, and the chip is only here to show it landed.
+                reminderPreview.length > 0 && {
+                  id: "reminder-preview",
+                  kind: "node" as const,
+                  node: (
+                    <span
+                      className="inline-flex shrink-0 items-center gap-1.5"
+                      title="Reminder from the text you typed"
+                    >
+                      <Bell className="h-3.5 w-3.5 shrink-0" />
+                      {reminderPreview.map(reminderChipLabel).join(", ")}
+                    </span>
+                  ),
                 },
               ],
               key: "schedule",
