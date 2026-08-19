@@ -62,12 +62,9 @@ function makePage(over: Partial<PageSummary> & { id: string }): PageSummary {
 // March 2026 (Monday-anchored) → Feb 23 … Apr 5.
 const WEEKS: MonthCell[][] = buildMonthGrid(new Date(2026, 2, 15), 1, new Date(2026, 2, 15));
 
-function renderGrid(
-  pages: PageSummary[],
-  handlers: Partial<{ onOpenDay: ReturnType<typeof vi.fn> }> = {}
-) {
-  const onOpenDay = handlers.onOpenDay ?? vi.fn();
-  const onPageDoubleClick = vi.fn();
+function renderGrid(pages: PageSummary[]) {
+  const onOpenDay = vi.fn<(day: Date) => void>();
+  const onPageDoubleClick = vi.fn<(pageId: string) => void>();
   renderWithProviders(
     <AppSettingsProvider>
       <TooltipProvider>
