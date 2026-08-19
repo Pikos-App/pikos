@@ -7,7 +7,6 @@ import { ThreePanelLayout } from "@/features/layout";
 import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
 import { SettingsPage } from "@/features/settings";
-import { TrashDialog } from "@/features/trash";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
 import { Toast } from "@/shared/components/Toast";
 import { UpdateDialog } from "@/shared/components/UpdateDialog";
@@ -240,13 +239,6 @@ function AppShell() {
         )}
       >
         <SearchPalette />
-      </ErrorBoundary>
-      <ErrorBoundary
-        fallback={({ error, reset }) => (
-          <PaneErrorFallback error={error} label="Trash" onReset={reset} />
-        )}
-      >
-        <TrashDialog />
       </ErrorBoundary>
       <Toast duration={UNDO_TOAST_DURATION_MS} items={toastItems} onDismiss={handleToastDismiss} />
       <UpdateDialog updater={updater} />

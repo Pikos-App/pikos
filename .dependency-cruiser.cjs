@@ -21,6 +21,10 @@ module.exports = {
           // shared/panels registry, or lazy element props passed in from App)
           // is the open question.
           "^apps/desktop/src/features/layout/components/EditorPanel\\.tsx$",
+          // 2026-08-19 — imports @/features/trash to give the trash the middle
+          // column when it is the active view. Same shell-composes-features
+          // question as EditorPanel, and it resolves the same way.
+          "^apps/desktop/src/features/layout/components/MiddlePanel\\.tsx$",
           // 2026-08-19 — imports @/features/folders for the folder picker in
           // the page-list header. Wants the folder chooser lifted into
           // shared/components, which means untangling it from folder state.

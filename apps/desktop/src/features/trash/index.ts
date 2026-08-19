@@ -1,1 +1,1 @@
-export { TrashDialog } from "./components/TrashDialog";
+export { TrashPanel } from "./components/TrashPanel";

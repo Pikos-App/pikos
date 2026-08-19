@@ -11,7 +11,7 @@ import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 /** 'today' | 'upcoming' | 'inbox' | folderId (UUID string) */
 export type ActiveViewId = SmartViewId | (string & NonNullable<unknown>);
-export type DialogId = "quick-add" | "search" | "trash" | null;
+export type DialogId = "quick-add" | "search" | null;
 /** Settings overlay sections. Kept here so external triggers (menu / shortcuts) can deep-link. */
 export type SettingsSection =
   | "general"

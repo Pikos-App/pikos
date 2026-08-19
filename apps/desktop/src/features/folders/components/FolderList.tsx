@@ -61,7 +61,7 @@ export function FolderList() {
     upcomingCount,
   } = useFolderList();
   const calendarGroups = useCalendarAccountGroups(externalFolders);
-  const { openSortMenu, setOpenDialog, setOpenSortMenu } = useUI();
+  const { openSortMenu, setOpenSortMenu } = useUI();
   const { density } = useListSettings();
   const folderRowHeight = density === "compact" ? 28 : density === "spacious" ? 38 : 32;
   const [calendarsCollapsed, setCalendarsCollapsed] = useLocalStorage(
@@ -318,9 +318,9 @@ export function FolderList() {
         <SmartViewEntry
           icon={<Trash2 size={16} />}
           id="nav-trash"
-          isActive={false}
+          isActive={activeViewId === "trash"}
           label="Trash"
-          onSelect={() => setOpenDialog("trash")}
+          onSelect={() => setActiveViewId("trash")}
         />
       </div>
     </div>

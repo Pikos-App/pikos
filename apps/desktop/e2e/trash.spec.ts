@@ -26,7 +26,7 @@ async function deleteAndLetUndoLapse(app: Parameters<typeof quickAdd>[0], title:
 }
 
 function openTrash(app: Parameters<typeof quickAdd>[0]) {
-  // exact: the trash dialog's own "Empty Trash" button also matches otherwise.
+  // exact: the panel's own "Empty Trash" button also matches otherwise.
   return app.getByRole("button", { exact: true, name: "Trash" }).click();
 }
 
@@ -45,8 +45,10 @@ appTest("a deleted page waits in the trash and restores from it @tier2", async (
 
   // Back in the live list without a reload — restore goes through the same
   // re-read the undo toast uses.
-  await expect(app.getByRole("dialog").getByText("The trash is empty.")).toBeVisible();
-  await app.keyboard.press("Escape");
+  await expect(app.getByText("The trash is empty.")).toBeVisible();
+
+  // The panel is a view, so leaving it is a navigation rather than a dismissal.
+  await app.getByRole("button", { name: /^Inbox/ }).click();
   await expect(
     app.locator("[data-page-list-item]").filter({ hasText: "notes from the offsite" })
   ).toBeVisible();
@@ -67,12 +69,9 @@ appTest("emptying the trash destroys what was in it @tier2", async ({ app }) => 
   await app.getByRole("alertdialog").getByRole("button", { name: "Empty Trash" }).click();
 
   await expect(app.getByText("The trash is empty.")).toBeVisible();
-  // The confirm dialog holds focus until it finishes closing, and Escape sent
-  // before that lands on it instead of on the trash panel behind it.
-  await expect(app.getByRole("alertdialog")).toHaveCount(0);
-  await app.keyboard.press("Escape");
 
-  // And it stays gone: re-opening reads the database, not a cached list.
+  // And it stays gone: leaving and coming back reads the database, not a cached list.
+  await app.getByRole("button", { name: /^Inbox/ }).click();
   await openTrash(app);
   await expect(app.getByText("The trash is empty.")).toBeVisible();
 });

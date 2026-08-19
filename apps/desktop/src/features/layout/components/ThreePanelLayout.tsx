@@ -19,7 +19,7 @@ import { useLayoutMode } from "../breakpoints";
 import { usePanelResize } from "../hooks/usePanelResize";
 import { useThreePanelDnD } from "../hooks/useThreePanelDnD";
 import { EditorPanel } from "./EditorPanel";
-import { PageListPanel } from "./PageListPanel";
+import { MiddlePanel } from "./MiddlePanel";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 
@@ -129,7 +129,7 @@ export function ThreePanelLayout() {
               )}
               transition={PANEL_SPRING}
             >
-              <PageListPanel onResizeStart={mid.onResizeStart} width={mid.width} />
+              <MiddlePanel onResizeStart={mid.onResizeStart} width={mid.width} />
             </motion.div>
           )}
 
@@ -155,7 +155,7 @@ export function ThreePanelLayout() {
                   initial={{ x: "-100%" }}
                   transition={PANEL_SPRING}
                 >
-                  <PageListPanel onResizeStart={mid.onResizeStart} width={280} />
+                  <MiddlePanel onResizeStart={mid.onResizeStart} width={280} />
                 </motion.div>
               </>
             )}

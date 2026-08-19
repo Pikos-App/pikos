@@ -9,7 +9,7 @@ export type SortMode = "manual" | "date" | "title" | "priority";
 
 /** The views that are computed from the pages themselves rather than folder
  *  membership. Everything else is a folder id. */
-export const SMART_VIEW_IDS = ["today", "upcoming", "inbox"] as const;
+export const SMART_VIEW_IDS = ["today", "upcoming", "inbox", "trash"] as const;
 export type SmartViewId = (typeof SMART_VIEW_IDS)[number];
 
 export function isSmartViewId(viewId: string): viewId is SmartViewId {
@@ -66,6 +66,9 @@ export function belongsToView(page: PageSummary, viewId: string, todayStr: strin
     return day >= todayStr && day <= upcomingWindowEnd(todayStr);
   }
   if (viewId === "inbox") return page.folderId === null;
+  // The trash reads deleted rows, which never reach this list — answering false
+  // stops the folder fallthrough treating "trash" as a folder id.
+  if (viewId === "trash") return false;
   return page.folderId === viewId;
 }
 

@@ -28,11 +28,12 @@ function CaptureWorkspace() {
   return null;
 }
 
-/** The sidebar owns no dialog of its own — the Trash entry asks UIContext to
- *  open one, and App renders it. This reads back what the entry asked for. */
-function ShowOpenDialog() {
-  const { openDialog } = useUI();
-  return <span data-testid="open-dialog">{openDialog ?? "none"}</span>;
+/** The sidebar selects views rather than rendering them — the Trash entry asks
+ *  UIContext for its view, and the middle panel renders it. This reads back
+ *  what the entry asked for. */
+function ShowActiveView() {
+  const { activeViewId } = useUI();
+  return <span data-testid="active-view">{activeViewId}</span>;
 }
 
 function workspaceApi(): WorkspaceContextValue {
@@ -63,7 +64,7 @@ async function setup(accountNames: string[]) {
     <TooltipProvider>
       <DndContext>
         <CaptureWorkspace />
-        <ShowOpenDialog />
+        <ShowActiveView />
         <FolderList />
       </DndContext>
     </TooltipProvider>
@@ -98,7 +99,7 @@ describe("FolderList — synced calendars", () => {
 });
 
 describe("FolderList — trash", () => {
-  it("offers Trash below the folders and opens it through the dialog surface", async () => {
+  it("offers Trash below the folders and selects it as a view", async () => {
     await setup([]);
 
     const trash = await screen.findByRole("button", { name: "Trash" });
@@ -108,6 +109,6 @@ describe("FolderList — trash", () => {
     expect(entries.map((e) => e.textContent)).toEqual(["Today", "Inbox", "Trash"]);
 
     fireEvent.click(trash);
-    expect(screen.getByTestId("open-dialog")).toHaveTextContent("trash");
+    expect(screen.getByTestId("active-view")).toHaveTextContent("trash");
   });
 });
