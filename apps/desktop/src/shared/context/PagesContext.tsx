@@ -18,15 +18,16 @@ import type {
   Tag,
 } from "@pikos/core";
 import {
-  alignWeeklyRuleToAnchor,
+  anchorMoveUpdate,
+  applyAnchorMove,
+  cloneWallClock,
   dateKey,
+  deriveTags,
+  findRecurringOccurrenceClone,
   formatDateOnly,
-  formatLocalISO,
   getLocalTimezone,
-  isTimedIso,
-  resolveSyncedInstant,
-  rruleEditWouldDegrade,
-  snapScheduleToRule,
+  resolveAnchorMove,
+  toPageSummary,
   toStorageError,
 } from "@pikos/core";
 import type {
@@ -42,11 +43,6 @@ import { createLogger } from "@/shared/logger";
 import { useWorkspaceInternal } from "./WorkspaceContext";
 
 const log = createLogger("PagesContext");
-
-function toPageSummary(page: Page): PageSummary {
-  const { content: _, contentText: _ct, ...summary } = page;
-  return summary;
-}
 
 /** Chaining + bound for a "complete everything to today" run. `fromHead` carries
  * the recomputed head returned by the gesture that opened the run — `pages` state
@@ -187,26 +183,6 @@ export interface PagesContextValue {
 }
 
 const PagesContext = createContext<PagesContextValue | null>(null);
-
-function deriveTags(pages: PageSummary[]): Tag[] {
-  const map = new Map<string, { count: number; ids: string[] }>();
-  for (const page of pages) {
-    for (const tag of page.tags) {
-      const entry = map.get(tag);
-      if (entry) {
-        entry.count++;
-        entry.ids.push(page.id);
-      } else {
-        map.set(tag, { count: 1, ids: [page.id] });
-      }
-    }
-  }
-  return Array.from(map.entries()).map(([name, { count, ids }]) => ({
-    name,
-    pageCount: count,
-    pageIds: ids,
-  }));
-}
 
 export function PagesProvider({ children }: { children: ReactNode }) {
   const { adapter, eventBus, registerDataLoader } = useWorkspaceInternal();
@@ -523,27 +499,12 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     // before the new head linger), making the series feel detached from the
     // user's most recent action.
     const ruleSnapshot = recurrenceRulesRef.current.find((r) => r.pageId === pageId);
-    // Realign a single-BYDAY weekly rule's weekday to the moved anchor — a head
-    // dragged Mon→Wed must make the series "every Wednesday", else completion's
-    // advance snaps back to the BYDAY weekday (the "reverts to its original
-    // day" bug). No-op for daily/monthly/multi-day rules. Skipped for a rule the
-    // editor is locked out of: the realign rebuilds through the same round-trip,
-    // so it would silently drop the terms the lock exists to protect.
-    const alignedRrule =
-      ruleSnapshot && !rruleEditWouldDegrade(ruleSnapshot.rrule)
-        ? alignWeeklyRuleToAnchor(ruleSnapshot.rrule, start)
-        : undefined;
-
-    // Snap an off-pattern drop (M/W/F dropped on Tue, monthly-by-day onto the
-    // wrong date) onto the nearest day the rule yields, before any optimistic
-    // update — otherwise recompute silently reverts it on the next heal (in
-    // 0.3.x the dragged position wasn't durable). No-op for single-BYDAY weekly
-    // (the realign above already fixes the day) and for non-recurring pages.
-    // Set-excluded dates still resolve wrong here; the recompute adopted below
-    // converges those.
-    const { end: snappedEnd, start: snappedStart } = ruleSnapshot
-      ? snapScheduleToRule(alignedRrule ?? ruleSnapshot.rrule, start, end)
-      : { end, start };
+    // Where the drop actually lands once the rule has had its say: a weekly
+    // BYDAY realigned to the moved weekday, and an off-pattern date snapped onto
+    // a day the rule yields. Both must settle BEFORE the optimistic update, else
+    // the next recompute silently reverts the dragged position.
+    const move = resolveAnchorMove(ruleSnapshot, start, end);
+    const { end: snappedEnd, start: snappedStart } = move;
 
     setPages((prev) =>
       prev.map((p) =>
@@ -554,22 +515,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
     );
     if (ruleSnapshot) {
       setRecurrenceRules((prev) =>
-        prev.map((r) => {
-          if (r.id !== ruleSnapshot.id) return r;
-          // Mirror the head denorm exactly — including CLEARING the end when
-          // the move drops it. An end left behind the new start gives the rule a
-          // negative span, which every occurrence derived from it then carries.
-          // (scheduledEnd is optional, not nullable, so we delete rather than
-          // assign null.)
-          const next: PageRecurrenceRule = {
-            ...r,
-            rrule: alignedRrule ?? r.rrule,
-            scheduledStart: snappedStart,
-          };
-          if (snappedEnd !== undefined) next.scheduledEnd = snappedEnd;
-          else delete next.scheduledEnd;
-          return next;
-        })
+        prev.map((r) => (r.id === ruleSnapshot.id ? applyAnchorMove(r, move) : r))
       );
     }
 
@@ -592,15 +538,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
           });
         }
         if (ruleSnapshot) {
-          await adapter.updateRecurrenceRule(ruleSnapshot.id, {
-            // Lockstep with the head denorm (end ?? null), incl. clearing —
-            // see the optimistic update above for why a stale end corrupts
-            // the next occurrence on completion.
-            scheduledEnd: snappedEnd ?? null,
-            scheduledStart: snappedStart,
-            // Realign weekly BYDAY to the moved weekday (no-op when unchanged).
-            ...(alignedRrule && alignedRrule !== ruleSnapshot.rrule ? { rrule: alignedRrule } : {}),
-          });
+          await adapter.updateRecurrenceRule(ruleSnapshot.id, anchorMoveUpdate(ruleSnapshot, move));
           // The rule update recomputes pages.scheduled_start backend-side (the
           // derivation owns the recurring head). Adopt that result so a drop onto
           // a set-excluded date — which the local snap can't detect — converges to
@@ -950,37 +888,6 @@ export function PagesProvider({ children }: { children: ReactNode }) {
   }
 
   /**
-   * Find the recurring series + date a done clone belongs to, or null — native or
-   * synced. Scans the loaded series' completion maps — reliable because active
-   * series are always in `pages` (the loader fetches all active pages with no
-   * folder/range filter), and the done clone's series is active. Skips pages with
-   * no completion map in O(1) each, so an uncheck costs ~one property read per page.
-   */
-  function findRecurringOccurrenceClone(
-    cloneId: string
-  ): { seriesId: string; occurrenceDate: string } | null {
-    for (const p of pagesRef.current) {
-      const map = p.completedOccurrences;
-      if (!map) continue;
-      const date = Object.keys(map).find((d) => map[d] === cloneId);
-      if (date) return { occurrenceDate: date, seriesId: p.id };
-    }
-    return null;
-  }
-
-  /** The done clone is a NATIVE (floating) page. For a timed zoned occurrence,
-   * store its start as the viewer-local wall-clock so the clone floats at the
-   * same slot the absolute occurrence rendered (a 3pm PT event shown at 6pm ET
-   * keeps a 6pm clone). All-day / floating (no tz) keep the raw wall-clock. The
-   * map KEY stays the source-zone date — that's what expansion suppresses by. */
-  function cloneWallClock(wallClock: string, timezone: string | null | undefined): string {
-    if (timezone && isTimedIso(wallClock)) {
-      return formatLocalISO(resolveSyncedInstant(wallClock, timezone));
-    }
-    return wallClock;
-  }
-
-  /**
    * Intercepts the un-check of a recurring done clone (native or synced) and
    * returns true ONLY when it handled it (caller must then NOT fall through) — a
    * plain status flip would be reverted by the next recompute. Completion routes
@@ -988,7 +895,7 @@ export function PagesProvider({ children }: { children: ReactNode }) {
    */
   function maybeUncompleteRecurringClone(page: PageSummary, nextStatus: PageStatus): boolean {
     if (nextStatus !== "not_started") return false;
-    const found = findRecurringOccurrenceClone(page.id);
+    const found = findRecurringOccurrenceClone(pagesRef.current, page.id);
     if (!found) return false;
     void uncompleteRecurringClone(found.seriesId, found.occurrenceDate);
     return true;
