@@ -19,6 +19,7 @@ import type React from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { BylineSeparator } from "@/shared/components/BylineSeparator";
 import { DateTimePicker } from "@/shared/components/DateTimePicker";
 import { FolderChip } from "@/shared/components/FolderChip";
 import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
@@ -31,14 +32,6 @@ import { useUI } from "@/shared/context/UIContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 import { useQuickAddPlaceholder } from "../hooks/useQuickAddPlaceholder";
-
-function BylineSeparator() {
-  return (
-    <span aria-hidden="true" className="shrink-0 text-muted-foreground/20">
-      ·
-    </span>
-  );
-}
 
 // ── QuickAddDialog (shell) ────────────────────────────────────────────────────
 

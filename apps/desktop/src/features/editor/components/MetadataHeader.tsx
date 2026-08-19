@@ -16,6 +16,7 @@ import { AlertTriangle, CalendarDays, CalendarOff, CalendarSync } from "lucide-r
 import { useEffect, useRef, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { BylineSeparator } from "@/shared/components/BylineSeparator";
 import { FolderChip } from "@/shared/components/FolderChip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
 import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
@@ -34,14 +35,6 @@ import { syncedScheduleLabel } from "@/shared/utils/syncedScheduleLabel";
 
 import { CalendarDescriptionNotice } from "./CalendarDescriptionNotice";
 import { DateSchedulePopover } from "./DateSchedulePopover";
-
-function BylineSeparator() {
-  return (
-    <span aria-hidden="true" className="text-muted-foreground/20">
-      ·
-    </span>
-  );
-}
 
 function Byline({
   allTags,
