@@ -2,7 +2,7 @@ import { MockStorageAdapter } from "@pikos/core";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { usePageReminders } from "./usePageReminders";
+import { DAY_BEFORE_SENTINEL, usePageReminders } from "./usePageReminders";
 
 vi.stubEnv("VITE_TEST_MODE", "true");
 
@@ -243,5 +243,49 @@ describe("page scoping", () => {
 
     expect(result.current.reminders).toHaveLength(1);
     expect(result.current.reminders[0]?.minutesBefore).toBe(10);
+  });
+});
+
+describe("the all-day anchor", () => {
+  it("stores the day-before choice as an ordinary active reminder", async () => {
+    const { result } = setup();
+
+    await act(async () => {
+      await result.current.add(DAY_BEFORE_SENTINEL);
+    });
+
+    // -2 is an anchor, not the "none" sentinel: the page does have a reminder.
+    expect(result.current.isNone).toBe(false);
+    expect(result.current.hasCustomReminders).toBe(true);
+    expect(result.current.activeReminders.map((r) => r.minutesBefore)).toEqual([
+      DAY_BEFORE_SENTINEL,
+    ]);
+    expect((await adapter.listPageReminders(PAGE_ID)).map((r) => r.minutesBefore)).toEqual([
+      DAY_BEFORE_SENTINEL,
+    ]);
+  });
+
+  it("replaces a None sentinel the way a lead time does", async () => {
+    const { result } = setup();
+
+    await act(async () => {
+      await result.current.setNone();
+    });
+    await act(async () => {
+      await result.current.add(DAY_BEFORE_SENTINEL);
+    });
+
+    expect(result.current.isNone).toBe(false);
+    expect(result.current.reminders.map((r) => r.minutesBefore)).toEqual([DAY_BEFORE_SENTINEL]);
+  });
+
+  it("accepts a lead time long enough to cross a day", async () => {
+    const { result } = setup();
+
+    await act(async () => {
+      await result.current.add(1440);
+    });
+
+    expect(result.current.activeReminders.map((r) => r.minutesBefore)).toEqual([1440]);
   });
 });

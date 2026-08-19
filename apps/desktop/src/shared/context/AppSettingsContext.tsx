@@ -7,8 +7,11 @@ import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 /** 0 = Sunday, 1 = Monday — matches date-fns weekStartsOn. */
 export type WeekStart = 0 | 1;
 
-/** Reminder lead time options in minutes. 0 = "at start time". */
-export type ReminderLeadTime = 0 | 5 | 10 | 15 | 30;
+/** Reminder lead time options in minutes. 0 = "at start time"; the longer end
+ *  (60 / 120 / 1440) is what the schema always accepted — the pickers just never
+ *  offered it — and the scheduler's arms do the date arithmetic in SQLite, so a
+ *  lead that crosses midnight fires on the right day. */
+export type ReminderLeadTime = 0 | 5 | 10 | 15 | 30 | 60 | 120 | 1440;
 
 export interface AppSettingsValue {
   weekStart: WeekStart;
