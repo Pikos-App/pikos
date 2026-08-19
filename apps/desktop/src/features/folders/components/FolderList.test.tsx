@@ -4,11 +4,12 @@
 // calendar and colour is the user's to set.
 
 import { DndContext } from "@dnd-kit/core";
-import { act, cleanup, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useUI } from "@/shared/context/UIContext";
 import type { WorkspaceContextValue } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { renderWithProviders } from "@/test/renderWithProviders";
@@ -25,6 +26,13 @@ function CaptureWorkspace() {
     workspaceRef.current = workspace;
   }, [workspace]);
   return null;
+}
+
+/** The sidebar owns no dialog of its own — the Trash entry asks UIContext to
+ *  open one, and App renders it. This reads back what the entry asked for. */
+function ShowOpenDialog() {
+  const { openDialog } = useUI();
+  return <span data-testid="open-dialog">{openDialog ?? "none"}</span>;
 }
 
 function workspaceApi(): WorkspaceContextValue {
@@ -55,6 +63,7 @@ async function setup(accountNames: string[]) {
     <TooltipProvider>
       <DndContext>
         <CaptureWorkspace />
+        <ShowOpenDialog />
         <FolderList />
       </DndContext>
     </TooltipProvider>
@@ -85,5 +94,20 @@ describe("FolderList — synced calendars", () => {
     expect(await screen.findByRole("button", { name: "Personal" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "alex@work.com" })).toBeNull();
     expect(screen.queryByText("alex@work.com")).toBeNull();
+  });
+});
+
+describe("FolderList — trash", () => {
+  it("offers Trash below the folders and opens it through the dialog surface", async () => {
+    await setup([]);
+
+    const trash = await screen.findByRole("button", { name: "Trash" });
+    // Bottom of the sidebar, after the smart views and the folder list — the
+    // entry is a way into deleted pages, not another place they live.
+    const entries = screen.getAllByRole("button", { name: /^(Today|Inbox|Trash)$/ });
+    expect(entries.map((e) => e.textContent)).toEqual(["Today", "Inbox", "Trash"]);
+
+    fireEvent.click(trash);
+    expect(screen.getByTestId("open-dialog")).toHaveTextContent("trash");
   });
 });
