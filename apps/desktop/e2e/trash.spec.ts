@@ -26,7 +26,8 @@ async function deleteAndLetUndoLapse(app: Parameters<typeof quickAdd>[0], title:
 }
 
 function openTrash(app: Parameters<typeof quickAdd>[0]) {
-  return app.getByRole("button", { name: "Trash" }).click();
+  // exact: the trash dialog's own "Empty Trash" button also matches otherwise.
+  return app.getByRole("button", { exact: true, name: "Trash" }).click();
 }
 
 // ─── tier2: a delete survives the toast and comes back ───────────────────────
@@ -66,6 +67,9 @@ appTest("emptying the trash destroys what was in it @tier2", async ({ app }) => 
   await app.getByRole("alertdialog").getByRole("button", { name: "Empty Trash" }).click();
 
   await expect(app.getByText("The trash is empty.")).toBeVisible();
+  // The confirm dialog holds focus until it finishes closing, and Escape sent
+  // before that lands on it instead of on the trash panel behind it.
+  await expect(app.getByRole("alertdialog")).toHaveCount(0);
   await app.keyboard.press("Escape");
 
   // And it stays gone: re-opening reads the database, not a cached list.

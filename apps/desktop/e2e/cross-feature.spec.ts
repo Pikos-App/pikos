@@ -158,7 +158,7 @@ appTest(
     await app.keyboard.press(mod("Mod+k"));
     const palette = app.getByRole("dialog", { name: "Search pages" });
     await expect(palette).toBeVisible();
-    await palette.getByPlaceholder("Search pages…").fill("alpha");
+    await palette.getByPlaceholder("Search pages, or > for commands…").fill("alpha");
     await expect(palette.getByText("alpha proposal")).toBeVisible();
     await app.keyboard.press("Enter");
     await expect(palette).not.toBeVisible();
@@ -184,12 +184,12 @@ appTest(
 
     await app.keyboard.press(mod("Mod+k"));
     await expect(palette).toBeVisible();
-    await palette.getByPlaceholder("Search pages…").fill("zenith");
+    await palette.getByPlaceholder("Search pages, or > for commands…").fill("zenith");
     await expect(palette.getByText("zenith proposal")).toBeVisible();
 
     // The old title must NOT match — proves the rename replaced rather than
     // appended a search-index entry.
-    await palette.getByPlaceholder("Search pages…").fill("alpha");
+    await palette.getByPlaceholder("Search pages, or > for commands…").fill("alpha");
     // FTS5 rebuild is debounced 150 ms; the retry-until-true semantics of
     // `not.toBeVisible({ timeout })` walk the wait for us — no bare sleep.
     await expect(palette.getByText("alpha proposal")).not.toBeVisible({ timeout: 1000 });

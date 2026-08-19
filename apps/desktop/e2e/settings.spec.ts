@@ -15,7 +15,7 @@ appTest("settings opens and each tab renders @tier1", async ({ app }) => {
   await expect(app.getByRole("heading", { name: "Preferences" })).toBeVisible();
 
   await app.getByRole("button", { name: "Notifications" }).click();
-  await expect(app.getByRole("heading", { name: "Notifications" })).toBeVisible();
+  await expect(app.getByRole("heading", { exact: true, name: "Notifications" })).toBeVisible();
 
   await app.getByRole("button", { name: "Data", exact: true }).click();
   await expect(app.getByRole("heading", { name: "Your Workspace" })).toBeVisible();

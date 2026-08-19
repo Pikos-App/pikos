@@ -43,7 +43,7 @@ appTest("upcoming groups the next seven days by day @tier2", async ({ page }) =>
   // Today and Tomorrow are named; anything further out is weekday + date.
   await expect(list.getByText(/^Today/)).toBeVisible();
   await expect(list.getByText(/^Tomorrow/)).toBeVisible();
-  await expect(list.getByText(/Jun 19/)).toBeVisible();
+  await expect(list.getByText(/^Fri, Jun 19/)).toBeVisible();
 
   const items = page.locator("[data-page-list-item]");
   await expect(items.filter({ hasText: "site visit" })).toBeVisible();
