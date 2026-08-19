@@ -23,6 +23,7 @@ import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggl
 
 import { Byline } from "./Byline";
 import { CalendarDescriptionNotice } from "./CalendarDescriptionNotice";
+import { FocusTimer } from "./FocusTimer";
 
 interface MetadataHeaderProps {
   page: Page;
@@ -370,19 +371,27 @@ export function MetadataHeader({
           </div>
         )}
 
-        <Byline
-          allTags={allTagNames}
-          folders={folders}
-          onErrorClick={handleErrorClick}
-          onFolderChange={handleFolderChange}
-          {...(page.scheduledStart ? { onOpenInCalendar: handleOpenInCalendar } : {})}
-          onPriorityChange={handlePriorityChange}
-          onRecurrenceChange={(rrule) => void handleRecurrenceChange(rrule)}
-          onStatusChange={handleStatusChange}
-          onTagToggle={handleTagToggle}
-          page={page}
-          saveError={hasError ? (errorMessage ?? "Save failed") : null}
-        />
+        {/* The byline owns its own vertical padding, so the timer is aligned to
+            it here rather than given padding of its own. `min-w-0` lets the
+            byline keep truncating its chips instead of pushing the timer off. */}
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <Byline
+              allTags={allTagNames}
+              folders={folders}
+              onErrorClick={handleErrorClick}
+              onFolderChange={handleFolderChange}
+              {...(page.scheduledStart ? { onOpenInCalendar: handleOpenInCalendar } : {})}
+              onPriorityChange={handlePriorityChange}
+              onRecurrenceChange={(rrule) => void handleRecurrenceChange(rrule)}
+              onStatusChange={handleStatusChange}
+              onTagToggle={handleTagToggle}
+              page={page}
+              saveError={hasError ? (errorMessage ?? "Save failed") : null}
+            />
+          </div>
+          <FocusTimer pageId={page.id} />
+        </div>
 
         {titleLocked && (
           <SyncedEventDetails
