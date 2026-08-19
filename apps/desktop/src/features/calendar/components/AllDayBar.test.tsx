@@ -5,13 +5,12 @@
 // signal is the absence of that treatment, asserted via the button's class as a
 // last resort since done state isn't otherwise exposed accessibly inside the bar.
 
-import type { PageSummary } from "@pikos/core";
+import type { AllDayBar as AllDayBarData, PageSummary } from "@pikos/core";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/renderWithProviders";
 
-import type { AllDayBar as AllDayBarData } from "../utils/allDayLayout";
 import { AllDayBar } from "./AllDayBar";
 
 // globals: false in vitest config → @testing-library's auto-cleanup never runs.

@@ -3,13 +3,11 @@
 // listeners, so onReschedule never fires. Mirrored with an unlocked block to
 // prove the guard, not a dead harness.
 
-import type { PageSummary } from "@pikos/core";
+import type { CalendarBlock, PageSummary } from "@pikos/core";
+import { buildCollapseGeometry, DEFAULT_COLLAPSE_CONFIG, DEFAULT_METRICS } from "@pikos/core";
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_COLLAPSE_CONFIG } from "../utils/calendarConstants";
-import { buildCollapseGeometry, DEFAULT_METRICS } from "../utils/calendarGeometry";
-import type { CalendarBlock } from "../utils/calendarLayout";
 import { useTimedResize } from "./useTimedResize";
 
 function makePage(scheduleLocked: boolean): PageSummary {

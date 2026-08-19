@@ -5,14 +5,13 @@
 // that treatment, asserted via the button's class as a last resort since done
 // state isn't otherwise exposed accessibly inside the block.
 
-import type { PageSummary } from "@pikos/core";
+import type { CalendarBlock, PageSummary } from "@pikos/core";
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
-import type { CalendarBlock } from "../utils/calendarLayout";
 import { PageBlock } from "./PageBlock";
 
 // globals: false in vitest config → @testing-library's auto-cleanup never runs.

@@ -1,9 +1,8 @@
+import type { CollapseGeometry } from "@pikos/core";
+import { mapHourToY, mapYToHour, VISIBLE_HOURS } from "@pikos/core";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
-
-import { VISIBLE_HOURS } from "../utils/calendarConstants";
-import { type CollapseGeometry, mapHourToY, mapYToHour } from "../utils/calendarGeometry";
 
 const SCROLL_PERSIST_DEBOUNCE_MS = 200;
 

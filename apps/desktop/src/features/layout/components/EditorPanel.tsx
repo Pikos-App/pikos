@@ -1,10 +1,10 @@
+import { clampDayCount, dayCountNavStep, getCalendarDayCount } from "@pikos/core";
 import { addDays, subDays } from "date-fns";
 
 import { CalendarHeader, CalendarView } from "@/features/calendar";
 import { EditorPane } from "@/features/editor";
-import { getCalendarDayCount, useLayoutMode } from "@/features/layout/breakpoints";
+import { useLayoutMode } from "@/features/layout/breakpoints";
 import { PaneErrorFallback } from "@/shared/components/PaneErrorFallback";
-import { clampDayCount, dayCountNavStep } from "@/shared/constants/calendar";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";

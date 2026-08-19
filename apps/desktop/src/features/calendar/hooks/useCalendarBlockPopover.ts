@@ -1,8 +1,7 @@
+import { CLICK_DELAY } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 
 import { useUI } from "@/shared/context/UIContext";
-
-import { CLICK_DELAY } from "../utils/calendarConstants";
 
 export interface UseCalendarBlockPopoverOptions {
   /** When true, the block mounts with its popover open. The rising-edge latch

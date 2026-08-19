@@ -1,13 +1,12 @@
+import type { CalendarDayCount } from "@pikos/core";
+import { buildCalendarDays } from "@pikos/core";
 import { addDays, format, isSameMonth, isWithinInterval, startOfDay } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
-import type { CalendarDayCount } from "@/shared/constants/calendar";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
-
-import { buildCalendarDays } from "../utils/calendarGeometry";
 
 interface CalendarHeaderProps {
   dayCount: CalendarDayCount;

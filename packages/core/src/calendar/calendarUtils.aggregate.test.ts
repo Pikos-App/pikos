@@ -1,9 +1,12 @@
-import type { PageSummary } from "@pikos/core";
+// Aggregate suite: still one file covering allDayLayout, calendarConstants,
+// calendarGeometry, calendarLayout, calendarTimeFormat, dayCount and
+// pages/schedule. It moved here wholesale with the modules it exercises; the
+// split into per-module suites is deliberately left to its own change so the
+// relocation stays a pure move.
 import { describe, expect, it } from "vitest";
 
-import { clampDayCount, dayCountColumns, dayCountNavStep } from "@/shared/constants/calendar";
-import { computeScheduleTransition, normalizeEndInput } from "@/shared/utils/schedule";
-
+import { computeScheduleTransition, normalizeEndInput } from "../pages/schedule";
+import type { PageSummary } from "../types";
 import {
   assignAllDayRows,
   assignStableAllDayRows,
@@ -15,7 +18,6 @@ import {
   isAllDayPage,
   shiftAllDayEnd,
 } from "./allDayLayout";
-import { chipFolderStyle, hexToRgba } from "./calendarColors";
 import {
   CASCADE_OFFSET_PCT,
   COLLAPSED_BAND_HEIGHT,
@@ -45,6 +47,7 @@ import {
 } from "./calendarGeometry";
 import { buildDayBlocks, collapseUnderWidth, remapBlocksForCollapse } from "./calendarLayout";
 import { formatMultiDayTimeRange, formatTimeRange } from "./calendarTimeFormat";
+import { clampDayCount, dayCountColumns, dayCountNavStep } from "./dayCount";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -250,20 +253,6 @@ describe("weekEnd", () => {
     const saturday = weekEnd(wed, 0);
     expect(saturday.getDay()).toBe(6); // Saturday
     expect(saturday.getDate()).toBe(21);
-  });
-});
-
-// ─── chipFolderStyle ────────────────────────────────────────────────────────
-
-describe("chipFolderStyle", () => {
-  it("returns --event-color CSS property when a folder color is provided", () => {
-    const style = chipFolderStyle("#ff0000") as Record<string, string>;
-    expect(style["--event-color"]).toBe("#ff0000");
-  });
-
-  it("falls back to the default event color when none is provided", () => {
-    const style = chipFolderStyle() as Record<string, string>;
-    expect(style["--event-color"]).toBeTruthy();
   });
 });
 
@@ -2004,22 +1993,6 @@ describe("normalizeEndInput", () => {
     expect(normalizeEndInput("2026-03-15T09:00:00", "2026-03-15T10:30:00")).toBe(
       "2026-03-15T10:30:00"
     );
-  });
-});
-
-// ─── hexToRgba ───────────────────────────────────────────────────────────────
-
-describe("hexToRgba", () => {
-  it("valid hex → correct rgba string", () => {
-    expect(hexToRgba("#ff0000", 0.5)).toBe("rgba(255,0,0,0.5)");
-  });
-
-  it("valid hex without # → correct rgba string", () => {
-    expect(hexToRgba("00ff00", 0.25)).toBe("rgba(0,255,0,0.25)");
-  });
-
-  it("invalid hex → fallback indigo", () => {
-    expect(hexToRgba("zzz", 0.5)).toBe("rgba(99,102,241,0.5)");
   });
 });
 

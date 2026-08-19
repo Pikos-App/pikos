@@ -1,4 +1,5 @@
-import type { PageSummary } from "@pikos/core";
+import type { CalendarMetrics, CollapseGeometry, PageSummary } from "@pikos/core";
+import { buildCollapseGeometry, COLLAPSED_BAND_HEIGHT } from "@pikos/core";
 import { useRef } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
@@ -17,12 +18,6 @@ import { useHeightResize } from "../hooks/useHeightResize";
 import { useScrollPersist } from "../hooks/useScrollPersist";
 import { useTimedDrag } from "../hooks/useTimedDrag";
 import { useTimedResize } from "../hooks/useTimedResize";
-import { COLLAPSED_BAND_HEIGHT } from "../utils/calendarConstants";
-import {
-  buildCollapseGeometry,
-  type CalendarMetrics,
-  type CollapseGeometry,
-} from "../utils/calendarGeometry";
 import { eatNextClick } from "../utils/eatNextClick";
 import { AllDaySection } from "./AllDaySection";
 import type { DragGhost } from "./DayColumn";
