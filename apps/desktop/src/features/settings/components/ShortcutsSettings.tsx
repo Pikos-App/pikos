@@ -1,113 +1,30 @@
-// Update this file when adding new shortcuts to the app.
+// Rendered from the keyboard registry: every shortcut registered with a label
+// and a group lands here without this file knowing about it. The only entries
+// spelled out below are the ones the registry can never see — keys ProseMirror
+// and the Quick Add form own, handled inside those components' own keymaps.
 
 import { IS_MACOS } from "@/shared/constants/platform";
+import { formatCombo } from "@/shared/keyboard/formatCombo";
+import type { ShortcutDoc } from "@/shared/keyboard/registry";
+import { Keyboard } from "@/shared/keyboard/registry";
 
-const MOD = IS_MACOS ? "⌘" : "Ctrl";
-const SHIFT = "⇧";
-const ALT = IS_MACOS ? "⌥" : "Alt";
+/** Section order on the page. Anything in a group not named here follows, in
+ *  registration order, so a new group shows up rather than disappearing. */
+const GROUP_ORDER = ["Navigation", "Page list", "Editor", "Quick add", "Calendar"];
 
-function formatCombo(combo: string): string[] {
-  return combo.split("+").map((part) => {
-    switch (part.trim()) {
-      case "Mod":
-        return MOD;
-      case "Shift":
-        return SHIFT;
-      case "Alt":
-      case "Option":
-        return ALT;
-      case "Enter":
-        return "↵";
-      case "Tab":
-        return "⇥";
-      case "ArrowUp":
-        return "↑";
-      case "ArrowDown":
-        return "↓";
-      case "ArrowLeft":
-        return "←";
-      case "ArrowRight":
-        return "→";
-      case "\\":
-        return "\\";
-      case "Space":
-        return "Space";
-      case "Escape":
-        return "Esc";
-      default:
-        return part.trim().toUpperCase();
-    }
-  });
-}
-
-interface ShortcutItem {
-  label: string;
-  combo: string | [string, string]; // single or chord
-}
-
-interface ShortcutGroup {
-  label: string;
-  items: ShortcutItem[];
-}
-
-const GROUPS: ShortcutGroup[] = [
-  {
-    items: [
-      { combo: "Mod+N", label: "New page" },
-      { combo: "Mod+W", label: "Close page" },
-      { combo: "Mod+K", label: "Search" },
-      { combo: "Mod+,", label: "Settings" },
-      { combo: "Mod+/", label: "Keyboard shortcuts" },
-      { combo: "Mod+\\", label: "Toggle sidebar" },
-      { combo: "Mod+Shift+C", label: "Toggle calendar / editor" },
-      { combo: "Mod+Backspace", label: "Delete page" },
-      { combo: "Mod+Shift+Backspace", label: "Delete page (works in text inputs)" },
-      { combo: "Mod+Z", label: "Undo delete" },
-      { combo: "Mod+1–9", label: "Switch to folder by index" },
-    ],
-    label: "Navigation",
-  },
-  {
-    items: [
-      { combo: "ArrowUp", label: "Select previous page" },
-      { combo: "ArrowDown", label: "Select next page" },
-      { combo: "Space", label: "Toggle completion" },
-      { combo: "Mod+A", label: "Select all open pages in folder" },
-      { combo: "Escape", label: "Clear multi-selection" },
-    ],
-    label: "Page list",
-  },
-  {
-    items: [
-      { combo: "/", label: "Slash menu" },
-      { combo: "Mod+B", label: "Bold" },
-      { combo: "Mod+I", label: "Italic" },
-      { combo: "Mod+Shift+S", label: "Strikethrough" },
-      { combo: "Mod+E", label: "Inline code" },
-      { combo: "Mod+Shift+K", label: "Insert / edit link" },
-      { combo: "Mod+F", label: "Find in page" },
-      { combo: "Tab", label: "Indent" },
-      { combo: "Shift+Tab", label: "Outdent" },
-    ],
-    label: "Editor",
-  },
-  {
-    items: [
-      { combo: "Enter", label: "Add and close" },
-      { combo: "Mod+Enter", label: "Add and stay open" },
-      { combo: "Shift+Enter", label: "Add and open the new page" },
-      { combo: "Mod+T", label: "Schedule for today" },
-    ],
-    label: "Quick add",
-  },
-  {
-    items: [
-      { combo: "ArrowLeft", label: "Previous week" },
-      { combo: "ArrowRight", label: "Next week" },
-      { combo: "T", label: "Jump to today" },
-    ],
-    label: "Calendar",
-  },
+/** Keys owned by the Tiptap editor and the Quick Add form, which never register
+ *  with the keyboard registry — their components bind them directly. */
+const EXTERNAL_SHORTCUTS: ShortcutDoc[] = [
+  { combo: "/", group: "Editor", label: "Slash menu" },
+  { combo: "Mod+B", group: "Editor", label: "Bold" },
+  { combo: "Mod+I", group: "Editor", label: "Italic" },
+  { combo: "Mod+Shift+S", group: "Editor", label: "Strikethrough" },
+  { combo: "Mod+E", group: "Editor", label: "Inline code" },
+  { combo: "Tab", group: "Editor", label: "Indent" },
+  { combo: "Shift+Tab", group: "Editor", label: "Outdent" },
+  { combo: "Enter", group: "Quick add", label: "Add and close" },
+  { combo: "Mod+Enter", group: "Quick add", label: "Add and stay open" },
+  { combo: "Shift+Enter", group: "Quick add", label: "Add and open the new page" },
 ];
 
 function KeyBadge({ token }: { token: string }) {
@@ -118,21 +35,7 @@ function KeyBadge({ token }: { token: string }) {
   );
 }
 
-function ComboDisplay({ combo }: { combo: string | [string, string] }) {
-  if (Array.isArray(combo)) {
-    const [first, second] = combo;
-    return (
-      <span className="flex items-center gap-1">
-        {formatCombo(first).map((t, i) => (
-          <KeyBadge key={i} token={t} />
-        ))}
-        <span className="text-xs text-muted-foreground">then</span>
-        {formatCombo(second).map((t, i) => (
-          <KeyBadge key={i} token={t} />
-        ))}
-      </span>
-    );
-  }
+function ComboDisplay({ combo }: { combo: string }) {
   return (
     <span className="flex items-center gap-1">
       {formatCombo(combo).map((t, i) => (
@@ -142,7 +45,31 @@ function ComboDisplay({ combo }: { combo: string | [string, string] }) {
   );
 }
 
+/** Registry entries plus the externally-owned ones, grouped for display.
+ *  Within a group entries sort by label: registration order follows React's
+ *  mount order, which is an implementation detail, not a reading order. */
+function groupShortcuts(entries: ShortcutDoc[]): { items: ShortcutDoc[]; label: string }[] {
+  const byGroup = new Map<string, ShortcutDoc[]>();
+  for (const entry of entries) {
+    const bucket = byGroup.get(entry.group);
+    if (bucket) bucket.push(entry);
+    else byGroup.set(entry.group, [entry]);
+  }
+
+  const ordered = [
+    ...GROUP_ORDER.filter((g) => byGroup.has(g)),
+    ...[...byGroup.keys()].filter((g) => !GROUP_ORDER.includes(g)),
+  ];
+
+  return ordered.map((label) => ({
+    items: [...(byGroup.get(label) ?? [])].sort((a, b) => a.label.localeCompare(b.label)),
+    label,
+  }));
+}
+
 export function ShortcutsSettings() {
+  const groups = groupShortcuts([...Keyboard.listShortcutCatalog(), ...EXTERNAL_SHORTCUTS]);
+
   return (
     <div className="max-w-lg">
       <h2 className="mb-1 text-base font-semibold">Keyboard Shortcuts</h2>
@@ -151,7 +78,7 @@ export function ShortcutsSettings() {
       </p>
 
       <div className="space-y-6">
-        {GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.label}>
             <p className="mb-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               {group.label}
@@ -160,7 +87,7 @@ export function ShortcutsSettings() {
               {group.items.map((item) => (
                 <div
                   className="flex items-center justify-between gap-4 px-4 py-2.5"
-                  key={item.label}
+                  key={`${item.group}-${item.label}`}
                 >
                   <span className="text-sm">{item.label}</span>
                   <ComboDisplay combo={item.combo} />
