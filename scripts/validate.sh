@@ -68,7 +68,8 @@ step "cargo fmt --check" "workspace + desktop"
 step "cargo clippy (workspace)" "zero warnings"
 (cd "$ROOT" && cargo clippy --workspace --all-targets -- -D warnings)
 
-step "cargo test (workspace)" ""
+step "cargo test (workspace)" "parser bridge rebuilt first"
+(cd "$ROOT" && pnpm --filter @pikos/bridge build >/dev/null)
 (cd "$ROOT" && cargo test --workspace --quiet)
 
 step "cargo check (desktop)" "zero warnings"

@@ -212,6 +212,25 @@ jobs:
         working-directory: .
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # pikos-cli's `add` tests drive the real NLP parser through the
+      # @pikos/bridge bundle and silently skip themselves when it is absent —
+      # so without this build step the CLI's whole parser surface passes
+      # vacuously here.
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Build the parser bridge
+        working-directory: .
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @pikos/bridge build
+
       - name: Cargo test (workspace)
         working-directory: .
         run: cargo test --workspace --quiet

@@ -23,6 +23,10 @@ if command -v cargo &>/dev/null; then
   cargo clippy --workspace --all-targets --quiet -- -D warnings || exit 1
   printf '\033[0;32m✓\033[0m Rust clippy — crates\n'
 
+  # pikos-cli's parser tests skip themselves when the bridge bundle is missing,
+  # and read a stale one when it is out of date — build it so they mean something.
+  pnpm --filter @pikos/bridge build >/dev/null || exit 1
+
   echo "Running cargo test (workspace)..."
   cargo test --workspace --quiet || exit 1
   printf '\033[0;32m✓\033[0m Rust tests — crates\n'
