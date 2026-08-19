@@ -71,15 +71,21 @@ async fn insert_synced_page(
     now: &str,
 ) -> AppResult<()> {
     let page_id = uuid::Uuid::new_v4().to_string();
+    // The body's own plain text, projected the way every real writer projects it
+    // (`create_page_impl`, and the reconciler when it applies a description). Seeding
+    // an empty projection beside a non-empty body leaves the user's notes on a mirror
+    // unfindable — search reads `content_text`, not `content`.
+    let body = mirror.body.unwrap_or(EMPTY_DOC);
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
             sort_order, scheduled_start, scheduled_end, links, mirror_search_text, created_at, updated_at)
-         VALUES (?, ?, ?, ?, '', 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, 'not_started', 0, '[]', ?, ?, ?, '[]', ?, ?, ?)",
     )
     .bind(&page_id)
     .bind(folder_id)
     .bind(title)
-    .bind(mirror.body.unwrap_or(EMPTY_DOC))
+    .bind(body)
+    .bind(pikos_db::extract_text_from_tiptap(body))
     .bind(sort_order)
     .bind(scheduled_start)
     .bind(scheduled_end)
@@ -182,6 +188,12 @@ async fn insert_synced_recurring(
     now: &str,
 ) -> AppResult<()> {
     let page_id = uuid::Uuid::new_v4().to_string();
+    // The head is the *derived* current occurrence, so it has to be what
+    // `recompute_recurring_schedule` would write — and the engine gives an all-day
+    // occurrence no end at all (`timed_duration` returns None for a date-only
+    // anchor). Stamping the base end here describes a row the first recompute
+    // clears, and the mock, which derives its head, never had one.
+    let head_end = base_start.contains('T').then_some(base_end);
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, content, content_text, status, priority, tags,
             sort_order, scheduled_start, scheduled_end, links, created_at, updated_at)
@@ -193,7 +205,7 @@ async fn insert_synced_recurring(
     .bind(EMPTY_DOC)
     .bind(sort_order)
     .bind(base_start)
-    .bind(base_end)
+    .bind(head_end)
     .bind(now)
     .bind(now)
     .execute(&mut **tx)

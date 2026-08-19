@@ -1,0 +1,290 @@
+{
+  "scope": {
+    "what": [
+      "The mock calendar-sync seed, as an outcome: what a seeded workspace contains.",
+      "The dev command (db/dev/seed.rs) writes it into SQLite; the TS twin",
+      "(shared/seeds/syncedCalendar.ts) builds it in MockStorageAdapter for test mode.",
+      "Every shape here is the only way to reach some synced behaviour by hand, so a",
+      "row that quietly disappears from one side costs the manual QA pass a check.",
+      "Dates are structural: `day` is an offset from the run's local today, `monthEnd`",
+      "is the last day of the run's local month, and both runners resolve them, so the",
+      "table says nothing about the day it is run on.",
+      "A calendar is named by a substring of its folder name, because only the display",
+      "names differ (see excludes)."
+    ],
+    "excludes": [
+      "Calendar/folder display names: the dev command names them 'Personal (synced)' and",
+      "'Work (synced)' to stand apart from the realistic seed's own folders in the same",
+      "dev database, while the mock's canned CalDAV discovery answers 'Personal' and",
+      "'Work' and the seed cannot rename them. Matched by substring instead.",
+      "sort_order values: the dev command numbers per folder from 0, the mock keeps one",
+      "global counter. The order within a calendar is what QA sees, so `pageOrder` pins",
+      "that and not the numbers.",
+      "page_schedules rows for one-off mirrors: the dev command writes one per page, the",
+      "mock keeps only the page's own denormalized schedule. Start/end are asserted on",
+      "the page either way; the stored zone comes from whichever row holds it.",
+      "sync_calendar.last_synced_at: the dev command stamps it so the panel reads fresh;",
+      "the mock has no seam to stamp it from a seed.",
+      "page_sync.user_modified: the dev command marks 'Team standup' owned because a",
+      "parked description can only exist on a page the user has edited. The mock has no",
+      "seam that stamps ownership from a seed (markPageSynced does not), and the",
+      "calendar-sync e2e specs own a mirror by hand and count what teardown keeps, so",
+      "closing this needs the mock seam and those specs, not the seed alone.",
+      "pages.mirror_search_text: a dev-command column with no mock counterpart. The",
+      "location and attendees it is built from are asserted instead."
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "one mock account owning two enabled calendars",
+      "steps": [{ "op": "seed" }],
+      "expect": {
+        "account": {
+          "displayName": "Mock Calendar (dev)",
+          "provider": "caldav",
+          "authKind": "basic"
+        },
+        "calendars": [
+          { "name": "Personal", "color": "#7c9cf0", "enabled": true, "externalFolder": true },
+          { "name": "Work", "color": "#f0a37c", "enabled": true, "externalFolder": true }
+        ],
+        "counts": {
+          "accounts": 1,
+          "calendars": 2,
+          "calendarFolders": 2,
+          "syncedPages": 15,
+          "series": 7,
+          "overrides": 3
+        },
+        "pageOrder": [
+          {
+            "calendar": "Personal",
+            "titles": [
+              "Team standup",
+              "Design review (LA team)",
+              "Company offsite",
+              "Product summit",
+              "Weekly 1:1 (London)",
+              "Recurring review",
+              "Swim class (term ends)"
+            ]
+          },
+          {
+            "calendar": "Work",
+            "titles": [
+              "Tokyo sync",
+              "Budget sign-off",
+              "Old planning (detached)",
+              "Contractor call (no zone)",
+              "Detached sprint",
+              "Release countdown",
+              "On-call rotation",
+              "Month-end close"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "every one-off mirror, with its schedule, zone and read-only surface",
+      "steps": [{ "op": "seed" }],
+      "expect": {
+        "pages": [
+          {
+            "title": "Team standup",
+            "calendar": "Personal",
+            "start": { "day": 0, "time": "11:00" },
+            "end": { "day": 0, "time": "11:30" },
+            "zone": "America/New_York",
+            "syncState": "active",
+            "location": "Zoom",
+            "attendees": ["alex@example.com", "sam@example.com", "jordan@example.com"],
+            "pendingDescription": "Agenda updated: demo the new sync panel, then round-table blockers.",
+            "bodyText": "My prep: land the calendar-sync PR before we demo."
+          },
+          {
+            "title": "Design review (LA team)",
+            "calendar": "Personal",
+            "start": { "day": 0, "time": "15:00" },
+            "end": { "day": 0, "time": "16:00" },
+            "zone": "America/Los_Angeles",
+            "syncState": "active",
+            "location": "Room 4B",
+            "attendees": ["design@example.com"]
+          },
+          {
+            "title": "Company offsite",
+            "calendar": "Personal",
+            "start": { "day": 0 },
+            "end": null,
+            "zone": null,
+            "syncState": "active"
+          },
+          {
+            "title": "Product summit",
+            "calendar": "Personal",
+            "start": { "day": 0 },
+            "end": { "day": 2 },
+            "zone": null,
+            "syncState": "active"
+          },
+          {
+            "title": "Tokyo sync",
+            "calendar": "Work",
+            "start": { "day": 1, "time": "10:00" },
+            "end": { "day": 1, "time": "10:30" },
+            "zone": "Asia/Tokyo",
+            "syncState": "active"
+          },
+          {
+            "title": "Budget sign-off",
+            "calendar": "Work",
+            "start": { "day": -2, "time": "13:00" },
+            "end": { "day": -2, "time": "13:30" },
+            "zone": "America/New_York",
+            "syncState": "active"
+          },
+          {
+            "title": "Old planning (detached)",
+            "calendar": "Work",
+            "start": { "day": 0, "time": "17:00" },
+            "end": { "day": 0, "time": "17:30" },
+            "zone": null,
+            "syncState": "detached"
+          },
+          {
+            "title": "Contractor call (no zone)",
+            "calendar": "Work",
+            "start": { "day": 0, "time": "13:30" },
+            "end": { "day": 0, "time": "14:00" },
+            "zone": null,
+            "syncState": "active"
+          }
+        ]
+      }
+    },
+    {
+      "name": "every recurring shape, with its head, occurrence deltas and connect day",
+      "steps": [{ "op": "seed" }],
+      "expect": {
+        "series": [
+          {
+            "title": "Weekly 1:1 (London)",
+            "calendar": "Personal",
+            "syncState": "active",
+            "rrule": "FREQ=WEEKLY",
+            "ruleZone": "Europe/London",
+            "base": {
+              "start": { "day": 0, "time": "17:00" },
+              "end": { "day": 0, "time": "17:30" }
+            },
+            "head": { "start": { "day": 0, "time": "17:00" }, "end": { "day": 0, "time": "17:30" } }
+          },
+          {
+            "title": "Recurring review",
+            "calendar": "Personal",
+            "syncState": "active",
+            "rrule": "FREQ=WEEKLY",
+            "ruleZone": "America/New_York",
+            "base": {
+              "start": { "day": 0, "time": "10:00" },
+              "end": { "day": 0, "time": "10:30" }
+            },
+            "head": {
+              "start": { "day": 0, "time": "10:00" },
+              "end": { "day": 0, "time": "10:30" }
+            },
+            "exdates": [{ "day": 7, "time": "10:00" }],
+            "moved": {
+              "original": { "day": 14, "time": "10:00" },
+              "start": { "day": 24, "time": "15:00" },
+              "end": { "day": 24, "time": "15:30" },
+              "zone": "America/New_York"
+            }
+          },
+          {
+            "title": "Swim class (term ends)",
+            "calendar": "Personal",
+            "syncState": "detached",
+            "rrule": "FREQ=WEEKLY",
+            "untilDay": 21,
+            "untilTime": "113000",
+            "ruleZone": "$device",
+            "base": {
+              "start": { "day": 0, "time": "06:00" },
+              "end": { "day": 0, "time": "06:30" }
+            },
+            "head": { "start": { "day": 0, "time": "06:00" }, "end": { "day": 0, "time": "06:30" } }
+          },
+          {
+            "title": "Detached sprint",
+            "calendar": "Work",
+            "syncState": "detached",
+            "rrule": "FREQ=WEEKLY",
+            "ruleZone": "$device",
+            "base": {
+              "start": { "day": 0, "time": "07:15" },
+              "end": { "day": 0, "time": "07:45" }
+            },
+            "head": {
+              "start": { "day": 0, "time": "07:15" },
+              "end": { "day": 0, "time": "07:45" }
+            },
+            "moved": {
+              "original": { "day": 14, "time": "07:15" },
+              "start": { "day": 16, "time": "15:00" },
+              "end": { "day": 16, "time": "15:30" },
+              "zone": null
+            }
+          },
+          {
+            "title": "Release countdown",
+            "calendar": "Work",
+            "syncState": "active",
+            "rrule": "FREQ=DAILY;COUNT=6",
+            "ruleZone": "America/New_York",
+            "base": {
+              "start": { "day": -5, "time": "08:30" },
+              "end": { "day": -5, "time": "09:00" }
+            },
+            "head": {
+              "start": { "day": -5, "time": "08:30" },
+              "end": { "day": -5, "time": "09:00" }
+            },
+            "connectedDay": -5
+          },
+          {
+            "title": "On-call rotation",
+            "calendar": "Work",
+            "syncState": "detached",
+            "rrule": "FREQ=WEEKLY",
+            "ruleZone": "UTC",
+            "base": { "start": { "day": 0 }, "end": { "day": 0 } },
+            "head": { "start": { "day": 0 }, "end": null },
+            "moved": {
+              "original": { "day": 14 },
+              "start": { "day": 15 },
+              "end": { "day": 15 },
+              "zone": null
+            }
+          },
+          {
+            "title": "Month-end close",
+            "calendar": "Work",
+            "syncState": "detached",
+            "rrule": "FREQ=MONTHLY;BYMONTHDAY=-1",
+            "ruleZone": "$device",
+            "base": {
+              "start": { "monthEnd": true, "time": "12:30" },
+              "end": { "monthEnd": true, "time": "13:00" }
+            },
+            "head": {
+              "start": { "monthEnd": true, "time": "12:30" },
+              "end": { "monthEnd": true, "time": "13:00" }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
