@@ -109,7 +109,15 @@ export async function seedSyncedCalendar(adapter: StorageAdapter): Promise<void>
       ...(scheduledEnd ? { scheduledEnd } : {}),
     });
     const zone = scheduleRowZone(timezone, state === "detached");
-    mock.markPageSynced(page.id, { state, ...(zone ? { timezone: zone } : {}), ...mirrorMeta });
+    // Same derivation the SQL seeder binds (`db/dev/seed.rs`): a parked description
+    // can only exist on a page the user has edited, so the mirror is owned — which
+    // is what makes a calendar turn-off detach it instead of destroying it.
+    mock.markPageSynced(page.id, {
+      state,
+      userModified: mirror.pendingDescription !== undefined,
+      ...(zone ? { timezone: zone } : {}),
+      ...mirrorMeta,
+    });
   };
 
   // Mirrors the dev command's `insert_synced_recurring`. Occurrence deltas are

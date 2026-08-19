@@ -51,6 +51,10 @@ interface PageExpect {
   attendees?: string[];
   pendingDescription?: string;
   bodyText?: string;
+  /** `page_sync.user_modified` — whether the mirror reads as the user's. Teardown
+   *  keeps an owned page and destroys a bare one, so a seeder that drops the flag
+   *  loses the row the manual QA pass is meant to find still standing. */
+  userModified?: boolean;
 }
 
 interface SeriesExpect {
@@ -239,6 +243,9 @@ const CHECKS: Record<keyof Expect, (want: Expect, adapter: MockStorageAdapter) =
         expected.pendingDescription ?? null
       );
       expect(page.contentText ?? "", `${at} indexed body text`).toBe(expected.bodyText ?? "");
+      expect(adapter.isPageUserModified(page.id), `${at} ownership`).toBe(
+        expected.userModified ?? false
+      );
     }
   },
 

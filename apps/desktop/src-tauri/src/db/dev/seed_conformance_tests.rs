@@ -130,6 +130,11 @@ struct PageExpect {
     /// a mirror, which is what a search has to be able to find.
     #[serde(default)]
     body_text: String,
+    /// `page_sync.user_modified` — whether the mirror reads as the user's. Teardown
+    /// keeps an owned page and destroys a bare one, so a seeder that drops the flag
+    /// loses the row the manual QA pass is meant to find still standing.
+    #[serde(default)]
+    user_modified: bool,
 }
 
 #[derive(Deserialize)]
@@ -410,7 +415,7 @@ async fn check_pages(pool: &SqlitePool, want: &[PageExpect], scenario: &str) {
         let row = sqlx::query(
             "SELECT p.scheduled_start, p.scheduled_end, p.content_text, p.folder_id,
                     s.timezone, ps.sync_state, ps.mirror_location, ps.mirror_attendees,
-                    ps.pending_description
+                    ps.pending_description, ps.user_modified
              FROM pages p
              JOIN page_sync ps ON ps.page_id = p.id
              LEFT JOIN page_schedules s ON s.page_id = p.id AND s.rule_id IS NULL
@@ -472,6 +477,11 @@ async fn check_pages(pool: &SqlitePool, want: &[PageExpect], scenario: &str) {
                 .unwrap_or_default(),
             page.body_text,
             "{scenario}: {at} indexed body text"
+        );
+        assert_eq!(
+            row.get::<bool, _>("user_modified"),
+            page.user_modified,
+            "{scenario}: {at} ownership"
         );
     }
 }

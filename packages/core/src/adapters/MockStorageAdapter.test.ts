@@ -1856,6 +1856,24 @@ describe("markPageSynced (test seam)", () => {
     expect(p?.mirrorAttendees).toEqual(["a@x.com", "b@x.com"]);
     expect(p?.pendingDescription).toBe("new agenda");
   });
+
+  it("stamps page_sync.user_modified, which no adapter call could reach", async () => {
+    const owned = await createTestPage();
+    adapter.markPageSynced(owned.id, { state: "active", userModified: true });
+    expect(adapter.isPageUserModified(owned.id)).toBe(true);
+
+    const bare = await createTestPage();
+    adapter.markPageSynced(bare.id, { state: "active" });
+    expect(adapter.isPageUserModified(bare.id)).toBe(false);
+  });
+
+  it("ownership survives a re-stamp, as the column does", async () => {
+    // A resync rewrites mirror metadata; it never clears the user's claim.
+    const page = await createTestPage();
+    adapter.markPageSynced(page.id, { state: "active", userModified: true });
+    adapter.markPageSynced(page.id, { location: "Room 2", state: "active" });
+    expect(adapter.isPageUserModified(page.id)).toBe(true);
+  });
 });
 
 describe("calendar sync — connect / disconnect dormancy", () => {
@@ -1971,6 +1989,19 @@ describe("calendar sync — teardown keeps the user's work", () => {
     expect(off.detachedPages).toBe(1);
     const folder = (await adapter.listFolders()).find((f) => f.id === folderId);
     expect(folder?.isExternalCalendar).toBe(false);
+  });
+
+  it("a mirror seeded already-owned detaches without anything touching it here", async () => {
+    // The seam the synced-calendar seed uses: a fixture can hand teardown a page
+    // the user "already" edited, which before this was only reachable by editing
+    // it in the test — so a seeded workspace lost a page the real writer keeps.
+    const { calendarId, pageId } = await syncedPage();
+    adapter.markPageSynced(pageId, { state: "active", userModified: true });
+
+    const off = await adapter.toggleSyncCalendar(calendarId, false, null);
+
+    expect((await adapter.getPage(pageId))?.syncState).toBe("detached");
+    expect(off.detachedPages).toBe(1);
   });
 
   it("a completed mirror counts as the user's even with nothing edited", async () => {
