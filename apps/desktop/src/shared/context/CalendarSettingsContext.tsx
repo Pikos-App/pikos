@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
+import { useState } from "react";
 
 import {
   type CalendarCollapseConfig,
@@ -13,6 +13,7 @@ import {
   computeCalendarMetrics,
 } from "@/features/calendar/utils/calendarGeometry";
 import type { CalendarDayCount, CalendarDensity } from "@/shared/constants/calendar";
+import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 export type { CalendarDayCount };
@@ -39,9 +40,7 @@ export interface CalendarSettingsValue {
   setHoveredBand: (v: "top" | "bottom" | null) => void;
 }
 
-export const CalendarSettingsContext = createContext<CalendarSettingsValue | null>(null);
-
-export function CalendarSettingsProvider({ children }: { children: ReactNode }) {
+function useCalendarSettingsValue(): CalendarSettingsValue {
   const [dayCount, setDayCount] = useLocalStorage<CalendarDayCount>("pikos:calendarDayCount", 7);
   const [density, setDensity] = useLocalStorage<CalendarDensity>("pikos:calendarDensity", "normal");
   const [topCollapsed, setTopCollapsedRaw] = useLocalStorage<boolean>(
@@ -76,7 +75,7 @@ export function CalendarSettingsProvider({ children }: { children: ReactNode }) 
   // Ephemeral, not persisted — pointer-tracking state for the band hover sync.
   const [hoveredBand, setHoveredBand] = useState<"top" | "bottom" | null>(null);
 
-  const value: CalendarSettingsValue = {
+  return {
     collapse,
     dayCount,
     density,
@@ -91,15 +90,10 @@ export function CalendarSettingsProvider({ children }: { children: ReactNode }) 
     setTopCollapsed: setTopCollapsedRaw,
     setTopHour,
   };
-
-  return (
-    <CalendarSettingsContext.Provider value={value}>{children}</CalendarSettingsContext.Provider>
-  );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function useCalendarSettings(): CalendarSettingsValue {
-  const ctx = useContext(CalendarSettingsContext);
-  if (!ctx) throw new Error("useCalendarSettings must be used within <CalendarSettingsProvider>");
-  return ctx;
-}
+const calendarSettings = createSettingsContext("CalendarSettings", useCalendarSettingsValue);
+
+export const CalendarSettingsContext = calendarSettings.Context;
+export const CalendarSettingsProvider = calendarSettings.Provider;
+export const useCalendarSettings = calendarSettings.useSettings;

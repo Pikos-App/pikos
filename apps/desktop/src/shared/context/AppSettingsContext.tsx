@@ -1,5 +1,6 @@
-import { createContext, type ReactNode, useContext, useEffect } from "react";
+import { useEffect } from "react";
 
+import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 /** 0 = Sunday, 1 = Monday — matches date-fns weekStartsOn. */
@@ -43,9 +44,7 @@ export interface AppSettingsValue {
   setQuietHoursEnd: (v: string) => void;
 }
 
-const AppSettingsContext = createContext<AppSettingsValue | null>(null);
-
-export function AppSettingsProvider({ children }: { children: ReactNode }) {
+function useAppSettingsValue(): AppSettingsValue {
   const [weekStart, setWeekStart] = useLocalStorage<WeekStart>("pikos:weekStart", 1);
   const [defaultFolderId, setDefaultFolderId] = useLocalStorage<string | null>(
     "pikos:defaultFolderId",
@@ -110,7 +109,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     quietHoursEnd,
   ]);
 
-  const value: AppSettingsValue = {
+  return {
     autoUpdateEnabled,
     defaultFolderId,
     defaultReminderMinutes,
@@ -134,13 +133,9 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     summaryTime,
     weekStart,
   };
-
-  return <AppSettingsContext.Provider value={value}>{children}</AppSettingsContext.Provider>;
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function useAppSettings(): AppSettingsValue {
-  const ctx = useContext(AppSettingsContext);
-  if (!ctx) throw new Error("useAppSettings must be used within <AppSettingsProvider>");
-  return ctx;
-}
+const appSettings = createSettingsContext("AppSettings", useAppSettingsValue);
+
+export const AppSettingsProvider = appSettings.Provider;
+export const useAppSettings = appSettings.useSettings;
