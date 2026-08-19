@@ -305,10 +305,25 @@ pub async fn export_csv(
     Ok(dest)
 }
 
+/// One reminder offset in the ISO-8601 duration form the importer's
+/// `parseDurationToMinutes` reads: a leading `-` means "before the start" (the
+/// sign is what the importer strips, so it is decoration either way), and `PT0S`
+/// is the at-start case its own doc comment names. Minutes are the only unit
+/// emitted — that is the unit `page_reminders` stores, and the importer's
+/// grammar takes any minute count, so no lossy hour/day rounding is needed.
+fn reminder_duration(minutes_before: i64) -> String {
+    if minutes_before == 0 {
+        "PT0S".to_string()
+    } else {
+        format!("-PT{minutes_before}M")
+    }
+}
+
 /// Build the CSV body (header + one row per non-deleted page). Split from
 /// `export_csv` so the escaping and column order are testable without writing
 /// to disk. Column names match the CSV importer's header heuristics so the
-/// output round-trips back through import.
+/// output round-trips back through import — including `Repeat` and `Reminder`,
+/// which the importer has always understood but the export used to drop.
 pub(crate) async fn build_export_csv_impl(
     pool: &sqlx::SqlitePool,
     include_synced: bool,
@@ -320,6 +335,31 @@ pub(crate) async fn build_export_csv_impl(
 
     let folder_names: std::collections::HashMap<String, String> = folders.into_iter().collect();
 
+    // Recurrence and reminders hang off their own tables, so they are read once
+    // and keyed by page rather than joined onto the page query — one rule per
+    // page (the table is UNIQUE on page_id), any number of reminders.
+    let rrules: std::collections::HashMap<String, String> =
+        sqlx::query_as::<_, (String, String)>("SELECT page_id, rrule FROM page_recurrence_rules")
+            .fetch_all(pool)
+            .await?
+            .into_iter()
+            .collect();
+
+    // The `-1` sentinel means "no reminders on this page", which no ISO-8601
+    // duration can say — it is left out, and the empty cell it produces reads on
+    // import as "fall back to the global default", the nearest honest match.
+    let mut reminders: std::collections::HashMap<String, Vec<i64>> =
+        std::collections::HashMap::new();
+    for (page_id, minutes_before) in sqlx::query_as::<_, (String, i64)>(
+        "SELECT page_id, minutes_before FROM page_reminders \
+         WHERE minutes_before >= 0 ORDER BY minutes_before ASC",
+    )
+    .fetch_all(pool)
+    .await?
+    {
+        reminders.entry(page_id).or_default().push(minutes_before);
+    }
+
     let pages = fetch_export_pages(
         pool,
         "id, folder_id, title, content_text, status, priority, tags, \
@@ -330,9 +370,10 @@ pub(crate) async fn build_export_csv_impl(
 
     let mut out = String::new();
 
-    out.push_str("Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Created At,Updated At,Completed At\n");
+    out.push_str("Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Repeat,Reminder,Created At,Updated At,Completed At\n");
 
     for row in &pages {
+        let id: String = row.try_get("id").unwrap_or_default();
         let title: String = row.try_get("title").unwrap_or_default();
         let content_text: String = row.try_get("content_text").unwrap_or_default();
         let status: String = row.try_get("status").unwrap_or_default();
@@ -357,6 +398,21 @@ pub(crate) async fn build_export_csv_impl(
             String::new()
         };
 
+        // The rule is stored the way the importer wants it — bare, no `RRULE:`
+        // prefix and no DTSTART — so it goes out verbatim.
+        let repeat = rrules.get(&id).cloned().unwrap_or_default();
+        // `;` rather than `,`: the importer splits on either, and a semicolon
+        // keeps a multi-reminder cell out of the quoting path.
+        let reminder = reminders
+            .get(&id)
+            .map(|mins| {
+                mins.iter()
+                    .map(|m| reminder_duration(*m))
+                    .collect::<Vec<_>>()
+                    .join(";")
+            })
+            .unwrap_or_default();
+
         fn csv_field(s: &str) -> String {
             if s.contains(',') || s.contains('\n') || s.contains('"') {
                 format!("\"{}\"", s.replace('"', "\"\""))
@@ -380,6 +436,10 @@ pub(crate) async fn build_export_csv_impl(
         out.push_str(&csv_field(scheduled_start.as_deref().unwrap_or("")));
         out.push(',');
         out.push_str(&csv_field(scheduled_end.as_deref().unwrap_or("")));
+        out.push(',');
+        out.push_str(&csv_field(&repeat));
+        out.push(',');
+        out.push_str(&csv_field(&reminder));
         out.push(',');
         out.push_str(&csv_field(&created_at));
         out.push(',');
