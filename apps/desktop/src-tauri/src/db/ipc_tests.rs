@@ -135,6 +135,7 @@ fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
         ("list_notification_history", json!({ "limit": 50 })),
         ("get_sync_status", json!({})),
         ("google_sync_available", json!({})),
+        ("get_usage_stats", json!({})),
     ]
 }
 
@@ -155,11 +156,19 @@ async fn seed_probe_workspace(pool: &sqlx::SqlitePool) {
 }
 
 /// Read commands the probe below cannot drive, with the reason.
-const NOT_PROBED: &[(&str, &str)] = &[(
-    "connect_db",
-    "opens a pool and migrates it — writing is the whole point, and it would \
+const NOT_PROBED: &[(&str, &str)] = &[
+    (
+        "backup_db",
+        "copies the workspace file into the app data dir — it reads no rows, but \
+         driving it writes to the machine running the test",
+    ),
+    ("backup_db_before_import", "same copy, on the import path"),
+    (
+        "connect_db",
+        "opens a pool and migrates it — writing is the whole point, and it would \
      swap the pool the probe measures",
-)];
+    ),
+];
 
 fn probe_body(cmd: &str) -> Option<serde_json::Value> {
     wire_cases()
@@ -235,6 +244,7 @@ fn build_app(pool: sqlx::SqlitePool) -> tauri::App<tauri::test::MockRuntime> {
             super::schedules::list_recurrence_rules,
             super::sync::get_sync_status,
             super::sync::google_sync_available,
+            super::dev::get_usage_stats,
         ])
         .build(ctx)
         .unwrap();
