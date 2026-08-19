@@ -15,7 +15,9 @@ chrono-tz = "0.10"
 iana-time-zone = "0.1"
 thiserror = "2"
 tokio = { version = "1", features = ["time"] }
-pikos-recurrence = { path = "../pikos-recurrence" }
+# tz: the reconciler and the notification log resolve stored wall clocks against
+# IANA zones through `pikos_recurrence::zoned`, the one home for that policy.
+pikos-recurrence = { path = "../pikos-recurrence", features = ["tz"] }
 log = "0.4"
 ts-rs = "12.0.1"
 

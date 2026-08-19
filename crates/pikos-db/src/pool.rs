@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use pikos_recurrence::WallClock;
 use sqlx::migrate::Migrator;
 use sqlx::SqlitePool;
 
@@ -39,13 +40,13 @@ pub fn now_iso() -> String {
 /// `completed_at.slice(0,10) === localToday()` comparison fail whenever the UTC
 /// date differs from the local date (i.e. for much of every day off-UTC).
 pub fn now_local_iso() -> String {
-    chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
+    WallClock::timed(chrono::Local::now().naive_local()).format()
 }
 
 /// Today's local date, `YYYY-MM-DD` — the day key occurrence dates are compared
 /// against. Local for the same reason as [`now_local_iso`].
 pub fn today_local() -> String {
-    chrono::Local::now().format("%Y-%m-%d").to_string()
+    WallClock::all_day(chrono::Local::now().date_naive()).format()
 }
 
 /// The device's IANA zone, resolved once per process — the lookup reads OS config
@@ -293,9 +294,31 @@ async fn backfill_content_text(pool: &SqlitePool) -> AppResult<()> {
     Ok(())
 }
 
+/// Plain text → a Tiptap JSON document, one paragraph per line — the doc the
+/// editor produces for pasted text.
+///
+/// Paired with [`extract_text_from_tiptap`], and here rather than at either
+/// caller because the round trip has to hold: the reconciler hashes a seeded
+/// description through the extractor to decide whether the body is still
+/// pristine, so a builder that drifted from the projection would classify every
+/// synced page as user-edited.
+pub fn build_tiptap_doc(text: &str) -> String {
+    let content: Vec<serde_json::Value> = text
+        .split('\n')
+        .map(|line| {
+            if line.is_empty() {
+                serde_json::json!({ "type": "paragraph" })
+            } else {
+                serde_json::json!({ "type": "paragraph", "content": [{ "type": "text", "text": line }] })
+            }
+        })
+        .collect();
+    serde_json::json!({ "type": "doc", "content": content }).to_string()
+}
+
 /// Recursively extract plain text from a Tiptap JSON document. Mirrors the
 /// TypeScript `extractText()` so FTS content_text stays in sync.
-pub(crate) fn extract_text_from_tiptap(content: &str) -> String {
+pub fn extract_text_from_tiptap(content: &str) -> String {
     if content.is_empty() || content == "{}" {
         return String::new();
     }
