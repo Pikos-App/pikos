@@ -2,7 +2,8 @@
 // 2026-06-10): re-entrant clone-minting calls, exdate read-modify-write
 // clobbering, and completion racing the per-page mutation queue.
 
-import { formatLocalISO, MockStorageAdapter, resolveSyncedInstant } from "@pikos/core";
+import { formatLocalISO, resolveSyncedInstant } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

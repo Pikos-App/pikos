@@ -1,4 +1,4 @@
-import { MockStorageAdapter } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

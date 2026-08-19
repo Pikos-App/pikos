@@ -5,12 +5,12 @@
 // data load via a registered loader callback.
 
 import type { StorageAdapter, Workspace } from "@pikos/core";
-import { MockStorageAdapter } from "@pikos/core";
 import { launchSeedLoader, SEED_LOADERS, type SeedScenario } from "@seeds/seedLoaders";
 import { appDataDir } from "@tauri-apps/api/path";
 import { load } from "@tauri-apps/plugin-store";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
+import { requireMockStorage } from "@/shared/adapters/mockStorageChunk";
 import { connectDb, TauriSQLiteAdapter } from "@/shared/adapters/TauriSQLiteAdapter";
 import {
   createWorkspaceEventBus,
@@ -60,10 +60,11 @@ interface WorkspaceInternalValue extends WorkspaceContextValue {
 const WorkspaceContext = createContext<WorkspaceInternalValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
+  // Test mode reads the in-memory adapter out of its own chunk — see
+  // shared/adapters/mockStorageChunk.ts for why the chunk is already in by the
+  // time this runs, and what it throws if it isn't.
   const [adapter] = useState<StorageAdapter>(() =>
-    import.meta.env["VITE_TEST_MODE"] === "true"
-      ? new MockStorageAdapter()
-      : new TauriSQLiteAdapter()
+    import.meta.env["VITE_TEST_MODE"] === "true" ? requireMockStorage() : new TauriSQLiteAdapter()
   );
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);

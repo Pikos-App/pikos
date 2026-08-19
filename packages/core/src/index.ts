@@ -1,7 +1,12 @@
 // @pikos/core — pure TS: types, parsers, storage interface
 // Zero Tauri / React / DOM dependencies
 
-export * from "./adapters/MockStorageAdapter";
+// Type only, deliberately. MockStorageAdapter is a ~1,400-line test double, and
+// this index is what the production entry chunk pulls in — a value re-export
+// here pins the whole class (and the recurrence engine it reaches for) into
+// that chunk no matter who actually uses it. Tests and the test-mode adapter
+// chunk import the class from "@pikos/core/testing" instead.
+export type { MockStorageAdapter } from "./adapters/MockStorageAdapter";
 export * from "./adapters/NoopPlatformAdapter";
 // ── Calendar math: row/block layout, hour↔pixel geometry, grid constants ──
 export {

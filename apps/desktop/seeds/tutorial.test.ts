@@ -1,4 +1,5 @@
-import { getLocalTimezone, MockStorageAdapter } from "@pikos/core";
+import { getLocalTimezone } from "@pikos/core";
+import { MockStorageAdapter } from "@pikos/core/testing";
 import { describe, expect, it } from "vitest";
 
 import { seedTutorial } from "./tutorial";

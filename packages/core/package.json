@@ -4,7 +4,8 @@
   "license": "BUSL-1.1",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/adapters/MockStorageAdapter.ts"
   },
   "scripts": {
     "lint": "eslint src --cache --cache-location node_modules/.cache/eslint",
