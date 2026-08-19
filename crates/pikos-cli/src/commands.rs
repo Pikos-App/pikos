@@ -8,13 +8,15 @@ use pikos_db::{
 };
 use serde_json::{json, Value};
 
-use crate::cli::{Cli, CliCommand};
+use crate::cli::{Cli, CliCommand, FolderCommand, ReminderCommand};
 use crate::error::{classify, CliError};
 use crate::ops::{
-    cmd_add, confirm, list_pages, mark_done, require_page, validate_priority, validate_status,
-    ListQuery,
+    add_reminder, cmd_add, confirm, create_folder, list_folders, list_pages, list_reminders,
+    mark_done, remove_reminder, require_page, validate_priority, validate_status, ListQuery,
 };
-use crate::render::{print_json, render_page, render_search, render_summary_list};
+use crate::render::{
+    print_json, render_folders, render_page, render_reminders, render_search, render_summary_list,
+};
 use crate::schedule::resolve_schedule_change;
 use crate::workspace::open_workspace;
 use crate::write::{schedule_once, text_to_tiptap};
@@ -276,6 +278,50 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 println!("Moved {id} to the trash");
             }
         }
+        CliCommand::Folders { command } => match command {
+            FolderCommand::List => {
+                let folders = list_folders(&pool).await?;
+                if json {
+                    print_json(&folders);
+                } else {
+                    println!("{}", render_folders(&folders));
+                }
+            }
+            FolderCommand::Create { name } => {
+                let folder = create_folder(&pool, name.join(" ").trim()).await?;
+                if json {
+                    print_json(&folder);
+                } else {
+                    println!("Created {}: {}", folder.id, folder.name);
+                }
+            }
+        },
+        CliCommand::Reminders { command } => match command {
+            ReminderCommand::List { page_id } => {
+                let reminders = list_reminders(&pool, &page_id).await?;
+                if json {
+                    print_json(&reminders);
+                } else {
+                    println!("{}", render_reminders(&reminders));
+                }
+            }
+            ReminderCommand::Add { page_id, minutes } => {
+                let reminder = add_reminder(&pool, &page_id, minutes).await?;
+                if json {
+                    print_json(&reminder);
+                } else {
+                    println!("Added reminder {} at {} min", reminder.id, minutes);
+                }
+            }
+            ReminderCommand::Rm { reminder_id } => {
+                remove_reminder(&pool, &reminder_id).await?;
+                if json {
+                    print_json(&json!({ "id": reminder_id, "removed": true }));
+                } else {
+                    println!("Removed reminder {reminder_id}");
+                }
+            }
+        },
     }
     Ok(())
 }

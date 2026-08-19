@@ -4,12 +4,16 @@
 //! the subcommand bodies and the MCP tools drive one implementation rather than
 //! two that drift.
 
+use std::collections::HashMap;
+
 use pikos_db::{
-    complete_recurring_page_impl, create_page_impl, create_recurrence_rule_impl,
-    fuzzy_match_folder, get_page, get_recurrence_rule_impl, list_folders_impl, list_pages_impl,
-    now_local_iso, today_local, CompleteRecurringInput, Folder, NewRecurrenceRule, Page,
-    PageFilter, PageSummary, PageUpdate,
+    complete_recurring_page_impl, create_folder_impl, create_page_impl, create_page_reminder,
+    create_recurrence_rule_impl, delete_page_reminder, fuzzy_match_folder, get_page,
+    get_recurrence_rule_impl, list_folders_impl, list_page_reminders, list_pages_impl,
+    now_local_iso, today_local, CompleteRecurringInput, Folder, NewFolder, NewRecurrenceRule, Page,
+    PageFilter, PageReminder, PageSummary, PageUpdate,
 };
+use serde::Serialize;
 use serde_json::Value;
 use sqlx::SqlitePool;
 
@@ -99,6 +103,55 @@ pub async fn list_pages(pool: &SqlitePool, q: ListQuery) -> Result<Vec<PageSumma
     Ok(pages)
 }
 
+// ─── Folders ────────────────────────────────────────────────────────────────
+
+/// A folder plus how many live pages sit in it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderEntry {
+    #[serde(flatten)]
+    pub folder: Folder,
+    pub page_count: usize,
+}
+
+/// Folders with their page counts. The tally comes from one page listing rather
+/// than a per-folder query, so the whole command is two round trips regardless
+/// of how many folders exist.
+pub async fn list_folders(pool: &SqlitePool) -> Result<Vec<FolderEntry>, CliError> {
+    let folders = list_folders_impl(pool).await.map_err(classify)?;
+    let pages = list_pages_impl(pool, None).await.map_err(classify)?;
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for p in &pages {
+        if let Some(id) = &p.folder_id {
+            *counts.entry(id.clone()).or_default() += 1;
+        }
+    }
+    Ok(folders
+        .into_iter()
+        .map(|folder| FolderEntry {
+            page_count: counts.get(&folder.id).copied().unwrap_or(0),
+            folder,
+        })
+        .collect())
+}
+
+pub async fn create_folder(pool: &SqlitePool, name: &str) -> Result<Folder, CliError> {
+    if name.trim().is_empty() {
+        return Err(CliError::usage("a folder needs a name"));
+    }
+    create_folder_impl(
+        pool,
+        NewFolder {
+            name: name.to_string(),
+            parent_id: None,
+            color: None,
+            icon: None,
+        },
+    )
+    .await
+    .map_err(classify)
+}
+
 /// Resolve a `--folder` argument to the value a [`PageFilter`] wants: an exact id
 /// first, then the same fuzzy name match `add` uses for `~folder`.
 ///
@@ -123,6 +176,40 @@ pub async fn resolve_folder_ref(pool: &SqlitePool, needle: &str) -> Result<Value
     Err(CliError::not_found(format!(
         "No folder matches \"{needle}\" — run `pikos folders list` to see them."
     )))
+}
+
+// ─── Reminders ──────────────────────────────────────────────────────────────
+
+pub async fn list_reminders(
+    pool: &SqlitePool,
+    page_id: &str,
+) -> Result<Vec<PageReminder>, CliError> {
+    require_page(pool, page_id).await?;
+    list_page_reminders(pool, page_id).await.map_err(classify)
+}
+
+/// `minutes` is minutes *ahead* of the scheduled start — 0 fires at the start,
+/// and -1 is pikos-db's "no reminders for this page" sentinel.
+pub async fn add_reminder(
+    pool: &SqlitePool,
+    page_id: &str,
+    minutes: i64,
+) -> Result<PageReminder, CliError> {
+    if minutes < -1 {
+        return Err(CliError::usage(format!(
+            "minutes counts backwards from the start, so it cannot be below -1 (got {minutes})"
+        )));
+    }
+    require_page(pool, page_id).await?;
+    create_page_reminder(pool, page_id, minutes)
+        .await
+        .map_err(classify)
+}
+
+pub async fn remove_reminder(pool: &SqlitePool, reminder_id: &str) -> Result<(), CliError> {
+    delete_page_reminder(pool, reminder_id)
+        .await
+        .map_err(classify)
 }
 
 /// Parse natural-language text into pages, then write them exactly as Quick Add

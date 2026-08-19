@@ -1057,3 +1057,111 @@ async fn list_rejects_a_priority_outside_the_scale_exit_2() {
     seed(dbs, vec![]).await;
     assert_eq!(code(&cli(dbs, &["list", "--priority", "9", "--json"])), 2);
 }
+
+// ─── folders ─────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn folders_list_reports_names_and_page_counts() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let projects = make_folder(dbs, "Projects").await;
+    make_folder(dbs, "Empty").await;
+    let mut filed = base_page("Filed");
+    filed.folder_id = Some(projects.clone());
+    seed(dbs, vec![filed]).await;
+
+    let listing = json(&cli(dbs, &["folders", "list", "--json"]));
+    let rows = listing.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    let counts: Vec<(&str, u64)> = rows
+        .iter()
+        .map(|f| {
+            (
+                f["name"].as_str().unwrap(),
+                f["pageCount"].as_u64().unwrap(),
+            )
+        })
+        .collect();
+    assert!(counts.contains(&("Projects", 1)), "{counts:?}");
+    assert!(counts.contains(&("Empty", 0)), "{counts:?}");
+}
+
+#[tokio::test]
+async fn folders_create_makes_a_folder_list_can_filter_on() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![base_page("Loose")]).await;
+
+    let made = cli(dbs, &["folders", "create", "Reading", "--json"]);
+    assert!(
+        made.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&made.stderr)
+    );
+    let id = json(&made)["id"].as_str().unwrap().to_string();
+
+    // The folder the CLI just made is immediately addressable as a filter.
+    assert!(json(&cli(dbs, &["list", "--folder", "Reading", "--json"]))
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert_eq!(json(&cli(dbs, &["folders", "list", "--json"]))[0]["id"], id);
+}
+
+// ─── reminders ───────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn reminders_add_list_and_rm_round_trip() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup")]).await;
+
+    let added = cli(
+        dbs,
+        &["reminders", "add", &ids[0], "--minutes", "15", "--json"],
+    );
+    assert!(
+        added.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    let reminder_id = json(&added)["id"].as_str().unwrap().to_string();
+
+    let listed = json(&cli(dbs, &["reminders", "list", &ids[0], "--json"]));
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["minutesBefore"], 15);
+
+    assert!(cli(dbs, &["reminders", "rm", &reminder_id, "--json"])
+        .status
+        .success());
+    assert!(json(&cli(dbs, &["reminders", "list", &ids[0], "--json"]))
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn reminders_on_a_missing_page_exit_3() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    seed(dbs, vec![]).await;
+    let missing = "00000000-0000-0000-0000-000000000000";
+    assert_eq!(code(&cli(dbs, &["reminders", "list", missing])), 3);
+    assert_eq!(
+        code(&cli(dbs, &["reminders", "add", missing, "--minutes", "5"])),
+        3
+    );
+}
+
+#[tokio::test]
+async fn reminders_reject_minutes_below_the_opt_out_sentinel_exit_2() {
+    let db = unique_db();
+    let dbs = db.to_str().unwrap();
+    let ids = seed(dbs, vec![base_page("Standup")]).await;
+    let out = cli(
+        dbs,
+        &["reminders", "add", &ids[0], "--minutes", "-5", "--json"],
+    );
+    assert_eq!(code(&out), 2);
+}

@@ -106,4 +106,39 @@ pub enum CliCommand {
         )]
         hard: bool,
     },
+    /// Inspect and create folders
+    Folders {
+        #[command(subcommand)]
+        command: FolderCommand,
+    },
+    /// Per-page reminders, in minutes ahead of the scheduled start
+    Reminders {
+        #[command(subcommand)]
+        command: ReminderCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum FolderCommand {
+    /// List folders with their page counts
+    List,
+    /// Create a folder at the top level
+    Create { name: Vec<String> },
+}
+
+#[derive(Subcommand)]
+pub enum ReminderCommand {
+    /// List a page's reminders
+    List { page_id: String },
+    /// Add a reminder to a page
+    Add {
+        page_id: String,
+        #[arg(
+            long,
+            help = "Minutes before the scheduled start; 0 fires at the start"
+        )]
+        minutes: i64,
+    },
+    /// Remove a reminder by its own id
+    Rm { reminder_id: String },
 }
