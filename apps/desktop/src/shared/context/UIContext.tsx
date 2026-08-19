@@ -3,10 +3,9 @@
 // Multi-select state lives in SelectionContext (useSelection).
 // Calendar DnD bridge lives in CalendarDnDContext (useCalendarDnD).
 
-import type { PageSummary } from "@pikos/core";
+import type { PageSummary, SortMode } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
-import type { SortMode } from "@/features/pages";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 

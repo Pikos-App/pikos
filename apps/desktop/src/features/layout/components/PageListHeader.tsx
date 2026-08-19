@@ -1,7 +1,7 @@
 // Sort is hidden on the Today view — it's always grouped overdue → today,
 // not user-sortable.
 
-import type { Folder } from "@pikos/core";
+import type { Folder, SortMode } from "@pikos/core";
 import {
   ArrowUpDown,
   CalendarDays,
@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FolderSwitcher } from "@/features/folders";
-import type { SortMode } from "@/features/pages";
 import { IconToolbar } from "@/shared/components/IconToolbar";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 

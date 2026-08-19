@@ -1,4 +1,5 @@
-import type { SortMode } from "@/features/pages";
+import type { SortMode } from "@pikos/core";
+
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 

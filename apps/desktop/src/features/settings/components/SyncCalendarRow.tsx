@@ -1,13 +1,12 @@
 import type { CalendarSyncResult, SyncCalendar } from "@pikos/core";
+import { calendarSyncDot, PALETTE_COLORS } from "@pikos/core";
 import { formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
-import { PALETTE_COLORS } from "@/shared/constants/colors";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 
-import { calendarSyncDot } from "./syncStatus";
 import { SyncStatusDot } from "./SyncStatusDot";
 
 interface SyncCalendarRowProps {

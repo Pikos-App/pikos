@@ -1,15 +1,20 @@
 import { SortableContext } from "@dnd-kit/sortable";
-import type { PageSummary } from "@pikos/core";
-import { nowLocalISO } from "@pikos/core";
+import type { PageSummary, VirtualRow } from "@pikos/core";
+import {
+  buildPageListRows,
+  groupTodayPages,
+  nowLocalISO,
+  partitionToggleSelection,
+  shouldHideSidebar,
+} from "@pikos/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
-import { shouldHideSidebar, useLayoutMode } from "@/features/layout/breakpoints";
-import { groupTodayPages, PageListItem, usePageList } from "@/features/pages";
+import { useLayoutMode } from "@/features/layout/breakpoints";
+import { PageListItem, usePageList } from "@/features/pages";
 import { useActiveSortMode } from "@/features/pages/hooks/useActiveSortMode";
-import { partitionToggleSelection } from "@/features/pages/utils/toggleSelection";
 import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
@@ -24,8 +29,6 @@ import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
 import { isArrowKeyConsumer, isInteractiveTarget } from "@/shared/keyboard/isInteractiveTarget";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
-import { buildPageListRows } from "../utils/buildPageListRows";
-import type { VirtualRow } from "../utils/buildPageListRows";
 import { PageListEmptyState } from "./PageListEmptyState";
 import { PageListHeader, viewName } from "./PageListHeader";
 

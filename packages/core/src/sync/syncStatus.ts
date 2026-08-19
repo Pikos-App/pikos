@@ -1,4 +1,4 @@
-import type { CalendarSyncResult, SyncCalendar } from "@pikos/core";
+import type { CalendarSyncResult, SyncCalendar } from "../types";
 
 // Four-state calendar health, derived not persisted: the read model only has
 // `enabled` + `lastSyncedAt`, so a resync result (when in hand) sharpens the

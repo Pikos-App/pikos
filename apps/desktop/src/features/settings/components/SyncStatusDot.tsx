@@ -1,8 +1,7 @@
+import type { SyncDotMeta } from "@pikos/core";
 import { AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-
-import type { SyncDotMeta } from "./syncStatus";
 
 // Health has its own colour scale, not the calendar's — so a pastel calendar
 // colour can't read as "healthy" or "broken".

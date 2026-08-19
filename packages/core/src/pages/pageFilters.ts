@@ -1,12 +1,7 @@
-import type { PageSummary } from "@pikos/core";
-import {
-  emojiAwareCompare,
-  isAllDayIso,
-  isDone,
-  isOpen,
-  localToday,
-  parseLocalISO,
-} from "@pikos/core";
+import type { PageSummary } from "../types";
+import { isAllDayIso, localToday, parseLocalISO } from "../utils/dates";
+import { isDone, isOpen } from "../utils/page";
+import { emojiAwareCompare } from "../utils/sort";
 
 export type SortMode = "manual" | "date" | "title" | "priority";
 

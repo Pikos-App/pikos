@@ -1,7 +1,7 @@
 import type { PagePriority, PageStatus, PageSummary } from "@pikos/core";
+import { getVisiblePages, sortPages } from "@pikos/core";
 import { useState } from "react";
 
-import { getVisiblePages, sortPages } from "@/features/pages/utils/pageFilters";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";

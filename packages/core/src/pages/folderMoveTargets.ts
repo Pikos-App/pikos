@@ -1,4 +1,4 @@
-import type { Folder } from "@pikos/core";
+import type { Folder } from "../types";
 
 /**
  * Folders a page may be moved into. Excludes external-calendar folders — the

@@ -1,4 +1,5 @@
 import type { AccountWithCalendars, CalendarSyncResult } from "@pikos/core";
+import { accountConnectionState, defaultColorForProvider } from "@pikos/core";
 import { CalendarSync, KeyRound, MoreHorizontal, RefreshCw, Server } from "lucide-react";
 import { useState } from "react";
 
@@ -9,12 +10,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { defaultColorForProvider } from "@/shared/constants/colors";
 
 import { ReconnectAccountDialog } from "./ReconnectAccountDialog";
 import { SyncCalendarRow } from "./SyncCalendarRow";
-import { accountConnectionState } from "./syncStatus";
-
 interface SyncAccountCardProps {
   account: AccountWithCalendars;
   results: Record<string, CalendarSyncResult["status"]>;

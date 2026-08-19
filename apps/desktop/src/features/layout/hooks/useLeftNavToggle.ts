@@ -1,7 +1,8 @@
+import { shouldOverlayPageList } from "@pikos/core";
+
 import { useUI } from "@/shared/context/UIContext";
 
-import { shouldOverlayPageList, useLayoutMode } from "../breakpoints";
-
+import { useLayoutMode } from "../breakpoints";
 interface LeftNavToggle {
   isOpen: boolean;
   /** Toggle visibility — routes to the right state for the current layout mode. */

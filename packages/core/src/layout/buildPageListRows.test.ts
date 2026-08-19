@@ -1,6 +1,6 @@
-import type { PageSummary } from "@pikos/core";
 import { describe, expect, it } from "vitest";
 
+import type { PageSummary } from "../types";
 import { buildPageListRows } from "./buildPageListRows";
 import type { BuildPageListRowsInput } from "./buildPageListRows";
 

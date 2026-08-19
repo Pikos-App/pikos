@@ -1,4 +1,4 @@
-import type { PageStatus } from "@pikos/core";
+import type { PageStatus } from "../types";
 
 export interface ToggleSelectionGroups<T> {
   /** Non-recurring, currently-open page ids to mark done. */
