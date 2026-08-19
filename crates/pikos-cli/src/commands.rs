@@ -18,6 +18,12 @@ use crate::workspace::open_workspace;
 
 pub async fn run(cli: Cli) -> Result<(), CliError> {
     let json = cli.json;
+    // The MCP server owns its own workspace lifecycle: it opens the file on the
+    // first tool call, so a client can still complete `initialize` and then be told
+    // in a frame it can read that the workspace is missing or behind.
+    if matches!(cli.command, CliCommand::Mcp) {
+        return crate::mcp::serve(cli.db, cli.migrate).await;
+    }
     let pool = open_workspace(&cli.db, cli.migrate).await?;
 
     match cli.command {
@@ -251,6 +257,7 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
                 }
             }
         },
+        CliCommand::Mcp => unreachable!("served above, before the workspace was opened"),
     }
     Ok(())
 }
