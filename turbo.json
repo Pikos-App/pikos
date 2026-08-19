@@ -12,14 +12,14 @@
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
-      "inputs": ["src/**", "tsconfig*.json", "vitest.config.ts", "package.json"]
+      "inputs": ["src/**", "seeds/**", "tsconfig*.json", "vitest.config.ts", "package.json"]
     },
     "lint": {
-      "inputs": ["src/**", "package.json"]
+      "inputs": ["src/**", "seeds/**", "package.json"]
     },
     "test": {
       "outputs": ["coverage/**"],
-      "inputs": ["src/**", "vitest.config.ts", "tsconfig*.json", "package.json"]
+      "inputs": ["src/**", "seeds/**", "vitest.config.ts", "tsconfig*.json", "package.json"]
     }
   }
 }

@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
 import {
   readConformanceTable,
   unhandledStep,
-} from "../../../../../packages/core/src/adapters/conformanceTable";
+} from "../../../packages/core/src/adapters/conformanceTable";
 import { seedSyncedCalendar } from "./syncedCalendar";
 
 interface Step {

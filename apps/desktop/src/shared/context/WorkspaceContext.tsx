@@ -6,6 +6,7 @@
 
 import type { StorageAdapter, Workspace } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
+import { launchSeedLoader, SEED_LOADERS, type SeedScenario } from "@seeds/seedLoaders";
 import { appDataDir } from "@tauri-apps/api/path";
 import { load } from "@tauri-apps/plugin-store";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -18,7 +19,6 @@ import {
   type WorkspaceEventPayloadMap,
 } from "@/shared/events/workspaceEvents";
 import { createLogger } from "@/shared/logger";
-import { launchSeedLoader, SEED_LOADERS, type SeedScenario } from "@/shared/seeds/seedLoaders";
 
 const log = createLogger("WorkspaceContext");
 
@@ -219,7 +219,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       // recoverable for the user, but a hard error screen here would lock them
       // out of an otherwise-working DB. Log and continue.
       try {
-        const { seedTutorial } = await import("@/shared/seeds/tutorial");
+        const { seedTutorial } = await import("@seeds/tutorial");
         const seedResult = await seedTutorial(adapter);
         if (seedResult) {
           log.info("Tutorial seed planted");

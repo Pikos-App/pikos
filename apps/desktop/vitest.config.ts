@@ -18,6 +18,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // Mirrors vite.config.ts — the seed fixtures live in apps/desktop/seeds,
+      // outside the app source.
+      "@seeds": fileURLToPath(new URL("./seeds", import.meta.url)),
     },
   },
   test: {
@@ -28,8 +31,9 @@ export default defineConfig({
         "src/**/*.test.{ts,tsx}",
         "src/test/**",
         "src/**/*.d.ts",
-        // Seeds and screenshots/scripts are dev/marketing-only utilities.
-        "src/shared/seeds/**",
+        // Screenshots/scripts are dev/marketing-only utilities. (The seed
+        // fixtures used to need an entry here too; they now live in
+        // apps/desktop/seeds, which `include` below never reaches.)
         "src/main.tsx",
         "src/vite-env.d.ts",
       ],
@@ -60,7 +64,9 @@ export default defineConfig({
       VITE_TEST_MODE: "true",
     },
     environment: "jsdom",
-    include: ["src/**/*.test.{ts,tsx}"],
+    // seeds/ carries two suites of its own — the tutorial seed's unit test and
+    // the synced-calendar conformance runner — so it has to be swept too.
+    include: ["src/**/*.test.{ts,tsx}", "seeds/**/*.test.{ts,tsx}"],
     setupFiles: ["./src/test/setup.ts"],
   },
 });

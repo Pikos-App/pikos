@@ -3,7 +3,7 @@
     "what": [
       "The mock calendar-sync seed, as an outcome: what a seeded workspace contains.",
       "The dev command (db/dev/seed.rs) writes it into SQLite; the TS twin",
-      "(shared/seeds/syncedCalendar.ts) builds it in MockStorageAdapter for test mode.",
+      "(apps/desktop/seeds/syncedCalendar.ts) builds it in MockStorageAdapter for test mode.",
       "Every shape here is the only way to reach some synced behaviour by hand, so a",
       "row that quietly disappears from one side costs the manual QA pass a check.",
       "Dates are structural: `day` is an offset from the run's local today, `monthEnd`",

@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "lint": "eslint src --cache --cache-location node_modules/.cache/eslint",
+    "lint": "eslint src seeds --cache --cache-location node_modules/.cache/eslint",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "vitest run",
     "test:watch": "vitest",

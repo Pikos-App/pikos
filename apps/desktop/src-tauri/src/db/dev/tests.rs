@@ -1093,7 +1093,7 @@ fn collect_asset_paths_finds_nested_images_only() {
 // ── dev_seed_synced_calendar ───────────────────────────────────────────────────
 
 /// The seed's whole point is exercising surfaces no unit test reaches, so what it
-/// *contains* is the contract — and its TS twin (`shared/seeds/syncedCalendar.ts`)
+/// *contains* is the contract — and its TS twin (`apps/desktop/seeds/syncedCalendar.ts`)
 /// claims to mirror it. The recurring half drifted apart unnoticed once already.
 /// Each series below is the only way to reach some synced or detached behavior by
 /// hand, so dropping one costs a QA check silently.
