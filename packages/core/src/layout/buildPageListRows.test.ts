@@ -155,6 +155,70 @@ describe("today view", () => {
   });
 });
 
+// ── Upcoming view (day sections) ────────────────────────────────────────────
+
+describe("upcoming view", () => {
+  const a = makePage({ id: "a" });
+  const b = makePage({ id: "b" });
+  const c = makePage({ id: "c" });
+
+  function upcoming() {
+    return defaults({
+      daySections: [
+        { date: "2026-03-25", label: "Today", pages: [a, b] },
+        { date: "2026-03-27", label: "Fri, Mar 27", pages: [c] },
+      ],
+      visiblePages: [a, b, c],
+    });
+  }
+
+  it("emits a header per day followed by that day's pages", () => {
+    expect(rowTypes(upcoming())).toEqual([
+      "section-header",
+      "page",
+      "page",
+      "section-header",
+      "page",
+      "completed-toggle",
+    ]);
+  });
+
+  it("labels and counts each day, and keys headers by date", () => {
+    const headers = buildPageListRows(upcoming()).rows.filter((r) => r.type === "section-header");
+    expect(headers).toEqual([
+      expect.objectContaining({
+        collapsible: false,
+        count: 2,
+        key: "day-2026-03-25",
+        label: "Today",
+      }),
+      expect.objectContaining({ count: 1, key: "day-2026-03-27", label: "Fri, Mar 27" }),
+    ]);
+  });
+
+  it("keeps a day header even when it is the only section", () => {
+    const types = rowTypes(
+      defaults({
+        daySections: [{ date: "2026-03-25", label: "Today", pages: [a] }],
+        visiblePages: [a],
+      })
+    );
+    expect(types).toEqual(["section-header", "page", "completed-toggle"]);
+  });
+
+  it("maps every day-section page into pageToRowIndex", () => {
+    const { pageToRowIndex } = buildPageListRows(upcoming());
+    expect(pageToRowIndex.get("a")).toBe(1);
+    expect(pageToRowIndex.get("b")).toBe(2);
+    expect(pageToRowIndex.get("c")).toBe(4);
+  });
+
+  it("falls back to the empty state when there is nothing in the window", () => {
+    const types = rowTypes(defaults({ daySections: [], visiblePages: [] }));
+    expect(types).toEqual(["empty-state", "completed-toggle"]);
+  });
+});
+
 // ── Completed section ───────────────────────────────────────────────────────
 
 describe("completed section", () => {
