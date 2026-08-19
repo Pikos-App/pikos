@@ -24,7 +24,7 @@ if [ -z "$CI" ]; then
     { git diff --name-only HEAD 2>/dev/null
       git diff --name-only --cached 2>/dev/null
       git ls-files --others --exclude-standard 2>/dev/null
-    } | sort -u | grep -E '\.(ts|tsx|css)$' | grep -E '^(apps/desktop/src|packages/core/src)/'
+    } | sort -u | grep -E '\.(ts|tsx|css)$' | grep -E '^(apps/desktop/src|packages/(core|ui)/src)/'
   )
 
   if [ ${#changed[@]} -gt 0 ]; then
@@ -47,12 +47,18 @@ run_check() {
 
 run_check "typecheck-desktop" pnpm --filter @pikos/desktop typecheck &
 run_check "typecheck-core"    pnpm --filter @pikos/core typecheck &
+run_check "typecheck-ui"      pnpm --filter @pikos/ui typecheck &
 run_check "lint"              pnpm exec turbo lint &
 run_check "depcruise"         pnpm exec depcruise apps/desktop/src packages/core/src --config .dependency-cruiser.cjs &
 # Every Playwright project is grep-scoped by tag, so an untagged test runs in no
 # project at all — silently. Text scan, no Playwright runtime: cheap enough to
 # ride along here (and so pre-commit and CI's verify job) instead of a new job.
 run_check "e2e-tags"          node scripts/check-e2e-tags.mjs &
+# app.css's token tiers are generated from packages/ui/src/tokens.ts. Nothing
+# else compares the two, so a token edited without regenerating would ship the
+# old value with every check green. Pure node + string compare, same cheap-guard
+# reasoning as e2e-tags.
+run_check "ui-tokens"         bash scripts/check-ui-tokens.sh &
 
 # Only the specs the working-tree diff can reach. Safe because the workspace
 # resolves `@pikos/core` to its *source* (`exports: "./src/index.ts"`), so
@@ -62,7 +68,8 @@ run_check "e2e-tags"          node scripts/check-e2e-tags.mjs &
 # spot, and why the full suite still gates pre-push and CI.
 affected_tests() {
   pnpm --filter @pikos/desktop exec vitest run --changed --passWithNoTests &&
-    pnpm --filter @pikos/core exec vitest run --changed --passWithNoTests
+    pnpm --filter @pikos/core exec vitest run --changed --passWithNoTests &&
+    pnpm --filter @pikos/ui exec vitest run --changed --passWithNoTests
 }
 
 # SKIP_UNIT_TESTS=1 omits the unit run — CI sets this so the coverage job (which
@@ -90,7 +97,7 @@ fi
 wait
 
 # ── Report results ────────────────────────────────────────────────────────────
-for name in typecheck-desktop typecheck-core lint prettier depcruise e2e-tags tests; do
+for name in typecheck-desktop typecheck-core typecheck-ui lint prettier depcruise e2e-tags ui-tokens tests; do
   [ -f "$tmpdir/$name.status" ] || continue
   status=$(cat "$tmpdir/$name.status")
   if [ "$status" = "pass" ]; then
