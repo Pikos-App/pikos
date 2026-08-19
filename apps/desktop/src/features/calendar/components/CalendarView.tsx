@@ -2,6 +2,7 @@ import {
   buildCalendarDays,
   buildMonthGrid,
   clampDayCount,
+  folderIdForView,
   getCalendarDayCount,
   monthGridDays,
 } from "@pikos/core";
@@ -130,8 +131,7 @@ export function CalendarView() {
 
   async function handleCreatePage(day: Date, start: Date, end?: Date) {
     // Default folder: active folder, then settings default, then Inbox.
-    const folderId =
-      activeViewId === "today" || activeViewId === "inbox" ? settingsDefaultFolder : activeViewId;
+    const folderId = folderIdForView(activeViewId) ?? settingsDefaultFolder;
 
     const page = await createPage({ folderId });
     // Use local-time format (no Z suffix) — SQLite's date() functions require this.
@@ -143,7 +143,7 @@ export function CalendarView() {
   /** `end` is undefined for a single-day click; set by the drag-to-create
    * gesture for a multi-day span. */
   async function handleCreateAllDay(start: Date, end?: Date) {
-    const folderId = activeViewId === "today" || activeViewId === "inbox" ? null : activeViewId;
+    const folderId = folderIdForView(activeViewId);
     const page = await createPage({ folderId });
     // Date-only strings → isAllDayPage() returns true.
     await scheduleOnce(

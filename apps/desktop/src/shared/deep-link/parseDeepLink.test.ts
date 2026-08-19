@@ -17,11 +17,13 @@ describe("parseDeepLink", () => {
 
   it("parses smart views", () => {
     expect(parseDeepLink("pikos://today")).toEqual({ type: "view", viewId: "today" });
+    expect(parseDeepLink("pikos://upcoming")).toEqual({ type: "view", viewId: "upcoming" });
     expect(parseDeepLink("pikos://inbox")).toEqual({ type: "view", viewId: "inbox" });
   });
 
   it("rejects smart views with trailing segments", () => {
     expect(parseDeepLink("pikos://today/extra")).toBeNull();
+    expect(parseDeepLink("pikos://upcoming/extra")).toBeNull();
   });
 
   it("parses calendar (notification click)", () => {

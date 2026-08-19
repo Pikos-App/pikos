@@ -3,14 +3,14 @@
 // Multi-select state lives in SelectionContext (useSelection).
 // Calendar DnD bridge lives in CalendarDnDContext (useCalendarDnD).
 
-import type { PageSummary, SortMode } from "@pikos/core";
+import type { PageSummary, SmartViewId, SortMode } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
-/** 'today' | 'inbox' | folderId (UUID string) */
-export type ActiveViewId = "today" | "inbox" | (string & NonNullable<unknown>);
+/** 'today' | 'upcoming' | 'inbox' | folderId (UUID string) */
+export type ActiveViewId = SmartViewId | (string & NonNullable<unknown>);
 export type DialogId = "quick-add" | "search" | "trash" | null;
 /** Settings overlay sections. Kept here so external triggers (menu / shortcuts) can deep-link. */
 export type SettingsSection =

@@ -1,3 +1,4 @@
+import { isSmartViewId } from "@pikos/core";
 import { useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -196,11 +197,7 @@ function AppShell() {
   if (didInitRef.current == null) {
     didInitRef.current = true;
 
-    if (
-      ui.activeViewId !== "today" &&
-      ui.activeViewId !== "inbox" &&
-      !folders.some((f) => f.id === ui.activeViewId)
-    ) {
+    if (!isSmartViewId(ui.activeViewId) && !folders.some((f) => f.id === ui.activeViewId)) {
       ui.setActiveViewId("inbox");
     }
     if (ui.activePageId !== null && !pages.some((p) => p.id === ui.activePageId)) {

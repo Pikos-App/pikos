@@ -1,5 +1,5 @@
 import type { Folder } from "@pikos/core";
-import { belongsToView, emojiAwareCompare, isOpen, localToday } from "@pikos/core";
+import { belongsToView, emojiAwareCompare, isOpen, isSmartViewId, localToday } from "@pikos/core";
 import { useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
@@ -18,6 +18,7 @@ export interface FolderListState {
   renamingId: string | null;
   setRenamingId: (id: string | null) => void;
   todayCount: number;
+  upcomingCount: number;
   inboxCount: number;
   sortOrder: FolderSortOrder;
   setSortOrder: (order: FolderSortOrder) => void;
@@ -37,7 +38,7 @@ export function useFolderList(): FolderListState {
   const visibleFolders = folders.filter((f) => !hiddenFolderIds.has(f.id));
 
   // If the active view points to a folder that no longer exists, fall back to inbox.
-  const isFolderView = activeViewId !== "today" && activeViewId !== "inbox";
+  const isFolderView = !isSmartViewId(activeViewId);
   if (isFolderView && !visibleFolders.some((f) => f.id === activeViewId)) {
     setActiveViewId("inbox");
   }
@@ -51,6 +52,7 @@ export function useFolderList(): FolderListState {
   }
 
   const todayCount = openPages.filter((p) => belongsToView(p, "today", today)).length;
+  const upcomingCount = openPages.filter((p) => belongsToView(p, "upcoming", today)).length;
   const inboxCount = openPages.filter((p) => belongsToView(p, "inbox", today)).length;
 
   // "manual" — use workspace array order as-is; reorderFolders keeps it correct via optimistic
@@ -106,5 +108,6 @@ export function useFolderList(): FolderListState {
     setSortOrder,
     sortOrder,
     todayCount,
+    upcomingCount,
   };
 }

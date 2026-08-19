@@ -1,6 +1,6 @@
 // View picker shown only at md/sm, where the folder sidebar is hidden.
 
-import { CalendarDays, ChevronDown, FolderPlus, Inbox } from "lucide-react";
+import { CalendarDays, CalendarRange, ChevronDown, FolderPlus, Inbox } from "lucide-react";
 import { useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -10,8 +10,15 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useFolderList } from "../hooks/useFolderList";
 
 export function FolderSwitcher() {
-  const { activeViewId, folders, inboxCount, pageCountByFolder, setActiveViewId, todayCount } =
-    useFolderList();
+  const {
+    activeViewId,
+    folders,
+    inboxCount,
+    pageCountByFolder,
+    setActiveViewId,
+    todayCount,
+    upcomingCount,
+  } = useFolderList();
   const { createFolder } = usePages();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -21,9 +28,11 @@ export function FolderSwitcher() {
   const activeLabel =
     activeViewId === "today"
       ? "Today"
-      : activeViewId === "inbox"
-        ? "Inbox"
-        : (activeFolder?.name ?? "Pages");
+      : activeViewId === "upcoming"
+        ? "Upcoming"
+        : activeViewId === "inbox"
+          ? "Inbox"
+          : (activeFolder?.name ?? "Pages");
 
   function handleSelect(id: string) {
     setActiveViewId(id);
@@ -70,6 +79,13 @@ export function FolderSwitcher() {
           isActive={activeViewId === "today"}
           label="Today"
           onSelect={() => handleSelect("today")}
+        />
+        <Row
+          badge={upcomingCount}
+          icon={<CalendarRange size={14} />}
+          isActive={activeViewId === "upcoming"}
+          label="Upcoming"
+          onSelect={() => handleSelect("upcoming")}
         />
         <Row
           badge={inboxCount}
