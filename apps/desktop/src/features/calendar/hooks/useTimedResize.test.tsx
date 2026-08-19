@@ -64,8 +64,8 @@ function setup(scheduleLocked: boolean) {
   const page = makePage(scheduleLocked);
   result.current.handleBlockResizeStart({ block: makeBlock(page), dayIndex: 0, pageId: page.id });
 
-  window.dispatchEvent(new MouseEvent("mousemove", { clientY: 300 }));
-  window.dispatchEvent(new MouseEvent("mouseup", { clientY: 300 }));
+  window.dispatchEvent(new PointerEvent("pointermove", { clientY: 300, isPrimary: true }));
+  window.dispatchEvent(new PointerEvent("pointerup", { clientY: 300, isPrimary: true }));
 
   return { onReschedule };
 }

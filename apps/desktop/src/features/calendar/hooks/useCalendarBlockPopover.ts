@@ -25,7 +25,7 @@ export interface UseCalendarBlockPopoverResult {
    * and swallows the click fired at the end of a drag gesture. */
   handleClick: (e: React.MouseEvent) => void;
   /** Cancel a pending single-click timer. Call from checkbox + edge-resize
-   * mousedowns so the block's click doesn't also open the popover. */
+   * presses so the block's click doesn't also open the popover. */
   suppressPendingClick: () => void;
   /** Mark a drag gesture as in progress. The next click event will be
    * swallowed (no popover open, no double-click check). */
@@ -41,9 +41,9 @@ export interface UseCalendarBlockPopoverResult {
  *   • post-drag click suppression (swallows the click that fires on mouseup
  *     after a drag threshold is crossed)
  *   • timer cleanup on unmount
- * Each block still owns its own mousedown handlers — body-drag vs edge-
+ * Each block still owns its own pointerdown handlers — body-drag vs edge-
  * resize fire with different payloads and the threshold behaviour differs
- * (edge-resize fires immediately on mousedown; body-drag waits for the
+ * (edge-resize fires immediately on pointerdown; body-drag waits for the
  * threshold). Unifying them further adds more indirection than it saves.
  */
 export function useCalendarBlockPopover(

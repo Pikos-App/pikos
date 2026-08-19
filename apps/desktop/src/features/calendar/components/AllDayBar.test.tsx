@@ -84,8 +84,8 @@ describe("AllDayBar — detached synced rendering", () => {
 // carries through to the reschedule.
 describe("AllDayBar — occurrence identity on drag", () => {
   const dragPast = (bar: HTMLElement) => {
-    fireEvent.mouseDown(bar, { button: 0, clientX: 0, clientY: 0 });
-    fireEvent.mouseMove(window, { clientX: 40, clientY: 0 });
+    fireEvent.pointerDown(bar, { button: 0, clientX: 0, clientY: 0, isPrimary: true });
+    fireEvent.pointerMove(window, { clientX: 40, clientY: 0, isPrimary: true });
   };
 
   it("hands the occurrence's date to the drag", () => {

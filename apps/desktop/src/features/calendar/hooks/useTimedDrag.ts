@@ -131,7 +131,11 @@ export function useTimedDrag({
 
     let lastClientY = clientY;
 
-    function onMove(ev: MouseEvent) {
+    function onMove(ev: PointerEvent) {
+      // A second finger landing mid-drag must not steer the gesture the first
+      // one started; mouse and pen are always primary, so this never fires for
+      // them.
+      if (!ev.isPrimary) return;
       lastClientY = ev.clientY;
       const state = dragRef.current;
       if (!state || !scrollRef.current || !dayColumnsRef.current) return;
@@ -190,9 +194,9 @@ export function useTimedDrag({
       });
     }
 
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    function onUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       enableSelect();
       eatNextClick();
       cancelAnimationFrame(rafIdRef.current);
@@ -239,8 +243,32 @@ export function useTimedDrag({
       onReschedule(state.pageId, fmt(newStart), newEnd, state.originalDate);
     }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    /** The platform took the gesture away (system swipe, palm rejection).
+     *  Unwind without committing — the drop never happened. */
+    function onCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      enableSelect();
+      cancelAnimationFrame(rafIdRef.current);
+      dragRef.current = null;
+      dragGhostPositionRef.current = null;
+      timedAllDayTargetDayIndexRef.current = null;
+      timedDragDayIndexRef.current = null;
+      setTimedDraggingPageId(null);
+      setGhostContent(null);
+      setTimedDragAllDayTarget(null);
+      setTimedDragDayIndex(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   }
 
   return {

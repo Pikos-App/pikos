@@ -84,8 +84,12 @@ describe("useTimedDrag — schedule lock guard", () => {
   it("does not reschedule a locked (synced) block dropped in the grid", () => {
     const { info, onReschedule, result } = setup(true);
     result.current.handleBlockDragStart(info);
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: 300 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: 300 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: 300, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: 300, isPrimary: true })
+    );
     expect(onReschedule).not.toHaveBeenCalled();
   });
 
@@ -93,24 +97,36 @@ describe("useTimedDrag — schedule lock guard", () => {
     const { info, onReschedule, result } = setup(true);
     result.current.handleBlockDragStart(info);
     // Negative clientY → above the grid top (rect.top is 0 in jsdom) = all-day drop.
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: -50 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: -50 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: -50, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: -50, isPrimary: true })
+    );
     expect(onReschedule).not.toHaveBeenCalled();
   });
 
   it("reschedules an unlocked block dropped in the grid", () => {
     const { info, onReschedule, result } = setup(false);
     result.current.handleBlockDragStart(info);
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: 300 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: 300 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: 300, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: 300, isPrimary: true })
+    );
     expect(onReschedule).toHaveBeenCalledTimes(1);
   });
 
   it("reschedules an unlocked block dropped into the all-day strip", () => {
     const { info, onReschedule, result } = setup(false);
     result.current.handleBlockDragStart(info);
-    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 10, clientY: -50 }));
-    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 10, clientY: -50 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 10, clientY: -50, isPrimary: true })
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { clientX: 10, clientY: -50, isPrimary: true })
+    );
     expect(onReschedule).toHaveBeenCalledTimes(1);
     // All-day drop → date-only start, no end.
     expect(onReschedule).toHaveBeenCalledWith("p1", "2099-01-05", undefined, undefined);

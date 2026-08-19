@@ -60,7 +60,8 @@ export function useTimedResize({
     resizeGhostBottomRef.current = initialBottom;
     setResizeRenderState({ bottom: initialBottom, dayIndex, pageId });
 
-    function onMove(ev: MouseEvent) {
+    function onMove(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
       const state = resizeRef.current;
       if (!state || !scrollRef.current) return;
 
@@ -83,9 +84,9 @@ export function useTimedResize({
       });
     }
 
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    function onUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       enableSelect();
       eatNextClick();
       cancelAnimationFrame(resizeRafIdRef.current);
@@ -105,8 +106,26 @@ export function useTimedResize({
       onReschedule(state.pageId, fmt(state.block.startDate), fmt(newEnd), state.originalDate);
     }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    /** Platform-cancelled gesture — drop the preview without committing. */
+    function onCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      enableSelect();
+      cancelAnimationFrame(resizeRafIdRef.current);
+      resizeRef.current = null;
+      resizeGhostBottomRef.current = null;
+      setResizeRenderState(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   }
 
   return { handleBlockResizeStart, resizeRenderState };

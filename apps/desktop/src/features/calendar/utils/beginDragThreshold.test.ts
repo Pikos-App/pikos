@@ -3,11 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { beginDragThreshold } from "./beginDragThreshold";
 
 function move(clientX: number, clientY: number) {
-  window.dispatchEvent(new MouseEvent("mousemove", { clientX, clientY }));
+  window.dispatchEvent(new PointerEvent("pointermove", { clientX, clientY, isPrimary: true }));
 }
 
 function release() {
-  window.dispatchEvent(new MouseEvent("mouseup"));
+  window.dispatchEvent(new PointerEvent("pointerup", { isPrimary: true }));
+}
+
+function cancel() {
+  window.dispatchEvent(new PointerEvent("pointercancel", { isPrimary: true }));
 }
 
 afterEach(() => {
@@ -36,7 +40,7 @@ describe("beginDragThreshold", () => {
     expect(onCrossed).toHaveBeenCalledTimes(1);
   });
 
-  it("sets the body cursor on mousedown and clears it on a click-release", () => {
+  it("sets the body cursor on pointerdown and clears it on a click-release", () => {
     beginDragThreshold(0, 0, { bodyCursor: "dragging-grab", onCrossed: vi.fn() });
     expect(document.documentElement.classList.contains("dragging-grab")).toBe(true);
 
@@ -59,6 +63,25 @@ describe("beginDragThreshold", () => {
     beginDragThreshold(0, 0, { onCrossed });
 
     release();
+    move(500, 500);
+    expect(onCrossed).not.toHaveBeenCalled();
+  });
+
+  it("ignores a non-primary pointer so a second finger can't cross the threshold", () => {
+    const onCrossed = vi.fn();
+    beginDragThreshold(0, 0, { onCrossed });
+
+    window.dispatchEvent(new PointerEvent("pointermove", { clientX: 500, isPrimary: false }));
+    expect(onCrossed).not.toHaveBeenCalled();
+  });
+
+  it("tears down on pointercancel like a release below the threshold", () => {
+    const onCrossed = vi.fn();
+    beginDragThreshold(0, 0, { bodyCursor: "dragging-grab", onCrossed });
+
+    cancel();
+    expect(document.documentElement.classList.contains("dragging-grab")).toBe(false);
+
     move(500, 500);
     expect(onCrossed).not.toHaveBeenCalled();
   });
