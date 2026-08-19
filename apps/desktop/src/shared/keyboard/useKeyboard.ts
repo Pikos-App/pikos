@@ -37,6 +37,8 @@ export function useKeyboardShortcut(
   const allowInInputs = opts?.allowInInputs;
   const repeat = opts?.repeat;
   const stopPropagation = opts?.stopPropagation;
+  const label = opts?.label;
+  const group = opts?.group;
 
   useEffect(() => {
     const id = `shortcut-${crypto.randomUUID()}`;
@@ -51,6 +53,10 @@ export function useKeyboardShortcut(
       ...(allowInInputs !== undefined && { allowInInputs }),
       ...(repeat !== undefined && { repeat }),
       ...(stopPropagation !== undefined && { stopPropagation }),
+      // Palette + settings metadata. Only the first key of a chord carries it —
+      // the second half is an implementation detail, not a command.
+      ...(label !== undefined && { label }),
+      ...(group !== undefined && { group }),
     };
 
     if (second !== undefined) {
@@ -102,7 +108,7 @@ export function useKeyboardShortcut(
     // ── Single binding ─────────────────────────────────────────────────────
     Keyboard.register({ combo: first, handler: stableHandler, id, ...baseOpts });
     return () => Keyboard.unregister(id);
-  }, [first, second, scope, preventDefault, allowInInputs, repeat, stopPropagation]);
+  }, [first, second, scope, preventDefault, allowInInputs, repeat, stopPropagation, label, group]);
 }
 
 /**

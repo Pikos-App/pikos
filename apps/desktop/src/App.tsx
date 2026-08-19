@@ -116,8 +116,16 @@ function useGlobalShortcuts() {
     useUI();
   const { folders } = usePages();
 
-  useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), { allowInInputs: true });
-  useKeyboardShortcut("Mod+W", () => setActivePage(null), { allowInInputs: true });
+  useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Settings",
+  });
+  useKeyboardShortcut("Mod+W", () => setActivePage(null), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Close page",
+  });
   // Cmd+/ — macOS reserves Cmd+? for the Help menu's search field, so we use
   // Cmd+/ (the standard for shortcut overlays — Linear, Notion, Slack).
   useKeyboardShortcut(
@@ -126,7 +134,7 @@ function useGlobalShortcuts() {
       setSettingsSection("shortcuts");
       setSettingsOpen(true);
     },
-    { allowInInputs: true }
+    { allowInInputs: true, group: "Navigation", label: "Keyboard shortcuts" }
   );
 
   // ⌘1-9 — switch to folder by index (1-based).
@@ -145,11 +153,13 @@ function useGlobalShortcuts() {
       Keyboard.register({
         allowInInputs: true,
         combo: `Mod+${i}`,
+        group: "Navigation",
         handler: () => {
           const folder = foldersRef.current[i - 1];
           if (folder) setViewRef.current(folder.id);
         },
         id,
+        label: `Switch to folder ${i}`,
         scope: "global",
       });
     }

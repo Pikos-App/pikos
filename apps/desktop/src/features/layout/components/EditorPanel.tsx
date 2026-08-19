@@ -27,10 +27,14 @@ export function EditorPanel() {
     () => {
       ui.setRightPanel(ui.rightPanel === "editor" ? "calendar" : "editor");
     },
-    { allowInInputs: true }
+    { allowInInputs: true, group: "Navigation", label: "Toggle calendar / editor" }
   );
 
-  useKeyboardShortcut("Mod+\\", leftNav.toggle, { allowInInputs: true });
+  useKeyboardShortcut("Mod+\\", leftNav.toggle, {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Toggle sidebar",
+  });
 
   function handlePrevWeek() {
     ui.setReferenceDate(subDays(ui.referenceDate, navStep));

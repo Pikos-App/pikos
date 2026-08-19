@@ -37,7 +37,11 @@ export function QuickAddDialog() {
   // Mod+N from anywhere opens the dialog. Idempotent when already open —
   // focus is kept on the input by each chip's onClose handler, so no inner
   // refocus shortcut is needed.
-  useKeyboardShortcut("Mod+N", () => setOpenDialog("quick-add"), { allowInInputs: true });
+  useKeyboardShortcut("Mod+N", () => setOpenDialog("quick-add"), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "New page",
+  });
 
   function handleOpenChange(next: boolean) {
     setOpenDialog(next ? "quick-add" : null);
@@ -135,7 +139,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       setDateManual(true);
       inputRef.current?.focus();
     },
-    { allowInInputs: true, preventDefault: true }
+    { allowInInputs: true, group: "Quick add", label: "Schedule for today", preventDefault: true }
   );
 
   // ── Debounce preview ─────────────────────────────────────────────────────────

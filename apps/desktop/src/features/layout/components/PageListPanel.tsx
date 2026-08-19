@@ -213,7 +213,10 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     }
   }
 
-  useKeyboardShortcut("Mod+Backspace", deleteSelectedOrActive);
+  useKeyboardShortcut("Mod+Backspace", deleteSelectedOrActive, {
+    group: "Navigation",
+    label: "Delete page",
+  });
   // Alias that also fires inside text inputs and the Tiptap editor, so the
   // user can delete the active page from the title/subtitle inputs or while
   // writing content. Gated to avoid surprise-deletes when a modal dialog
@@ -221,11 +224,15 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   // different mental context where the activePage isn't what's being acted on.
   useKeyboardShortcut("Mod+Shift+Backspace", deleteSelectedOrActive, {
     allowInInputs: true,
+    group: "Navigation",
+    label: "Delete page (works in text inputs)",
     preventDefault: true,
     when: () => openDialog === null && !settingsOpen,
   });
 
   useKeyboardShortcut("Escape", () => clearSelection(), {
+    group: "Page list",
+    label: "Clear multi-selection",
     when: () => selectedPageIds.size > 0,
   });
 
@@ -240,7 +247,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       // toggle never fired.
       listRef.current?.focus();
     },
-    { preventDefault: true }
+    { group: "Page list", label: "Select all open pages in folder", preventDefault: true }
   );
 
   // Space: toggle completion. Registered globally so it works after Cmd+A
@@ -281,6 +288,8 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       }
     },
     {
+      group: "Page list",
+      label: "Toggle completion",
       preventDefault: true,
       when: () =>
         !renamingId &&
@@ -315,11 +324,15 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
     });
   }
   useKeyboardShortcut("ArrowUp", (e) => navigateFromKey(e, -1), {
+    group: "Page list",
+    label: "Select previous page",
     preventDefault: true,
     repeat: true,
     when: canNavigatePages,
   });
   useKeyboardShortcut("ArrowDown", (e) => navigateFromKey(e, 1), {
+    group: "Page list",
+    label: "Select next page",
     preventDefault: true,
     repeat: true,
     when: canNavigatePages,
