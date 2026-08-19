@@ -13,7 +13,7 @@ import type {
   StorageAdapter,
 } from "@pikos/core";
 import { buildSearchFilter, ftsTokens, isDone, parseSearchQuery } from "@pikos/core";
-import { FileText, Search } from "lucide-react";
+import { Command, FileText, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -23,6 +23,9 @@ import { PRIORITY_LABELS } from "@/shared/constants/priorities";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { formatCombo } from "@/shared/keyboard/formatCombo";
+import type { Binding } from "@/shared/keyboard/registry";
+import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 import { createLogger } from "@/shared/logger";
 
@@ -31,7 +34,23 @@ const log = createLogger("SearchPalette");
 /** FTS5 needs something to prefix-match on; below this the query is too broad to run. */
 const MIN_QUERY_LENGTH = 2;
 
+/** Leading character that turns the palette into a command list. */
+const COMMAND_PREFIX = ">";
+
 type SearchPagesFn = (query: string, includeCompleted?: boolean) => Promise<SearchResponse>;
+
+/** Substring first, then a subsequence pass so ">tgsb" still finds "Toggle sidebar". */
+function commandMatches(label: string, filter: string): boolean {
+  if (filter === "") return true;
+  const haystack = label.toLowerCase();
+  if (haystack.includes(filter)) return true;
+  let i = 0;
+  for (const ch of haystack) {
+    if (ch === filter[i]) i++;
+    if (i === filter.length) return true;
+  }
+  return false;
+}
 
 function highlightText(text: string, queryWords: string[]): React.ReactNode {
   if (!text || queryWords.length === 0) return text;
@@ -183,6 +202,27 @@ export function SearchPalette() {
     }
   }
 
+  // ── Command mode ("> …") ─────────────────────────────────────────────────
+
+  const isCommandMode = query.startsWith(COMMAND_PREFIX);
+  const commandFilter = query.slice(COMMAND_PREFIX.length).trim().toLowerCase();
+
+  const [commands, setCommands] = useState<Binding[]>([]);
+  const [prevCommandMode, setPrevCommandMode] = useState(isCommandMode);
+  if (isCommandMode !== prevCommandMode) {
+    setPrevCommandMode(isCommandMode);
+    // Snapshot on entry. The registry is a module store, not React state, so
+    // reading it every render would tie the command list to unrelated renders;
+    // what's active can't change while the palette holds the keyboard anyway.
+    setCommands(isCommandMode ? Keyboard.listCommands() : []);
+    setResults([]);
+    setCompletedCount(0);
+  }
+
+  const commandItems = isCommandMode
+    ? commands.filter((c) => commandMatches(c.label ?? "", commandFilter))
+    : [];
+
   useKeyboardShortcut(
     "Mod+K",
     () => {
@@ -202,6 +242,8 @@ export function SearchPalette() {
 
   useEffect(() => {
     const q = query.trim();
+    // Command mode never touches the database.
+    if (q.startsWith(COMMAND_PREFIX)) return;
     const parsedQuery = parseSearchQuery(q);
     // Operators carry their own meaning, so `tag:x` runs on its own; plain text
     // still waits for two characters before hitting the index.
@@ -245,8 +287,9 @@ export function SearchPalette() {
         .slice(0, 10)
         .map(summaryToResult);
 
-  const displayItems = query.trim() ? results : recentItems;
-  const clampedIdx = Math.min(selectedIdx, Math.max(0, displayItems.length - 1));
+  const pageItems = query.trim() ? results : recentItems;
+  const displayCount = isCommandMode ? commandItems.length : pageItems.length;
+  const clampedIdx = Math.min(selectedIdx, Math.max(0, displayCount - 1));
 
   const trimmedQuery = query.trim();
   const parsed = parseSearchQuery(trimmedQuery);
@@ -260,6 +303,13 @@ export function SearchPalette() {
     resetAndClose();
   }
 
+  function runCommand(binding: Binding) {
+    resetAndClose();
+    // Close first: the handler acts on the surface underneath, and several of
+    // them open a dialog of their own that would otherwise race this one for focus.
+    binding.handler(new KeyboardEvent("keydown"));
+  }
+
   function resetAndClose() {
     setOpenDialog(null);
     setQuery("");
@@ -269,9 +319,9 @@ export function SearchPalette() {
     setShowCompleted(false);
   }
 
-  /** Index of the item in the flat displayItems list — drives keyboard selection. */
+  /** Index of the item in the flat result list — drives keyboard selection. */
   function getDisplayIndex(item: SearchResult): number {
-    return displayItems.indexOf(item);
+    return pageItems.indexOf(item);
   }
 
   function scrollToIdx(idx: number) {
@@ -287,7 +337,7 @@ export function SearchPalette() {
       setMouseMoved(false);
       setMouseActive(false);
       setSelectedIdx((i) => {
-        const next = Math.min(i + 1, displayItems.length - 1);
+        const next = Math.min(i + 1, displayCount - 1);
         scrollToIdx(next);
         return next;
       });
@@ -302,7 +352,12 @@ export function SearchPalette() {
       });
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const item = displayItems[clampedIdx];
+      if (isCommandMode) {
+        const command = commandItems[clampedIdx];
+        if (command) runCommand(command);
+        return;
+      }
+      const item = pageItems[clampedIdx];
       if (item) handleSelect(item.id);
     }
   }
@@ -370,6 +425,42 @@ export function SearchPalette() {
     );
   }
 
+  function renderCommand(binding: Binding, idx: number) {
+    return (
+      <button
+        className={cn(
+          "flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors",
+          idx === clampedIdx ? "bg-accent text-foreground" : mouseActive && "hover:bg-accent/50"
+        )}
+        key={binding.id}
+        onClick={() => runCommand(binding)}
+        onMouseEnter={() => {
+          if (mouseMoved) {
+            setMouseActive(true);
+            setSelectedIdx(idx);
+          }
+        }}
+        ref={(el) => {
+          if (el) itemRefs.current.set(idx, el);
+          else itemRefs.current.delete(idx);
+        }}
+      >
+        <Command className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+        <span className="min-w-0 flex-1 truncate">{binding.label}</span>
+        <span className="flex shrink-0 items-center gap-1">
+          {formatCombo(binding.combo).map((token, i) => (
+            <kbd
+              className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[10px] leading-none text-muted-foreground"
+              key={i}
+            >
+              {token}
+            </kbd>
+          ))}
+        </span>
+      </button>
+    );
+  }
+
   const showEmpty = trimmedQuery && results.length === 0 && completedCount === 0;
 
   return (
@@ -383,7 +474,8 @@ export function SearchPalette() {
             even on a command-palette UI; sr-only keeps both invisible. */}
         <DialogTitle className="sr-only">Search pages</DialogTitle>
         <DialogDescription className="sr-only">
-          Search across all pages and folders. Use arrow keys to navigate results, Enter to open.
+          Search across all pages and folders, or start with &gt; to run a command. Use arrow keys
+          to navigate results, Enter to open.
         </DialogDescription>
         {/* Search input */}
         <div className="flex items-center gap-2 border-b border-border/40 px-4 py-3">
@@ -403,7 +495,7 @@ export function SearchPalette() {
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Search pages…"
+            placeholder="Search pages, or > for commands…"
             ref={inputRef}
             spellCheck={false}
             value={query}
@@ -417,36 +509,47 @@ export function SearchPalette() {
             if (!mouseMoved) setMouseMoved(true);
           }}
         >
-          {/* Recent pages (no query) */}
-          {!trimmedQuery && recentItems.length > 0 && recentItems.map(renderItem)}
+          {isCommandMode ? (
+            <>
+              {/* Commands — whatever the keyboard registry has active right now */}
+              {commandItems.map(renderCommand)}
 
-          {/* Search results — bm25 ranked order, no section splits */}
-          {trimmedQuery && results.length > 0 && results.map(renderItem)}
+              {commandItems.length === 0 && <EmptyState compact message="No matching commands" />}
+            </>
+          ) : (
+            <>
+              {/* Recent pages (no query) */}
+              {!trimmedQuery && recentItems.length > 0 && recentItems.map(renderItem)}
 
-          {/* Empty state — search returned nothing (and no completed matches either) */}
-          {showEmpty && <EmptyState compact message="No pages found" />}
+              {/* Search results — bm25 ranked order, no section splits */}
+              {trimmedQuery && results.length > 0 && results.map(renderItem)}
 
-          {/* Toggle to include/hide completed pages. `is:done` already asked for
-              them, so the toggle reports that state instead of offering to fight it. */}
-          {trimmedQuery &&
-            (showCompleted || completedCount > 0) &&
-            (parsed.status === "done" ? (
-              <p className="px-4 py-1.5 text-xs text-muted-foreground/50">
-                Showing completed — is:done
-              </p>
-            ) : (
-              <button
-                className="w-full px-4 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
-                onClick={() => setShowCompleted((v) => !v)}
-                type="button"
-              >
-                {showCompleted ? "Hide completed" : `Show completed (${completedCount})`}
-              </button>
-            ))}
+              {/* Empty state — search returned nothing (and no completed matches either) */}
+              {showEmpty && <EmptyState compact message="No pages found" />}
 
-          {/* Empty state — no recent pages and no query */}
-          {!trimmedQuery && recentItems.length === 0 && (
-            <EmptyState compact message="No recent pages" />
+              {/* Toggle to include/hide completed pages. `is:done` already asked for
+                  them, so the toggle reports that state instead of offering to fight it. */}
+              {trimmedQuery &&
+                (showCompleted || completedCount > 0) &&
+                (parsed.status === "done" ? (
+                  <p className="px-4 py-1.5 text-xs text-muted-foreground/50">
+                    Showing completed — is:done
+                  </p>
+                ) : (
+                  <button
+                    className="w-full px-4 py-1.5 text-left text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground/70"
+                    onClick={() => setShowCompleted((v) => !v)}
+                    type="button"
+                  >
+                    {showCompleted ? "Hide completed" : `Show completed (${completedCount})`}
+                  </button>
+                ))}
+
+              {/* Empty state — no recent pages and no query */}
+              {!trimmedQuery && recentItems.length === 0 && (
+                <EmptyState compact message="No recent pages" />
+              )}
+            </>
           )}
         </div>
       </DialogContent>

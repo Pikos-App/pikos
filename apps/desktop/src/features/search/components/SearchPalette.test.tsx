@@ -11,6 +11,7 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import type { WorkspaceContextValue } from "@/shared/context/WorkspaceContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { Keyboard } from "@/shared/keyboard/registry";
 import { renderWithProviders } from "@/test/renderWithProviders";
 
 import { SearchPalette } from "./SearchPalette";
@@ -289,5 +290,108 @@ describe("SearchPalette — is:done", () => {
     await waitFor(() => {
       expect(queryRow("alpha archived")).toBeNull();
     });
+  });
+});
+
+// ─── Command mode ("> …") ──────────────────────────────────────────────────
+
+describe("SearchPalette — command mode", () => {
+  afterEach(() => {
+    Keyboard.unregister("test-command");
+    Keyboard.unregister("test-unlabelled");
+    Keyboard.unregister("test-gated");
+  });
+
+  function registerCommand(handler: () => void) {
+    Keyboard.register({
+      combo: "Mod+9",
+      group: "Navigation",
+      handler,
+      id: "test-command",
+      label: "Do the thing",
+    });
+  }
+
+  it("lists commands as soon as > is typed, below the two-character floor", async () => {
+    await setup([{ title: "alpha report" }]);
+    registerCommand(() => undefined);
+
+    type(">");
+
+    expect(await screen.findByRole("button", { name: /Do the thing/ })).toBeInTheDocument();
+    expect(queryRow("alpha report")).toBeNull();
+  });
+
+  it("shows the binding's combo beside its label", async () => {
+    await setup();
+    registerCommand(() => undefined);
+
+    type(">");
+
+    const row = await screen.findByRole("button", { name: /Do the thing/ });
+    expect(row.textContent).toContain("9");
+  });
+
+  it("filters commands on the text after the >", async () => {
+    await setup();
+    registerCommand(() => undefined);
+
+    type(">thing");
+    expect(await screen.findByRole("button", { name: /Do the thing/ })).toBeInTheDocument();
+
+    type(">dtt");
+    expect(await screen.findByRole("button", { name: /Do the thing/ })).toBeInTheDocument();
+
+    type(">zzz");
+    expect(await screen.findByText("No matching commands")).toBeInTheDocument();
+  });
+
+  it("runs the binding and closes on Enter", async () => {
+    await setup();
+    let ran = 0;
+    registerCommand(() => {
+      ran += 1;
+    });
+
+    type(">thing");
+    await screen.findByRole("button", { name: /Do the thing/ });
+
+    fireEvent.keyDown(screen.getByPlaceholderText(/Search pages/), { key: "Enter" });
+
+    expect(ran).toBe(1);
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText(/Search pages/)).toBeNull();
+    });
+  });
+
+  it("runs the binding on click", async () => {
+    await setup();
+    let ran = 0;
+    registerCommand(() => {
+      ran += 1;
+    });
+
+    type(">");
+    fireEvent.click(await screen.findByRole("button", { name: /Do the thing/ }));
+
+    expect(ran).toBe(1);
+  });
+
+  it("leaves out unlabelled bindings and ones their gate has closed", async () => {
+    await setup();
+    registerCommand(() => undefined);
+    Keyboard.register({ combo: "Mod+8", handler: () => undefined, id: "test-unlabelled" });
+    Keyboard.register({
+      combo: "Mod+7",
+      handler: () => undefined,
+      id: "test-gated",
+      label: "Gated away",
+      when: () => false,
+    });
+
+    type(">");
+
+    expect(await screen.findByRole("button", { name: /Do the thing/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Gated away/ })).toBeNull();
   });
 });
