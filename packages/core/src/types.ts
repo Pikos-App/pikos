@@ -22,6 +22,7 @@ export interface Workspace {
 // scripts/gen-ts-bindings.sh. Re-exported here so consumers keep one import path
 // and the shapes cannot drift from the backend.
 export type { Folder } from "./generated/Folder";
+export type { NotificationHistoryEntry } from "./generated/NotificationHistoryEntry";
 export type { Page } from "./generated/Page";
 export type { PageRecurrenceRule } from "./generated/PageRecurrenceRule";
 export type { PageReminder } from "./generated/PageReminder";

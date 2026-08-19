@@ -991,6 +991,74 @@ describe("page reminders", () => {
   });
 });
 
+// ─── Notification history ────────────────────────────────────────────────────
+
+describe("notification history", () => {
+  it("is empty until the scheduler's stand-in seeds it", async () => {
+    expect(await adapter.listNotificationHistory(50)).toEqual([]);
+  });
+
+  it("returns newest first, capped at the limit, with the page title joined live", async () => {
+    const page = await createTestPage({ title: "Standup" });
+    adapter.seedNotificationHistory([
+      {
+        action: null,
+        firedAt: "2026-05-25 08:50:00",
+        id: "n1",
+        kind: "reminder",
+        pageId: page.id,
+        pageTitle: null,
+        scheduleId: "s1#10",
+      },
+      {
+        action: "opened",
+        firedAt: "2026-05-25 09:10:00",
+        id: "n2",
+        kind: "suppressed",
+        pageId: page.id,
+        pageTitle: null,
+        scheduleId: "s2#10",
+      },
+      {
+        action: null,
+        firedAt: "2026-05-25 07:00:00",
+        id: "n3",
+        kind: "overdue",
+        pageId: null,
+        pageTitle: null,
+        scheduleId: null,
+      },
+    ]);
+
+    const all = await adapter.listNotificationHistory(50);
+    expect(all.map((h) => h.id)).toEqual(["n2", "n1", "n3"]);
+    expect(all[0]?.pageTitle).toBe("Standup");
+    expect(all[0]?.action).toBe("opened");
+    // The summary marker names no page, so it joins to no title.
+    expect(all[2]?.pageTitle).toBeNull();
+
+    expect((await adapter.listNotificationHistory(1)).map((h) => h.id)).toEqual(["n2"]);
+  });
+
+  it("reads a renamed page under its current title", async () => {
+    const page = await createTestPage({ title: "Old name" });
+    adapter.seedNotificationHistory([
+      {
+        action: null,
+        firedAt: "2026-05-25 08:50:00",
+        id: "n1",
+        kind: "reminder",
+        pageId: page.id,
+        pageTitle: "Old name",
+        scheduleId: "s1#10",
+      },
+    ]);
+    await adapter.updatePage(page.id, { title: "New name" });
+
+    expect((await adapter.listNotificationHistory(10))[0]?.pageTitle).toBe("New name");
+  });
+});
+
 // ─── SQLite parity guarantees ────────────────────────────────────────────────
 // These tests pin behaviour the Rust adapter enforces via SQL — UNIQUE
 // constraints, FTS surface, soft-delete cascade. Drift here causes mock-only

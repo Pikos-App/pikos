@@ -6,6 +6,7 @@ import type {
   CompleteRecurringInput,
   CompleteRecurringResult,
   Folder,
+  NotificationHistoryEntry,
   Page,
   PageFilter,
   PageRecurrenceRule,
@@ -151,6 +152,7 @@ export const READ_COMMANDS = new Set([
   "list_recurrence_rules",
   "expand_recurrence_range",
   "list_page_reminders",
+  "list_notification_history",
   "get_sync_status",
   "list_sync_calendars",
   "google_sync_available",
@@ -383,6 +385,10 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   deletePageReminders(pageId: string): Promise<void> {
     return invoke<void>("delete_page_reminders", { pageId });
+  }
+
+  listNotificationHistory(limit: number): Promise<NotificationHistoryEntry[]> {
+    return invoke<NotificationHistoryEntry[]>("list_notification_history", { limit });
   }
 
   // ─── Calendar sync ────────────────────────────────────────────────────────────

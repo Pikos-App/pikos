@@ -234,6 +234,11 @@ db_commands! {
             = pikos_db::list_page_reminders(&page_id);
         delete_page_reminder(id: String) -> () = pikos_db::delete_page_reminder(&id);
         delete_page_reminders(page_id: String) -> () = pikos_db::delete_page_reminders(&page_id);
+        /// The notification log, newest first — what the scheduler fired, and
+        /// what quiet hours silenced. Read-only: the log's only writer is the
+        /// scheduler, so there is no frontend counterpart to this command.
+        list_notification_history(limit: i64) -> Vec<NotificationHistoryEntry>
+            = pikos_db::list_notification_history(limit);
     }
 
     /// The sync commands that are pure delegation. The keychain is constructed
