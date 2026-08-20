@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 
-import { mod, test as appTest } from "./fixtures";
+import { mod, quickAdd, test as appTest } from "./fixtures";
 
 // ─── Opens settings and navigates every tab ─────────────────────────────────
 
@@ -93,17 +93,8 @@ appTest("Delete All Data dialog requires typing 'delete' to enable confirm @tier
 // The panel stays mounted while closed, so a fetch keyed on anything that
 // doesn't change per-open pins every figure to app launch. Creating the page
 // first and opening settings after is what separates the two.
-//
-// The explicit wait is not incidental: Quick Add previews the parse on a 200ms
-// debounce and submits from that state, so an Enter inside the window commits a
-// plain page. Drop the wait once submit re-parses its own input.
 appTest("Data tab reads the workspace as it is on open @tier2", async ({ app }) => {
-  await app.keyboard.press(mod("Mod+n"));
-  await expect(app.getByRole("dialog")).toBeVisible();
-  await app.getByRole("textbox", { name: "Quick add input" }).fill("Stand-up every monday at 9am");
-  await app.waitForTimeout(400);
-  await app.keyboard.press("Enter");
-  await expect(app.getByRole("dialog")).not.toBeVisible();
+  await quickAdd(app, "Stand-up every monday at 9am");
 
   await app.getByRole("button", { name: "Open settings" }).click();
   await app.getByRole("button", { name: "Data", exact: true }).click();

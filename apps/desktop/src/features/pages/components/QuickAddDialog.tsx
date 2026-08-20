@@ -356,9 +356,17 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       }
     }
 
-    // Chip-set rrule takes precedence. Falls back to NLP-derived rrule when
-    // the user hasn't touched the chip.
-    if (rruleValue) {
+    // Chip-set rrule takes precedence. Otherwise take the rule from *this*
+    // submit's parse rather than the chip's debounced preview: an Enter inside
+    // the 200ms window would otherwise read a preview that never ran and commit
+    // a plain page. Every other field below already reads the fresh parse.
+    const resolvedRrule = rruleManual
+      ? rruleValue
+      : result.type === "recurring"
+        ? result.rrule
+        : null;
+
+    if (resolvedRrule) {
       // Infinite recurrence: 1 template page + recurrence rule.
       const page = await createPage({ folderId: resolvedFolderId, title });
       if (Object.keys(patch).length > 0) updatePage(page.id, patch);
@@ -370,13 +378,13 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       // cadence ("on wednesday every monday"); the end travels with the start so
       // it can't end up before it.
       const { end: ruleEnd, start: ruleStart } = snapScheduleToRule(
-        rruleValue,
+        resolvedRrule,
         resolvedDate ?? localToday(),
         parsed?.scheduledEnd
       );
       await createRecurrence({
         pageId: page.id,
-        rrule: rruleValue,
+        rrule: resolvedRrule,
         scheduledStart: ruleStart,
         ...(ruleEnd ? { scheduledEnd: ruleEnd } : {}),
         timezone: tz,
