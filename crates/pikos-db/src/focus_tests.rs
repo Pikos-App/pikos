@@ -131,3 +131,28 @@ async fn deleting_the_page_orphans_the_session_rather_than_removing_it() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].1, None);
 }
+
+#[tokio::test]
+async fn a_session_survives_reopening_the_database() {
+    let db = crate::pool::wal_test_pool().await;
+    seed_page(&db.pool, "p1").await;
+    let created = create_focus_session(
+        &db.pool,
+        "p1",
+        "2026-06-01T09:00:00",
+        "2026-06-01T09:25:00",
+        1500,
+    )
+    .await
+    .unwrap();
+    db.pool.close().await;
+
+    let reopened = crate::pool::open_pool(db.path().to_str().unwrap())
+        .await
+        .unwrap();
+    let rows = session_rows(&reopened).await;
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].0, created.id);
+    assert_eq!(rows[0].3, 1500);
+}

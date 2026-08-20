@@ -399,6 +399,13 @@ pub struct TempWalDb {
 }
 
 #[cfg(test)]
+impl TempWalDb {
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+#[cfg(test)]
 impl Drop for TempWalDb {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
