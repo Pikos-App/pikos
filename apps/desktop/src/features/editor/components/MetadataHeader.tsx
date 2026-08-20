@@ -371,9 +371,11 @@ export function MetadataHeader({
           </div>
         )}
 
-        {/* The byline owns its own vertical padding, so the timer is aligned to
-            it here rather than given padding of its own. `min-w-0` lets the
-            byline keep truncating its chips instead of pushing the timer off. */}
+        {/* The timer repeats the byline's own `pt-2 pb-4` so both boxes have the
+            same vertical padding: `items-center` aligns boxes, not text, and the
+            byline's asymmetric padding would otherwise push the timer below the
+            copy it sits beside. `min-w-0` lets the byline keep truncating its
+            chips instead of pushing the timer off. */}
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <Byline
@@ -390,7 +392,9 @@ export function MetadataHeader({
               saveError={hasError ? (errorMessage ?? "Save failed") : null}
             />
           </div>
-          <FocusTimer pageId={page.id} />
+          <div className="pt-2 pb-4">
+            <FocusTimer pageId={page.id} />
+          </div>
         </div>
 
         {titleLocked && (
