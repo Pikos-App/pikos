@@ -302,6 +302,61 @@ async fn usage_stats_counts_totals_and_adoption() {
     assert_eq!(created, 3);
 }
 
+/// SQLite's `weekday` modifier does nothing when the date already is that
+/// weekday, so the obvious "next Monday, then back a week" reads a Monday as
+/// belonging to the week before. Everything logged on a Monday used to land in
+/// the previous bucket.
+#[tokio::test]
+async fn usage_stats_count_monday_in_its_own_week() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Deep work", "{}", "", 0, "[]").await;
+
+    let monday: String = sqlx::query_scalar("SELECT date('now', '-6 days', 'weekday 1')")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO focus_sessions (id, page_id, started_at, ended_at, duration_s)
+         VALUES ('fs1', 'p1', ?, ?, 600)",
+    )
+    .bind(format!("{monday}T09:00:00"))
+    .bind(format!("{monday}T09:10:00"))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let s = get_usage_stats_impl(&pool).await.unwrap();
+
+    assert_eq!(
+        s.weekly_activity.last().unwrap().focus_minutes,
+        10,
+        "a Monday session belongs to the week that Monday opens"
+    );
+}
+
+/// The chart sums a week's sessions into whole minutes, truncating like the
+/// running total does — 90s + 90s is 3 minutes, not two rounded-up ones.
+#[tokio::test]
+async fn usage_stats_bucket_focus_minutes_into_the_current_week() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Deep work", "{}", "", 0, "[]").await;
+    insert_focus_session(&pool, "fs1", "p1", 90).await;
+    insert_focus_session(&pool, "fs2", "p1", 90).await;
+
+    let s = get_usage_stats_impl(&pool).await.unwrap();
+    let latest = s.weekly_activity.last().unwrap();
+
+    assert_eq!(latest.focus_minutes, 3);
+    assert_eq!(
+        s.weekly_activity
+            .iter()
+            .map(|w| w.focus_minutes)
+            .sum::<i64>(),
+        3,
+        "no other week may carry the same sessions"
+    );
+}
+
 /// Both flags read a table the other adoption queries never touch, and a
 /// connected-but-empty calendar still counts as having used sync.
 #[tokio::test]

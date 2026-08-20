@@ -137,6 +137,7 @@ export interface WorkspaceWeekActivity {
   created: number;
   edited: number;
   completed: number;
+  focus_minutes: number;
 }
 
 /**

@@ -18,6 +18,9 @@ import {
 
 import { cn } from "@/lib/utils";
 
+import { weekLabel } from "../utils/weekLabel";
+import { FocusSummary } from "./FocusSummary";
+
 /** The shape now lives on the storage seam (`getUsageStats`); this alias keeps
  *  the panel's long-standing local name for it. */
 export type UsageStatsData = WorkspaceUsageStats;
@@ -75,7 +78,8 @@ function ActivityChart({ weeks }: { weeks: WorkspaceWeekActivity[] }) {
   return (
     <div className="space-y-2">
       <div className="flex items-end gap-1" style={{ height: 64 }}>
-        {weeks.map((w) => {
+        {weeks.map((w, i) => {
+          const label = weekLabel(weeks, i);
           const createdH = (w.created / maxVal) * 56;
           const editedH = (w.edited / maxVal) * 56;
           const completedH = (w.completed / maxVal) * 56;
@@ -87,25 +91,25 @@ function ActivityChart({ weeks }: { weeks: WorkspaceWeekActivity[] }) {
               <div
                 className="w-full max-w-[7px] rounded-t-sm bg-blue-500/60 transition-colors group-hover:bg-blue-500"
                 style={{ height: Math.max(createdH, w.created > 0 ? 2 : 0) }}
-                title={`${w.week}: ${w.created} created`}
+                title={`${label}: ${w.created} created`}
               />
               <div
                 className="w-full max-w-[7px] rounded-t-sm bg-violet-500/60 transition-colors group-hover:bg-violet-500"
                 style={{ height: Math.max(editedH, w.edited > 0 ? 2 : 0) }}
-                title={`${w.week}: ${w.edited} edited`}
+                title={`${label}: ${w.edited} edited`}
               />
               <div
                 className="w-full max-w-[7px] rounded-t-sm bg-emerald-500/60 transition-colors group-hover:bg-emerald-500"
                 style={{ height: Math.max(completedH, w.completed > 0 ? 2 : 0) }}
-                title={`${w.week}: ${w.completed} completed`}
+                title={`${label}: ${w.completed} completed`}
               />
             </div>
           );
         })}
       </div>
       <div className="flex justify-between text-[10px] text-muted-foreground">
-        <span>{weeks[0]?.week}</span>
-        <span>{weeks[weeks.length - 1]?.week}</span>
+        <span>{weekLabel(weeks, 0)}</span>
+        <span>{weekLabel(weeks, weeks.length - 1)}</span>
       </div>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1.5">
@@ -208,6 +212,8 @@ export function UsageStats({
           <ActivityChart weeks={stats.weekly_activity} />
         </div>
       )}
+
+      <FocusSummary stats={stats} />
 
       {/* Feature adoption */}
       <div className="rounded-lg border border-border bg-card p-4">
