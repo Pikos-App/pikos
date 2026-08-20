@@ -5,7 +5,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test as appTest } from "./fixtures";
+import { expect, quickAdd, test as appTest } from "./fixtures";
 
 async function openCalendarMode(app: Page) {
   // Click the header button rather than the shortcut — a keypress can be
@@ -51,6 +51,28 @@ appTest("month view shows a seeded event and opens its popover @tier2", async ({
   // the week grid opens, so the title input is the thing that appears.
   await chip.first().click();
   await expect(app.getByPlaceholder("Untitled")).toHaveValue("Board review");
+});
+
+appTest("month view never widens the window @tier2", async ({ app }) => {
+  for (const [title, when] of [
+    ["Quarterly planning review with the whole platform team", "today 9am"],
+    ["Follow-up on the migration rollback decision and its owners", "tomorrow 10am"],
+    ["Retrospective for the calendar sync rollout, part two", "tomorrow 2pm"],
+  ]) {
+    await quickAdd(app, `${title} ${when}`);
+  }
+  await openCalendarMode(app);
+  await switchToMonth(app);
+  // Narrow enough that cells sized to their content would not fit seven across.
+  await app.setViewportSize({ height: 800, width: 1000 });
+  await app.waitForTimeout(300);
+
+  // Guards the panel's min-w-0 — see EditorPanel.
+  const { client, scroll } = await app.evaluate(() => ({
+    client: document.documentElement.clientWidth,
+    scroll: document.documentElement.scrollWidth,
+  }));
+  expect(scroll).toBe(client);
 });
 
 appTest("month view header navigates by month and back to today @tier2", async ({ app }) => {

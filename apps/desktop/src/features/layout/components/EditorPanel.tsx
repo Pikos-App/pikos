@@ -55,8 +55,12 @@ export function EditorPanel() {
     ui.setReferenceDate(new Date());
   }
 
+  // min-w-0: a flex item defaults to min-width:auto and so refuses to shrink
+  // below its content. The month grid is as wide as its widest row wants to be,
+  // so without this the panel grows past the window and drags the whole
+  // three-panel shell with it — the sidebar and page list scroll off screen.
   return (
-    <div className="flex flex-1 flex-col bg-background">
+    <div className="flex min-w-0 flex-1 flex-col bg-background">
       <RightPanelHeader>
         {ui.rightPanel === "calendar" && (
           <CalendarHeader
