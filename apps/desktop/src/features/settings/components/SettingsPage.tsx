@@ -63,14 +63,16 @@ export function SettingsPage() {
     state: importState,
   } = useImport();
 
-  // Fetch usage stats eagerly so the Data tab renders instantly.
+  // Refetch on every open, not once per session: this panel stays mounted while
+  // closed, so keying on `storage` alone pinned every figure to app launch.
+  // Fetching on open still lands before the Data tab can be clicked.
   useEffect(() => {
-    if (!storage) return;
+    if (!storage || !settingsOpen) return;
     storage
       .getUsageStats()
       .then(setUsageStats)
       .catch(() => {});
-  }, [storage]);
+  }, [storage, settingsOpen]);
 
   // Close on Escape — go back from mapping/preview first, then close settings
   useEffect(() => {
