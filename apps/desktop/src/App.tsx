@@ -154,13 +154,14 @@ function useGlobalShortcuts() {
       Keyboard.register({
         allowInInputs: true,
         combo: `Mod+${i}`,
-        group: "Navigation",
         handler: () => {
           const folder = foldersRef.current[i - 1];
           if (folder) setViewRef.current(folder.id);
         },
         id,
-        label: `Switch to folder ${i}`,
+        // Unlabelled on purpose: a label would put nine near-identical rows in
+        // both the shortcuts page and the command palette. Documented once, as
+        // a family, in ShortcutsSettings.
         scope: "global",
       });
     }

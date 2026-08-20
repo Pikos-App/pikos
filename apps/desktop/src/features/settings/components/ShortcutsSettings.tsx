@@ -12,6 +12,13 @@ import { Keyboard } from "@/shared/keyboard/registry";
  *  registration order, so a new group shows up rather than disappearing. */
 const GROUP_ORDER = ["Navigation", "Page list", "Editor", "Quick add", "Calendar"];
 
+/** Bindings registered as a family of near-identical entries, documented once.
+ *  They register unlabelled so they stay out of the catalog and the command
+ *  palette, where nine rows differing by one digit read as noise. */
+const FAMILY_SHORTCUTS: ShortcutDoc[] = [
+  { combo: "Mod+1…9", group: "Navigation", label: "Switch to folder by position" },
+];
+
 /** Keys owned by the Tiptap editor and the Quick Add form, which never register
  *  with the keyboard registry — their components bind them directly. */
 const EXTERNAL_SHORTCUTS: ShortcutDoc[] = [
@@ -68,7 +75,11 @@ function groupShortcuts(entries: ShortcutDoc[]): { items: ShortcutDoc[]; label: 
 }
 
 export function ShortcutsSettings() {
-  const groups = groupShortcuts([...Keyboard.listShortcutCatalog(), ...EXTERNAL_SHORTCUTS]);
+  const groups = groupShortcuts([
+    ...Keyboard.listShortcutCatalog(),
+    ...FAMILY_SHORTCUTS,
+    ...EXTERNAL_SHORTCUTS,
+  ]);
 
   return (
     <div className="max-w-lg">
