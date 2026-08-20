@@ -47,6 +47,8 @@ pub struct UsageStats {
     pub has_subtasks: bool,
     pub has_tags: bool,
     pub has_priorities: bool,
+    pub has_reminders: bool,
+    pub has_calendar_sync: bool,
 
     // Milestones
     pub first_page_date: Option<String>,
@@ -218,6 +220,22 @@ pub(crate) async fn get_usage_stats_impl(pool: &sqlx::SqlitePool) -> AppResult<U
     .await?
         > 0;
 
+    // Explicit per-page leads only. Whether reminders actually *fire* also depends
+    // on the notifications toggle and the global default lead, both of which live
+    // in frontend settings — the panel combines the two.
+    let has_reminders: bool = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM page_reminders")
+        .fetch_one(pool)
+        .await?
+        > 0;
+
+    // Connecting is the adoption signal, not mirroring: a user who connected an
+    // empty calendar has used the feature. Dormant rows count for the same reason.
+    let has_calendar_sync: bool =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sync_account")
+            .fetch_one(pool)
+            .await?
+            > 0;
+
     // ── Milestones ────────────────────────────────────────────────────────────
     let first_page_date: Option<String> =
         sqlx::query_scalar("SELECT MIN(created_at) FROM pages WHERE deleted_at IS NULL")
@@ -241,6 +259,8 @@ pub(crate) async fn get_usage_stats_impl(pool: &sqlx::SqlitePool) -> AppResult<U
         has_subtasks,
         has_tags,
         has_priorities,
+        has_reminders,
+        has_calendar_sync,
         first_page_date,
     })
 }

@@ -1523,12 +1523,14 @@ export class MockStorageAdapter implements StorageAdapter {
     const focusSeconds = this.focusSessions.reduce((sum, s) => sum + s.durationS, 0);
     return Promise.resolve({
       first_page_date: pages.map((p) => p.createdAt).sort()[0] ?? null,
+      has_calendar_sync: this.syncAccounts.size > 0,
       has_focus_sessions: this.focusSessions.length > 0,
       has_folders: this.folders.size > 0,
-      has_priorities: pages.some((p) => p.priority != null),
+      has_priorities: pages.some((p) => p.priority !== 0),
       has_recurring: this.rules.size > 0,
+      has_reminders: this.reminders.size > 0,
       has_schedules: this.schedules.size > 0,
-      has_subtasks: false,
+      has_subtasks: pages.some((p) => p.parentId != null),
       has_tags: tags.size > 0,
       total_completed: pages.filter(isDone).length,
       total_focus_minutes: Math.floor(focusSeconds / 60),

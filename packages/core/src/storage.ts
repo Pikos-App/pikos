@@ -160,6 +160,8 @@ export interface WorkspaceUsageStats {
   has_subtasks: boolean;
   has_tags: boolean;
   has_priorities: boolean;
+  has_reminders: boolean;
+  has_calendar_sync: boolean;
   first_page_date: string | null;
 }
 

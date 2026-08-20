@@ -9,6 +9,7 @@ import { TypedConfirmDialog } from "@/components/ui/typed-confirm-dialog";
 import { ImportSection } from "@/features/import";
 import type { ImportState, LastImportResult } from "@/features/import";
 import { deleteAllData } from "@/lib/data/deleteAllData";
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -123,6 +124,7 @@ export function DataSettings({
   usageStats,
 }: DataSettingsProps) {
   const { storage, workspace } = useWorkspace();
+  const { notificationsEnabled } = useAppSettings();
   const { folders } = usePages();
   const { showNotice } = useUndoDelete();
   const [sqliteExport, setSqliteExport] = useState<ExportState>({ status: "idle" });
@@ -185,7 +187,7 @@ export function DataSettings({
         description="Your data is stored locally and never leaves your device."
         title="Your Workspace"
       >
-        <UsageStats stats={usageStats} />
+        <UsageStats notificationsEnabled={notificationsEnabled} stats={usageStats} />
       </SettingsSection>
 
       {/* ── Import ──────────────────────────────────────────────────── */}

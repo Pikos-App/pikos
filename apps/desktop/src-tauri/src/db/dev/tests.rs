@@ -234,6 +234,8 @@ async fn usage_stats_empty_db_is_all_zeros() {
     assert!(!s.has_subtasks);
     assert!(!s.has_tags);
     assert!(!s.has_priorities);
+    assert!(!s.has_reminders);
+    assert!(!s.has_calendar_sync);
     assert!(s.first_page_date.is_none());
     // Always 12 weeks of buckets, regardless of data.
     assert_eq!(s.weekly_activity.len(), 12);
@@ -298,6 +300,33 @@ async fn usage_stats_counts_totals_and_adoption() {
     // All three pages were created "now", so they land in the current week.
     let created: i64 = s.weekly_activity.iter().map(|w| w.created).sum();
     assert_eq!(created, 3);
+}
+
+/// Both flags read a table the other adoption queries never touch, and a
+/// connected-but-empty calendar still counts as having used sync.
+#[tokio::test]
+async fn usage_stats_flags_reminders_and_a_connected_calendar() {
+    let pool = test_pool().await;
+    insert_rich_page(&pool, "p1", "Parent", "{}", "one two", 0, "[]").await;
+
+    assert!(!get_usage_stats_impl(&pool).await.unwrap().has_reminders);
+    assert!(!get_usage_stats_impl(&pool).await.unwrap().has_calendar_sync);
+
+    pikos_db::create_page_reminder(&pool, "p1", 30).await.unwrap();
+    let now = pikos_db::now_iso();
+    sqlx::query(
+        "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('acct', 'google', 'a@example.com', 'oauth', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let s = get_usage_stats_impl(&pool).await.unwrap();
+    assert!(s.has_reminders);
+    assert!(s.has_calendar_sync);
 }
 
 #[tokio::test]

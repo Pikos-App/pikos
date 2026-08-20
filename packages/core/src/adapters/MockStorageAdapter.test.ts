@@ -2092,6 +2092,28 @@ describe("createFocusSession", () => {
     expect(stats.has_focus_sessions).toBe(true);
   });
 
+  /// Each of these read a different source than the totals beside them, and two
+  /// of them disagreed with the writer until 2026-08-19: `has_priorities` tested
+  /// for a non-null priority, which every page has, and `has_subtasks` was a
+  /// hardcoded false.
+  it("derives every adoption flag the writer does", async () => {
+    const plain = await adapter.getUsageStats();
+    expect(plain.has_priorities).toBe(false);
+    expect(plain.has_subtasks).toBe(false);
+    expect(plain.has_reminders).toBe(false);
+    expect(plain.has_calendar_sync).toBe(false);
+
+    const parent = await createTestPage({ priority: 2 });
+    const child = await createTestPage();
+    await adapter.updatePage(child.id, { parentId: parent.id });
+    await adapter.createPageReminder({ minutesBefore: 30, pageId: parent.id });
+
+    const used = await adapter.getUsageStats();
+    expect(used.has_priorities).toBe(true);
+    expect(used.has_subtasks).toBe(true);
+    expect(used.has_reminders).toBe(true);
+  });
+
   it("truncates partial minutes the way SQLite integer division does", async () => {
     const page = await createTestPage();
     await adapter.createFocusSession({

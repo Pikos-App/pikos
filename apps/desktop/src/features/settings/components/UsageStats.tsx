@@ -1,8 +1,10 @@
 import type { WorkspaceUsageStats, WorkspaceWeekActivity } from "@pikos/core";
 import {
   BarChart3,
+  BellRing,
   BookOpen,
   Calendar,
+  CalendarSync,
   CheckCircle2,
   Clock,
   FileText,
@@ -10,6 +12,7 @@ import {
   FolderOpen,
   Hash,
   Layers,
+  Repeat,
   Timer,
 } from "lucide-react";
 
@@ -132,7 +135,10 @@ function FeatureBadge({
   label: string;
 }) {
   return (
+    // Colour is the only visual carrier of on/off, so the state is spelled out
+    // for anyone who can't read it — screen readers included.
     <div
+      aria-label={`${label}: ${active ? "in use" : "not used"}`}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
         active
@@ -146,7 +152,13 @@ function FeatureBadge({
   );
 }
 
-export function UsageStats({ stats }: { stats: UsageStatsData | null }) {
+export function UsageStats({
+  notificationsEnabled,
+  stats,
+}: {
+  notificationsEnabled: boolean;
+  stats: UsageStatsData | null;
+}) {
   if (!stats) return null;
 
   const memberDays = stats.first_page_date ? daysSince(stats.first_page_date) : 0;
@@ -209,6 +221,18 @@ export function UsageStats({ stats }: { stats: UsageStatsData | null }) {
           <FeatureBadge active={stats.has_schedules} icon={Calendar} label="Scheduling" />
           <FeatureBadge active={stats.has_priorities} icon={Flag} label="Priorities" />
           <FeatureBadge active={stats.has_tags} icon={Hash} label="Tags" />
+          <FeatureBadge active={stats.has_recurring} icon={Repeat} label="Recurring" />
+          <FeatureBadge
+            active={notificationsEnabled && (stats.has_schedules || stats.has_reminders)}
+            icon={BellRing}
+            label="Notifications"
+          />
+          <FeatureBadge active={stats.has_focus_sessions} icon={Timer} label="Focus" />
+          <FeatureBadge
+            active={stats.has_calendar_sync}
+            icon={CalendarSync}
+            label="Calendar sync"
+          />
         </div>
       </div>
     </div>
