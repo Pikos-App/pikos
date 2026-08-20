@@ -23,6 +23,7 @@ import type { NewFocusSession, StorageAdapter } from "@pikos/core";
 import { formatLocalISO } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 
+import { postNotice } from "@/shared/events/noticeBus";
 import { createLogger } from "@/shared/logger";
 
 const log = createLogger("useFocusTimer");
@@ -98,7 +99,11 @@ export function useFocusTimer(storage: StorageAdapter | null, pageId: string): F
 
 /** Write one finished session, or decline to. Never throws: a lost session is a
  *  missing row on a settings card, not something worth an error state in the
- *  editor the user is typing in. */
+ *  editor the user is typing in.
+ *
+ *  Both outcomes get a toast. Ending is otherwise near-invisible — the row is
+ *  written to a panel the user isn't looking at — and a silent discard below the
+ *  floor reads exactly like a silent success. */
 async function writeSession(
   storage: StorageAdapter | null,
   pageId: string,
@@ -107,7 +112,10 @@ async function writeSession(
   if (!storage || !startedAt) return;
   const ended = new Date();
   const durationS = Math.round((ended.getTime() - startedAt.getTime()) / 1000);
-  if (durationS < MIN_SESSION_S) return;
+  if (durationS < MIN_SESSION_S) {
+    postNotice(`Under ${MIN_SESSION_S} seconds — not recorded`);
+    return;
+  }
   const session: NewFocusSession = {
     durationS,
     endedAt: formatLocalISO(ended),
@@ -116,9 +124,22 @@ async function writeSession(
   };
   try {
     await storage.createFocusSession(session);
+    postNotice(`Focused for ${formatSessionLength(durationS)}`);
   } catch (err) {
     log.warn("focus session not recorded", err);
   }
+}
+
+/** Whole units for the end-of-session toast: a session is worth reporting as
+ *  "24 minutes", never as "24:07" — the seconds are precision nobody asked for
+ *  once the thing being measured is over. */
+function formatSessionLength(totalSeconds: number): string {
+  const minutes = Math.round(totalSeconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  const hourPart = `${hours} hour${hours === 1 ? "" : "s"}`;
+  return rest === 0 ? hourPart : `${hourPart} ${rest} min`;
 }
 
 /** `M:SS`, or `H:MM:SS` once an hour is up — read at a glance beside the byline,

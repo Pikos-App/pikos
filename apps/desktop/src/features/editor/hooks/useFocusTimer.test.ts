@@ -2,6 +2,8 @@ import { MockStorageAdapter } from "@pikos/core/testing";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { subscribeNotices } from "@/shared/events/noticeBus";
+
 import { formatElapsed, MIN_SESSION_S, useFocusTimer } from "./useFocusTimer";
 
 vi.stubEnv("VITE_TEST_MODE", "true");
@@ -175,5 +177,41 @@ describe("formatElapsed", () => {
 
   it("clamps a negative input rather than rendering a minus sign", () => {
     expect(formatElapsed(-5)).toBe("0:00");
+  });
+});
+
+describe("end-of-session notice", () => {
+  let notices: string[];
+  let unsubscribe: () => void;
+
+  beforeEach(() => {
+    notices = [];
+    unsubscribe = subscribeNotices((label) => notices.push(label));
+  });
+
+  afterEach(() => unsubscribe());
+
+  async function runSession(seconds: number) {
+    const { result } = setup();
+    act(() => result.current.start());
+    await advance(seconds);
+    await act(async () => {
+      await result.current.stop();
+    });
+  }
+
+  it("reports a recorded session in whole minutes", async () => {
+    await runSession(25 * 60);
+    expect(notices).toEqual(["Focused for 25 minutes"]);
+  });
+
+  it("says so when a session was too short to record", async () => {
+    await runSession(MIN_SESSION_S - 1);
+    expect(notices).toEqual([`Under ${MIN_SESSION_S} seconds — not recorded`]);
+  });
+
+  it("carries the hour once a session passes one", async () => {
+    await runSession(95 * 60);
+    expect(notices).toEqual(["Focused for 1 hour 35 min"]);
   });
 });
