@@ -41,6 +41,9 @@ const MIN_QUERY_LENGTH = 2;
 
 /** Leading character that turns the palette into a command list. */
 const COMMAND_PREFIX = ">";
+// The trailing space is functional: it leaves the caret past the prefix so the
+// first keystroke filters commands instead of sitting flush against ">".
+const COMMAND_PREFILL = `${COMMAND_PREFIX} `;
 
 type SearchPagesFn = (query: string, includeCompleted?: boolean) => Promise<SearchResponse>;
 
@@ -236,12 +239,13 @@ export function SearchPalette() {
     { allowInInputs: true, group: "Navigation", label: "Search pages" }
   );
 
-  // Focus input when palette opens.
-  useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus();
-    }
-  }, [isOpen]);
+  useKeyboardShortcut(
+    "Mod+Shift+K",
+    () => {
+      if (!isOpen) setOpenDialog("search", COMMAND_PREFILL);
+    },
+    { allowInInputs: true, group: "Navigation", label: "Run a command" }
+  );
 
   // ── Search with debounce ──────────────────────────────────────────────────
 
@@ -473,6 +477,16 @@ export function SearchPalette() {
       <DialogContent
         aria-label="Search pages"
         className="top-[15%] translate-y-0 gap-0 border-border/60 bg-card p-0 shadow-2xl sm:max-w-[540px]"
+        // Radix's focus scope selects an input's contents when it autofocuses,
+        // which makes the first keystroke replace a prefill rather than extend
+        // it. Focus it here instead, caret collapsed to the end.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          const input = inputRef.current;
+          if (!input) return;
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }}
         showCloseButton={false}
       >
         {/* Radix Dialog requires a title + description for screen readers

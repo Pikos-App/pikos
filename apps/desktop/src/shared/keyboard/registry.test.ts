@@ -489,3 +489,42 @@ describe("listShortcutCatalog", () => {
     expect(catalog.map((d) => d.combo)).not.toContain("Mod+r");
   });
 });
+
+describe("palette / shortcuts page parity", () => {
+  it("lists a command on both surfaces, or on neither", () => {
+    Keyboard.register({
+      combo: "Mod+1",
+      group: "Views",
+      handler: vi.fn(),
+      id: "par-1",
+      label: "Go to Today",
+    });
+    Keyboard.register({ combo: "Mod+2", handler: vi.fn(), id: "par-2" });
+    Keyboard.register({
+      combo: "Mod+3",
+      group: "Views",
+      handler: vi.fn(),
+      id: "par-3",
+      label: "Gated off",
+      when: () => false,
+    });
+
+    const palette = Keyboard.listCommands().map((b) => b.label);
+    const documented = new Set(Keyboard.listShortcutCatalog().map((d) => d.label));
+
+    expect(palette).toContain("Go to Today");
+    expect(palette).not.toContain("Gated off");
+    expect(palette).not.toContain(undefined);
+    for (const label of palette) expect(documented).toContain(label);
+  });
+
+  it("hands the palette a runnable handler, not a copy stripped of one", () => {
+    const handler = vi.fn();
+    Keyboard.register({ combo: "Mod+k", group: "Views", handler, id: "par-4", label: "Runs" });
+
+    const command = Keyboard.listCommands().find((b) => b.label === "Runs");
+    command?.handler(new KeyboardEvent("keydown"));
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+});

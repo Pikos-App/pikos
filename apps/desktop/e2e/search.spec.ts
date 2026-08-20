@@ -209,6 +209,25 @@ appTest("Cmd+K > lists commands and Enter runs the highlighted one @tier2", asyn
   await expect(app.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeVisible();
 });
 
+// Cmd+Shift+K opens straight into command mode. Radix's focus scope selects an
+// input's contents when it autofocuses, so the prefix survived being rendered
+// but not the first keystroke — typing replaced it and the palette fell back to
+// searching pages.
+
+appTest("Cmd+Shift+K opens in command mode and typing keeps the prefix @tier2", async ({ app }) => {
+  await app.keyboard.press(mod("Mod+Shift+k"));
+  const dialog = app.getByRole("dialog", { name: "Search pages" });
+  await expect(dialog).toBeVisible();
+
+  const input = dialog.getByRole("textbox");
+  await expect(input).toHaveValue("> ");
+  await expect(dialog.getByRole("button", { name: /New page/ })).toBeVisible();
+
+  await app.keyboard.type("keyboard");
+  await expect(input).toHaveValue("> keyboard");
+  await expect(dialog.getByRole("button", { name: /Keyboard shortcuts/ })).toBeVisible();
+});
+
 // The shortcuts settings page is rendered from the same registry the command
 // list reads, so a labelled binding shows up in both.
 
