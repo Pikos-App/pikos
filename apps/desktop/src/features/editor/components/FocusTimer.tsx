@@ -7,15 +7,22 @@
 // what the Data panel's "Focus time" card has always been summing.
 
 import { Play, Square } from "lucide-react";
+import { useEffect } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 
 import { formatElapsed, MIN_SESSION_S, useFocusTimer } from "../hooks/useFocusTimer";
 
 export function FocusTimer({ pageId }: { pageId: string }) {
   const { storage } = useWorkspace();
+  const { setFocusZen } = useUI();
   const { elapsedS, running, start, stop } = useFocusTimer(storage, pageId);
+
+  // Leaving the page banks the running session the same way stopping does, and
+  // this component is keyed per page, so unmount is the other end of a session.
+  useEffect(() => () => setFocusZen(false), [setFocusZen]);
 
   if (!running) {
     return (
@@ -24,7 +31,10 @@ export function FocusTimer({ pageId }: { pageId: string }) {
           <button
             aria-label="Start focus timer"
             className="inline-flex shrink-0 items-center rounded p-1 text-subtle transition-colors hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            onClick={start}
+            onClick={() => {
+              start();
+              setFocusZen(true);
+            }}
             type="button"
           >
             <Play aria-hidden="true" size={13} />
@@ -51,7 +61,10 @@ export function FocusTimer({ pageId }: { pageId: string }) {
           <button
             aria-label="Stop focus timer"
             className="inline-flex items-center rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            onClick={() => void stop()}
+            onClick={() => {
+              setFocusZen(false);
+              void stop();
+            }}
             type="button"
           >
             <Square aria-hidden="true" fill="currentColor" size={11} />

@@ -51,6 +51,20 @@ export interface UIContextValue {
   /** Both left panels hidden. Persisted to localStorage. */
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (v: boolean | ((prev: boolean) => boolean)) => void;
+  /**
+   * A focus session is hiding the left panels. Every consumer that hides them
+   * must read this alongside `sidebarCollapsed` — the session hides the same
+   * two panels, it just doesn't own the preference.
+   *
+   * Deliberately *not* persisted, and deliberately not written through
+   * `sidebarCollapsed`: that flag is the user's standing choice, so a session
+   * that set it would survive the session, the app quit, and the next launch —
+   * panels gone with nothing left to explain why. Ending the session drops this
+   * and the standing choice reappears on its own. An explicit toggle mid-session
+   * clears it too, so the app stops fighting a decision the user just made.
+   */
+  focusZen: boolean;
+  setFocusZen: (v: boolean) => void;
   /** Page list overlay drawer open state. Only meaningful at the sm breakpoint. Not persisted. */
   pageListDrawerOpen: boolean;
   setPageListDrawerOpen: (v: boolean) => void;
@@ -109,6 +123,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     STORAGE_KEYS.sidebarCollapsed,
     false
   );
+  const [focusZen, setFocusZen] = useState(false);
   const [pageListDrawerOpen, setPageListDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
@@ -195,6 +210,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     calendarScrollRequest,
     dialogPrefill,
     flashPageBlock,
+    focusZen,
     getSortMode,
     highlightedPageId,
     lastEditorPageId,
@@ -207,6 +223,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     rightPanel,
     setActivePage,
     setActiveViewId,
+    setFocusZen,
     setLastEditorPageId,
     setOpenDialog,
     setOpenSortMenu,

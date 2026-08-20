@@ -325,3 +325,38 @@ appTest("bubble toolbar inserts a link around the selection @tier2", async ({ ap
   const link = editor.locator('a[href="https://pikos.app"]');
   await expect(link).toHaveText("Pikos");
 });
+
+// ─── Focus timer clears the room and reports on the way out ─────────────────
+
+// The session hides the left panels for the duration. It must not write the
+// user's standing sidebar preference to do it: a run that ended by quitting the
+// app would otherwise leave the panels gone on the next launch, with nothing on
+// screen to explain why.
+
+appTest("a focus session hides the left panels and gives them back @tier2", async ({ app }) => {
+  await quickAdd(app, "Deep work");
+  await openEditorForPage(app, "Deep work");
+
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+  await expect(app.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+
+  await app.getByRole("button", { name: "Stop focus timer" }).click();
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+});
+
+// Opening the sidebar mid-session is an explicit decision, so the session stops
+// driving it — ending must not yank the panels away again.
+
+appTest("reopening the sidebar mid-session survives the session ending @tier2", async ({ app }) => {
+  await quickAdd(app, "Deep work");
+  await openEditorForPage(app, "Deep work");
+
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+  await app.getByRole("button", { name: "Expand sidebar" }).click();
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+
+  await app.getByRole("button", { name: "Stop focus timer" }).click();
+  await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
+});

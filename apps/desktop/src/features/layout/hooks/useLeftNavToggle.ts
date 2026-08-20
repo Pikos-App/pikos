@@ -16,8 +16,14 @@ interface LeftNavToggle {
  * page list is an overlay drawer controlled by `pageListDrawerOpen`.
  */
 export function useLeftNavToggle(): LeftNavToggle {
-  const { pageListDrawerOpen, setPageListDrawerOpen, setSidebarCollapsed, sidebarCollapsed } =
-    useUI();
+  const {
+    focusZen,
+    pageListDrawerOpen,
+    setFocusZen,
+    setPageListDrawerOpen,
+    setSidebarCollapsed,
+    sidebarCollapsed,
+  } = useUI();
   const mode = useLayoutMode();
 
   if (shouldOverlayPageList(mode)) {
@@ -27,8 +33,12 @@ export function useLeftNavToggle(): LeftNavToggle {
     };
   }
 
+  const hidden = sidebarCollapsed || focusZen;
   return {
-    isOpen: !sidebarCollapsed,
-    toggle: () => setSidebarCollapsed(!sidebarCollapsed),
+    isOpen: !hidden,
+    toggle: () => {
+      setFocusZen(false);
+      setSidebarCollapsed(!hidden);
+    },
   };
 }
