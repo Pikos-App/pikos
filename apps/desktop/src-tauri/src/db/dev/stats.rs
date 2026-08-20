@@ -246,11 +246,10 @@ pub(crate) async fn get_usage_stats_impl(pool: &sqlx::SqlitePool) -> AppResult<U
 
     // Connecting is the adoption signal, not mirroring: a user who connected an
     // empty calendar has used the feature. Dormant rows count for the same reason.
-    let has_calendar_sync: bool =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sync_account")
-            .fetch_one(pool)
-            .await?
-            > 0;
+    let has_calendar_sync: bool = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sync_account")
+        .fetch_one(pool)
+        .await?
+        > 0;
 
     // ── Milestones ────────────────────────────────────────────────────────────
     let first_page_date: Option<String> =

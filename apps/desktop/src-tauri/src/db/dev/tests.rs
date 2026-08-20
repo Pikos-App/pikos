@@ -367,7 +367,9 @@ async fn usage_stats_flags_reminders_and_a_connected_calendar() {
     assert!(!get_usage_stats_impl(&pool).await.unwrap().has_reminders);
     assert!(!get_usage_stats_impl(&pool).await.unwrap().has_calendar_sync);
 
-    pikos_db::create_page_reminder(&pool, "p1", 30).await.unwrap();
+    pikos_db::create_page_reminder(&pool, "p1", 30)
+        .await
+        .unwrap();
     let now = pikos_db::now_iso();
     sqlx::query(
         "INSERT INTO sync_account (id, provider, display_name, auth_kind, created_at, updated_at)
