@@ -72,11 +72,7 @@ fi
 "${SED[@]}" "s/\"version\": \"$CURRENT\"/\"version\": \"$VERSION\"/" "$DESKTOP_PKG"
 "${SED[@]}" "s/^version = \"$CURRENT\"/version = \"$VERSION\"/" "$CARGO_TOML"
 
-# Deliberately NOT `cargo generate-lockfile`, which re-resolves the whole graph:
-# on this tree that moved 364 dependency versions and pulled in new crates, so a
-# release would ship against a dependency set nothing had tested. Reading the
-# metadata updates the lockfile minimally instead, touching only the version line
-# the bump above changed.
+# Minimal lockfile update, not `cargo generate-lockfile`; release.sh says why.
 (cd "$ROOT/apps/desktop/src-tauri" && cargo metadata --format-version 1 >/dev/null 2>&1 || true)
 
 git -C "$ROOT" add "$TAURI_CONF" "$DESKTOP_PKG" "$CARGO_TOML" \
