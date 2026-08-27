@@ -68,6 +68,7 @@ export const MIRRORED_GUARD_MESSAGES = {
   intoCalendarFolder: "Pages cannot be moved into an external calendar folder",
   noOccurrence: "Recurring page has no scheduled occurrence to complete.",
   notRecurring: "Occurrence completion applies only to a recurring series.",
+  occurrenceAlreadyPassed: "This series has moved past the occurrence you asked to complete.",
   occurrenceNotInSeries: "Occurrence is not part of this synced series.",
   syncedNeedsDate: "Synced occurrence completion requires an occurrence date.",
   syncedNeedsStart: "Synced occurrence completion requires the occurrence start.",
@@ -83,6 +84,7 @@ const {
   intoCalendarFolder: INTO_CALENDAR_FOLDER_MSG,
   noOccurrence: NO_OCCURRENCE_MSG,
   notRecurring: NOT_RECURRING_MSG,
+  occurrenceAlreadyPassed: OCCURRENCE_ALREADY_PASSED_MSG,
   occurrenceNotInSeries: OCCURRENCE_NOT_IN_SERIES_MSG,
   syncedNeedsDate: SYNCED_NEEDS_DATE_MSG,
   syncedNeedsStart: SYNCED_NEEDS_START_MSG,
@@ -962,6 +964,17 @@ export class MockStorageAdapter implements StorageAdapter {
       occurrenceDate = head.scheduledStart.slice(0, 10);
       cloneStart = head.scheduledStart;
       cloneEnd = head.scheduledEnd ?? null;
+    }
+
+    // A head a second writer advanced under the caller: already complete means the
+    // race is simply lost, so hand back the winner's clone; any other move refuses
+    // (mirrors the Rust guard).
+    const expected = data.expectedOccurrenceDate;
+    if (expected && expected !== occurrenceDate) {
+      const wonId = head.completedOccurrences?.[expected];
+      const won = wonId ? this.pages.get(wonId) : undefined;
+      if (!won) return Promise.reject(new StorageError("Conflict", OCCURRENCE_ALREADY_PASSED_MSG));
+      return Promise.resolve({ clone: toSummary(won), head: toSummary(head) });
     }
 
     // Idempotency: a repeat completion of the same occurrence returns the existing

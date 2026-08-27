@@ -114,6 +114,11 @@ export interface CompleteRecurringInput {
   occurrenceDate?: string;
   scheduledStart?: string;
   scheduledEnd?: string;
+  /** The occurrence the caller last saw as open. Supplied, the completion applies to
+   * that occurrence or to nothing: already done returns its clone, and a series that
+   * moved on for any other reason is refused rather than advanced again. Guards a
+   * second writer (the CLI) against the desktop, whose in-flight guard it can't see. */
+  expectedOccurrenceDate?: string;
 }
 
 export interface CompleteRecurringResult {

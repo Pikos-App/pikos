@@ -368,7 +368,9 @@ pub async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
     }
 
     // The occurrence, the exclusion and the next head are all derived server-side
-    // from the occurrence-sets; the CLI supplies only which series to advance.
+    // from the occurrence-sets; the CLI supplies only which series to advance, plus
+    // the occurrence it read, so a desktop tick landing first can't make this call
+    // silently consume the following one.
     complete_recurring_page_impl(
         pool,
         CompleteRecurringInput {
@@ -376,6 +378,10 @@ pub async fn mark_done(pool: &SqlitePool, id: &str) -> Result<Page, CliError> {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: page
+                .scheduled_start
+                .as_deref()
+                .map(|s| s[..s.len().min(10)].to_string()),
         },
     )
     .await

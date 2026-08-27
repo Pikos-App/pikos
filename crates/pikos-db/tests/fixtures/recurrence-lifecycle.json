@@ -10,25 +10,44 @@
       "name": "a fresh series heads on its first occurrence",
       "origin": "native",
       "steps": [],
-      "expect": { "head": { "scheduledStart": "2026-06-01T09:00:00", "status": "not_started" } }
+      "expect": {
+        "head": {
+          "scheduledStart": "2026-06-01T09:00:00",
+          "status": "not_started"
+        }
+      }
     },
-
     {
       "name": "completing the head advances it and leaves a done clone behind",
       "origin": "native",
-      "steps": [{ "op": "complete" }],
+      "steps": [
+        {
+          "op": "complete"
+        }
+      ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-08T09:00:00", "status": "not_started" },
-        "completedDates": ["2026-06-01"],
-        "clones": [{ "scheduledStart": "2026-06-01T09:00:00", "status": "done" }]
+        "head": {
+          "scheduledStart": "2026-06-08T09:00:00",
+          "status": "not_started"
+        },
+        "completedDates": [
+          "2026-06-01"
+        ],
+        "clones": [
+          {
+            "scheduledStart": "2026-06-01T09:00:00",
+            "status": "done"
+          }
+        ]
       }
     },
-
     {
       "name": "completing the same occurrence twice mints one clone",
       "origin": "native",
       "steps": [
-        { "op": "complete" },
+        {
+          "op": "complete"
+        },
         {
           "op": "complete",
           "occurrenceDate": "2026-06-01",
@@ -37,85 +56,173 @@
         }
       ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-08T09:00:00" },
-        "completedDates": ["2026-06-01"],
+        "head": {
+          "scheduledStart": "2026-06-08T09:00:00"
+        },
+        "completedDates": [
+          "2026-06-01"
+        ],
         "cloneCount": 1
       }
     },
-
+    {
+      "name": "a completion naming an occurrence the head has left returns the clone that took it",
+      "origin": "native",
+      "steps": [
+        {
+          "op": "complete"
+        },
+        {
+          "op": "complete",
+          "expectedOccurrenceDate": "2026-06-01"
+        }
+      ],
+      "expect": {
+        "head": {
+          "scheduledStart": "2026-06-08T09:00:00"
+        },
+        "completedDates": [
+          "2026-06-01"
+        ],
+        "cloneCount": 1
+      }
+    },
     {
       "name": "uncompleting an occurrence removes its clone and walks the head back",
       "origin": "native",
-      "steps": [{ "op": "complete" }, { "op": "uncomplete", "occurrenceDate": "2026-06-01" }],
+      "steps": [
+        {
+          "op": "complete"
+        },
+        {
+          "op": "uncomplete",
+          "occurrenceDate": "2026-06-01"
+        }
+      ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-01T09:00:00", "status": "not_started" },
+        "head": {
+          "scheduledStart": "2026-06-01T09:00:00",
+          "status": "not_started"
+        },
         "completedDates": [],
         "cloneCount": 0
       }
     },
-
     {
       "name": "skipping an occurrence advances the head without minting a clone",
       "origin": "native",
-      "steps": [{ "op": "skip", "occurrenceDate": "2026-06-01" }],
+      "steps": [
+        {
+          "op": "skip",
+          "occurrenceDate": "2026-06-01"
+        }
+      ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-08T09:00:00" },
-        "skippedDates": ["2026-06-01"],
+        "head": {
+          "scheduledStart": "2026-06-08T09:00:00"
+        },
+        "skippedDates": [
+          "2026-06-01"
+        ],
         "cloneCount": 0
       }
     },
-
     {
       "name": "undoing a skip restores the occurrence to the head",
       "origin": "native",
       "steps": [
-        { "op": "skip", "occurrenceDate": "2026-06-01" },
-        { "op": "undoSkip", "occurrenceDate": "2026-06-01" }
+        {
+          "op": "skip",
+          "occurrenceDate": "2026-06-01"
+        },
+        {
+          "op": "undoSkip",
+          "occurrenceDate": "2026-06-01"
+        }
       ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-01T09:00:00" },
+        "head": {
+          "scheduledStart": "2026-06-01T09:00:00"
+        },
         "skippedDates": []
       }
     },
-
     {
       "name": "completed and skipped occurrences both push the head past them",
       "origin": "native",
       "steps": [
-        { "op": "complete" },
-        { "op": "skip", "occurrenceDate": "2026-06-08" },
-        { "op": "skip", "occurrenceDate": "2026-06-15" }
+        {
+          "op": "complete"
+        },
+        {
+          "op": "skip",
+          "occurrenceDate": "2026-06-08"
+        },
+        {
+          "op": "skip",
+          "occurrenceDate": "2026-06-15"
+        }
       ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-22T09:00:00" },
-        "completedDates": ["2026-06-01"],
-        "skippedDates": ["2026-06-08", "2026-06-15"]
+        "head": {
+          "scheduledStart": "2026-06-22T09:00:00"
+        },
+        "completedDates": [
+          "2026-06-01"
+        ],
+        "skippedDates": [
+          "2026-06-08",
+          "2026-06-15"
+        ]
       }
     },
-
     {
       "name": "an exdate takes its occurrence out of the head derivation",
       "origin": "native",
-      "steps": [{ "op": "addExdates", "dates": ["2026-06-01", "2026-06-08"] }],
+      "steps": [
+        {
+          "op": "addExdates",
+          "dates": [
+            "2026-06-01",
+            "2026-06-08"
+          ]
+        }
+      ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-15T09:00:00" },
-        "exdates": ["2026-06-01", "2026-06-08"]
+        "head": {
+          "scheduledStart": "2026-06-15T09:00:00"
+        },
+        "exdates": [
+          "2026-06-01",
+          "2026-06-08"
+        ]
       }
     },
-
     {
       "name": "removing an exdate gives the occurrence back",
       "origin": "native",
       "steps": [
-        { "op": "addExdates", "dates": ["2026-06-01", "2026-06-08"] },
-        { "op": "removeExdate", "date": "2026-06-01" }
+        {
+          "op": "addExdates",
+          "dates": [
+            "2026-06-01",
+            "2026-06-08"
+          ]
+        },
+        {
+          "op": "removeExdate",
+          "date": "2026-06-01"
+        }
       ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-01T09:00:00" },
-        "exdates": ["2026-06-08"]
+        "head": {
+          "scheduledStart": "2026-06-01T09:00:00"
+        },
+        "exdates": [
+          "2026-06-08"
+        ]
       }
     },
-
     {
       "name": "a native occurrence moved out of the series becomes its own page and an exdate",
       "origin": "native",
@@ -128,13 +235,21 @@
         }
       ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-08T09:00:00" },
-        "exdates": ["2026-06-01"],
+        "head": {
+          "scheduledStart": "2026-06-08T09:00:00"
+        },
+        "exdates": [
+          "2026-06-01"
+        ],
         "overrideCount": 0,
-        "clones": [{ "scheduledStart": "2026-06-03T14:00:00", "status": "not_started" }]
+        "clones": [
+          {
+            "scheduledStart": "2026-06-03T14:00:00",
+            "status": "not_started"
+          }
+        ]
       }
     },
-
     {
       "name": "a detached synced occurrence moves in place as an override, never a clone",
       "origin": "detached",
@@ -147,13 +262,14 @@
         }
       ],
       "expect": {
-        "head": { "scheduledStart": "2026-06-08T09:00:00" },
+        "head": {
+          "scheduledStart": "2026-06-08T09:00:00"
+        },
         "exdates": [],
         "overrideCount": 1,
         "cloneCount": 0
       }
     },
-
     {
       "name": "moving the same detached occurrence again reuses its override row",
       "origin": "detached",
@@ -174,7 +290,6 @@
         "cloneCount": 0
       }
     },
-
     {
       "name": "an active mirror completes per occurrence and the tick lands on the head's set",
       "origin": "active",
@@ -187,31 +302,53 @@
         }
       ],
       "expect": {
-        "completedDates": ["2026-06-08"],
-        "clones": [{ "scheduledStart": "2026-06-08T09:00:00", "status": "done" }]
+        "completedDates": [
+          "2026-06-08"
+        ],
+        "clones": [
+          {
+            "scheduledStart": "2026-06-08T09:00:00",
+            "status": "done"
+          }
+        ]
       }
     },
-
     {
       "name": "the foreground heal pulls a stale native head back onto its occurrence",
       "origin": "native",
       "steps": [
-        { "op": "staleHead", "scheduledStart": "2026-05-25T09:00:00" },
-        { "op": "recompute" }
+        {
+          "op": "staleHead",
+          "scheduledStart": "2026-05-25T09:00:00"
+        },
+        {
+          "op": "recompute"
+        }
       ],
-      "expect": { "head": { "scheduledStart": "2026-06-01T09:00:00" } }
+      "expect": {
+        "head": {
+          "scheduledStart": "2026-06-01T09:00:00"
+        }
+      }
     },
-
     {
       "name": "the foreground heal advances a synced head as well as a native one",
       "origin": "active",
       "steps": [
-        { "op": "staleHead", "scheduledStart": "2026-05-25T09:00:00" },
-        { "op": "recompute" }
+        {
+          "op": "staleHead",
+          "scheduledStart": "2026-05-25T09:00:00"
+        },
+        {
+          "op": "recompute"
+        }
       ],
-      "expect": { "head": { "scheduledStart": "2026-06-01T09:00:00" } }
+      "expect": {
+        "head": {
+          "scheduledStart": "2026-06-01T09:00:00"
+        }
+      }
     },
-
     {
       "name": "a span running over several days keeps its length as the head advances",
       "origin": "native",
@@ -221,12 +358,18 @@
         "end": "2026-08-26T17:00:00",
         "timezone": "UTC"
       },
-      "steps": [{ "op": "complete" }],
+      "steps": [
+        {
+          "op": "complete"
+        }
+      ],
       "expect": {
-        "head": { "scheduledStart": "2026-08-31T09:00:00", "scheduledEnd": "2026-09-02T17:00:00" }
+        "head": {
+          "scheduledStart": "2026-08-31T09:00:00",
+          "scheduledEnd": "2026-09-02T17:00:00"
+        }
       }
     },
-
     {
       "name": "an end stored before its start is carried, not quietly repaired",
       "origin": "native",
@@ -236,9 +379,16 @@
         "end": "2026-08-19T11:00:00",
         "timezone": "UTC"
       },
-      "steps": [{ "op": "complete" }],
+      "steps": [
+        {
+          "op": "complete"
+        }
+      ],
       "expect": {
-        "head": { "scheduledStart": "2026-08-31T09:00:00", "scheduledEnd": "2026-08-26T11:00:00" }
+        "head": {
+          "scheduledStart": "2026-08-31T09:00:00",
+          "scheduledEnd": "2026-08-26T11:00:00"
+        }
       }
     }
   ]

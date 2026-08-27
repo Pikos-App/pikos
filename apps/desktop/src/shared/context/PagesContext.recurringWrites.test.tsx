@@ -97,7 +97,7 @@ describe("completeRecurringPage payload", () => {
     vi.useRealTimers();
   });
 
-  it("a native head sends just the page id — the backend derives its occurrence", async () => {
+  it("a native head names the occurrence it saw and lets the backend derive the rest", async () => {
     const { hook, pageId } = await setupRecurringPage();
     const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
 
@@ -106,7 +106,23 @@ describe("completeRecurringPage payload", () => {
     });
 
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.calls[0]![0]).toEqual({ pageId });
+    expect(spy.mock.calls[0]![0]).toEqual({ expectedOccurrenceDate: "2099-01-05", pageId });
+  });
+
+  it("a synced head sends its occurrence and no expectation — the reconciler owns its head", async () => {
+    const { hook, pageId } = await setupRecurringPage();
+    const spy = vi.spyOn(MockStorageAdapter.prototype, "completeRecurringPage");
+    const head = hook.result.current.pages.pages.find((p) => p.id === pageId)!;
+
+    await act(async () => {
+      await hook.result.current.pages.completeRecurringPage(pageId, {
+        ...head,
+        scheduleLocked: true,
+        timezone: null,
+      });
+    });
+
+    expect(spy.mock.calls[0]![0]).not.toHaveProperty("expectedOccurrenceDate");
   });
 
   it("completes the head off the passed-in override, not the lagging pages state", async () => {

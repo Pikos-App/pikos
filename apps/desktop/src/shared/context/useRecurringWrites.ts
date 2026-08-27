@@ -27,6 +27,7 @@ import {
   findRecurringOccurrenceClone,
   formatDateOnly,
   getLocalTimezone,
+  toStorageError,
 } from "@pikos/core";
 import { type Dispatch, type RefObject, type SetStateAction, useRef, useState } from "react";
 
@@ -281,7 +282,7 @@ export function useRecurringWrites({
   async function completeRecurringPageQueued(
     pageId: string,
     head: PageSummary | undefined
-  ): Promise<CompleteRecurringResult> {
+  ): Promise<CompleteRecurringResult | null> {
     // An active synced head must name the occurrence it's completing: the reconciler
     // pins `pages.scheduled_start` at the series base, so the backend can't derive it
     // the way it does for a native head. The wall-clocks convert out of the source
@@ -297,7 +298,25 @@ export function useRecurringWrites({
           }
         : {};
 
-    const result = await adapter.completeRecurringPage({ pageId, ...syncedHead });
+    // A native head names no occurrence, so the backend derives it from whatever
+    // the head reads at write time. Naming the one this gesture was aimed at keeps
+    // a CLI `done` that landed first from turning this into a second advance.
+    const expected =
+      !head?.scheduleLocked && head?.scheduledStart
+        ? { expectedOccurrenceDate: head.scheduledStart.slice(0, 10) }
+        : {};
+
+    // Refusing is the point of the expectation: the series moved under this
+    // gesture, so the tick applies to nothing. The watcher's refetch already
+    // carries the truth, which is what the user should see. Only a call that sent
+    // one absorbs its refusal; every other conflict still surfaces.
+    let result: CompleteRecurringResult;
+    try {
+      result = await adapter.completeRecurringPage({ pageId, ...syncedHead, ...expected });
+    } catch (err: unknown) {
+      if (expected.expectedOccurrenceDate && toStorageError(err).kind === "Conflict") return null;
+      throw err;
+    }
 
     setPages((prev) => {
       const updated = prev.map((p) => (p.id === pageId ? result.head : p));

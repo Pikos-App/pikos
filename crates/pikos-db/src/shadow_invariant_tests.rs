@@ -116,6 +116,7 @@ async fn assert_invariant(
                 occurrence_date: None,
                 scheduled_start: None,
                 scheduled_end: None,
+                expected_occurrence_date: None,
             },
         )
         .await

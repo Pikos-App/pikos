@@ -10,4 +10,12 @@ export type CompleteRecurringInput = {
   occurrenceDate?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  /**
+   * The occurrence you meant to complete, as you last saw it. Supply it and the
+   * completion applies to that occurrence or to nothing: if it is already done,
+   * its record comes back unchanged, and if the series has moved on for any other
+   * reason the call is refused. Omit it to complete whichever occurrence is open
+   * now.
+   */
+  expectedOccurrenceDate?: string | null;
 };

@@ -68,6 +68,8 @@ enum Step {
         occurrence_date: Option<String>,
         scheduled_start: Option<String>,
         scheduled_end: Option<String>,
+        #[serde(default)]
+        expected_occurrence_date: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
     Uncomplete {
@@ -189,6 +191,7 @@ async fn apply(pool: &sqlx::SqlitePool, rule_id: &str, series: &Series, step: &S
             occurrence_date,
             scheduled_start,
             scheduled_end,
+            expected_occurrence_date,
         } => {
             complete_recurring_page_impl(
                 pool,
@@ -197,6 +200,7 @@ async fn apply(pool: &sqlx::SqlitePool, rule_id: &str, series: &Series, step: &S
                     occurrence_date: occurrence_date.clone(),
                     scheduled_start: scheduled_start.clone(),
                     scheduled_end: scheduled_end.clone(),
+                    expected_occurrence_date: expected_occurrence_date.clone(),
                 },
             )
             .await

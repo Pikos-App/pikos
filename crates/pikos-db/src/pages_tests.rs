@@ -64,6 +64,7 @@ async fn series_advances_to_next_open_occurrence() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -151,6 +152,7 @@ async fn completion_records_the_set_and_leaves_rule_exdates_untouched() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -217,6 +219,7 @@ async fn series_marks_head_done_when_exhausted() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -257,6 +260,7 @@ async fn syncs_normalized_tag_tables_on_clone() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -281,6 +285,7 @@ async fn missing_head_returns_not_found() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -313,6 +318,7 @@ async fn rejects_soft_deleted_head() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -386,6 +392,7 @@ async fn advanced_head_survives_later_denorm_refresh() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -429,6 +436,7 @@ async fn uncomplete_reverses_a_native_completion() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -496,6 +504,7 @@ async fn exhausted_series_uncomplete_unmarks_done() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -627,6 +636,7 @@ async fn rule_delete_preserves_advanced_head_over_stale_anchor() {
                 occurrence_date: None,
                 scheduled_start: None,
                 scheduled_end: None,
+                expected_occurrence_date: None,
             },
         )
         .await
@@ -2935,6 +2945,7 @@ fn synced_complete(date: &str, start: &str) -> CompleteRecurringInput {
         occurrence_date: Some(date.into()),
         scheduled_start: Some(start.into()),
         scheduled_end: None,
+        expected_occurrence_date: None,
     }
 }
 
@@ -2955,6 +2966,7 @@ async fn unified_completion_rejects_a_non_recurring_synced_page() {
             occurrence_date: Some("2026-06-01".into()),
             scheduled_start: Some("2026-06-01T09:00:00".into()),
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -3214,6 +3226,7 @@ async fn unified_completion_requires_an_occurrence_for_a_synced_series() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -3357,6 +3370,7 @@ async fn restore_re_derives_a_native_series_head() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await

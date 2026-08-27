@@ -1281,6 +1281,13 @@ pub struct CompleteRecurringInput {
     pub scheduled_start: Option<String>,
     #[serde(default)]
     pub scheduled_end: Option<String>,
+    /// The occurrence you meant to complete, as you last saw it. Supply it and the
+    /// completion applies to that occurrence or to nothing: if it is already done,
+    /// its record comes back unchanged, and if the series has moved on for any other
+    /// reason the call is refused. Omit it to complete whichever occurrence is open
+    /// now.
+    #[serde(default)]
+    pub expected_occurrence_date: Option<String>,
 }
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -1475,21 +1482,33 @@ async fn complete_recurring_page_once(
             )
         };
 
+    // A native head carries no occurrence key, so the date above is read off
+    // `pages.scheduled_start` inside this transaction. Two writers that both saw
+    // occurrence D therefore complete D and D+1 for one gesture — the desktop's
+    // in-flight guard is per-webview and cannot see the CLI, the second writer.
+    // Already-complete means the race is simply lost, so hand back the winner's
+    // clone; any other move is a conflict, because what resolved here is not the
+    // occurrence the caller asked for.
+    if let Some(expected) = data.expected_occurrence_date.as_deref() {
+        if expected != occurrence_date {
+            return match existing_completed_clone(&mut tx, &data.page_id, expected).await? {
+                Some(clone) => {
+                    let head = page_summary_tx(&mut tx, &data.page_id).await?;
+                    Ok(CompleteRecurringResult { clone, head })
+                }
+                None => Err(AppError::Conflict(
+                    "This series has moved past the occurrence you asked to complete.".to_string(),
+                )),
+            };
+        }
+    }
+
     // Idempotency: a double-click or post-`SQLITE_BUSY_SNAPSHOT` retry must not mint
     // a second clone for the same occurrence. A live clone → return it unchanged;
     // a trashed one falls through so the OR REPLACE below re-points the set row.
     if let Some(clone) = existing_completed_clone(&mut tx, &data.page_id, &occurrence_date).await? {
-        let head_row = sqlx::query_as::<_, PageSummaryRow>(&format!(
-            // sql-ok: SUMMARY_COLUMNS is a compile-time constant
-            "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
-        ))
-        .bind(&data.page_id)
-        .fetch_one(&mut *tx)
-        .await?;
-        return Ok(CompleteRecurringResult {
-            clone,
-            head: PageSummary::from(head_row),
-        });
+        let head = page_summary_tx(&mut tx, &data.page_id).await?;
+        return Ok(CompleteRecurringResult { clone, head });
     }
 
     insert_head_clone_tx(
@@ -1542,6 +1561,21 @@ async fn complete_recurring_page_once(
         clone: PageSummary::from(clone_row),
         head: PageSummary::from(head_row),
     })
+}
+
+/// One page as the summary shape both completion exits return.
+async fn page_summary_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    page_id: &str,
+) -> AppResult<PageSummary> {
+    let row = sqlx::query_as::<_, PageSummaryRow>(&format!(
+        // sql-ok: SUMMARY_COLUMNS is a compile-time constant
+        "SELECT {SUMMARY_COLUMNS}{SYNC_DERIVED_SELECT} FROM pages WHERE id = ?"
+    ))
+    .bind(page_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(PageSummary::from(row))
 }
 
 /// The live done clone recorded for `(page_id, occurrence_date)`, if any. `None`

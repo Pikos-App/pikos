@@ -648,6 +648,7 @@ async fn recompute_batch_does_not_starve_a_racing_completion() {
                     occurrence_date: None,
                     scheduled_start: None,
                     scheduled_end: None,
+                    expected_occurrence_date: None,
                 },
             )
             .await

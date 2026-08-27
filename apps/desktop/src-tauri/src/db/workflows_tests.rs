@@ -124,6 +124,7 @@ async fn recurring_completion_clone_is_searchable() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await

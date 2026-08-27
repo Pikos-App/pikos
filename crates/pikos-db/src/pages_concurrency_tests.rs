@@ -206,6 +206,7 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
             occurrence_date: None,
             scheduled_start: None,
             scheduled_end: None,
+            expected_occurrence_date: None,
         },
     )
     .await
@@ -224,4 +225,125 @@ async fn recurring_completion_recovers_from_a_racing_commit() {
     .await
     .unwrap();
     assert_eq!(clones, 1, "completion clone created");
+}
+
+// ─── two writers, one occurrence ─────────────────────────────────────────────
+//
+// A native head carries no occurrence key, so both writers resolve the date off
+// `pages.scheduled_start` inside their own transaction. Serialized, the second
+// therefore reads the already-advanced head and completes the FOLLOWING
+// occurrence — one gesture, two occurrences consumed. The desktop's in-flight
+// guard is per-webview and cannot see the CLI, which is the second writer.
+
+async fn daily_head_at(pool: &sqlx::SqlitePool, start: &str) {
+    insert_test_page(
+        pool,
+        TestPage {
+            scheduled_start: Some(start),
+            ..TestPage::new("head", "Daily standup")
+        },
+    )
+    .await
+    .unwrap();
+    crate::create_recurrence_rule_impl(
+        pool,
+        crate::NewRecurrenceRule {
+            page_id: "head".into(),
+            rrule: "FREQ=DAILY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: start.into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+fn complete_expecting(occurrence: &str) -> CompleteRecurringInput {
+    CompleteRecurringInput {
+        page_id: "head".into(),
+        occurrence_date: None,
+        scheduled_start: None,
+        scheduled_end: None,
+        expected_occurrence_date: Some(occurrence.into()),
+    }
+}
+
+#[tokio::test]
+async fn a_second_writer_on_the_same_occurrence_does_not_advance_twice() {
+    let db = wal_test_pool().await;
+    let pool = &db.pool;
+    daily_head_at(pool, "2026-06-05").await;
+
+    let first = complete_recurring_page_impl(pool, complete_expecting("2026-06-05"))
+        .await
+        .unwrap();
+    let second = complete_recurring_page_impl(pool, complete_expecting("2026-06-05"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        second.clone.id, first.clone.id,
+        "the loser of the race gets the winner's clone, not one of its own"
+    );
+    assert_eq!(
+        second.head.scheduled_start.as_deref(),
+        Some("2026-06-06"),
+        "head advanced exactly one occurrence"
+    );
+    let clones: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pages WHERE title = 'Daily standup' AND status = 'done'",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(clones, 1, "one occurrence completed, one clone");
+}
+
+#[tokio::test]
+async fn a_head_that_moved_for_another_reason_is_a_conflict() {
+    let db = wal_test_pool().await;
+    let pool = &db.pool;
+    daily_head_at(pool, "2026-06-05").await;
+    crate::skip_occurrence_impl(
+        pool,
+        crate::SkipOccurrenceInput {
+            page_id: "head".into(),
+            occurrence_date: "2026-06-05".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let err = complete_recurring_page_impl(pool, complete_expecting("2026-06-05"))
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, AppError::Conflict(_)),
+        "a dismissed occurrence is not a lost race — refuse rather than complete 06-06"
+    );
+}
+
+#[tokio::test]
+async fn an_unguarded_completion_keeps_deriving_the_occurrence_itself() {
+    let db = wal_test_pool().await;
+    let pool = &db.pool;
+    daily_head_at(pool, "2026-06-05").await;
+
+    let result = complete_recurring_page_impl(
+        pool,
+        CompleteRecurringInput {
+            page_id: "head".into(),
+            occurrence_date: None,
+            scheduled_start: None,
+            scheduled_end: None,
+            expected_occurrence_date: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.head.scheduled_start.as_deref(), Some("2026-06-06"));
 }

@@ -23,6 +23,7 @@ interface Step {
     | "staleHead"
     | "recompute";
   occurrenceDate?: string;
+  expectedOccurrenceDate?: string;
   scheduledStart?: string;
   scheduledEnd?: string;
   originalDate?: string;
@@ -145,6 +146,9 @@ async function apply(
       await adapter.completeRecurringPage({
         pageId,
         ...(step.occurrenceDate !== undefined && { occurrenceDate: step.occurrenceDate }),
+        ...(step.expectedOccurrenceDate !== undefined && {
+          expectedOccurrenceDate: step.expectedOccurrenceDate,
+        }),
         ...(step.scheduledStart !== undefined && { scheduledStart: step.scheduledStart }),
         ...(step.scheduledEnd !== undefined && { scheduledEnd: step.scheduledEnd }),
       });
