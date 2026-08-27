@@ -38,10 +38,7 @@ if git -C "$ROOT" rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
   exit 1
 fi
 
-# `.husky/pre-commit` carries a permanently uncommitted local guard; release.sh
-# says why.
-if ! git -C "$ROOT" diff --quiet -- . ':(exclude).husky/pre-commit' \
-  || ! git -C "$ROOT" diff --cached --quiet -- . ':(exclude).husky/pre-commit'; then
+if ! git -C "$ROOT" diff --quiet || ! git -C "$ROOT" diff --cached --quiet; then
   echo "Error: uncommitted changes. Commit or stash first."
   exit 1
 fi

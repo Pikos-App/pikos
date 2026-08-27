@@ -81,15 +81,12 @@ if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
   exit 0
 fi
 
-# Check for uncommitted changes. Three paths are exempt. RELEASE_NOTES.md and
-# the marketing release-notes page are written right before cutting and get
+# Check for uncommitted changes. RELEASE_NOTES.md and the marketing
+# release-notes page are exempt: both are written right before cutting and get
 # committed by the version-bump commit below, so requiring a separate commit
-# (plus its own green CI run) adds nothing. `.husky/pre-commit` is exempt for the
-# opposite reason: a working-hours guard is composed into it by machine tooling
-# and deliberately never committed, so it is modified permanently and would
-# otherwise block every release on this machine forever.
-if ! git diff --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro' ':(exclude).husky/pre-commit' \
-  || ! git diff --cached --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro' ':(exclude).husky/pre-commit'; then
+# (plus its own green CI run) adds nothing.
+if ! git diff --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro' \
+  || ! git diff --cached --quiet -- . ':(exclude)RELEASE_NOTES.md' ':(exclude)apps/marketing/src/pages/release-notes.astro'; then
   echo "Error: uncommitted changes. Commit or stash first."
   exit 1
 fi
