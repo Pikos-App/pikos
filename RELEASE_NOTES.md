@@ -7,11 +7,11 @@ A beta of 0.4.0, cut from the calendar sync branch before its QA pass is finishe
 - **External calendar sync.** Connect Google Calendar or a CalDAV server and your events show up beside your pages. Read-only by design: Pikos never writes back.
 - Events from a connected calendar behave like pages you made yourself. Complete one occurrence, skip one, move one, set a reminder on one.
 - One repeat model for everything. Native and synced recurring pages now share the same occurrence set, so completing or dismissing a single occurrence works the same wherever it came from.
-- Reminders for recurring pages, including all-day ones the day before.
+- A reminder on a repeating page now fires for every occurrence, not just the first. Lead times go up to a day before, and an all-day page can remind you at 9:00 the morning before.
 - **Focus sessions.** Time your work from the page header. The side panels clear while it runs, and you get the length when you stop.
 - **Upcoming**, a seven-day view grouped by day, with a one-press move of everything overdue onto today.
 - Month view in the calendar.
-- The trash, in the page list rather than a dialog, plus restore.
+- **Trash.** Deleted pages are kept for 30 days, and you restore them from the sidebar. Until now, undoing a delete meant catching the toast before it went away.
 - Search operators in the palette: filter by tag, folder, status, priority and due date. A chevron switches the palette to command mode.
 - Calendar export. Your scheduled pages, written out as an `.ics`.
 - **`pikos`, the command-line interface, published for the first time.** Beta, same as the app. It reads and writes the same local workspace, and it speaks MCP over stdio so an agent can use it too.
@@ -19,6 +19,3 @@ A beta of 0.4.0, cut from the calendar sync branch before its QA pass is finishe
 ### Fixed
 
 - Quick Add lost the repeat cadence if you hit enter before the preview caught up.
-- A dense month could widen the whole window.
-- Restoring a page whose folder was still in the trash left it invisible. It goes to the Inbox now.
-- Completing a recurring page from two places at once could quietly consume the following occurrence as well.
