@@ -1,5 +1,7 @@
 A beta of 0.4.0, cut from the calendar sync branch before its QA pass is finished. It is not the default download, and nobody on 0.3.1 will be offered it by the in-app updater.
 
+**macOS 12 or later.** Big Sur can't run this build. The recurrence engine needs a WebAssembly permission its version of WebKit doesn't support.
+
 **Read this before installing it next to an existing Pikos.** The beta upgrades your workspace to a newer schema, and that only goes one way. Once it has opened your data, 0.3.1 will refuse to open it again until you move to 0.4.0. Either back up `~/Library/Application Support/app.pikos.desktop` first, or install the beta on a machine that has no Pikos data yet.
 
 ### Added
@@ -18,4 +20,5 @@ A beta of 0.4.0, cut from the calendar sync branch before its QA pass is finishe
 
 ### Fixed
 
+- A window that never painted. 0.4.0-beta.1 opened, drew nothing, and no part of the app ever ran.
 - Quick Add lost the repeat cadence if you hit enter before the preview caught up.
