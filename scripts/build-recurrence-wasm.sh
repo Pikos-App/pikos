@@ -10,11 +10,18 @@
 # esbuild) never needs a Rust toolchain. Re-run this script whenever the
 # engine or bindings change, and commit the regenerated pkg/.
 #
-# Requirements:
-#   - rustup (the pinned toolchain and the wasm32 target install on demand)
-#   - wasm-bindgen CLI matching the version pinned in
-#     crates/pikos-recurrence-wasm/Cargo.toml
-#     (cargo install wasm-bindgen-cli --version <pin>, or a prebuilt release)
+# Requirements: Docker. No local Rust toolchain, and no wasm-bindgen CLI.
+#
+# The compile runs inside a pinned Linux image because rustc's wasm output
+# depends on the HOST it runs on, which no compiler flag can pin away. Measured
+# on rustc 1.93.1 (same commit, same LLVM 21.1.8, codegen-units=1, fat LTO):
+# aarch64-apple-darwin emits 269,840 bytes and x86_64-unknown-linux-gnu emits
+# 269,030 — same exports, same strings, 810 bytes of different codegen. Each
+# host is perfectly reproducible with itself, so the artifact only round-trips
+# if every machine compiles on the same one. An earlier version of this script
+# pinned rustc and remapped paths and built natively; those pins are still here
+# and still necessary, but they cannot reach the host, so the committed pkg was
+# only ever reproducible on the Mac that produced it.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -22,48 +29,63 @@ cd "$(dirname "$0")/.."
 PKG_DIR="packages/recurrence-wasm/pkg"
 WASM_BINDGEN_PIN=$(sed -n 's/^wasm-bindgen = "=\(.*\)"$/\1/p' crates/pikos-recurrence-wasm/Cargo.toml)
 
-# CI re-runs this script and fails on any diff against the committed pkg/, so
-# the output has to be byte-identical on every machine that builds it. rustc's
-# version moves both codegen and the embedded panic line tables, so tracking
-# `stable` would go red the day it bumps and stay red while a developer's rustc
-# and CI's disagree. Those panic locations also bake in source paths carrying
-# $HOME and the host triple — remapped to fixed stand-ins below, as is any
-# ambient RUSTFLAGS, for the same reason.
+# Tracking `stable` would go red the day rustc bumps: its version moves codegen
+# and the panic line tables. The image tag pins toolchain and host in one value.
 RUSTC_PIN="1.93.1"
+BUILD_IMAGE="rust:${RUSTC_PIN}-slim"
+BUILD_PLATFORM="linux/amd64"
 
-if ! command -v wasm-bindgen >/dev/null; then
-  echo "wasm-bindgen CLI not found. Install with:" >&2
-  echo "  cargo install wasm-bindgen-cli --version ${WASM_BINDGEN_PIN}" >&2
+if ! docker info >/dev/null 2>&1; then
+  echo "Docker is required: the artifact is only reproducible when compiled" >&2
+  echo "inside ${BUILD_IMAGE} (${BUILD_PLATFORM}). Start Docker and retry." >&2
   exit 1
 fi
 
-CLI_VERSION=$(wasm-bindgen --version | awk '{print $2}')
-if [ "$CLI_VERSION" != "$WASM_BINDGEN_PIN" ]; then
-  echo "wasm-bindgen CLI ${CLI_VERSION} != pinned ${WASM_BINDGEN_PIN} in crates/pikos-recurrence-wasm/Cargo.toml" >&2
-  exit 1
-fi
+docker run --rm \
+  --platform "$BUILD_PLATFORM" \
+  -v "$PWD:/work" \
+  -w /work \
+  -e PKG_DIR="$PKG_DIR" \
+  -e WASM_BINDGEN_PIN="$WASM_BINDGEN_PIN" \
+  -e HOST_OWNER="$(id -u):$(id -g)" \
+  "$BUILD_IMAGE" \
+  bash -euo pipefail -c '
+    apt-get update -qq >/dev/null
+    apt-get install -y -qq curl ca-certificates >/dev/null
+    rustup target add wasm32-unknown-unknown >/dev/null
 
-export RUSTUP_TOOLCHAIN="$RUSTC_PIN"
-rustup toolchain install "$RUSTC_PIN" \
-  --profile minimal \
-  --target wasm32-unknown-unknown \
-  --no-self-update >/dev/null
+    curl -fsSL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${WASM_BINDGEN_PIN}/wasm-bindgen-${WASM_BINDGEN_PIN}-x86_64-unknown-linux-musl.tar.gz" \
+      | tar xz --strip-components=1 -C /usr/local/bin
+    CLI_VERSION=$(wasm-bindgen --version | awk "{print \$2}")
+    if [ "$CLI_VERSION" != "$WASM_BINDGEN_PIN" ]; then
+      echo "wasm-bindgen CLI ${CLI_VERSION} != pinned ${WASM_BINDGEN_PIN}" >&2
+      exit 1
+    fi
 
-export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}/registry/src=/cargo --remap-path-prefix=$(rustc --print sysroot)=/rustc"
+    # Outside the mount: the host target/ holds objects fingerprinted for a
+    # different host, and sharing the directory lets them collide.
+    export CARGO_TARGET_DIR=/tmp/target
 
-cargo build \
-  -p pikos-recurrence-wasm \
-  --target wasm32-unknown-unknown \
-  --profile wasm-release
+    # Panic locations bake in source paths carrying $HOME and the host triple;
+    # ambient RUSTFLAGS would do the same. Both get fixed stand-ins.
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}/registry/src=/cargo --remap-path-prefix=$(rustc --print sysroot)=/rustc"
 
-rm -rf "$PKG_DIR"
-wasm-bindgen \
-  --target web \
-  --out-dir "$PKG_DIR" \
-  target/wasm32-unknown-unknown/wasm-release/pikos_recurrence_wasm.wasm
+    cargo build \
+      -p pikos-recurrence-wasm \
+      --target wasm32-unknown-unknown \
+      --profile wasm-release
 
-# Embed the wasm as base64 so consumers initialize synchronously at import
-# time with zero bundler configuration (vite, vitest, esbuild, plain node).
+    rm -rf "$PKG_DIR"
+    wasm-bindgen \
+      --target web \
+      --out-dir "$PKG_DIR" \
+      "$CARGO_TARGET_DIR/wasm32-unknown-unknown/wasm-release/pikos_recurrence_wasm.wasm"
+
+    chown -R "$HOST_OWNER" "$PKG_DIR"
+  '
+
+# Embed the wasm as base64 so consumers initialize synchronously at import time
+# with zero bundler config. Host-side: a pure function of bytes already fixed.
 node - "$PKG_DIR" <<'EOF'
 const fs = require("fs");
 const path = require("path");

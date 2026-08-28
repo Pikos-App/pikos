@@ -93,6 +93,84 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr, len);
 }
 /**
+ * Human-readable label ("every week on Monday"), or undefined when the rule
+ * can't be reduced to the phrased subset (callers fall back to the raw
+ * string).
+ * @param {string} rrule
+ * @returns {string | undefined}
+ */
+export function rruleToLabel(rrule) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.rruleToLabel(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        let v2;
+        if (r0 !== 0) {
+            v2 = getStringFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
+        }
+        return v2;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
+ * Typed options as a JSON object (`{freq, interval, byweekday?,
+ * byweekdayOrdinals?, bysetpos?, bymonthday?, bymonth?, wkst?, count?,
+ * until?}`), or undefined when unparseable or the FREQ is unsupported.
+ * @param {string} rrule
+ * @returns {string | undefined}
+ */
+export function parseRruleOptions(rrule) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.parseRruleOptions(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        let v2;
+        if (r0 !== 0) {
+            v2 = getStringFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
+        }
+        return v2;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
+ * @param {string} rrule
+ * @param {string} anchor
+ * @returns {string}
+ */
+export function snapAnchorToRule(rrule, anchor) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(anchor, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.snapAnchorToRule(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred3_0 = r0;
+        deferred3_1 = r1;
+        return getStringFromWasm0(r0, r1);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export_2(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * JSON array of YYYY-MM-DD strings strictly between `after` and `before`.
  * @param {string} rrule
  * @param {string} scheduled_start
@@ -129,31 +207,6 @@ export function missedOccurrencesBetween(rrule, scheduled_start, after, before, 
 }
 
 /**
- * Builds an RRULE string from a JSON options object. Returns undefined when
- * the JSON doesn't deserialize into valid options.
- * @param {string} options_json
- * @returns {string | undefined}
- */
-export function buildRrule(options_json) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(options_json, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.buildRrule(retptr, ptr0, len0);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        let v2;
-        if (r0 !== 0) {
-            v2 = getStringFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
-        }
-        return v2;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
-}
-
-/**
  * @param {string} rrule
  * @param {string} anchor_start
  * @returns {string}
@@ -176,143 +229,6 @@ export function alignWeeklyRuleToAnchor(rrule, anchor_start) {
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
         wasm.__wbindgen_export_2(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * Next occurrence's scheduledStart strictly after the day of `after`, or
- * undefined when the rule is exhausted or invalid.
- * @param {string} rrule
- * @param {string} scheduled_start
- * @param {string} after
- * @param {string} exdates_json
- * @returns {string | undefined}
- */
-export function nextOccurrenceAfter(rrule, scheduled_start, after, exdates_json) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(scheduled_start, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(after, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(exdates_json, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len3 = WASM_VECTOR_LEN;
-        wasm.nextOccurrenceAfter(retptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        let v5;
-        if (r0 !== 0) {
-            v5 = getStringFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
-        }
-        return v5;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
-}
-
-/**
- * @param {string} base_end
- * @param {string} next_start
- * @returns {string | undefined}
- */
-export function computeNextEnd(base_end, next_start) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(base_end, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(next_start, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len1 = WASM_VECTOR_LEN;
-        wasm.computeNextEnd(retptr, ptr0, len0, ptr1, len1);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        let v3;
-        if (r0 !== 0) {
-            v3 = getStringFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
-        }
-        return v3;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
-}
-
-/**
- * Typed options as a JSON object (`{freq, interval, byweekday?,
- * byweekdayOrdinals?, bysetpos?, bymonthday?, bymonth?, wkst?, count?,
- * until?}`), or undefined when unparseable or the FREQ is unsupported.
- * @param {string} rrule
- * @returns {string | undefined}
- */
-export function parseRruleOptions(rrule) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.parseRruleOptions(retptr, ptr0, len0);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        let v2;
-        if (r0 !== 0) {
-            v2 = getStringFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
-        }
-        return v2;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
-}
-
-/**
- * Human-readable label ("every week on Monday"), or undefined when the rule
- * can't be reduced to the phrased subset (callers fall back to the raw
- * string).
- * @param {string} rrule
- * @returns {string | undefined}
- */
-export function rruleToLabel(rrule) {
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.rruleToLabel(retptr, ptr0, len0);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        let v2;
-        if (r0 !== 0) {
-            v2 = getStringFromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
-        }
-        return v2;
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-    }
-}
-
-/**
- * Compact byline label ("Weekly", "Every 2 weeks × 10"). Falls back to the
- * raw RRULE string on parse failure, mirroring the native helper.
- * @param {string} rrule
- * @returns {string}
- */
-export function rruleToShortLabel(rrule) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.rruleToShortLabel(retptr, ptr0, len0);
-        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        deferred2_0 = r0;
-        deferred2_1 = r1;
-        return getStringFromWasm0(r0, r1);
-    } finally {
-        wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export_2(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -399,28 +315,112 @@ export function oldestOpenOccurrence(rrule, scheduled_start, scheduled_end, excl
 }
 
 /**
- * @param {string} rrule
- * @param {string} anchor
- * @returns {string}
+ * Builds an RRULE string from a JSON options object. Returns undefined when
+ * the JSON doesn't deserialize into valid options.
+ * @param {string} options_json
+ * @returns {string | undefined}
  */
-export function snapAnchorToRule(rrule, anchor) {
-    let deferred3_0;
-    let deferred3_1;
+export function buildRrule(options_json) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(options_json, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.buildRrule(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        let v2;
+        if (r0 !== 0) {
+            v2 = getStringFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
+        }
+        return v2;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
+ * Next occurrence's scheduledStart strictly after the day of `after`, or
+ * undefined when the rule is exhausted or invalid.
+ * @param {string} rrule
+ * @param {string} scheduled_start
+ * @param {string} after
+ * @param {string} exdates_json
+ * @returns {string | undefined}
+ */
+export function nextOccurrenceAfter(rrule, scheduled_start, after, exdates_json) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
         const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(anchor, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const ptr1 = passStringToWasm0(scheduled_start, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
         const len1 = WASM_VECTOR_LEN;
-        wasm.snapAnchorToRule(retptr, ptr0, len0, ptr1, len1);
+        const ptr2 = passStringToWasm0(after, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(exdates_json, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len3 = WASM_VECTOR_LEN;
+        wasm.nextOccurrenceAfter(retptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-        deferred3_0 = r0;
-        deferred3_1 = r1;
+        let v5;
+        if (r0 !== 0) {
+            v5 = getStringFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
+        }
+        return v5;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
+ * @param {string} base_end
+ * @param {string} next_start
+ * @returns {string | undefined}
+ */
+export function computeNextEnd(base_end, next_start) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(base_end, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(next_start, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.computeNextEnd(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        let v3;
+        if (r0 !== 0) {
+            v3 = getStringFromWasm0(r0, r1).slice();
+            wasm.__wbindgen_export_2(r0, r1 * 1, 1);
+        }
+        return v3;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
+ * Compact byline label ("Weekly", "Every 2 weeks × 10"). Falls back to the
+ * raw RRULE string on parse failure, mirroring the native helper.
+ * @param {string} rrule
+ * @returns {string}
+ */
+export function rruleToShortLabel(rrule) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(rrule, wasm.__wbindgen_export_0, wasm.__wbindgen_export_1);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.rruleToShortLabel(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred2_0 = r0;
+        deferred2_1 = r1;
         return getStringFromWasm0(r0, r1);
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export_2(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_export_2(deferred2_0, deferred2_1, 1);
     }
 }
 

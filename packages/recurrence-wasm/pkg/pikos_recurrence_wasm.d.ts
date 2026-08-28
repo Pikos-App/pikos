@@ -1,38 +1,23 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * JSON array of YYYY-MM-DD strings strictly between `after` and `before`.
- */
-export function missedOccurrencesBetween(rrule: string, scheduled_start: string, after: string, before: string, exdates_json: string): string;
-/**
- * Builds an RRULE string from a JSON options object. Returns undefined when
- * the JSON doesn't deserialize into valid options.
- */
-export function buildRrule(options_json: string): string | undefined;
-export function alignWeeklyRuleToAnchor(rrule: string, anchor_start: string): string;
-/**
- * Next occurrence's scheduledStart strictly after the day of `after`, or
- * undefined when the rule is exhausted or invalid.
- */
-export function nextOccurrenceAfter(rrule: string, scheduled_start: string, after: string, exdates_json: string): string | undefined;
-export function computeNextEnd(base_end: string, next_start: string): string | undefined;
-/**
- * Typed options as a JSON object (`{freq, interval, byweekday?,
- * byweekdayOrdinals?, bysetpos?, bymonthday?, bymonth?, wkst?, count?,
- * until?}`), or undefined when unparseable or the FREQ is unsupported.
- */
-export function parseRruleOptions(rrule: string): string | undefined;
-/**
  * Human-readable label ("every week on Monday"), or undefined when the rule
  * can't be reduced to the phrased subset (callers fall back to the raw
  * string).
  */
 export function rruleToLabel(rrule: string): string | undefined;
 /**
- * Compact byline label ("Weekly", "Every 2 weeks × 10"). Falls back to the
- * raw RRULE string on parse failure, mirroring the native helper.
+ * Typed options as a JSON object (`{freq, interval, byweekday?,
+ * byweekdayOrdinals?, bysetpos?, bymonthday?, bymonth?, wkst?, count?,
+ * until?}`), or undefined when unparseable or the FREQ is unsupported.
  */
-export function rruleToShortLabel(rrule: string): string;
+export function parseRruleOptions(rrule: string): string | undefined;
+export function snapAnchorToRule(rrule: string, anchor: string): string;
+/**
+ * JSON array of YYYY-MM-DD strings strictly between `after` and `before`.
+ */
+export function missedOccurrencesBetween(rrule: string, scheduled_start: string, after: string, before: string, exdates_json: string): string;
+export function alignWeeklyRuleToAnchor(rrule: string, anchor_start: string): string;
 /**
  * Occurrences of a rule within [rangeStart, rangeEnd) as a JSON array of
  * `{originalDate, scheduledStart, scheduledEnd}`.
@@ -45,7 +30,22 @@ export function expandRange(rrule: string, scheduled_start: string, scheduled_en
  * Undefined when the series is exhausted or the rule is out of envelope.
  */
 export function oldestOpenOccurrence(rrule: string, scheduled_start: string, scheduled_end: string | null | undefined, exclusions_json: string, floor?: string | null): string | undefined;
-export function snapAnchorToRule(rrule: string, anchor: string): string;
+/**
+ * Builds an RRULE string from a JSON options object. Returns undefined when
+ * the JSON doesn't deserialize into valid options.
+ */
+export function buildRrule(options_json: string): string | undefined;
+/**
+ * Next occurrence's scheduledStart strictly after the day of `after`, or
+ * undefined when the rule is exhausted or invalid.
+ */
+export function nextOccurrenceAfter(rrule: string, scheduled_start: string, after: string, exdates_json: string): string | undefined;
+export function computeNextEnd(base_end: string, next_start: string): string | undefined;
+/**
+ * Compact byline label ("Weekly", "Every 2 weeks × 10"). Falls back to the
+ * raw RRULE string on parse failure, mirroring the native helper.
+ */
+export function rruleToShortLabel(rrule: string): string;
 /**
  * First `limit` occurrences anchored at `dtstart`, as a JSON array of local
  * ISO datetimes.

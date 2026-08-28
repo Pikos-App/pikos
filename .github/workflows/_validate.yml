@@ -306,27 +306,21 @@ jobs:
   # packages/recurrence-wasm/pkg is a committed build artifact, so it can drift
   # from the crate it was generated from with every other gate still green: the
   # Rust tests cover the crate, the JS tests cover the stale pkg. Rebuilding and
-  # diffing is what ties them together — the build is pinned and path-remapped
-  # (see the script) so a Linux runner reproduces an artifact built on a Mac.
+  # diffing is what ties them together. The script compiles inside a pinned
+  # container so this runner and a contributor's Mac emit the same bytes; rustc's
+  # wasm output is host-dependent, and no flag pins that (see the script).
   wasm:
     name: Wasm Freshness
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
         with:
-          workspaces: . -> target
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install the pinned wasm-bindgen CLI
-        run: |
-          PIN=$(sed -n 's/^wasm-bindgen = "=\(.*\)"$/\1/p' crates/pikos-recurrence-wasm/Cargo.toml)
-          DIR="$RUNNER_TEMP/wasm-bindgen"
-          mkdir -p "$DIR"
-          curl -fsSL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${PIN}/wasm-bindgen-${PIN}-x86_64-unknown-linux-musl.tar.gz" \
-            | tar xz --strip-components=1 -C "$DIR"
-          echo "$DIR" >> "$GITHUB_PATH"
-
+      # No toolchain setup: the script compiles inside its own pinned image, and
+      # a runner-installed rustc or wasm-bindgen would not be the one it uses.
       - name: Rebuild the committed pkg
         run: scripts/build-recurrence-wasm.sh
 
