@@ -253,6 +253,11 @@ appTest("drag bottom edge of a timed block resizes without moving it @tier2", as
 
   const block = app.locator("[data-cal-page-id]").filter({ hasText: "Standup" }).first();
   await expect(block).toBeVisible();
+  // The grid opens scrolled to an hour before now, so a fixed 10am block sits
+  // above the viewport for most of the day and the press below lands at a
+  // negative y. toBeVisible() does not catch it — the block is rendered and
+  // unclipped, just outside the scroll port.
+  await block.scrollIntoViewIfNeeded();
   const before = await block.boundingBox();
   if (!before) throw new Error("block missing");
 
