@@ -61,6 +61,9 @@ jobs:
       - name: Bundle size check
         run: pnpm --filter @pikos/desktop check:bundle
 
+      - name: Release CSP smoke test (prod build)
+        run: pnpm --filter @pikos/desktop exec playwright test --config playwright.csp.config.ts
+
       - name: Perf tests (prod build, warn only)
         env:
           PERF_WARN_ONLY: "true"
