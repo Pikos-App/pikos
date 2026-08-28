@@ -117,7 +117,7 @@ jobs:
         run: |
           PKG=$(pnpm --filter @pikos/desktop exec playwright --version | awk '{print $NF}')
           if [ "$PKG" != "1.58.2" ]; then
-            echo "::error::@playwright/test is $PKG but the container is pinned to v1.58.2-noble. Update container.image to v$PKG-noble (and this assert) in ci.yml and _validate.yml."
+            echo "::error::@playwright/test is $PKG but the container is pinned to v1.58.2-noble. Update container.image to v$PKG-noble (and this assert) in _build.yml and _validate.yml."
             exit 1
           fi
 

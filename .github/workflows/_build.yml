@@ -1,0 +1,64 @@
+name: Build
+
+# Reusable prod-build gate shared by CI (on PR/main push) and Release (on tag).
+# Smoke-builds the frontend, checks bundle size, boots the bundle under the
+# packaged CSP, and runs perf (warn-only).
+#
+# This is NOT the release build — release.yml does the real Tauri matrix build.
+# It is separate from _validate.yml because everything here needs a production
+# bundle, and _validate.yml's e2e runs against the dev server.
+
+on:
+  workflow_call:
+
+env:
+  PNPM_VERSION: 10.30.3
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    # Perf and CSP tests need Playwright; run in the official image so browsers +
+    # system deps are pre-baked (no cold-download hang — see _validate.yml e2e).
+    # The image tag MUST track @playwright/test; the guard step fails loudly on
+    # drift.
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Assert Playwright matches the container image
+        run: |
+          PKG=$(pnpm --filter @pikos/desktop exec playwright --version | awk '{print $NF}')
+          if [ "$PKG" != "1.58.2" ]; then
+            echo "::error::@playwright/test is $PKG but the container is pinned to v1.58.2-noble. Update container.image to v$PKG-noble (and this assert) in _build.yml and _validate.yml."
+            exit 1
+          fi
+
+      - name: Build all packages
+        run: VITE_TEST_MODE=true pnpm turbo build
+
+      - name: Verify dist output exists
+        run: test -d apps/desktop/dist && echo "✓ dist built"
+
+      - name: Bundle size check
+        run: pnpm --filter @pikos/desktop check:bundle
+
+      - name: Release CSP smoke test (prod build)
+        run: pnpm --filter @pikos/desktop exec playwright test --config playwright.csp.config.ts
+
+      - name: Perf tests (prod build, warn only)
+        env:
+          PERF_WARN_ONLY: "true"
+        run: pnpm --filter @pikos/desktop exec playwright test --config playwright.perf.config.ts

@@ -15,12 +15,27 @@ env:
 
 jobs:
   # ── Validation ──────────────────────────────────────────────────────────────
-  # No validate job here. ci.yml runs the full _validate.yml sweep on every push
-  # to `main`; scripts/release.sh refuses to tag unless that run is green for the
-  # released commit (scripts/require-green-ci.sh). Re-running it on the tag was
-  # pure duplication, so the tag pipeline goes straight to build → publish.
+  # The tag is where both release paths converge, and it is the only place a
+  # beta is gated at all. release.sh requires a green ci.yml run before tagging,
+  # but that covers neither path fully: release-beta.sh cuts from a feature
+  # branch ci.yml never runs on, and release.sh tags a version-bump commit
+  # created *after* the check and pushed with [skip ci]. Publishing an unbuilt
+  # tree is what shipped 0.4.0-beta.1 with a window that never painted, so the
+  # sweep runs here on the tagged commit itself.
+  #
+  # Both gates are needed and neither subsumes the other: _validate.yml runs
+  # against the dev server, _build.yml against a production bundle under the
+  # packaged CSP.
+  validate:
+    uses: ./.github/workflows/_validate.yml
+
+  bundle:
+    name: Bundle Gate
+    uses: ./.github/workflows/_build.yml
+
   build:
     name: Build (${{ matrix.label }})
+    needs: [validate, bundle]
     strategy:
       fail-fast: false
       matrix:
@@ -126,6 +141,7 @@ jobs:
 
   cli:
     name: CLI (${{ matrix.label }})
+    needs: [validate, bundle]
     strategy:
       fail-fast: false
       matrix:
