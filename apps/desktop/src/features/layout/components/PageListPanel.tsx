@@ -5,6 +5,7 @@ import {
   groupTodayPages,
   groupUpcomingPages,
   nowLocalISO,
+  occurrenceDateOf,
   partitionToggleSelection,
   shouldHideSidebar,
 } from "@pikos/core";
@@ -61,6 +62,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const {
     clearSchedule,
     completeRecurringPage,
+    completeSyncedOccurrence,
     recurrenceRules,
     setPagesStatus,
     uncompleteRecurringHead,
@@ -282,6 +284,17 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
       if (p.status === "done") {
         if (!(await uncompleteRecurringHead(p.id)))
           await setPagesStatus([p.id], "not_started", null);
+        continue;
+      }
+      // An occurrence row names its own date; a head lets the backend derive it.
+      const occurrence = occurrenceDateOf(p);
+      if (occurrence && p.scheduledStart) {
+        await completeSyncedOccurrence({
+          occurrenceDate: occurrence,
+          pageId: p.id,
+          scheduledStart: p.scheduledStart,
+          ...(p.scheduledEnd ? { scheduledEnd: p.scheduledEnd } : {}),
+        });
       } else await completeRecurringPage(p.id);
     }
   }

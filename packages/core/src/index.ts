@@ -199,6 +199,7 @@ export {
 } from "./pages/pageFilters";
 export type { SmartViewId, SortMode } from "./pages/pageFilters";
 export { computeScheduleTransition, normalizeEndInput } from "./pages/schedule";
+export { withTodayOccurrences } from "./pages/todayOccurrences";
 export { partitionToggleSelection } from "./pages/toggleSelection";
 export type { ToggleSelectionGroups } from "./pages/toggleSelection";
 export { groupUpcomingPages } from "./pages/upcoming";
@@ -237,6 +238,7 @@ export {
   expandRecurrenceForRange,
   missedOccurrencesBetween,
   nextOccurrenceAfter,
+  occurrenceDateOf,
   optionsForFreq,
   optionsWithEnd,
   parseRrule,

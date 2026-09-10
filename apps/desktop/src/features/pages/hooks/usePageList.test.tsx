@@ -123,6 +123,75 @@ describe("usePageList — visible pages", () => {
     }
   });
 
+  // A synced head only advances when someone ticks it, and nobody ticks a
+  // meeting — so without the swap this series shows as weeks overdue and its
+  // occurrence for today reaches no list at all.
+  async function seedLapsedSyncedSeries(hook: ReturnType<typeof setup>) {
+    const page = await makePage(hook, { title: "Standup" });
+    await act(async () => {
+      await hook.result.current.pages.scheduleOnce(page.id, "2026-06-01T09:00:00");
+      await hook.result.current.pages.createRecurrence({
+        pageId: page.id,
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2026-06-01T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+    await act(async () => {
+      const storage = hook.result.current.workspace.storage as MockStorageAdapter;
+      storage.markPageSynced(page.id, { state: "active", syncedSince: "2026-06-01" });
+      await hook.result.current.workspace.reload();
+    });
+    act(() => hook.result.current.ui.setActiveViewId("today"));
+    return page;
+  }
+
+  it("today view: a lapsed synced series lists at today's occurrence, not its head", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
+    try {
+      const hook = setup();
+      await init(hook);
+      const page = await seedLapsedSyncedSeries(hook);
+
+      await waitFor(() => {
+        const row = hook.result.current.pageList.visiblePages.find((p) => p.id === page.id);
+        expect(row?.scheduledStart).toBe("2026-06-15T09:00:00");
+      });
+      // Still one row for the series: the head is replaced, never joined.
+      expect(hook.result.current.pageList.visiblePages).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("today view: ticking that row completes today, not the stale head date", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
+    try {
+      const hook = setup();
+      await init(hook);
+      const page = await seedLapsedSyncedSeries(hook);
+      await waitFor(() => {
+        const row = hook.result.current.pageList.visiblePages.find((p) => p.id === page.id);
+        expect(row?.scheduledStart).toBe("2026-06-15T09:00:00");
+      });
+
+      await act(async () => {
+        hook.result.current.pageList.handleToggleStatus(page.id, "not_started");
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        const series = hook.result.current.pages.pages.find((p) => p.id === page.id);
+        expect(Object.keys(series?.completedOccurrences ?? {})).toEqual(["2026-06-15"]);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("filters out pages pending undo deletion", async () => {
     const hook = setup();
     await init(hook);

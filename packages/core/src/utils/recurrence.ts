@@ -119,6 +119,17 @@ export function rawExpandRule(
 }
 
 /**
+ * The date a rendered occurrence stands for, or null for a plain page — a
+ * series head included, since the head carries its date in `scheduledStart`
+ * alone. Both rendered shapes carry it (an expanded virtual and a moved
+ * override block), and it is the date a completion writes against, which is why
+ * it stays the original date rather than the day a moved instance landed on.
+ */
+export function occurrenceDateOf(page: PageSummary): string | null {
+  return "originalDate" in page ? (page as VirtualOccurrence).originalDate : null;
+}
+
+/**
  * Realigns a single-BYDAY weekly rule's weekday to match a moved anchor.
  *
  * Moving a recurring head moves the whole series with it (the head IS the

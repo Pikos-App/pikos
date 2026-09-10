@@ -9,8 +9,14 @@
 // while a synced-origin series ticks the instance the user pointed at — its
 // virtuals and moved blocks carry their own `originalDate`.
 
-import type { PageRecurrenceRule, PageSchedule, PageSummary, VirtualOccurrence } from "@pikos/core";
-import { dateKey, formatDateOnly, missedOccurrencesBetween, parseLocalISO } from "@pikos/core";
+import type { PageRecurrenceRule, PageSchedule, PageSummary } from "@pikos/core";
+import {
+  dateKey,
+  formatDateOnly,
+  missedOccurrencesBetween,
+  occurrenceDateOf,
+  parseLocalISO,
+} from "@pikos/core";
 import { startOfDay, subMilliseconds } from "date-fns";
 import { createContext, type ReactNode, useContext, useState } from "react";
 
@@ -54,11 +60,6 @@ export function useRecurringGapDialog(): RecurringGapDialogContextValue {
     throw new Error("useRecurringGapDialog must be used inside a RecurringGapDialogProvider");
   }
   return ctx;
-}
-
-/** A rendered occurrence carries the date it stands for; the head does not. */
-function occurrenceDateOf(page: PageSummary): string | null {
-  return "originalDate" in page ? (page as VirtualOccurrence).originalDate : null;
 }
 
 /**

@@ -507,14 +507,19 @@ columns at title 10, subtitle 5, tags 3, mirror metadata 3, body 1; 20 rows come
 completed matches are counted even when they're excluded, which is what lets "Show completed"
 advertise a number before you ask.
 ⁵³ The Today predicate (`belongsToView`: `scheduledStart ≤ today`, open only) is origin-blind:
-a past *synced one-off* stays until ticked, agreeing with the daily summary's `overdue_count`
-and with `pikos today`. A synced series' head advances on completion and leaves Today like a
-native one. Synced pages never appear in Inbox: the reconciler always assigns their calendar
-folder.
+a past *synced one-off* stays until ticked, agreeing with the daily summary's `overdue_count`.
+A synced *series* is listed at today's occurrence whenever it has one, so a series nobody has
+ticked since the calendar was connected reads as today's meeting rather than as weeks overdue,
+and the tick lands on the date shown. It stays one row: today's occurrence replaces the head's,
+never joins it, and the days behind it are on the calendar rather than in the list. A native
+series keeps funnelling to its head, which is the next thing due. Synced pages never appear in
+Inbox: the reconciler always assigns their calendar folder.
 ⁵⁴ `pikos today` (`list_pages_today_impl`) computes the local day in Rust and reads the `pages`
 denorm. Both halves of its old disagreement with the app (UTC day boundary; the never-advancing
-`page_schedules` anchor join) are gone, as is the app's past-synced-one-off carve-out (⁵³).
-`pikos list --due` was always denorm-based.
+`page_schedules` anchor join) are gone, as is the app's past-synced-one-off carve-out (⁵³). The
+same set still reaches both, with one difference in what a row is dated: the denorm holds the
+head, so a lapsed synced series prints its head's date here while the app shows it at today's
+occurrence (⁵³). `pikos list --due` was always denorm-based.
 ⁵⁵ Not built. `pages.links` is a write-through JSON column nothing populates or renders;
 there's no `[[` editor affordance and no backlink computation anywhere (the only Tiptap link
 extension is external URLs). Markdown import preserves `[[wikilinks]]` as plain text.
