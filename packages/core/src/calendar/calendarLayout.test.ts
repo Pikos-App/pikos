@@ -448,7 +448,7 @@ describe("buildDayBlocks", () => {
     expect(blocks.indexOf(host)).toBeLessThan(blocks.indexOf(guest));
   });
 
-  it("identical range → split (same tops always collide), stable ordering by id", () => {
+  it("identical range → split (same tops always collide), order independent of input order", () => {
     const pagesA = [
       makePage({
         id: "aaa",
@@ -470,6 +470,30 @@ describe("buildDayBlocks", () => {
     expect(pickIds(first)).toEqual(["aaa", "bbb"]);
     expect(pickIds(second)).toEqual(["aaa", "bbb"]);
     first.forEach((b) => expect(b.widthPct).toBe(50));
+  });
+
+  it("identical range → each event keeps its side when one is replaced by a done clone", () => {
+    const standup = makePage({
+      id: "a1",
+      scheduledEnd: "2026-03-15T10:00:00",
+      scheduledStart: "2026-03-15T09:00:00",
+      title: "Standup",
+    });
+    const review = makePage({
+      id: "b2",
+      scheduledEnd: "2026-03-15T10:00:00",
+      scheduledStart: "2026-03-15T09:00:00",
+      title: "Design review",
+    });
+    const leftOf = (blocks: ReturnType<typeof buildDayBlocks>, title: string) =>
+      blocks.find((b) => b.page.title === title)!.leftPct;
+
+    const before = buildDayBlocks([standup, review], day);
+    // Completing the standup swaps it for a clone carrying a fresh uuid.
+    const after = buildDayBlocks([{ ...standup, id: "z9", status: "done" }, review], day);
+
+    expect(leftOf(after, "Standup")).toBe(leftOf(before, "Standup"));
+    expect(leftOf(after, "Design review")).toBe(leftOf(before, "Design review"));
   });
 
   it("long host + chips: header-overlapping chip splits 50/50, body chips cascade", () => {

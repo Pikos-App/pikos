@@ -292,14 +292,7 @@ export function buildDayBlocks(
     buildRawBlock(page, dayStart, dayEnd, metrics)
   );
 
-  // Sort by visual top, then start time, then id — gives identical time ranges
-  // a deterministic depth ordering across re-renders.
-  raws.sort(
-    (a, b) =>
-      a.top - b.top ||
-      a.startDate.getTime() - b.startDate.getTime() ||
-      a.page.id.localeCompare(b.page.id)
-  );
+  raws.sort(compareRawOrder);
 
   const clusters = groupIntoClusters(raws);
   const blocks: CalendarBlock[] = [];
@@ -432,12 +425,7 @@ function findTextCollisionComponents(cluster: RawBlock[]): number[][] {
         }
       }
     }
-    members.sort(
-      (a, b) =>
-        cluster[a]!.top - cluster[b]!.top ||
-        cluster[a]!.startDate.getTime() - cluster[b]!.startDate.getTime() ||
-        cluster[a]!.page.id.localeCompare(cluster[b]!.page.id)
-    );
+    members.sort((a, b) => compareRawOrder(cluster[a]!, cluster[b]!));
     componentMembers.push(members);
   }
 
@@ -524,6 +512,25 @@ interface RawBlock {
   page: PageSummary;
   startDate: Date;
   top: number;
+}
+
+/**
+ * The one visual order for blocks sharing a slot: top, then start, then title,
+ * then id. Every layout decision that a tie can flip — cascade depth and the
+ * close-top 50/50 split — reads it, so the two can't disagree.
+ *
+ * Title outranks id because completing an occurrence swaps the page for a done
+ * clone carrying a fresh uuid. Under an id-first tiebreak that re-decides which
+ * of two same-start events hosts the slot, so the pair visibly swaps sides on a
+ * tick. Id stays as the last resort: same time, same title, still deterministic.
+ */
+function compareRawOrder(a: RawBlock, b: RawBlock): number {
+  return (
+    a.top - b.top ||
+    a.startDate.getTime() - b.startDate.getTime() ||
+    a.page.title.localeCompare(b.page.title) ||
+    a.page.id.localeCompare(b.page.id)
+  );
 }
 
 /**
