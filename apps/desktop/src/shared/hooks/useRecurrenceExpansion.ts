@@ -133,7 +133,8 @@ function toOverrideBlocks(
 
 /**
  * Returns pages merged with virtual rrule occurrences for the visible range, so
- * the calendar renders both identically. Expansion runs in the Rust engine over
+ * a surface renders both identically — the calendar grid over its week, the
+ * Today list over the one day it shows. Expansion runs in the Rust engine over
  * IPC (stale-while-revalidate); the completed/skip exclusion union and the head
  * suppression stay synchronous and client-side, so a completion reflects on the
  * next render without waiting for a round-trip. Virtual occurrences carry

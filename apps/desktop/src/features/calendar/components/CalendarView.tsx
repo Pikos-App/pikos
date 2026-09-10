@@ -16,8 +16,8 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 
-import { useRecurrenceExpansion } from "../hooks/useRecurrenceExpansion";
 import { MonthGrid } from "./MonthGrid";
 import { WeekGrid } from "./WeekGrid";
 
