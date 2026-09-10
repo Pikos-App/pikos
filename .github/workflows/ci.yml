@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'LICENSE']
   pull_request:
     branches: [main]
+    paths-ignore: ['**.md', 'LICENSE']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

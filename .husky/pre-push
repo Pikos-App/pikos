@@ -1,3 +1,18 @@
+# A markdown-only push has nothing here that can fail: no test, clippy run or
+# e2e spec reads a committed .md. Without this, fixing a typo in a doc costs the
+# full Rust workspace and a tier-1 e2e run.
+#
+# @{u}..HEAD is what is about to leave the machine. A branch with no upstream
+# has no range to compute, so it runs everything rather than guessing.
+if git rev-parse --verify -q '@{u}' >/dev/null 2>&1; then
+  pushing=$(git diff --name-only '@{u}..HEAD')
+  if [ -n "$pushing" ] && ! printf '%s\n' "$pushing" | grep -qvE '(\.md|\.txt|LICENSE)$'; then
+    DIFF_BASE='@{u}..HEAD' ./scripts/verify.sh || exit 1
+    printf '\033[0;32m✓\033[0m Docs-only push — code gates skipped\n'
+    exit 0
+  fi
+fi
+
 # Full unit suite. Pre-commit runs only the specs its diff reaches, so this is the
 # first gate seeing all of them — what keeps commits fast without letting an
 # unreached breakage leave the machine. Turbo-cached, so usually ~free.

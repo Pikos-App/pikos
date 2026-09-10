@@ -15,6 +15,43 @@ fail() { printf "${RED}✗${RESET} %s\n" "$1"; }
 errors=""
 overall=0
 
+# ── What this diff can actually break ────────────────────────────────────────
+# No code gate reads a committed .md, so a markdown-only diff cannot change any
+# of their outcomes. Running the full set anyway costs about a minute to fix a
+# typo, and a gate that expensive on trivial edits is one people learn to skip.
+#
+# DIFF_BASE lets pre-push and CI pass the range they are actually gating; unset
+# it means the working tree, which is what a pre-commit run cares about.
+changed_paths() {
+  if [ -n "$DIFF_BASE" ]; then
+    git diff --name-only "$DIFF_BASE" 2>/dev/null
+  else
+    { git diff --name-only HEAD 2>/dev/null
+      git diff --name-only --cached 2>/dev/null
+      git ls-files --others --exclude-standard 2>/dev/null
+    }
+  fi | sort -u
+}
+
+files=$(changed_paths)
+
+# The footnote checker used to be a line in functionality-matrix.md asking a
+# person to remember. Running it here is what makes it a gate.
+if printf '%s\n' "$files" | grep -q '^docs/.*\.md$' && [ -f scripts/check-doc-footnotes.py ]; then
+  if python3 scripts/check-doc-footnotes.py >/dev/null 2>&1; then
+    pass "doc-footnotes"
+  else
+    fail "doc-footnotes"
+    python3 scripts/check-doc-footnotes.py 2>&1 | tail -10
+    overall=1
+  fi
+fi
+
+if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '(\.md|\.txt|LICENSE)$'; then
+  pass "docs-only" "code gates skipped, nothing changed that they read"
+  exit $overall
+fi
+
 # ── Auto-fix (skip in CI — clean checkout has no changed files) ───────────────
 changed=()
 if [ -z "$CI" ]; then
