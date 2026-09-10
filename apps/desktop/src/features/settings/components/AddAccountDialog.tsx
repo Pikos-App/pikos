@@ -1,5 +1,5 @@
 import type { NewCaldavConnection } from "@pikos/core";
-import { CalendarDays, Server } from "lucide-react";
+import { CalendarDays, Loader2, Server } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -119,14 +119,18 @@ export function AddAccountDialog({
               disabled={!googleAvailable || busy}
               onClick={() => void submitGoogle()}
             >
-              <CalendarDays className="size-4 text-muted-foreground" />
+              {busy ? (
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              ) : (
+                <CalendarDays className="size-4 text-muted-foreground" />
+              )}
               <div>
                 <p className="text-sm font-medium">Google Calendar</p>
                 <p className="text-xs text-muted-foreground">
                   {!googleAvailable
                     ? "Not available in this build"
                     : busy
-                      ? "Waiting for you to finish in your browser…"
+                      ? "Waiting for your browser. Finish signing in there."
                       : "Sign in with your Google account"}
                 </p>
               </div>

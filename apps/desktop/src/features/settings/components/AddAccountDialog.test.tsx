@@ -60,7 +60,7 @@ describe("AddAccountDialog", () => {
     expect(onConnectGoogle).toHaveBeenCalled();
     // Why the waiting state exists: see submitGoogle in AddAccountDialog.tsx.
     expect(
-      await screen.findByText("Waiting for you to finish in your browser…")
+      await screen.findByText("Waiting for your browser. Finish signing in there.")
     ).toBeInTheDocument();
 
     finish();

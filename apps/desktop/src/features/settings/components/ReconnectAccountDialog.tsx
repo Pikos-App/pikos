@@ -1,4 +1,5 @@
 import type { SyncAccount } from "@pikos/core";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -78,7 +79,14 @@ export function ReconnectAccountDialog({
                 }
                 size="sm"
               >
-                {busy ? "Waiting for you to finish in your browser…" : "Sign in with Google"}
+                {busy ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Waiting for your browser…
+                  </>
+                ) : (
+                  "Sign in with Google"
+                )}
               </Button>
             </div>
           </div>
