@@ -7,8 +7,11 @@ import type { WeekStart } from "@/shared/context/AppSettingsContext";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { EDITOR_FONT_SIZES, useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import type { EditorFontSize, LineWidth } from "@/shared/context/EditorSettingsContext";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
-import type { ListDensity } from "@/shared/context/ListSettingsContext";
+import {
+  type InterfaceTextScale,
+  useInterfaceSettings,
+} from "@/shared/context/InterfaceSettingsContext";
+import type { ListDensity } from "@/shared/context/InterfaceSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import type { ThemeMode } from "@/shared/context/ThemeContext";
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -56,6 +59,19 @@ const LIST_DENSITY_OPTIONS: readonly { id: ListDensity; label: string }[] = [
   { id: "spacious", label: "Spacious" },
 ];
 
+/** Shared by the interface and calendar rows: the same control shape and the same
+ *  naming across all three areas, with the values free to differ. Findability
+ *  comes from the naming, not from the units (PKOS-0067). */
+const TEXT_SCALE_OPTIONS: readonly { id: InterfaceTextScale; label: string }[] = [
+  { id: 0.85, label: "Smaller" },
+  { id: 1, label: "Default" },
+  { id: 1.15, label: "Large" },
+  { id: 1.3, label: "Larger" },
+  { id: 1.5, label: "Huge" },
+  { id: 1.75, label: "Huger" },
+  { id: 2, label: "Largest" },
+];
+
 const WEEK_START_OPTIONS: readonly { id: WeekStart; label: string }[] = [
   { id: 1, label: "Monday" },
   { id: 0, label: "Sunday" },
@@ -71,8 +87,15 @@ export function GeneralSettingsPreferences() {
     density: calendarDensity,
     setDayCount: setCalendarDayCount,
     setDensity: setCalendarDensity,
+    setTextScale: setCalendarTextScale,
+    textScale: calendarTextScale,
   } = useCalendarSettings();
-  const { density: listDensity, setDensity: setListDensity } = useListSettings();
+  const {
+    density: listDensity,
+    setDensity: setListDensity,
+    setTextScale: setInterfaceTextScale,
+    textScale: interfaceTextScale,
+  } = useInterfaceSettings();
   const defaultFolderName = folders.find((f) => f.id === defaultFolderId)?.name ?? "Inbox";
 
   return (
@@ -85,9 +108,16 @@ export function GeneralSettingsPreferences() {
           options={THEME_OPTIONS}
           value={mode}
         />
+        <SettingSelect
+          description="Text size in the sidebar, lists, dialogs and menus. ⌘+ and ⌘− change this while Settings is open."
+          label="Interface text size"
+          onChange={setInterfaceTextScale}
+          options={TEXT_SCALE_OPTIONS}
+          value={interfaceTextScale}
+        />
         <SettingChoice
           description="How tightly rows pack in the page and folder lists."
-          label="List density"
+          label="Interface density"
           onChange={setListDensity}
           options={LIST_DENSITY_OPTIONS}
           value={listDensity}
@@ -100,8 +130,8 @@ export function GeneralSettingsPreferences() {
           value={lineWidth}
         />
         <SettingSelect
-          description="Body text size in the editor. Headings and code scale with it."
-          label="Editor font size"
+          description="Body text size in the editor. Headings and code scale with it. ⌘+ and ⌘− change this while the editor is showing."
+          label="Editor text size"
           onChange={setFontSize}
           options={FONT_SIZE_OPTIONS}
           value={fontSize}
@@ -112,6 +142,13 @@ export function GeneralSettingsPreferences() {
           onChange={setCalendarDayCount}
           options={CALENDAR_DAY_COUNT_OPTIONS}
           value={calendarDayCount}
+        />
+        <SettingSelect
+          description="Text size for event titles and time labels. ⌘+ and ⌘− change this while the calendar is showing. Large sizes raise the hour height so a short event can still show its title."
+          label="Calendar text size"
+          onChange={setCalendarTextScale}
+          options={TEXT_SCALE_OPTIONS}
+          value={calendarTextScale}
         />
         <SettingChoice
           description="How tall each hour row renders."

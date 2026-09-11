@@ -28,7 +28,7 @@ import { IconToolbar } from "@/shared/components/IconToolbar";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInsertionLine } from "@/shared/hooks/useInsertionLine";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
@@ -62,7 +62,7 @@ export function FolderList() {
   } = useFolderList();
   const calendarGroups = useCalendarAccountGroups(externalFolders);
   const { openSortMenu, setOpenSortMenu } = useUI();
-  const { density } = useListSettings();
+  const { density } = useInterfaceSettings();
   const folderRowHeight = density === "compact" ? 28 : density === "spacious" ? 38 : 32;
   const [calendarsCollapsed, setCalendarsCollapsed] = useLocalStorage(
     STORAGE_KEYS.calendarsCollapsed,

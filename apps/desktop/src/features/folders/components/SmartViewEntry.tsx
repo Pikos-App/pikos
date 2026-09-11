@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { SIDEBAR_ENTRY_BOX } from "@/shared/components/SidebarListItem";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 
 interface SmartViewEntryProps {
   label: string;
@@ -23,7 +23,7 @@ export function SmartViewEntry({
   label,
   onSelect,
 }: SmartViewEntryProps) {
-  const { density } = useListSettings();
+  const { density } = useInterfaceSettings();
   return (
     <button
       aria-current={isActive ? "true" : undefined}

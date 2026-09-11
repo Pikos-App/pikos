@@ -22,7 +22,7 @@ import { setMockStorageFactory } from "@/shared/adapters/mockStorageChunk";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
 import { CalendarDnDProvider } from "@/shared/context/CalendarDnDContext";
 import { ImportProvider } from "@/shared/context/ImportContext";
-import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
+import { InterfaceSettingsProvider } from "@/shared/context/InterfaceSettingsContext";
 import { PagesProvider } from "@/shared/context/PagesContext";
 import { RecurringGapDialogProvider } from "@/shared/context/RecurringGapDialogContext";
 import { SelectionProvider } from "@/shared/context/SelectionContext";
@@ -48,9 +48,9 @@ function TestProviders({ children }: { children: ReactNode }) {
               <CalendarDnDProvider>
                 <UndoDeleteProvider>
                   <RecurringGapDialogProvider>
-                    <ListSettingsProvider>
+                    <InterfaceSettingsProvider>
                       <AppSettingsProvider>{children}</AppSettingsProvider>
-                    </ListSettingsProvider>
+                    </InterfaceSettingsProvider>
                   </RecurringGapDialogProvider>
                 </UndoDeleteProvider>
               </CalendarDnDProvider>

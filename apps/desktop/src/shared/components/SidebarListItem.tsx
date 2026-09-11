@@ -1,7 +1,7 @@
 import { forwardRef, type RefCallback } from "react";
 
 import { cn } from "@/lib/utils";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 
 /** Every sidebar entry wears this box, smart views and folders alike, so a
  *  selection reads the same wherever it lands. The border closes on all four
@@ -62,7 +62,7 @@ export const SidebarListItem = forwardRef<HTMLDivElement, SidebarListItemProps>(
       onRenameCommit(raw.trim() || "Untitled");
     }
 
-    const { density } = useListSettings();
+    const { density } = useInterfaceSettings();
 
     return (
       <div

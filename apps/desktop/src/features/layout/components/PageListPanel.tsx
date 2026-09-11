@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { InsertionLine } from "@/shared/components/InsertionLine";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useCalendarDnD } from "@/shared/context/CalendarDnDContext";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { useUI } from "@/shared/context/UIContext";
@@ -90,7 +90,7 @@ export function PageListPanel({ onResizeStart, width }: PageListPanelProps) {
   const { moveOverdueToToday } = useMoveOverdueToToday();
   const sortMode = useActiveSortMode();
   const sidebarHidden = shouldHideSidebar(useLayoutMode());
-  const { density } = useListSettings();
+  const { density } = useInterfaceSettings();
   const [showRelative, setShowRelative] = useLocalStorage(STORAGE_KEYS.showRelativeDates, false);
   const [overdueCollapsed, setOverdueCollapsed] = useLocalStorage(
     STORAGE_KEYS.overdueCollapsed,

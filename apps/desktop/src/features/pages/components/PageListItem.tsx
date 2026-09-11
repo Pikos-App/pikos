@@ -27,7 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
-import { useListSettings } from "@/shared/context/ListSettingsContext";
+import { useInterfaceSettings } from "@/shared/context/InterfaceSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useInlineRename } from "@/shared/hooks/useInlineRename";
 import { useMinuteTick } from "@/shared/hooks/useMinuteTick";
@@ -78,7 +78,7 @@ export function PageListItem({
   });
   const { contextMenuContentProps, inputRef, prepareRenameFromMenu } = useInlineRename(isRenaming);
   const { openPage } = useUI();
-  const { density } = useListSettings();
+  const { density } = useInterfaceSettings();
   const showSubtitle = density !== "compact" && Boolean(page.subtitle);
 
   useMinuteTick();
