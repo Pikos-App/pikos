@@ -107,7 +107,7 @@ export function GeneralSettingsPreferences() {
 
   return (
     <SettingsSection title="Preferences">
-      <div className="rounded-lg border border-border bg-card px-4">
+      <div className="mb-3 rounded-lg border border-border bg-card px-4">
         <SettingChoice
           description="Choose how Pikos looks."
           label="Theme"
@@ -115,6 +115,8 @@ export function GeneralSettingsPreferences() {
           options={THEME_OPTIONS}
           value={mode}
         />
+      </div>
+      <div className="mb-3 rounded-lg border border-border bg-card px-4">
         <SettingSelect
           description="Text size in the sidebar, lists, dialogs and menus. ⌘+ and ⌘− change this while Settings is open."
           label="Interface text size"
@@ -129,6 +131,15 @@ export function GeneralSettingsPreferences() {
           options={LIST_DENSITY_OPTIONS}
           value={listDensity}
         />
+      </div>
+      <div className="mb-3 rounded-lg border border-border bg-card px-4">
+        <SettingSelect
+          description="Body text size in the editor. Headings and code scale with it. ⌘+ and ⌘− change this while the editor is showing."
+          label="Editor text size"
+          onChange={setFontSize}
+          options={FONT_SIZE_OPTIONS}
+          value={fontSize}
+        />
         <SettingChoice
           description="How wide the text area is."
           label="Editor line width"
@@ -136,22 +147,10 @@ export function GeneralSettingsPreferences() {
           options={LINE_WIDTH_OPTIONS}
           value={lineWidth}
         />
+      </div>
+      <div className="mb-3 rounded-lg border border-border bg-card px-4">
         <SettingSelect
-          description="Body text size in the editor."
-          label="Editor text size"
-          onChange={setFontSize}
-          options={FONT_SIZE_OPTIONS}
-          value={fontSize}
-        />
-        <SettingChoice
-          description="Number of day columns in the calendar. Narrow windows may show fewer."
-          label="Calendar days shown"
-          onChange={setCalendarDayCount}
-          options={CALENDAR_DAY_COUNT_OPTIONS}
-          value={calendarDayCount}
-        />
-        <SettingSelect
-          description="Text size for event titles and time labels."
+          description="Text size for event titles and time labels. ⌘+ and ⌘− change this while the calendar is showing. Large sizes raise the hour height so a short event can still show its title."
           label="Calendar text size"
           onChange={setCalendarTextSize}
           options={CALENDAR_TEXT_SIZE_OPTIONS}
@@ -165,13 +164,21 @@ export function GeneralSettingsPreferences() {
           value={calendarDensity}
         />
         <SettingChoice
+          description="Number of day columns in the calendar. Narrow windows may show fewer."
+          label="Calendar days shown"
+          onChange={setCalendarDayCount}
+          options={CALENDAR_DAY_COUNT_OPTIONS}
+          value={calendarDayCount}
+        />
+        <SettingChoice
           description="Controls the calendar and date picker layout."
           label="Week starts on"
           onChange={setWeekStart}
           options={WEEK_START_OPTIONS}
           value={weekStart}
         />
-
+      </div>
+      <div className="rounded-lg border border-border bg-card px-4">
         {/* Default folder uses a searchable popover, not a button group. */}
         <div className="flex items-center justify-between py-3">
           <div>
