@@ -134,7 +134,7 @@ export function GeneralSettingsPreferences() {
       </div>
       <div className="mb-3 rounded-lg border border-border bg-card px-4">
         <SettingSelect
-          description="Body text size in the editor. Headings and code scale with it. ⌘+ and ⌘− change this while the editor is showing."
+          description="Body text size in the editor."
           label="Editor text size"
           onChange={setFontSize}
           options={FONT_SIZE_OPTIONS}
@@ -150,7 +150,7 @@ export function GeneralSettingsPreferences() {
       </div>
       <div className="mb-3 rounded-lg border border-border bg-card px-4">
         <SettingSelect
-          description="Text size for event titles and time labels. ⌘+ and ⌘− change this while the calendar is showing. Large sizes raise the hour height so a short event can still show its title."
+          description="Text size for event titles and time labels."
           label="Calendar text size"
           onChange={setCalendarTextSize}
           options={CALENDAR_TEXT_SIZE_OPTIONS}
