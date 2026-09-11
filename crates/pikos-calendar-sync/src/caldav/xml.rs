@@ -29,6 +29,11 @@ struct RawResponse {
     home_href: Option<String>,
     is_calendar: bool,
     display_name: Option<String>,
+    /// Whether a `<displayname>` element appeared at all, which `display_name`
+    /// cannot say: an absent element and an empty one both parse to `None`,
+    /// because the text handler drops whitespace. The two mean different things
+    /// when a server returns no name, so the distinction is kept here.
+    display_name_seen: bool,
     color: Option<String>,
     components: Vec<String>,
     /// `<cs:getctag>` — the collection change-tag, present only on a ctag PROPFIND.
@@ -39,6 +44,8 @@ struct RawResponse {
 pub(crate) struct RawCalendar {
     pub href: String,
     pub display_name: Option<String>,
+    /// See [`RawResponse::display_name_seen`].
+    pub display_name_seen: bool,
     pub color: Option<String>,
     /// `supported-calendar-component-set` comp names; empty when the server omits
     /// the prop (RFC default: all components supported).
@@ -70,6 +77,7 @@ pub(crate) fn parse_calendars(xml: &str) -> Result<Vec<RawCalendar>, CaldavError
         .map(|r| RawCalendar {
             href: r.href,
             display_name: r.display_name,
+            display_name_seen: r.display_name_seen,
             color: r.color,
             components: r.components,
         })
@@ -112,6 +120,7 @@ struct PropBuf {
     home_href: Option<String>,
     is_calendar: bool,
     display_name: Option<String>,
+    display_name_seen: bool,
     color: Option<String>,
     components: Vec<String>,
     ctag: Option<String>,
@@ -139,6 +148,9 @@ impl Parse {
     fn open(&mut self, ns: &[u8], local: &[u8], e: &BytesStart, is_start: bool) {
         if self.in_resourcetype && (ns, local) == (NS_CALDAV, b"calendar".as_ref()) {
             self.pbuf.is_calendar = true;
+        }
+        if (ns, local) == (NS_DAV, b"displayname".as_ref()) {
+            self.pbuf.display_name_seen = true;
         }
         if self.in_compset && (ns, local) == (NS_CALDAV, b"comp".as_ref()) {
             if let Some(name) = attr(e, b"name") {
@@ -299,6 +311,9 @@ fn merge(cur: Option<&mut RawResponse>, pbuf: &mut PropBuf) {
     }
     if pbuf.display_name.is_some() {
         c.display_name = pbuf.display_name.take();
+    }
+    if pbuf.display_name_seen {
+        c.display_name_seen = true;
     }
     if pbuf.color.is_some() {
         c.color = pbuf.color.take();

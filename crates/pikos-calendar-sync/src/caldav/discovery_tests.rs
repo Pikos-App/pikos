@@ -163,6 +163,28 @@ async fn a_uuid_named_collection_still_takes_its_displayname() {
     assert_eq!(calendars[0].display_name, "Personal");
 }
 
+/// An empty `<displayname/>` and an absent one both parse to `None`, so the
+/// element having appeared is tracked separately. Without it the diagnostic
+/// cannot say which of the two a server did, and they need different fixes.
+#[test]
+fn an_empty_displayname_is_distinguishable_from_an_absent_one() {
+    let with_empty = r#"<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:response><D:href>/c/</D:href><D:propstat><D:prop>
+    <D:resourcetype><D:collection/><C:calendar/></D:resourcetype>
+    <D:displayname/>
+  </D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>
+</D:multistatus>"#;
+    let without = with_empty.replace("<D:displayname/>", "");
+
+    let seen = super::super::xml::parse_calendars(with_empty).unwrap();
+    let absent = super::super::xml::parse_calendars(&without).unwrap();
+
+    assert!(seen[0].display_name.is_none() && absent[0].display_name.is_none());
+    assert!(seen[0].display_name_seen, "an empty element still appeared");
+    assert!(!absent[0].display_name_seen, "nothing appeared");
+}
+
 #[tokio::test]
 async fn wrong_password_fails_cleanly() {
     let err = discover(Mode::Unauthorized).await.unwrap_err();

@@ -81,13 +81,19 @@ pub(crate) async fn discover_calendars<T: DavTransport>(
         let calendar_url = resolve(&base, &resp.final_url, &raw.href)?;
         // The fallback names a collection whose URL is often opaque, so say which
         // half failed: a server that answered with an empty name is a different
-        // problem from one that never returned the property.
+        // problem from one that never returned the property, and they need
+        // different fixes. `display_name` alone cannot tell them apart, because
+        // an empty element parses to `None` exactly like an absent one.
         let display_name = match raw.display_name {
             Some(name) if !name.is_empty() => name,
-            empty => {
+            _ => {
                 log::warn!(
-                    "caldav: {calendar_url} enumerated with {} displayname; falling back to its URL segment",
-                    if empty.is_some() { "an empty" } else { "no" }
+                    "caldav: {calendar_url} enumerated with {}; falling back to its URL segment",
+                    if raw.display_name_seen {
+                        "an empty displayname element"
+                    } else {
+                        "no displayname element in the response"
+                    }
                 );
                 last_segment(&calendar_url)
             }
