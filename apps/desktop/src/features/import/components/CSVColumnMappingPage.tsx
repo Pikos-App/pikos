@@ -195,7 +195,7 @@ export function CSVColumnMappingPage({
                 <div className="w-40 shrink-0">
                   <p className="text-sm font-medium">{cm.csvHeader}</p>
                   {cm.sampleValues.length > 0 && (
-                    <p className="truncate font-mono text-[11px] text-muted-foreground">
+                    <p className="truncate font-mono text-2xs text-muted-foreground">
                       {cm.sampleValues[0]}
                     </p>
                   )}

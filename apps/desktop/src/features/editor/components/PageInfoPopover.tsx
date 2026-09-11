@@ -94,19 +94,19 @@ export function PageInfoPopover({ editor, page }: PageInfoPopoverProps) {
 
           <div className="space-y-1.5 text-xs">
             <InfoRow label="Created" value={relativeDate(page.createdAt)} />
-            <div className="text-right text-[10px] text-muted-foreground">
+            <div className="text-right text-3xs text-muted-foreground">
               {formatDate(page.createdAt)}
             </div>
 
             <InfoRow label="Updated" value={relativeDate(page.updatedAt)} />
-            <div className="text-right text-[10px] text-muted-foreground">
+            <div className="text-right text-3xs text-muted-foreground">
               {formatDate(page.updatedAt)}
             </div>
 
             {page.completedAt && (
               <>
                 <InfoRow label="Completed" value={relativeDate(page.completedAt)} />
-                <div className="text-right text-[10px] text-muted-foreground">
+                <div className="text-right text-3xs text-muted-foreground">
                   {formatDate(page.completedAt)}
                 </div>
               </>

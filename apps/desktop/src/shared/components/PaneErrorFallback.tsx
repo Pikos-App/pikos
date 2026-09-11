@@ -22,7 +22,7 @@ export function PaneErrorFallback({ error, label, onReset }: PaneErrorFallbackPr
             Try again
           </Button>
         </div>
-        <pre className="mt-3 max-h-40 overflow-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+        <pre className="mt-3 max-h-40 overflow-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-2xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
           {error.message}
         </pre>
       </div>

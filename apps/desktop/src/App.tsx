@@ -12,14 +12,21 @@ import { Toast } from "@/shared/components/Toast";
 import { UpdateDialog } from "@/shared/components/UpdateDialog";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
 import { CalendarDnDProvider } from "@/shared/context/CalendarDnDContext";
-import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
+import {
+  CalendarSettingsProvider,
+  useCalendarSettings,
+} from "@/shared/context/CalendarSettingsContext";
 import {
   DEFAULT_EDITOR_FONT_SIZE,
   EditorSettingsProvider,
   useEditorSettings,
 } from "@/shared/context/EditorSettingsContext";
 import { ImportProvider } from "@/shared/context/ImportContext";
-import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
+import {
+  DEFAULT_INTERFACE_TEXT_SCALE,
+  useInterfaceSettings,
+} from "@/shared/context/InterfaceSettingsContext";
+import { InterfaceSettingsProvider } from "@/shared/context/InterfaceSettingsContext";
 import { PagesProvider, usePages } from "@/shared/context/PagesContext";
 import { RecurringGapDialogProvider } from "@/shared/context/RecurringGapDialogContext";
 import { SelectionProvider } from "@/shared/context/SelectionContext";
@@ -127,10 +134,26 @@ function useGlobalShortcuts() {
   } = useUI();
   const { folders } = usePages();
   const { setFontSize, stepFontSize } = useEditorSettings();
+  const { setTextScale: setInterfaceScale, stepTextScale: stepInterfaceScale } =
+    useInterfaceSettings();
+  const { setTextScale: setCalendarScale, stepTextScale: stepCalendarScale } =
+    useCalendarSettings();
 
   // The size keys act on the panel in front of you, not on whatever holds focus.
-  // Only the editor has a size to act on yet, so they stand down elsewhere.
-  const editorIsOnScreen = () => rightPanel === "editor" && !settingsOpen;
+  // Settings is a full-window overlay, so while it is open it is that panel and
+  // the keys size the interface — which is what keeps the fix for "I cannot read
+  // this" from being reachable only by reading. PKOS-0067.
+  const sizeTarget = () => (settingsOpen ? "interface" : rightPanel);
+  const stepVisible = (direction: 1 | -1) => {
+    if (sizeTarget() === "interface") return stepInterfaceScale(direction);
+    if (sizeTarget() === "calendar") return stepCalendarScale(direction);
+    return stepFontSize(direction);
+  };
+  const resetVisible = () => {
+    if (sizeTarget() === "interface") return setInterfaceScale(DEFAULT_INTERFACE_TEXT_SCALE);
+    if (sizeTarget() === "calendar") return setCalendarScale(DEFAULT_INTERFACE_TEXT_SCALE);
+    return setFontSize(DEFAULT_EDITOR_FONT_SIZE);
+  };
 
   useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), {
     allowInInputs: true,
@@ -153,34 +176,25 @@ function useGlobalShortcuts() {
     { allowInInputs: true, group: "Navigation", label: "Keyboard shortcuts" }
   );
 
-  // Allowed in inputs because the surface being sized is itself one.
-  useKeyboardShortcut("Mod+=", () => stepFontSize(1), {
+  // Allowed in inputs because the surface being sized is often one itself.
+  useKeyboardShortcut("Mod+=", () => stepVisible(1), {
     allowInInputs: true,
-    group: "Editor",
-    label: "Increase font size",
-    when: editorIsOnScreen,
+    group: "View",
+    label: "Increase text size",
   });
   // Same gesture on layouts where "+" needs Shift and on those where it doesn't.
   // Unlabelled so the shortcuts page and the palette list one row, not three.
-  useKeyboardShortcut("Mod+Shift+Plus", () => stepFontSize(1), {
+  useKeyboardShortcut("Mod+Shift+Plus", () => stepVisible(1), { allowInInputs: true });
+  useKeyboardShortcut("Mod+Plus", () => stepVisible(1), { allowInInputs: true });
+  useKeyboardShortcut("Mod+-", () => stepVisible(-1), {
     allowInInputs: true,
-    when: editorIsOnScreen,
+    group: "View",
+    label: "Decrease text size",
   });
-  useKeyboardShortcut("Mod+Plus", () => stepFontSize(1), {
+  useKeyboardShortcut("Mod+0", resetVisible, {
     allowInInputs: true,
-    when: editorIsOnScreen,
-  });
-  useKeyboardShortcut("Mod+-", () => stepFontSize(-1), {
-    allowInInputs: true,
-    group: "Editor",
-    label: "Decrease font size",
-    when: editorIsOnScreen,
-  });
-  useKeyboardShortcut("Mod+0", () => setFontSize(DEFAULT_EDITOR_FONT_SIZE), {
-    allowInInputs: true,
-    group: "Editor",
-    label: "Reset font size",
-    when: editorIsOnScreen,
+    group: "View",
+    label: "Reset text size",
   });
 
   // ⌘1-9 — switch to folder by index (1-based).
@@ -214,6 +228,17 @@ function useGlobalShortcuts() {
   }, []);
 }
 
+/** Puts the interface text scale on the document root rather than on a wrapper.
+ *  Dialogs, dropdowns and tooltips portal to `body`, so a subtree style would
+ *  leave every menu in the app unscaled — the missed-surface failure this whole
+ *  change exists to avoid. */
+function useInterfaceTextScale() {
+  const { textScale } = useInterfaceSettings();
+  useEffect(() => {
+    document.documentElement.style.setProperty("--ui-text-scale", String(textScale));
+  }, [textScale]);
+}
+
 function AppShell() {
   useKeyboardListener();
   useTrackPageOpened();
@@ -228,6 +253,7 @@ function AppShell() {
   useEffect(() => {
     performance.mark("pikos:ready");
   }, []);
+  useInterfaceTextScale();
   const updater = useUpdate();
   const { consumePendingNavigation } = useWorkspace();
   const ui = useUI();
@@ -302,7 +328,7 @@ function WorkspaceLoadError({ error }: { error: unknown }) {
           Quit and relaunch the app. If this keeps happening, file a bug — connect_db failures are
           usually a path or permission problem on disk.
         </p>
-        <pre className="mt-4 max-h-48 overflow-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+        <pre className="mt-4 max-h-48 overflow-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-2xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
           {detail}
         </pre>
       </div>
@@ -338,7 +364,7 @@ export default function App() {
                       <CalendarDnDProvider>
                         <EditorSettingsProvider>
                           <CalendarSettingsProvider>
-                            <ListSettingsProvider>
+                            <InterfaceSettingsProvider>
                               <UndoDeleteProvider>
                                 <RecurringGapDialogProvider>
                                   <TooltipProvider delayDuration={400}>
@@ -357,7 +383,7 @@ export default function App() {
                                   </TooltipProvider>
                                 </RecurringGapDialogProvider>
                               </UndoDeleteProvider>
-                            </ListSettingsProvider>
+                            </InterfaceSettingsProvider>
                           </CalendarSettingsProvider>
                         </EditorSettingsProvider>
                       </CalendarDnDProvider>

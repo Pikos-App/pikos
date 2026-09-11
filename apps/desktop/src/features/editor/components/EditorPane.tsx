@@ -244,7 +244,7 @@ export function EditorPane() {
         <EmptyState message="Select a page to start editing">
           <p className="type-ui-sm mt-1 text-subtle">
             or press{" "}
-            <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">
+            <kbd className="rounded border border-border px-1 py-0.5 text-3xs">
               {MOD_KEY_LABEL}N
             </kbd>{" "}
             to create a new page

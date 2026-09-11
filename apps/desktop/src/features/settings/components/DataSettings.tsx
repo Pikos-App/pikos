@@ -201,7 +201,7 @@ export function DataSettings({
                 {lastImportResult.folderCount > 0 &&
                   ` into ${lastImportResult.folderCount} folder${lastImportResult.folderCount !== 1 ? "s" : ""}`}
               </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-2xs text-muted-foreground">
                 via {lastImportResult.source === "markdown" ? "Markdown" : "CSV"} ·{" "}
                 {formatTimeAgo(lastImportResult.importedAt)}
               </p>

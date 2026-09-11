@@ -67,7 +67,7 @@ function StatCard({
         <span className="text-xs">{label}</span>
       </div>
       <span className="text-xl font-semibold tracking-tight tabular-nums">{value}</span>
-      {sub && <span className="text-[11px] text-muted-foreground">{sub}</span>}
+      {sub && <span className="text-2xs text-muted-foreground">{sub}</span>}
     </div>
   );
 }
@@ -107,7 +107,7 @@ function ActivityChart({ weeks }: { weeks: WorkspaceWeekActivity[] }) {
           );
         })}
       </div>
-      <div className="flex justify-between text-[10px] text-muted-foreground">
+      <div className="flex justify-between text-3xs text-muted-foreground">
         <span>{weekLabel(weeks, 0)}</span>
         <span>{weekLabel(weeks, weeks.length - 1)}</span>
       </div>
