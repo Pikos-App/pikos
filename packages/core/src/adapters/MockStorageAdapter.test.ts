@@ -2086,7 +2086,7 @@ describe("createFocusSession", () => {
       startedAt: "2026-06-01T14:00:00",
     });
 
-    const stats = await adapter.getUsageStats();
+    const stats = await adapter.getUsageStats(1);
     expect(stats.total_focus_sessions).toBe(2);
     expect(stats.total_focus_minutes).toBe(40); // (1500 + 900) / 60
     expect(stats.has_focus_sessions).toBe(true);
@@ -2097,7 +2097,7 @@ describe("createFocusSession", () => {
   /// for a non-null priority, which every page has, and `has_subtasks` was a
   /// hardcoded false.
   it("derives every adoption flag the writer does", async () => {
-    const plain = await adapter.getUsageStats();
+    const plain = await adapter.getUsageStats(1);
     expect(plain.has_priorities).toBe(false);
     expect(plain.has_subtasks).toBe(false);
     expect(plain.has_reminders).toBe(false);
@@ -2108,7 +2108,7 @@ describe("createFocusSession", () => {
     await adapter.updatePage(child.id, { parentId: parent.id });
     await adapter.createPageReminder({ minutesBefore: 30, pageId: parent.id });
 
-    const used = await adapter.getUsageStats();
+    const used = await adapter.getUsageStats(1);
     expect(used.has_priorities).toBe(true);
     expect(used.has_subtasks).toBe(true);
     expect(used.has_reminders).toBe(true);
@@ -2122,7 +2122,7 @@ describe("createFocusSession", () => {
       pageId: page.id,
       startedAt: "2026-06-01T09:00:00",
     });
-    expect((await adapter.getUsageStats()).total_focus_minutes).toBe(1);
+    expect((await adapter.getUsageStats(1)).total_focus_minutes).toBe(1);
   });
 
   it("refuses a non-positive duration", async () => {

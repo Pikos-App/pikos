@@ -512,8 +512,8 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     }
   }
 
-  getUsageStats(): Promise<WorkspaceUsageStats> {
-    return invoke<WorkspaceUsageStats>("get_usage_stats");
+  getUsageStats(weekStartsOn: 0 | 1): Promise<WorkspaceUsageStats> {
+    return invoke<WorkspaceUsageStats>("get_usage_stats", { weekStart: weekStartsOn });
   }
 
   async resetWorkspaceData(): Promise<void> {

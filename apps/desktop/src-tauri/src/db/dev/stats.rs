@@ -63,12 +63,27 @@ pub struct UsageStats {
 /// single CTE-based query would be the obvious next step if this ever shows
 /// up in a profile.
 #[tauri::command]
-pub async fn get_usage_stats(state: tauri::State<'_, DbState>) -> AppResult<UsageStats> {
+pub async fn get_usage_stats(
+    state: tauri::State<'_, DbState>,
+    week_start: i64,
+) -> AppResult<UsageStats> {
     let pool = state.get_pool().await?;
-    get_usage_stats_impl(&pool).await
+    get_usage_stats_impl(&pool, week_start).await
 }
 
-pub(crate) async fn get_usage_stats_impl(pool: &sqlx::SqlitePool) -> AppResult<UsageStats> {
+/// `week_start` is SQLite's weekday number, 0 = Sunday, which is also what the
+/// frontend's `WeekStart` holds. Rejected rather than clamped when out of range:
+/// `date()` answers NULL to an unrecognised modifier, so a bad value would empty
+/// every bar rather than fail.
+pub(crate) async fn get_usage_stats_impl(
+    pool: &sqlx::SqlitePool,
+    week_start: i64,
+) -> AppResult<UsageStats> {
+    if !(0..=6).contains(&week_start) {
+        return Err(crate::error::AppError::Internal(format!(
+            "week_start must be 0-6, got {week_start}"
+        )));
+    }
     // ── Totals ────────────────────────────────────────────────────────────────
     let total_pages: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL")
@@ -121,17 +136,18 @@ pub(crate) async fn get_usage_stats_impl(pool: &sqlx::SqlitePool) -> AppResult<U
     // ── Weekly activity (last 12 weeks) ───────────────────────────────────────
     // Tracks pages created, pages edited (updated_at != created_at), and pages completed per week.
     //
-    // Weeks key on their Monday via `date(X, '-6 days', 'weekday 1')`. The
-    // reverse — `'weekday 1'` then back a week — is what you reach for first and
-    // it is wrong on Mondays: SQLite's `weekday` modifier is a no-op when the
-    // date already is that weekday, so a Monday walks back to the week before
-    // and every Monday's activity lands in the previous bucket.
+    // Weeks key on their first day via `date(X, '-6 days', 'weekday N')`. The
+    // reverse — `'weekday N'` then back a week — is what you reach for first and
+    // it is wrong on the boundary day: SQLite's `weekday` modifier is a no-op when
+    // the date already is that weekday, so that day walks back to the week before
+    // and its activity lands in the previous bucket. Going back 6 first can never
+    // land on the target weekday, so the modifier always moves.
     let week_rows = sqlx::query(
         "WITH RECURSIVE weeks(n) AS ( \
            SELECT 0 UNION ALL SELECT n+1 FROM weeks WHERE n < 11 \
          ), \
          week_starts AS ( \
-           SELECT date('now', '-' || (n * 7) || ' days', '-6 days', 'weekday 1') AS week_start \
+           SELECT date('now', '-' || (n * 7) || ' days', '-6 days', 'weekday ' || ?1) AS week_start \
            FROM weeks \
          ) \
          SELECT \
@@ -142,28 +158,29 @@ pub(crate) async fn get_usage_stats_impl(pool: &sqlx::SqlitePool) -> AppResult<U
            COALESCE(fs.focus_minutes, 0) AS focus_minutes \
          FROM week_starts ws \
          LEFT JOIN ( \
-           SELECT date(created_at, '-6 days', 'weekday 1') AS w, COUNT(*) AS created \
+           SELECT date(created_at, '-6 days', 'weekday ' || ?1) AS w, COUNT(*) AS created \
            FROM pages WHERE deleted_at IS NULL \
            GROUP BY w \
          ) cr ON cr.w = ws.week_start \
          LEFT JOIN ( \
-           SELECT date(updated_at, '-6 days', 'weekday 1') AS w, COUNT(*) AS edited \
+           SELECT date(updated_at, '-6 days', 'weekday ' || ?1) AS w, COUNT(*) AS edited \
            FROM pages WHERE deleted_at IS NULL AND updated_at != created_at \
            GROUP BY w \
          ) ed ON ed.w = ws.week_start \
          LEFT JOIN ( \
-           SELECT date(completed_at, '-6 days', 'weekday 1') AS w, COUNT(*) AS completed \
+           SELECT date(completed_at, '-6 days', 'weekday ' || ?1) AS w, COUNT(*) AS completed \
            FROM pages WHERE deleted_at IS NULL AND completed_at IS NOT NULL \
            GROUP BY w \
          ) co ON co.w = ws.week_start \
          LEFT JOIN ( \
-           SELECT date(started_at, '-6 days', 'weekday 1') AS w, \
+           SELECT date(started_at, '-6 days', 'weekday ' || ?1) AS w, \
                   SUM(duration_s) / 60 AS focus_minutes \
            FROM focus_sessions \
            GROUP BY w \
          ) fs ON fs.w = ws.week_start \
          ORDER BY ws.week_start ASC",
     )
+    .bind(week_start)
     .fetch_all(pool)
     .await?;
 

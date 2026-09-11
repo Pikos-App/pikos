@@ -1528,7 +1528,7 @@ export class MockStorageAdapter implements StorageAdapter {
 
   /** Counted from the in-memory maps so the panel shows the seeded workspace
    *  rather than zeroes. The activity chart has no source here and stays empty. */
-  getUsageStats(): Promise<WorkspaceUsageStats> {
+  getUsageStats(_weekStartsOn: 0 | 1): Promise<WorkspaceUsageStats> {
     const pages = [...this.pages.values()].filter((p) => !this.softDeleted.has(p.id));
     const tags = new Set(pages.flatMap((p) => p.tags));
     // Integer minutes, matching the backend's `SUM(duration_s) / 60` — SQLite

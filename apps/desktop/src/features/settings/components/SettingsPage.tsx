@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 
 import { CSVColumnMappingPage, ImportPreviewModal, useImport } from "@/features/import";
 import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useImportBatch } from "@/shared/context/ImportContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
@@ -42,6 +43,7 @@ export function SettingsPage() {
     settingsSection: section,
   } = useUI();
   const { storage } = useWorkspace();
+  const { weekStart } = useAppSettings();
   const { clearLastImport, lastImportResult, undoLastImport } = useImportBatch();
 
   // Undo deletes the imported pages; if one is open in the editor, deselect it
@@ -69,10 +71,10 @@ export function SettingsPage() {
   useEffect(() => {
     if (!storage || !settingsOpen) return;
     storage
-      .getUsageStats()
+      .getUsageStats(weekStart)
       .then(setUsageStats)
       .catch(() => {});
-  }, [storage, settingsOpen]);
+  }, [storage, settingsOpen, weekStart]);
 
   // Close on Escape — go back from mapping/preview first, then close settings
   useEffect(() => {

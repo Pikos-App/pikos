@@ -60,6 +60,7 @@ fn wire_cases() -> Vec<(&'static str, serde_json::Value)> {
         ("list_page_reminders", json!({ "pageId": "p1" })),
         ("delete_page_reminders", json!({ "pageId": "p1" })),
         ("list_sync_calendars", json!({ "accountId": "a1" })),
+        ("get_usage_stats", json!({ "weekStart": 1 })),
         (
             "set_sync_calendar_color",
             json!({ "color": "#ffffff", "syncCalendarId": "c1" }),
@@ -144,7 +145,6 @@ fn extra_read_bodies() -> Vec<(&'static str, serde_json::Value)> {
         ("list_notification_history", json!({ "limit": 50 })),
         ("get_sync_status", json!({})),
         ("google_sync_available", json!({})),
-        ("get_usage_stats", json!({})),
     ]
 }
 

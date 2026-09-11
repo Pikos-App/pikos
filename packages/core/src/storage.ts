@@ -356,8 +356,10 @@ export interface StorageAdapter {
   backupBeforeImport(): Promise<void>;
   /** Render the workspace into `format`; resolves to where it landed. */
   exportWorkspace(format: WorkspaceExportFormat, options: WorkspaceExportOptions): Promise<string>;
-  /** Aggregate counts for the Data settings panel. */
-  getUsageStats(): Promise<WorkspaceUsageStats>;
+  /** Aggregate counts for the Data settings panel. `weekStartsOn` buckets the
+   *  activity chart, since the counting happens where the rows are and the
+   *  preference lives with the user. */
+  getUsageStats(weekStartsOn: 0 | 1): Promise<WorkspaceUsageStats>;
   /** Dev tool: empty every table so a seed scenario can start from nothing.
    *  Leaves the database file and the workspace registry in place — unlike
    *  `wipeAllData`, this is a truncate, not an uninstall. */
