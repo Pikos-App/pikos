@@ -8,9 +8,11 @@ import {
   clampTopHour,
   collapsedBandInnerOffset,
   collapsedBandPillHeight,
+  computeCalendarMetrics,
   mapHourToY,
   mapYToDate,
   mapYToHour,
+  minHourHeightForTextScale,
   snapY,
   timeToY,
   weekDays,
@@ -351,5 +353,28 @@ describe("collapsedBandInnerOffset", () => {
   it("never goes negative — pill height is clamped against the band height", () => {
     expect(collapsedBandInnerOffset(14)).toBeGreaterThanOrEqual(0);
     expect(collapsedBandInnerOffset(40)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("minHourHeightForTextScale", () => {
+  it("is inert at the default scale", () => {
+    // 36px, below every density, so raising calendar text is the only thing
+    // that can move the hour height.
+    expect(minHourHeightForTextScale(1)).toBeLessThan(computeCalendarMetrics("compact").hourHeight);
+  });
+
+  it("raises the hour height once text outgrows the block holding it", () => {
+    // A 30-minute block at compact is 20px; one line at 2x needs 28px, so
+    // leaving the hour at 40 would clip the title rather than enlarge it.
+    expect(computeCalendarMetrics("compact", 2).hourHeight).toBe(minHourHeightForTextScale(2));
+    expect(computeCalendarMetrics("compact", 2).hourHeight).toBeGreaterThan(
+      computeCalendarMetrics("compact").hourHeight
+    );
+  });
+
+  it("leaves a density that is already tall enough alone", () => {
+    expect(computeCalendarMetrics("spacious", 1.15).hourHeight).toBe(
+      computeCalendarMetrics("spacious").hourHeight
+    );
   });
 });

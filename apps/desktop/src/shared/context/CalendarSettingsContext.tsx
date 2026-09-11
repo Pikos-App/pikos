@@ -17,6 +17,11 @@ import { useState } from "react";
 
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
+import {
+  DEFAULT_INTERFACE_TEXT_SCALE,
+  type InterfaceTextScale,
+  stepInterfaceTextScale,
+} from "@/shared/context/InterfaceSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 export type { CalendarDayCount, CalendarViewMode };
@@ -32,6 +37,12 @@ export interface CalendarSettingsValue {
   setViewMode: (v: CalendarViewMode) => void;
   density: CalendarDensity;
   setDensity: (v: CalendarDensity) => void;
+  /** Multiplier on the calendar's own `--ui-text-scale`, independent of the
+   *  interface one. Raising it raises `metrics.hourHeight` when the text would
+   *  otherwise be taller than the block holding it. */
+  textScale: InterfaceTextScale;
+  setTextScale: (v: InterfaceTextScale) => void;
+  stepTextScale: (direction: 1 | -1) => void;
   /** Derived from density — convenient so callers don't recompute. */
   metrics: CalendarMetrics;
   /** Pixel layout of the collapsible bands at the current hourHeight. */
@@ -62,6 +73,10 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     STORAGE_KEYS.calendarDensity,
     "normal"
   );
+  const [textScale, setTextScale] = useLocalStorage<InterfaceTextScale>(
+    STORAGE_KEYS.calendarTextScale,
+    DEFAULT_INTERFACE_TEXT_SCALE
+  );
   const [topCollapsed, setTopCollapsedRaw] = useLocalStorage<boolean>(
     STORAGE_KEYS.calendarTopCollapsed,
     DEFAULT_COLLAPSE_CONFIG.topCollapsed
@@ -79,7 +94,7 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     DEFAULT_COLLAPSE_CONFIG.bottomHour
   );
 
-  const metrics = computeCalendarMetrics(density);
+  const metrics = computeCalendarMetrics(density, textScale);
   const collapse: CalendarCollapseConfig = {
     bottomCollapsed,
     bottomHour,
@@ -106,9 +121,12 @@ function useCalendarSettingsValue(): CalendarSettingsValue {
     setDayCount,
     setDensity,
     setHoveredBand,
+    setTextScale,
     setTopCollapsed: setTopCollapsedRaw,
     setTopHour,
     setViewMode,
+    stepTextScale: (direction) => setTextScale((prev) => stepInterfaceTextScale(prev, direction)),
+    textScale,
     viewMode,
   };
 }

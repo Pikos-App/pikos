@@ -70,7 +70,12 @@ export function TimeGutter() {
   }
 
   return (
-    <div className="relative w-14 shrink-0 select-none" style={{ height: geometry.totalHeight }}>
+    // Width rides the calendar's text scale: at 2x "10 PM" is wider than a fixed
+    // 3.5rem gutter, and the labels wrap into the grid rather than truncating.
+    <div
+      className="relative w-[calc(3.5rem*var(--ui-text-scale,1))] shrink-0 whitespace-nowrap select-none"
+      style={{ height: geometry.totalHeight }}
+    >
       {collapse.topCollapsed ? (
         // Compressed band: two endpoint labels + chevron between, click to expand.
         // Bottom divider matches the day columns so the band/middle seam reads

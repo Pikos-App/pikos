@@ -40,8 +40,22 @@ const DENSITY_HOUR_HEIGHT: Record<CalendarDensity, number> = {
   spacious: 88,
 };
 
-export function computeCalendarMetrics(density: CalendarDensity): CalendarMetrics {
-  const hourHeight = DENSITY_HOUR_HEIGHT[density];
+/** One line of event title at scale 1, plus the block's own vertical padding.
+ *  An hour has to be twice this or a half-hour block clips its own title. */
+const EVENT_LINE_HEIGHT = 14;
+const EVENT_BLOCK_PADDING = 4;
+
+/** The shortest hour that still lets a 30-minute block show one line of title at
+ *  `textScale`. Below this the text is taller than the block that holds it, so
+ *  raising the text size alone would silently clip instead of enlarging.
+ *  At scale 1 this is 36px, under every density, so it is inert until the
+ *  calendar text size is actually raised (PKOS-0067, C88). */
+export function minHourHeightForTextScale(textScale: number): number {
+  return 2 * (EVENT_LINE_HEIGHT * textScale + EVENT_BLOCK_PADDING);
+}
+
+export function computeCalendarMetrics(density: CalendarDensity, textScale = 1): CalendarMetrics {
+  const hourHeight = Math.max(DENSITY_HOUR_HEIGHT[density], minHourHeightForTextScale(textScale));
   return {
     compactBlockHeight: hourHeight / 4,
     gridHeight: hourHeight * VISIBLE_HOURS,

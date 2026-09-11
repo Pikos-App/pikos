@@ -7,7 +7,7 @@ import {
   monthGridDays,
 } from "@pikos/core";
 import { addDays, format, isSameDay } from "date-fns";
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
@@ -54,7 +54,12 @@ export function CalendarView() {
   const { activeViewId, openPage, referenceDate, setReferenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
   const { defaultFolderId: settingsDefaultFolder, weekStart } = useAppSettings();
-  const { dayCount: preferredDayCount, setViewMode, viewMode } = useCalendarSettings();
+  const {
+    dayCount: preferredDayCount,
+    setViewMode,
+    textScale: calendarTextScale,
+    viewMode,
+  } = useCalendarSettings();
   const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
   const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
@@ -194,7 +199,13 @@ export function CalendarView() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // Overriding `--ui-text-scale` here is what makes the calendar's text size
+    // independent of the interface's: everything below inherits the calendar's
+    // value, everything above keeps the interface's.
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      style={{ "--ui-text-scale": calendarTextScale } as CSSProperties}
+    >
       {isMonth ? (
         <MonthGrid
           onOpenDay={handleOpenDay}
