@@ -26,6 +26,7 @@ export const STORAGE_KEYS = {
   calendarViewMode: "pikos:calendarViewMode",
   defaultFolderId: "pikos:defaultFolderId",
   defaultReminderMinutes: "pikos:defaultReminderMinutes",
+  editorFontSize: "pikos:editorFontSize",
   lastActivePageId: "pikos:lastActivePageId",
   lastActiveViewId: "pikos:lastActiveViewId",
   lastEditorPageId: "pikos:lastEditorPageId",

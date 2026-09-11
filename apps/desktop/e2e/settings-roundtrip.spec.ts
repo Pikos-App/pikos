@@ -10,7 +10,7 @@
 // import.spec.ts already covers the markdown-vault import path, so this
 // spec focuses on the preferences round-trip.
 
-import { expect, test as appTest } from "./fixtures";
+import { expect, mod, quickAdd, test as appTest } from "./fixtures";
 
 // ─── Calendar day count: setting → live UI → reload survives ───────────────
 //
@@ -55,6 +55,57 @@ appTest(
     // has driven the visible UI — that's the contract.
   }
 );
+
+// ─── Editor font size: shortcut → live type → reload survives → reset ──────
+//
+// The two paths (⌘+/⌘− and the Settings row) write the same preference, so the
+// round-trip is only proved by driving one and reading the other back.
+
+appTest("editor font size steps from the keyboard and survives reload @tier2", async ({ app }) => {
+  await quickAdd(app, "font size test");
+  await app.locator("[data-page-list-item]").getByText("font size test").click();
+  const editor = app.getByRole("textbox", { name: "Page content" });
+  await editor.click();
+
+  const fontSize = () => editor.evaluate((el) => getComputedStyle(el).fontSize);
+  expect(await fontSize()).toBe("14px");
+
+  await app.keyboard.press(mod("Mod+="));
+  await expect.poll(fontSize).toBe("16px");
+  await app.keyboard.press(mod("Mod+="));
+  await expect.poll(fontSize).toBe("18px");
+  await app.keyboard.press(mod("Mod+-"));
+  await expect.poll(fontSize).toBe("16px");
+
+  // The keys act on the panel on screen, so with the calendar up they must not
+  // resize the editor hiding behind it.
+  await app.getByRole("button", { name: "Calendar view" }).click();
+  await expect(app.getByRole("region", { name: "Week calendar" })).toBeVisible();
+  await app.keyboard.press(mod("Mod+="));
+  await app.getByRole("button", { name: "Editor view" }).click();
+  await expect.poll(fontSize).toBe("16px");
+
+  // The Settings row is the other half of the round-trip: it must be showing
+  // what the shortcut wrote, not its own stale copy.
+  await app.getByRole("button", { name: "Open settings" }).click();
+  const settings = app.getByRole("region", { name: "Settings" });
+  await settings.getByRole("button", { name: /^Editor font size:/ }).click();
+  // Radix portals the popover outside the settings region.
+  await app.getByRole("button", { name: "20", exact: true }).click();
+  await app.keyboard.press("Escape");
+  await expect.poll(fontSize).toBe("20px");
+
+  // The mock adapter holds pages in memory, so a reload starts on an empty
+  // workspace — the preference is what has to come back, not the page.
+  await app.reload();
+  await expect(app.getByRole("main", { name: "Workspace" })).toBeVisible();
+  await quickAdd(app, "font size after reload");
+  await app.locator("[data-page-list-item]").getByText("font size after reload").click();
+  await expect.poll(fontSize).toBe("20px");
+
+  await app.keyboard.press(mod("Mod+0"));
+  await expect.poll(fontSize).toBe("14px");
+});
 
 // Note on scope: a real "settings round-trip" (export → wipe → re-import →
 // identity) requires Tauri APIs (invoke/relaunch) that don't exist in

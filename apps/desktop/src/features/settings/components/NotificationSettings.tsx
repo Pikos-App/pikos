@@ -2,13 +2,6 @@ import type { NotificationHistoryEntry } from "@pikos/core";
 import { AlertTriangle, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
@@ -19,6 +12,7 @@ import { createLogger } from "@/shared/logger";
 import { getPlatform } from "@/shared/platform";
 
 import { NotificationHistory } from "./NotificationHistory";
+import { SettingPicker } from "./SettingPicker";
 
 const log = createLogger("NotificationSettings");
 
@@ -37,8 +31,6 @@ const LEAD_TIME_OPTIONS: { id: ReminderLeadTime; label: string }[] = [
  *  without turning the settings panel into an unbounded list. */
 const HISTORY_LIMIT = 50;
 
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
-
 function formatTime24to12(time: string): string {
   const parts = time.split(":").map(Number);
   const h = parts[0] ?? 0;
@@ -47,6 +39,11 @@ function formatTime24to12(time: string): string {
   const hour12 = h % 12 || 12;
   return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
 }
+
+const HOUR_PICKER_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const id = `${String(i).padStart(2, "0")}:00`;
+  return { id, label: formatTime24to12(id) };
+});
 
 export function NotificationSettings() {
   const {
@@ -282,21 +279,12 @@ export function NotificationSettings() {
             {overdueAlerts && (
               <div className="mt-3 flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Fire at</span>
-                <Select onValueChange={setSummaryTime} value={summaryTime}>
-                  <SelectTrigger
-                    aria-label="Daily summary time"
-                    className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {HOUR_OPTIONS.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {formatTime24to12(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SettingPicker
+                  label="Daily summary time"
+                  onChange={setSummaryTime}
+                  options={HOUR_PICKER_OPTIONS}
+                  value={summaryTime}
+                />
               </div>
             )}
           </div>
@@ -323,37 +311,19 @@ export function NotificationSettings() {
 
             {quietHoursEnabled && (
               <div className="mt-3 flex items-center gap-2">
-                <Select onValueChange={setQuietHoursStart} value={quietHoursStart}>
-                  <SelectTrigger
-                    aria-label="Quiet hours start"
-                    className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {HOUR_OPTIONS.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {formatTime24to12(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SettingPicker
+                  label="Quiet hours start"
+                  onChange={setQuietHoursStart}
+                  options={HOUR_PICKER_OPTIONS}
+                  value={quietHoursStart}
+                />
                 <span className="text-xs text-muted-foreground">to</span>
-                <Select onValueChange={setQuietHoursEnd} value={quietHoursEnd}>
-                  <SelectTrigger
-                    aria-label="Quiet hours end"
-                    className="h-auto w-[100px] rounded-md border px-2.5 py-1.5 text-xs font-medium"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {HOUR_OPTIONS.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {formatTime24to12(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SettingPicker
+                  label="Quiet hours end"
+                  onChange={setQuietHoursEnd}
+                  options={HOUR_PICKER_OPTIONS}
+                  value={quietHoursEnd}
+                />
               </div>
             )}
           </div>

@@ -13,7 +13,11 @@ import { UpdateDialog } from "@/shared/components/UpdateDialog";
 import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
 import { CalendarDnDProvider } from "@/shared/context/CalendarDnDContext";
 import { CalendarSettingsProvider } from "@/shared/context/CalendarSettingsContext";
-import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
+import {
+  DEFAULT_EDITOR_FONT_SIZE,
+  EditorSettingsProvider,
+  useEditorSettings,
+} from "@/shared/context/EditorSettingsContext";
 import { ImportProvider } from "@/shared/context/ImportContext";
 import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
 import { PagesProvider, usePages } from "@/shared/context/PagesContext";
@@ -113,9 +117,20 @@ function useMenuEvents() {
 }
 
 function useGlobalShortcuts() {
-  const { setActivePage, setActiveViewId, setSettingsOpen, setSettingsSection, settingsOpen } =
-    useUI();
+  const {
+    rightPanel,
+    setActivePage,
+    setActiveViewId,
+    setSettingsOpen,
+    setSettingsSection,
+    settingsOpen,
+  } = useUI();
   const { folders } = usePages();
+  const { setFontSize, stepFontSize } = useEditorSettings();
+
+  // The size keys act on the panel in front of you, not on whatever holds focus.
+  // Only the editor has a size to act on yet, so they stand down elsewhere.
+  const editorIsOnScreen = () => rightPanel === "editor" && !settingsOpen;
 
   useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), {
     allowInInputs: true,
@@ -137,6 +152,36 @@ function useGlobalShortcuts() {
     },
     { allowInInputs: true, group: "Navigation", label: "Keyboard shortcuts" }
   );
+
+  // Allowed in inputs because the surface being sized is itself one.
+  useKeyboardShortcut("Mod+=", () => stepFontSize(1), {
+    allowInInputs: true,
+    group: "Editor",
+    label: "Increase font size",
+    when: editorIsOnScreen,
+  });
+  // Same gesture on layouts where "+" needs Shift and on those where it doesn't.
+  // Unlabelled so the shortcuts page and the palette list one row, not three.
+  useKeyboardShortcut("Mod+Shift+Plus", () => stepFontSize(1), {
+    allowInInputs: true,
+    when: editorIsOnScreen,
+  });
+  useKeyboardShortcut("Mod+Plus", () => stepFontSize(1), {
+    allowInInputs: true,
+    when: editorIsOnScreen,
+  });
+  useKeyboardShortcut("Mod+-", () => stepFontSize(-1), {
+    allowInInputs: true,
+    group: "Editor",
+    label: "Decrease font size",
+    when: editorIsOnScreen,
+  });
+  useKeyboardShortcut("Mod+0", () => setFontSize(DEFAULT_EDITOR_FONT_SIZE), {
+    allowInInputs: true,
+    group: "Editor",
+    label: "Reset font size",
+    when: editorIsOnScreen,
+  });
 
   // ⌘1-9 — switch to folder by index (1-based).
   // Use the Keyboard registry directly to register all 9 bindings in one effect,

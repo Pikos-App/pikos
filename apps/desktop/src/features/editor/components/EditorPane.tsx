@@ -10,7 +10,7 @@ import Typography from "@tiptap/extension-typography";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { Markdown } from "tiptap-markdown";
 
 import { EmptyState } from "@/shared/components/EmptyState";
@@ -102,7 +102,7 @@ function appendParagraphs(editor: Editor | null, text: string): void {
 export function EditorPane() {
   const { isLoading, page } = useEditorPage();
   const { updatePage } = usePages();
-  const { lineWidth } = useEditorSettings();
+  const { fontSize, lineWidth } = useEditorSettings();
   const { clearSelection, selectedPageIds } = useSelection();
 
   const currentPageIdRef = useRef<string | null>(null);
@@ -294,6 +294,7 @@ export function EditorPane() {
               requestAnimationFrame(() => !editor?.isDestroyed && editor?.commands.focus("end"));
             }
           }}
+          style={{ "--editor-font-size": `${fontSize}px` } as CSSProperties}
         >
           <EditorContent editor={editor} />
         </div>

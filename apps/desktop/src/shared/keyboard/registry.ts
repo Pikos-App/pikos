@@ -40,6 +40,8 @@ function normalizeKey(key: string): string {
   // KeyboardEvent.key for the space bar is the literal " " character; accept
   // the friendlier "space" form in combo strings.
   if (lower === "space") return " ";
+  // "+" cannot be written literally in a combo string — parseCombo splits on it.
+  if (lower === "plus") return "+";
   return lower;
 }
 

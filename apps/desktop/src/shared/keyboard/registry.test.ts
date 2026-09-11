@@ -391,6 +391,26 @@ describe("Space key", () => {
   });
 });
 
+describe("Plus key", () => {
+  it("matches a 'Plus' combo against the literal '+' KeyboardEvent.key", () => {
+    const handler = vi.fn();
+    Keyboard.register({ combo: "Mod+Shift+Plus", handler, id: "test-mod-shift-plus" });
+    Keyboard.handle(makeKeyEvent("+", { ctrlKey: true, shiftKey: true }));
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("keeps 'Mod+Plus' and 'Mod+=' as separate bindings", () => {
+    const plus = vi.fn();
+    const equals = vi.fn();
+    Keyboard.register({ combo: "Mod+Plus", handler: plus, id: "test-mod-plus" });
+    Keyboard.register({ combo: "Mod+=", handler: equals, id: "test-mod-equals" });
+
+    Keyboard.handle(makeKeyEvent("=", { ctrlKey: true }));
+    expect(equals).toHaveBeenCalledOnce();
+    expect(plus).not.toHaveBeenCalled();
+  });
+});
+
 // ─── listActiveBindings ─────────────────────────────────────────────────────
 
 describe("listActiveBindings", () => {
