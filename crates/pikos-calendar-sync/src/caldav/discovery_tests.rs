@@ -201,6 +201,22 @@ fn a_cdata_wrapped_displayname_is_read() {
     assert_eq!(cals[0].display_name.as_deref(), Some("Personal & Work"));
 }
 
+/// Entity-escaped text is the other way a name can arrive in pieces. The text
+/// handler trims every fragment it sees, so a name split across fragments would
+/// silently lose the spaces around the entity.
+#[test]
+fn an_escaped_ampersand_keeps_the_spaces_around_it() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:response><D:href>/c/</D:href><D:propstat><D:prop>
+    <D:resourcetype><D:collection/><C:calendar/></D:resourcetype>
+    <D:displayname>Work &amp; Life</D:displayname>
+  </D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>
+</D:multistatus>"#;
+    let cals = super::super::xml::parse_calendars(xml).unwrap();
+    assert_eq!(cals[0].display_name.as_deref(), Some("Work & Life"));
+}
+
 #[tokio::test]
 async fn wrong_password_fails_cleanly() {
     let err = discover(Mode::Unauthorized).await.unwrap_err();
