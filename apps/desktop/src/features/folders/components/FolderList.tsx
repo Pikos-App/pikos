@@ -314,7 +314,7 @@ export function FolderList() {
           a place you go to see pages — but it is not somewhere pages live and
           nothing can be dropped into it, so it must not sit in the scrolling
           list beside Inbox and the folders. */}
-      <div className="shrink-0 border-t border-border-subtle px-1 py-1">
+      <div className="shrink-0 border-t border-border-subtle px-1 py-2">
         <SmartViewEntry
           icon={<Trash2 size={16} />}
           id="nav-trash"
