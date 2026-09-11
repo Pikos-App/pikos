@@ -79,10 +79,19 @@ pub(crate) async fn discover_calendars<T: DavTransport>(
             continue;
         }
         let calendar_url = resolve(&base, &resp.final_url, &raw.href)?;
-        let display_name = raw
-            .display_name
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| last_segment(&calendar_url));
+        // The fallback names a collection whose URL is often opaque, so say which
+        // half failed: a server that answered with an empty name is a different
+        // problem from one that never returned the property.
+        let display_name = match raw.display_name {
+            Some(name) if !name.is_empty() => name,
+            empty => {
+                log::warn!(
+                    "caldav: {calendar_url} enumerated with {} displayname; falling back to its URL segment",
+                    if empty.is_some() { "an empty" } else { "no" }
+                );
+                last_segment(&calendar_url)
+            }
+        };
         calendars.push(RemoteCalendar {
             calendar_id: calendar_url.to_string(),
             display_name,

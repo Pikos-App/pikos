@@ -1,7 +1,8 @@
 //! Layer-1 discovery tests. Most run over recorded Radicale fixtures (captured
-//! 2026-06-19 from radicale 3.3.3 with htpasswd basic auth); `04_*` is
-//! hand-authored to mimic an iCloud-style cross-host calendar-home redirect,
-//! which a single local server can't produce. No network.
+//! 2026-06-19 from radicale 3.3.3 with htpasswd basic auth); `04_*` and `05_*` are
+//! hand-authored, for an iCloud-style cross-host calendar-home redirect and the
+//! Cyrus/Fastmail enumeration shape, neither of which a local radicale produces.
+//! No network.
 
 use super::super::error::CaldavError;
 use super::super::transport::{DavResponse, DavTransport};
@@ -15,6 +16,8 @@ const ENUM: &str = include_str!("../../tests/fixtures/caldav/discovery/03_enumer
 const HOME_REMOTE: &str =
     include_str!("../../tests/fixtures/caldav/discovery/04_calendar_home_set_remote.xml");
 const UNAUTH: &str = include_str!("../../tests/fixtures/caldav/discovery/00_unauthorized.txt");
+const ENUM_CYRUS: &str =
+    include_str!("../../tests/fixtures/caldav/discovery/05_enumerate_calendars_cyrus.xml");
 
 #[derive(Debug)]
 enum Mode {
@@ -28,6 +31,9 @@ enum Mode {
     CrossHostHome,
     /// A server that advertises no component set at all on its calendars.
     NoComponentSet,
+    /// Cyrus/Fastmail shape: prefixed `D:` namespace, opaque UUID collection
+    /// names, and the props split across a 200 and a 404 propstat.
+    CyrusShape,
 }
 
 /// An enumerate whose calendar declares no `supported-calendar-component-set`.
@@ -63,6 +69,7 @@ impl DavTransport for FixtureTransport {
             (Mode::CrossHostHome, "p42-caldav.icloud.com", _, "1") => ok(ENUM),
             (_, _, "/testuser/", "0") => ok(HOME),
             (Mode::NoComponentSet, _, "/testuser/", "1") => ok(ENUM_NO_COMPONENTS),
+            (Mode::CyrusShape, _, "/testuser/", "1") => ok(ENUM_CYRUS),
             (_, _, "/testuser/", "1") => ok(ENUM),
             other => panic!("unexpected discovery request: {other:?}"),
         };
@@ -142,6 +149,18 @@ async fn a_calendar_with_no_declared_components_is_kept() {
 
     assert_eq!(calendars.len(), 1, "got: {calendars:?}");
     assert_eq!(calendars[0].display_name, "Plain");
+}
+
+/// Hand-authored to Cyrus's documented shape, not recorded: a Fastmail account
+/// lists every calendar under an opaque UUID, so the URL-segment fallback is the
+/// visible symptom of a name that never arrived. Pins that the shape itself parses,
+/// which is what says the name is missing upstream rather than dropped here.
+#[tokio::test]
+async fn a_uuid_named_collection_still_takes_its_displayname() {
+    let calendars = discover(Mode::CyrusShape).await.unwrap();
+
+    assert_eq!(calendars.len(), 1, "got: {calendars:?}");
+    assert_eq!(calendars[0].display_name, "Personal");
 }
 
 #[tokio::test]
