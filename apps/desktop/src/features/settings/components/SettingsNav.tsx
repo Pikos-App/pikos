@@ -29,9 +29,7 @@ export function SettingsNav({ active, onClose, onNavigate, width }: SettingsNavP
     >
       {/* Header */}
       <div className="flex h-11 items-center justify-between border-b border-border px-3">
-        <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-          Settings
-        </span>
+        <span className="type-ui-sm tracking-wide text-subtle uppercase">Settings</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -55,9 +53,9 @@ export function SettingsNav({ active, onClose, onNavigate, width }: SettingsNavP
         {NAV_ITEMS.map(({ icon: Icon, id, label }) => (
           <button
             className={cn(
-              "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+              "type-ui flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 transition-colors",
               active === id
-                ? "bg-accent font-medium text-accent-foreground"
+                ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             )}
             key={id}
