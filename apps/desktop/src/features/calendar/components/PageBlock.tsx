@@ -369,7 +369,8 @@ export function PageBlock({
               </div>
             )}
             {showTimeLabel && (
-              <p className="type-ui-sm mt-0.5 truncate pl-[18px] text-subtle">{timeLabel}</p>
+              // Indent matches the title's own left edge: checkbox 3.5 + gap 1
+              <p className="type-ui-sm mt-0.5 truncate pl-4.5 text-subtle">{timeLabel}</p>
             )}
             {resizeHandle}
           </button>

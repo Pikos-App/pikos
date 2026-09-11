@@ -185,6 +185,22 @@ fn an_empty_displayname_is_distinguishable_from_an_absent_one() {
     assert!(!absent[0].display_name_seen, "nothing appeared");
 }
 
+/// A name wrapped in CDATA is a name. Dropping the event made it indistinguishable
+/// from an empty element, which reads as "the server sent nothing" when the server
+/// in fact sent the answer.
+#[test]
+fn a_cdata_wrapped_displayname_is_read() {
+    let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:response><D:href>/c/</D:href><D:propstat><D:prop>
+    <D:resourcetype><D:collection/><C:calendar/></D:resourcetype>
+    <D:displayname><![CDATA[Personal & Work]]></D:displayname>
+  </D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>
+</D:multistatus>"#;
+    let cals = super::super::xml::parse_calendars(xml).unwrap();
+    assert_eq!(cals[0].display_name.as_deref(), Some("Personal & Work"));
+}
+
 #[tokio::test]
 async fn wrong_password_fails_cleanly() {
     let err = discover(Mode::Unauthorized).await.unwrap_err();

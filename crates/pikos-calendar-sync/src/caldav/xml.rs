@@ -275,6 +275,13 @@ fn parse_multistatus(xml: &str) -> Result<Vec<RawResponse>, CaldavError> {
                     .map_err(|e| CaldavError::Protocol(e.to_string()))?;
                 p.text(&text);
             }
+            // CDATA is character data like any other here. Dropping it made an
+            // element wrapping its value in CDATA look byte-identical to an empty
+            // one, which is a silent wrong answer rather than a parse failure.
+            // Its content is literal by definition, so it is not unescaped.
+            Event::CData(t) => {
+                p.text(&String::from_utf8_lossy(t.as_ref()));
+            }
             Event::End(e) => {
                 let local = e.local_name().as_ref().to_vec();
                 p.close(&ns, &local);

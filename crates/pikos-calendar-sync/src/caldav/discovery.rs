@@ -72,6 +72,7 @@ pub(crate) async fn discover_calendars<T: DavTransport>(
         .await?
         .ok_or_else(|| CaldavError::NotCaldav("calendar enumeration not found".into()))?;
     let mut calendars = Vec::new();
+    let mut nameless = 0usize;
     for raw in xml::parse_calendars(&resp.body)? {
         // Absent component-set ⇒ all components supported (RFC default); keep it.
         // An explicit set without VEVENT (a tasks-only calendar) is dropped.
@@ -87,6 +88,7 @@ pub(crate) async fn discover_calendars<T: DavTransport>(
         let display_name = match raw.display_name {
             Some(name) if !name.is_empty() => name,
             _ => {
+                nameless += 1;
                 log::warn!(
                     "caldav: {calendar_url} enumerated with {}; falling back to its URL segment",
                     if raw.display_name_seen {
@@ -103,6 +105,15 @@ pub(crate) async fn discover_calendars<T: DavTransport>(
             display_name,
             color: raw.color.filter(|s| !s.is_empty()),
         });
+    }
+
+    // Every calendar nameless is a server-shape problem, not a stray collection,
+    // and the response is the only thing that can say which. Logged once, only in
+    // that case, and truncated: it names the user's calendars, which is theirs and
+    // stays on their disk, but there is no reason to write pages of it.
+    if nameless > 0 && nameless == calendars.len() {
+        let body: String = resp.body.chars().take(4000).collect();
+        log::warn!("caldav: no calendar in this account returned a name. Enumeration response follows (truncated): {body}");
     }
     Ok(calendars)
 }
