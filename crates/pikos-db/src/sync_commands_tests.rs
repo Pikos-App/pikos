@@ -65,6 +65,42 @@ async fn status_lists_accounts_with_their_calendars() {
     assert!(status[0].calendars.iter().all(|c| !c.enabled));
 }
 
+/// Connection order is not an order: with three providers the panel read as a pile.
+/// Case-insensitive so "work" and "Work" don't split a provider's group, and the
+/// last account connected has to land in its place rather than at the bottom.
+#[tokio::test]
+async fn accounts_list_by_provider_then_name_whatever_the_connect_order() {
+    let pool = test_pool().await;
+    for (provider, name) in [
+        ("google", "zoe@example.com"),
+        ("caldav", "work · https://x"),
+        ("google", "Amy@example.com"),
+        ("caldav", "Home · https://y"),
+    ] {
+        insert_sync_account_impl(&pool, provider, name, "basic")
+            .await
+            .unwrap();
+    }
+
+    let listed: Vec<String> = get_sync_status_impl(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|a| a.account.display_name)
+        .collect();
+
+    assert_eq!(
+        listed,
+        [
+            "Home · https://y",
+            "work · https://x",
+            "Amy@example.com",
+            "zoe@example.com",
+        ],
+        "providers group, names sort case-insensitively inside them"
+    );
+}
+
 #[tokio::test]
 async fn account_is_reused_by_identity_whether_dormant_or_active() {
     let pool = test_pool().await;

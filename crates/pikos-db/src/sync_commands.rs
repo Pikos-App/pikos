@@ -144,8 +144,13 @@ pub async fn reactivate_account_impl(pool: &sqlx::SqlitePool, id: &str) -> AppRe
 pub async fn get_sync_status_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<AccountWithCalendars>> {
     // Dormant (disconnected) accounts are hidden — disconnect reads as removal in
     // the panel even though the row survives for reconnect re-link.
+    // Grouped by provider, then by name, so a workspace lists the same way on every
+    // launch and two accounts on one provider sit together. Connection order put a
+    // newly added account at the bottom and told the user nothing. `created_at` only
+    // breaks a tie between two same-provider accounts sharing a name.
     let sql = format!(
-        "SELECT {ACCOUNT_COLS} FROM sync_account WHERE disconnected = 0 ORDER BY created_at ASC"
+        "SELECT {ACCOUNT_COLS} FROM sync_account WHERE disconnected = 0
+         ORDER BY provider ASC, display_name COLLATE NOCASE ASC, created_at ASC"
     );
     let accounts = sqlx::query_as::<_, SyncAccount>(&sql)
         .fetch_all(pool)
