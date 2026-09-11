@@ -303,7 +303,7 @@ the raw base. The completed/skip sets survive a wholesale rule rewrite and push 
 | Uncomplete (uncheck a done clone) | ✅ ³⁶ | ✅ ³⁶ | ✅ | — | ○ |
 | Delete the head | ✅ series stops ³⁷ | ⚠️ soft + tombstone ⁷ ³⁷ | ✅ ³⁷ | ✅ soft ⁹ ³⁷ | ○ |
 | Restore the head | ✅ series returns ³⁸ | ✅ ³⁸ | ✅ | — | ○ |
-| Terminal state (series exhausted) | ✅ head marked done, no clone | ✅ same, and **un-marked** if the provider re-extends | ✅ | ✅ | ○ |
+| Terminal state (series exhausted) | ✅ head marked done, no clone | ⚠️ stays open at its last occurrence, never self-completes | ✅ like native | ✅ | ○ |
 
 ³¹ The sets model can't represent a head parked on a date the rule can't yield, and the heal
 would silently revert it on relaunch (decided 2026-07-03), so an off-pattern move lands on a

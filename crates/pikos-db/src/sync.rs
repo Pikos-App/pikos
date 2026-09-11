@@ -167,11 +167,21 @@ pub(crate) async fn page_schedule_locked(
     pool: &sqlx::SqlitePool,
     page_id: &str,
 ) -> crate::error::AppResult<bool> {
+    let mut conn = pool.acquire().await?;
+    page_schedule_locked_conn(&mut conn, page_id).await
+}
+
+/// [`page_schedule_locked`] on the caller's connection, for a guard that has to
+/// read the same snapshot as the write it gates.
+pub(crate) async fn page_schedule_locked_conn(
+    conn: &mut sqlx::SqliteConnection,
+    page_id: &str,
+) -> crate::error::AppResult<bool> {
     Ok(sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM page_sync WHERE page_id = ? AND sync_state = 'active')",
     )
     .bind(page_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await?)
 }
 

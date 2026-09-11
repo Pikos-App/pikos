@@ -160,6 +160,76 @@ async fn recompute_flips_head_done_on_exhaustion_and_back_on_reyield() {
     assert_eq!(completed_at, None, "un-mark must clear completed_at");
 }
 
+/// The trigger is the head floor: a series whose last occurrence fell before the
+/// connect day has nothing at or after the floor, so the derivation yields null on
+/// the very first sync.
+#[tokio::test]
+async fn an_exhausted_active_mirror_stays_open_at_its_last_occurrence() {
+    let pool = test_pool().await;
+    seed_series(
+        &pool,
+        "head",
+        "FREQ=DAILY;COUNT=2",
+        &day_at(-10, "09:00:00"),
+        None,
+    )
+    .await;
+    crate::pool::insert_test_page_sync_connected_at(
+        &pool,
+        "head",
+        "active",
+        &connected_days_ago(3),
+    )
+    .await
+    .unwrap();
+
+    recompute(&pool, "head").await;
+
+    let (cached, status) = head(&pool, "head").await;
+    assert_eq!(status, "not_started", "a live mirror must not complete itself");
+    assert_eq!(
+        cached.as_deref(),
+        Some(day_at(-9, "09:00:00").as_str()),
+        "head parks on the last occurrence, not the provider's base"
+    );
+    let completed_at: Option<String> =
+        sqlx::query_scalar("SELECT completed_at FROM pages WHERE id = 'head'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        completed_at, None,
+        "completed_at is a PAGE_OWNED_SQL investment signal; no system write may set it"
+    );
+}
+
+/// Detaching hands the page to the user outright, so native terminal behavior
+/// comes back with it.
+#[tokio::test]
+async fn an_exhausted_detached_series_still_terminates() {
+    let pool = test_pool().await;
+    seed_series(
+        &pool,
+        "head",
+        "FREQ=DAILY;COUNT=2",
+        &day_at(-10, "09:00:00"),
+        None,
+    )
+    .await;
+    crate::pool::insert_test_page_sync_connected_at(
+        &pool,
+        "head",
+        "detached",
+        &connected_days_ago(3),
+    )
+    .await
+    .unwrap();
+
+    recompute(&pool, "head").await;
+
+    assert_eq!(head(&pool, "head").await.1, "done");
+}
+
 // ─── reminder derivation ─────────────────────────────────────────────────────
 
 #[tokio::test]

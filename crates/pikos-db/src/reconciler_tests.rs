@@ -3427,8 +3427,9 @@ async fn series_rewrite_recomputes_head_over_both_sets() {
     );
 }
 
-/// A finite series exhausted by exclusion recomputes to `done`; the provider
-/// extending it (a later UNTIL) must un-mark the head both times the recompute runs.
+/// An exhausted mirror stays open, and the provider extending it (a later UNTIL)
+/// still un-marks a head an older build left `done` — over the reconcile path, not
+/// just a bare recompute.
 #[tokio::test]
 async fn provider_re_extension_unmarks_exhausted_head() {
     let pool = setup().await;
@@ -3459,8 +3460,11 @@ async fn provider_re_extension_unmarks_exhausted_head() {
     .await
     .unwrap();
     let (_, status, completed_at) = page_denorm(&pool, &page_id).await;
-    assert_eq!(status, "done", "exhausted series marks the head done");
-    assert!(completed_at.is_some());
+    assert_eq!(status, "not_started", "an exhausted mirror stays open");
+    assert_eq!(completed_at, None);
+
+    // A head this build would no longer write, but an upgraded database still holds.
+    force_terminal_done(&pool, &page_id).await;
 
     // Provider extends the series → the next occurrence opens → head un-marked.
     reconcile(

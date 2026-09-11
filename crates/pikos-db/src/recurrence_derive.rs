@@ -79,6 +79,33 @@ fn derive_oldest_open(
     .map_err(|e| AppError::Internal(format!("recurrence derivation failed: {e}")))
 }
 
+/// Upper bound for expanding a whole series. Only reached on a series the
+/// derivation has already found exhausted, which means finite — an unbounded rule
+/// always yields, so it never lands there.
+const SERIES_END: &str = "9999-12-31T23:59:59";
+
+/// The newest occurrence no exclusion covers, ignoring the synced head floor.
+/// Where an exhausted mirror's head parks: the floor is what left it with nothing
+/// at or after the connect day, and the provider's base would date the row at the
+/// *first* occurrence of a series that has already ended. `None` when every
+/// occurrence is excluded, which leaves the head where it is — the user completed
+/// or dismissed them all, and the frontend hides a head sitting on a completed date.
+fn last_open_occurrence(
+    rule: &RuleRow,
+    exclusions: &[String],
+) -> Option<pikos_recurrence::Occurrence> {
+    pikos_recurrence::occurrences_in_window(
+        &rule.rrule,
+        &rule.base_start,
+        rule.base_end.as_deref(),
+        &rule.base_start,
+        SERIES_END,
+        exclusions,
+    )
+    .ok()?
+    .pop()
+}
+
 /// Lower bound on a synced series' head: the day the page was first synced.
 /// Without one the head parks on the master's original `DTSTART` — which a
 /// provider returns whenever the series still yields instances in the backfill
@@ -176,9 +203,33 @@ pub async fn recompute_recurring_schedule(
             .execute(&mut **tx)
             .await?;
         }
-        // Finite series exhausted → head done, no clone (native terminal
-        // behavior). Guarded so a repeat recompute doesn't re-stamp completed_at.
+        // Finite series exhausted. A native series terminates here: head done, no
+        // clone. A live mirror must not. The flip reads as the page completing
+        // itself, and the `completed_at` it stamps is one of `PAGE_OWNED_SQL`'s
+        // ownership signals, so the mirror would then survive disconnect and ship
+        // in a user-facing export as if it had been authored. Park the head on the
+        // last occurrence instead and leave the status alone.
         None => {
+            if crate::sync::page_schedule_locked_conn(tx, page_id).await? {
+                if let Some(occ) = last_open_occurrence(&rule, &excl) {
+                    sqlx::query(
+                        "UPDATE pages SET
+                           scheduled_start = ?1,
+                           scheduled_end = ?2,
+                           updated_at = ?3
+                         WHERE id = ?4
+                           AND (scheduled_start IS NOT ?1 OR scheduled_end IS NOT ?2)",
+                    )
+                    .bind(&occ.scheduled_start)
+                    .bind(&occ.scheduled_end)
+                    .bind(&now)
+                    .bind(page_id)
+                    .execute(&mut **tx)
+                    .await?;
+                }
+                return Ok(());
+            }
+            // Guarded so a repeat recompute doesn't re-stamp completed_at.
             sqlx::query(
                 "UPDATE pages SET status = 'done', completed_at = ?1, updated_at = ?2
                  WHERE id = ?3 AND status != 'done'",
