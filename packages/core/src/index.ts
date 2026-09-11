@@ -207,6 +207,7 @@ export type { UpcomingDaySection } from "./pages/upcoming";
 // ── Host-shell seam: everything the app asks of the machine, minus storage ──
 export * from "./platform";
 export * from "./storage";
+export { accountAddress, accountProviderLabel, accountServerUrl } from "./sync/accountLabel";
 // ── Calendar sync health, derived from the read model ──
 export { accountConnectionState, calendarSyncDot, STALE_AFTER_MS } from "./sync/syncStatus";
 export type { AccountConnectionState, SyncDotMeta, SyncDotState } from "./sync/syncStatus";

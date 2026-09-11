@@ -1,3 +1,4 @@
+import { accountAddress } from "@pikos/core";
 import type { AccountWithCalendars, Folder } from "@pikos/core";
 import { useEffect, useState } from "react";
 
@@ -54,7 +55,7 @@ export function useCalendarAccountGroups(externalFolders: Folder[]): CalendarAcc
     }
     let group = byAccountId.get(account.id);
     if (!group) {
-      group = { accountId: account.id, accountName: account.displayName, folders: [] };
+      group = { accountId: account.id, accountName: accountAddress(account), folders: [] };
       byAccountId.set(account.id, group);
       groups.push(group);
     }

@@ -59,7 +59,7 @@ describe("SyncAccountCard", () => {
   it("shows Connected by default and lists the account's calendars", () => {
     render_();
     expect(screen.getByText("me@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(screen.getByText("CalDAV · Connected")).toBeInTheDocument();
     expect(screen.getByText("Personal")).toBeInTheDocument();
   });
 
@@ -67,7 +67,7 @@ describe("SyncAccountCard", () => {
     // results is keyed by sync_calendar row id (cal() → id "c1").
     render_({ results: { c1: "reconnectNeeded" } });
     expect(screen.getByText(/Reconnect needed/)).toBeInTheDocument();
-    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(screen.queryByText("CalDAV · Connected")).not.toBeInTheDocument();
   });
 
   it("shows Reconnect needed from the stored flag, with no resync result in hand", () => {
@@ -84,8 +84,8 @@ describe("SyncAccountCard", () => {
 
   it("spins a syncing indicator while the account is busy", () => {
     render_({ busy: true });
-    expect(screen.getByText("Syncing…")).toBeInTheDocument();
-    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(screen.getByText("CalDAV · Syncing…")).toBeInTheDocument();
+    expect(screen.queryByText("CalDAV · Connected")).not.toBeInTheDocument();
   });
 
   it("offers a full refresh alongside the incremental resync", async () => {
