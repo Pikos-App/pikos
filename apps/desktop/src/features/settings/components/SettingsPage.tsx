@@ -3,13 +3,11 @@ import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import { CSVColumnMappingPage, ImportPreviewModal, useImport } from "@/features/import";
-import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { useImportBatch } from "@/shared/context/ImportContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useIsFullscreen } from "@/shared/hooks/useIsFullscreen";
-import { getKeyValueStore } from "@/shared/kv";
 
 import { CalendarSyncSettings } from "./CalendarSyncSettings";
 import { DataSettings } from "./DataSettings";
@@ -22,18 +20,6 @@ import type { UsageStatsData } from "./UsageStats";
 const DeveloperSettings = import.meta.env.DEV
   ? lazy(() => import("./DeveloperSettings").then((m) => ({ default: m.DeveloperSettings })))
   : null;
-
-/** Matches `usePanelResize`'s own default for this panel in ThreePanelLayout. */
-const DEFAULT_LEFT_PANEL_WIDTH = 180;
-
-function readLeftPanelWidth(): number {
-  try {
-    const raw = getKeyValueStore().getItem(STORAGE_KEYS.leftPanelWidth);
-    return raw ? (JSON.parse(raw) as number) : DEFAULT_LEFT_PANEL_WIDTH;
-  } catch {
-    return DEFAULT_LEFT_PANEL_WIDTH;
-  }
-}
 
 export function SettingsPage() {
   const {
@@ -57,11 +43,6 @@ export function SettingsPage() {
     await undoLastImport();
   }
   const isFullscreen = useIsFullscreen();
-  // Read on each open, not once at mount: this panel stays mounted while closed,
-  // so a sidebar resized afterwards would leave the settings nav at a stale
-  // width until relaunch. Settings is a full-window overlay and the folder
-  // sidebar cannot be dragged while it is up, so per-open is the live value.
-  const sidebarWidth = settingsOpen ? readLeftPanelWidth() : DEFAULT_LEFT_PANEL_WIDTH;
   const [usageStats, setUsageStats] = useState<UsageStatsData | null>(null);
   const {
     applyCSVMapping,
@@ -116,7 +97,6 @@ export function SettingsPage() {
         active={section}
         onClose={() => setSettingsOpen(false)}
         onNavigate={setSettingsSection}
-        width={sidebarWidth}
       />
 
       {/* Content — mapping → preview → progress, or normal section */}

@@ -21,7 +21,7 @@ export const STORAGE_KEYS = {
   calendarReferenceDate: "pikos:calendarReferenceDate",
   calendarsCollapsed: "pikos:calendarsCollapsed",
   calendarScrollHour: "pikos:calendarScrollHour",
-  calendarTextScale: "pikos:calendarTextScale",
+  calendarTextSize: "pikos:calendarTextSize",
   calendarTopCollapsed: "pikos:calendarTopCollapsed",
   calendarTopHour: "pikos:calendarTopHour",
   calendarViewMode: "pikos:calendarViewMode",

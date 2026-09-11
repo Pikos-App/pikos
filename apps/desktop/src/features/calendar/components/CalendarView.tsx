@@ -11,7 +11,7 @@ import { type CSSProperties, useEffect, useState } from "react";
 
 import { useLayoutMode } from "@/features/layout/breakpoints";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
-import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import { calendarTextScale, useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
 import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
@@ -57,7 +57,7 @@ export function CalendarView() {
   const {
     dayCount: preferredDayCount,
     setViewMode,
-    textScale: calendarTextScale,
+    textSize: calendarTextSize,
     viewMode,
   } = useCalendarSettings();
   const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
@@ -204,7 +204,7 @@ export function CalendarView() {
     // value, everything above keeps the interface's.
     <div
       className="flex min-h-0 flex-1 flex-col"
-      style={{ "--ui-text-scale": calendarTextScale } as CSSProperties}
+      style={{ "--ui-text-scale": calendarTextScale(calendarTextSize) } as CSSProperties}
     >
       {isMonth ? (
         <MonthGrid

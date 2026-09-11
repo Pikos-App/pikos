@@ -4,7 +4,11 @@ import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/Se
 import { IS_LINUX } from "@/shared/constants/platform";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";
-import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
+import {
+  CALENDAR_TEXT_SIZES,
+  type CalendarTextSize,
+  useCalendarSettings,
+} from "@/shared/context/CalendarSettingsContext";
 import { EDITOR_FONT_SIZES, useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import type { EditorFontSize, LineWidth } from "@/shared/context/EditorSettingsContext";
 import {
@@ -59,9 +63,9 @@ const LIST_DENSITY_OPTIONS: readonly { id: ListDensity; label: string }[] = [
   { id: "spacious", label: "Spacious" },
 ];
 
-/** Shared by the interface and calendar rows: the same control shape and the same
- *  naming across all three areas, with the values free to differ. Findability
- *  comes from the naming, not from the units (PKOS-0067). */
+/** The interface has no single body size for a px to refer to, so it names
+ *  its steps. The editor and calendar each do have one and name the px
+ *  (PKOS-0067: shared control shape, per-area vocabulary). */
 const TEXT_SCALE_OPTIONS: readonly { id: InterfaceTextScale; label: string }[] = [
   { id: 0.85, label: "Smaller" },
   { id: 1, label: "Default" },
@@ -71,6 +75,9 @@ const TEXT_SCALE_OPTIONS: readonly { id: InterfaceTextScale; label: string }[] =
   { id: 1.75, label: "Huger" },
   { id: 2, label: "Largest" },
 ];
+
+const CALENDAR_TEXT_SIZE_OPTIONS: readonly { id: CalendarTextSize; label: string }[] =
+  CALENDAR_TEXT_SIZES.map((size) => ({ id: size, label: String(size) }));
 
 const WEEK_START_OPTIONS: readonly { id: WeekStart; label: string }[] = [
   { id: 1, label: "Monday" },
@@ -87,8 +94,8 @@ export function GeneralSettingsPreferences() {
     density: calendarDensity,
     setDayCount: setCalendarDayCount,
     setDensity: setCalendarDensity,
-    setTextScale: setCalendarTextScale,
-    textScale: calendarTextScale,
+    setTextSize: setCalendarTextSize,
+    textSize: calendarTextSize,
   } = useCalendarSettings();
   const {
     density: listDensity,
@@ -130,7 +137,7 @@ export function GeneralSettingsPreferences() {
           value={lineWidth}
         />
         <SettingSelect
-          description="Body text size in the editor. Headings and code scale with it. ⌘+ and ⌘− change this while the editor is showing."
+          description="Body text size in the editor."
           label="Editor text size"
           onChange={setFontSize}
           options={FONT_SIZE_OPTIONS}
@@ -144,11 +151,11 @@ export function GeneralSettingsPreferences() {
           value={calendarDayCount}
         />
         <SettingSelect
-          description="Text size for event titles and time labels. ⌘+ and ⌘− change this while the calendar is showing. Large sizes raise the hour height so a short event can still show its title."
+          description="Text size for event titles and time labels."
           label="Calendar text size"
-          onChange={setCalendarTextScale}
-          options={TEXT_SCALE_OPTIONS}
-          value={calendarTextScale}
+          onChange={setCalendarTextSize}
+          options={CALENDAR_TEXT_SIZE_OPTIONS}
+          value={calendarTextSize}
         />
         <SettingChoice
           description="How tall each hour row renders."

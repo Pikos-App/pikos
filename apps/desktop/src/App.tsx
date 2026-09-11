@@ -14,6 +14,7 @@ import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
 import { CalendarDnDProvider } from "@/shared/context/CalendarDnDContext";
 import {
   CalendarSettingsProvider,
+  DEFAULT_CALENDAR_TEXT_SIZE,
   useCalendarSettings,
 } from "@/shared/context/CalendarSettingsContext";
 import {
@@ -136,8 +137,7 @@ function useGlobalShortcuts() {
   const { setFontSize, stepFontSize } = useEditorSettings();
   const { setTextScale: setInterfaceScale, stepTextScale: stepInterfaceScale } =
     useInterfaceSettings();
-  const { setTextScale: setCalendarScale, stepTextScale: stepCalendarScale } =
-    useCalendarSettings();
+  const { setTextSize: setCalendarSize, stepTextSize: stepCalendarSize } = useCalendarSettings();
 
   // The size keys act on the panel in front of you, not on whatever holds focus.
   // Settings is a full-window overlay, so while it is open it is that panel and
@@ -146,12 +146,12 @@ function useGlobalShortcuts() {
   const sizeTarget = () => (settingsOpen ? "interface" : rightPanel);
   const stepVisible = (direction: 1 | -1) => {
     if (sizeTarget() === "interface") return stepInterfaceScale(direction);
-    if (sizeTarget() === "calendar") return stepCalendarScale(direction);
+    if (sizeTarget() === "calendar") return stepCalendarSize(direction);
     return stepFontSize(direction);
   };
   const resetVisible = () => {
     if (sizeTarget() === "interface") return setInterfaceScale(DEFAULT_INTERFACE_TEXT_SCALE);
-    if (sizeTarget() === "calendar") return setCalendarScale(DEFAULT_INTERFACE_TEXT_SCALE);
+    if (sizeTarget() === "calendar") return setCalendarSize(DEFAULT_CALENDAR_TEXT_SIZE);
     return setFontSize(DEFAULT_EDITOR_FONT_SIZE);
   };
 

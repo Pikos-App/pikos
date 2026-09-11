@@ -1,27 +1,17 @@
 import { STORAGE_KEYS } from "@/shared/constants/storage";
 import { createSettingsContext } from "@/shared/context/createSettingsContext";
+import { stepTextSize, TEXT_SIZES, type TextSize } from "@/shared/context/textSizes";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
 export type LineWidth = "narrow" | "default" | "wide" | "full";
 
-/** Body type sizes in px, ascending. This ladder is both what Settings offers
- *  and what ⌘+/⌘− step through, so a size missing here is reachable by neither.
- *  The top is 2× the default because that is the size the accessibility
- *  guidance asks text to reach, not because 28 renders particularly well. */
-export const EDITOR_FONT_SIZES = [12, 14, 16, 18, 20, 22, 24, 28] as const;
+export const EDITOR_FONT_SIZES = TEXT_SIZES;
 
-export type EditorFontSize = (typeof EDITOR_FONT_SIZES)[number];
+export type EditorFontSize = TextSize;
 
 export const DEFAULT_EDITOR_FONT_SIZE: EditorFontSize = 14;
 
-/** The next rung above (`1`) or below (`-1`) `size`, or `size` itself at either
- *  end. Matching on the value rather than on a ladder position keeps a size
- *  persisted by an older ladder steppable instead of stranding the shortcuts. */
-export function stepEditorFontSize(size: EditorFontSize, direction: 1 | -1): EditorFontSize {
-  if (direction === 1) return EDITOR_FONT_SIZES.find((s) => s > size) ?? size;
-  const smaller = EDITOR_FONT_SIZES.filter((s) => s < size);
-  return smaller[smaller.length - 1] ?? size;
-}
+export const stepEditorFontSize = stepTextSize;
 
 export interface EditorSettingsValue {
   lineWidth: LineWidth;

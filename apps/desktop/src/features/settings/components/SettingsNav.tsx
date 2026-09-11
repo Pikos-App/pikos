@@ -18,15 +18,11 @@ interface SettingsNavProps {
   active: SettingsSection;
   onNavigate: (section: SettingsSection) => void;
   onClose: () => void;
-  width: number;
 }
 
-export function SettingsNav({ active, onClose, onNavigate, width }: SettingsNavProps) {
+export function SettingsNav({ active, onClose, onNavigate }: SettingsNavProps) {
   return (
-    <div
-      className="flex h-full shrink-0 flex-col border-r border-border bg-background"
-      style={{ width }}
-    >
+    <div className="flex h-full w-56 shrink-0 flex-col border-r border-border bg-background">
       {/* Header */}
       <div className="flex h-11 items-center justify-between border-b border-border px-3">
         <span className="type-ui-sm tracking-wide text-subtle uppercase">Settings</span>
