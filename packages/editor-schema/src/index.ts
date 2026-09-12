@@ -46,6 +46,7 @@ export {
   isCursorAtLineStart,
   setIndentForSelection,
 } from "./tabIndent";
+export { Markdown } from "tiptap-markdown";
 export type { ResolveAssetUrl };
 
 export interface DocumentSchemaOptions {
@@ -66,6 +67,16 @@ export interface DocumentSchemaOptions {
    * until a document round-trips wrong.
    */
   image?: Extensions[number];
+  /**
+   * Replaces the default Markdown extension.
+   *
+   * Parsing options legitimately differ by context — the Obsidian importer
+   * needs `breaks: true` because Obsidian renders a single newline as a line
+   * break, which CommonMark does not — while the *schema* contribution (a
+   * `tight` attribute on lists) must stay identical. Pass a reconfigured
+   * `Markdown` so the attribute survives and only the parsing changes.
+   */
+  markdown?: Extensions[number];
 }
 
 /**
@@ -102,10 +113,11 @@ export function createDocumentExtensions(options: DocumentSchemaOptions): Extens
     // Markdown contributes `tight` to lists; TabIndent contributes `indent` to
     // paragraph and heading. Omitting either on one platform loses those
     // attributes on the next save from the other.
-    Markdown.configure({
-      transformCopiedText: false,
-      transformPastedText: true,
-    }),
+    options.markdown ??
+      Markdown.configure({
+        transformCopiedText: false,
+        transformPastedText: true,
+      }),
     TabIndent,
   ];
 }

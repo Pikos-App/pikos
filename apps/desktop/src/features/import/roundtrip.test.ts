@@ -4,18 +4,9 @@
 // CSV path: CSV string → prepareCSVRows + applyMappings → verify metadata fields
 //           → build CSV from output → re-parse → verify round-trip
 
+import { createDocumentExtensions, Markdown } from "@pikos/editor-schema";
 import type { JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
-import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
-import { TableCell } from "@tiptap/extension-table-cell";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableRow } from "@tiptap/extension-table-row";
-import TaskItem from "@tiptap/extension-task-item";
-import TaskList from "@tiptap/extension-task-list";
-import Underline from "@tiptap/extension-underline";
-import StarterKit from "@tiptap/starter-kit";
-import { Markdown } from "tiptap-markdown";
 import { describe, expect, it } from "vitest";
 
 import { convertMarkdownToTiptap } from "./hooks/useImport";
@@ -29,24 +20,28 @@ import {
 import { parseMarkdownVault, type VaultFile } from "./parsers/markdown";
 import type { CSVMappingConfig, ImportPage } from "./parsers/types";
 
+/**
+ * An editor with the production document schema.
+ *
+ * This used to assemble its own extension list, which had drifted from
+ * production — base Image instead of the Pikos node, no Link configuration, no
+ * table extension, no TabIndent. A round-trip test that does not use the
+ * production schema can pass while production breaks, which is the failure this
+ * suite exists to prevent.
+ *
+ * Markdown parsing is overridden to match the importer (`breaks: true` for
+ * Obsidian's non-CommonMark line breaks); its schema contribution is unchanged.
+ */
 function createTestEditor(): Editor {
   return new Editor({
     content: "",
-    extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Underline,
-      Image.configure({ allowBase64: false, inline: false }),
-      Table.configure({ resizable: false }),
-      TableRow,
-      TableCell,
-      TableHeader,
-      Markdown.configure({
+    extensions: createDocumentExtensions({
+      markdown: Markdown.configure({
         breaks: true,
         transformPastedText: false,
       }),
-    ],
+      resolveAssetUrl: (path) => `asset://${path}`,
+    }),
   });
 }
 

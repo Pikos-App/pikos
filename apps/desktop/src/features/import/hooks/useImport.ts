@@ -1,23 +1,15 @@
 import { extractText, storageErrorUserMessage, toStorageError } from "@pikos/core";
+import { createDocumentExtensions, Markdown } from "@pikos/editor-schema";
 import { invoke } from "@tauri-apps/api/core";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import type { JSONContent } from "@tiptap/core";
 import { Editor } from "@tiptap/core";
-import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
-import { TableCell } from "@tiptap/extension-table-cell";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableRow } from "@tiptap/extension-table-row";
-import TaskItem from "@tiptap/extension-task-item";
-import TaskList from "@tiptap/extension-task-list";
-import Underline from "@tiptap/extension-underline";
-import StarterKit from "@tiptap/starter-kit";
 import { useState } from "react";
-import { Markdown } from "tiptap-markdown";
 
 import { useImportBatch } from "@/shared/context/ImportContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { createLogger } from "@/shared/logger";
+import { assetUrl } from "@/shared/utils/assetUrl";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
 const log = createLogger("useImport");
@@ -82,28 +74,44 @@ export function convertMarkdownToTiptap(md: string): string {
   if (!sharedEditor) {
     sharedEditor = new Editor({
       content: "",
-      extensions: [
-        StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-        TaskList,
-        TaskItem.configure({ nested: true }),
-        Underline,
-        Image.configure({ allowBase64: false, inline: false }),
-        Table.configure({ resizable: false }),
-        TableRow,
-        TableCell,
-        TableHeader,
-        Markdown.configure({
+      // The production schema, not a hand-rolled approximation of it.
+      //
+      // This used to assemble its own extension list, and it had drifted: it
+      // omitted TabIndent, so imported documents carried no `indent` attribute
+      // while every document the editor writes carries `indent: 0` on each
+      // paragraph and heading. Opening an imported page and typing one
+      // character normalised the whole document, turning the first keystroke
+      // into a full-document rewrite.
+      //
+      // Only the markdown *parsing* is overridden below; its schema
+      // contribution is unchanged.
+      extensions: createDocumentExtensions({
+        markdown: Markdown.configure({
           // Obsidian renders single \n as line breaks (non-CommonMark).
           // Without this, single newlines collapse to spaces.
           breaks: true,
           transformPastedText: false,
         }),
-      ],
+        resolveAssetUrl: assetUrl,
+      }),
     });
   }
 
   sharedEditor.commands.setContent(md);
-  return JSON.stringify(insertBlankLineParagraphs(md, sharedEditor.getJSON()));
+  const withBlankLines = insertBlankLineParagraphs(md, sharedEditor.getJSON());
+
+  // Normalise through the editor a second time.
+  //
+  // insertBlankLineParagraphs builds `{ type: "paragraph" }` nodes by hand, and
+  // a hand-built node carries no attributes — so imported documents ended up
+  // with paragraphs missing the defaults every edited document has. Re-running
+  // setContent lets ProseMirror apply them.
+  //
+  // Done this way rather than by adding the attributes at the construction
+  // site, because that would have to be updated every time the schema gains an
+  // attribute, and the failure mode of forgetting is silent.
+  sharedEditor.commands.setContent(withBlankLines);
+  return JSON.stringify(sharedEditor.getJSON());
 }
 
 let sharedEditor: Editor | null = null;

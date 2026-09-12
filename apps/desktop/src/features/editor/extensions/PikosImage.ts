@@ -1,11 +1,11 @@
 import { createPikosImageNode } from "@pikos/editor-schema";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 import { postNotice } from "@/shared/events/noticeBus";
 import { createLogger } from "@/shared/logger";
+import { assetUrl } from "@/shared/utils/assetUrl";
 
 const log = createLogger("PikosImage");
 
@@ -24,10 +24,6 @@ async function uploadFromPath(path: string): Promise<string> {
 
 async function uploadFromBytes(data: Uint8Array, ext: string): Promise<string> {
   return invoke<string>("save_asset_bytes", { data: Array.from(data), ext });
-}
-
-export function assetUrl(absolutePath: string): string {
-  return convertFileSrc(absolutePath);
 }
 
 async function handleFiles(files: File[], view: EditorView, pos?: number): Promise<boolean> {

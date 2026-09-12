@@ -17,9 +17,10 @@ import { usePages } from "@/shared/context/PagesContext";
 import { useSelection } from "@/shared/context/SelectionContext";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
+import { assetUrl } from "@/shared/utils/assetUrl";
 import { EMPTY_TIPTAP_DOC, tryParseTiptapJson } from "@/shared/utils/jsonContent";
 
-import { assetUrl, PikosImage } from "../extensions/PikosImage";
+import { PikosImage } from "../extensions/PikosImage";
 import { useAutosave } from "../hooks/useAutosave";
 import { useEditorPage } from "../hooks/useEditorPage";
 import { registerActiveEditor } from "../utils/imageDropBridge";
