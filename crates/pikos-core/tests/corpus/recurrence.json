@@ -1,0 +1,671 @@
+{
+  "expansionCases": [
+    {
+      "exdates": [],
+      "id": "weekly_monday",
+      "rangeEnd": "2026-04-30",
+      "rangeStart": "2026-03-01",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "scheduledEnd": "2026-03-16T09:30:00",
+      "scheduledStart": "2026-03-16T09:00:00",
+      "occurrences": {
+        "ok": true,
+        "value": [
+          {
+            "originalDate": "2026-03-16",
+            "scheduledEnd": "2026-03-16T09:30:00",
+            "scheduledStart": "2026-03-16T09:00:00"
+          },
+          {
+            "originalDate": "2026-03-23",
+            "scheduledEnd": "2026-03-23T09:30:00",
+            "scheduledStart": "2026-03-23T09:00:00"
+          },
+          {
+            "originalDate": "2026-03-30",
+            "scheduledEnd": "2026-03-30T09:30:00",
+            "scheduledStart": "2026-03-30T09:00:00"
+          },
+          {
+            "originalDate": "2026-04-06",
+            "scheduledEnd": "2026-04-06T09:30:00",
+            "scheduledStart": "2026-04-06T09:00:00"
+          },
+          {
+            "originalDate": "2026-04-13",
+            "scheduledEnd": "2026-04-13T09:30:00",
+            "scheduledStart": "2026-04-13T09:00:00"
+          },
+          {
+            "originalDate": "2026-04-20",
+            "scheduledEnd": "2026-04-20T09:30:00",
+            "scheduledStart": "2026-04-20T09:00:00"
+          },
+          {
+            "originalDate": "2026-04-27",
+            "scheduledEnd": "2026-04-27T09:30:00",
+            "scheduledStart": "2026-04-27T09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "exdates": [
+        "2026-03-23"
+      ],
+      "id": "weekly_monday_with_exdate",
+      "rangeEnd": "2026-04-30",
+      "rangeStart": "2026-03-01",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "scheduledEnd": "2026-03-16T09:30:00",
+      "scheduledStart": "2026-03-16T09:00:00",
+      "occurrences": {
+        "ok": true,
+        "value": [
+          {
+            "originalDate": "2026-03-16",
+            "scheduledEnd": "2026-03-16T09:30:00",
+            "scheduledStart": "2026-03-16T09:00:00"
+          },
+          {
+            "originalDate": "2026-03-30",
+            "scheduledEnd": "2026-03-30T09:30:00",
+            "scheduledStart": "2026-03-30T09:00:00"
+          },
+          {
+            "originalDate": "2026-04-06",
+            "scheduledEnd": "2026-04-06T09:30:00",
+            "scheduledStart": "2026-04-06T09:00:00"
+          },
+          {
+            "originalDate": "2026-04-13",
+            "scheduledEnd": "2026-04-13T09:30:00",
+            "scheduledStart": "2026-04-13T09:00:00"
+          },
+          {
+            "originalDate": "2026-04-20",
+            "scheduledEnd": "2026-04-20T09:30:00",
+            "scheduledStart": "2026-04-20T09:00:00"
+          },
+          {
+            "originalDate": "2026-04-27",
+            "scheduledEnd": "2026-04-27T09:30:00",
+            "scheduledStart": "2026-04-27T09:00:00"
+          }
+        ]
+      }
+    },
+    {
+      "exdates": [],
+      "id": "daily_all_day",
+      "rangeEnd": "2026-03-31",
+      "rangeStart": "2026-03-15",
+      "rrule": "FREQ=DAILY",
+      "scheduledStart": "2026-03-15",
+      "occurrences": {
+        "ok": true,
+        "value": [
+          {
+            "originalDate": "2026-03-15",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-15"
+          },
+          {
+            "originalDate": "2026-03-16",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-16"
+          },
+          {
+            "originalDate": "2026-03-17",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-17"
+          },
+          {
+            "originalDate": "2026-03-18",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-18"
+          },
+          {
+            "originalDate": "2026-03-19",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-19"
+          },
+          {
+            "originalDate": "2026-03-20",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-20"
+          },
+          {
+            "originalDate": "2026-03-21",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-21"
+          },
+          {
+            "originalDate": "2026-03-22",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-22"
+          },
+          {
+            "originalDate": "2026-03-23",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-23"
+          },
+          {
+            "originalDate": "2026-03-24",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-24"
+          },
+          {
+            "originalDate": "2026-03-25",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-25"
+          },
+          {
+            "originalDate": "2026-03-26",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-26"
+          },
+          {
+            "originalDate": "2026-03-27",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-27"
+          },
+          {
+            "originalDate": "2026-03-28",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-28"
+          },
+          {
+            "originalDate": "2026-03-29",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-29"
+          },
+          {
+            "originalDate": "2026-03-30",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-30"
+          }
+        ]
+      }
+    },
+    {
+      "exdates": [],
+      "id": "monthly_31st",
+      "rangeEnd": "2026-12-31",
+      "rangeStart": "2026-01-01",
+      "rrule": "FREQ=MONTHLY;BYMONTHDAY=31",
+      "scheduledStart": "2026-01-31",
+      "occurrences": {
+        "ok": true,
+        "value": [
+          {
+            "originalDate": "2026-01-31",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-01-31"
+          },
+          {
+            "originalDate": "2026-03-31",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-31"
+          },
+          {
+            "originalDate": "2026-05-31",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-31"
+          },
+          {
+            "originalDate": "2026-07-31",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-07-31"
+          },
+          {
+            "originalDate": "2026-08-31",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-08-31"
+          },
+          {
+            "originalDate": "2026-10-31",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-10-31"
+          }
+        ]
+      }
+    },
+    {
+      "exdates": [],
+      "id": "weekend_days",
+      "rangeEnd": "2026-05-31",
+      "rangeStart": "2026-03-01",
+      "rrule": "FREQ=WEEKLY;BYDAY=SA,SU",
+      "scheduledStart": "2026-03-21",
+      "occurrences": {
+        "ok": true,
+        "value": [
+          {
+            "originalDate": "2026-03-21",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-21"
+          },
+          {
+            "originalDate": "2026-03-22",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-22"
+          },
+          {
+            "originalDate": "2026-03-28",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-28"
+          },
+          {
+            "originalDate": "2026-03-29",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-03-29"
+          },
+          {
+            "originalDate": "2026-04-04",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-04-04"
+          },
+          {
+            "originalDate": "2026-04-05",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-04-05"
+          },
+          {
+            "originalDate": "2026-04-11",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-04-11"
+          },
+          {
+            "originalDate": "2026-04-12",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-04-12"
+          },
+          {
+            "originalDate": "2026-04-18",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-04-18"
+          },
+          {
+            "originalDate": "2026-04-19",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-04-19"
+          },
+          {
+            "originalDate": "2026-04-25",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-04-25"
+          },
+          {
+            "originalDate": "2026-04-26",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-04-26"
+          },
+          {
+            "originalDate": "2026-05-02",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-02"
+          },
+          {
+            "originalDate": "2026-05-03",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-03"
+          },
+          {
+            "originalDate": "2026-05-09",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-09"
+          },
+          {
+            "originalDate": "2026-05-10",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-10"
+          },
+          {
+            "originalDate": "2026-05-16",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-16"
+          },
+          {
+            "originalDate": "2026-05-17",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-17"
+          },
+          {
+            "originalDate": "2026-05-23",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-23"
+          },
+          {
+            "originalDate": "2026-05-24",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-24"
+          },
+          {
+            "originalDate": "2026-05-30",
+            "scheduledEnd": null,
+            "scheduledStart": "2026-05-30"
+          }
+        ]
+      }
+    },
+    {
+      "exdates": [],
+      "id": "daily_across_dst",
+      "rangeEnd": "2026-04-02",
+      "rangeStart": "2026-03-25",
+      "rrule": "FREQ=DAILY",
+      "scheduledEnd": "2026-03-27T10:00:00",
+      "scheduledStart": "2026-03-27T09:00:00",
+      "occurrences": {
+        "ok": true,
+        "value": [
+          {
+            "originalDate": "2026-03-27",
+            "scheduledEnd": "2026-03-27T10:00:00",
+            "scheduledStart": "2026-03-27T09:00:00"
+          },
+          {
+            "originalDate": "2026-03-28",
+            "scheduledEnd": "2026-03-28T10:00:00",
+            "scheduledStart": "2026-03-28T09:00:00"
+          },
+          {
+            "originalDate": "2026-03-29",
+            "scheduledEnd": "2026-03-29T10:00:00",
+            "scheduledStart": "2026-03-29T09:00:00"
+          },
+          {
+            "originalDate": "2026-03-30",
+            "scheduledEnd": "2026-03-30T10:00:00",
+            "scheduledStart": "2026-03-30T09:00:00"
+          },
+          {
+            "originalDate": "2026-03-31",
+            "scheduledEnd": "2026-03-31T10:00:00",
+            "scheduledStart": "2026-03-31T09:00:00"
+          },
+          {
+            "originalDate": "2026-04-01",
+            "scheduledEnd": "2026-04-01T10:00:00",
+            "scheduledStart": "2026-04-01T09:00:00"
+          }
+        ]
+      }
+    }
+  ],
+  "meta": {
+    "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
+    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",
+    "references": [
+      {
+        "id": "sun_noon",
+        "iso": "2026-03-15T12:00:00",
+        "note": "suite NOW — Sunday, midday"
+      },
+      {
+        "id": "wed_noon",
+        "iso": "2026-03-18T12:00:00",
+        "note": "midweek — forward-date rollover differs"
+      },
+      {
+        "id": "mon_morning",
+        "iso": "2026-03-16T08:00:00",
+        "note": "before 9am — 'today vs tomorrow' flips"
+      },
+      {
+        "id": "sat_late",
+        "iso": "2026-03-21T22:30:00",
+        "note": "after 8pm — 'tonight' rolls to tomorrow"
+      },
+      {
+        "id": "dst_eve",
+        "iso": "2026-03-28T12:00:00",
+        "note": "eve of EU DST change"
+      },
+      {
+        "id": "leap_day",
+        "iso": "2024-02-29T09:00:00",
+        "note": "leap day"
+      },
+      {
+        "id": "year_end",
+        "iso": "2026-12-31T23:00:00",
+        "note": "year boundary"
+      }
+    ],
+    "timezone": "UTC"
+  },
+  "recurrenceCases": [
+    {
+      "afterDate": "2026-03-16T10:00:00",
+      "exdates": [],
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "scheduledEnd": "2026-03-16T09:30:00",
+      "scheduledStart": "2026-03-16T09:00:00",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-23T09:00:00"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": "2026-03-23T09:30:00"
+      }
+    },
+    {
+      "afterDate": "2026-03-18T09:00:00",
+      "exdates": [
+        "2026-03-20"
+      ],
+      "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+      "scheduledEnd": null,
+      "scheduledStart": "2026-03-16T09:00:00",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-23T09:00:00"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": null
+      }
+    },
+    {
+      "afterDate": "2026-03-19T00:00:00",
+      "exdates": [],
+      "rrule": "FREQ=DAILY;INTERVAL=2",
+      "scheduledEnd": null,
+      "scheduledStart": "2026-03-15",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-21"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": null
+      }
+    },
+    {
+      "afterDate": "2026-01-31T00:00:00",
+      "exdates": [],
+      "rrule": "FREQ=MONTHLY;BYMONTHDAY=31",
+      "scheduledEnd": null,
+      "scheduledStart": "2026-01-31",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-31"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": null
+      }
+    },
+    {
+      "afterDate": "2026-03-17T14:00:00",
+      "exdates": [],
+      "rrule": "FREQ=MONTHLY;BYDAY=3TU",
+      "scheduledEnd": "2026-03-17T15:00:00",
+      "scheduledStart": "2026-03-17T14:00:00",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-04-21T14:00:00"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": "2026-04-21T15:00:00"
+      }
+    },
+    {
+      "afterDate": "2024-03-01T00:00:00",
+      "exdates": [],
+      "rrule": "FREQ=YEARLY",
+      "scheduledEnd": null,
+      "scheduledStart": "2024-02-29",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2028-02-29"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": null
+      }
+    },
+    {
+      "afterDate": "2026-03-30T09:00:00",
+      "exdates": [],
+      "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260401T000000Z",
+      "scheduledEnd": null,
+      "scheduledStart": "2026-03-16T09:00:00",
+      "next": {
+        "ok": true,
+        "value": null
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": null
+      }
+    },
+    {
+      "afterDate": "2026-03-30T09:00:00",
+      "exdates": [],
+      "rrule": "FREQ=WEEKLY;BYDAY=MO;COUNT=3",
+      "scheduledEnd": null,
+      "scheduledStart": "2026-03-16T09:00:00",
+      "next": {
+        "ok": true,
+        "value": null
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": null
+      }
+    },
+    {
+      "afterDate": "2026-03-28T12:00:00",
+      "exdates": [],
+      "rrule": "FREQ=DAILY",
+      "scheduledEnd": "2026-03-28T13:00:00",
+      "scheduledStart": "2026-03-28T12:00:00",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-29T12:00:00"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": "2026-03-29T13:00:00"
+      }
+    },
+    {
+      "afterDate": "2026-03-20T22:00:00",
+      "exdates": [],
+      "rrule": "FREQ=WEEKLY;BYDAY=FR",
+      "scheduledEnd": "2026-03-21T01:00:00",
+      "scheduledStart": "2026-03-20T22:00:00",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-27T22:00:00"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": "2026-03-28T01:00:00"
+      }
+    },
+    {
+      "afterDate": "2026-03-15T09:00:00",
+      "exdates": [],
+      "rrule": "FREQ=DAILY",
+      "scheduledEnd": "2026-03-15T09:00:00",
+      "scheduledStart": "2026-03-15T09:00:00",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16T09:00:00"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": "2026-03-17T09:00:00"
+      }
+    },
+    {
+      "afterDate": "2026-03-21T00:00:00",
+      "exdates": [],
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
+      "scheduledEnd": null,
+      "scheduledStart": "2026-03-21",
+      "next": {
+        "ok": true,
+        "value": {
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-28"
+        }
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": null
+      }
+    },
+    {
+      "afterDate": "2026-03-15T09:00:00",
+      "exdates": [
+        "2026-03-16",
+        "2026-03-17"
+      ],
+      "rrule": "FREQ=DAILY;COUNT=3",
+      "scheduledEnd": null,
+      "scheduledStart": "2026-03-15T09:00:00",
+      "next": {
+        "ok": true,
+        "value": null
+      },
+      "nextEnd": {
+        "ok": true,
+        "value": null
+      }
+    }
+  ]
+}

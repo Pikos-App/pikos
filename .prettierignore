@@ -6,3 +6,10 @@ apps/desktop/src-tauri/
 **/build/
 **/node_modules/
 **/.turbo/
+
+# Generated parity corpus — the literal output of the TypeScript reference
+# implementation, written by packages/core/scripts/gen-parity-corpus.ts.
+# Prettier would reformat it on every check and the generator would undo that
+# on every regeneration, so the two would fight forever over a file no human
+# edits. Regenerate with `pnpm --filter @pikos/core gen:parity`.
+crates/pikos-core/tests/corpus/

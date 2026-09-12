@@ -7,17 +7,19 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "lint": "eslint src",
+    "lint": "eslint src scripts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "gen:parity": "esbuild scripts/gen-parity-corpus.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/gen-parity.mjs && TZ=UTC node node_modules/.cache/gen-parity.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.0",
     "jsdom": "^28.1.0",
     "typescript": "~5.9.3",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "esbuild": "^0.25.0"
   },
   "dependencies": {
     "chrono-node": "^2.9.0",
