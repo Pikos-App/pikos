@@ -19,13 +19,22 @@ import type {
 // ─── Page input helpers ───────────────────────────────────────────────────────
 // sort_order excluded — backend assigns max+1 on create
 
-export type NewPage = Omit<Page, "id" | "createdAt" | "updatedAt" | "sortOrder"> & {
+// `contentSchemaVersion` is excluded from both input types alongside the other
+// backend-assigned fields: the writer stamps it from its own build (see
+// pikos-db migration 010 and CONTENT_SCHEMA_VERSION), so letting a caller set
+// it would let a client claim a document shape it did not actually produce.
+export type NewPage = Omit<
+  Page,
+  "id" | "createdAt" | "updatedAt" | "sortOrder" | "contentSchemaVersion"
+> & {
   /** Optional override for created_at (used during import to preserve original dates). */
   createdAt?: string;
   /** Optional override for updated_at (used during import to preserve original dates). */
   updatedAt?: string;
 };
-export type PageUpdate = Partial<Omit<Page, "id" | "createdAt" | "updatedAt">>;
+export type PageUpdate = Partial<
+  Omit<Page, "id" | "createdAt" | "updatedAt" | "contentSchemaVersion">
+>;
 export type NewFolder = Omit<Folder, "id" | "createdAt" | "updatedAt" | "sortOrder">;
 export type FolderUpdate = Partial<Omit<Folder, "id" | "createdAt" | "updatedAt">>;
 

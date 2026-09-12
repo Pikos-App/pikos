@@ -44,6 +44,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import type { PageSummary } from "@pikos/core";
+import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 
 import {
   assignStableAllDayRows,
@@ -96,6 +97,7 @@ function page(
   createdAt = "2026-03-01T00:00:00"
 ): PageSummary {
   return {
+    contentSchemaVersion: CONTENT_SCHEMA_VERSION,
     createdAt,
     folderId: null,
     id,

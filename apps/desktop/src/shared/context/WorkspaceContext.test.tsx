@@ -7,6 +7,7 @@
 // lifecycle hooks it composes with.
 
 import type { Page } from "@pikos/core";
+import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import { act } from "@testing-library/react";
 import { format } from "date-fns";
@@ -914,6 +915,7 @@ describe("mergePages", () => {
     act(() => {
       hook.result.current.mergePages([
         {
+          contentSchemaVersion: CONTENT_SCHEMA_VERSION,
           createdAt: new Date().toISOString(),
           folderId: null,
           id: "completed-1",
@@ -941,6 +943,7 @@ describe("mergePages", () => {
     act(() => {
       hook.result.current.mergePages([
         {
+          contentSchemaVersion: CONTENT_SCHEMA_VERSION,
           createdAt: page.createdAt,
           folderId: null,
           id: page.id,
@@ -966,6 +969,7 @@ describe("mergePages", () => {
       hook.result.current.mergePages([
         {
           completedAt: "2026-03-01T10:00:00",
+          contentSchemaVersion: CONTENT_SCHEMA_VERSION,
           createdAt: "2026-03-01T09:00:00",
           folderId: null,
           id: "merged-1",

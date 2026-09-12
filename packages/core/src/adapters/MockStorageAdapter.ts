@@ -30,6 +30,7 @@ import type {
   SearchResponse,
   SearchResult,
 } from "../types";
+import { CONTENT_SCHEMA_VERSION } from "../types";
 import { nowLocalISO } from "../utils/dates";
 import { extractText } from "../utils/extractText";
 import { isDone, isOpen } from "../utils/page";
@@ -113,6 +114,9 @@ export class MockStorageAdapter implements StorageAdapter {
   createPage(data: NewPage): Promise<Page> {
     const page: Page = {
       ...data,
+      // Also mirrors the Rust writer, which stamps the version it wrote with
+      // rather than leaving it to the column default (pikos-db migration 010).
+      contentSchemaVersion: CONTENT_SCHEMA_VERSION,
       // Mirror the Rust adapter, which extracts plain text from Tiptap JSON on
       // every save so FTS indexes the visible body, not the structural tokens.
       contentText: data.contentText ?? deriveContentText(data.content),

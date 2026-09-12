@@ -30,6 +30,17 @@ export type PageStatus = "not_started" | "done";
 // 0 = none  1 = urgent  2 = high  3 = medium  4 = low
 export type PagePriority = 0 | 1 | 2 | 3 | 4;
 
+/**
+ * The Tiptap document schema this build writes and can safely read.
+ *
+ * Mirror of `pikos_db::CONTENT_SCHEMA_VERSION` — the Rust constant is the
+ * authority, since the database outlives any one client. A test in
+ * `crates/pikos-db` reads this file and fails if the two drift apart, so
+ * bumping one side without the other is caught rather than discovered later
+ * as corrupted documents.
+ */
+export const CONTENT_SCHEMA_VERSION = 1;
+
 export interface Page {
   id: string; // UUID
   folderId: string | null;
@@ -52,6 +63,14 @@ export interface Page {
   deletedAt?: string | null; // ISO 8601; NULL = not deleted, set = trashed
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
+  /**
+   * Which Tiptap document schema produced `content` (see pikos-db migration
+   * 010). Always supplied by the backend. A client finding a version above its
+   * own must not save over the document — re-serialising through an older
+   * editor schema silently drops node types it cannot represent, which is the
+   * corruption mode a second writing client introduces.
+   */
+  contentSchemaVersion: number;
 }
 
 // ─── PageSchedule ─────────────────────────────────────────────────────────────

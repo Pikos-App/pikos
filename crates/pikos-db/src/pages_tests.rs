@@ -1128,7 +1128,9 @@ async fn fts_index_drops_page_after_hard_delete() {
 async fn set_pages_status_completes_all_in_one_call() {
     let pool = test_pool().await;
     for id in ["a", "b", "c"] {
-        insert_test_page(&pool, TestPage::new(id, id)).await.unwrap();
+        insert_test_page(&pool, TestPage::new(id, id))
+            .await
+            .unwrap();
     }
 
     let ids = vec!["a".to_string(), "b".to_string(), "c".to_string()];
@@ -1181,8 +1183,12 @@ async fn set_pages_status_uncomplete_clears_completed_at() {
 #[tokio::test]
 async fn set_pages_status_skips_soft_deleted_rows() {
     let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("a", "A")).await.unwrap();
-    insert_test_page(&pool, TestPage::new("b", "B")).await.unwrap();
+    insert_test_page(&pool, TestPage::new("a", "A"))
+        .await
+        .unwrap();
+    insert_test_page(&pool, TestPage::new("b", "B"))
+        .await
+        .unwrap();
     soft_delete_page_impl(&pool, "b").await.unwrap();
 
     let ids = vec!["a".to_string(), "b".to_string()];
@@ -1201,7 +1207,9 @@ async fn set_pages_status_skips_soft_deleted_rows() {
 #[tokio::test]
 async fn set_pages_status_empty_ids_is_noop() {
     let pool = test_pool().await;
-    let updated = set_pages_status_impl(&pool, &[], "done", None).await.unwrap();
+    let updated = set_pages_status_impl(&pool, &[], "done", None)
+        .await
+        .unwrap();
     assert!(updated.is_empty());
 }
 
@@ -1340,5 +1348,95 @@ async fn reschedule_virtual_rejects_trashed_head_with_no_partial_writes() {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(exdates_json, "[]", "exdate not written for a failed reschedule");
+    assert_eq!(
+        exdates_json, "[]",
+        "exdate not written for a failed reschedule"
+    );
+}
+
+// ─── content_schema_version (migration 010) ──────────────────────────────────
+
+#[tokio::test]
+async fn new_pages_are_stamped_with_the_current_content_schema_version() {
+    let pool = test_pool().await;
+    let page = create_page_impl(&pool, new_page("Versioned"))
+        .await
+        .unwrap();
+    assert_eq!(page.content_schema_version, crate::CONTENT_SCHEMA_VERSION);
+}
+
+#[tokio::test]
+async fn existing_rows_backfill_to_version_one() {
+    // Rows written before migration 010 must read as version 1 rather than 0 or
+    // NULL — they came from the single desktop editor, which is what 1 denotes.
+    // Simulated by writing the column's pre-migration absence directly.
+    let pool = test_pool().await;
+    let page = create_page_impl(&pool, new_page("Versioned"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 1 WHERE id = ?")
+        .bind(&page.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let fetched = fetch_page(&pool, &page.id).await.unwrap();
+    assert_eq!(fetched.content_schema_version, 1);
+}
+
+#[tokio::test]
+async fn writing_content_restamps_the_version() {
+    // A page left behind at an older version must come forward when its content
+    // is rewritten — the new document came from this build's editor, so the
+    // stored version has to follow the content, not the row's history.
+    let pool = test_pool().await;
+    let page = create_page_impl(&pool, new_page("Versioned"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 0 WHERE id = ?")
+        .bind(&page.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let updated = update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            content: Some(r#"{"type":"doc","content":[]}"#.to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        updated.content_schema_version,
+        crate::CONTENT_SCHEMA_VERSION
+    );
+}
+
+#[tokio::test]
+async fn updating_other_fields_leaves_the_version_alone() {
+    // Only a content write re-stamps. Renaming a page must not claim its
+    // document was re-authored, or the marker stops meaning anything.
+    let pool = test_pool().await;
+    let page = create_page_impl(&pool, new_page("Versioned"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pages SET content_schema_version = 99 WHERE id = ?")
+        .bind(&page.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let updated = update_page_impl(
+        &pool,
+        page.id.clone(),
+        PageUpdate {
+            title: Some("renamed".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.content_schema_version, 99);
 }

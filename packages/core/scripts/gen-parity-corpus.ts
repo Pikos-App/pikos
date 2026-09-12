@@ -27,6 +27,7 @@ import { dirname, resolve } from "node:path";
 
 import { parseInput } from "../src/nlp/parser";
 import type { PageRecurrenceRule, PageSummary } from "../src/types";
+import { CONTENT_SCHEMA_VERSION } from "../src/types";
 import { extractText } from "../src/utils/extractText";
 import {
   computeNextEnd,
@@ -329,6 +330,7 @@ const EXPANSION_CASES: {
  *  values are irrelevant to the logic under test — only the occurrence dates
  *  the expander computes are projected into the corpus below. */
 const TEMPLATE_PAGE: PageSummary = {
+  contentSchemaVersion: CONTENT_SCHEMA_VERSION,
   createdAt: "2026-03-01T00:00:00",
   folderId: null,
   id: "page-0000",

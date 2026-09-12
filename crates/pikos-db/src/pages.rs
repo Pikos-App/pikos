@@ -36,6 +36,7 @@ struct PageRow {
     last_opened_at: Option<String>,
     created_at: String,
     updated_at: String,
+    content_schema_version: i64,
 }
 
 // ─── Output type (camelCase for TypeScript) ───────────────────────────────────
@@ -61,6 +62,10 @@ pub struct Page {
     pub last_opened_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// Which Tiptap document schema produced `content`. See migration 010:
+    /// a client finding a version above its own must not save over the document,
+    /// or it silently drops node types it cannot represent.
+    pub content_schema_version: i64,
 }
 
 impl From<PageRow> for Page {
@@ -90,6 +95,7 @@ impl From<PageRow> for Page {
             last_opened_at: row.last_opened_at,
             created_at: row.created_at,
             updated_at: row.updated_at,
+            content_schema_version: row.content_schema_version,
         }
     }
 }
@@ -349,8 +355,9 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
          priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
-         links, parent_id, last_opened_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         links, parent_id, last_opened_at, created_at, updated_at,
+         content_schema_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&data.folder_id)
@@ -370,6 +377,9 @@ pub async fn create_page_impl(pool: &sqlx::SqlitePool, data: NewPage) -> AppResu
     .bind(&data.last_opened_at)
     .bind(created_at)
     .bind(updated_at)
+    // Stamped explicitly rather than left to the column default, so the
+    // version travels with the writer that produced the content.
+    .bind(crate::CONTENT_SCHEMA_VERSION)
     .execute(&mut *tx)
     .await?;
 
@@ -397,6 +407,11 @@ pub async fn update_page_impl(
     if let Some(v) = updates.content {
         fields.push("content = ");
         fields.push_bind_unseparated(v);
+        // Re-stamp on every content write: whatever produced this document did
+        // so with this build's editor schema, so the stored version must follow
+        // the content rather than stay at whatever wrote the row originally.
+        fields.push("content_schema_version = ");
+        fields.push_bind_unseparated(crate::CONTENT_SCHEMA_VERSION);
         has_updates = true;
     }
     if let Some(v) = updates.content_text {
@@ -893,8 +908,9 @@ async fn insert_head_clone_tx(
     sqlx::query(
         "INSERT INTO pages (id, folder_id, title, subtitle, content, content_text, status,
          priority, tags, sort_order, scheduled_start, scheduled_end, completed_at,
-         links, parent_id, last_opened_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL, NULL, ?, ?)",
+         links, parent_id, last_opened_at, created_at, updated_at,
+         content_schema_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL, NULL, ?, ?, ?)",
     )
     .bind(spec.clone_id)
     .bind(&head.folder_id)
@@ -911,6 +927,11 @@ async fn insert_head_clone_tx(
     .bind(spec.completed_at)
     .bind(now) // created_at
     .bind(now) // updated_at
+    // The clone copies head.content verbatim, so it inherits the head's
+    // schema — but the head was readable by this build (it was just fetched),
+    // so stamping the current version is correct and keeps the clone from
+    // looking staler than it is.
+    .bind(crate::CONTENT_SCHEMA_VERSION)
     .execute(&mut **tx)
     .await?;
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PageRecurrenceRule, PageSchedule, PageSummary } from "../types";
+import { CONTENT_SCHEMA_VERSION } from "../types";
 import {
   alignWeeklyRuleToAnchor,
   buildRrule,
@@ -17,6 +18,7 @@ import {
 
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
+    contentSchemaVersion: CONTENT_SCHEMA_VERSION,
     createdAt: "2026-01-01T00:00:00",
     folderId: null,
     id: "page-1",

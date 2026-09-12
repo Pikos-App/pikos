@@ -1,4 +1,5 @@
 import type { Page, PageSummary } from "@pikos/core";
+import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import { nowLocalISO } from "@pikos/core";
 import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,6 +35,7 @@ function fixtureDonePage(overrides: {
 }): PageSummary {
   return {
     completedAt: overrides.completedAt,
+    contentSchemaVersion: CONTENT_SCHEMA_VERSION,
     createdAt: overrides.completedAt,
     folderId: overrides.folderId ?? null,
     id: overrides.id,

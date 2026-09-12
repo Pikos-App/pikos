@@ -7,6 +7,7 @@
 // queues an undo via the UndoDeleteContext.
 
 import type { PageSummary, VirtualOccurrence } from "@pikos/core";
+import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
 import { MockStorageAdapter } from "@pikos/core";
 import { act } from "@testing-library/react";
 import { useState } from "react";
@@ -34,6 +35,7 @@ afterEach(() => {
 function setup() {
   let setTargetPage!: (p: PageSummary) => void;
   const TARGET_INITIAL: PageSummary = {
+    contentSchemaVersion: CONTENT_SCHEMA_VERSION,
     createdAt: "2026-01-01T00:00:00",
     folderId: null,
     id: "placeholder",
@@ -92,6 +94,7 @@ describe("useRecurringActions", () => {
     });
 
     const virtual: VirtualOccurrence = {
+      contentSchemaVersion: CONTENT_SCHEMA_VERSION,
       createdAt: "2026-01-01T00:00:00",
       folderId: null,
       id: "page-1",
@@ -198,6 +201,7 @@ describe("useRecurringActions", () => {
     });
 
     const virtual: VirtualOccurrence = {
+      contentSchemaVersion: CONTENT_SCHEMA_VERSION,
       createdAt: "2026-01-01T00:00:00",
       folderId: null,
       id: pageId,
