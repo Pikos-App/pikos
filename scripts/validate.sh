@@ -30,6 +30,20 @@ pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
 step "source audit" "secrets, XSS, SQL, Tauri capabilities"
 pnpm audit:source
 
+# ── rust-workspace job ────────────────────────────────────────────────────────
+# crates/* (pikos-db, pikos-cli, pikos-core). Separate from the src-tauri steps
+# below because Cargo.toml excludes src-tauri from the root workspace, so
+# `cargo test` in one never covers the other. No fmt gate here yet — see the
+# note in .github/workflows/_validate.yml.
+step "workspace cargo check" "crates/* — zero warnings"
+(cd "$ROOT" && RUSTFLAGS="-D warnings" cargo check --workspace --all-targets)
+
+step "workspace cargo clippy" "crates/* — zero warnings"
+(cd "$ROOT" && cargo clippy --workspace --all-targets -- -D warnings)
+
+step "workspace cargo test" "crates/* — includes the TS-parity corpus"
+(cd "$ROOT" && cargo test --workspace --quiet)
+
 # ── rust job ──────────────────────────────────────────────────────────────────
 step "cargo fmt --check" ""
 (cd "$SRC_TAURI" && cargo fmt --check)

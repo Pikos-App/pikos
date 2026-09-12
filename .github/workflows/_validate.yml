@@ -174,6 +174,46 @@ jobs:
           path: apps/desktop/playwright-report/
           retention-days: 7
 
+  # The root Cargo workspace (crates/*) — pikos-db, pikos-cli, pikos-core.
+  #
+  # Separate from the `rust` job below because that one runs inside
+  # apps/desktop/src-tauri, which Cargo.toml deliberately *excludes* from the
+  # root workspace (Tauri links GTK/WebKit system libraries). The consequence
+  # went unnoticed: `cargo test --all` in src-tauri resolves to src-tauri alone,
+  # so until this job existed the shared data layer's tests never ran in CI
+  # despite being the single writer behind both the app and the CLI.
+  #
+  # No system dependencies needed here — that is the point of the exclusion, and
+  # it keeps this job fast enough to run on every push.
+  rust-workspace:
+    name: Rust Check (workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Cargo check (zero warnings)
+        env:
+          RUSTFLAGS: "-D warnings"
+        run: cargo check --workspace --all-targets
+
+      - name: Cargo clippy (zero warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Cargo test
+        run: cargo test --workspace --quiet
+
+      # `cargo fmt --check` is deliberately absent. crates/ has never been
+      # rustfmt-gated and currently carries ~64 drifted hunks across pikos-db
+      # and pikos-cli. Formatting them belongs in its own commit, where the
+      # diff is reviewable as formatting rather than hidden inside a feature
+      # change; promote fmt to a blocking step here once that lands.
+
   rust:
     name: Rust Check
     runs-on: ubuntu-latest
