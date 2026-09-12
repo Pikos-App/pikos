@@ -41,7 +41,11 @@ export function isCursorAtLineStart(state: EditorState): boolean {
 }
 
 export function getIndentLevel(node: ProseMirrorNode): number {
-  const raw = node.attrs?.["indent"];
+  // ProseMirror types attrs as Record<string, any>, so the read is `any` and
+  // the lint rightly objects. Widening to unknown first makes the runtime
+  // narrowing below the thing that establishes the type, which is what it was
+  // already doing implicitly.
+  const raw: unknown = node.attrs?.["indent"];
   return typeof raw === "number" ? raw : 0;
 }
 

@@ -2,7 +2,7 @@ import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { describe, expect, it } from "vitest";
 
-import { getIndentLevel, isCursorAtLineStart, setIndentForSelection, TabIndent } from "./TabIndent";
+import { getIndentLevel, isCursorAtLineStart, setIndentForSelection, TabIndent } from "./tabIndent";
 
 function createTestEditor(content?: string) {
   return new Editor({

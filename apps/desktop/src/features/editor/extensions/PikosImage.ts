@@ -1,6 +1,6 @@
+import { createPikosImageNode } from "@pikos/editor-schema";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { invoke } from "@tauri-apps/api/core";
-import Image from "@tiptap/extension-image";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
@@ -26,7 +26,7 @@ async function uploadFromBytes(data: Uint8Array, ext: string): Promise<string> {
   return invoke<string>("save_asset_bytes", { data: Array.from(data), ext });
 }
 
-function assetUrl(absolutePath: string): string {
+export function assetUrl(absolutePath: string): string {
   return convertFileSrc(absolutePath);
 }
 
@@ -68,35 +68,17 @@ async function handleFiles(files: File[], view: EditorView, pos?: number): Promi
 
 const pikosImagePluginKey = new PluginKey("pikosImage");
 
-export const PikosImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      "data-asset-path": {
-        default: null,
-        parseHTML: (element: HTMLElement) => element.getAttribute("data-asset-path"),
-        renderHTML: (attributes: Record<string, unknown>) => {
-          if (!attributes["data-asset-path"]) return {};
-          return { "data-asset-path": attributes["data-asset-path"] };
-        },
-      },
-      src: {
-        default: null,
-        parseHTML: (element: HTMLElement) => element.getAttribute("src"),
-        renderHTML: (attributes: Record<string, unknown>) => {
-          let src = (attributes["src"] as string) ?? "";
-          const path = attributes["data-asset-path"] as string | null;
-          if (path) {
-            src = assetUrl(path);
-          } else if (src && !src.startsWith("http") && !src.startsWith("blob:")) {
-            src = assetUrl(src);
-          }
-          return { src };
-        },
-      },
-    };
-  },
-
+/**
+ * The desktop image node: the shared schema (from @pikos/editor-schema) plus
+ * the Tauri-specific half — a node view that renders through the asset
+ * protocol, and a drop handler that copies dropped files into the workspace.
+ *
+ * The attribute set deliberately lives in the shared package instead of here.
+ * Attributes are what `getJSON()` serialises, so they are the part a second
+ * client must agree on byte-for-byte; node views and drop handling are free to
+ * differ per platform because they cannot change a stored document.
+ */
+export const PikosImage = createPikosImageNode(assetUrl).extend({
   addNodeView() {
     return ({ node }: { node: { attrs: Record<string, unknown> } }) => {
       const dom = document.createElement("div");
