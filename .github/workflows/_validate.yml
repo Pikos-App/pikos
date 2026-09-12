@@ -211,6 +211,22 @@ jobs:
       - name: Cargo test
         run: cargo test --workspace --quiet
 
+      # The Swift bindings are generated from the Rust FFI surface and
+      # committed so the API is reviewable in a pull request. Regenerating here
+      # and failing on a diff is what stops the Rust surface changing while the
+      # committed Swift silently describes the old one — a mismatch that would
+      # otherwise surface as a link error on somebody's Mac, far from the cause.
+      # uniffi-bindgen reads the compiled cdylib's metadata, so this needs no
+      # Apple toolchain.
+      - name: Swift bindings are up to date
+        run: |
+          bash scripts/gen-swift-bindings.sh
+          git diff --exit-code -- apps/ios/PikosCore/Sources apps/ios/PikosCore/generated \
+            || {
+              echo "::error::Swift bindings are stale. Run scripts/gen-swift-bindings.sh and commit the result."
+              exit 1
+            }
+
   rust:
     name: Rust Check
     runs-on: ubuntu-latest

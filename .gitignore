@@ -45,3 +45,11 @@ CLAUDE.md
 
 # OS generated files
 Thumbs.db
+
+# iOS build artifacts.
+# The XCFramework is a multi-megabyte binary produced by
+# scripts/build-ios-framework.sh on a Mac. The Swift bindings beside it ARE
+# committed — those are reviewable source, generated on any platform.
+apps/ios/**/Frameworks/
+apps/ios/**/.build/
+apps/ios/**/*.xcframework

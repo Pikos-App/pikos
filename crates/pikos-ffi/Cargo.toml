@@ -1,0 +1,25 @@
+[package]
+name = "pikos-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+description = "UniFFI bindings over pikos-core and pikos-db — the surface the iOS app consumes as a Swift package."
+
+[lib]
+# staticlib for linking into the iOS app, cdylib so uniffi-bindgen can read the
+# compiled library's metadata, lib so the bindgen binary below can depend on it.
+crate-type = ["staticlib", "cdylib", "lib"]
+name = "pikos_ffi"
+
+[[bin]]
+# Generates the Swift bindings. A plain Rust binary — it needs no Xcode and no
+# Apple toolchain, so bindings can be generated and reviewed on any machine.
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+pikos-core = { path = "../pikos-core" }
+uniffi = { version = "0.32", features = ["cli"] }
+
+[build-dependencies]
+uniffi = { version = "0.32", features = ["build"] }
