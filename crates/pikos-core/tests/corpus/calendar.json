@@ -1,0 +1,1301 @@
+{
+  "allDay": [
+    {
+      "bars": [
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "a",
+          "row": 0,
+          "span": 1,
+          "startCol": 0
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "b",
+          "row": 1,
+          "span": 1,
+          "startCol": 0
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "c",
+          "row": 2,
+          "span": 1,
+          "startCol": 0
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "single_day_stack",
+      "note": "three single-day events on the same day stack into three rows",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "a",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "b",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "c",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16"
+        }
+      ],
+      "rowCount": 3,
+      "slots": [
+        [
+          "a",
+          "b",
+          "c"
+        ],
+        [
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "bars": [
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "long",
+          "row": 0,
+          "span": 5,
+          "startCol": 0
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "short",
+          "row": 1,
+          "span": 1,
+          "startCol": 2
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "multi_day_anchors_top",
+      "note": "longer spans sort to the top rows regardless of declaration order",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "short",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-18"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "long",
+          "scheduledEnd": "2026-03-20",
+          "scheduledStart": "2026-03-16"
+        }
+      ],
+      "rowCount": 2,
+      "slots": [
+        [
+          "long",
+          null
+        ],
+        [
+          "long",
+          null
+        ],
+        [
+          "long",
+          "short"
+        ],
+        [
+          "long",
+          null
+        ],
+        [
+          "long",
+          null
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "bars": [
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "mwf",
+          "row": 0,
+          "span": 1,
+          "startCol": 0
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "tue",
+          "row": 0,
+          "span": 1,
+          "startCol": 1
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "mwf",
+          "row": 0,
+          "span": 1,
+          "startCol": 2
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "mwf",
+          "row": 0,
+          "span": 1,
+          "startCol": 4
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "non_contiguous_shared_id",
+      "note": "recurring virtuals share one page id on non-adjacent days (M/W/F). Rows must claim only the days actually occupied, and the bars must not coalesce across gaps.",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "mwf",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "mwf",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-18"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "mwf",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-20"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "tue",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-17"
+        }
+      ],
+      "rowCount": 1,
+      "slots": [
+        [
+          "mwf"
+        ],
+        [
+          "tue"
+        ],
+        [
+          "mwf"
+        ],
+        [
+          null
+        ],
+        [
+          "mwf"
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "bars": [
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "daily",
+          "row": 0,
+          "span": 1,
+          "startCol": 0
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "daily",
+          "row": 0,
+          "span": 1,
+          "startCol": 1
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "adjacent_same_id_single_day",
+      "note": "same id on consecutive days but each single-day — must stay separate bars, since neither flags continuation",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "daily",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "daily",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-17"
+        }
+      ],
+      "rowCount": 1,
+      "slots": [
+        [
+          "daily"
+        ],
+        [
+          "daily"
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "bars": [
+        {
+          "continuesLeft": true,
+          "continuesRight": false,
+          "pageId": "early",
+          "row": 0,
+          "span": 3,
+          "startCol": 0
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "crosses_week_start",
+      "note": "begins before the visible range — continuesLeft on the first column",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "early",
+          "scheduledEnd": "2026-03-18",
+          "scheduledStart": "2026-03-13"
+        }
+      ],
+      "rowCount": 1,
+      "slots": [
+        [
+          "early"
+        ],
+        [
+          "early"
+        ],
+        [
+          "early"
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "bars": [
+        {
+          "continuesLeft": false,
+          "continuesRight": true,
+          "pageId": "late",
+          "row": 0,
+          "span": 3,
+          "startCol": 4
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "crosses_week_end",
+      "note": "ends after the visible range — continuesRight on the last column",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "late",
+          "scheduledEnd": "2026-03-25",
+          "scheduledStart": "2026-03-20"
+        }
+      ],
+      "rowCount": 1,
+      "slots": [
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          "late"
+        ],
+        [
+          "late"
+        ],
+        [
+          "late"
+        ]
+      ]
+    },
+    {
+      "bars": [
+        {
+          "continuesLeft": true,
+          "continuesRight": true,
+          "pageId": "whole",
+          "row": 0,
+          "span": 7,
+          "startCol": 0
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "spans_entire_week",
+      "note": "continues in both directions",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "whole",
+          "scheduledEnd": "2026-03-30",
+          "scheduledStart": "2026-03-09"
+        }
+      ],
+      "rowCount": 1,
+      "slots": [
+        [
+          "whole"
+        ],
+        [
+          "whole"
+        ],
+        [
+          "whole"
+        ],
+        [
+          "whole"
+        ],
+        [
+          "whole"
+        ],
+        [
+          "whole"
+        ],
+        [
+          "whole"
+        ]
+      ]
+    },
+    {
+      "bars": [
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "x",
+          "row": 0,
+          "span": 4,
+          "startCol": 0
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "z",
+          "row": 1,
+          "span": 1,
+          "startCol": 1
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "y",
+          "row": 1,
+          "span": 4,
+          "startCol": 2
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "interleaved_spans",
+      "note": "overlapping multi-day spans must not share a row",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "x",
+          "scheduledEnd": "2026-03-19",
+          "scheduledStart": "2026-03-16"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "y",
+          "scheduledEnd": "2026-03-21",
+          "scheduledStart": "2026-03-18"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "z",
+          "scheduledEnd": "2026-03-17",
+          "scheduledStart": "2026-03-17"
+        }
+      ],
+      "rowCount": 2,
+      "slots": [
+        [
+          "x",
+          null
+        ],
+        [
+          "x",
+          "z"
+        ],
+        [
+          "x",
+          "y"
+        ],
+        [
+          "x",
+          "y"
+        ],
+        [
+          null,
+          "y"
+        ],
+        [
+          null,
+          "y"
+        ],
+        [
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "bars": [
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "earlier",
+          "row": 0,
+          "span": 2,
+          "startCol": 0
+        },
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "later",
+          "row": 1,
+          "span": 2,
+          "startCol": 0
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "createdat_tiebreak",
+      "note": "equal-length spans starting the same day fall back to createdAt order",
+      "pages": [
+        {
+          "createdAt": "2026-06-01T00:00:00",
+          "id": "later",
+          "scheduledEnd": "2026-03-17",
+          "scheduledStart": "2026-03-16"
+        },
+        {
+          "createdAt": "2026-01-01T00:00:00",
+          "id": "earlier",
+          "scheduledEnd": "2026-03-17",
+          "scheduledStart": "2026-03-16"
+        }
+      ],
+      "rowCount": 2,
+      "slots": [
+        [
+          "earlier",
+          "later"
+        ],
+        [
+          "earlier",
+          "later"
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          null,
+          null
+        ]
+      ]
+    },
+    {
+      "bars": [
+        {
+          "continuesLeft": false,
+          "continuesRight": false,
+          "pageId": "ad",
+          "row": 0,
+          "span": 1,
+          "startCol": 0
+        }
+      ],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "timed_excluded",
+      "note": "timed events never enter the all-day section",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "timed",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "ad",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16"
+        }
+      ],
+      "rowCount": 1,
+      "slots": [
+        [
+          "ad"
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "bars": [],
+      "days": [
+        "2026-03-16",
+        "2026-03-17",
+        "2026-03-18",
+        "2026-03-19",
+        "2026-03-20",
+        "2026-03-21",
+        "2026-03-22"
+      ],
+      "id": "empty",
+      "note": "no all-day pages at all",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "timed",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        }
+      ],
+      "rowCount": 0,
+      "slots": [
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        []
+      ]
+    }
+  ],
+  "meta": {
+    "generatedBy": "apps/desktop/scripts/gen-calendar-parity.ts",
+    "note": "Golden output of the TypeScript calendar layout. Captures only the pixel-independent half — cascade columns, continuation flags, all-day rows and bars. Pixel mapping is per-platform and deliberately absent. Regenerate with `pnpm --filter @pikos/desktop gen:parity`.",
+    "timezone": "UTC"
+  },
+  "midnights": [
+    {
+      "end": "2026-03-16T17:00:00",
+      "id": "same_day",
+      "start": "2026-03-16T09:00:00",
+      "count": 0
+    },
+    {
+      "end": "2026-03-17T00:00:00",
+      "id": "ends_exactly_at_midnight",
+      "start": "2026-03-16T23:00:00",
+      "count": 0
+    },
+    {
+      "end": "2026-03-17T00:01:00",
+      "id": "one_minute_past_midnight",
+      "start": "2026-03-16T23:00:00",
+      "count": 1
+    },
+    {
+      "end": "2026-03-18T01:00:00",
+      "id": "two_nights",
+      "start": "2026-03-16T23:00:00",
+      "count": 2
+    },
+    {
+      "end": "2026-03-16T09:00:00",
+      "id": "end_before_start",
+      "start": "2026-03-16T10:00:00",
+      "count": 0
+    },
+    {
+      "end": "2026-03-30T01:00:00",
+      "id": "across_dst",
+      "start": "2026-03-27T23:00:00",
+      "count": 3
+    }
+  ],
+  "timed": [
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "a"
+        },
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "b"
+        },
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "c"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "disjoint",
+      "note": "no overlap — every event owns column 0",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "a",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "b",
+          "scheduledEnd": "2026-03-16T12:00:00",
+          "scheduledStart": "2026-03-16T11:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "c",
+          "scheduledEnd": "2026-03-16T15:00:00",
+          "scheduledStart": "2026-03-16T14:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "a"
+        },
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "b"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "back_to_back",
+      "note": "end == next start — touching, not overlapping, so both take column 0",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "a",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "b",
+          "scheduledEnd": "2026-03-16T11:00:00",
+          "scheduledStart": "2026-03-16T10:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "a"
+        },
+        {
+          "cascadeDepth": 1,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "b"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "simple_overlap",
+      "note": "two overlapping events — columns 0 and 1",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "a",
+          "scheduledEnd": "2026-03-16T10:30:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "b",
+          "scheduledEnd": "2026-03-16T11:00:00",
+          "scheduledStart": "2026-03-16T10:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "a"
+        },
+        {
+          "cascadeDepth": 1,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "b"
+        },
+        {
+          "cascadeDepth": 2,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "c"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "transitive_cluster",
+      "note": "A-B and B-C overlap but A-C do not — one cluster, three columns needed?",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "a",
+          "scheduledEnd": "2026-03-16T10:30:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "b",
+          "scheduledEnd": "2026-03-16T11:30:00",
+          "scheduledStart": "2026-03-16T10:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "c",
+          "scheduledEnd": "2026-03-16T12:00:00",
+          "scheduledStart": "2026-03-16T11:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 1,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "guest"
+        },
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "host"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "nested_host_guest",
+      "note": "long host with a short guest fully inside it",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "host",
+          "scheduledEnd": "2026-03-16T17:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "guest",
+          "scheduledEnd": "2026-03-16T11:30:00",
+          "scheduledStart": "2026-03-16T11:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "p1"
+        },
+        {
+          "cascadeDepth": 1,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "p2"
+        },
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "p3"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "point_events",
+      "note": "no scheduledEnd — the 15-minute minimum decides whether they overlap",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "p1",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "p2",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16T09:10:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "p3",
+          "scheduledEnd": null,
+          "scheduledStart": "2026-03-16T09:30:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 1,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "next"
+        },
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "short"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "sub_minimum_duration",
+      "note": "5-minute event — quantized up to the 15-minute floor for overlap math",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "short",
+          "scheduledEnd": "2026-03-16T09:05:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "next",
+          "scheduledEnd": "2026-03-16T09:20:00",
+          "scheduledStart": "2026-03-16T09:10:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": true,
+          "pageId": "overnight"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "continuation_before",
+      "note": "starts the previous day — clamped to the day's start, flagged as continuing",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "overnight",
+          "scheduledEnd": "2026-03-16T02:00:00",
+          "scheduledStart": "2026-03-15T22:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": true,
+          "isContinuationBefore": false,
+          "pageId": "late"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "continuation_after",
+      "note": "runs past midnight into the next day",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "late",
+          "scheduledEnd": "2026-03-17T02:00:00",
+          "scheduledStart": "2026-03-16T22:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": true,
+          "isContinuationBefore": true,
+          "pageId": "multi"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "spans_whole_day",
+      "note": "continues in both directions — the day is entirely interior",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "multi",
+          "scheduledEnd": "2026-03-18T08:00:00",
+          "scheduledStart": "2026-03-15T08:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "alpha"
+        },
+        {
+          "cascadeDepth": 1,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "zeta"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "identical_times",
+      "note": "same start and end — id breaks the tie deterministically",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "zeta",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "alpha",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "a"
+        },
+        {
+          "cascadeDepth": 1,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "b"
+        },
+        {
+          "cascadeDepth": 1,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "c"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "column_reuse",
+      "note": "a freed column is reused only when every column above it is free too",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "a",
+          "scheduledEnd": "2026-03-16T12:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "b",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:30:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "c",
+          "scheduledEnd": "2026-03-16T11:00:00",
+          "scheduledStart": "2026-03-16T10:30:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "timed"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "all_day_excluded",
+      "note": "all-day pages never appear in the timed grid",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "allday",
+          "scheduledEnd": "2026-03-18",
+          "scheduledStart": "2026-03-16"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "timed",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "timed"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "unscheduled_excluded",
+      "note": "pages with no schedule are filtered out",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "none",
+          "scheduledEnd": null,
+          "scheduledStart": null
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "timed",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        }
+      ]
+    },
+    {
+      "blocks": [
+        {
+          "cascadeDepth": 0,
+          "isContinuationAfter": false,
+          "isContinuationBefore": false,
+          "pageId": "today"
+        }
+      ],
+      "day": "2026-03-16",
+      "id": "other_day_excluded",
+      "note": "events on neighbouring days do not leak into this day",
+      "pages": [
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "yesterday",
+          "scheduledEnd": "2026-03-15T10:00:00",
+          "scheduledStart": "2026-03-15T09:00:00"
+        },
+        {
+          "createdAt": "2026-03-01T00:00:00",
+          "id": "today",
+          "scheduledEnd": "2026-03-16T10:00:00",
+          "scheduledStart": "2026-03-16T09:00:00"
+        }
+      ]
+    }
+  ]
+}

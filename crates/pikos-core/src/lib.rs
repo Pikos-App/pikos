@@ -12,9 +12,11 @@
 //! which is what makes it testable against a fixture corpus and cheap to bind
 //! from Swift.
 
+pub mod calendar;
 pub mod dates;
 pub mod recurrence;
 
+pub use calendar::LayoutPage;
 pub use dates::{
     format_date_only, format_local_iso, is_all_day_iso, is_timed_iso, parse_local_iso,
 };

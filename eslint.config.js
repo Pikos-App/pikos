@@ -25,6 +25,7 @@ export default tseslint.config(
         project: [
           "./apps/desktop/tsconfig.app.json",
           "./apps/desktop/tsconfig.node.json",
+          "./apps/desktop/tsconfig.scripts.json",
           "./packages/core/tsconfig.json",
           "./packages/ui/tsconfig.json",
         ],

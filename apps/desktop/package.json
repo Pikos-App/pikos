@@ -9,8 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "lint": "eslint src",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "lint": "eslint src scripts",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.scripts.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -20,7 +20,8 @@
     "test:e2e:perf:prod": "VITE_TEST_MODE=true pnpm build && playwright test --config playwright.perf.config.ts",
     "check:bundle": "bash ../../scripts/check-bundle-size.sh",
     "record:hero": "bash scripts/record-hero.sh",
-    "screenshot:calendar": "node scripts/screenshot-calendar.mjs"
+    "screenshot:calendar": "node scripts/screenshot-calendar.mjs",
+    "gen:parity": "esbuild scripts/gen-calendar-parity.ts --bundle --platform=node --format=esm --alias:@=./src --alias:@pikos/core=../../packages/core/src/index.ts --outfile=node_modules/.cache/gen-calendar-parity.mjs && TZ=UTC node node_modules/.cache/gen-calendar-parity.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -86,6 +87,7 @@
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^8.0.8",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "esbuild": "^0.25.0"
   }
 }

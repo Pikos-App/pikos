@@ -85,28 +85,28 @@ scheduler queries.
 
 Ordered by port priority. The first two are already blocking the CLI.
 
-| Module                                                      | Lines | Why it must move                                                                                                                 |
-| ----------------------------------------------------------- | ----: | -------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/core/nlp/parser.ts`                               |   861 | Quick-add NLP. CLI already shells to Node for it. Depends on `chrono-node`.                                                      |
-| `packages/core/utils/recurrence.ts`                         |   510 | RRULE expansion + next-occurrence. Same; depends on `rrule`.                                                                     |
-| `features/calendar/utils/calendarLayout.ts`                 |   634 | Overlap/column packing. **Split required** — lines ~600-633 are a DOM drag helper (`window.addEventListener`), the rest is pure. |
-| `features/calendar/utils/allDayLayout.ts`                   |   363 | All-day lane packing. Only impurity is a `CSSProperties` _type_ import — trivial to strip.                                       |
-| `features/calendar/utils/calendarGeometry.ts`               |   279 | Time↔pixel math. Zero DOM refs.                                                                                                  |
-| `packages/core/types.ts`                                    |   227 | Domain types. Becomes the UniFFI type surface.                                                                                   |
-| `packages/core/storage.ts`                                  |   163 | Storage interface + input types. Becomes the UniFFI API shape.                                                                   |
-| `features/pages/utils/pageFilters.ts`                       |   131 | Smart-view filtering + sort modes. Zero DOM refs.                                                                                |
-| `features/layout/utils/buildPageListRows.ts`                |   114 | Section grouping for the page list. Pure data→rows.                                                                              |
-| `features/import/parsers/csv.ts`, `markdown.ts`, `utils.ts` |  ~200 | Import parsing. Zero DOM refs. Lower priority — import may stay desktop-only.                                                    |
-| `shared/utils/schedule.ts`                                  |    71 | All-day↔timed transitions. Pure date-string transforms.                                                                          |
-| `packages/core/utils/dates.ts`                              |    69 | Local ISO helpers.                                                                                                               |
-| `packages/core/utils/extractText.ts`                        |    63 | ProseMirror JSON → plain text. Needed for `docChanged` on iOS.                                                                   |
-| `shared/deep-link/parseDeepLink.ts`                         |    65 | `pikos://` URLs. iOS needs the same grammar for Shortcuts/widgets.                                                               |
-| `shared/utils/formatDateRange.ts`                           |    36 | Range chip labels. Depends on `date-fns`.                                                                                        |
-| `features/editor/utils/markdownPaste.ts`                    |    41 | Markdown detection heuristic.                                                                                                    |
-| `features/editor/utils/textSearch.ts`                       |    37 | Find-in-page matching.                                                                                                           |
-| `features/pages/utils/fuzzyMatchFolder.ts`                  |    17 | Folder name matching for parsed `folderQuery`.                                                                                   |
-| `packages/core/utils/sort.ts`                               |    17 | Emoji-aware compare. Subtle; needs a parity corpus.                                                                              |
-| `packages/core/utils/page.ts`                               |    15 | `isDone` / `isOpen`.                                                                                                             |
+| Module                                                      | Lines | Why it must move                                                                                                                                |
+| ----------------------------------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/nlp/parser.ts`                               |   861 | Quick-add NLP. CLI already shells to Node for it. Depends on `chrono-node`.                                                                     |
+| `packages/core/utils/recurrence.ts`                         |   510 | RRULE expansion + next-occurrence. Same; depends on `rrule`.                                                                                    |
+| `features/calendar/utils/calendarLayout.ts`                 |   634 | **Partly portable — see the 2026-09-12 addendum.** The overlap/column algorithm ports; the pixel layer and the text-collision heuristic do not. |
+| `features/calendar/utils/allDayLayout.ts`                   |   363 | All-day lane packing. Portable apart from `barPositionStyle`.                                                                                   |
+| ~~`features/calendar/utils/calendarGeometry.ts`~~           |   279 | **Reclassified `ui-only`.** Hour↔pixel mapping and density tables — per-platform, not shared.                                                   |
+| `packages/core/types.ts`                                    |   227 | Domain types. Becomes the UniFFI type surface.                                                                                                  |
+| `packages/core/storage.ts`                                  |   163 | Storage interface + input types. Becomes the UniFFI API shape.                                                                                  |
+| `features/pages/utils/pageFilters.ts`                       |   131 | Smart-view filtering + sort modes. Zero DOM refs.                                                                                               |
+| `features/layout/utils/buildPageListRows.ts`                |   114 | Section grouping for the page list. Pure data→rows.                                                                                             |
+| `features/import/parsers/csv.ts`, `markdown.ts`, `utils.ts` |  ~200 | Import parsing. Zero DOM refs. Lower priority — import may stay desktop-only.                                                                   |
+| `shared/utils/schedule.ts`                                  |    71 | All-day↔timed transitions. Pure date-string transforms.                                                                                         |
+| `packages/core/utils/dates.ts`                              |    69 | Local ISO helpers.                                                                                                                              |
+| `packages/core/utils/extractText.ts`                        |    63 | ProseMirror JSON → plain text. Needed for `docChanged` on iOS.                                                                                  |
+| `shared/deep-link/parseDeepLink.ts`                         |    65 | `pikos://` URLs. iOS needs the same grammar for Shortcuts/widgets.                                                                              |
+| `shared/utils/formatDateRange.ts`                           |    36 | Range chip labels. Depends on `date-fns`.                                                                                                       |
+| `features/editor/utils/markdownPaste.ts`                    |    41 | Markdown detection heuristic.                                                                                                                   |
+| `features/editor/utils/textSearch.ts`                       |    37 | Find-in-page matching.                                                                                                                          |
+| `features/pages/utils/fuzzyMatchFolder.ts`                  |    17 | Folder name matching for parsed `folderQuery`.                                                                                                  |
+| `packages/core/utils/sort.ts`                               |    17 | Emoji-aware compare. Subtle; needs a parity corpus.                                                                                             |
+| `packages/core/utils/page.ts`                               |    15 | `isDone` / `isOpen`.                                                                                                                            |
 
 **Subtotal: roughly 3,900 non-test lines**, against which there are already 75 TS
 test files — a ready-made parity corpus, which is what the plan's parity-test
@@ -257,3 +257,56 @@ Recurrence went first rather than the parser (as finding 2 suggested) precisely
 because this was unknown at the time: `rrule` exists in Rust and made recurrence
 a real port, which got the harness built and proven on tractable work before
 meeting the hard problem.
+
+---
+
+## Addendum: the calendar layout split is finer than "ts-portable" (2026-09-12)
+
+The overlap and all-day algorithms are ported and at parity
+(`crates/pikos-core/src/calendar/`). Doing it corrected this document's own
+classification, which treated all three calendar util files as portable and put
+the number at ~1,270 lines. The real portable surface is roughly 500.
+
+The line that matters is not file-by-file but **algorithm vs. pixels**:
+
+| Ported                                           | Left in the platform layer                                                                         |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| overlap clustering, sweep-line column assignment | `calendarGeometry.ts` in its entirety — hour↔pixel mapping, density tables, collapse-band geometry |
+| all-day row packing, bar coalescing              | `barPositionStyle`, `beginDragThreshold`, `collapseUnderWidth`, `remapBlocksForCollapse`           |
+| continuation flags, midnight crossing            | the text-collision heuristic                                                                       |
+
+The text-collision heuristic is the instructive exclusion. It decides whether
+two blocks' labels would visually clash by comparing their pixel gap against
+`CASCADE_MIN_TOP_GAP_PX`, using an `isCompact` flag derived from pixel height.
+Those constants encode one renderer's font metrics and row heights. Porting
+them would hand iOS a 28px threshold that means nothing on a phone — reuse in
+name, a bug in practice. iOS should make that judgement itself, against the
+same _column assignment_ the shared code computes.
+
+### Two things the port established empirically
+
+**Cascade depth is density-independent.** Porting column assignment without the
+pixel layer is only sound if it does not depend on it, and that was an
+assumption rather than an obvious truth — `buildDayBlocks` takes `metrics`, and
+`isCompact` is pixel-derived. The generator now computes every timed scenario
+at all three densities and refuses to emit a corpus if any page's cascade depth
+differs. It passes, so the corpus existing is itself the evidence.
+
+**Emit order is not portable, and the check initially said so.** That guard
+fired on its first run. The cause was not a density-dependent column assignment
+but `buildDayBlocks`'s final `blocks.sort((a, b) => a.leftPct - b.leftPct ...)`,
+which orders elements for DOM painting so deeper cascades overlay their hosts.
+`leftPct` comes from the text-collision split, so emit _order_ genuinely varies
+with density while each page's _column_ does not. The corpus therefore compares
+keyed by page id and does not record order at all.
+
+### A gap found in `pnpm typecheck` for the desktop app
+
+Wiring the generator in surfaced that `apps/desktop/tsconfig.node.json` has
+never been typechecked — the package's `typecheck` script only ran
+`tsconfig.app.json`, and pointing `tsc` at the node project reports pre-existing
+errors in `vite.config.ts` and `playwright.config.ts`. Rather than widen the app
+project or fix unrelated config, the generator got its own
+`tsconfig.scripts.json`, which `typecheck` now runs as a second pass. The
+`tsconfig.node.json` errors are untouched and still unchecked; worth its own
+cleanup.
