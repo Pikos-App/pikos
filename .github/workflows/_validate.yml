@@ -193,9 +193,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Cargo fmt --check
+        run: cargo fmt --all --check
 
       - name: Cargo check (zero warnings)
         env:
@@ -207,12 +210,6 @@ jobs:
 
       - name: Cargo test
         run: cargo test --workspace --quiet
-
-      # `cargo fmt --check` is deliberately absent. crates/ has never been
-      # rustfmt-gated and currently carries ~64 drifted hunks across pikos-db
-      # and pikos-cli. Formatting them belongs in its own commit, where the
-      # diff is reviewable as formatting rather than hidden inside a feature
-      # change; promote fmt to a blocking step here once that lands.
 
   rust:
     name: Rust Check

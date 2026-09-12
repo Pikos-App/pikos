@@ -43,8 +43,12 @@ async fn provoke_busy_snapshot(pool: &sqlx::SqlitePool) -> AppError {
 async fn busy_snapshot_race_is_classified_retryable() {
     let db = wal_test_pool().await;
     let pool = &db.pool;
-    insert_test_page(pool, TestPage::new("a", "A")).await.unwrap();
-    insert_test_page(pool, TestPage::new("b", "B")).await.unwrap();
+    insert_test_page(pool, TestPage::new("a", "A"))
+        .await
+        .unwrap();
+    insert_test_page(pool, TestPage::new("b", "B"))
+        .await
+        .unwrap();
 
     // A deferred read-then-write that loses the race produces a 517 …
     let busy = provoke_busy_snapshot(pool).await;

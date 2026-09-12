@@ -410,10 +410,12 @@ async fn recurring_explicit_reminder_uses_page_reminder_lead() {
     assert_eq!(explicit[0].schedule_id, "rec@2026-05-25T09:10:00#10");
 
     // A page with explicit reminders must not also hit the default path.
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -456,10 +458,12 @@ async fn completing_before_the_reminder_suppresses_it() {
         .await
         .unwrap()
         .is_empty());
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -474,10 +478,12 @@ async fn recurring_head_reminder_dedups_per_occurrence() {
         .await
         .unwrap();
 
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -487,10 +493,12 @@ async fn recurring_all_day_head_has_no_reminder() {
     set_page_start(&pool, "rec", "2026-05-25").await; // date-only = all-day
     insert_rule(&pool, "rec", "2026-05-25").await;
 
-    assert!(due_recurring_default_reminders(&pool, 0, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_recurring_default_reminders(&pool, 0, WINDOW_START, NOW_TS)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -503,10 +511,12 @@ async fn recurring_head_skips_when_a_materialized_override_covers_it() {
     insert_override(&pool, "ov", "rec", "2026-05-25T09:10:00", "not_started").await;
 
     // The head query defers — the override row owns this occurrence's reminder…
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     // …and the override (rule_id IS NOT NULL) still fires via page_schedules.
     let via_schedule = due_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
         .await
@@ -527,10 +537,12 @@ async fn recurring_head_excludes_done_and_deleted_pages() {
     insert_rule(&pool, "del", "2026-05-25T09:10:00").await;
     soft_delete_page(&pool, "del").await;
 
-    assert!(due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(
+        due_recurring_default_reminders(&pool, 10, WINDOW_START, NOW_TS)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 // ─── prune ───────────────────────────────────────────────────────────────────

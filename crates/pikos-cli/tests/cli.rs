@@ -70,7 +70,12 @@ async fn stamp_version(db: &str, version: i64) {
 }
 
 fn cli(db: &str, args: &[&str]) -> Output {
-    Command::new(BIN).args(args).arg("--db").arg(db).output().unwrap()
+    Command::new(BIN)
+        .args(args)
+        .arg("--db")
+        .arg(db)
+        .output()
+        .unwrap()
 }
 
 fn bridge_js() -> Option<String> {
@@ -199,7 +204,18 @@ async fn update_title_and_priority() {
     let db = unique_db();
     let dbs = db.to_str().unwrap();
     let ids = seed(dbs, vec![base_page("Draft")]).await;
-    let out = cli(dbs, &["update", &ids[0], "--title", "Final", "--priority", "1", "--json"]);
+    let out = cli(
+        dbs,
+        &[
+            "update",
+            &ids[0],
+            "--title",
+            "Final",
+            "--priority",
+            "1",
+            "--json",
+        ],
+    );
     assert!(out.status.success());
     let v = json(&out);
     assert_eq!(v["title"], "Final");
@@ -235,7 +251,10 @@ async fn add_without_node_exits_7_with_actionable_error() {
     let body: Value = serde_json::from_slice(&out.stderr).expect("stderr JSON");
     assert_eq!(body["error"]["kind"], "MissingNode");
     let msg = body["error"]["message"].as_str().unwrap_or("");
-    assert!(msg.contains("Node.js"), "message should name Node.js: {msg}");
+    assert!(
+        msg.contains("Node.js"),
+        "message should name Node.js: {msg}"
+    );
     assert!(
         msg.contains("nodejs.org") || msg.contains("brew install node"),
         "message should hint at install path: {msg}",
@@ -269,7 +288,11 @@ async fn add_single_parses_via_bridge() {
         eprintln!("skipped: @pikos/bridge not built (pnpm --filter @pikos/bridge build)");
         return;
     };
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v = json(&out);
     assert_eq!(v["created"][0]["title"], "Buy milk");
     assert_eq!(v["created"][0]["priority"], 2); // !high
@@ -294,7 +317,11 @@ async fn done_recurring_advances_and_clones() {
         .to_string();
 
     let done = cli_bridge(dbs, &["done", &id, "--json"]).unwrap();
-    assert!(done.status.success(), "stderr: {}", String::from_utf8_lossy(&done.stderr));
+    assert!(
+        done.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&done.stderr)
+    );
     let head = json(&done);
     assert_eq!(head["status"], "not_started"); // head advanced, not completed
     assert_ne!(head["scheduledStart"].as_str().unwrap(), before);

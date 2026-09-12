@@ -781,10 +781,13 @@ async fn exdate_merge_ops_preserve_interleaved_writes() {
     .await
     .unwrap();
 
-    let after_skip =
-        add_rule_exdates_impl(&pool, rule.id.clone(), vec!["2026-06-10".into(), "2026-06-10".into()])
-            .await
-            .unwrap();
+    let after_skip = add_rule_exdates_impl(
+        &pool,
+        rule.id.clone(),
+        vec!["2026-06-10".into(), "2026-06-10".into()],
+    )
+    .await
+    .unwrap();
     assert_eq!(
         after_skip.rrule_exdates,
         vec!["2026-06-10".to_string()],
