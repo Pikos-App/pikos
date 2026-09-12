@@ -39,6 +39,21 @@ jobs:
           SKIP_UNIT_TESTS: "1"
         run: pnpm verify
 
+      # The editor bridge's Swift half is generated from
+      # packages/editor-mobile/src/protocol.ts so the two ends cannot disagree
+      # about a field name or a type. Regenerating here and failing on a diff is
+      # what keeps that true — a drifted field would not fail to compile on
+      # either side, it would arrive as nil and the editor would quietly stop
+      # saving.
+      - name: Editor bridge protocol is up to date
+        run: |
+          pnpm --filter @pikos/editor-mobile gen:swift
+          git diff --exit-code -- apps/ios/PikosEditorBridge/Sources \
+            || {
+              echo "::error::The editor bridge protocol is stale. Run 'pnpm --filter @pikos/editor-mobile gen:swift' and commit the result."
+              exit 1
+            }
+
       - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
         run: pnpm audit:source
 

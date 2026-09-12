@@ -1,0 +1,29 @@
+{
+  "name": "@pikos/editor-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "license": "BUSL-1.1",
+  "type": "module",
+  "description": "The Tiptap editor built for a WKWebView, plus the host bridge. Consumed by the iOS app; never by desktop.",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "lint": "eslint src scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "gen:swift": "esbuild scripts/gen-swift-protocol.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/gen-swift-protocol.mjs && node node_modules/.cache/gen-swift-protocol.mjs"
+  },
+  "dependencies": {
+    "@pikos/core": "workspace:*",
+    "@pikos/editor-schema": "workspace:*",
+    "@tiptap/core": "^3.20.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "esbuild": "^0.25.0",
+    "jsdom": "^28.1.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.8",
+    "vitest": "^4.1.0"
+  }
+}

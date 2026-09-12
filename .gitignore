@@ -53,3 +53,8 @@ Thumbs.db
 apps/ios/**/Frameworks/
 apps/ios/**/.build/
 apps/ios/**/*.xcframework
+
+# Built mobile editor bundle (scripts/build-editor-bundle.sh).
+# A generated single-file build, not source.
+apps/ios/PikosEditorBridge/Sources/PikosEditorBridge/Resources/editor.html
+packages/editor-mobile/dist/

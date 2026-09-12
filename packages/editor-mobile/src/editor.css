@@ -1,0 +1,148 @@
+/*
+ * Editor styling for a phone.
+ *
+ * Kept minimal on purpose: M0 is measuring whether a WKWebView can host this
+ * editor at all — typing latency, keyboard behaviour, selection handles — and
+ * elaborate styling would only confound those measurements.
+ */
+
+:root {
+  --pikos-accent: #d1603d;
+  --pikos-bg: #ffffff;
+  --pikos-fg: #1a1a1a;
+  --pikos-muted: #6b6b6b;
+  --pikos-rule: #e5e5e5;
+}
+
+:root[data-scheme="dark"] {
+  --pikos-bg: #141414;
+  --pikos-fg: #ededed;
+  --pikos-muted: #9a9a9a;
+  --pikos-rule: #2c2c2c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--pikos-bg);
+  color: var(--pikos-fg);
+  /* -apple-system resolves to the platform text face, so the editor matches the
+     native screens around it without shipping a font. */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 17px; /* iOS body size; smaller invites the zoom-on-focus behaviour */
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+
+#editor {
+  padding: 16px max(16px, env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-right));
+}
+
+.ProseMirror {
+  outline: none;
+  min-height: 60vh; /* keeps the tap target large on a nearly-empty page */
+}
+
+.ProseMirror > * + * {
+  margin-top: 0.75em;
+}
+
+.ProseMirror h1 {
+  font-size: 1.6em;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.ProseMirror h2 {
+  font-size: 1.3em;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.ProseMirror h3 {
+  font-size: 1.1em;
+  font-weight: 650;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.4em;
+}
+
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+}
+
+/* A 17px checkbox is below the 44pt minimum touch target, so it gets padding
+   rather than a larger box, which would look wrong next to the text. */
+.ProseMirror ul[data-type="taskList"] li > label {
+  padding: 0.35em 0.25em;
+  margin: -0.35em -0.25em;
+  flex-shrink: 0;
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid var(--pikos-rule);
+  padding-left: 0.9em;
+  color: var(--pikos-muted);
+}
+
+.ProseMirror pre {
+  background: var(--pikos-rule);
+  border-radius: 8px;
+  padding: 0.75em 0.9em;
+  overflow-x: auto;
+  font-size: 0.9em;
+}
+
+.ProseMirror code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid var(--pikos-rule);
+}
+
+.ProseMirror a {
+  color: var(--pikos-accent);
+}
+
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  display: block;
+  overflow-x: auto; /* tables are the one thing allowed to scroll sideways */
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid var(--pikos-rule);
+  padding: 0.4em 0.6em;
+  min-width: 5em;
+}
+
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--pikos-muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
