@@ -310,3 +310,24 @@ project or fix unrelated config, the generator got its own
 `tsconfig.scripts.json`, which `typecheck` now runs as a second pass. The
 `tsconfig.node.json` errors are untouched and still unchecked; worth its own
 cleanup.
+
+---
+
+## Addendum: two more reclassifications (2026-09-12)
+
+`extractText`, `parseDeepLink`, `computeScheduleTransition`, `normalizeEndInput`
+and the page predicates are ported and at parity. Two entries this document
+listed as `ts-portable` should not be ported, for the same underlying reason in
+both cases: they depend on a locale-aware platform API, not on logic.
+
+| Module                            | Was           | Now           | Why                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------- | ------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/utils/sort.ts`     | `ts-portable` | **`ui-only`** | `emojiAwareCompare` is `Intl.Collator(undefined, { numeric: true })` — locale-sensitive numeric collation. Rust has no equivalent in std, and the ICU crates would need the same locale data and the same tie-breaking to agree. iOS should use `String.compare(options: .numeric)`, which is the platform's own answer to the same question. |
+| `shared/utils/formatDateRange.ts` | `ts-portable` | **`ui-only`** | Produces human-readable labels (`"May 2 – 10"`) via `date-fns` with English month names. Porting it to Rust would hard-code English into shared code; iOS should use `DateIntervalFormatter`, which localises for free.                                                                                                                       |
+
+The pattern is worth stating once, because it will recur: **logic ports, locale
+does not.** Anything whose output a human reads in their own language belongs in
+the platform layer, even when the code looks pure. That leaves `sortMode`
+_ordering rules_ (which field, which direction, which tiebreak) as the portable
+part of sorting, with the string comparison itself delegated — a split worth
+making when `pageFilters.ts` is ported.

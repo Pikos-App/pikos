@@ -53,6 +53,8 @@ import {
 import { computeCalendarMetrics } from "@/features/calendar/utils/calendarGeometry";
 import { buildDayBlocks } from "@/features/calendar/utils/calendarLayout";
 import type { CalendarDensity } from "@/shared/constants/calendar";
+import { parseDeepLink } from "@/shared/deep-link/parseDeepLink";
+import { computeScheduleTransition, normalizeEndInput } from "@/shared/utils/schedule";
 
 const EXPECTED_TZ = "UTC";
 const DENSITIES: CalendarDensity[] = ["compact", "normal", "spacious"];
@@ -366,6 +368,100 @@ const MIDNIGHT_CASES: { id: string; start: string; end: string }[] = [
   { end: "2026-03-30T01:00:00", id: "across_dst", start: "2026-03-27T23:00:00" },
 ];
 
+// ─── Deep-link corpus ────────────────────────────────────────────────────────
+// iOS needs the same pikos:// grammar for App Intents, widget taps and
+// notification handling, so the parser must agree byte-for-byte with desktop.
+
+const DEEP_LINKS: string[] = [
+  "pikos://page/3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+  "pikos://page/3F2504E0-4F89-41D3-9A0C-0305E82C3301",
+  "pikos://page/not-a-uuid",
+  "pikos://page/",
+  "pikos://page",
+  "pikos://page/3f2504e0-4f89-41d3-9a0c-0305e82c3301/extra",
+  "pikos://today",
+  "pikos://today/",
+  "pikos://today/extra",
+  "pikos://inbox",
+  "pikos://calendar",
+  "pikos://calendar/extra",
+  "pikos://quick-add?text=buy%20milk",
+  "pikos://quick-add?text=",
+  "pikos://quick-add",
+  "pikos://quick-add?other=x",
+  "pikos://quick-add?text=tomorrow%20at%203pm%20%23work",
+  "pikos://search?q=invoice",
+  "pikos://search",
+  "pikos://search?q=%C3%BCnicode%20%F0%9F%8E%89",
+  "pikos://unknown",
+  "pikos://",
+  "https://pikos.app/page/3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+  "notpikos://today",
+  "",
+  "garbage",
+  "pikos://TODAY",
+];
+
+// ─── Schedule-transition corpus ──────────────────────────────────────────────
+// The four all-day/timed transitions the date picker can produce. Shared
+// because a mobile date picker has to make exactly the same decisions.
+
+const SCHEDULE_CASES: {
+  id: string;
+  start: string | null;
+  end: string | null;
+  iso: string;
+}[] = [
+  { end: null, id: "none_to_timed", iso: "2026-03-16T09:00:00", start: null },
+  { end: null, id: "none_to_all_day", iso: "2026-03-16", start: null },
+  { end: "2026-03-18", id: "all_day_to_timed", iso: "2026-03-16T09:00:00", start: "2026-03-16" },
+  {
+    end: "2026-03-16T11:00:00",
+    id: "timed_to_all_day_end_after",
+    iso: "2026-03-15",
+    start: "2026-03-16T09:00:00",
+  },
+  {
+    end: "2026-03-16T11:00:00",
+    id: "timed_to_all_day_end_before",
+    iso: "2026-03-20",
+    start: "2026-03-16T09:00:00",
+  },
+  {
+    end: "2026-03-16T10:30:00",
+    id: "timed_to_timed_preserves_duration",
+    iso: "2026-03-20T14:00:00",
+    start: "2026-03-16T09:00:00",
+  },
+  {
+    end: "2026-03-16T09:00:00",
+    id: "timed_to_timed_zero_duration",
+    iso: "2026-03-20T14:00:00",
+    start: "2026-03-16T09:00:00",
+  },
+  {
+    end: "2026-03-17T01:00:00",
+    id: "timed_to_timed_overnight",
+    iso: "2026-03-20T22:00:00",
+    start: "2026-03-16T22:00:00",
+  },
+  { end: "2026-03-20", id: "all_day_to_all_day_end_after", iso: "2026-03-17", start: "2026-03-16" },
+  { end: "2026-03-17", id: "all_day_to_all_day_end_before", iso: "2026-03-20", start: "2026-03-16" },
+  { end: "2026-03-17", id: "all_day_to_all_day_end_equal", iso: "2026-03-17", start: "2026-03-16" },
+  { end: null, id: "timed_no_end_to_timed", iso: "2026-03-20T14:00:00", start: "2026-03-16T09:00:00" },
+];
+
+const NORMALIZE_END_CASES: { id: string; start: string; end: string | null }[] = [
+  { end: null, id: "cleared", start: "2026-03-16" },
+  { end: "2026-03-18", id: "all_day_after", start: "2026-03-16" },
+  { end: "2026-03-14", id: "all_day_before", start: "2026-03-16" },
+  { end: "2026-03-16", id: "all_day_equal", start: "2026-03-16" },
+  { end: "2026-03-18T15:00:00", id: "all_day_start_timed_end", start: "2026-03-16" },
+  { end: "2026-03-16T10:00:00", id: "timed_after", start: "2026-03-16T09:00:00" },
+  { end: "2026-03-16T08:00:00", id: "timed_before", start: "2026-03-16T09:00:00" },
+  { end: "2026-03-16T09:00:00", id: "timed_equal", start: "2026-03-16T09:00:00" },
+];
+
 // ─── Capture ─────────────────────────────────────────────────────────────────
 
 function main(): void {
@@ -452,6 +548,21 @@ function main(): void {
     count: crossingMidnightsCount(new Date(c.start), new Date(c.end)),
   }));
 
+  const deepLinks = DEEP_LINKS.map((url) => ({
+    action: parseDeepLink(url),
+    url,
+  }));
+
+  const scheduleTransitions = SCHEDULE_CASES.map((c) => {
+    const r = computeScheduleTransition({ end: c.end, start: c.start }, c.iso);
+    return { ...c, result: { end: r.end ?? null, start: r.start } };
+  });
+
+  const normalizeEnds = NORMALIZE_END_CASES.map((c) => ({
+    ...c,
+    result: normalizeEndInput(c.start, c.end) ?? null,
+  }));
+
   const meta = {
     generatedBy: "apps/desktop/scripts/gen-calendar-parity.ts",
     note:
@@ -464,12 +575,17 @@ function main(): void {
 
   mkdirSync(OUT_DIR, { recursive: true });
   writeFileSync(
+    resolve(OUT_DIR, "platform.json"),
+    JSON.stringify({ deepLinks, meta, normalizeEnds, scheduleTransitions }, null, 2) + "\n"
+  );
+  writeFileSync(
     resolve(OUT_DIR, "calendar.json"),
     JSON.stringify({ allDay, meta, midnights, timed }, null, 2) + "\n"
   );
 
   process.stdout.write(
     `calendar.json: ${timed.length} timed, ${allDay.length} all-day, ${midnights.length} midnight\n` +
+      `platform.json: ${deepLinks.length} deep-link, ${scheduleTransitions.length} transition, ${normalizeEnds.length} normalize-end\n` +
       `cascadeDepth verified density-independent across ${DENSITIES.length} densities\n` +
       `out: ${OUT_DIR}\n`
   );

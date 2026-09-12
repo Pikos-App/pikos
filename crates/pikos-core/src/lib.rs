@@ -14,10 +14,18 @@
 
 pub mod calendar;
 pub mod dates;
+pub mod deep_link;
+pub mod page;
 pub mod recurrence;
+pub mod schedule;
+pub mod text;
 
 pub use calendar::LayoutPage;
 pub use dates::{
     format_date_only, format_local_iso, is_all_day_iso, is_timed_iso, parse_local_iso,
 };
+pub use deep_link::{parse_deep_link, DeepLink, SmartView};
+pub use page::{is_done, is_open, PageStatus};
 pub use recurrence::{compute_next_end, expand_for_range, next_occurrence_after, Occurrence};
+pub use schedule::{compute_schedule_transition, normalize_end_input, ScheduleTransition};
+pub use text::{extract_text, extract_text_value};

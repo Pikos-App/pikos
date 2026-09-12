@@ -27,6 +27,7 @@ import { dirname, resolve } from "node:path";
 
 import { parseInput } from "../src/nlp/parser";
 import type { PageRecurrenceRule, PageSummary } from "../src/types";
+import { extractText } from "../src/utils/extractText";
 import {
   computeNextEnd,
   expandRecurrenceForRange,
@@ -339,6 +340,162 @@ const TEMPLATE_PAGE: PageSummary = {
   updatedAt: "2026-03-01T00:00:00",
 };
 
+// ─── extractText corpus ──────────────────────────────────────────────────────
+// Tiptap JSON → plain text. iOS needs this on the `docChanged` bridge message
+// to keep the FTS column populated, so it is a prerequisite for the editor
+// webview rather than a nice-to-have.
+//
+// Inputs are stored as JSON strings, matching how pages.content is persisted
+// and how the function is actually called.
+
+const EXTRACT_TEXT_CASES: { id: string; doc: string }[] = [
+  { doc: "", id: "empty_string" },
+  { doc: "{}", id: "empty_object_literal" },
+  { doc: "not json at all", id: "invalid_json" },
+  { doc: "null", id: "json_null" },
+  { doc: '"just a string"', id: "json_string" },
+  { doc: "[]", id: "json_array" },
+  { doc: JSON.stringify({ content: [{ type: "paragraph" }], type: "doc" }), id: "empty_paragraph" },
+  {
+    doc: JSON.stringify({
+      content: [{ content: [{ text: "Hello world", type: "text" }], type: "paragraph" }],
+      type: "doc",
+    }),
+    id: "single_paragraph",
+  },
+  {
+    doc: JSON.stringify({
+      content: [
+        { content: [{ text: "First", type: "text" }], type: "paragraph" },
+        { content: [{ text: "Second", type: "text" }], type: "paragraph" },
+      ],
+      type: "doc",
+    }),
+    id: "two_paragraphs",
+  },
+  {
+    doc: JSON.stringify({
+      content: [
+        {
+          content: [
+            { text: "plain ", type: "text" },
+            { marks: [{ type: "bold" }], text: "bold", type: "text" },
+            { text: " tail", type: "text" },
+          ],
+          type: "paragraph",
+        },
+      ],
+      type: "doc",
+    }),
+    id: "marks_are_transparent",
+  },
+  {
+    doc: JSON.stringify({
+      content: [
+        { content: [{ text: "Heading", type: "text" }], type: "heading" },
+        {
+          content: [
+            {
+              content: [{ content: [{ text: "one", type: "text" }], type: "paragraph" }],
+              type: "listItem",
+            },
+            {
+              content: [{ content: [{ text: "two", type: "text" }], type: "paragraph" }],
+              type: "listItem",
+            },
+          ],
+          type: "bulletList",
+        },
+      ],
+      type: "doc",
+    }),
+    id: "heading_and_bullet_list",
+  },
+  {
+    doc: JSON.stringify({
+      content: [
+        {
+          content: [
+            {
+              content: [{ content: [{ text: "task a", type: "text" }], type: "paragraph" }],
+              type: "taskItem",
+            },
+            {
+              content: [{ content: [{ text: "task b", type: "text" }], type: "paragraph" }],
+              type: "taskItem",
+            },
+          ],
+          type: "taskList",
+        },
+      ],
+      type: "doc",
+    }),
+    id: "task_list",
+  },
+  {
+    doc: JSON.stringify({
+      content: [{ content: [{ text: "const x = 1;", type: "text" }], type: "codeBlock" }],
+      type: "doc",
+    }),
+    id: "code_block",
+  },
+  {
+    doc: JSON.stringify({
+      content: [
+        { content: [{ content: [{ text: "quoted", type: "text" }], type: "paragraph" }], type: "blockquote" },
+      ],
+      type: "doc",
+    }),
+    id: "blockquote",
+  },
+  {
+    doc: JSON.stringify({
+      content: [
+        { attrs: { src: "asset://x.png" }, type: "image" },
+        { content: [{ text: "after", type: "text" }], type: "paragraph" },
+      ],
+      type: "doc",
+    }),
+    id: "leaf_without_text",
+  },
+  {
+    doc: JSON.stringify({
+      content: [
+        {
+          content: [
+            {
+              content: [
+                {
+                  content: [{ content: [{ text: "deep", type: "text" }], type: "paragraph" }],
+                  type: "listItem",
+                },
+              ],
+              type: "bulletList",
+            },
+          ],
+          type: "listItem",
+        },
+      ],
+      type: "bulletList",
+    }),
+    id: "deeply_nested_lists",
+  },
+  {
+    doc: JSON.stringify({
+      content: [{ content: [{ text: "  padded  ", type: "text" }], type: "paragraph" }],
+      type: "doc",
+    }),
+    id: "outer_whitespace_trimmed",
+  },
+  {
+    doc: JSON.stringify({
+      content: [{ content: [{ text: "emoji 🎉 and ünïcode", type: "text" }], type: "paragraph" }],
+      type: "doc",
+    }),
+    id: "unicode",
+  },
+];
+
 // ─── Capture ─────────────────────────────────────────────────────────────────
 // Errors are captured, not thrown. A Rust port must reproduce the TS behaviour
 // on malformed input too, and "this input throws" is part of that behaviour.
@@ -413,6 +570,11 @@ function main(): void {
     return { ...c, occurrences };
   });
 
+  const extractTextCases = EXTRACT_TEXT_CASES.map((c) => ({
+    ...c,
+    text: capture(() => extractText(c.doc)),
+  }));
+
   const meta = {
     generatedBy: "packages/core/scripts/gen-parity-corpus.ts",
     note:
@@ -429,6 +591,10 @@ function main(): void {
     JSON.stringify({ cases: parserCases, inputCount: inputs.length, meta }, null, 2) + "\n"
   );
   writeFileSync(
+    resolve(OUT_DIR, "text.json"),
+    JSON.stringify({ extractTextCases, meta }, null, 2) + "\n"
+  );
+  writeFileSync(
     resolve(OUT_DIR, "recurrence.json"),
     JSON.stringify({ expansionCases, meta, recurrenceCases }, null, 2) + "\n"
   );
@@ -437,6 +603,7 @@ function main(): void {
   process.stdout.write(
     `parser.json:     ${parserCases.length} cases (${inputs.length} inputs × ${REFERENCES.length} refs), ${failures} throwing\n` +
       `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion\n` +
+      `text.json:       ${extractTextCases.length} extractText\n` +
       `out: ${OUT_DIR}\n`
   );
 }

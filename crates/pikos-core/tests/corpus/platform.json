@@ -1,0 +1,333 @@
+{
+  "deepLinks": [
+    {
+      "action": {
+        "pageId": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+        "type": "page"
+      },
+      "url": "pikos://page/3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+    },
+    {
+      "action": {
+        "pageId": "3F2504E0-4F89-41D3-9A0C-0305E82C3301",
+        "type": "page"
+      },
+      "url": "pikos://page/3F2504E0-4F89-41D3-9A0C-0305E82C3301"
+    },
+    {
+      "action": null,
+      "url": "pikos://page/not-a-uuid"
+    },
+    {
+      "action": null,
+      "url": "pikos://page/"
+    },
+    {
+      "action": null,
+      "url": "pikos://page"
+    },
+    {
+      "action": {
+        "pageId": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+        "type": "page"
+      },
+      "url": "pikos://page/3f2504e0-4f89-41d3-9a0c-0305e82c3301/extra"
+    },
+    {
+      "action": {
+        "type": "view",
+        "viewId": "today"
+      },
+      "url": "pikos://today"
+    },
+    {
+      "action": {
+        "type": "view",
+        "viewId": "today"
+      },
+      "url": "pikos://today/"
+    },
+    {
+      "action": null,
+      "url": "pikos://today/extra"
+    },
+    {
+      "action": {
+        "type": "view",
+        "viewId": "inbox"
+      },
+      "url": "pikos://inbox"
+    },
+    {
+      "action": {
+        "type": "calendar"
+      },
+      "url": "pikos://calendar"
+    },
+    {
+      "action": null,
+      "url": "pikos://calendar/extra"
+    },
+    {
+      "action": {
+        "prefill": "buy milk",
+        "type": "quick-add"
+      },
+      "url": "pikos://quick-add?text=buy%20milk"
+    },
+    {
+      "action": {
+        "prefill": "",
+        "type": "quick-add"
+      },
+      "url": "pikos://quick-add?text="
+    },
+    {
+      "action": {
+        "prefill": "",
+        "type": "quick-add"
+      },
+      "url": "pikos://quick-add"
+    },
+    {
+      "action": {
+        "prefill": "",
+        "type": "quick-add"
+      },
+      "url": "pikos://quick-add?other=x"
+    },
+    {
+      "action": {
+        "prefill": "tomorrow at 3pm #work",
+        "type": "quick-add"
+      },
+      "url": "pikos://quick-add?text=tomorrow%20at%203pm%20%23work"
+    },
+    {
+      "action": {
+        "prefill": "invoice",
+        "type": "search"
+      },
+      "url": "pikos://search?q=invoice"
+    },
+    {
+      "action": {
+        "prefill": "",
+        "type": "search"
+      },
+      "url": "pikos://search"
+    },
+    {
+      "action": {
+        "prefill": "ünicode 🎉",
+        "type": "search"
+      },
+      "url": "pikos://search?q=%C3%BCnicode%20%F0%9F%8E%89"
+    },
+    {
+      "action": null,
+      "url": "pikos://unknown"
+    },
+    {
+      "action": null,
+      "url": "pikos://"
+    },
+    {
+      "action": null,
+      "url": "https://pikos.app/page/3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+    },
+    {
+      "action": null,
+      "url": "notpikos://today"
+    },
+    {
+      "action": null,
+      "url": ""
+    },
+    {
+      "action": null,
+      "url": "garbage"
+    },
+    {
+      "action": null,
+      "url": "pikos://TODAY"
+    }
+  ],
+  "meta": {
+    "generatedBy": "apps/desktop/scripts/gen-calendar-parity.ts",
+    "note": "Golden output of the TypeScript calendar layout. Captures only the pixel-independent half — cascade columns, continuation flags, all-day rows and bars. Pixel mapping is per-platform and deliberately absent. Regenerate with `pnpm --filter @pikos/desktop gen:parity`.",
+    "timezone": "UTC"
+  },
+  "normalizeEnds": [
+    {
+      "end": null,
+      "id": "cleared",
+      "start": "2026-03-16",
+      "result": null
+    },
+    {
+      "end": "2026-03-18",
+      "id": "all_day_after",
+      "start": "2026-03-16",
+      "result": "2026-03-18"
+    },
+    {
+      "end": "2026-03-14",
+      "id": "all_day_before",
+      "start": "2026-03-16",
+      "result": null
+    },
+    {
+      "end": "2026-03-16",
+      "id": "all_day_equal",
+      "start": "2026-03-16",
+      "result": null
+    },
+    {
+      "end": "2026-03-18T15:00:00",
+      "id": "all_day_start_timed_end",
+      "start": "2026-03-16",
+      "result": "2026-03-18"
+    },
+    {
+      "end": "2026-03-16T10:00:00",
+      "id": "timed_after",
+      "start": "2026-03-16T09:00:00",
+      "result": "2026-03-16T10:00:00"
+    },
+    {
+      "end": "2026-03-16T08:00:00",
+      "id": "timed_before",
+      "start": "2026-03-16T09:00:00",
+      "result": null
+    },
+    {
+      "end": "2026-03-16T09:00:00",
+      "id": "timed_equal",
+      "start": "2026-03-16T09:00:00",
+      "result": null
+    }
+  ],
+  "scheduleTransitions": [
+    {
+      "end": null,
+      "id": "none_to_timed",
+      "iso": "2026-03-16T09:00:00",
+      "start": null,
+      "result": {
+        "end": null,
+        "start": "2026-03-16T09:00:00"
+      }
+    },
+    {
+      "end": null,
+      "id": "none_to_all_day",
+      "iso": "2026-03-16",
+      "start": null,
+      "result": {
+        "end": null,
+        "start": "2026-03-16"
+      }
+    },
+    {
+      "end": "2026-03-18",
+      "id": "all_day_to_timed",
+      "iso": "2026-03-16T09:00:00",
+      "start": "2026-03-16",
+      "result": {
+        "end": null,
+        "start": "2026-03-16T09:00:00"
+      }
+    },
+    {
+      "end": "2026-03-16T11:00:00",
+      "id": "timed_to_all_day_end_after",
+      "iso": "2026-03-15",
+      "start": "2026-03-16T09:00:00",
+      "result": {
+        "end": "2026-03-16",
+        "start": "2026-03-15"
+      }
+    },
+    {
+      "end": "2026-03-16T11:00:00",
+      "id": "timed_to_all_day_end_before",
+      "iso": "2026-03-20",
+      "start": "2026-03-16T09:00:00",
+      "result": {
+        "end": null,
+        "start": "2026-03-20"
+      }
+    },
+    {
+      "end": "2026-03-16T10:30:00",
+      "id": "timed_to_timed_preserves_duration",
+      "iso": "2026-03-20T14:00:00",
+      "start": "2026-03-16T09:00:00",
+      "result": {
+        "end": "2026-03-20T15:30:00",
+        "start": "2026-03-20T14:00:00"
+      }
+    },
+    {
+      "end": "2026-03-16T09:00:00",
+      "id": "timed_to_timed_zero_duration",
+      "iso": "2026-03-20T14:00:00",
+      "start": "2026-03-16T09:00:00",
+      "result": {
+        "end": "2026-03-16T09:00:00",
+        "start": "2026-03-20T14:00:00"
+      }
+    },
+    {
+      "end": "2026-03-17T01:00:00",
+      "id": "timed_to_timed_overnight",
+      "iso": "2026-03-20T22:00:00",
+      "start": "2026-03-16T22:00:00",
+      "result": {
+        "end": "2026-03-21T01:00:00",
+        "start": "2026-03-20T22:00:00"
+      }
+    },
+    {
+      "end": "2026-03-20",
+      "id": "all_day_to_all_day_end_after",
+      "iso": "2026-03-17",
+      "start": "2026-03-16",
+      "result": {
+        "end": "2026-03-20",
+        "start": "2026-03-17"
+      }
+    },
+    {
+      "end": "2026-03-17",
+      "id": "all_day_to_all_day_end_before",
+      "iso": "2026-03-20",
+      "start": "2026-03-16",
+      "result": {
+        "end": null,
+        "start": "2026-03-20"
+      }
+    },
+    {
+      "end": "2026-03-17",
+      "id": "all_day_to_all_day_end_equal",
+      "iso": "2026-03-17",
+      "start": "2026-03-16",
+      "result": {
+        "end": "2026-03-17",
+        "start": "2026-03-17"
+      }
+    },
+    {
+      "end": null,
+      "id": "timed_no_end_to_timed",
+      "iso": "2026-03-20T14:00:00",
+      "start": "2026-03-16T09:00:00",
+      "result": {
+        "end": null,
+        "start": "2026-03-20T14:00:00"
+      }
+    }
+  ]
+}
