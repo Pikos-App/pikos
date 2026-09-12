@@ -1,16 +1,16 @@
 # Desktop business-logic inventory
 
-**Purpose:** answer open question 1 of the iOS plan — *how much domain logic
-lives in Rust vs TS today* — and thereby set M1 scope.
+**Purpose:** answer open question 1 of the iOS plan — _how much domain logic
+lives in Rust vs TS today_ — and thereby set M1 scope.
 
 **Method:** every non-test module under `apps/desktop/src`, `packages/`, and
 `crates/` classified as:
 
-| Tag | Meaning |
-|---|---|
-| `rust` | Already in Rust, already Tauri-free, already shared. iOS consumes it via UniFFI — no port. |
-| `ts-portable` | Pure logic, no DOM/React/Tauri. Both platforms need it → must move to Rust. |
-| `ui-only` | Platform presentation. iOS reimplements natively; nothing to share. |
+| Tag           | Meaning                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `rust`        | Already in Rust, already Tauri-free, already shared. iOS consumes it via UniFFI — no port. |
+| `ts-portable` | Pure logic, no DOM/React/Tauri. Both platforms need it → must move to Rust.                |
+| `ui-only`     | Platform presentation. iOS reimplements natively; nothing to share.                        |
 
 Counts are non-test lines. Measured 2026-09-12 at `a79d995`.
 
@@ -25,10 +25,10 @@ consumers (the desktop app and `pikos-cli`).
 Evidence that the split is real rather than nominal — the Tauri layer is a thin
 wrapper, not a parallel implementation:
 
-| Concern | `crates/pikos-db` | `src-tauri/src/db` (wrapper) |
-|---|---|---|
-| Pages | 1166 lines | 109 lines |
-| Search (FTS5) | 362 lines | 16 lines |
+| Concern       | `crates/pikos-db` | `src-tauri/src/db` (wrapper) |
+| ------------- | ----------------- | ---------------------------- |
+| Pages         | 1166 lines        | 109 lines                    |
+| Search (FTS5) | 362 lines         | 16 lines                     |
 
 `src-tauri/Cargo.toml` declares `pikos-db = { path = "../../../crates/pikos-db" }`,
 and `src-tauri/src/error/error.rs` re-exports `pikos_db::{AppError, AppResult}`
@@ -41,7 +41,7 @@ already exists and already has 244 Rust tests.
 ## Second finding: the TS→Rust dependency currently runs backwards
 
 `packages/pikos-bridge` is **not** an editor bridge despite the name. It is a
-one-shot Node subprocess that the *Rust CLI shells out to* for the two pieces of
+one-shot Node subprocess that the _Rust CLI shells out to_ for the two pieces of
 logic that never got ported:
 
 ```
@@ -63,18 +63,18 @@ from the CLI. It can ship and be validated on desktop before any Swift exists.
 
 ### Already Rust — iOS consumes via UniFFI, no port
 
-| Module | Lines | Notes |
-|---|---:|---|
-| `crates/pikos-db/pages.rs` | 1166 | Page CRUD, the single writer |
-| `crates/pikos-db/search.rs` | 362 | FTS5 |
-| `crates/pikos-db/schedules.rs` | 630 | Schedule rows, virtual-occurrence overrides |
-| `crates/pikos-db/reminders.rs` | 100 | Due-reminder queries |
-| `crates/pikos-db/folders.rs` | 295 | Folder CRUD |
-| `crates/pikos-db/tags.rs` | 18 | Tag logic |
-| `crates/pikos-db/notification_log.rs` | 337 | Daily-summary + fired-reminder log |
-| `crates/pikos-db/pool.rs`, `tx.rs`, `error.rs` | 548 | Pool, WAL, transactions, shared error type |
-| `src-tauri/src/markdown/` | 397 | Markdown export |
-| `src-tauri/src/notifications/scheduler/` | 593 | Reminder scheduling; desktop-delivery half is platform-specific |
+| Module                                         | Lines | Notes                                                           |
+| ---------------------------------------------- | ----: | --------------------------------------------------------------- |
+| `crates/pikos-db/pages.rs`                     |  1166 | Page CRUD, the single writer                                    |
+| `crates/pikos-db/search.rs`                    |   362 | FTS5                                                            |
+| `crates/pikos-db/schedules.rs`                 |   630 | Schedule rows, virtual-occurrence overrides                     |
+| `crates/pikos-db/reminders.rs`                 |   100 | Due-reminder queries                                            |
+| `crates/pikos-db/folders.rs`                   |   295 | Folder CRUD                                                     |
+| `crates/pikos-db/tags.rs`                      |    18 | Tag logic                                                       |
+| `crates/pikos-db/notification_log.rs`          |   337 | Daily-summary + fired-reminder log                              |
+| `crates/pikos-db/pool.rs`, `tx.rs`, `error.rs` |   548 | Pool, WAL, transactions, shared error type                      |
+| `src-tauri/src/markdown/`                      |   397 | Markdown export                                                 |
+| `src-tauri/src/notifications/scheduler/`       |   593 | Reminder scheduling; desktop-delivery half is platform-specific |
 
 **iOS work:** UniFFI wrapper + App Group container path. No logic rewrite.
 `src-tauri/src/notifications/macos.rs` is AppKit-specific and does not transfer —
@@ -85,28 +85,28 @@ scheduler queries.
 
 Ordered by port priority. The first two are already blocking the CLI.
 
-| Module | Lines | Why it must move |
-|---|---:|---|
-| `packages/core/nlp/parser.ts` | 861 | Quick-add NLP. CLI already shells to Node for it. Depends on `chrono-node`. |
-| `packages/core/utils/recurrence.ts` | 510 | RRULE expansion + next-occurrence. Same; depends on `rrule`. |
-| `features/calendar/utils/calendarLayout.ts` | 634 | Overlap/column packing. **Split required** — lines ~600-633 are a DOM drag helper (`window.addEventListener`), the rest is pure. |
-| `features/calendar/utils/allDayLayout.ts` | 363 | All-day lane packing. Only impurity is a `CSSProperties` *type* import — trivial to strip. |
-| `features/calendar/utils/calendarGeometry.ts` | 279 | Time↔pixel math. Zero DOM refs. |
-| `packages/core/types.ts` | 227 | Domain types. Becomes the UniFFI type surface. |
-| `packages/core/storage.ts` | 163 | Storage interface + input types. Becomes the UniFFI API shape. |
-| `features/pages/utils/pageFilters.ts` | 131 | Smart-view filtering + sort modes. Zero DOM refs. |
-| `features/layout/utils/buildPageListRows.ts` | 114 | Section grouping for the page list. Pure data→rows. |
-| `features/import/parsers/csv.ts`, `markdown.ts`, `utils.ts` | ~200 | Import parsing. Zero DOM refs. Lower priority — import may stay desktop-only. |
-| `shared/utils/schedule.ts` | 71 | All-day↔timed transitions. Pure date-string transforms. |
-| `packages/core/utils/dates.ts` | 69 | Local ISO helpers. |
-| `packages/core/utils/extractText.ts` | 63 | ProseMirror JSON → plain text. Needed for `docChanged` on iOS. |
-| `shared/deep-link/parseDeepLink.ts` | 65 | `pikos://` URLs. iOS needs the same grammar for Shortcuts/widgets. |
-| `shared/utils/formatDateRange.ts` | 36 | Range chip labels. Depends on `date-fns`. |
-| `features/editor/utils/markdownPaste.ts` | 41 | Markdown detection heuristic. |
-| `features/editor/utils/textSearch.ts` | 37 | Find-in-page matching. |
-| `features/pages/utils/fuzzyMatchFolder.ts` | 17 | Folder name matching for parsed `folderQuery`. |
-| `packages/core/utils/sort.ts` | 17 | Emoji-aware compare. Subtle; needs a parity corpus. |
-| `packages/core/utils/page.ts` | 15 | `isDone` / `isOpen`. |
+| Module                                                      | Lines | Why it must move                                                                                                                 |
+| ----------------------------------------------------------- | ----: | -------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/nlp/parser.ts`                               |   861 | Quick-add NLP. CLI already shells to Node for it. Depends on `chrono-node`.                                                      |
+| `packages/core/utils/recurrence.ts`                         |   510 | RRULE expansion + next-occurrence. Same; depends on `rrule`.                                                                     |
+| `features/calendar/utils/calendarLayout.ts`                 |   634 | Overlap/column packing. **Split required** — lines ~600-633 are a DOM drag helper (`window.addEventListener`), the rest is pure. |
+| `features/calendar/utils/allDayLayout.ts`                   |   363 | All-day lane packing. Only impurity is a `CSSProperties` _type_ import — trivial to strip.                                       |
+| `features/calendar/utils/calendarGeometry.ts`               |   279 | Time↔pixel math. Zero DOM refs.                                                                                                  |
+| `packages/core/types.ts`                                    |   227 | Domain types. Becomes the UniFFI type surface.                                                                                   |
+| `packages/core/storage.ts`                                  |   163 | Storage interface + input types. Becomes the UniFFI API shape.                                                                   |
+| `features/pages/utils/pageFilters.ts`                       |   131 | Smart-view filtering + sort modes. Zero DOM refs.                                                                                |
+| `features/layout/utils/buildPageListRows.ts`                |   114 | Section grouping for the page list. Pure data→rows.                                                                              |
+| `features/import/parsers/csv.ts`, `markdown.ts`, `utils.ts` |  ~200 | Import parsing. Zero DOM refs. Lower priority — import may stay desktop-only.                                                    |
+| `shared/utils/schedule.ts`                                  |    71 | All-day↔timed transitions. Pure date-string transforms.                                                                          |
+| `packages/core/utils/dates.ts`                              |    69 | Local ISO helpers.                                                                                                               |
+| `packages/core/utils/extractText.ts`                        |    63 | ProseMirror JSON → plain text. Needed for `docChanged` on iOS.                                                                   |
+| `shared/deep-link/parseDeepLink.ts`                         |    65 | `pikos://` URLs. iOS needs the same grammar for Shortcuts/widgets.                                                               |
+| `shared/utils/formatDateRange.ts`                           |    36 | Range chip labels. Depends on `date-fns`.                                                                                        |
+| `features/editor/utils/markdownPaste.ts`                    |    41 | Markdown detection heuristic.                                                                                                    |
+| `features/editor/utils/textSearch.ts`                       |    37 | Find-in-page matching.                                                                                                           |
+| `features/pages/utils/fuzzyMatchFolder.ts`                  |    17 | Folder name matching for parsed `folderQuery`.                                                                                   |
+| `packages/core/utils/sort.ts`                               |    17 | Emoji-aware compare. Subtle; needs a parity corpus.                                                                              |
+| `packages/core/utils/page.ts`                               |    15 | `isDone` / `isOpen`.                                                                                                             |
 
 **Subtotal: roughly 3,900 non-test lines**, against which there are already 75 TS
 test files — a ready-made parity corpus, which is what the plan's parity-test
@@ -116,19 +116,19 @@ requirement needs.
 
 This is the plan's exception and the inventory agrees with it.
 
-| Module | Lines | Disposition |
-|---|---:|---|
-| `features/editor/components/EditorPane.tsx` | 289 | Extract to `packages/editor`. See coupling note below. |
-| `features/editor/components/SlashMenu.tsx` | 330 | Moves with the editor. |
-| `features/editor/components/LinkPopover.tsx` | 328 | Moves; iOS may drive natively via `selectionChanged`. |
-| `features/editor/components/FindContentPopover.tsx` | 240 | Moves. |
-| `features/editor/components/FormatToolbar.tsx` | 212 | Desktop keeps; iOS replaces with a native keyboard toolbar. |
-| `features/editor/components/TableToolbar.tsx` | 162 | Moves. |
-| `features/editor/extensions/PikosImage.ts` | 226 | Moves. Image URL resolution is platform-specific — bridge it. |
-| `features/editor/extensions/TabIndent.ts` | 180 | Moves. |
-| `features/editor/extensions/PikosTable.ts` | 12 | Moves. |
-| `shared/utils/jsonContent.ts` | 39 | Moves. Defines `EMPTY_TIPTAP_DOC` + defensive parse. |
-| `features/editor/components/MetadataHeader.tsx` | 484 | **Stays desktop.** Page metadata chrome, not the editor. iOS builds this natively. |
+| Module                                              | Lines | Disposition                                                                        |
+| --------------------------------------------------- | ----: | ---------------------------------------------------------------------------------- |
+| `features/editor/components/EditorPane.tsx`         |   289 | Extract to `packages/editor`. See coupling note below.                             |
+| `features/editor/components/SlashMenu.tsx`          |   330 | Moves with the editor.                                                             |
+| `features/editor/components/LinkPopover.tsx`        |   328 | Moves; iOS may drive natively via `selectionChanged`.                              |
+| `features/editor/components/FindContentPopover.tsx` |   240 | Moves.                                                                             |
+| `features/editor/components/FormatToolbar.tsx`      |   212 | Desktop keeps; iOS replaces with a native keyboard toolbar.                        |
+| `features/editor/components/TableToolbar.tsx`       |   162 | Moves.                                                                             |
+| `features/editor/extensions/PikosImage.ts`          |   226 | Moves. Image URL resolution is platform-specific — bridge it.                      |
+| `features/editor/extensions/TabIndent.ts`           |   180 | Moves.                                                                             |
+| `features/editor/extensions/PikosTable.ts`          |    12 | Moves.                                                                             |
+| `shared/utils/jsonContent.ts`                       |    39 | Moves. Defines `EMPTY_TIPTAP_DOC` + defensive parse.                               |
+| `features/editor/components/MetadataHeader.tsx`     |   484 | **Stays desktop.** Page metadata chrome, not the editor. iOS builds this natively. |
 
 **Extraction difficulty is moderate, not trivial.** `EditorPane.tsx` imports from
 six desktop-local paths (`@/shared/context/*`, `@/shared/keyboard/*`,
@@ -140,18 +140,18 @@ across 16 packages, which makes the extraction mechanical once the seams are cut
 
 No sharing, no port. Listed for completeness of scope.
 
-| Area | Files | Lines |
-|---|---:|---:|
-| `shared/components/*` | 24 | 3,334 |
-| `features/calendar/components/*` | 15 | 2,936 |
-| `shared/context/*` (15 React contexts) | 15 | 2,635 |
-| `features/settings/components/*` | 13 | 1,888 |
-| `features/calendar/hooks/*` (drag/resize) | 11 | 1,534 |
-| `components/ui/*` (Radix wrappers) | 11 | 1,416 |
-| `features/layout/components/*` | 8 | 1,166 |
-| `shared/keyboard/*` | 3 | 414 |
-| `shared/hooks/*` | 10 | 467 |
-| `shared/seeds/*` (dev fixtures — desktop-only, not shipped logic) | 8 | 3,569 |
+| Area                                                              | Files | Lines |
+| ----------------------------------------------------------------- | ----: | ----: |
+| `shared/components/*`                                             |    24 | 3,334 |
+| `features/calendar/components/*`                                  |    15 | 2,936 |
+| `shared/context/*` (15 React contexts)                            |    15 | 2,635 |
+| `features/settings/components/*`                                  |    13 | 1,888 |
+| `features/calendar/hooks/*` (drag/resize)                         |    11 | 1,534 |
+| `components/ui/*` (Radix wrappers)                                |    11 | 1,416 |
+| `features/layout/components/*`                                    |     8 | 1,166 |
+| `shared/keyboard/*`                                               |     3 |   414 |
+| `shared/hooks/*`                                                  |    10 |   467 |
+| `shared/seeds/*` (dev fixtures — desktop-only, not shipped logic) |     8 | 3,569 |
 
 Excluding seeds, that is roughly **15,800 lines of presentation** that iOS
 reimplements from scratch. That number is the honest cost of the two-UI-codebase
@@ -184,8 +184,8 @@ portable part, not the adapter.
 3. **Open question 2 is answered, and the answer is "not frozen."** There is no
    `schemaVersion` on pages anywhere in the codebase (the only match repo-wide is
    an unrelated FTS index-version check in `pool_tests.rs`). `jsonContent.ts`
-   already anticipates the gap in a comment: *"a future schema bump that wasn't
-   migrated."* Adding `schemaVersion` to every page is a prerequisite for M1, not
+   already anticipates the gap in a comment: _"a future schema bump that wasn't
+   migrated."_ Adding `schemaVersion` to every page is a prerequisite for M1, not
    a nice-to-have — two devices writing ProseMirror JSON with no version marker
    is exactly the corruption risk the plan's decision section cites as
    unacceptable.
@@ -194,3 +194,66 @@ portable part, not the adapter.
    plan introduces an entirely different Swift↔JS editor bridge. Two things named
    "bridge" in one monorepo will cause confusion. Suggest `packages/cli-bridge`,
    and it gets deleted outright once parser and recurrence land in Rust.
+
+---
+
+## Addendum: what porting revealed about the parser (2026-09-12)
+
+Recurrence is ported and at parity (`crates/pikos-core`). The parser is not, and
+the reason is worth recording before anyone estimates it from its line count.
+
+`parser.ts` is 861 lines, but only **three** of them call `chrono-node`, and the
+important one is a single `chrono.parse(text, ref, { forwardDate: true })`. The
+file's bulk is _pre-processing_ — rewriting "tonight", "this afternoon", "last
+monday" and similar into explicit forms chrono can handle. That pre-processing
+ports to Rust straightforwardly.
+
+The cost is entirely in what the parser then reads back off chrono's result:
+
+| What the parser uses                                                        | Why it is hard to replace                                                                                            |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `result.start.isCertain("hour" \| "day" \| "month" \| "year" \| "weekday")` | Granularity certainty drives the whole timed-vs-all-day decision, and the "bare weekday" special case.               |
+| `result.index` + `result.text`                                              | The matched span is cut out of the string to leave the title behind. Without exact match extents the title is wrong. |
+| `result.end`                                                                | Time ranges ("3pm to 5pm") and date ranges ("April 18-25").                                                          |
+
+No Rust crate exposes any of this. `chrono-english` and its fork `interim` are,
+by their own description, "inspired by the Linux date command" — they return a
+single timestamp, with no certainty flags, no match position, and no range end.
+Substituting one would not be a port; it would be a rewrite of the parser's
+contract, and the corpus would show it immediately.
+
+So the realistic options are:
+
+1. **Port the needed subset of chrono-node's English parser to Rust**, carrying
+   the certainty/index/extent concepts across. This is the honest path and is
+   substantially more than 861 lines of work — chrono-node earns its size.
+2. **Keep the parser in TypeScript and keep the Node subprocess**, accepting
+   that `pikos-cli` needs node installed and that iOS would need a JS runtime
+   for quick-add parsing. Viable, but it puts a JS dependency inside the iOS
+   app for one feature, which is exactly the kind of thing the native decision
+   was meant to avoid.
+3. **Narrow the contract deliberately** — decide which date expressions quick-add
+   must support on mobile, and hand-write a parser for that set rather than
+   reproducing chrono-node. The corpus makes this measurable: it records exactly
+   what today's parser does for all 317 inputs, so any narrowing shows up as a
+   specific list of inputs that would change behaviour, rather than a vague
+   regression risk.
+
+Option 3 is worth considering seriously before committing to option 1. Of the
+317 corpus inputs, the great majority are the pre-processed forms the parser
+generates itself; the genuinely free-form date expressions are a much smaller
+set. That measurement should be made before the estimate is.
+
+**Revised port order**, replacing the one in finding 2 above:
+
+1. ~~recurrence~~ — done, at parity.
+2. Calendar layout + geometry + all-day layout. Pure math, no external
+   dependency, ~1,270 lines, immediately useful to iOS.
+3. Filters, list-row building, schedule transitions, date formatting. Small and
+   mechanical.
+4. Parser — only after a decision between the three options above.
+
+Recurrence went first rather than the parser (as finding 2 suggested) precisely
+because this was unknown at the time: `rrule` exists in Rust and made recurrence
+a real port, which got the harness built and proven on tractable work before
+meeting the hard problem.
