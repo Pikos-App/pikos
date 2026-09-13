@@ -40,14 +40,29 @@ struct RootView: View {
     var body: some View {
         @Bindable var route = route
 
+        // The shell owns navigation; the screens are content.
+        //
+        // That split is the one thing worth preserving deliberately, because it
+        // is expensive to retrofit and free to keep. A `pikos://page/<id>` link
+        // can push only because the path lives out here, and the iPad build —
+        // a `NavigationSplitView` with a folder sidebar, the list as content
+        // and the editor as detail, closer to the desktop app than to this —
+        // replaces this view and nothing else. `PageListScreen` and
+        // `SearchScreen` do not know which shell they are in.
         TabView(selection: $route.tab) {
-            PageListScreen()
-                .tabItem { Label("Pages", systemImage: "doc.text") }
-                .tag(Route.Tab.pages)
+            NavigationStack(path: $route.pagesPath) {
+                PageListScreen()
+                    .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
+            }
+            .tabItem { Label("Pages", systemImage: "doc.text") }
+            .tag(Route.Tab.pages)
 
-            SearchScreen()
-                .tabItem { Label("Search", systemImage: "magnifyingglass") }
-                .tag(Route.Tab.search)
+            NavigationStack(path: $route.searchPath) {
+                SearchScreen()
+                    .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
+            }
+            .tabItem { Label("Search", systemImage: "magnifyingglass") }
+            .tag(Route.Tab.search)
         }
         .sheet(
             isPresented: $route.isQuickAddPresented,

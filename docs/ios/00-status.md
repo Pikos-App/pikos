@@ -175,6 +175,41 @@ session of its own. What has been done instead:
   build in Swift 5 mode regardless of the app's setting — suspects 1 and 2 are
   warnings there and errors only where app code touches them.
 
+## iPad is a later milestone, not a later decision
+
+iPhone and iPad ship as one universal purchase, and the iPad build is meant to
+feel like the desktop app rather than a stretched phone — a folder sidebar, a
+list, and an editor beside it, with the calendar as the screen that gains most
+from the width. None of that is being built yet. What matters now is only that
+building it later stays a change of shell rather than a rewrite.
+
+Three things follow, and they are the whole of it:
+
+1. **The shell owns navigation; screens are content.** `PageListScreen` and
+   `SearchScreen` hold no `NavigationStack` and declare no
+   `navigationDestination` — `RootView` does, and the paths live on `Route`.
+   The iPad build replaces `RootView` with a `NavigationSplitView` reading
+   `pagesPath.last` as its detail selection, and both screens are untouched.
+   This was not free-standing tidiness: a screen owning its own stack is also
+   why `pikos://page/<id>` did nothing, since a deep link had no path to push
+   onto. Fixing one fixed the other.
+2. **`TARGETED_DEVICE_FAMILY` is `"1,2"`, explicitly.** It is the Xcode
+   default, so stating it is redundant until someone narrows it to `"1"` on the
+   reasonable-sounding grounds that the UI is phone-shaped. That would make the
+   iPad build a new SKU instead of an update, which is the one mistake here
+   that cannot be taken back.
+3. **Nothing platform-specific goes in the Rust.** Already true, and worth
+   keeping true for a reason that is about to matter: the calendar's *layout*
+   is shared and its *pixel mapping* is deliberately not, because density
+   tables and text-collision heuristics encode one renderer's font metrics.
+   iPad will want metrics closer to the desktop's than to the phone's, which
+   is exactly why that line was drawn where it is.
+
+What is explicitly **not** being done now: size-class branching, a split-view
+shell, multi-window (`UISceneConfiguration`), keyboard shortcuts, pointer and
+hover, `.systemExtraLarge` widgets, or Stage Manager. Adding any of them early
+would be guessing at a design nobody has drawn.
+
 ## Next, in order
 
 1. **M0.** It gates everything else, and the plan is explicit that a failed

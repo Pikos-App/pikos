@@ -12,43 +12,45 @@ struct PageListScreen: View {
     @State private var isQuickAddPresented = false
     @State private var searchText = ""
 
+    /// The list only — no `NavigationStack` of its own.
+    ///
+    /// The container owns navigation, which is what lets the same screen sit in
+    /// a tab's stack on a phone and in a split view's content column on iPad
+    /// without being rewritten. It is also what makes a `pikos://page/<id>`
+    /// link work at all: a screen that declares its own stack gives nothing
+    /// outside it a way to push.
     var body: some View {
-        NavigationStack {
-            Group {
-                if store.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if store.pages.isEmpty {
-                    emptyState
-                } else if visiblePages.isEmpty {
-                    ContentUnavailableView.search(text: searchText)
-                } else {
-                    list
-                }
-            }
-            .navigationTitle(store.scope.title)
-            .toolbar { toolbar }
-            // Filters the current view by title. Deliberately narrower than
-            // the Search tab, which is full-text across every page — this is
-            // "find it in what I'm looking at", which is a different question
-            // and the one a list wants answered.
-            .searchable(text: $searchText, prompt: "Filter \(store.scope.title)")
-            .sheet(isPresented: $isQuickAddPresented) {
-                QuickAddSheet()
-            }
-            .alert(
-                "Something went wrong",
-                isPresented: .init(
-                    get: { store.errorMessage != nil },
-                    set: { if !$0 { store.errorMessage = nil } }
-                ),
-                actions: { Button("OK", role: .cancel) {} },
-                message: { Text(store.errorMessage ?? "") }
-            )
-            .navigationDestination(for: String.self) { pageId in
-                EditorScreen(pageId: pageId)
+        Group {
+            if store.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if store.pages.isEmpty {
+                emptyState
+            } else if visiblePages.isEmpty {
+                ContentUnavailableView.search(text: searchText)
+            } else {
+                list
             }
         }
+        .navigationTitle(store.scope.title)
+        .toolbar { toolbar }
+        // Filters the current view by title. Deliberately narrower than
+        // the Search tab, which is full-text across every page — this is
+        // "find it in what I'm looking at", which is a different question
+        // and the one a list wants answered.
+        .searchable(text: $searchText, prompt: "Filter \(store.scope.title)")
+        .sheet(isPresented: $isQuickAddPresented) {
+            QuickAddSheet()
+        }
+        .alert(
+            "Something went wrong",
+            isPresented: .init(
+                get: { store.errorMessage != nil },
+                set: { if !$0 { store.errorMessage = nil } }
+            ),
+            actions: { Button("OK", role: .cancel) {} },
+            message: { Text(store.errorMessage ?? "") }
+        )
     }
 
     // MARK: - Pieces

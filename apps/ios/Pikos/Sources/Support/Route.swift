@@ -24,6 +24,21 @@ final class Route {
     }
 
     var tab: Tab = .pages
+
+    /// What each tab's navigation stack has pushed, as page ids.
+    ///
+    /// Held here rather than by the screens, so that something outside a screen
+    /// — a deep link, a widget tap, an App Intent — can push. The screens are
+    /// content; the container owns navigation.
+    ///
+    /// Two paths rather than one because the tabs are independent on a phone.
+    /// An iPad split view has a single detail column instead and would read
+    /// `pagesPath.last` as its selection; keeping the paths here rather than
+    /// inside the screens is what makes that a change of shell rather than a
+    /// rewrite of both screens.
+    var pagesPath: [String] = []
+    var searchPath: [String] = []
+
     var isQuickAddPresented = false
     /// Text to open quick add with, from a `pikos://quick-add?text=…` link.
     /// Cleared when the sheet closes so the next manual open starts empty.
@@ -33,6 +48,7 @@ final class Route {
     /// which has no view to route through and moves this state directly.
     func showToday(store: WorkspaceStore? = nil) {
         tab = .pages
+        pagesPath = []
         store?.scope = .today
         pendingScope = .today
     }
@@ -60,19 +76,26 @@ final class Route {
     func handle(_ url: URL, store: WorkspaceStore) {
         guard let link = parseDeepLink(url: url.absoluteString) else { return }
 
+        // A link that *navigates* returns its tab to the root first; a link
+        // that merely *presents* does not. Without that, "show me today" from a
+        // widget would select the Pages tab and leave whatever editor was open
+        // sitting on top of the list it was asked to show — the stack survives
+        // now that the shell owns it, which it did not when each screen kept
+        // its own.
         switch link {
         case .view(let viewId):
             tab = .pages
+            pagesPath = []
             let scope: WorkspaceStore.Scope = viewId == .today ? .today : .inbox
             store.scope = scope
             pendingScope = scope
 
-        case .page:
-            // Navigating to a specific page needs a navigation path the list
-            // screen owns; wiring that is the next step. Landing on the list is
-            // a poor answer but an honest one — better than appearing to work
-            // and showing the wrong page.
+        case .page(let pageId):
+            // Replaces the stack rather than appending to it. A link is a jump,
+            // not a step: appending would build a back stack of pages the user
+            // never navigated through, and tapping back would walk them.
             tab = .pages
+            pagesPath = [pageId]
 
         case .calendar:
             // No calendar screen yet (M3). Today is the nearest thing.
@@ -81,13 +104,17 @@ final class Route {
         case .quickAdd(let prefill):
             // The prefill is parsed like anything typed by hand, so a link
             // carrying "tomorrow at 3pm" schedules rather than naming a page
-            // that.
+            // that. Presents rather than navigates, so the stack is left
+            // alone: a quick-add link arriving while a page is open should
+            // give the user the sheet and their page back, not lose their
+            // place.
             quickAddPrefill = prefill
             tab = .pages
             isQuickAddPresented = true
 
         case .search:
             tab = .search
+            searchPath = []
         }
     }
 }

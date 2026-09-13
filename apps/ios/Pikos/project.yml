@@ -54,8 +54,23 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        # iPhone and iPad from one binary — a universal purchase, which is the
+        # intent and not merely Xcode's default. Stated explicitly so it is not
+        # narrowed to "1" by someone reasoning from the UI, which is currently
+        # phone-shaped: iPad ships later with a NavigationSplitView shell
+        # closer to the desktop app, and narrowing this would make that a new
+        # SKU rather than an update.
+        TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_UISupportedInterfaceOrientations: >-
           UIInterfaceOrientationPortrait
+          UIInterfaceOrientationLandscapeLeft
+          UIInterfaceOrientationLandscapeRight
+        # iPad is expected to rotate freely, upside down included — it has no
+        # single "up", and an iPad app that refuses an orientation reads as
+        # broken rather than opinionated.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: >-
+          UIInterfaceOrientationPortrait
+          UIInterfaceOrientationPortraitUpsideDown
           UIInterfaceOrientationLandscapeLeft
           UIInterfaceOrientationLandscapeRight
         CODE_SIGN_ENTITLEMENTS: Pikos.entitlements

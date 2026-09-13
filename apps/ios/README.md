@@ -83,7 +83,13 @@ suite.
 
 ## What is deliberately missing
 
-- **Calendar screens.** M3.
+- **Calendar screens.** M3. The layout algorithms are already ported and
+  fuzzed (`crates/pikos-core/src/calendar/`, exported as `layoutTimedDay` and
+  `layoutAllDay`), so what is missing is the grid that draws what they return —
+  and the pixel mapping, which is deliberately per-platform.
+- **The iPad UI.** Ships in the same universal binary, styled after the desktop
+  app rather than the phone. Not started; `docs/ios/00-status.md` records the
+  three things being kept true so that it stays a change of shell.
 - **Inserting an image.** The whole path exists except its trigger: the editor
   handles `insertImage`, `EditorController.insertImage(assetPath:)` sends it,
   and `EditorWebView.onImageRequested` is wired to a `requestImagePicker`

@@ -16,35 +16,33 @@ struct SearchScreen: View {
     /// overwrite the results of a newer one.
     @State private var generation = 0
 
+    /// No `NavigationStack` of its own — see the note on `PageListScreen`.
     var body: some View {
-        NavigationStack {
-            Group {
-                if query.trimmingCharacters(in: .whitespaces).isEmpty {
-                    ContentUnavailableView(
-                        "Search", systemImage: "magnifyingglass",
-                        description: Text("Find a page by its title or anything written in it."))
-                } else if hits.isEmpty && !isSearching {
-                    ContentUnavailableView.search(text: query)
-                } else {
-                    List(hits, id: \.pageId) { hit in
-                        NavigationLink(value: hit.pageId) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(hit.title.isEmpty ? "Untitled" : hit.title)
-                                    .font(.body)
-                                Text(hit.excerpt)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
+        Group {
+            if query.trimmingCharacters(in: .whitespaces).isEmpty {
+                ContentUnavailableView(
+                    "Search", systemImage: "magnifyingglass",
+                    description: Text("Find a page by its title or anything written in it."))
+            } else if hits.isEmpty && !isSearching {
+                ContentUnavailableView.search(text: query)
+            } else {
+                List(hits, id: \.pageId) { hit in
+                    NavigationLink(value: hit.pageId) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(hit.title.isEmpty ? "Untitled" : hit.title)
+                                .font(.body)
+                            Text(hit.excerpt)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
                         }
                     }
-                    .listStyle(.plain)
                 }
+                .listStyle(.plain)
             }
-            .navigationTitle("Search")
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
-            .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
         }
+        .navigationTitle("Search")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
         .task(id: query) {
             // Debounced by cancellation: `task(id:)` cancels the previous run on
             // each keystroke, so a sleep that is not interrupted means typing
