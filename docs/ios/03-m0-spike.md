@@ -100,6 +100,43 @@ none of them depend on the editor being a webview. The parts that would be
 discarded are `packages/editor-mobile` and `PikosEditorBridge`, which is a
 deliberately small fraction, and the reason the spike was scaffolded this way.
 
+## What has not been compiled
+
+No Swift compiler was available where this was written, and `download.swift.org`
+is blocked by the environment's network policy, so **none of the Swift here has
+ever been built**. The Rust, the TypeScript and the generated bindings are all
+tested; the hand-written Swift is reviewed but unproven. Expect the first
+`swift build` to surface something, and treat that as normal rather than as a
+sign the design is wrong.
+
+Two specific things to expect:
+
+- **Strict concurrency.** The plan calls for Swift 6 with strict concurrency,
+  and nothing here is annotated for it. `EditorWebView.Coordinator` conforms to
+  `WKScriptMessageHandler` and `WKNavigationDelegate`, both of which are
+  main-actor bound in practice, so `@MainActor` annotations are likely needed.
+  They were not added speculatively: guessing at isolation without a compiler
+  to check against tends to produce annotations that are confidently wrong.
+- **`Bundle.module`.** Available only because `Package.swift` declares the
+  editor as a resource. If the editor bundle has not been built,
+  `EditorWebView.bundleURL()` traps with a message saying so — that is
+  deliberate, and the fix is to run `scripts/build-editor-bundle.sh`.
+
+Three issues were found and fixed by reading rather than by compiling, which is
+some indication of what a review pass catches and what it does not:
+
+1. The coordinator was registered as a script message handler and never
+   removed. `WKUserContentController` retains its handlers strongly, so pushing
+   and popping editor screens would have accumulated a webview apiece — on a
+   phone, a leak that ends in a jetsam kill rather than a visible bug. Now torn
+   down in `dismantleUIView`.
+2. The navigation policy claimed in a comment that the editor "must never
+   navigate" while the code allowed everything that was not a tapped link. It
+   is now an allowlist of exactly one URL, which is what the comment said.
+3. The protocol version crossed as a `Double` and was compared for floating
+   point equality. The protocol declaration now has an `integer` field type, so
+   Swift gets an `Int`.
+
 ## Deliberate omissions
 
 - **No database.** The editor takes a document and reports changes; the host

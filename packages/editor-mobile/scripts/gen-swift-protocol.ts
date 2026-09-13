@@ -36,6 +36,8 @@ function swiftType(type: FieldType): string {
   switch (type) {
     case "string":
       return "String";
+    case "integer":
+      return "Int";
     case "number":
       return "Double";
     case "boolean":

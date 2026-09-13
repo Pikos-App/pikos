@@ -71,7 +71,7 @@ public struct EditorWebView: UIViewRepresentable {
             EditorAssetSchemeHandler(assetRoot: assetRoot, editorBundle: Self.bundleURL()),
             forURLScheme: EditorAssetSchemeHandler.scheme
         )
-        configuration.userContentController.add(context.coordinator, name: "pikos")
+        configuration.userContentController.add(context.coordinator, name: Self.messageHandlerName)
 
         // The editor manages its own focus through the bridge, so the webview
         // must not require a tap to bring the keyboard up when the host calls
@@ -108,6 +108,19 @@ public struct EditorWebView: UIViewRepresentable {
         return webView
     }
 
+    /// Unregister the message handler when the view goes away.
+    ///
+    /// `WKUserContentController` holds its handlers strongly, so the
+    /// coordinator — and through the configuration, the webview — would outlive
+    /// the view without this. Pushing and popping editor screens would then
+    /// accumulate a webview apiece, which on a phone is the kind of leak that
+    /// ends in a jetsam kill rather than a visible bug.
+    public static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: messageHandlerName)
+        webView.navigationDelegate = nil
+        webView.stopLoading()
+    }
+
     public func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
         guard context.coordinator.isReady else { return }
@@ -125,6 +138,10 @@ public struct EditorWebView: UIViewRepresentable {
                 .setTheme(.init(accent: accentColor, scheme: scheme)), on: webView)
         }
     }
+
+    /// Name the webview posts messages under. Declared once so registration
+    /// and teardown cannot drift — a mismatch there would silently leak.
+    static let messageHandlerName = "pikos"
 
     /// The built editor, copied into the package's resources by
     /// scripts/build-editor-bundle.sh.
@@ -190,7 +207,7 @@ public struct EditorWebView: UIViewRepresentable {
 
             switch incoming {
             case .ready(let payload):
-                guard payload.protocolVersion == Double(EditorBridge.protocolVersion) else {
+                guard payload.protocolVersion == EditorBridge.protocolVersion else {
                     assertionFailure(
                         "editor speaks protocol \(payload.protocolVersion), host speaks "
                             + "\(EditorBridge.protocolVersion)")
@@ -236,19 +253,29 @@ public struct EditorWebView: UIViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            // The editor is a local document and must never navigate. Any
-            // attempt to leave it — a stray link, an injected redirect — is
-            // refused, and taps arrive through the bridge instead.
-            if navigationAction.navigationType == .other, navigationAction.targetFrame?.isMainFrame != false,
-                webView.url == nil
-            {
+            // The editor is a local document and must never navigate away from
+            // itself. Exactly one URL is permitted — the editor's own — and
+            // everything else is refused, including a link the user taps, which
+            // is reported to the host instead so the app decides what to do
+            // with it.
+            //
+            // An allowlist rather than a denylist: a page is user content, and
+            // enumerating the ways content could try to navigate is a losing
+            // game.
+            guard let url = navigationAction.request.url else {
+                decisionHandler(.cancel)
+                return
+            }
+
+            if url == EditorAssetSchemeHandler.editorURL {
                 decisionHandler(.allow)
                 return
             }
-            if let url = navigationAction.request.url, navigationAction.navigationType == .linkActivated {
+
+            if navigationAction.navigationType == .linkActivated {
                 parent.onLinkTapped(url)
             }
-            decisionHandler(navigationAction.navigationType == .linkActivated ? .cancel : .allow)
+            decisionHandler(.cancel)
         }
     }
 }

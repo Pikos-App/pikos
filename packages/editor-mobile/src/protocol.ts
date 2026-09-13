@@ -23,7 +23,15 @@
 export const PROTOCOL_VERSION = 1;
 
 /** Field types the bridge can carry. Deliberately small. */
-export type FieldType = "string" | "number" | "boolean" | "json" | "stringArray";
+export type FieldType =
+  | "string"
+  /** A whole number. Distinct from `number` so Swift gets an `Int`, and a
+   *  version or a count is compared exactly rather than as a Double. */
+  | "integer"
+  | "number"
+  | "boolean"
+  | "json"
+  | "stringArray";
 
 export interface MessageSpec {
   readonly doc: string;
@@ -80,7 +88,7 @@ export const WEBVIEW_TO_HOST = {
   },
   ready: {
     doc: "The editor has mounted and can accept messages. Carries the protocol version the webview was built against so the host can refuse a mismatch loudly rather than misbehave quietly.",
-    fields: { protocolVersion: "number" },
+    fields: { protocolVersion: "integer" },
   },
   requestImagePicker: {
     doc: "The user asked to insert an image. The host presents a picker and replies with insertImage.",
@@ -98,7 +106,7 @@ export type WebviewToHostType = keyof typeof WEBVIEW_TO_HOST;
 /** Maps a declared field type onto its TypeScript counterpart. */
 type FieldValue<T extends FieldType> = T extends "string"
   ? string
-  : T extends "number"
+  : T extends "integer" | "number"
     ? number
     : T extends "boolean"
       ? boolean
@@ -128,6 +136,8 @@ function isValid(value: unknown, type: FieldType): boolean {
   switch (type) {
     case "string":
       return typeof value === "string";
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value);
     case "number":
       // NaN and Infinity serialise as null through JSON and would arrive as a
       // number-typed hole, so they are rejected here rather than downstream.

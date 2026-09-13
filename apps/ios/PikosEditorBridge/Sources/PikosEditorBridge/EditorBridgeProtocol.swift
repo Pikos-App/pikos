@@ -147,9 +147,9 @@ public enum EditorBridge {
     /// the webview was built against so the host can refuse a mismatch loudly
     /// rather than misbehave quietly.
     public struct IncomingReadyPayload: Codable, Equatable {
-        public let protocolVersion: Double
+        public let protocolVersion: Int
 
-        public init(protocolVersion: Double) {
+        public init(protocolVersion: Int) {
             self.protocolVersion = protocolVersion
         }
     }

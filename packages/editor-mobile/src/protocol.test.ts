@@ -55,6 +55,18 @@ describe("message validation", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("rejects a non-integer where an integer is declared", () => {
+    // The protocol version is an integer so Swift compares it as an Int rather
+    // than a Double. A fractional value would mean the sender and receiver
+    // disagree about the type, not just the value.
+    const result = parseHostMessage({
+      payload: { protocolVersion: 1.5 },
+      type: "ready",
+      v: PROTOCOL_VERSION,
+    });
+    expect(result.ok).toBe(false);
+  });
+
   it("rejects non-objects", () => {
     for (const junk of [null, undefined, "string", 42, []]) {
       expect(parseHostMessage(junk).ok).toBe(false);
