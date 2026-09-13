@@ -398,6 +398,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_move_overdue_to_today(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_page_repeat(uint64_t ptr, RustBuffer page_id
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_PALETTE_COLORS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_PALETTE_COLORS
+RustBuffer uniffi_pikos_ffi_fn_method_workspace_palette_colors(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_ONLY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_ONLY
 uint64_t uniffi_pikos_ffi_fn_method_workspace_read_only(uint64_t ptr, RustCallStatus *_Nonnull out_status
@@ -446,6 +451,16 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_search(uint64_t ptr, RustBuffer qu
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_calendar_enabled(uint64_t ptr, RustBuffer sync_calendar_id, int8_t enabled
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_FOLDER_COLOR
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_FOLDER_COLOR
+uint64_t uniffi_pikos_ffi_fn_method_workspace_set_folder_color(uint64_t ptr, RustBuffer id, RustBuffer color
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_FOLDER_PARENT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_FOLDER_PARENT
+uint64_t uniffi_pikos_ffi_fn_method_workspace_set_folder_parent(uint64_t ptr, RustBuffer id, RustBuffer parent
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_REPEAT
@@ -1066,6 +1081,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_page_repeat(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_PALETTE_COLORS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_PALETTE_COLORS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_palette_colors(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_READ_ONLY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_READ_ONLY
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_read_only(void
@@ -1123,6 +1144,18 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_search(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_calendar_enabled(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_FOLDER_COLOR
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_FOLDER_COLOR
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_folder_color(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_FOLDER_PARENT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_FOLDER_PARENT
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_folder_parent(void
     
 );
 #endif

@@ -439,6 +439,42 @@ public final class WorkspaceStore {
         }
     }
 
+    /// The colours a folder can be, served by the workspace.
+    ///
+    /// Read once and held: it is a constant, and the only reason it crosses the
+    /// boundary at all is so that this app is not a fourth place the palette is
+    /// written down.
+    public var paletteColors: [PaletteColor] {
+        workspace?.paletteColors() ?? []
+    }
+
+    /// Set a folder's colour, or clear it with `nil`.
+    ///
+    /// Offered on a calendar's folder too. Its name and its placement belong to
+    /// the calendar; what colour it is here does not — and the write latches
+    /// that choice, so the next sync stops pulling the provider's colour back
+    /// over it.
+    public func setFolderColor(id: String, to color: String?) async {
+        guard let workspace else { return }
+        do {
+            _ = try await workspace.setFolderColor(id: id, color: color)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Nest a folder inside another, or pass `nil` to bring it back to the top.
+    public func setFolderParent(id: String, to parent: String?) async {
+        guard let workspace else { return }
+        do {
+            _ = try await workspace.setFolderParent(id: id, parent: parent)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Move a folder to the trash, taking its pages with it.
     ///
     /// If the deleted folder was the one being shown, the scope falls back to

@@ -464,12 +464,12 @@ naturally: write in the head before completing, and the clone captures them.
 | -------------------------------- | -------------- | -------------------------------------- | ------------------- | ------------------------- |
 | Create                           | ✅             | 🚫 sync enable path only               | ✅ `folders create` | ✅ folder manager         |
 | Rename                           | ✅             | 🚫 sync-owned, follows the calendar ⁴⁶ | —                   | ✅ folder manager         |
-| Recolor                          | ✅             | ✅ Pikos palette, user pick wins ⁴⁷    | —                   | ○                         |
-| Reparent / nest                  | ✅             | 🚫 both directions ⁴⁸                  | —                   | ○                         |
+| Recolor                          | ✅             | ✅ Pikos palette, user pick wins ⁴⁷    | —                   | ✅ folder manager ⁴⁷      |
+| Reparent / nest                  | ✅             | 🚫 both directions ⁴⁸                  | —                   | ✅ Move into… ⁴⁸          |
 | Delete                           | ✅             | 🚫 disconnect in settings ⁴⁸           | —                   | ✅ regular folders only   |
 | Enable / disable (per-calendar)  | —              | ⚠️ sync teardown, not hide ⁴⁹          | —                   | ✅ Settings → Calendars   |
 | Default page-list sort           | ✅ manual      | ⚠️ date ⁵⁰                             | —                   | ⚠️ no sort control at all |
-| Grouped under an account heading | —              | ✅ with >1 account ⁵¹                  | —                   | ○                         |
+| Grouped under an account heading | —              | ✅ with >1 account ⁵¹                  | —                   | ✅ same rule ⁵¹           |
 
 ⁴⁶ The sidebar item offers no rename. Sync owns the name end to end. Every re-discovery
 reconciles the folder to `sync_calendar.display_name` (`upsert_sync_calendar_impl` →
@@ -481,9 +481,18 @@ guard the name, so a programmatic rename lands. It is simply reverted on the nex
 following the provider's color until the user picks one from either surface (the sidebar
 context menu or the Calendar Sync panel row), after which `color_user_set` latches and
 re-discovery leaves it alone. **Both surfaces write `sync_calendar.color`**; the folder's
-column is a derived copy, so they cannot show different colors.
+column is a derived copy, so they cannot show different colors. iOS offers the same picker on
+the folder-manager row's colour dot, for a calendar's folder as well as a regular one — it is
+the one thing about such a folder that is not the calendar's. The palette itself is served by
+the workspace (`Workspace::palette_colors`) rather than written out in Swift: it is already
+defined in `@pikos/core` and mirrored in `pikos-core::colors`, graded against it, and a fourth
+copy is one more place a colour is added and does not arrive.
 ⁴⁸ `EXTERNAL_FOLDER_LOCKED_MSG`: "use the Calendar Sync settings to disconnect"
-(`crates/pikos-db/src/folders.rs`). Color stays editable.
+(`crates/pikos-db/src/folders.rs`). Color stays editable. iOS adds a cycle guard the data layer
+does not have: `set_folder_parent` refuses a folder moved inside itself or any of its own
+descendants, at any depth. Nothing downstream checks for that today, and the result is silent —
+both rows survive, neither is reachable from the top level, and the folders vanish from the
+sidebar with no error and no way back short of editing SQL.
 ⁴⁹ The Calendar Sync panel's per-calendar switch **enables/disables the sync itself. It is not
 a visibility toggle**. Disable runs a full teardown (`disable_sync_calendar` →
 `teardown_calendar`): bare mirrors are hard-deleted, owned pages detach in place, the sync
@@ -500,7 +509,10 @@ native folders keep manual.
 ⁵¹ With calendars from more than one account, the sidebar groups them under per-account
 headings (`useCalendarAccountGroups`); a single account renders headingless, and the heading
 disappears again when a disconnect leaves one. Same-named calendars on different accounts stay
-distinct. Rows are keyed by folder id, headed by account.
+distinct. Rows are keyed by folder id, headed by account. iOS's folder manager applies the same
+rule, with one addition: a calendar folder whose account has gone — a disconnect that left it
+behind — is still listed, under a plain "Calendars" heading, rather than dropping off a screen
+whose whole job is to show what exists.
 
 ## 8. Cross-cutting surfaces
 

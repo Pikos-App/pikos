@@ -1,0 +1,124 @@
+{
+  "defaults": [
+    {
+      "color": "#A6C8E8",
+      "provider": "caldav"
+    },
+    {
+      "color": "#A8CDB4",
+      "provider": "google"
+    },
+    {
+      "color": "#A6C8E8",
+      "provider": "unknown"
+    }
+  ],
+  "palette": [
+    {
+      "label": "Red",
+      "value": "#E5534B"
+    },
+    {
+      "label": "Orange",
+      "value": "#E09B4A"
+    },
+    {
+      "label": "Yellow",
+      "value": "#C4A143"
+    },
+    {
+      "label": "Green",
+      "value": "#57A872"
+    },
+    {
+      "label": "Teal",
+      "value": "#3DBDA7"
+    },
+    {
+      "label": "Blue",
+      "value": "#539BF5"
+    },
+    {
+      "label": "Purple",
+      "value": "#9B8AE8"
+    },
+    {
+      "label": "Pink",
+      "value": "#DB6C9E"
+    },
+    {
+      "label": "Rose",
+      "value": "#E8A6A1"
+    },
+    {
+      "label": "Peach",
+      "value": "#E8C3A0"
+    },
+    {
+      "label": "Sand",
+      "value": "#DCCB97"
+    },
+    {
+      "label": "Sage",
+      "value": "#A8CDB4"
+    },
+    {
+      "label": "Mint",
+      "value": "#A6DBCF"
+    },
+    {
+      "label": "Sky",
+      "value": "#A6C8E8"
+    },
+    {
+      "label": "Lavender",
+      "value": "#C3B8E8"
+    },
+    {
+      "label": "Blush",
+      "value": "#E8B6CE"
+    }
+  ],
+  "meta": {
+    "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
+    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",
+    "references": [
+      {
+        "id": "sun_noon",
+        "iso": "2026-03-15T12:00:00",
+        "note": "suite NOW — Sunday, midday"
+      },
+      {
+        "id": "wed_noon",
+        "iso": "2026-03-18T12:00:00",
+        "note": "midweek — forward-date rollover differs"
+      },
+      {
+        "id": "mon_morning",
+        "iso": "2026-03-16T08:00:00",
+        "note": "before 9am — 'today vs tomorrow' flips"
+      },
+      {
+        "id": "sat_late",
+        "iso": "2026-03-21T22:30:00",
+        "note": "after 8pm — 'tonight' rolls to tomorrow"
+      },
+      {
+        "id": "dst_eve",
+        "iso": "2026-03-28T12:00:00",
+        "note": "eve of EU DST change"
+      },
+      {
+        "id": "leap_day",
+        "iso": "2024-02-29T09:00:00",
+        "note": "leap day"
+      },
+      {
+        "id": "year_end",
+        "iso": "2026-12-31T23:00:00",
+        "note": "year boundary"
+      }
+    ],
+    "timezone": "UTC"
+  }
+}

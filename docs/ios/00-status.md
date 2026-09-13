@@ -101,6 +101,39 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**Folders can be coloured and nested, and calendar folders sit under their
+account.** Three §7 rows, and the interesting part is what each one turned up.
+
+The palette is now served by the workspace rather than written out in Swift.
+It was already defined in `@pikos/core` and mirrored in
+`pikos-calendar-sync::palette` for the provider-colour mapping; a Swift copy
+would have been the fourth, and the failure mode is a folder coloured on the
+phone in a shade the desktop's picker can neither show nor change. So
+`pikos-core::colors` holds it, graded against the TypeScript entry for entry
+_and in order_ — the rows are not arbitrary, and a shuffle that keeps every
+value would still put an imported calendar in a colour that shouts.
+`pikos-calendar-sync` keeps its own pastel eight, and the test that pins the
+row boundary now says so instead of claiming a sharing that does not exist.
+
+Reparenting needed a guard the data layer does not have. Nothing checks for a
+cycle, and the result is silent: move a folder inside its own child and both
+rows survive, neither is reachable from the top level, and the pair disappears
+from the sidebar with no error and no way back short of editing SQL. The
+workspace now refuses it at any depth — one level of checking passes the
+grandchild case — and the picker leaves the impossible choices out as well.
+
+The account headings follow the desktop's rule (`useCalendarAccountGroups`):
+none with one account, one per account with more. The addition is a folder
+whose account has gone, left behind by a disconnect — it stays listed under a
+plain "Calendars" heading rather than dropping off a screen whose entire job
+is to show what exists.
+
+Colour also needed a hex parser, which is small enough to look untestable and
+is not: every wrong answer is a plausible-looking colour, and a parser that
+shrugs and returns black turns one mistyped character into a folder dot that
+reads as deliberate. It refuses anything that is not six hex digits — no
+three-digit form, no alpha — because the workspace only ever serves `#RRGGBB`.
+
 **The overdue backlog clears in one tap.** "Move to today" sits on the Overdue
 section's own heading rather than in the toolbar, because it acts on that
 section and nothing else. `planMoveOverdueToToday` is ported to

@@ -240,6 +240,12 @@ pub struct Folder {
     pub name: String,
     pub color: Option<String>,
     pub sort_order: i64,
+    /// The folder this one is nested inside, if any.
+    ///
+    /// Needed to draw the tree and to keep a "move into" picker honest: without
+    /// it the only way to know a folder is already somebody's child is to guess,
+    /// and a picker that offers a folder its own descendant would build a cycle.
+    pub parent_id: Option<String>,
     /// True for a folder that mirrors a synced calendar.
     ///
     /// Pikos manages it, and the data layer enforces that: it cannot be deleted
@@ -493,6 +499,16 @@ pub struct UpcomingDay {
 pub struct CompletedPages {
     pub pages: Vec<PageSummary>,
     pub total: u32,
+}
+
+/// One colour a folder can be.
+#[derive(Debug, uniffi::Record)]
+pub struct PaletteColor {
+    /// Shown to a person, and read aloud by VoiceOver — a swatch with no name
+    /// is a colour nobody who cannot see it can pick.
+    pub label: String,
+    /// Stored on the folder, `#RRGGBB`.
+    pub value: String,
 }
 
 /// What clearing the overdue backlog did, and what it would take to undo.
@@ -1984,6 +2000,7 @@ impl Workspace {
             name: folder.name,
             color: folder.color,
             sort_order: folder.sort_order,
+            parent_id: folder.parent_id,
             is_external_calendar: folder.is_external_calendar,
         })
     }
@@ -2015,8 +2032,113 @@ impl Workspace {
             name: folder.name,
             color: folder.color,
             sort_order: folder.sort_order,
+            parent_id: folder.parent_id,
             is_external_calendar: folder.is_external_calendar,
         })
+    }
+
+    /// The colours a folder can be.
+    ///
+    /// Served rather than declared in Swift, because the palette is a design
+    /// decision with one home and three consumers already. A fourth copy is one
+    /// more place for a colour to be added and not arrive, and the symptom is a
+    /// folder coloured on the phone in a shade the desktop's picker cannot show
+    /// or change.
+    ///
+    /// Two rows of eight, in order: the saturated eight are what a person picks
+    /// for their own folders, and the pastel eight are where a synced calendar
+    /// is mapped, so an imported calendar reads as ambient beside work somebody
+    /// chose to colour. A picker that reorders them loses that.
+    pub fn palette_colors(&self) -> Vec<PaletteColor> {
+        pikos_core::PALETTE_COLORS
+            .iter()
+            .map(|c| PaletteColor {
+                label: c.label.to_string(),
+                value: c.value.to_string(),
+            })
+            .collect()
+    }
+
+    /// Set a folder's colour, or clear it.
+    ///
+    /// Offered on a calendar's folder as well as a regular one, and that is the
+    /// deliberate exception to everything else being locked: the name, the
+    /// placement and the existence of such a folder belong to the calendar, but
+    /// what colour it is in *this* app does not.
+    ///
+    /// The write goes through `update_folder_impl` rather than straight at the
+    /// column, because for a synced folder it has a second half: the pick
+    /// latches `sync_calendar.color_user_set`, and re-discovery then stops
+    /// pulling the provider's colour back over it. Writing the folder row alone
+    /// would hold until the next sync and then silently revert.
+    pub async fn set_folder_color(
+        &self,
+        id: String,
+        color: Option<String>,
+    ) -> Result<Folder, WorkspaceError> {
+        let folder = pikos_db::update_folder_impl(
+            &self.pool,
+            id,
+            pikos_db::FolderUpdate {
+                // The tri-state the data layer takes: absent leaves the column
+                // alone, null clears it, a string sets it. Collapsing the last
+                // two would make "no colour" unreachable.
+                color: Some(match color {
+                    Some(value) => serde_json::Value::String(value),
+                    None => serde_json::Value::Null,
+                }),
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(folder_of(folder))
+    }
+
+    /// Nest a folder inside another, or move it back to the top level.
+    ///
+    /// Refused in both directions for a folder a calendar owns — it cannot be
+    /// moved, and nothing can be filed under it. The data layer enforces that
+    /// and says so in the message; a picker that leaves external folders out is
+    /// the belt to this braces.
+    ///
+    /// `parent` of `None` means the top level.
+    pub async fn set_folder_parent(
+        &self,
+        id: String,
+        parent: Option<String>,
+    ) -> Result<Folder, WorkspaceError> {
+        if parent.as_deref() == Some(id.as_str()) {
+            return Err(WorkspaceError::InvalidInput {
+                message: "a folder cannot be inside itself".to_string(),
+            });
+        }
+        if let Some(parent_id) = parent.as_deref() {
+            if descendants_of(&self.pool, &id)
+                .await?
+                .contains(&parent_id.to_string())
+            {
+                // The cycle the data layer does not check for. Nesting a folder
+                // under its own child detaches the pair from the tree entirely:
+                // both rows still exist, and neither is reachable from the top
+                // level, so they vanish from the sidebar with no error.
+                return Err(WorkspaceError::InvalidInput {
+                    message: "a folder cannot be moved inside one of its own folders".to_string(),
+                });
+            }
+        }
+        let folder = pikos_db::update_folder_impl(
+            &self.pool,
+            id,
+            pikos_db::FolderUpdate {
+                parent_id: Some(match parent {
+                    Some(value) => serde_json::Value::String(value),
+                    None => serde_json::Value::Null,
+                }),
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(folder_of(folder))
     }
 
     /// Move a folder to the trash, taking its pages with it.
@@ -2049,6 +2171,7 @@ impl Workspace {
                 name: f.name,
                 color: f.color,
                 sort_order: f.sort_order,
+                parent_id: f.parent_id,
                 is_external_calendar: f.is_external_calendar,
             })
             .collect())
@@ -2174,6 +2297,7 @@ impl ReadOnlyWorkspace {
                 name: f.name,
                 color: f.color,
                 sort_order: f.sort_order,
+                parent_id: f.parent_id,
                 is_external_calendar: f.is_external_calendar,
             })
             .collect())
@@ -2387,6 +2511,43 @@ async fn filtered_search(
         .into_iter()
         .filter(|r| wants_done || r.status != "done")
         .collect())
+}
+
+/// Every folder beneath `id`, at any depth.
+///
+/// A free function, not a method: everything in `impl Workspace` is exported,
+/// and a helper on the Swift surface is a helper somebody calls.
+///
+/// Walks the whole list in memory rather than issuing a recursive query.
+/// Folder counts are in the tens, the list is one cheap read, and the
+/// `!contains` guard means a parent cycle already in the database terminates
+/// here instead of spinning.
+async fn descendants_of(pool: &sqlx::SqlitePool, id: &str) -> Result<Vec<String>, WorkspaceError> {
+    let folders = pikos_db::list_folders_impl(pool).await?;
+    let mut found: Vec<String> = Vec::new();
+    let mut frontier = vec![id.to_string()];
+    while let Some(current) = frontier.pop() {
+        for folder in &folders {
+            if folder.parent_id.as_deref() == Some(current.as_str()) && !found.contains(&folder.id)
+            {
+                found.push(folder.id.clone());
+                frontier.push(folder.id.clone());
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// The data layer's folder as the one that crosses the boundary.
+fn folder_of(folder: pikos_db::Folder) -> Folder {
+    Folder {
+        id: folder.id,
+        name: folder.name,
+        color: folder.color,
+        sort_order: folder.sort_order,
+        parent_id: folder.parent_id,
+        is_external_calendar: folder.is_external_calendar,
+    }
 }
 
 /// A page summary as a search hit, for the one path with no FTS row to show: a

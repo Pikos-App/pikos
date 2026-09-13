@@ -25,6 +25,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { defaultColorForProvider, PALETTE_COLORS } from "../src/constants/colors";
 import { parseInput } from "../src/nlp/parser";
 import { parseSearchQuery } from "../src/nlp/searchQuery";
 import { belongsToView, groupTodayPages, upcomingWindowEnd } from "../src/pages/pageFilters";
@@ -977,6 +978,18 @@ function main(): void {
     })
   );
 
+  // The palette is a constant, so this is not a behaviour capture — it is the
+  // design source of truth written where a Rust test can read it. Every surface
+  // that offers a colour picks from this list, and a copy that drifts puts a
+  // folder coloured on the phone in a shade the desktop's picker cannot show.
+  const colors = {
+    defaults: ["caldav", "google", "unknown"].map((provider) => ({
+      color: defaultColorForProvider(provider),
+      provider,
+    })),
+    palette: PALETTE_COLORS,
+  };
+
   const extractTextCases = EXTRACT_TEXT_CASES.map((c) => ({
     ...c,
     text: capture(() => extractText(c.doc)),
@@ -1002,6 +1015,10 @@ function main(): void {
     JSON.stringify({ meta, pages: VIEW_PAGES, viewCases }, null, 2) + "\n"
   );
   writeFileSync(
+    resolve(OUT_DIR, "colors.json"),
+    JSON.stringify({ ...colors, meta }, null, 2) + "\n"
+  );
+  writeFileSync(
     resolve(OUT_DIR, "overdue.json"),
     JSON.stringify({ cases: overdueCases, meta, pages: OVERDUE_PAGES }, null, 2) + "\n"
   );
@@ -1023,6 +1040,7 @@ function main(): void {
   process.stdout.write(
     `parser.json:     ${parserCases.length} cases (${inputs.length} inputs × ${REFERENCES.length} refs), ${failures} throwing\n` +
       `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion, ${snapCases.length} snap, ${degradeCases.length} degrade\n` +
+      `colors.json:     ${colors.palette.length} palette entries, ${colors.defaults.length} provider defaults\n` +
       `overdue.json:    ${overdueCases.length} reference times × ${OVERDUE_PAGES.length} pages\n` +
       `search.json:     ${searchCases.length} cases (${searchInputs.length} queries × ${REFERENCES.length} refs)\n` +
       `text.json:       ${extractTextCases.length} extractText\n` +

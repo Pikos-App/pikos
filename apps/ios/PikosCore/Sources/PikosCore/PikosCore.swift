@@ -1097,6 +1097,22 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func pageRepeat(pageId: String) async throws  -> PageRepeat
     
     /**
+     * The colours a folder can be.
+     *
+     * Served rather than declared in Swift, because the palette is a design
+     * decision with one home and three consumers already. A fourth copy is one
+     * more place for a colour to be added and not arrive, and the symptom is a
+     * folder coloured on the phone in a shade the desktop's picker cannot show
+     * or change.
+     *
+     * Two rows of eight, in order: the saturated eight are what a person picks
+     * for their own folders, and the pastel eight are where a synced calendar
+     * is mapped, so an imported calendar reads as ambient beside work somebody
+     * chose to colour. A picker that reorders them loses that.
+     */
+    func paletteColors()  -> [PaletteColor]
+    
+    /**
      * A read-only handle onto the same workspace, for passing to code that
      * must not write.
      */
@@ -1172,6 +1188,34 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * is why it is worth confirming rather than doing quietly.
      */
     func setCalendarEnabled(syncCalendarId: String, enabled: Bool) async throws  -> SyncCalendar
+    
+    /**
+     * Set a folder's colour, or clear it.
+     *
+     * Offered on a calendar's folder as well as a regular one, and that is the
+     * deliberate exception to everything else being locked: the name, the
+     * placement and the existence of such a folder belong to the calendar, but
+     * what colour it is in *this* app does not.
+     *
+     * The write goes through `update_folder_impl` rather than straight at the
+     * column, because for a synced folder it has a second half: the pick
+     * latches `sync_calendar.color_user_set`, and re-discovery then stops
+     * pulling the provider's colour back over it. Writing the folder row alone
+     * would hold until the next sync and then silently revert.
+     */
+    func setFolderColor(id: String, color: String?) async throws  -> Folder
+    
+    /**
+     * Nest a folder inside another, or move it back to the top level.
+     *
+     * Refused in both directions for a folder a calendar owns — it cannot be
+     * moved, and nothing can be filed under it. The data layer enforces that
+     * and says so in the message; a picker that leaves external folders out is
+     * the belt to this braces.
+     *
+     * `parent` of `None` means the top level.
+     */
+    func setFolderParent(id: String, parent: String?) async throws  -> Folder
     
     /**
      * Make a page repeat, or change how it already does.
@@ -1971,6 +2015,29 @@ open func pageRepeat(pageId: String)async throws  -> PageRepeat  {
 }
     
     /**
+     * The colours a folder can be.
+     *
+     * Served rather than declared in Swift, because the palette is a design
+     * decision with one home and three consumers already. A fourth copy is one
+     * more place for a colour to be added and not arrive, and the symptom is a
+     * folder coloured on the phone in a shade the desktop's picker cannot show
+     * or change.
+     *
+     * Two rows of eight, in order: the saturated eight are what a person picks
+     * for their own folders, and the pastel eight are where a synced calendar
+     * is mapped, so an imported calendar reads as ambient beside work somebody
+     * chose to colour. A picker that reorders them loses that.
+     */
+open func paletteColors() -> [PaletteColor]  {
+    return try!  FfiConverterSequenceTypePaletteColor.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_method_workspace_palette_colors(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * A read-only handle onto the same workspace, for passing to code that
      * must not write.
      */
@@ -2176,6 +2243,62 @@ open func setCalendarEnabled(syncCalendarId: String, enabled: Bool)async throws 
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSyncCalendar_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Set a folder's colour, or clear it.
+     *
+     * Offered on a calendar's folder as well as a regular one, and that is the
+     * deliberate exception to everything else being locked: the name, the
+     * placement and the existence of such a folder belong to the calendar, but
+     * what colour it is in *this* app does not.
+     *
+     * The write goes through `update_folder_impl` rather than straight at the
+     * column, because for a synced folder it has a second half: the pick
+     * latches `sync_calendar.color_user_set`, and re-discovery then stops
+     * pulling the provider's colour back over it. Writing the folder row alone
+     * would hold until the next sync and then silently revert.
+     */
+open func setFolderColor(id: String, color: String?)async throws  -> Folder  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_folder_color(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id),FfiConverterOptionString.lower(color)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFolder_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Nest a folder inside another, or move it back to the top level.
+     *
+     * Refused in both directions for a folder a calendar owns — it cannot be
+     * moved, and nothing can be filed under it. The data layer enforces that
+     * and says so in the message; a picker that leaves external folders out is
+     * the belt to this braces.
+     *
+     * `parent` of `None` means the top level.
+     */
+open func setFolderParent(id: String, parent: String?)async throws  -> Folder  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_folder_parent(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id),FfiConverterOptionString.lower(parent)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFolder_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -3072,6 +3195,14 @@ public struct Folder: Equatable, Hashable {
     public var color: String?
     public var sortOrder: Int64
     /**
+     * The folder this one is nested inside, if any.
+     *
+     * Needed to draw the tree and to keep a "move into" picker honest: without
+     * it the only way to know a folder is already somebody's child is to guess,
+     * and a picker that offers a folder its own descendant would build a cycle.
+     */
+    public var parentId: String?
+    /**
      * True for a folder that mirrors a synced calendar.
      *
      * Pikos manages it, and the data layer enforces that: it cannot be deleted
@@ -3085,6 +3216,13 @@ public struct Folder: Equatable, Hashable {
     // declare one manually.
     public init(id: String, name: String, color: String?, sortOrder: Int64, 
         /**
+         * The folder this one is nested inside, if any.
+         *
+         * Needed to draw the tree and to keep a "move into" picker honest: without
+         * it the only way to know a folder is already somebody's child is to guess,
+         * and a picker that offers a folder its own descendant would build a cycle.
+         */parentId: String?, 
+        /**
          * True for a folder that mirrors a synced calendar.
          *
          * Pikos manages it, and the data layer enforces that: it cannot be deleted
@@ -3096,6 +3234,7 @@ public struct Folder: Equatable, Hashable {
         self.name = name
         self.color = color
         self.sortOrder = sortOrder
+        self.parentId = parentId
         self.isExternalCalendar = isExternalCalendar
     }
 
@@ -3119,6 +3258,7 @@ public struct FfiConverterTypeFolder: FfiConverterRustBuffer {
                 name: FfiConverterString.read(from: &buf), 
                 color: FfiConverterOptionString.read(from: &buf), 
                 sortOrder: FfiConverterInt64.read(from: &buf), 
+                parentId: FfiConverterOptionString.read(from: &buf), 
                 isExternalCalendar: FfiConverterBool.read(from: &buf)
         )
     }
@@ -3128,6 +3268,7 @@ public struct FfiConverterTypeFolder: FfiConverterRustBuffer {
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterOptionString.write(value.color, into: &buf)
         FfiConverterInt64.write(value.sortOrder, into: &buf)
+        FfiConverterOptionString.write(value.parentId, into: &buf)
         FfiConverterBool.write(value.isExternalCalendar, into: &buf)
     }
 }
@@ -4043,6 +4184,77 @@ public func FfiConverterTypePageSummary_lift(_ buf: RustBuffer) throws -> PageSu
 #endif
 public func FfiConverterTypePageSummary_lower(_ value: PageSummary) -> RustBuffer {
     return FfiConverterTypePageSummary.lower(value)
+}
+
+
+/**
+ * One colour a folder can be.
+ */
+public struct PaletteColor: Equatable, Hashable {
+    /**
+     * Shown to a person, and read aloud by VoiceOver — a swatch with no name
+     * is a colour nobody who cannot see it can pick.
+     */
+    public var label: String
+    /**
+     * Stored on the folder, `#RRGGBB`.
+     */
+    public var value: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Shown to a person, and read aloud by VoiceOver — a swatch with no name
+         * is a colour nobody who cannot see it can pick.
+         */label: String, 
+        /**
+         * Stored on the folder, `#RRGGBB`.
+         */value: String) {
+        self.label = label
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PaletteColor: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePaletteColor: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PaletteColor {
+        return
+            try PaletteColor(
+                label: FfiConverterString.read(from: &buf), 
+                value: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PaletteColor, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.label, into: &buf)
+        FfiConverterString.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePaletteColor_lift(_ buf: RustBuffer) throws -> PaletteColor {
+    return try FfiConverterTypePaletteColor.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePaletteColor_lower(_ value: PaletteColor) -> RustBuffer {
+    return FfiConverterTypePaletteColor.lower(value)
 }
 
 
@@ -6578,6 +6790,31 @@ fileprivate struct FfiConverterSequenceTypePageSummary: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePaletteColor: FfiConverterRustBuffer {
+    typealias SwiftType = [PaletteColor]
+
+    public static func write(_ value: [PaletteColor], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePaletteColor.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PaletteColor] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PaletteColor]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePaletteColor.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeQuickAddInput: FfiConverterRustBuffer {
     typealias SwiftType = [QuickAddInput]
 
@@ -7097,6 +7334,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_page_repeat() != 43934) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_palette_colors() != 35084) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_read_only() != 39832) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7125,6 +7365,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_calendar_enabled() != 65191) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_folder_color() != 15940) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_folder_parent() != 57680) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_page_repeat() != 26372) {

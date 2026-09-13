@@ -4060,3 +4060,165 @@ async fn undoing_the_bulk_move_puts_every_page_back_where_it_was() {
         "the end comes back too, or undo silently shortens the meeting"
     );
 }
+
+// ─── Folder colour and nesting ───────────────────────────────────────────────
+
+/// The palette is served, not declared on each platform.
+#[tokio::test]
+async fn the_palette_comes_from_the_workspace_in_the_order_it_is_drawn() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let palette = ws.palette_colors();
+    assert_eq!(palette.len(), 16, "two rows of eight");
+    assert_eq!(palette[0].label, "Red");
+    assert_eq!(palette[0].value, "#E5534B");
+    assert_eq!(
+        palette[8].label, "Rose",
+        "the pastel row starts at nine — a synced calendar is mapped into it, \
+         and reordering puts an imported calendar in a colour that shouts"
+    );
+    assert!(
+        palette
+            .iter()
+            .all(|c| c.value.starts_with('#') && c.value.len() == 7),
+        "every entry is a hex a picker can render"
+    );
+}
+
+#[tokio::test]
+async fn a_folder_can_be_coloured_and_uncoloured() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    assert_eq!(folder.color, None, "a new folder has no colour");
+
+    let painted = ws
+        .set_folder_color(folder.id.clone(), Some("#539BF5".to_string()))
+        .await
+        .unwrap();
+    assert_eq!(painted.color.as_deref(), Some("#539BF5"));
+
+    // Clearing has to be reachable, which is the whole reason the argument is
+    // an option rather than a string.
+    let cleared = ws.set_folder_color(folder.id, None).await.unwrap();
+    assert_eq!(cleared.color, None);
+}
+
+/// The deliberate exception to a calendar's folder being untouchable.
+///
+/// Its name, its placement and its existence belong to the calendar. What
+/// colour it is in *this* app does not, and the desktop offers the same.
+#[tokio::test]
+async fn a_calendars_folder_can_still_be_recoloured() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws
+        .create_folder("Book club".to_string(), None)
+        .await
+        .unwrap();
+    mark_as_calendar_folder(&tmp.path, &folder.id).await;
+
+    let painted = ws
+        .set_folder_color(folder.id.clone(), Some("#A6DBCF".to_string()))
+        .await
+        .expect("recolouring a calendar's folder is allowed");
+    assert_eq!(painted.color.as_deref(), Some("#A6DBCF"));
+
+    // And the rest of it stays locked, so the exception is an exception.
+    assert!(ws.set_folder_parent(folder.id.clone(), None).await.is_err());
+    assert!(ws.trash_folder(folder.id).await.is_err());
+}
+
+#[tokio::test]
+async fn a_folder_can_be_nested_and_brought_back_out() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let parent = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let child = ws
+        .create_folder("Invoices".to_string(), None)
+        .await
+        .unwrap();
+    assert_eq!(child.parent_id, None);
+
+    let nested = ws
+        .set_folder_parent(child.id.clone(), Some(parent.id.clone()))
+        .await
+        .unwrap();
+    assert_eq!(nested.parent_id.as_deref(), Some(parent.id.as_str()));
+
+    let freed = ws.set_folder_parent(child.id, None).await.unwrap();
+    assert_eq!(freed.parent_id, None, "and back to the top level");
+}
+
+/// The two shapes of cycle, both of which lose the folders silently.
+///
+/// Nothing in the data layer checks for either. A folder nested inside itself,
+/// or inside one of its own children, still has both rows in the database and
+/// neither is reachable from the top level — so they disappear from the sidebar
+/// with no error and no way back short of editing SQL.
+#[tokio::test]
+async fn a_folder_cannot_be_moved_inside_itself_or_its_own_children() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let top = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let middle = ws.create_folder("Clients".to_string(), None).await.unwrap();
+    let bottom = ws.create_folder("Acme".to_string(), None).await.unwrap();
+    ws.set_folder_parent(middle.id.clone(), Some(top.id.clone()))
+        .await
+        .unwrap();
+    ws.set_folder_parent(bottom.id.clone(), Some(middle.id.clone()))
+        .await
+        .unwrap();
+
+    assert!(
+        ws.set_folder_parent(top.id.clone(), Some(top.id.clone()))
+            .await
+            .is_err(),
+        "inside itself"
+    );
+    assert!(
+        ws.set_folder_parent(top.id.clone(), Some(middle.id.clone()))
+            .await
+            .is_err(),
+        "inside its own child"
+    );
+    assert!(
+        ws.set_folder_parent(top.id.clone(), Some(bottom.id.clone()))
+            .await
+            .is_err(),
+        "inside its own grandchild — one level of checking is not enough"
+    );
+
+    // The tree is unchanged by any of the three refusals.
+    let folders = ws.list_folders().await.unwrap();
+    let placed = |id: &str| {
+        folders
+            .iter()
+            .find(|f| f.id == id)
+            .and_then(|f| f.parent_id.clone())
+    };
+    assert_eq!(placed(&top.id), None);
+    assert_eq!(placed(&middle.id), Some(top.id.clone()));
+    assert_eq!(placed(&bottom.id), Some(middle.id));
+
+    // A sibling is not a descendant, so the guard must not refuse that.
+    let sibling = ws
+        .create_folder("Personal".to_string(), None)
+        .await
+        .unwrap();
+    ws.set_folder_parent(sibling.id, Some(top.id))
+        .await
+        .expect("nesting an unrelated folder is ordinary");
+}
+
+/// Flags a folder the way the reconciler does, which is the only writer of this
+/// column — there is no iOS-side way to create one.
+async fn mark_as_calendar_folder(path: &str, folder_id: &str) {
+    let pool = pikos_db::open_pool(path).await.unwrap();
+    sqlx::query("UPDATE folders SET is_external_calendar = 1 WHERE id = ?")
+        .bind(folder_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+}

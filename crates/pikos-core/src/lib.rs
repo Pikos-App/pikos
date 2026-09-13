@@ -13,6 +13,7 @@
 //! from Swift.
 
 pub mod calendar;
+pub mod colors;
 pub mod dates;
 pub mod deep_link;
 pub mod nlp;
@@ -24,6 +25,7 @@ pub mod text;
 pub mod views;
 
 pub use calendar::LayoutPage;
+pub use colors::{default_color_for_provider, PaletteColor, PALETTE_COLORS};
 pub use dates::{
     format_date_only, format_local_iso, is_all_day_iso, is_timed_iso, parse_local_iso,
 };
