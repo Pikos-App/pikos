@@ -101,6 +101,20 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**A repeat can be changed or switched off.** Quick add could make a page repeat
+and nothing could change it afterwards, so "every Monday" typed once was every
+Monday forever and the only way out was deleting the page. The picker covers
+frequency, interval and weekdays; anything richer is shown read-only.
+
+Which is which took two guards, not one, and a test caught the difference.
+`rrule_edit_would_degrade` asks whether a _full_ editor could round-trip the
+rule — and "the last Friday of the month" passes, because `RecurrenceOptions`
+carries `BYSETPOS`. A picker with nowhere to put it would then have offered it
+for editing and saved back "every month on a Friday". `repeat_from` is the
+second, narrower envelope, and the read and the write apply the identical test
+so the UI cannot call a rule uneditable while the workspace edits it for anyone
+asking directly.
+
 **Priority and tags are editable too.** Both were creation-only for the same
 reason the date was: quick add's line set them and nothing changed them
 afterwards. Priority is a submenu beside Move to Folder — with "None" as a real

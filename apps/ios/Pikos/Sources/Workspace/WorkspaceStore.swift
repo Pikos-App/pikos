@@ -540,6 +540,53 @@ public final class WorkspaceStore {
         }
     }
 
+    /// What a page repeats as, and whether this app may change it.
+    ///
+    /// Fetched on demand rather than carried on every summary: a repeat is read
+    /// when somebody opens the picker, and a rule row per listed page would be
+    /// a join on every refresh for a field almost no row uses.
+    public func pageRepeat(for pageId: String) async -> PageRepeat? {
+        guard let workspace else { return nil }
+        do {
+            return try await workspace.pageRepeat(pageId: pageId)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Make a page repeat, or change how it already does.
+    ///
+    /// Returns whether it took, so a sheet knows whether to close. The workspace
+    /// refuses a page with no date, a rule it cannot represent, and one a
+    /// calendar owns — and each refusal carries a sentence worth showing.
+    @discardableResult
+    public func setRepeat(pageId: String, to value: Repeat) async -> Bool {
+        guard let workspace else { return false }
+        do {
+            try await workspace.setPageRepeat(pageId: pageId, pattern: value)
+            await refresh()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Stop a page repeating. The page stays, on the date it was last on.
+    @discardableResult
+    public func removeRepeat(pageId: String) async -> Bool {
+        guard let workspace else { return false }
+        do {
+            try await workspace.removePageRepeat(pageId: pageId)
+            await refresh()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     /// Take a page's date away, leaving any recurrence intact.
     public func clearDate(pageId: String) async {
         guard let workspace else { return }

@@ -409,6 +409,56 @@ impl From<pikos_calendar_sync::CalendarSyncResult> for CalendarSyncResult {
     }
 }
 
+// ─── Repeats ─────────────────────────────────────────────────────────────────
+
+/// How often a page repeats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum RepeatFreq {
+    Daily,
+    Weekly,
+    Monthly,
+    Yearly,
+}
+
+/// A repeat in the shape an editor can offer: a frequency, how many of them
+/// between runs, and — for a weekly repeat — which days.
+///
+/// Deliberately narrower than an RRULE. This is the set of rules a picker can
+/// round-trip without losing anything; a rule carrying `BYSETPOS`, `BYWEEKNO`
+/// or an ordinal weekday cannot be described here, and [`PageRepeat::Fixed`] is
+/// what says so instead of quietly flattening it.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Repeat {
+    pub freq: RepeatFreq,
+    /// 1 is every day/week/month/year, 2 is every other, and so on.
+    pub interval: u32,
+    /// Weekdays for a weekly repeat: 0 is Monday through 6 is Sunday, matching
+    /// what the rule layer stores. Empty for every other frequency, and for a
+    /// weekly repeat that names no day — which means "the day it started on".
+    ///
+    /// `u32` rather than the `u8` the rule layer uses, because UniFFI maps a
+    /// `Vec<u8>` to Swift's `Data`. These are weekday numbers, not bytes, and a
+    /// caller should not have to build a byte buffer to say "Tuesday".
+    pub weekdays: Vec<u32>,
+}
+
+/// What a page's repeat is, and whether this editor may change it.
+#[derive(Debug, uniffi::Enum)]
+pub enum PageRepeat {
+    /// The page does not repeat.
+    Never,
+    /// It repeats, and the rule fits [`Repeat`] exactly.
+    Editable { repeat: Repeat, label: String },
+    /// It repeats in a way the picker cannot represent.
+    ///
+    /// Shown, never edited. Offering an editor here is not a cosmetic bug: the
+    /// user nudges the interval, the rule is rebuilt through a shape that
+    /// cannot hold the terms it had, and the rule that was theirs is gone with
+    /// nothing logged. `rrule_edit_would_degrade` is the guard, and a rule a
+    /// calendar owns lands here too — that one is upstream's to change.
+    Fixed { label: String },
+}
+
 /// Today's list, already split into the two sections it is drawn as.
 ///
 /// Split here rather than in the shell because the rule is not a rendering
@@ -1177,6 +1227,172 @@ impl Workspace {
         }
     }
 
+    // ─── Repeats ─────────────────────────────────────────────────────────
+
+    /// What a page repeats as, and whether this editor may change it.
+    pub async fn page_repeat(&self, page_id: String) -> Result<PageRepeat, WorkspaceError> {
+        let Some(rule) = pikos_db::get_recurrence_rule_impl(&self.pool, &page_id).await? else {
+            return Ok(PageRepeat::Never);
+        };
+        // A label for anything, including the rules the picker cannot hold: a
+        // reader who is not allowed to change a repeat should still be told
+        // what it is.
+        let label =
+            pikos_recurrence::rrule_to_label(&rule.rrule).unwrap_or_else(|| "Repeats".to_string());
+
+        // Two separate reasons to lock, and both have to be checked. The guard
+        // covers what the picker cannot express; the sync lock covers what is
+        // not ours to express at all. `schedule_locked` is derived by the
+        // summary query, so reading it costs the page fetch and nothing more.
+        let locked = pikos_db::get_page(&self.pool, &page_id)
+            .await?
+            .is_some_and(|page| page.schedule_locked);
+        if locked || pikos_recurrence::rrule_edit_would_degrade(&rule.rrule) {
+            return Ok(PageRepeat::Fixed { label });
+        }
+
+        match pikos_recurrence::parse_rrule(&rule.rrule).and_then(repeat_from) {
+            Some(repeat) => Ok(PageRepeat::Editable { repeat, label }),
+            None => Ok(PageRepeat::Fixed { label }),
+        }
+    }
+
+    /// Make a page repeat, or change how it already does.
+    ///
+    /// Creates the rule when there is none and rewrites it when there is, so a
+    /// caller does not have to know which — and so the two cannot drift apart,
+    /// which is what a second rule row on one page would be.
+    ///
+    /// The page needs a date first. A repeat is a pattern *from* somewhere, and
+    /// the anchor is what every occurrence is derived from; inventing one here
+    /// would put the series on a day the user never chose.
+    ///
+    /// Refused when the existing rule is one this picker cannot represent, and
+    /// when a calendar owns it. `page_repeat` reports both as `Fixed` and
+    /// applies the identical test, so a UI that asks first never reaches
+    /// either — but a stale list row can, which is why they are checked here
+    /// rather than trusted to the caller.
+    pub async fn set_page_repeat(
+        &self,
+        page_id: String,
+        // Named `pattern` rather than `repeat`: `repeat` is a Swift keyword, and
+        // a generated argument label that has to be back-quoted at every call
+        // site is a papercut for nothing.
+        pattern: Repeat,
+    ) -> Result<(), WorkspaceError> {
+        let page = pikos_db::get_page(&self.pool, &page_id)
+            .await?
+            .ok_or_else(|| WorkspaceError::NotFound {
+                entity: "page".into(),
+                id: page_id.clone(),
+            })?;
+        let Some(anchor) = page.scheduled_start.clone() else {
+            return Err(WorkspaceError::Refused {
+                message: "Give the page a date first — a repeat needs somewhere to start."
+                    .to_string(),
+            });
+        };
+        if pattern.interval == 0 {
+            return Err(WorkspaceError::InvalidInput {
+                message: "a repeat has to happen at least every 1".to_string(),
+            });
+        }
+        if pattern.weekdays.iter().any(|day| *day > 6) {
+            return Err(WorkspaceError::InvalidInput {
+                message: "weekdays are 0 (Monday) through 6 (Sunday)".to_string(),
+            });
+        }
+
+        let rrule = pikos_recurrence::build_rrule(&pikos_recurrence::RecurrenceOptions {
+            freq: Some(match pattern.freq {
+                RepeatFreq::Daily => pikos_recurrence::Freq::Daily,
+                RepeatFreq::Weekly => pikos_recurrence::Freq::Weekly,
+                RepeatFreq::Monthly => pikos_recurrence::Freq::Monthly,
+                RepeatFreq::Yearly => pikos_recurrence::Freq::Yearly,
+            }),
+            interval: pattern.interval,
+            byweekday: match pattern.freq {
+                // Weekdays mean nothing on a monthly or yearly repeat, and the
+                // engine rejects a rule that carries them there. Dropped rather
+                // than passed through, so switching a weekly repeat to monthly
+                // does not produce a rule that fails to enumerate.
+                RepeatFreq::Weekly if !pattern.weekdays.is_empty() => {
+                    Some(pattern.weekdays.iter().map(|d| *d as u8).collect())
+                }
+                _ => None,
+            },
+            ..Default::default()
+        });
+
+        match pikos_db::get_recurrence_rule_impl(&self.pool, &page_id).await? {
+            Some(existing) => {
+                // The same envelope the read applies, not the wider one.
+                // `rrule_edit_would_degrade` alone would let "the last
+                // Friday of the month" through here — it round-trips
+                // fine — and this write would save it back as "every
+                // month on a Friday". The read and the write have to
+                // refuse the same set, or the UI calls a rule uneditable
+                // while the workspace edits it for anyone who asks
+                // directly.
+                let representable = pikos_recurrence::parse_rrule(&existing.rrule)
+                    .and_then(repeat_from)
+                    .is_some();
+                if !representable {
+                    return Err(WorkspaceError::Refused {
+                        message: "This repeat is more detailed than Pikos can edit here. Change it on the desktop."
+                            .to_string(),
+                    });
+                }
+                // The anchor moves with the rule: a weekly repeat switched to
+                // Wednesdays has to sit on a Wednesday, or the derivation drags
+                // the head back on the next recompute.
+                let (start, end) = pikos_recurrence::snap_schedule_to_rule(
+                    &rrule,
+                    &anchor,
+                    page.scheduled_end.as_deref(),
+                );
+                pikos_db::update_recurrence_rule_impl(
+                    &self.pool,
+                    existing.id,
+                    pikos_db::RecurrenceRuleUpdate {
+                        rrule: Some(rrule),
+                        scheduled_start: Some(start),
+                        scheduled_end: Some(match end {
+                            Some(value) => serde_json::Value::String(value),
+                            None => serde_json::Value::Null,
+                        }),
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            }
+            None => {
+                self.set_recurrence(
+                    page_id,
+                    rrule,
+                    anchor,
+                    page.scheduled_end.clone(),
+                    pikos_db::device_zone().to_string(),
+                )
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Stop a page repeating, leaving the page itself where it is.
+    ///
+    /// Not a delete: the head survives as an ordinary one-off on the date it
+    /// was last sitting on, which is what somebody switching "Repeat" to
+    /// "Never" means. Refused on a calendar's rule, which is upstream's.
+    pub async fn remove_page_repeat(&self, page_id: String) -> Result<(), WorkspaceError> {
+        let Some(rule) = pikos_db::get_recurrence_rule_impl(&self.pool, &page_id).await? else {
+            return Ok(());
+        };
+        pikos_db::delete_recurrence_rule_impl(&self.pool, &rule.id).await?;
+        Ok(())
+    }
+
     /// Give a page a date, replacing whatever one-off date it already had.
     ///
     /// The everyday "move this to Thursday". Distinct from
@@ -1829,6 +2045,56 @@ async fn calendar_range_impl(
 }
 
 /// One entry, from a page plus whichever schedule this occurrence has.
+/// A parsed rule as a [`Repeat`], or `None` when the picker cannot hold it.
+///
+/// A second, narrower envelope than `rrule_edit_would_degrade`, and the two
+/// answer different questions. That guard asks whether a *full* editor could
+/// round-trip the rule; this asks whether *this* picker can — frequency,
+/// interval, and weekdays for a weekly repeat, and nothing else.
+///
+/// The distinction is not academic, and a test caught it being missed.
+/// `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1` — "the last Friday of the month" —
+/// round-trips perfectly, so the guard passes it; a picker with nowhere to put
+/// `BYSETPOS` would then have offered it for editing and saved back "every
+/// month on a Friday". Every term below is one this shape would silently drop.
+fn repeat_from(options: pikos_recurrence::RecurrenceOptions) -> Option<Repeat> {
+    let freq = match options.freq? {
+        pikos_recurrence::Freq::Daily => RepeatFreq::Daily,
+        pikos_recurrence::Freq::Weekly => RepeatFreq::Weekly,
+        pikos_recurrence::Freq::Monthly => RepeatFreq::Monthly,
+        pikos_recurrence::Freq::Yearly => RepeatFreq::Yearly,
+    };
+
+    // "The first Monday", "the last Friday", "the 15th", "every March", a
+    // non-default week start, and the two ways a rule can stop. A picker with
+    // no control for any of them must not claim to be editing the rule.
+    let unrepresentable = options.bysetpos.is_some_and(|v| !v.is_empty())
+        || options.bymonthday.is_some_and(|v| !v.is_empty())
+        || options.bymonth.is_some_and(|v| !v.is_empty())
+        || options
+            .byweekday_ordinals
+            .is_some_and(|v| v.iter().any(Option::is_some))
+        || options.wkst.is_some()
+        || options.count.is_some()
+        || options.until.is_some();
+    if unrepresentable {
+        return None;
+    }
+
+    let weekdays = options.byweekday.unwrap_or_default();
+    // Weekdays on anything but a weekly rule say something this shape cannot,
+    // and would be dropped on the way back out.
+    if !weekdays.is_empty() && freq != RepeatFreq::Weekly {
+        return None;
+    }
+
+    Some(Repeat {
+        freq,
+        interval: options.interval.max(1),
+        weekdays: weekdays.into_iter().map(u32::from).collect(),
+    })
+}
+
 fn entry_of(
     page: &pikos_db::PageSummary,
     key: String,

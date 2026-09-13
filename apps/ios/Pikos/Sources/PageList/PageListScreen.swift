@@ -17,6 +17,7 @@ struct PageListScreen: View {
     @State private var renaming: PageSummary?
     @State private var scheduling: Scheduling?
     @State private var tagging: Tagging?
+    @State private var repeating: Repeating?
 
     /// A wrapper rather than a conformance on the generated `PageSummary`.
     ///
@@ -32,6 +33,12 @@ struct PageListScreen: View {
 
     /// The same wrapper, for the same reason.
     private struct Tagging: Identifiable {
+        let page: PageSummary
+        var id: String { page.id }
+    }
+
+    /// And again.
+    private struct Repeating: Identifiable {
         let page: PageSummary
         var id: String { page.id }
     }
@@ -87,6 +94,9 @@ struct PageListScreen: View {
         }
         .sheet(item: $tagging) { target in
             TagsSheet(page: target.page)
+        }
+        .sheet(item: $repeating) { target in
+            RepeatSheet(page: target.page)
         }
         .alert(
             "Something went wrong",
@@ -283,6 +293,15 @@ struct PageListScreen: View {
                 tagging = Tagging(page: page)
             } label: {
                 Label("Tags…", systemImage: "tag")
+            }
+
+            // Offered on a repeating page too — it is the way to stop one — and
+            // on a calendar's, which the sheet shows read-only. What the user
+            // may change is the workspace's answer, not this menu's guess.
+            Button {
+                repeating = Repeating(page: page)
+            } label: {
+                Label("Repeat…", systemImage: "repeat")
             }
 
             // Nested rather than a sheet: a move is one decision from a short

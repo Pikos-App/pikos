@@ -6,8 +6,8 @@
 //! error, and the read-only handle that must actually be read-only.
 
 use pikos_ffi::workspace::{
-    CompletedScope, FolderAssignment, FolderScope, NewPage, PageEdit, PageQuery, ReadOnlyWorkspace,
-    Workspace, WorkspaceError,
+    CompletedScope, FolderAssignment, FolderScope, NewPage, PageEdit, PageQuery, PageRepeat,
+    ReadOnlyWorkspace, Repeat, RepeatFreq, Workspace, WorkspaceError,
 };
 
 /// A workspace in a fresh temporary file.
@@ -2524,4 +2524,447 @@ async fn a_malformed_date_is_refused() {
             other => panic!("expected InvalidInput for {bad:?}, got {other:?}"),
         }
     }
+}
+
+// ─── Repeats ─────────────────────────────────────────────────────────────────
+
+/// A page that does not repeat says so, rather than reporting a repeat of
+/// nothing.
+#[tokio::test]
+async fn a_plain_page_has_no_repeat() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Once")).await.unwrap();
+    assert!(matches!(
+        ws.page_repeat(page.id).await.unwrap(),
+        PageRepeat::Never
+    ));
+}
+
+/// Setting a repeat, reading it back, and changing it — the round-trip the
+/// picker depends on. A shape that does not survive it would show the user
+/// something other than what they saved.
+#[tokio::test]
+async fn a_repeat_survives_being_read_back_and_changed() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Standup")
+        })
+        .await
+        .unwrap();
+
+    ws.set_page_repeat(
+        page.id.clone(),
+        Repeat {
+            freq: RepeatFreq::Weekly,
+            interval: 2,
+            weekdays: vec![0, 2],
+        },
+    )
+    .await
+    .unwrap();
+
+    match ws.page_repeat(page.id.clone()).await.unwrap() {
+        PageRepeat::Editable { repeat, label } => {
+            assert_eq!(repeat.freq, RepeatFreq::Weekly);
+            assert_eq!(repeat.interval, 2);
+            assert_eq!(repeat.weekdays, vec![0u32, 2]);
+            assert!(!label.is_empty(), "a repeat is described, not just flagged");
+        }
+        other => panic!("expected Editable, got {other:?}"),
+    }
+
+    // Changing it rewrites the one rule rather than adding a second — two rules
+    // on a page is a series that expands twice.
+    ws.set_page_repeat(
+        page.id.clone(),
+        Repeat {
+            freq: RepeatFreq::Daily,
+            interval: 1,
+            weekdays: vec![],
+        },
+    )
+    .await
+    .unwrap();
+
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+    let rules = pikos_db::list_recurrence_rules_impl(&pool).await.unwrap();
+    assert_eq!(rules.len(), 1, "one rule, rewritten: {rules:?}");
+    assert!(rules[0].rrule.contains("FREQ=DAILY"), "{}", rules[0].rrule);
+}
+
+/// The anchor moves with the rule.
+///
+/// A weekly repeat switched to a different weekday has to leave the head on a
+/// day the rule yields, or the next recompute drags it back and the edit looks
+/// like it did not take.
+#[tokio::test]
+async fn changing_the_weekday_moves_the_head_onto_it() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    // 2099-03-16 is a Monday.
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Standup")
+        })
+        .await
+        .unwrap();
+
+    ws.set_page_repeat(
+        page.id.clone(),
+        Repeat {
+            freq: RepeatFreq::Weekly,
+            interval: 1,
+            weekdays: vec![0],
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        ws.get_page(page.id.clone())
+            .await
+            .unwrap()
+            .scheduled_start
+            .as_deref(),
+        Some("2099-03-16T09:00:00"),
+        "precondition: the head sits on its Monday"
+    );
+
+    // Wednesday.
+    ws.set_page_repeat(
+        page.id.clone(),
+        Repeat {
+            freq: RepeatFreq::Weekly,
+            interval: 1,
+            weekdays: vec![2],
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        ws.get_page(page.id.clone())
+            .await
+            .unwrap()
+            .scheduled_start
+            .as_deref(),
+        Some("2099-03-18T09:00:00"),
+        "the head follows the rule onto the Wednesday"
+    );
+
+    // And the rule's own anchor moves with it. The head is re-derived by
+    // `recompute_recurring_schedule` either way, so this is the half that
+    // testing the page alone would miss: an anchor left on a Monday under
+    // BYDAY=WE is a rule whose stated start is a day it never yields, which
+    // anything reading the rule row directly — the calendar's connect-day
+    // floor, a future exporter — would have to second-guess.
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+    let rule = pikos_db::get_recurrence_rule_impl(&pool, &page.id)
+        .await
+        .unwrap()
+        .expect("the rule is still there");
+    assert_eq!(
+        rule.scheduled_start, "2099-03-18T09:00:00",
+        "the rule's anchor is snapped onto a day it yields"
+    );
+}
+
+/// Weekdays are dropped when the frequency cannot carry them.
+///
+/// The engine rejects a monthly rule with a BYDAY set it did not ask for, so
+/// passing the picker's leftover weekdays through would build a rule that fails
+/// to enumerate — a series that silently stops.
+#[tokio::test]
+async fn switching_away_from_weekly_drops_the_weekdays() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Report")
+        })
+        .await
+        .unwrap();
+
+    ws.set_page_repeat(
+        page.id.clone(),
+        Repeat {
+            freq: RepeatFreq::Monthly,
+            interval: 1,
+            weekdays: vec![0, 2, 4],
+        },
+    )
+    .await
+    .unwrap();
+
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+    let rules = pikos_db::list_recurrence_rules_impl(&pool).await.unwrap();
+    assert!(
+        !rules[0].rrule.contains("BYDAY"),
+        "weekdays should not survive onto a monthly rule: {}",
+        rules[0].rrule
+    );
+}
+
+/// Stopping a repeat leaves the page, on the date it was last sitting on.
+///
+/// "Never" means stop repeating, not delete — and a head that vanished with its
+/// rule would take the user's page with it.
+#[tokio::test]
+async fn removing_a_repeat_keeps_the_page_and_its_date() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Standup")
+        })
+        .await
+        .unwrap();
+    ws.set_page_repeat(
+        page.id.clone(),
+        Repeat {
+            freq: RepeatFreq::Weekly,
+            interval: 1,
+            weekdays: vec![0],
+        },
+    )
+    .await
+    .unwrap();
+
+    ws.remove_page_repeat(page.id.clone()).await.unwrap();
+
+    let after = ws.get_page(page.id.clone()).await.unwrap();
+    assert_eq!(
+        after.scheduled_start.as_deref(),
+        Some("2099-03-16T09:00:00")
+    );
+    assert!(matches!(
+        ws.page_repeat(page.id).await.unwrap(),
+        PageRepeat::Never
+    ));
+}
+
+/// Removing a repeat a page does not have is a no-op, not an error. The menu
+/// offers "Never" whatever the page is, and a list row can be stale.
+#[tokio::test]
+async fn removing_a_repeat_that_is_not_there_is_harmless() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Once")).await.unwrap();
+    ws.remove_page_repeat(page.id.clone()).await.unwrap();
+    assert!(matches!(
+        ws.page_repeat(page.id).await.unwrap(),
+        PageRepeat::Never
+    ));
+}
+
+/// A repeat needs somewhere to start.
+///
+/// Every occurrence is derived from the anchor, so inventing one would put the
+/// series on a day the user never chose — and they would have to work out why
+/// their weekly meeting is on a Thursday.
+#[tokio::test]
+async fn a_page_with_no_date_cannot_be_made_to_repeat() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Someday")).await.unwrap();
+
+    match ws
+        .set_page_repeat(
+            page.id.clone(),
+            Repeat {
+                freq: RepeatFreq::Daily,
+                interval: 1,
+                weekdays: vec![],
+            },
+        )
+        .await
+    {
+        Err(WorkspaceError::Refused { message }) => {
+            assert!(message.contains("date"), "explains itself: {message}")
+        }
+        other => panic!("expected Refused, got {other:?}"),
+    }
+    assert!(matches!(
+        ws.page_repeat(page.id).await.unwrap(),
+        PageRepeat::Never
+    ));
+}
+
+/// A rule the picker cannot represent is shown, never offered for editing.
+///
+/// This is the whole point of the degrade guard reaching the FFI: a "last
+/// Friday of the month" rule has no place in a frequency-and-weekdays picker,
+/// and rebuilding it through one would quietly turn it into "every Friday".
+#[tokio::test]
+async fn a_rule_beyond_the_picker_is_shown_but_locked() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-27T09:00:00".to_string()),
+            ..new_page("Payroll")
+        })
+        .await
+        .unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1".to_string(),
+        "2099-03-27T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    match ws.page_repeat(page.id.clone()).await.unwrap() {
+        PageRepeat::Fixed { label } => assert!(!label.is_empty(), "still described"),
+        other => panic!("expected Fixed, got {other:?}"),
+    }
+
+    // And the write refuses too, for a caller holding a stale row.
+    match ws
+        .set_page_repeat(
+            page.id.clone(),
+            Repeat {
+                freq: RepeatFreq::Weekly,
+                interval: 1,
+                weekdays: vec![4],
+            },
+        )
+        .await
+    {
+        Err(WorkspaceError::Refused { .. }) => {}
+        other => panic!("expected Refused, got {other:?}"),
+    }
+}
+
+/// Every term the picker has no control for locks the rule, not just the ones
+/// that happen to carry a weekday.
+///
+/// Written after a mutation survived: deleting the envelope check left the
+/// suite green, because the one locked rule it had also tripped the separate
+/// "weekdays on a non-weekly rule" guard. These carry none, so only the
+/// envelope can catch them — and each would be silently dropped by a save.
+#[tokio::test]
+async fn a_rule_with_terms_the_picker_lacks_controls_for_is_locked() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    for (rrule, what) in [
+        ("FREQ=MONTHLY;BYMONTHDAY=15", "on the 15th"),
+        ("FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15", "every 15 March"),
+        ("FREQ=DAILY;COUNT=10", "ten times and stop"),
+        ("FREQ=DAILY;UNTIL=20990401T235959", "until April"),
+        ("FREQ=WEEKLY;BYDAY=MO;WKST=SU", "a different week start"),
+    ] {
+        let page = ws
+            .create_page(NewPage {
+                scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+                ..new_page(what)
+            })
+            .await
+            .unwrap();
+        ws.set_recurrence(
+            page.id.clone(),
+            rrule.to_string(),
+            "2099-03-16T09:00:00".to_string(),
+            None,
+            "UTC".to_string(),
+        )
+        .await
+        .unwrap();
+
+        match ws.page_repeat(page.id.clone()).await.unwrap() {
+            PageRepeat::Fixed { .. } => {}
+            other => panic!("{rrule} ({what}) should be locked, got {other:?}"),
+        }
+        match ws
+            .set_page_repeat(
+                page.id.clone(),
+                Repeat {
+                    freq: RepeatFreq::Daily,
+                    interval: 1,
+                    weekdays: vec![],
+                },
+            )
+            .await
+        {
+            Err(WorkspaceError::Refused { .. }) => {}
+            other => panic!("{rrule} ({what}) should refuse the write, got {other:?}"),
+        }
+    }
+}
+
+/// A calendar's repeat is upstream's. Shown, not edited.
+#[tokio::test]
+async fn a_calendar_owned_repeat_is_locked() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Standup")
+        })
+        .await
+        .unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "2099-03-16T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+    link_to_a_calendar(&tmp.path, &page.id).await;
+
+    match ws.page_repeat(page.id.clone()).await.unwrap() {
+        PageRepeat::Fixed { .. } => {}
+        other => panic!("expected Fixed for a mirror, got {other:?}"),
+    }
+    assert!(
+        ws.remove_page_repeat(page.id.clone()).await.is_err(),
+        "and the calendar's rule cannot be deleted from here"
+    );
+}
+
+/// An interval of zero would build a rule that never yields.
+#[tokio::test]
+async fn an_interval_of_zero_is_refused() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Standup")
+        })
+        .await
+        .unwrap();
+
+    for bad in [
+        Repeat {
+            freq: RepeatFreq::Daily,
+            interval: 0,
+            weekdays: vec![],
+        },
+        Repeat {
+            freq: RepeatFreq::Weekly,
+            interval: 1,
+            weekdays: vec![9],
+        },
+    ] {
+        match ws.set_page_repeat(page.id.clone(), bad).await {
+            Err(WorkspaceError::InvalidInput { .. }) => {}
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+    assert!(matches!(
+        ws.page_repeat(page.id).await.unwrap(),
+        PageRepeat::Never
+    ));
 }

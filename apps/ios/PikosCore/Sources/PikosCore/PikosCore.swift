@@ -1035,6 +1035,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func listUpcoming() async throws  -> [UpcomingDay]
     
     /**
+     * What a page repeats as, and whether this editor may change it.
+     */
+    func pageRepeat(pageId: String) async throws  -> PageRepeat
+    
+    /**
      * A read-only handle onto the same workspace, for passing to code that
      * must not write.
      */
@@ -1049,6 +1054,15 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * password proves itself against the server.
      */
     func reconnectCaldav(accountId: String, password: String) async throws  -> SyncAccountWithCalendars
+    
+    /**
+     * Stop a page repeating, leaving the page itself where it is.
+     *
+     * Not a delete: the head survives as an ordinary one-off on the date it
+     * was last sitting on, which is what somebody switching "Repeat" to
+     * "Never" means. Refused on a calendar's rule, which is upstream's.
+     */
+    func removePageRepeat(pageId: String) async throws 
     
     /**
      * Rename a folder.
@@ -1101,6 +1115,25 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * is why it is worth confirming rather than doing quietly.
      */
     func setCalendarEnabled(syncCalendarId: String, enabled: Bool) async throws  -> SyncCalendar
+    
+    /**
+     * Make a page repeat, or change how it already does.
+     *
+     * Creates the rule when there is none and rewrites it when there is, so a
+     * caller does not have to know which — and so the two cannot drift apart,
+     * which is what a second rule row on one page would be.
+     *
+     * The page needs a date first. A repeat is a pattern *from* somewhere, and
+     * the anchor is what every occurrence is derived from; inventing one here
+     * would put the series on a day the user never chose.
+     *
+     * Refused when the existing rule is one this picker cannot represent, and
+     * when a calendar owns it. `page_repeat` reports both as `Fixed` and
+     * applies the identical test, so a UI that asks first never reaches
+     * either — but a stale list row can, which is why they are checked here
+     * rather than trusted to the caller.
+     */
+    func setPageRepeat(pageId: String, pattern: Repeat) async throws 
     
     /**
      * Give a page a date, replacing whatever one-off date it already had.
@@ -1738,6 +1771,25 @@ open func listUpcoming()async throws  -> [UpcomingDay]  {
 }
     
     /**
+     * What a page repeats as, and whether this editor may change it.
+     */
+open func pageRepeat(pageId: String)async throws  -> PageRepeat  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_page_repeat(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePageRepeat_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * A read-only handle onto the same workspace, for passing to code that
      * must not write.
      */
@@ -1770,6 +1822,29 @@ open func reconnectCaldav(accountId: String, password: String)async throws  -> S
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSyncAccountWithCalendars_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Stop a page repeating, leaving the page itself where it is.
+     *
+     * Not a delete: the head survives as an ordinary one-off on the date it
+     * was last sitting on, which is what somebody switching "Repeat" to
+     * "Never" means. Refused on a calendar's rule, which is upstream's.
+     */
+open func removePageRepeat(pageId: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_remove_page_repeat(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -1920,6 +1995,39 @@ open func setCalendarEnabled(syncCalendarId: String, enabled: Bool)async throws 
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSyncCalendar_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Make a page repeat, or change how it already does.
+     *
+     * Creates the rule when there is none and rewrites it when there is, so a
+     * caller does not have to know which — and so the two cannot drift apart,
+     * which is what a second rule row on one page would be.
+     *
+     * The page needs a date first. A repeat is a pattern *from* somewhere, and
+     * the anchor is what every occurrence is derived from; inventing one here
+     * would put the series on a day the user never chose.
+     *
+     * Refused when the existing rule is one this picker cannot represent, and
+     * when a calendar owns it. `page_repeat` reports both as `Fixed` and
+     * applies the identical test, so a UI that asks first never reaches
+     * either — but a stale list row can, which is why they are checked here
+     * rather than trusted to the caller.
+     */
+open func setPageRepeat(pageId: String, pattern: Repeat)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_page_repeat(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterTypeRepeat_lower(pattern)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -3619,6 +3727,97 @@ public func FfiConverterTypeRecurringCompletion_lower(_ value: RecurringCompleti
 
 
 /**
+ * A repeat in the shape an editor can offer: a frequency, how many of them
+ * between runs, and — for a weekly repeat — which days.
+ *
+ * Deliberately narrower than an RRULE. This is the set of rules a picker can
+ * round-trip without losing anything; a rule carrying `BYSETPOS`, `BYWEEKNO`
+ * or an ordinal weekday cannot be described here, and [`PageRepeat::Fixed`] is
+ * what says so instead of quietly flattening it.
+ */
+public struct Repeat: Equatable, Hashable {
+    public var freq: RepeatFreq
+    /**
+     * 1 is every day/week/month/year, 2 is every other, and so on.
+     */
+    public var interval: UInt32
+    /**
+     * Weekdays for a weekly repeat: 0 is Monday through 6 is Sunday, matching
+     * what the rule layer stores. Empty for every other frequency, and for a
+     * weekly repeat that names no day — which means "the day it started on".
+     *
+     * `u32` rather than the `u8` the rule layer uses, because UniFFI maps a
+     * `Vec<u8>` to Swift's `Data`. These are weekday numbers, not bytes, and a
+     * caller should not have to build a byte buffer to say "Tuesday".
+     */
+    public var weekdays: [UInt32]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(freq: RepeatFreq, 
+        /**
+         * 1 is every day/week/month/year, 2 is every other, and so on.
+         */interval: UInt32, 
+        /**
+         * Weekdays for a weekly repeat: 0 is Monday through 6 is Sunday, matching
+         * what the rule layer stores. Empty for every other frequency, and for a
+         * weekly repeat that names no day — which means "the day it started on".
+         *
+         * `u32` rather than the `u8` the rule layer uses, because UniFFI maps a
+         * `Vec<u8>` to Swift's `Data`. These are weekday numbers, not bytes, and a
+         * caller should not have to build a byte buffer to say "Tuesday".
+         */weekdays: [UInt32]) {
+        self.freq = freq
+        self.interval = interval
+        self.weekdays = weekdays
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Repeat: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRepeat: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Repeat {
+        return
+            try Repeat(
+                freq: FfiConverterTypeRepeatFreq.read(from: &buf), 
+                interval: FfiConverterUInt32.read(from: &buf), 
+                weekdays: FfiConverterSequenceUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Repeat, into buf: inout [UInt8]) {
+        FfiConverterTypeRepeatFreq.write(value.freq, into: &buf)
+        FfiConverterUInt32.write(value.interval, into: &buf)
+        FfiConverterSequenceUInt32.write(value.weekdays, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRepeat_lift(_ buf: RustBuffer) throws -> Repeat {
+    return try FfiConverterTypeRepeat.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRepeat_lower(_ value: Repeat) -> RustBuffer {
+    return FfiConverterTypeRepeat.lower(value)
+}
+
+
+/**
  * Result of moving a schedule's start. `end` of `None` is a single occurrence.
  */
 public struct ScheduleTransition: Equatable, Hashable {
@@ -4695,6 +4894,104 @@ public func FfiConverterTypeFolderScope_lower(_ value: FolderScope) -> RustBuffe
 
 
 
+/**
+ * What a page's repeat is, and whether this editor may change it.
+ */
+
+public enum PageRepeat: Equatable, Hashable {
+    
+    /**
+     * The page does not repeat.
+     */
+    case never
+    /**
+     * It repeats, and the rule fits [`Repeat`] exactly.
+     */
+    case editable(`repeat`: Repeat, label: String
+    )
+    /**
+     * It repeats in a way the picker cannot represent.
+     *
+     * Shown, never edited. Offering an editor here is not a cosmetic bug: the
+     * user nudges the interval, the rule is rebuilt through a shape that
+     * cannot hold the terms it had, and the rule that was theirs is gone with
+     * nothing logged. `rrule_edit_would_degrade` is the guard, and a rule a
+     * calendar owns lands here too — that one is upstream's to change.
+     */
+    case fixed(label: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PageRepeat: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePageRepeat: FfiConverterRustBuffer {
+    typealias SwiftType = PageRepeat
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PageRepeat {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .never
+        
+        case 2: return .editable(repeat: try FfiConverterTypeRepeat.read(from: &buf), label: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .fixed(label: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PageRepeat, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .never:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .editable(`repeat`,label):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeRepeat.write(`repeat`, into: &buf)
+            FfiConverterString.write(label, into: &buf)
+            
+        
+        case let .fixed(label):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(label, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageRepeat_lift(_ buf: RustBuffer) throws -> PageRepeat {
+    return try FfiConverterTypePageRepeat.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageRepeat_lower(_ value: PageRepeat) -> RustBuffer {
+    return FfiConverterTypePageRepeat.lower(value)
+}
+
+
+
 
 public enum Priority: Equatable, Hashable {
     
@@ -4952,6 +5249,89 @@ public func FfiConverterTypeQuickAddResult_lift(_ buf: RustBuffer) throws -> Qui
 #endif
 public func FfiConverterTypeQuickAddResult_lower(_ value: QuickAddResult) -> RustBuffer {
     return FfiConverterTypeQuickAddResult.lower(value)
+}
+
+
+
+/**
+ * How often a page repeats.
+ */
+
+public enum RepeatFreq: Equatable, Hashable {
+    
+    case daily
+    case weekly
+    case monthly
+    case yearly
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension RepeatFreq: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRepeatFreq: FfiConverterRustBuffer {
+    typealias SwiftType = RepeatFreq
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RepeatFreq {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .daily
+        
+        case 2: return .weekly
+        
+        case 3: return .monthly
+        
+        case 4: return .yearly
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RepeatFreq, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .daily:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .weekly:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .monthly:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .yearly:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRepeatFreq_lift(_ buf: RustBuffer) throws -> RepeatFreq {
+    return try FfiConverterTypeRepeatFreq.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRepeatFreq_lower(_ value: RepeatFreq) -> RustBuffer {
+    return FfiConverterTypeRepeatFreq.lower(value)
 }
 
 
@@ -5421,6 +5801,31 @@ fileprivate struct FfiConverterOptionSequenceString: FfiConverterRustBuffer {
         case 1: return try FfiConverterSequenceString.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt32]
+
+    public static func write(_ value: [UInt32], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt32.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt32] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt32]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterUInt32.read(from: &buf))
+        }
+        return seq
     }
 }
 
@@ -6162,10 +6567,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_list_upcoming() != 48506) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_page_repeat() != 43934) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_read_only() != 39832) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav() != 31810) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_remove_page_repeat() != 55311) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_rename_folder() != 17853) {
@@ -6187,6 +6598,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_calendar_enabled() != 65191) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_page_repeat() != 26372) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_page_schedule() != 23911) {

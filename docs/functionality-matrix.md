@@ -278,13 +278,13 @@ passes `originalDate`, so it keys an override exactly like a timed virtual (§6)
 
 ## 4. Recurrence rule (the series itself)
 
-| Functionality                         | Native                   | Synced                                 | Detached         | CLI            | iOS                  |
-| ------------------------------------- | ------------------------ | -------------------------------------- | ---------------- | -------------- | -------------------- |
-| Add a recurrence rule                 | ✅                       | 🚫 calendar-owned ²⁷                   | ✅               | ✅ `add` NL ²⁸ | ⚠️ quick add NL only |
-| Edit cadence (freq/interval/weekdays) | ✅                       | 🚫 ²⁷ read-only label                  | ⚠️ ²⁹            | —              | ○                    |
-| Remove the rule                       | ✅                       | 🚫 calendar-owned ²⁷                   | ✅               | —              | ○                    |
-| Rule source of truth                  | user                     | provider (wholesale rewrite each sync) | frozen at detach | user           | user                 |
-| Head derivation                       | `oldest_open_occurrence` | `oldest_open_occurrence` ³⁰            | same             | same           | same                 |
+| Functionality                         | Native                   | Synced                                 | Detached         | CLI            | iOS                    |
+| ------------------------------------- | ------------------------ | -------------------------------------- | ---------------- | -------------- | ---------------------- |
+| Add a recurrence rule                 | ✅                       | 🚫 calendar-owned ²⁷                   | ✅               | ✅ `add` NL ²⁸ | ✅ long press → Repeat |
+| Edit cadence (freq/interval/weekdays) | ✅                       | 🚫 ²⁷ read-only label                  | ⚠️ ²⁹            | —              | ⚠️ simple rules only   |
+| Remove the rule                       | ✅                       | 🚫 calendar-owned ²⁷                   | ✅               | —              | ✅ Repeat → off        |
+| Rule source of truth                  | user                     | provider (wholesale rewrite each sync) | frozen at detach | user           | user                   |
+| Head derivation                       | `oldest_open_occurrence` | `oldest_open_occurrence` ³⁰            | same             | same           | same                   |
 
 ²⁷ `ensure_rule_row_unlocked` (`crates/pikos-db/src/schedules.rs`) guards update / delete rule
 and both exdate paths. **Create is guarded separately**. It calls

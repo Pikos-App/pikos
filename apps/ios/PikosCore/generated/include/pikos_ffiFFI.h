@@ -383,6 +383,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_list_trashed_pages(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_upcoming(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_PAGE_REPEAT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_PAGE_REPEAT
+uint64_t uniffi_pikos_ffi_fn_method_workspace_page_repeat(uint64_t ptr, RustBuffer page_id
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_ONLY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_ONLY
 uint64_t uniffi_pikos_ffi_fn_method_workspace_read_only(uint64_t ptr, RustCallStatus *_Nonnull out_status
@@ -391,6 +396,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_read_only(uint64_t ptr, RustCallSt
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECONNECT_CALDAV
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECONNECT_CALDAV
 uint64_t uniffi_pikos_ffi_fn_method_workspace_reconnect_caldav(uint64_t ptr, RustBuffer account_id, RustBuffer password
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_REMOVE_PAGE_REPEAT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_REMOVE_PAGE_REPEAT
+uint64_t uniffi_pikos_ffi_fn_method_workspace_remove_page_repeat(uint64_t ptr, RustBuffer page_id
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RENAME_FOLDER
@@ -426,6 +436,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_search(uint64_t ptr, RustBuffer qu
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_calendar_enabled(uint64_t ptr, RustBuffer sync_calendar_id, int8_t enabled
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_REPEAT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_REPEAT
+uint64_t uniffi_pikos_ffi_fn_method_workspace_set_page_repeat(uint64_t ptr, RustBuffer page_id, RustBuffer pattern
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_SCHEDULE
@@ -1008,6 +1023,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_upcoming(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_PAGE_REPEAT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_PAGE_REPEAT
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_page_repeat(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_READ_ONLY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_READ_ONLY
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_read_only(void
@@ -1017,6 +1038,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_read_only(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECONNECT_CALDAV
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECONNECT_CALDAV
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_REMOVE_PAGE_REPEAT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_REMOVE_PAGE_REPEAT
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_remove_page_repeat(void
     
 );
 #endif
@@ -1059,6 +1086,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_search(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_calendar_enabled(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_PAGE_REPEAT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_PAGE_REPEAT
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_page_repeat(void
     
 );
 #endif

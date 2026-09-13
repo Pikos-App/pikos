@@ -107,6 +107,12 @@ suite.
   only. The finished pages come from their own paginated query and a filter
   over the rows that happen to be loaded would search a fifth of the folder
   while looking like it searched all of it.
+- **Repeats richer than a picker can hold.** "Every other Tuesday" is
+  editable; "the last Friday of the month", "every 15 March", and one that
+  stops after ten runs are shown and left alone. The workspace decides which is
+  which — `repeat_from` is a narrower envelope than
+  `rrule_edit_would_degrade`, and the difference is exactly the rule that
+  round-trips fine but has nowhere to go in a frequency-and-weekdays form.
 - **Moving a repeating page's date.** Every other page can be scheduled,
   moved, given an end or converted between timed and all-day from the context
   menu. A recurring head cannot: its date belongs to its rule, so moving it has

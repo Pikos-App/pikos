@@ -52,7 +52,11 @@ def labels_of(signature: str) -> list[str]:
     for part in strip_comments(signature).split(","):
         if ":" not in part:
             continue
-        label = part.split(":")[0].strip()
+        # Back-quotes come off: uniffi wraps a label that collides with a
+        # Swift keyword (`repeat`, `default`, `in`), and the call site may
+        # write it either way. Comparing the quoted form against an unquoted
+        # one reports a mismatch that is not there.
+        label = part.split(":")[0].strip().strip("`")
         if re.fullmatch(r"\w+", label):
             out.append(label)
     return out
@@ -150,7 +154,7 @@ def top_level_labels(args: str) -> list[str]:
             expecting, token = True, ""
             continue
         elif char == ":" and depth == 0 and expecting:
-            label = token.strip()
+            label = token.strip().strip("`")
             if re.fullmatch(r"\w+", label):
                 out.append(label)
             expecting, token = False, ""
