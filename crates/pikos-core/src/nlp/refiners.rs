@@ -228,6 +228,12 @@ fn merge_date_time_component(
         }
     }
 
+    if time.is_certain(Component::TimezoneOffset) {
+        if let Some(offset) = time.get(Component::TimezoneOffset) {
+            merged.assign(Component::TimezoneOffset, offset);
+        }
+    }
+
     if time.is_certain(Component::Meridiem) {
         if let Some(meridiem) = time.get(Component::Meridiem) {
             merged.assign(Component::Meridiem, meridiem);
@@ -253,6 +259,72 @@ fn merge_date_time_component(
     }
 
     merged
+}
+
+// ---------------------------------------------------------------------------
+// A UTC offset written after a date: "2020-02-13 +09:00".
+// ---------------------------------------------------------------------------
+
+/// Pull a `+hh`/`-hh[:mm]` following a result into it.
+///
+/// This engine has no timezone concept of its own, and the offset it records is
+/// never reported or stored — but the reference *applies* what it finds, so a
+/// port that ignored it would disagree on the result's time and on how much
+/// text the match claimed.
+///
+/// Worth knowing how loosely it fires: the pattern is a sign and one or two
+/// digits, so a hyphen after a date is enough. In "may 2 to 10 2026-04-01" the
+/// month-name parser claims "may 2 to 10 2026" and this reads the "-04" of the
+/// *following date* as UTC-4, shifting the result four hours. That is the
+/// reference's behaviour and almost certainly unwanted in a wall-clock app;
+/// it is reproduced here rather than fixed because the fix belongs on the
+/// TypeScript side, where it would land for both platforms at once.
+pub struct ExtractTimezoneOffsetRefiner;
+
+impl Refiner for ExtractTimezoneOffsetRefiner {
+    fn refine(&self, context: &Context, mut results: Vec<ParsingResult>) -> Vec<ParsingResult> {
+        let pattern =
+            Regex::new("(?i)^\\s*(?:\\(?(?:GMT|UTC)\\s?)?([+-])([0-9]{1,2})(?::?([0-9]{2}))?\\)?")
+                .expect("static pattern");
+
+        for result in results.iter_mut() {
+            if result.start.is_certain(Component::TimezoneOffset) {
+                continue;
+            }
+            let suffix_start = result.index + result.text.len();
+            let Some(suffix) = context.text.get(suffix_start..) else {
+                continue;
+            };
+            let Ok(Some(captures)) = pattern.captures(suffix) else {
+                continue;
+            };
+            let Some(hours) = captures.get(2).and_then(|m| m.as_str().parse::<i64>().ok()) else {
+                continue;
+            };
+            let minutes = captures
+                .get(3)
+                .and_then(|m| m.as_str().parse::<i64>().ok())
+                .unwrap_or(0);
+            let mut offset = hours * 60 + minutes;
+            // No real zone is more than fourteen hours out, so a larger number
+            // is something else that happens to look like one.
+            if offset > 14 * 60 {
+                continue;
+            }
+            if captures.get(1).map(|m| m.as_str()) == Some("-") {
+                offset = -offset;
+            }
+
+            if let Some(end) = result.end.as_mut() {
+                end.assign(Component::TimezoneOffset, offset);
+            }
+            result.start.assign(Component::TimezoneOffset, offset);
+            result
+                .text
+                .push_str(captures.get(0).expect("group 0").as_str());
+        }
+        results
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -685,14 +757,15 @@ impl Refiner for MergeDateRangeRefiner {
 /// new overlaps, and the pass after each merge stage is what keeps them from
 /// compounding.
 ///
-/// Two of the reference's refiners are deliberately absent — both timezone
-/// extractors. See the note in `nlp`.
+/// One of the reference's refiners is deliberately absent: the one that reads a
+/// *written-out* zone ("3pm EST"). See the note in `nlp`.
 pub fn all_refiners() -> Vec<Box<dyn Refiner>> {
     vec![
         Box::new(OverlapRemovalRefiner),
         Box::new(MergeRelativeAfterDateRefiner),
         Box::new(MergeRelativeFollowByDateRefiner),
         Box::new(OverlapRemovalRefiner),
+        Box::new(ExtractTimezoneOffsetRefiner),
         Box::new(MergeWeekdayComponentRefiner),
         Box::new(MergeDateTimeRefiner),
         Box::new(OverlapRemovalRefiner),

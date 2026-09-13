@@ -247,9 +247,18 @@ impl Parser for IsoFormatParser {
                 if let Some(ms) = m.group(7).and_then(|g| g.parse::<i64>().ok()) {
                     components.assign(Component::Millisecond, ms);
                 }
-                // The trailing timezone designator is matched so it lands
-                // inside the claimed span, but not applied — see `nlp`'s note
-                // on why this engine has no timezone concept.
+                // A trailing designator: `Z`, or ±hh[:mm]. Recorded rather
+                // than ignored, because the reference applies it to the
+                // result and a port that dropped it would disagree.
+                if m.group(8).is_some() {
+                    let mut offset = 0i64;
+                    if let Some(hours) = m.group(9).and_then(|g| g.parse::<i64>().ok()) {
+                        let minutes = m.group(10).and_then(|g| g.parse::<i64>().ok()).unwrap_or(0);
+                        offset = hours * 60;
+                        offset += if offset < 0 { -minutes } else { minutes };
+                    }
+                    components.assign(Component::TimezoneOffset, offset);
+                }
             }
             Extracted::components(components)
         })

@@ -166,6 +166,10 @@ impl JsDate {
     pub fn add_days(self, days: i64) -> Option<Self> {
         self.set_day(self.day() + days)
     }
+
+    pub fn add_minutes(self, minutes: i64) -> Option<Self> {
+        self.set_minute(self.minute() + minutes)
+    }
 }
 
 enum Field {

@@ -294,6 +294,39 @@ jobs:
       - name: Cargo test
         run: cargo test --workspace --quiet
 
+      # The generator is TypeScript — it runs the reference implementation —
+      # so this job needs Node as well as Rust. Set up after the Rust checks so
+      # a formatting or clippy failure surfaces without waiting on an install.
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The committed fuzz corpus is a sample. This searches wider on every CI
+      # run, with a seed derived from the run so successive runs explore
+      # different ground — which is the point: the first 20,000-line sweep found
+      # five divergence classes the 317-input corpus never reached, and a second
+      # seed found a sixth the first had missed.
+      - name: Wider differential fuzz against the TypeScript parser
+        run: |
+          FUZZ_CASES=8000 FUZZ_SEED=${{ github.run_number }} \
+            FUZZ_OUT=/tmp/fuzz-wide.json pnpm --filter @pikos/core gen:fuzz
+          PIKOS_FUZZ_CORPUS=/tmp/fuzz-wide.json PIKOS_FUZZ_FAILURES=/tmp/fuzz-failures.json \
+            cargo test --release -p pikos-core --test quick_add_fuzz
+
+      - uses: actions/upload-artifact@v6
+        if: ${{ failure() }}
+        with:
+          name: fuzz-failures
+          path: /tmp/fuzz-failures.json
+          retention-days: 7
+
       # The Swift bindings are generated from the Rust FFI surface and
       # committed so the API is reviewable in a pull request. Regenerating here
       # and failing on a diff is what stops the Rust surface changing while the

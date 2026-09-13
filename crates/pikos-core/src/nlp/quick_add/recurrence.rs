@@ -478,11 +478,15 @@ pub fn expand_weekly(
     };
 
     let mut occurrences = Vec::new();
-    // Weeks to scan before giving up. A bounded rule always terminates well
-    // inside this; the cap only matters for an `until` in the past.
-    const MAX_WEEKS: usize = 520;
+    // Weeks to scan before giving up. Derived from `limit` rather than fixed,
+    // because a fixed number is a second, invisible cap: at 520 weeks a series
+    // of 2,000 occurrences quietly stopped at 1,038 while `limit` still had
+    // room. Every week yields at least one candidate, so `limit + 2` weeks
+    // always reaches `limit` occurrences — the extra two cover a first week
+    // whose days all fall before `start`.
+    let max_weeks = limit.saturating_add(2);
 
-    for _ in 0..MAX_WEEKS {
+    for _ in 0..max_weeks {
         for day in &ordered {
             let Some(at) = add_days(week, *day as i64) else {
                 return occurrences;

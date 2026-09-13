@@ -241,3 +241,93 @@ the same line parses the same way in a test, a widget and the app; a malformed
 one returns `nil` rather than a guess. Priority crosses as a three-state
 `PriorityEdit` (`unchanged` / `cleared` / `set`), because writing nothing and
 writing `!0` are different edits and an optional cannot hold both.
+
+---
+
+## Addendum 3: what fuzzing found that the corpus could not
+
+The caveat at the top of this document said the corpus is a lower bound: 317
+inputs scraped from the test suite, which is what the author thought to test.
+The port passed all 2,219 of its cases on the first run. That was not evidence
+of much, and it turned out not to be.
+
+`packages/core/scripts/parser-grammar/fuzz.ts` composes lines from fragments —
+titles, dates, times, ranges, cadences, windows, durations, markers, and junk
+that has no business parsing — **in random order**, runs them through the
+TypeScript reference, and writes what it got.
+
+Random order is the point. The parser is a pipeline whose ordering is
+load-bearing: cadence before date, intervals before day words, "biweekly"
+before "weekly". Ordering bugs cannot show up in inputs written one feature at
+a time, and every input in the hand-written corpus is written one feature at a
+time.
+
+The first sweep — 20,000 lines × 7 reference times — found **124 divergent
+inputs**, in five classes:
+
+| What was wrong                                                      | Where           |
+| ------------------------------------------------------------------- | --------------- |
+| A series dropped the end date a time range had given it              | `quick_add/mod` |
+| A series with a time but no date took the wrong branch entirely      | `quick_add/mod` |
+| `ExtractTimezoneOffsetRefiner` was missing                           | `refiners`      |
+| `String.substring`'s argument swap was not reproduced                | `engine`        |
+| A fixed week budget capped long series below the real limit          | `quick_add/recurrence` |
+
+A second sweep with a different seed, after all five were fixed, found a
+**sixth** class the first had missed: a weekly rule injected the weekday of the
+*resolved date* rather than the weekday the text named, so "every 2 weeks on
+friday dec 28" — a Friday stated over a Monday — became a Monday rule.
+
+Three of the six deserve naming, because none of them is the kind of thing
+re-reading the code finds.
+
+**The `substring` swap.** JavaScript's `String.prototype.substring` swaps its
+arguments when the start is past the end. Results can overlap — a refiner that
+extends one result's text pushes its end past the next result's start — and the
+reference then asks for the text "between" them with the bounds reversed. It
+gets the overlapping text back, which fails the merge patterns and leaves the
+pair for overlap removal. A Rust slice returns empty instead, which reads as
+"nothing between these", and the two merge: `april 18-25 2024-02-26` came back
+as `april 18-25 2024-0202`.
+
+**The timezone offset.** This engine was built with no timezone concept, on the
+grounds that a wall-clock app has nothing for an offset to apply to, and the
+gap was documented as "a written-out timezone stays in the title". The fuzzer
+showed that was too narrow a description of it. `ExtractTimezoneOffsetRefiner`
+looks for a sign and one or two digits after whatever was just matched, and a
+hyphen after a date is not rare: in "may 2 to 10 2026-04-01" the month-name
+parser claims "may 2 to 10 2026", and the refiner reads the "-04" of the
+*following date* as UTC-4. The user typed two dates and got a four-hour shift.
+It is now reproduced, because parity is the bar — but it is a bug in the
+reference, and the fix belongs there, where it would land for both platforms at
+once.
+
+**The invisible second cap.** Series expansion had a documented cap of 1,000
+occurrences and an undocumented `MAX_WEEKS = 520` beside it. The second one
+bound first: a 2,026-page series stopped at 1,038 while the cap it was supposed
+to respect still had room. The week budget is now derived from the limit, so
+there is one bound rather than two, and the visible one wins.
+
+That 2,026-page series is itself worth knowing about. "mon/wed/fri 10 times"
+resolves "fri 10" to a concrete date, leaving "2026  times" behind, which the
+window rule reads as a count of 2026. The reference then hands that number
+straight to the expander — it has no cap of any kind, so "99999 times" would
+try to build 99,999 pages. This port caps at 10,000, which is a deliberate
+divergence at the extreme and the one place the two do not agree.
+
+### Where it stands
+
+Three independent seeds, 20,000 / 25,000 / 30,000 lines each, at seven
+reference times: **no divergences**. Every class found is also pinned by a unit
+test, because a regression corpus says *that* something broke and a unit test
+says *what*.
+
+A 500-line sample is committed as `tests/corpus/parser-fuzz.json`, seeded and
+regenerable, with every input that ever diverged included by name in
+`fuzz-regressions.json`. CI generates a fresh 8,000-line sweep on every run with
+the run number as its seed, so successive runs explore different ground and a
+failure uploads the offending inputs as an artifact.
+
+The honest summary: the hand-written corpus proved the port handled what
+someone thought to write down. The fuzzer proved it handles what they did not —
+and it took six fixes to get there.

@@ -22,10 +22,17 @@ pub enum Component {
     Millisecond,
     Weekday,
     Meridiem,
+    /// Minutes east of UTC, when the text named one.
+    ///
+    /// Pikos has no timezone concept — see `nlp`'s module docs — so this is
+    /// never reported to the caller and never stored. It exists because the
+    /// reference *applies* an offset it finds, shifting the wall-clock result,
+    /// and a port that ignored it would disagree on any line where one appears.
+    TimezoneOffset,
 }
 
 impl Component {
-    const ALL: [Component; 9] = [
+    const ALL: [Component; 10] = [
         Component::Year,
         Component::Month,
         Component::Day,
@@ -35,6 +42,7 @@ impl Component {
         Component::Millisecond,
         Component::Weekday,
         Component::Meridiem,
+        Component::TimezoneOffset,
     ];
 
     fn index(self) -> usize {
@@ -61,8 +69,8 @@ impl Reference {
 
 #[derive(Clone, Debug)]
 pub struct ParsingComponents {
-    known: [Option<i64>; 9],
-    implied: [Option<i64>; 9],
+    known: [Option<i64>; 10],
+    implied: [Option<i64>; 10],
 }
 
 impl ParsingComponents {
@@ -70,8 +78,8 @@ impl ParsingComponents {
     /// them: the reference's date, and midday with zeroed sub-hour fields.
     pub fn new(reference: Reference) -> Self {
         let mut components = Self {
-            known: [None; 9],
-            implied: [None; 9],
+            known: [None; 10],
+            implied: [None; 10],
         };
         let date = reference.instant;
         components.imply(Component::Day, date.day());
@@ -153,7 +161,7 @@ impl ParsingComponents {
     /// "this/next <weekday>", where the *weekday* is what the text said and the
     /// resulting calendar date is merely a consequence.
     pub fn add_duration_as_implied(&mut self, duration: &Duration) -> Option<&mut Self> {
-        let current = self.date()?;
+        let current = self.naive()?;
         let date = add_duration(current, duration)?;
         if duration.has_date_part() {
             for component in [
@@ -207,7 +215,10 @@ impl ParsingComponents {
     /// normalises to 3 March, so reading the fields back and finding they moved
     /// is how an impossible date gets rejected.
     pub fn is_valid_date(&self) -> bool {
-        let Some(date) = self.date() else {
+        // Validity is about the fields themselves, so it asks the unadjusted
+        // date — an offset moving 1 March back to 28 February must not make
+        // "31 February" look real.
+        let Some(date) = self.naive() else {
             return false;
         };
         if Some(date.year()) != self.get(Component::Year) {
@@ -232,9 +243,13 @@ impl ParsingComponents {
         true
     }
 
-    /// The instant these components describe. `None` when a field is missing or
-    /// the combination falls outside the representable range.
-    pub fn date(&self) -> Option<JsDate> {
+    /// The fields as written, with no offset applied.
+    ///
+    /// Distinct from [`Self::date`] and not interchangeable with it: validity
+    /// is a question about the fields ("is there a 31st of February?"), so it
+    /// is asked of this one, while every comparison between two results is
+    /// asked of the adjusted one.
+    pub fn naive(&self) -> Option<JsDate> {
         JsDate::from_parts(
             self.get(Component::Year)?,
             self.get(Component::Month)? - 1,
@@ -244,6 +259,20 @@ impl ParsingComponents {
             self.get(Component::Second)?,
             self.get(Component::Millisecond)?,
         )
+    }
+
+    /// The instant these components describe, with any named offset applied.
+    ///
+    /// The reference converts into the *system* zone, which for a wall-clock
+    /// app read against a wall-clock reference is UTC — so the whole conversion
+    /// collapses to subtracting the offset the text named, and to nothing at
+    /// all when it named none.
+    pub fn date(&self) -> Option<JsDate> {
+        let naive = self.naive()?;
+        let Some(offset) = self.get(Component::TimezoneOffset) else {
+            return Some(naive);
+        };
+        naive.add_minutes(-offset)
     }
 
     /// Components for a point a fixed duration from the reference — "in 3
@@ -257,10 +286,16 @@ impl ParsingComponents {
         if duration.has_time_part() {
             components.assign_similar_time(date);
             components.assign_similar_date(date);
+            // The reference stamps its own offset here, which is zero for a
+            // wall-clock reference. The value changes nothing; its *certainty*
+            // does, because a certain offset overrides an uncertain one when
+            // a date and a time are merged.
+            components.assign(Component::TimezoneOffset, 0);
             return Some(components);
         }
 
         components.imply_similar_time(date);
+        components.imply(Component::TimezoneOffset, 0);
         if duration.day.is_some() {
             components.assign(Component::Day, date.day());
             components.assign(Component::Month, date.month0() + 1);

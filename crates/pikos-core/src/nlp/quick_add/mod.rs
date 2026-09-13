@@ -66,10 +66,20 @@ pub enum ParseResult {
     Recurring { input: ParsedInput, rrule: String },
 }
 
-/// A finite series is capped so a mistyped window cannot allocate without
-/// bound. The reference has no cap, but it is driven by a UI text field and
-/// nothing in the corpus comes near this.
-const MAX_FINITE_OCCURRENCES: usize = 1000;
+/// A finite series is capped so a mistyped line cannot allocate without bound.
+///
+/// The reference has no cap at all: it hands whatever number it read straight
+/// to the expander, so "99999 times" tries to build 99,999 pages. And the
+/// number need not even have been typed — "mon/wed/fri 10 times" resolves
+/// "fri 10" to a concrete date, leaving "2026  times" behind, which the window
+/// rule then reads as a count of 2026. A typo becomes two thousand pages.
+///
+/// Ten thousand is far above any real use and far above that accident, so the
+/// cap is a memory bound rather than a behaviour difference — but it *is* a
+/// difference above it, where the reference would keep going and this stops.
+/// Deliberate: an unbounded allocation driven by parsed text is not something
+/// to reproduce faithfully.
+const MAX_FINITE_OCCURRENCES: usize = 10_000;
 
 /// Parse one line of quick-add input.
 pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
@@ -177,10 +187,15 @@ pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
         Some(matched),
     ) = (cadence.as_mut(), &matched)
     {
-        if matched.start.is_certain(Granularity::Weekday) {
-            if let Some(day) = Weekday::from_sunday_zero(weekday_of(matched.start.at)) {
-                *byday = Some(vec![day]);
-            }
+        // The weekday the text named, not the one the resolved date falls on.
+        // "every 2 weeks on friday dec 28" states Friday over a Monday, and the
+        // rule repeats on the stated day.
+        if let Some(day) = matched
+            .start
+            .stated_weekday
+            .and_then(|weekday| Weekday::from_sunday_zero(i64::from(weekday)))
+        {
+            *byday = Some(vec![day]);
         }
     }
 
@@ -296,23 +311,40 @@ pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
 
             let occurrences =
                 recurrence::expand_weekly(window_start, &days, &bound, MAX_FINITE_OCCURRENCES);
+            let timed_start = scheduled_start.as_deref().and_then(parse_local_iso);
             let inputs = occurrences
                 .into_iter()
                 .map(|at| {
                     let mut input = base.clone();
-                    if has_time {
-                        if let Some(start_at) = scheduled_start.as_deref().and_then(parse_local_iso)
-                        {
+                    match timed_start.filter(|_| has_time) {
+                        Some(start_at) => {
                             let dated = with_time(at, start_at.hour(), start_at.minute());
                             input.scheduled_start = dated.map(|at| format_local_iso(&at));
-                            input.scheduled_end = dated
-                                .zip(tokens.duration_minutes)
-                                .and_then(|(at, duration)| add_minutes(at, duration))
-                                .map(|at| format_local_iso(&at));
+                            // Only an *explicitly written* duration ("for 2h")
+                            // re-derives the end for each occurrence. A duration
+                            // that came from a time range instead leaves the end
+                            // exactly as the single-page path computed it — the
+                            // same end, on the first occurrence's date, for every
+                            // page in the series.
+                            //
+                            // That is the reference's behaviour and almost
+                            // certainly a bug in it: `parseInput` tests its local
+                            // `durationMinutes`, which a range never sets, while
+                            // writing the range's own duration onto the page. It
+                            // is reproduced rather than fixed because the
+                            // TypeScript side is the reference until it is
+                            // retired; fixing it belongs there, where the change
+                            // shows up in one diff for both platforms.
+                            if let Some(duration) = tokens.duration_minutes {
+                                input.scheduled_end = dated
+                                    .and_then(|at| add_minutes(at, duration))
+                                    .map(|at| format_local_iso(&at));
+                            }
                         }
-                    } else {
-                        input.scheduled_start = Some(format_date_only(&at));
-                        input.scheduled_end = None;
+                        None => {
+                            input.scheduled_start = Some(format_date_only(&at));
+                            input.scheduled_end = None;
+                        }
                     }
                     input
                 })
@@ -506,6 +538,89 @@ mod tests {
     fn punctuation_left_by_a_stripped_marker_is_tidied() {
         assert_eq!(single("call bob #work.").title, "call bob.");
         assert_eq!(single("note #a, #b").title, "note");
+    }
+
+    // The cases below were found by differential fuzzing, not by reading —
+    // each is a class the 317-input corpus never reached. See
+    // `tests/quick_add_fuzz.rs`.
+
+    #[test]
+    fn a_series_keeps_the_end_a_time_range_gave_it() {
+        // The range sets the end and the duration on the page; the series then
+        // inherits that end unchanged, the same end on the first occurrence's
+        // date for every page. That is the reference's behaviour — see the
+        // note where it is reproduced — and the port has to match it, quirk
+        // and all, because the reference is the reference.
+        let ParseResult::Finite { inputs } = parse_input("gym m/w/f 9pm to 5am", sunday_noon())
+        else {
+            panic!("expected a finite series");
+        };
+        assert_eq!(inputs.len(), 3);
+        for input in &inputs {
+            assert_eq!(input.scheduled_end.as_deref(), Some("2026-03-16T05:00:00"));
+            assert_eq!(input.duration_minutes, Some(480));
+        }
+        // Only the starts advance.
+        assert_eq!(
+            inputs
+                .iter()
+                .map(|i| i.scheduled_start.as_deref().unwrap_or_default())
+                .collect::<Vec<_>>(),
+            [
+                "2026-03-16T21:00:00",
+                "2026-03-18T21:00:00",
+                "2026-03-20T21:00:00"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_explicit_duration_re_derives_the_end_for_each_page() {
+        // The other half of the rule above: a duration the user wrote out does
+        // move with each occurrence.
+        let ParseResult::Finite { inputs } = parse_input("gym m/w/f at 9am for 2h", sunday_noon())
+        else {
+            panic!("expected a finite series");
+        };
+        assert_eq!(
+            inputs
+                .iter()
+                .map(|i| i.scheduled_end.as_deref().unwrap_or_default())
+                .collect::<Vec<_>>(),
+            [
+                "2026-03-16T11:00:00",
+                "2026-03-18T11:00:00",
+                "2026-03-20T11:00:00"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_rule_repeats_on_the_weekday_the_text_named() {
+        // 2026-12-28 is a Monday, and the line says Friday. The date wins for
+        // *when this one starts*; the weekday wins for *what the rule repeats
+        // on*. Deriving the rule's day from the resolved date instead — the
+        // obvious shortcut — turns this into a Monday rule.
+        let ParseResult::Recurring { input, rrule } =
+            parse_input("every 2 weeks on friday dec 28 to jan 3", sunday_noon())
+        else {
+            panic!("expected a recurring page");
+        };
+        assert_eq!(rrule, "FREQ=WEEKLY;BYDAY=FR;INTERVAL=2");
+        assert_eq!(input.scheduled_start.as_deref(), Some("2026-12-28"));
+    }
+
+    #[test]
+    fn a_series_longer_than_a_few_years_is_not_silently_truncated() {
+        // "fri 10" resolves to a date, leaving "2026  times" behind, which the
+        // window rule reads as a count of 2026. Absurd, and exactly the
+        // reference's behaviour — the point here is that the series is 2,026
+        // pages and not some smaller number an internal limit chose.
+        let ParseResult::Finite { inputs } = parse_input("mon/wed/fri 10 times", sunday_noon())
+        else {
+            panic!("expected a finite series");
+        };
+        assert_eq!(inputs.len(), 2026);
     }
 
     #[test]

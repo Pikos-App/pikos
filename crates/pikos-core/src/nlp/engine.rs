@@ -223,13 +223,9 @@ pub fn refine_by_merging<T: MergingRefiner>(
 
     for next in iterator {
         let between_start = current.index + current.text.len();
-        let text_between = context
-            .text
-            .get(between_start..next.index)
-            .unwrap_or_default();
-        if refiner.should_merge(context, text_between, &current, &next) {
-            let between = text_between.to_string();
-            current = refiner.merge(context, &between, current, next);
+        let text_between = js_substring(context.text, between_start, next.index);
+        if refiner.should_merge(context, &text_between, &current, &next) {
+            current = refiner.merge(context, &text_between, current, next);
         } else {
             merged.push(current);
             current = next;
@@ -237,6 +233,34 @@ pub fn refine_by_merging<T: MergingRefiner>(
     }
     merged.push(current);
     merged
+}
+
+/// `String.prototype.substring`, whose two surprises are both load-bearing
+/// here: it **swaps** its arguments when the start is past the end, and it
+/// clamps both to the string.
+///
+/// Results can overlap — a refiner that extends one result's text can push its
+/// end past the next result's start — and the reference then asks for the text
+/// "between" them with the bounds the wrong way round. It gets the overlapping
+/// text back, which fails the merge patterns and leaves the pair alone. A slice
+/// returning empty instead reads as "nothing between these", and they merge:
+/// "april 18-25 2024-02" swallowed a "02" that overlapped it and came out as
+/// "april 18-25 2024-0202".
+fn js_substring(text: &str, start: usize, end: usize) -> String {
+    let (mut lo, mut hi) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    lo = lo.min(text.len());
+    hi = hi.min(text.len());
+    while lo < text.len() && !text.is_char_boundary(lo) {
+        lo += 1;
+    }
+    while hi < text.len() && !text.is_char_boundary(hi) {
+        hi += 1;
+    }
+    text.get(lo..hi).unwrap_or_default().to_string()
 }
 
 /// A refiner that only drops results.
