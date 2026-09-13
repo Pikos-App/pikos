@@ -88,8 +88,8 @@ definitions (and the rest of the domain vocabulary): [`glossary.md`](./glossary.
 | Open in editor                    | ✅              | ✅ read-only mirror ³   | ✅                        | ✅ `read`                                        | ✅ same webview         |
 | Adjust page title                 | ✅              | 🚫 locked ⁴             | ✅                        | ⚠️ `update --title`, refused on synced ⁴         | ✅ long press → Rename  |
 | Edit body / content               | ✅              | ✅ marks owned ⁵        | ✅                        | ⚠️ `update --content`, plain text, replaces body | ✅                      |
-| Adjust priority                   | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --priority`                           | ⚠️ at creation only     |
-| Add / remove tags                 | ✅              | ✅ marks owned ⁵        | ✅                        | ⚠️ `add` only, no tag flag on `update`           | ⚠️ at creation only     |
+| Adjust priority                   | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `update --priority`                           | ✅ long press           |
+| Add / remove tags                 | ✅              | ✅ marks owned ⁵        | ✅                        | ⚠️ `add` only, no tag flag on `update`           | ✅ long press           |
 | Toggle status (non-recurring)     | ✅              | ✅ marks owned ⁵        | ✅                        | ✅ `done` / `status`                             | ✅                      |
 | Move page to another folder       | ✅              | 🚫 locked ⁶             | ✅ ⁶                      | — no `--folder`                                  | ✅ long press → Move    |
 | Drag page from list onto a folder | ✅ ⁶            | 🚫 locked ⁶             | ✅ ⁶                      | —                                                | ○                       |

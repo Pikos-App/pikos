@@ -16,6 +16,7 @@ struct PageListScreen: View {
     @State private var searchText = ""
     @State private var renaming: PageSummary?
     @State private var scheduling: Scheduling?
+    @State private var tagging: Tagging?
 
     /// A wrapper rather than a conformance on the generated `PageSummary`.
     ///
@@ -25,6 +26,12 @@ struct PageListScreen: View {
     /// collide with, and `@retroactive` is Swift 6 syntax on a package still on
     /// tools 5.9.
     private struct Scheduling: Identifiable {
+        let page: PageSummary
+        var id: String { page.id }
+    }
+
+    /// The same wrapper, for the same reason.
+    private struct Tagging: Identifiable {
         let page: PageSummary
         var id: String { page.id }
     }
@@ -77,6 +84,9 @@ struct PageListScreen: View {
         }
         .sheet(item: $scheduling) { target in
             SchedulePageSheet(page: target.page)
+        }
+        .sheet(item: $tagging) { target in
+            TagsSheet(page: target.page)
         }
         .alert(
             "Something went wrong",
@@ -252,6 +262,29 @@ struct PageListScreen: View {
                 Label("Rename", systemImage: "pencil")
             }
 
+            // Same shape as Move to Folder, and for the same reason: one
+            // decision from a short fixed list. "None" is a real choice here
+            // rather than the absence of one — a page with a priority needs a
+            // way back to having none.
+            Menu {
+                Button { setPriority(page, to: nil) } label: {
+                    priorityLabel("None", current: page.priority == 0)
+                }
+                ForEach(Self.priorities, id: \.stored) { option in
+                    Button { setPriority(page, to: option.value) } label: {
+                        priorityLabel(option.name, current: page.priority == option.stored)
+                    }
+                }
+            } label: {
+                Label("Priority", systemImage: "exclamationmark.circle")
+            }
+
+            Button {
+                tagging = Tagging(page: page)
+            } label: {
+                Label("Tags…", systemImage: "tag")
+            }
+
             // Nested rather than a sheet: a move is one decision from a short
             // list, and a sheet for it would be two taps and a dismissal for
             // something the menu is already showing.
@@ -303,6 +336,26 @@ struct PageListScreen: View {
         } label: {
             Label("Delete", systemImage: "trash")
         }
+    }
+
+    /// The four priorities, paired with the numbers they are stored as.
+    ///
+    /// Low number first — 1 urgent through 4 low — which runs the opposite way
+    /// to the names. The pairing is written out here rather than derived so the
+    /// menu's order and the column's meaning cannot drift apart.
+    private static let priorities: [(name: String, value: Priority, stored: Int64)] = [
+        ("Urgent", .urgent, 1),
+        ("High", .high, 2),
+        ("Medium", .medium, 3),
+        ("Low", .low, 4),
+    ]
+
+    private func priorityLabel(_ name: String, current: Bool) -> some View {
+        Label(name, systemImage: current ? "checkmark" : "circle")
+    }
+
+    private func setPriority(_ page: PageSummary, to priority: Priority?) {
+        Task { await store.setPriority(pageId: page.id, priority: priority) }
     }
 
     /// A tick beside where the page already is.

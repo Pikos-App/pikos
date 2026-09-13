@@ -101,6 +101,14 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**Priority and tags are editable too.** Both were creation-only for the same
+reason the date was: quick add's line set them and nothing changed them
+afterwards. Priority is a submenu beside Move to Folder — with "None" as a real
+choice, because a page with a priority needs a way back to having none — and
+tags get a sheet. Both are offered on a calendar's page, because tags and
+priority are user-layer: the lock covers the title and the schedule, not what
+somebody files a meeting under.
+
 **A page can be put on a date, which it could not before.** Filling in the
 matrix's iOS column made the largest gap obvious: a page took its date from
 quick add's natural-language line and nothing could change it afterwards, so one

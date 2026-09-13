@@ -515,6 +515,31 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Replace a page's tags.
+    ///
+    /// Whole-list rather than add/remove: tags are stored as one JSON column
+    /// plus a join table the writer keeps in step, so every write is a
+    /// replacement underneath. Offering "remove one" on top of that would be a
+    /// read-modify-write in the UI that two edits in quick succession could
+    /// interleave and lose.
+    ///
+    /// Blank entries are dropped and the leading `#` is optional, because the
+    /// same person types `#work` in quick add an hour earlier.
+    public func setTags(pageId: String, to tags: [String]) async {
+        guard let workspace else { return }
+        let cleaned =
+            tags
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { $0.hasPrefix("#") ? String($0.dropFirst()) : $0 }
+            .filter { !$0.isEmpty }
+        do {
+            _ = try await workspace.updatePage(id: pageId, edit: PageEdit(tags: cleaned))
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Take a page's date away, leaving any recurrence intact.
     public func clearDate(pageId: String) async {
         guard let workspace else { return }
@@ -526,12 +551,14 @@ public final class WorkspaceStore {
         }
     }
 
-    /// Set a page's priority.
+    /// Set a page's priority, or take it away with `nil`.
     ///
     /// Stored as a number, low value first: 1 urgent through 4 low, with 0
     /// meaning none. The naming runs the opposite way to the number, which is
-    /// exactly why this mapping lives in one place.
-    public func setPriority(pageId: String, priority: Priority) async {
+    /// exactly why this mapping lives in one place — and why "none" is a real
+    /// value here rather than the absence of one. `PageEdit.priority` uses nil
+    /// for "leave it alone", so clearing has to say 0 out loud.
+    public func setPriority(pageId: String, priority: Priority?) async {
         guard let workspace else { return }
         let stored: Int64
         switch priority {
@@ -539,6 +566,7 @@ public final class WorkspaceStore {
         case .high: stored = 2
         case .medium: stored = 3
         case .low: stored = 4
+        case nil: stored = 0
         }
         do {
             _ = try await workspace.updatePage(id: pageId, edit: PageEdit(priority: stored))
