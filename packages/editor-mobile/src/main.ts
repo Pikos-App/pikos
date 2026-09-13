@@ -187,6 +187,73 @@ function handleHostMessage(editor: Editor, raw: unknown): void {
       });
       return;
     }
+    case "toggleMark": {
+      const { mark } = parsed.payload as { mark: string };
+      toggleMark(editor, mark);
+      return;
+    }
+    case "toggleBlock": {
+      const { headingLevel, nodeType } = parsed.payload as {
+        headingLevel: number;
+        nodeType: string;
+      };
+      toggleBlock(editor, nodeType, headingLevel);
+      return;
+    }
+  }
+}
+
+/**
+ * Marks the host may toggle.
+ *
+ * An allowlist rather than passing the name straight through: the message
+ * carries a string from outside the webview, and `chain()[name]()` on an
+ * arbitrary string is a call into whatever the editor happens to expose.
+ */
+const TOGGLEABLE_MARKS = new Set(["bold", "italic", "underline", "strike", "code"]);
+
+function toggleMark(editor: Editor, mark: string): void {
+  if (!TOGGLEABLE_MARKS.has(mark)) {
+    // eslint-disable-next-line no-console
+    console.warn("[pikos-bridge] unknown mark:", mark);
+    return;
+  }
+  // focus() first, or the toggle applies to a selection the editor no longer
+  // considers current — the native toolbar takes focus when tapped.
+  editor.chain().focus().toggleMark(mark).run();
+}
+
+function toggleBlock(editor: Editor, nodeType: string, headingLevel: number): void {
+  const chain = editor.chain().focus();
+  switch (nodeType) {
+    case "paragraph":
+      chain.setParagraph().run();
+      return;
+    case "heading": {
+      // The schema declares levels 1–3; anything else would be dropped on the
+      // next parse, which reads to the user as the heading not sticking.
+      const level = Math.min(3, Math.max(1, Math.round(headingLevel))) as 1 | 2 | 3;
+      chain.toggleHeading({ level }).run();
+      return;
+    }
+    case "bulletList":
+      chain.toggleBulletList().run();
+      return;
+    case "orderedList":
+      chain.toggleOrderedList().run();
+      return;
+    case "taskList":
+      chain.toggleTaskList().run();
+      return;
+    case "blockquote":
+      chain.toggleBlockquote().run();
+      return;
+    case "codeBlock":
+      chain.toggleCodeBlock().run();
+      return;
+    default:
+      // eslint-disable-next-line no-console
+      console.warn("[pikos-bridge] unknown block type:", nodeType);
   }
 }
 

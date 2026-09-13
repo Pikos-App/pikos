@@ -321,6 +321,92 @@ test.describe("host commands", () => {
     );
   });
 
+  test("toggles a mark over a selected range", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: docWithText("make me bold"), pageId: "p1" });
+    // Triple-click selects the paragraph — a real gesture, and one that does not
+    // depend on a select-all shortcut reaching the webview.
+    await page.locator(".ProseMirror p").first().click({ clickCount: 3 });
+    await clearMessages(page);
+
+    await sendToEditor(page, "toggleMark", { mark: "bold" });
+    await page.waitForTimeout(DEBOUNCE_SETTLE_MS);
+
+    const doc = (await messagesOfType(page, "docChanged")).at(-1)?.payload["doc"] as string;
+    expect(doc).toContain('"type":"bold"');
+  });
+
+  test("a mark toggled with no selection applies to what is typed next", async ({ page }) => {
+    // How the toolbar is actually used on a phone: tap bold, then type. With a
+    // collapsed caret the mark is pending rather than applied, so nothing
+    // changes until a character arrives.
+    await sendToEditor(page, "load", { doc: docWithText(""), pageId: "p1" });
+    await page.locator(".ProseMirror").click();
+    await clearMessages(page);
+
+    await sendToEditor(page, "toggleMark", { mark: "italic" });
+    await page.keyboard.type("emphasised");
+    await page.waitForTimeout(DEBOUNCE_SETTLE_MS);
+
+    const doc = (await messagesOfType(page, "docChanged")).at(-1)?.payload["doc"] as string;
+    expect(doc).toContain('"type":"italic"');
+    expect(doc).toContain("emphasised");
+  });
+
+  test("toggles a block type", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: docWithText("make me a heading"), pageId: "p1" });
+    await page.locator(".ProseMirror").click();
+    await clearMessages(page);
+
+    await sendToEditor(page, "toggleBlock", { headingLevel: 2, nodeType: "heading" });
+    await page.waitForTimeout(DEBOUNCE_SETTLE_MS);
+
+    const doc = (await messagesOfType(page, "docChanged")).at(-1)?.payload["doc"] as string;
+    expect(doc).toContain('"type":"heading"');
+    expect(doc).toContain('"level":2');
+  });
+
+  test("clamps a heading level the schema does not declare", async ({ page }) => {
+    // The schema declares levels 1-3. A level outside that would be dropped on
+    // the next parse, which reads to the user as the heading not sticking.
+    await sendToEditor(page, "load", { doc: docWithText("heading"), pageId: "p1" });
+    await page.locator(".ProseMirror").click();
+    await clearMessages(page);
+
+    await sendToEditor(page, "toggleBlock", { headingLevel: 9, nodeType: "heading" });
+    await page.waitForTimeout(DEBOUNCE_SETTLE_MS);
+
+    const doc = (await messagesOfType(page, "docChanged")).at(-1)?.payload["doc"] as string;
+    expect(doc).toContain('"level":3');
+  });
+
+  test("ignores a mark it does not know", async ({ page }) => {
+    // The name arrives from outside the webview. Passing it through to
+    // `chain()[name]()` would be a call into whatever the editor happens to
+    // expose, so unknown names are refused rather than forwarded.
+    await sendToEditor(page, "load", { doc: docWithText("unchanged"), pageId: "p1" });
+    await page.locator(".ProseMirror").click();
+    await clearMessages(page);
+
+    await sendToEditor(page, "toggleMark", { mark: "destroyEverything" });
+    await page.waitForTimeout(300);
+
+    expect(await messagesOfType(page, "docChanged")).toEqual([]);
+    await expect(page.locator(".ProseMirror")).toContainText("unchanged");
+  });
+
+  test("toggling a list keeps the text", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: docWithText("a list item"), pageId: "p1" });
+    await page.locator(".ProseMirror").click();
+    await clearMessages(page);
+
+    await sendToEditor(page, "toggleBlock", { headingLevel: 0, nodeType: "taskList" });
+    await page.waitForTimeout(DEBOUNCE_SETTLE_MS);
+
+    const doc = (await messagesOfType(page, "docChanged")).at(-1)?.payload["doc"] as string;
+    expect(doc).toContain('"type":"taskList"');
+    expect(doc).toContain("a list item");
+  });
+
   test("focus and blur move the caret in and out", async ({ page }) => {
     await sendToEditor(page, "focus", {});
     await expect.poll(async () =>

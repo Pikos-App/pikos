@@ -45,6 +45,38 @@ final class EditorBridgeProtocolTests: XCTestCase {
         XCTAssertTrue(json.contains("\"payload\":{}"))
     }
 
+    func testFormattingCommandsEncode() throws {
+        let mark = try EditorBridge.Outgoing.toggleMark(.init(mark: "bold")).encoded()
+        XCTAssertTrue(mark.contains("\"type\":\"toggleMark\""))
+        XCTAssertTrue(mark.contains("\"mark\":\"bold\""))
+
+        let block = try EditorBridge.Outgoing
+            .toggleBlock(.init(headingLevel: 2, nodeType: "heading"))
+            .encoded()
+        XCTAssertTrue(block.contains("\"nodeType\":\"heading\""))
+        // An Int, not a Double: the field is declared `integer` in the protocol,
+        // so this must not encode as 2.0.
+        XCTAssertTrue(block.contains("\"headingLevel\":2"))
+    }
+
+    /// The mark names the controller can send must all be ones the webview
+    /// accepts — it refuses anything outside its allowlist, and a name that is
+    /// silently dropped looks to the user like a dead button.
+    func testEveryControllerMarkIsOneTheEditorAccepts() {
+        let accepted: Set<String> = ["bold", "italic", "underline", "strike", "code"]
+        for mark in EditorController.Mark.allCases {
+            XCTAssertTrue(accepted.contains(mark.rawValue), "\(mark.rawValue) is not accepted")
+        }
+    }
+
+    /// The caret sits inside a `listItem`, not the list, so a toolbar matching
+    /// on the toggle name would leave list buttons permanently inactive.
+    func testListBlocksMatchTheirItemNodeType() {
+        XCTAssertEqual(EditorController.Block.bulletList.nodeType, "bulletList")
+        XCTAssertEqual(EditorController.Block.heading(level: 2).headingLevel, 2)
+        XCTAssertEqual(EditorController.Block.paragraph.headingLevel, 0)
+    }
+
     func testIncomingMessagesDecode() throws {
         let data = Data(
             #"{"v":1,"type":"docChanged","payload":{"doc":"{}","pageId":"p","plainText":"hi"}}"#

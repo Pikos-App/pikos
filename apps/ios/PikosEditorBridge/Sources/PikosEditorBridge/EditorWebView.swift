@@ -16,6 +16,10 @@ public struct EditorWebView: UIViewRepresentable {
     public let documentJSON: String
 
     public let assetRoot: URL
+
+    /// Handle for sending commands in. Optional because a read-only editor
+    /// needs none, and passing one that is never used would suggest otherwise.
+    public var controller: EditorController?
     public var colorScheme: ColorScheme = .light
     public var accentColor: String = "#d1603d"
 
@@ -41,6 +45,7 @@ public struct EditorWebView: UIViewRepresentable {
         pageId: String,
         documentJSON: String,
         assetRoot: URL,
+        controller: EditorController? = nil,
         colorScheme: ColorScheme = .light,
         accentColor: String = "#d1603d",
         onDocumentChanged: @escaping (String, String, String) -> Void,
@@ -52,6 +57,7 @@ public struct EditorWebView: UIViewRepresentable {
         self.pageId = pageId
         self.documentJSON = documentJSON
         self.assetRoot = assetRoot
+        self.controller = controller
         self.colorScheme = colorScheme
         self.accentColor = accentColor
         self.onDocumentChanged = onDocumentChanged
@@ -101,6 +107,8 @@ public struct EditorWebView: UIViewRepresentable {
         }
         #endif
 
+        controller?.attach(webView: webView, coordinator: context.coordinator)
+
         context.coordinator.loadStartedAt = Date()
         // Loaded through the scheme handler rather than loadFileURL so the
         // document and its images share one origin.
@@ -119,6 +127,7 @@ public struct EditorWebView: UIViewRepresentable {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: messageHandlerName)
         webView.navigationDelegate = nil
         webView.stopLoading()
+        coordinator.controller?.detach()
     }
 
     public func updateUIView(_ webView: WKWebView, context: Context) {
@@ -165,11 +174,16 @@ public struct EditorWebView: UIViewRepresentable {
         var loadedPageId: String?
         var appliedTheme: String?
         var loadStartedAt: Date?
+        /// Held so `dismantleUIView` can detach it — the view itself is a value
+        /// type and will not be the same instance by then.
+        var controller: EditorController?
 
         init(_ parent: EditorWebView) {
             self.parent = parent
+            self.controller = parent.controller
         }
 
+        /// Internal rather than private: `EditorController` forwards through it.
         func send(_ message: EditorBridge.Outgoing, on webView: WKWebView) {
             do {
                 let json = try message.encoded()

@@ -20,6 +20,9 @@ struct EditorScreen: View {
     @State private var selection = EditorSelection()
     @State private var assetsURL: URL?
     @State private var coldLoadSeconds: TimeInterval?
+    /// Owned here rather than by the editor view, which is a value type
+    /// recreated on every update and so cannot hold a live reference.
+    @State private var controller = EditorController()
 
     var body: some View {
         Group {
@@ -64,6 +67,7 @@ struct EditorScreen: View {
                 pageId: page.id,
                 documentJSON: page.content,
                 assetRoot: assetsURL,
+                controller: controller,
                 colorScheme: colorScheme,
                 // Every callback hops to the main actor explicitly. They are
                 // invoked from WebKit delegate callbacks, and whether those are
@@ -96,7 +100,7 @@ struct EditorScreen: View {
         .toolbar {
             if editable {
                 ToolbarItemGroup(placement: .keyboard) {
-                    FormattingToolbar(selection: selection)
+                    FormattingToolbar(selection: selection, controller: controller)
                 }
             }
             #if DEBUG

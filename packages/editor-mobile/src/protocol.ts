@@ -65,6 +65,14 @@ export const HOST_TO_WEBVIEW = {
     doc: "Apply the host's colour scheme so the editor matches the app around it.",
     fields: { accent: "string", scheme: "string" },
   },
+  toggleBlock: {
+    doc: "Toggle the block type of the selection — paragraph, heading, bulletList, orderedList, taskList, blockquote or codeBlock. `headingLevel` is read only when nodeType is heading, and ignored otherwise.",
+    fields: { headingLevel: "integer", nodeType: "string" },
+  },
+  toggleMark: {
+    doc: "Toggle an inline mark on the selection — bold, italic, underline, strike or code. Named rather than enumerated so the two ends need not agree on an ordering; an unknown mark is ignored.",
+    fields: { mark: "string" },
+  },
 } as const satisfies Record<string, MessageSpec>;
 
 /**

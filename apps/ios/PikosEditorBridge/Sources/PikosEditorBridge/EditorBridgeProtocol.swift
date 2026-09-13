@@ -64,6 +64,30 @@ public enum EditorBridge {
         }
     }
 
+    /// Toggle the block type of the selection — paragraph, heading, bulletList,
+    /// orderedList, taskList, blockquote or codeBlock. `headingLevel` is read only
+    /// when nodeType is heading, and ignored otherwise.
+    public struct OutgoingToggleBlockPayload: Codable, Equatable {
+        public let headingLevel: Int
+        public let nodeType: String
+
+        public init(headingLevel: Int, nodeType: String) {
+            self.headingLevel = headingLevel
+            self.nodeType = nodeType
+        }
+    }
+
+    /// Toggle an inline mark on the selection — bold, italic, underline, strike or
+    /// code. Named rather than enumerated so the two ends need not agree on an
+    /// ordering; an unknown mark is ignored.
+    public struct OutgoingToggleMarkPayload: Codable, Equatable {
+        public let mark: String
+
+        public init(mark: String) {
+            self.mark = mark
+        }
+    }
+
     /// A message the host sends into the editor.
     ///
     /// Encodes to `{ "v": 1, "type": "...", "payload": { ... } }`.
@@ -73,6 +97,8 @@ public enum EditorBridge {
         case insertImage(OutgoingInsertImagePayload)
         case load(OutgoingLoadPayload)
         case setTheme(OutgoingSetThemePayload)
+        case toggleBlock(OutgoingToggleBlockPayload)
+        case toggleMark(OutgoingToggleMarkPayload)
 
         var messageType: String {
             switch self {
@@ -81,6 +107,8 @@ public enum EditorBridge {
             case .insertImage: return "insertImage"
             case .load: return "load"
             case .setTheme: return "setTheme"
+            case .toggleBlock: return "toggleBlock"
+            case .toggleMark: return "toggleMark"
             }
         }
 
@@ -98,6 +126,8 @@ public enum EditorBridge {
             case .insertImage(let p): payloadData = try encoder.encode(p)
             case .load(let p): payloadData = try encoder.encode(p)
             case .setTheme(let p): payloadData = try encoder.encode(p)
+            case .toggleBlock(let p): payloadData = try encoder.encode(p)
+            case .toggleMark(let p): payloadData = try encoder.encode(p)
             }
 
             let payloadJSON = String(decoding: payloadData, as: UTF8.self)
