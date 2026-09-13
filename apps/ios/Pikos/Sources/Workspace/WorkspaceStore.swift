@@ -249,6 +249,54 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Rename a page without opening it.
+    ///
+    /// The title is the first line of the document on desktop, but renaming
+    /// from a list must not load and re-save the body — that would restamp
+    /// `content_schema_version` for a change that touched no content, and on a
+    /// page written by a newer build it would be the exact overwrite the
+    /// version stamp exists to prevent.
+    public func renamePage(id: String, to title: String) async {
+        guard let workspace else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            _ = try await workspace.updatePage(id: id, edit: PageEdit(title: trimmed))
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// File a page into a folder, or `nil` for the Inbox.
+    ///
+    /// The two are one call rather than a move and an unfile, because `nil`
+    /// here means the Inbox rather than "leave it alone" — `PageEdit.folder`
+    /// draws that distinction with an enum precisely so a caller cannot lose it
+    /// to an optional.
+    public func movePage(id: String, toFolder folderId: String?) async {
+        guard let workspace else { return }
+        do {
+            let assignment: FolderAssignment =
+                folderId.map { .folder(id: $0) } ?? .inbox
+            _ = try await workspace.updatePage(id: id, edit: PageEdit(folder: assignment))
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Take a page's date away, leaving any recurrence intact.
+    public func clearDate(pageId: String) async {
+        guard let workspace else { return }
+        do {
+            _ = try await workspace.clearPageSchedule(pageId: pageId)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Set a page's priority.
     ///
     /// Stored as a number, low value first: 1 urgent through 4 low, with 0

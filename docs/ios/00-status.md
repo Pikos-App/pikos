@@ -101,6 +101,16 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**A page can be renamed, moved and un-dated without opening it.** The long
+press menu is desktop's right-click menu: rename, move to folder, clear date,
+delete. Two entries are withheld rather than shown and refused — all of the
+first three on a page a calendar owns (`PageSummary` now carries
+`schedule_locked` so a list can decide that per row without a round trip), and
+clear-date on a repeating page, where the write is real but changes nothing
+visible because the head's date belongs to the rule. Before this, folder and
+priority were settable only in quick add, so a page was stuck in whatever
+folder it was created in.
+
 **A mis-swipe is recoverable from the phone.** Swipe-to-delete was wired with
 no way back: the delete had been soft all along, but nothing on iOS listed or
 restored a trashed page, so as far as the user could tell it was gone. The

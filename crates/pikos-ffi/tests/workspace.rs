@@ -1425,3 +1425,256 @@ async fn the_retention_window_comes_from_the_data_layer() {
     let ws = Workspace::open(tmp.path.clone()).await.unwrap();
     assert_eq!(ws.trash_retention_days(), 30);
 }
+
+/// Clearing a date, and the rows it must not touch.
+///
+/// The interesting half is what survives. A page's schedule rows are not all
+/// the same kind: a row carrying a `rule_id` is a materialised occurrence of a
+/// series — one instance somebody moved — and a bulk delete of "this page's
+/// schedules" would silently undo those moves. The desktop path draws the line
+/// at `rule_id`, so this checks the line is in the same place here.
+#[tokio::test]
+async fn clearing_a_date_takes_the_one_offs_and_leaves_the_series() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Dentist")
+        })
+        .await
+        .unwrap();
+    ws.schedule_page(page.id.clone(), "2099-03-20T09:00:00".to_string(), None)
+        .await
+        .unwrap();
+
+    // A rule-backed row, seeded the way the reconciler and the drag path do:
+    // a rule for the page, then a schedule row naming it.
+    let rule_id = {
+        let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+        let rule = pikos_db::create_recurrence_rule_impl(
+            &pool,
+            pikos_db::NewRecurrenceRule {
+                page_id: page.id.clone(),
+                rrule: "FREQ=WEEKLY;BYDAY=MO".to_string(),
+                rrule_exdates: Vec::new(),
+                scheduled_start: "2099-03-16T09:00:00".to_string(),
+                scheduled_end: None,
+                timezone: "UTC".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        pikos_db::create_page_schedule_impl(
+            &pool,
+            pikos_db::NewPageSchedule {
+                page_id: page.id.clone(),
+                scheduled_start: "2099-03-23T09:00:00".to_string(),
+                scheduled_end: None,
+                timezone: None,
+                rule_id: Some(rule.id.clone()),
+                original_date: Some("2099-03-22".to_string()),
+            },
+        )
+        .await
+        .unwrap();
+        rule.id
+    };
+
+    let cleared = ws.clear_page_schedule(page.id.clone()).await.unwrap();
+    assert_eq!(cleared, 2, "both one-off rows, and only those two");
+
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+    let left = pikos_db::list_page_schedules_impl(&pool, &page.id)
+        .await
+        .unwrap();
+    assert_eq!(left.len(), 1, "the materialised occurrence stays: {left:?}");
+    assert_eq!(left[0].rule_id.as_deref(), Some(rule_id.as_str()));
+}
+
+/// Clearing is not a bulk `DELETE`, and this is why: the denorm has to follow.
+///
+/// `pages.scheduled_start` is a copy of the earliest schedule row. Deleting the
+/// rows without recomputing it leaves the page showing a date that no longer
+/// exists anywhere — which reads as "the clear didn't work" and survives a
+/// restart.
+#[tokio::test]
+async fn clearing_a_date_takes_the_page_s_own_copy_of_it_too() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Dentist")
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        page.scheduled_start.as_deref(),
+        Some("2099-03-16T09:00:00"),
+        "precondition: the page has a date to lose"
+    );
+
+    assert_eq!(ws.clear_page_schedule(page.id.clone()).await.unwrap(), 1);
+
+    let after = ws.get_page(page.id.clone()).await.unwrap();
+    assert_eq!(after.scheduled_start, None, "the page shows no date");
+    assert_eq!(after.scheduled_end, None);
+}
+
+/// Nothing to clear is not a failure. The menu entry is offered whenever a page
+/// shows a date, and a date can be gone by the time the tap lands — from
+/// another window, a sync poll, or a second tap.
+#[tokio::test]
+async fn clearing_a_page_with_no_date_reports_nothing_rather_than_failing() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Someday")).await.unwrap();
+    assert_eq!(ws.clear_page_schedule(page.id.clone()).await.unwrap(), 0);
+}
+
+/// A calendar's page cannot have its date taken away here, and the refusal has
+/// to arrive as a refusal.
+///
+/// This is the flag's whole purpose: `schedule_locked` on a summary is what
+/// lets the UI leave the entry out, and this is the guard behind it for every
+/// caller that does not — a widget, an intent, a stale list.
+#[tokio::test]
+async fn a_calendar_owned_date_cannot_be_cleared() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Standup")
+        })
+        .await
+        .unwrap();
+
+    link_to_a_calendar(&tmp.path, &page.id).await;
+
+    match ws.clear_page_schedule(page.id.clone()).await {
+        Err(WorkspaceError::Refused { .. }) => {}
+        other => panic!("expected Refused, got {other:?}"),
+    }
+    assert_eq!(
+        ws.get_page(page.id.clone())
+            .await
+            .unwrap()
+            .scheduled_start
+            .as_deref(),
+        Some("2099-03-16T09:00:00"),
+        "and the date is still there"
+    );
+}
+
+/// The summary carries the lock, so a list can decide what to offer without
+/// fetching every page.
+///
+/// A page list draws dozens of rows and each one's context menu has to know
+/// whether rename, move and clear-date are available. Asking per row would be
+/// dozens of round trips for a flag the summary query already computes.
+#[tokio::test]
+async fn a_summary_says_whether_a_calendar_owns_its_schedule() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let native = ws.create_page(new_page("Mine")).await.unwrap();
+    let mirrored = ws.create_page(new_page("Theirs")).await.unwrap();
+    link_to_a_calendar(&tmp.path, &mirrored.id).await;
+
+    let pages = ws.list_pages(PageQuery::default()).await.unwrap();
+    let locked = |id: &str| {
+        pages
+            .iter()
+            .find(|p| p.id == id)
+            .unwrap_or_else(|| panic!("{id} should be listed"))
+            .schedule_locked
+    };
+    assert!(!locked(&native.id), "a page made here is the user's");
+    assert!(locked(&mirrored.id), "a mirror is not");
+}
+
+/// Give a page an active calendar link, the way the reconciler seeds one.
+///
+/// Written against the tables rather than through a sync API because this crate
+/// does not expose one — `pikos-calendar-sync` is not a dependency of the FFI.
+/// What matters to the tests above is only the derived flag, and that reads
+/// `page_sync.sync_state = 'active'`.
+async fn link_to_a_calendar(path: &str, page_id: &str) {
+    let pool = pikos_db::open_pool(path).await.unwrap();
+    let now = "2026-01-01T00:00:00.000Z";
+    sqlx::query(
+        "INSERT INTO sync_account
+           (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('acct', 'caldav', 'Test calendar', 'basic', ?, ?)",
+    )
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_sync
+           (id, page_id, account_id, provider, calendar_id, external_id, ical_uid, created_at)
+         VALUES (?, ?, 'acct', 'caldav', 'cal', ?, ?, ?)",
+    )
+    .bind(format!("ps-{page_id}"))
+    .bind(page_id)
+    .bind(format!("/dav/{page_id}.ics"))
+    .bind(format!("uid-{page_id}"))
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
+}
+
+/// What clearing does on a repeating page, which is nothing visible.
+///
+/// A record of the behaviour rather than an endorsement of it. A page with a
+/// rule owns its `scheduled_start` directly — the denorm refresh returns early
+/// for exactly that case, because the head's date is advanced by the recurring
+/// logic and recomputing it from `page_schedules` would drag the head back to
+/// whatever anchor row predates the rule. So the one-off rows do go, and the
+/// date the user is looking at does not move.
+///
+/// That is why the iOS menu leaves "Clear Date" out on a repeating page: not a
+/// different rule from desktop's, but a refusal to offer an entry whose only
+/// outcome is nothing happening. Ending a series is a different action and
+/// needs its own affordance.
+#[tokio::test]
+async fn clearing_a_repeating_page_s_date_leaves_the_head_where_it_is() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Standup")
+        })
+        .await
+        .unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "2099-03-16T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let before = ws.get_page(page.id.clone()).await.unwrap().scheduled_start;
+    assert!(before.is_some(), "precondition: the head shows a date");
+
+    ws.clear_page_schedule(page.id.clone()).await.unwrap();
+
+    assert_eq!(
+        ws.get_page(page.id.clone()).await.unwrap().scheduled_start,
+        before,
+        "the head keeps its date — the series still owns it"
+    );
+}

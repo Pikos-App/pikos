@@ -98,6 +98,11 @@ suite.
 - **The iPad UI.** Ships in the same universal binary, styled after the desktop
   app rather than the phone. Not started; `docs/ios/00-status.md` records the
   three things being kept true so that it stays a change of shell.
+- **Ending a series from the list.** The context menu's "Clear Date" is left
+  out on a repeating page, where it would remove the one-off schedule rows and
+  change nothing the user can see — a page with a rule owns its
+  `scheduled_start` directly. Ending a series is a different action and has no
+  affordance yet.
 - **Emptying the trash by hand.** "Recently Deleted" restores; it does not
   offer a permanent delete. The retention window already clears the trash, and
   a destructive control sitting next to a restore button on a phone is the same

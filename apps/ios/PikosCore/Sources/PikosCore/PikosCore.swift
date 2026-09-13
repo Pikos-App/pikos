@@ -864,6 +864,33 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func calendarRange(start: String, end: String) async throws  -> [CalendarEntry]
     
     /**
+     * Take a page's date away, leaving any recurrence it has intact.
+     *
+     * A page can carry several schedule rows and they are not all the same
+     * kind. The one-off ones are what "clear the date" means; a row with a
+     * `rule_id` is a *materialised occurrence* of a series — a single instance
+     * somebody dragged to another slot — and deleting those would silently
+     * undo those moves, or, on a head, strip the series of the anchor it is
+     * expanded from. So only the rule-less rows go, which is the same line
+     * desktop's `clearSchedule` draws.
+     *
+     * Each row goes through `delete_page_schedule_impl` rather than one bulk
+     * `DELETE`, because that function is where the two things a bare delete
+     * would skip live: the refusal on a calendar-owned row, and the denorm
+     * refresh that stops `pages.scheduled_start` pointing at a row that is no
+     * longer there.
+     *
+     * Returns how many rows were removed, so a caller can tell "cleared" from
+     * "there was nothing to clear" without listing them itself.
+     *
+     * **Not atomic.** Each row is its own transaction. A failure partway
+     * leaves the earlier deletions in place, which is the same shape as the
+     * desktop path and the benign direction to fail in: a page with fewer
+     * dates than it had, never one whose denorm disagrees with its rows.
+     */
+    func clearPageSchedule(pageId: String) async throws  -> UInt32
+    
+    /**
      * Complete one occurrence of a recurring page.
      *
      * Not the same operation as setting `status` to done, and the difference is
@@ -1180,6 +1207,47 @@ open func calendarRange(start: String, end: String)async throws  -> [CalendarEnt
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeCalendarEntry.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Take a page's date away, leaving any recurrence it has intact.
+     *
+     * A page can carry several schedule rows and they are not all the same
+     * kind. The one-off ones are what "clear the date" means; a row with a
+     * `rule_id` is a *materialised occurrence* of a series — a single instance
+     * somebody dragged to another slot — and deleting those would silently
+     * undo those moves, or, on a head, strip the series of the anchor it is
+     * expanded from. So only the rule-less rows go, which is the same line
+     * desktop's `clearSchedule` draws.
+     *
+     * Each row goes through `delete_page_schedule_impl` rather than one bulk
+     * `DELETE`, because that function is where the two things a bare delete
+     * would skip live: the refusal on a calendar-owned row, and the denorm
+     * refresh that stops `pages.scheduled_start` pointing at a row that is no
+     * longer there.
+     *
+     * Returns how many rows were removed, so a caller can tell "cleared" from
+     * "there was nothing to clear" without listing them itself.
+     *
+     * **Not atomic.** Each row is its own transaction. A failure partway
+     * leaves the earlier deletions in place, which is the same shape as the
+     * desktop path and the benign direction to fail in: a page with fewer
+     * dates than it had, never one whose denorm disagrees with its rows.
+     */
+open func clearPageSchedule(pageId: String)async throws  -> UInt32  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_clear_page_schedule(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_u32,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_u32,
+            freeFunc: ffi_pikos_ffi_rust_future_free_u32,
+            liftFunc: FfiConverterUInt32.lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -2655,6 +2723,16 @@ public struct PageSummary: Equatable, Hashable {
      * per row, and the one flag that changes what a checkbox means.
      */
     public var isRecurring: Bool
+    /**
+     * True while a calendar owns this page's schedule.
+     *
+     * Carried for the same reason as `is_recurring`: it changes what the UI may
+     * offer, not just what it draws. A locked page's title and dates belong to
+     * the calendar, so rename, move and clear-date are refused at the data
+     * layer — and a menu entry whose only outcome is an error message should
+     * not be shown at all. Derived per row by the summary query, not stored.
+     */
+    public var scheduleLocked: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2669,7 +2747,16 @@ public struct PageSummary: Equatable, Hashable {
          * setting `status` on a recurring head ends the series instead of
          * completing one occurrence of it. Cheaper than the alternative of asking
          * per row, and the one flag that changes what a checkbox means.
-         */isRecurring: Bool) {
+         */isRecurring: Bool, 
+        /**
+         * True while a calendar owns this page's schedule.
+         *
+         * Carried for the same reason as `is_recurring`: it changes what the UI may
+         * offer, not just what it draws. A locked page's title and dates belong to
+         * the calendar, so rename, move and clear-date are refused at the data
+         * layer — and a menu entry whose only outcome is an error message should
+         * not be shown at all. Derived per row by the summary query, not stored.
+         */scheduleLocked: Bool) {
         self.id = id
         self.folderId = folderId
         self.title = title
@@ -2685,6 +2772,7 @@ public struct PageSummary: Equatable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isRecurring = isRecurring
+        self.scheduleLocked = scheduleLocked
     }
 
     
@@ -2717,7 +2805,8 @@ public struct FfiConverterTypePageSummary: FfiConverterRustBuffer {
                 parentId: FfiConverterOptionString.read(from: &buf), 
                 createdAt: FfiConverterString.read(from: &buf), 
                 updatedAt: FfiConverterString.read(from: &buf), 
-                isRecurring: FfiConverterBool.read(from: &buf)
+                isRecurring: FfiConverterBool.read(from: &buf), 
+                scheduleLocked: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2737,6 +2826,7 @@ public struct FfiConverterTypePageSummary: FfiConverterRustBuffer {
         FfiConverterString.write(value.createdAt, into: &buf)
         FfiConverterString.write(value.updatedAt, into: &buf)
         FfiConverterBool.write(value.isRecurring, into: &buf)
+        FfiConverterBool.write(value.scheduleLocked, into: &buf)
     }
 }
 
@@ -4800,6 +4890,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_calendar_range() != 23142) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_clear_page_schedule() != 51741) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_complete_recurring_occurrence() != 16483) {

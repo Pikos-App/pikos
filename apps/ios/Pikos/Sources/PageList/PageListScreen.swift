@@ -13,6 +13,8 @@ struct PageListScreen: View {
     @State private var isFolderManagerPresented = false
     @State private var isTrashPresented = false
     @State private var searchText = ""
+    @State private var renaming: PageSummary?
+    @State private var renameText = ""
 
     /// The list only — no `NavigationStack` of its own.
     ///
@@ -96,10 +98,107 @@ struct PageListScreen: View {
                     }
                     .tint(done ? .orange : .green)
                 }
+                .contextMenu { menu(for: page) }
             }
         }
         .listStyle(.plain)
         .refreshable { await store.refresh() }
+        // An alert rather than an inline edit, for the same reason as the
+        // folder manager's: a row that becomes editable on tap competes with
+        // the tap that opens the page, and a phone has no hover to disambiguate.
+        //
+        // On the list rather than on `body`, which already carries the error
+        // alert. Two `.alert` modifiers on one view are not reliably two
+        // alerts — the last one applied can win — and this is the view the
+        // context menu that raises it belongs to anyway.
+        .alert("Rename page", isPresented: isRenaming) {
+            TextField("Title", text: $renameText)
+            Button("Cancel", role: .cancel) { renaming = nil }
+            Button("Rename") { commitRename() }
+        }
+    }
+
+    /// The long press menu — desktop's right-click menu, minus what a phone
+    /// cannot do.
+    ///
+    /// Everything above Delete is withheld from a page a calendar owns. The
+    /// title, dates and placement of a mirror belong upstream and the workspace
+    /// refuses all three, so an entry here would only ever produce an error
+    /// alert. Delete stays: a mirror can be removed locally, and that path
+    /// already knows to keep the tombstone.
+    @ViewBuilder
+    private func menu(for page: PageSummary) -> some View {
+        if !page.scheduleLocked {
+            Button {
+                renameText = page.title
+                renaming = page
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+
+            // Nested rather than a sheet: a move is one decision from a short
+            // list, and a sheet for it would be two taps and a dismissal for
+            // something the menu is already showing.
+            Menu {
+                Button { move(page, to: nil) } label: {
+                    filedLabel("Inbox", current: page.folderId == nil)
+                }
+                ForEach(store.fileableFolders, id: \.id) { folder in
+                    Button { move(page, to: folder.id) } label: {
+                        filedLabel(folder.name, current: page.folderId == folder.id)
+                    }
+                }
+            } label: {
+                Label("Move to Folder", systemImage: "folder")
+            }
+
+            // Not offered on a repeating page, where it would do nothing
+            // visible: a page with a rule owns its `scheduled_start` directly,
+            // so clearing the one-off rows underneath leaves the date on
+            // screen exactly where it was. Ending a series is a different
+            // action and wants its own affordance, not this one silently
+            // failing to be it. `pikos-ffi`'s
+            // `clearing_a_repeating_page_s_date_leaves_the_head_where_it_is`
+            // pins the behaviour this is avoiding.
+            if page.scheduledStart != nil && !page.isRecurring {
+                Button {
+                    Task { await store.clearDate(pageId: page.id) }
+                } label: {
+                    Label("Clear Date", systemImage: "calendar.badge.minus")
+                }
+            }
+        }
+
+        Button(role: .destructive) {
+            Task { await store.trash(pageId: page.id) }
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+    }
+
+    /// A tick beside where the page already is.
+    ///
+    /// Desktop bolds that row; a menu on iOS shows state with a checkmark, and
+    /// `Label` is what puts one in the leading position the system uses.
+    private func filedLabel(_ name: String, current: Bool) -> some View {
+        Label(name, systemImage: current ? "checkmark" : "folder")
+    }
+
+    private func move(_ page: PageSummary, to folderId: String?) {
+        guard page.folderId != folderId else { return }
+        Task { await store.movePage(id: page.id, toFolder: folderId) }
+    }
+
+    /// Bound to the presence of a page rather than a separate flag, so the two
+    /// cannot disagree about whether the alert is up.
+    private var isRenaming: Binding<Bool> {
+        Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
+    }
+
+    private func commitRename() {
+        guard let page = renaming else { return }
+        renaming = nil
+        Task { await store.renamePage(id: page.id, to: renameText) }
     }
 
     /// The current view, narrowed by the filter field.

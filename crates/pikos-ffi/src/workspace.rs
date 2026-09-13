@@ -124,6 +124,14 @@ pub struct PageSummary {
     /// completing one occurrence of it. Cheaper than the alternative of asking
     /// per row, and the one flag that changes what a checkbox means.
     pub is_recurring: bool,
+    /// True while a calendar owns this page's schedule.
+    ///
+    /// Carried for the same reason as `is_recurring`: it changes what the UI may
+    /// offer, not just what it draws. A locked page's title and dates belong to
+    /// the calendar, so rename, move and clear-date are refused at the data
+    /// layer — and a menu entry whose only outcome is an error message should
+    /// not be shown at all. Derived per row by the summary query, not stored.
+    pub schedule_locked: bool,
 }
 
 impl From<pikos_db::PageSummary> for PageSummary {
@@ -144,6 +152,7 @@ impl From<pikos_db::PageSummary> for PageSummary {
             created_at: p.created_at,
             updated_at: p.updated_at,
             is_recurring: p.is_recurring,
+            schedule_locked: p.schedule_locked,
         }
     }
 }
@@ -826,6 +835,39 @@ impl Workspace {
                 Ok(vec![self.get_page(page.id).await?])
             }
         }
+    }
+
+    /// Take a page's date away, leaving any recurrence it has intact.
+    ///
+    /// A page can carry several schedule rows and they are not all the same
+    /// kind. The one-off ones are what "clear the date" means; a row with a
+    /// `rule_id` is a *materialised occurrence* of a series — a single instance
+    /// somebody dragged to another slot — and deleting those would silently
+    /// undo those moves, or, on a head, strip the series of the anchor it is
+    /// expanded from. So only the rule-less rows go, which is the same line
+    /// desktop's `clearSchedule` draws.
+    ///
+    /// Each row goes through `delete_page_schedule_impl` rather than one bulk
+    /// `DELETE`, because that function is where the two things a bare delete
+    /// would skip live: the refusal on a calendar-owned row, and the denorm
+    /// refresh that stops `pages.scheduled_start` pointing at a row that is no
+    /// longer there.
+    ///
+    /// Returns how many rows were removed, so a caller can tell "cleared" from
+    /// "there was nothing to clear" without listing them itself.
+    ///
+    /// **Not atomic.** Each row is its own transaction. A failure partway
+    /// leaves the earlier deletions in place, which is the same shape as the
+    /// desktop path and the benign direction to fail in: a page with fewer
+    /// dates than it had, never one whose denorm disagrees with its rows.
+    pub async fn clear_page_schedule(&self, page_id: String) -> Result<u32, WorkspaceError> {
+        let schedules = pikos_db::list_page_schedules_impl(&self.pool, &page_id).await?;
+        let mut cleared = 0;
+        for schedule in schedules.into_iter().filter(|s| s.rule_id.is_none()) {
+            pikos_db::delete_page_schedule_impl(&self.pool, schedule.id).await?;
+            cleared += 1;
+        }
+        Ok(cleared)
     }
 
     /// Move a page to the trash. Recoverable — see `restore_page`.
