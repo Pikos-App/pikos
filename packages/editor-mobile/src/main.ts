@@ -71,15 +71,13 @@ function mount(): Editor {
         resolveAssetUrl,
       }),
     ],
-    onSelectionUpdate: ({ editor: e }) => {
-      const { $from, empty } = e.state.selection;
-      send("selectionChanged", {
-        isEmpty: empty,
-        // Drives the native formatting toolbar's active states.
-        marks: Object.keys(e.schema.marks).filter((mark) => e.isActive(mark)),
-        nodeType: $from.parent.type.name,
-      });
-    },
+    // Reported on focus as well as on selection change. ProseMirror only fires
+    // a selection update when the selection actually moves, so tapping into the
+    // document where the caret already sits produces nothing — and a native
+    // toolbar that only listens for movement would sit there showing whatever
+    // the last page's caret was under.
+    onFocus: ({ editor: e }) => reportSelection(e),
+    onSelectionUpdate: ({ editor: e }) => reportSelection(e),
     onUpdate: ({ editor: e }) => {
       // A host-initiated load fires onUpdate too. Sending that back would have
       // the host persist a document it just supplied — harmless in isolation,
@@ -98,6 +96,17 @@ function mount(): Editor {
   window.addEventListener("pagehide", () => sendDocChanged.flush());
 
   return editor;
+}
+
+/** Tell the host what the caret is currently inside, for its formatting UI. */
+function reportSelection(editor: Editor): void {
+  const { $from, empty } = editor.state.selection;
+  send("selectionChanged", {
+    isEmpty: empty,
+    // Drives the native toolbar's active states.
+    marks: Object.keys(editor.schema.marks).filter((mark) => editor.isActive(mark)),
+    nodeType: $from.parent.type.name,
+  });
 }
 
 let lastReportedHeight = 0;
@@ -133,9 +142,21 @@ function handleHostMessage(editor: Editor, raw: unknown): void {
       currentPageId = pageId;
       applyingHostDocument = true;
       try {
-        // `emitUpdate: false` is belt to the `applyingHostDocument` braces —
-        // the flag also covers the transactions Tiptap runs while normalising.
-        editor.commands.setContent(JSON.parse(doc) as object, { emitUpdate: false });
+        // Three things at once, each load-bearing:
+        //
+        //   addToHistory: false  keeps the load out of the undo stack. Without
+        //     it, undo on a freshly-opened page reverts to the empty document
+        //     the editor started with. That is worse on a phone than a desktop:
+        //     iOS offers shake-to-undo and an undo key on the keyboard, both
+        //     easy to hit by accident.
+        //   emitUpdate: false    stops the load being reported back as a change.
+        //   applyingHostDocument also covers the transactions Tiptap runs while
+        //     normalising, which emitUpdate alone does not.
+        editor
+          .chain()
+          .setMeta("addToHistory", false)
+          .setContent(JSON.parse(doc) as object, { emitUpdate: false })
+          .run();
       } catch {
         // A document that will not parse is corrupt, not a reason to leave the
         // user staring at the previous page's content.

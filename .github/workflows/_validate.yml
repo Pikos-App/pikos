@@ -94,6 +94,58 @@ jobs:
             packages/core/coverage/
           retention-days: 7
 
+  # The mobile editor driven in a real browser.
+  #
+  # Not a substitute for M0: typing latency, keyboard behaviour and selection
+  # handles are WKWebView questions no desktop browser can answer. What it does
+  # cover is the bridge protocol, document fidelity and message validation —
+  # which would otherwise only ever be exercised on a device, where a failure
+  # costs far more to diagnose.
+  #
+  # Its own job rather than a step in `verify` (that runner has no browsers) and
+  # rather than a step in `e2e` (which is sharded five ways, and this would then
+  # run five times). Same container image, for the same reason: pre-baked
+  # browsers, no download to stall on.
+  editor-e2e:
+    name: Mobile Editor E2E
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Assert Playwright matches the container image
+        run: |
+          PKG=$(pnpm --filter @pikos/editor-mobile exec playwright --version | awk '{print $NF}')
+          if [ "$PKG" != "1.58.2" ]; then
+            echo "::error::@pikos/editor-mobile pins @playwright/test $PKG but the container is v1.58.2-noble. Bump both together."
+            exit 1
+          fi
+
+      - name: Build the editor
+        run: pnpm --filter @pikos/editor-mobile build
+
+      - name: Run editor e2e
+        run: pnpm --filter @pikos/editor-mobile test:e2e
+
+      - uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: editor-e2e-report
+          path: packages/editor-mobile/test-results/
+          retention-days: 7
+
   e2e:
     name: E2E Tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest

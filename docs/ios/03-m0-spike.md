@@ -100,6 +100,37 @@ none of them depend on the editor being a webview. The parts that would be
 discarded are `packages/editor-mobile` and `PikosEditorBridge`, which is a
 deliberately small fraction, and the reason the spike was scaffolded this way.
 
+## The editor is tested in a real browser
+
+`packages/editor-mobile/e2e/` drives the built editor in Chromium with a
+stand-in for the WKWebView host. 22 tests cover what the device run should not
+have to discover: the bridge protocol end to end, document fidelity across
+every node type, debounce and its flush-on-background, selection reporting,
+theme and image commands, and refusal of malformed or wrong-version messages.
+
+Chromium is not WebKit, and the difference is exactly the part M0 exists to
+measure — typing latency, keyboard behaviour, selection handles. This narrows
+what the device run is _for_ rather than replacing it.
+
+Two real defects came out of writing those tests, both of which would otherwise
+have surfaced on device:
+
+1. **Undo after opening a page erased it.** Loading content with
+   `setContent(doc, { emitUpdate: false })` makes the load an undoable step, so
+   undo reverted to the empty document the editor was constructed with — and
+   because `onUpdate` then fired, autosave persisted the empty document. Two
+   ways in: undo before typing at all, or typing within ProseMirror's ~500ms
+   grouping window, where the keystroke is grouped with the load and one undo
+   reverts both. **This was a live bug in the desktop app**, which loads pages
+   the same way; it is fixed in both, with regression tests.
+2. **No selection event on focus.** ProseMirror reports a selection update only
+   when the selection actually moves, so tapping into the document where the
+   caret already sits produced nothing — and a native formatting toolbar would
+   have sat there showing the previous page's state. The editor now reports on
+   focus as well.
+
+The suite runs in CI as its own job, in the Playwright container.
+
 ## What has not been compiled
 
 No Swift compiler was available where this was written, and `download.swift.org`

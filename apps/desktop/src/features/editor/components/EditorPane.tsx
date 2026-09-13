@@ -3,6 +3,7 @@
 
 import { extractText } from "@pikos/core";
 import { createDocumentExtensions } from "@pikos/editor-schema";
+import type { JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Typography from "@tiptap/extension-typography";
 import type { Editor } from "@tiptap/react";
@@ -70,6 +71,27 @@ function handleMarkdownPaste(editor: Editor | null, event: ClipboardEvent): bool
   if (!text || !looksLikeMarkdown(text)) return false;
   // insertContent is overridden by tiptap-markdown to parse strings as markdown.
   return editor.commands.insertContent(text);
+}
+
+/**
+ * Put a page's content into the editor.
+ *
+ * Exported so the behaviour below can be tested directly rather than through a
+ * React effect — and so there is exactly one load path to get right.
+ *
+ * Two flags, both load-bearing:
+ *
+ * - `emitUpdate: false` stops the load being reported as a change, which would
+ *   trigger autosave for content the user has not touched.
+ * - `addToHistory: false` keeps the load out of the undo stack. Without it the
+ *   load is an undoable step, so undo on a freshly-opened page reverts to the
+ *   empty document the editor was constructed with — and because onUpdate then
+ *   fires, autosave persists that empty document. Typing within ProseMirror's
+ *   ~500ms grouping window has the same effect, as the keystroke is grouped
+ *   with the load and one undo reverts both.
+ */
+export function loadPageContent(editor: Editor, doc: JSONContent): void {
+  editor.chain().setMeta("addToHistory", false).setContent(doc, { emitUpdate: false }).run();
 }
 
 export function EditorPane() {
@@ -159,9 +181,8 @@ export function EditorPane() {
 
     const doc = tryParseTiptapJson(page.content, `EditorPane page=${page.id}`);
 
-    // setContent without emitting an update (avoids triggering autosave for loaded content)
     if (!editor.isDestroyed) {
-      editor.commands.setContent(doc ?? EMPTY_TIPTAP_DOC, { emitUpdate: false });
+      loadPageContent(editor, doc ?? EMPTY_TIPTAP_DOC);
     }
     contentJsonRef.current = doc ? page.content : "";
 

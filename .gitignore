@@ -58,3 +58,7 @@ apps/ios/**/*.xcframework
 # A generated single-file build, not source.
 apps/ios/PikosEditorBridge/Sources/PikosEditorBridge/Resources/editor.html
 packages/editor-mobile/dist/
+
+# Playwright output for the mobile editor suite.
+packages/editor-mobile/test-results/
+packages/editor-mobile/playwright-report/

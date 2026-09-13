@@ -8,10 +8,11 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "lint": "eslint src scripts",
+    "lint": "eslint src scripts e2e",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "gen:swift": "esbuild scripts/gen-swift-protocol.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/gen-swift-protocol.mjs && node node_modules/.cache/gen-swift-protocol.mjs"
+    "gen:swift": "esbuild scripts/gen-swift-protocol.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/gen-swift-protocol.mjs && node node_modules/.cache/gen-swift-protocol.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@pikos/core": "workspace:*",
@@ -19,6 +20,7 @@
     "@tiptap/core": "^3.20.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.58.2",
     "@types/node": "^25.5.0",
     "esbuild": "^0.25.0",
     "jsdom": "^28.1.0",
