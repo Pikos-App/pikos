@@ -1,0 +1,309 @@
+// MetadataHeader — synced (locked) + detached provenance rendering.
+// Verifies: a locked title is read-only; a detached page shows the disconnected
+// notice; the reminder bell shows on a locked page whether or not it recurs.
+
+import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
+import type { Page } from "@pikos/core";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppSettingsProvider } from "@/shared/context/AppSettingsContext";
+import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
+import { usePages } from "@/shared/context/PagesContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
+import { renderWithProviders } from "@/test/renderWithProviders";
+
+import { MetadataHeader } from "./MetadataHeader";
+
+// globals: false in vitest config → @testing-library's auto-cleanup never runs.
+beforeEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+function makePage(over: Partial<Page>): Page {
+  return {
+    content: "",
+    contentSchemaVersion: CONTENT_SCHEMA_VERSION,
+    createdAt: "2026-01-01T00:00:00",
+    folderId: null,
+    id: "p1",
+    isRecurring: false,
+    priority: 0,
+    scheduledEnd: "2099-01-05T10:00:00",
+    scheduledStart: "2099-01-05T09:00:00",
+    scheduleLocked: false,
+    sortOrder: 0,
+    status: "not_started",
+    tags: [],
+    title: "Team sync",
+    updatedAt: "2026-01-01T00:00:00",
+    ...over,
+  };
+}
+
+type PagesApi = ReturnType<typeof usePages>;
+type WorkspaceApi = ReturnType<typeof useWorkspace>;
+
+function Harness({
+  onApi,
+  onAppendToBody,
+  page,
+}: {
+  onApi: (api: PagesApi, ws: WorkspaceApi) => void;
+  onAppendToBody: (text: string) => void;
+  page: Page;
+}) {
+  const pages = usePages();
+  const workspace = useWorkspace();
+  onApi(pages, workspace);
+  return (
+    <AppSettingsProvider>
+      <EditorSettingsProvider>
+        <TooltipProvider>
+          <MetadataHeader onAppendToBody={onAppendToBody} onFocusEditor={vi.fn()} page={page} />
+        </TooltipProvider>
+      </EditorSettingsProvider>
+    </AppSettingsProvider>
+  );
+}
+
+async function renderHeader(page: Page, onAppendToBody: (text: string) => void = vi.fn()) {
+  let pagesApi!: PagesApi;
+  let workspaceApi!: WorkspaceApi;
+  const utils = renderWithProviders(
+    <Harness
+      onApi={(p, w) => {
+        pagesApi = p;
+        workspaceApi = w;
+      }}
+      onAppendToBody={onAppendToBody}
+      page={page}
+    />
+  );
+  await act(async () => {
+    await workspaceApi.selectWorkspace();
+  });
+  return { ...utils, pagesApi: () => pagesApi };
+}
+
+describe("MetadataHeader — locked title", () => {
+  it("renders a locked page title as read-only (no button, click does not edit)", async () => {
+    await renderHeader(makePage({ scheduleLocked: true, syncState: "active", title: "Team sync" }));
+
+    const title = screen.getByLabelText("Page title");
+    expect(title).not.toHaveAttribute("role", "button");
+
+    fireEvent.click(title);
+    // No textarea editor appears — the title stays a static div.
+    expect(screen.queryByRole("textbox", { name: "Page title" })).not.toBeInTheDocument();
+  });
+
+  it("renders an unlocked page title as an editable button", async () => {
+    await renderHeader(makePage({ scheduleLocked: false, syncState: null, title: "Team sync" }));
+    expect(screen.getByRole("button", { name: "Page title" })).toBeInTheDocument();
+  });
+});
+
+// The other half of the lock, and the half nothing else asserts. A synced page is
+// meant to be first-class apart from its title and schedule, so the byline keeps
+// every control the calendar does not own. Widening the lock to the whole header
+// is the easy regression — it looks safer, it reads as "synced means read-only",
+// and the read-only tests above all keep passing while the page goes inert.
+describe("MetadataHeader — a locked mirror keeps what the calendar doesn't own", () => {
+  const mirror = () => makePage({ scheduleLocked: true, syncState: "active", tags: ["work"] });
+
+  it("offers the priority picker", async () => {
+    await renderHeader(mirror());
+    expect(screen.getByRole("button", { name: /^Priority:/ })).toBeEnabled();
+  });
+
+  it("offers the tag picker", async () => {
+    await renderHeader(mirror());
+    expect(screen.getByRole("button", { name: /^Tags:/ })).toBeEnabled();
+  });
+
+  it("offers the status toggle", async () => {
+    await renderHeader(mirror());
+    expect(screen.getByRole("button", { name: "Mark done" })).toBeEnabled();
+  });
+});
+
+describe("MetadataHeader — detached notice", () => {
+  it("shows the disconnected notice for a detached page", async () => {
+    await renderHeader(makePage({ scheduleLocked: false, syncState: "detached" }));
+    expect(screen.getByText(/Disconnected from/)).toBeInTheDocument();
+  });
+
+  it("omits the disconnected notice for an active synced page", async () => {
+    await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
+    expect(screen.queryByText(/Disconnected from/)).not.toBeInTheDocument();
+  });
+});
+
+describe("MetadataHeader — read-only mirror metadata", () => {
+  it("renders location + attendees read-only on a locked page", async () => {
+    await renderHeader(
+      makePage({
+        mirrorAttendees: ["alex@example.com", "sam@example.com"],
+        mirrorLocation: "Room 4B",
+        scheduleLocked: true,
+        syncState: "active",
+      })
+    );
+    expect(screen.getByText("Room 4B")).toBeInTheDocument();
+    // Multiple attendees collapse to a count.
+    expect(screen.getByText("2 guests")).toBeInTheDocument();
+  });
+
+  it("omits mirror metadata on a native (unlocked) page", async () => {
+    await renderHeader(
+      makePage({ mirrorAttendees: ["alex@example.com"], mirrorLocation: "Room 4B" })
+    );
+    expect(screen.queryByText("Room 4B")).not.toBeInTheDocument();
+  });
+});
+
+describe("MetadataHeader — calendar description-changed notice", () => {
+  it("shows the notice on a locked page with a pending description, revealing the text on View", async () => {
+    await renderHeader(
+      makePage({
+        pendingDescription: "New agenda for the meeting.",
+        scheduleLocked: true,
+        syncState: "active",
+      })
+    );
+    expect(screen.getByText(/calendar description changed/i)).toBeInTheDocument();
+    // Parked text is hidden until the user opens it.
+    expect(screen.queryByText("New agenda for the meeting.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    expect(screen.getByText("New agenda for the meeting.")).toBeInTheDocument();
+  });
+
+  it("omits the notice when pendingDescription is null", async () => {
+    await renderHeader(
+      makePage({ pendingDescription: null, scheduleLocked: true, syncState: "active" })
+    );
+    expect(screen.queryByText(/calendar description changed/i)).not.toBeInTheDocument();
+  });
+
+  it("omits the notice on a native page even if a stale pendingDescription is present", async () => {
+    await renderHeader(makePage({ pendingDescription: "stale", scheduleLocked: false }));
+    expect(screen.queryByText(/calendar description changed/i)).not.toBeInTheDocument();
+  });
+
+  it("hands the parked text to the editor on Append", async () => {
+    const append = vi.fn();
+    await renderHeader(
+      makePage({
+        pendingDescription: "New agenda for the meeting.",
+        scheduleLocked: true,
+        syncState: "active",
+      }),
+      append
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Append" }));
+    expect(append).toHaveBeenCalledWith("New agenda for the meeting.");
+  });
+
+  it("leaves the body alone on Dismiss", async () => {
+    const append = vi.fn();
+    await renderHeader(
+      makePage({
+        pendingDescription: "New agenda for the meeting.",
+        scheduleLocked: true,
+        syncState: "active",
+      }),
+      append
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(append).not.toHaveBeenCalled();
+  });
+
+  // No replace action, deliberately: the notice only fires because the user
+  // edited the body, so replacing destroys what raised it.
+  it("offers no action that overwrites the body", async () => {
+    await renderHeader(
+      makePage({
+        pendingDescription: "New agenda.",
+        scheduleLocked: true,
+        syncState: "active",
+      })
+    );
+    expect(screen.queryByRole("button", { name: /replace|use the calendar/i })).toBeNull();
+  });
+});
+
+describe("MetadataHeader — reminder bell on locked pages", () => {
+  it("shows the reminder bell on a locked RECURRING series", async () => {
+    const page = makePage({ id: "rec1", scheduleLocked: true, syncState: "active" });
+    const { pagesApi } = await renderHeader(page);
+    await act(async () => {
+      await pagesApi().createRecurrence({
+        pageId: "rec1",
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+    expect(screen.getByLabelText(/reminder/i)).toBeInTheDocument();
+  });
+
+  it("shows the reminder bell on a locked NON-recurring timed page", async () => {
+    await renderHeader(makePage({ id: "one1", scheduleLocked: true, syncState: "active" }));
+    expect(screen.getByLabelText(/reminder/i)).toBeInTheDocument();
+  });
+});
+
+describe("MetadataHeader — locked recurrence label", () => {
+  it("names the position of a BYSETPOS series", async () => {
+    const page = makePage({ id: "rec2", scheduleLocked: true, syncState: "active" });
+    const { pagesApi } = await renderHeader(page);
+    await act(async () => {
+      await pagesApi().createRecurrence({
+        pageId: "rec2",
+        rrule: "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=3",
+        scheduledStart: "2099-01-05T09:00:00",
+        timezone: "America/New_York",
+      });
+    });
+    expect(screen.getByText("every month on the 3rd Friday")).toBeInTheDocument();
+  });
+});
+
+describe("MetadataHeader — why a locked field can't be edited", () => {
+  it("explains the lock from the hint beside a locked title", async () => {
+    await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
+
+    const hint = screen.getByRole("img", { name: /are read-only for synced pages/ });
+    fireEvent.pointerMove(hint, { pointerType: "mouse" });
+    expect((await screen.findAllByText(/are read-only for synced pages/)).length).toBeGreaterThan(
+      0
+    );
+  });
+
+  // The lock is the one trigger. Resting on a locked field used to pop a tooltip
+  // of its own, which then parked over whatever sat below it.
+  it("leaves the locked title and schedule themselves silent", async () => {
+    await renderHeader(makePage({ scheduleLocked: true, syncState: "active" }));
+
+    fireEvent.pointerMove(screen.getByLabelText("Page title"), { pointerType: "mouse" });
+    fireEvent.pointerMove(screen.getByLabelText(/^Scheduled:/), { pointerType: "mouse" });
+    expect(screen.queryByText(/are read-only for synced pages/)).not.toBeInTheDocument();
+  });
+
+  it("leaves an unlocked title with no such explanation", async () => {
+    await renderHeader(makePage({ scheduleLocked: false, syncState: null }));
+
+    fireEvent.pointerMove(screen.getByRole("button", { name: "Page title" }), {
+      pointerType: "mouse",
+    });
+    expect(
+      screen.queryByRole("img", { name: /are read-only for synced pages/ })
+    ).not.toBeInTheDocument();
+  });
+});

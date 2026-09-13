@@ -1,11 +1,14 @@
 import {
   buildRrule,
   formatDateOnly,
+  optionsForFreq,
+  optionsWithEnd,
   parseLocalISO,
   parseRrule,
   type RecurrenceFreq,
   type RecurrenceOptions,
   type RecurrenceWeekday,
+  rruleEditWouldDegrade,
   rruleToLabel,
   rruleToShortLabel,
 } from "@pikos/core";
@@ -23,7 +26,7 @@ import { RecurrenceCustomEditor } from "./recurrence/RecurrenceCustomEditor";
 import { RecurrenceEndsEditor, type RecurrenceEndType } from "./recurrence/RecurrenceEndsEditor";
 import { RecurrencePresetList } from "./recurrence/RecurrencePresetList";
 
-interface RecurrencePopoverProps {
+export interface RecurrencePopoverProps {
   /** Current RRULE string (no "RRULE:" prefix) or null for "no recurrence". */
   rrule: string | null;
   /** Emit the new RRULE string, or null to clear the recurrence. */
@@ -89,6 +92,8 @@ export function RecurrencePopover({
 
   const options = rrule ? parseRrule(rrule) : null;
   const hasRule = options !== null;
+  const degradeLocked = !!rrule && rruleEditWouldDegrade(rrule);
+  const effectiveReadOnly = readOnly || degradeLocked;
   const triggerLabel = hasRule
     ? formatTriggerLabel(rrule, /* short */ true)
     : (overrideLabel ?? formatTriggerLabel(rrule, /* short */ true));
@@ -123,6 +128,9 @@ export function RecurrencePopover({
 
   function handleSelectPreset(preset: Preset) {
     setCustomManuallyExpanded(false);
+    // Re-clicking the active preset must not re-emit: the head's rule update
+    // triggers a backend recompute for an identical rule.
+    if (options && shapesMatch(options, preset.options)) return;
     emit(withEndCondition(preset.options));
   }
 
@@ -132,12 +140,11 @@ export function RecurrencePopover({
   }
 
   function handleSelectFreq(freq: RecurrenceFreq) {
-    const base: RecurrenceOptions = options
-      ? { ...options, freq, interval: options.interval }
-      : { freq, interval: 1 };
-    // BYDAY only meaningful for WEEKLY.
-    if (freq !== "WEEKLY") delete base.byweekday;
-    emit(base);
+    // Re-clicking the current freq must be a no-op: optionsForFreq whitelists per
+    // freq, so a re-emit strips the BY* terms that freq can't carry — a monthly
+    // "every Friday" rule would lose its BYDAY and become monthly-on-the-anchor.
+    if (freq === options?.freq) return;
+    emit(options ? optionsForFreq(options, freq) : { freq, interval: 1 });
   }
 
   function handleIntervalCommit() {
@@ -167,6 +174,7 @@ export function RecurrencePopover({
     const next = current.includes(day) ? current.filter((d) => d !== day) : [...current, day];
     const sorted = [...next].sort((a, b) => a - b);
     const nextOpts: RecurrenceOptions = { ...options };
+    delete nextOpts.byweekdayOrdinals;
     if (sorted.length === 0) delete nextOpts.byweekday;
     else nextOpts.byweekday = sorted;
     emit(nextOpts);
@@ -174,28 +182,19 @@ export function RecurrencePopover({
 
   function handleSelectEnd(type: RecurrenceEndType) {
     if (!options) return;
-    const next: RecurrenceOptions = {
-      freq: options.freq,
-      interval: options.interval,
-    };
-    if (options.byweekday) next.byweekday = options.byweekday;
     if (type === "until") {
-      next.until = options.until ?? format(addMonths(new Date(), 3), "yyyy-MM-dd");
+      const until = options.until ?? format(addMonths(new Date(), 3), "yyyy-MM-dd");
+      emit(optionsWithEnd(options, { until }));
     } else if (type === "count") {
-      next.count = options.count ?? 10;
+      emit(optionsWithEnd(options, { count: options.count ?? 10 }));
+    } else {
+      emit(optionsWithEnd(options, null));
     }
-    emit(next);
   }
 
   function handleUntilSelect(date: Date) {
     if (!options) return;
-    const next: RecurrenceOptions = {
-      freq: options.freq,
-      interval: options.interval,
-      until: formatDateOnly(date),
-    };
-    if (options.byweekday) next.byweekday = options.byweekday;
-    emit(next);
+    emit(optionsWithEnd(options, { until: formatDateOnly(date) }));
   }
 
   function handleCountCommit() {
@@ -205,15 +204,7 @@ export function RecurrencePopover({
       return;
     }
     const parsed = parseInt(countDraft, 10);
-    if (!isNaN(parsed) && parsed > 0) {
-      const next: RecurrenceOptions = {
-        count: parsed,
-        freq: options.freq,
-        interval: options.interval,
-      };
-      if (options.byweekday) next.byweekday = options.byweekday;
-      emit(next);
-    }
+    if (!isNaN(parsed) && parsed > 0) emit(optionsWithEnd(options, { count: parsed }));
     setCountDraft("");
   }
 
@@ -230,7 +221,7 @@ export function RecurrencePopover({
   }
 
   function handleOpenChange(next: boolean) {
-    if (readOnly || disabled) return;
+    if (effectiveReadOnly || disabled) return;
     if (!next) {
       setCountDraft("");
       setIntervalDraft("");
@@ -260,9 +251,11 @@ export function RecurrencePopover({
   const isIconOnly = variant === "icon" || !showLabel;
   const iconTooltipText = disabled
     ? (disabledHint ?? "Set a date first")
-    : hasLabelContent
-      ? triggerLabel
-      : "Set recurrence";
+    : degradeLocked
+      ? "This repeat can't be edited here"
+      : hasLabelContent
+        ? triggerLabel
+        : "Set recurrence";
 
   const triggerButton = (
     <button
@@ -277,7 +270,7 @@ export function RecurrencePopover({
             "min-w-0 text-sm",
         disabled
           ? "cursor-not-allowed text-muted-foreground/30"
-          : readOnly
+          : effectiveReadOnly
             ? "text-muted-foreground"
             : hasLabelContent
               ? "text-muted-foreground hover:text-foreground"
@@ -290,8 +283,10 @@ export function RecurrencePopover({
     </button>
   );
 
-  if (disabled || readOnly) {
-    if (isIconOnly) {
+  if (disabled || effectiveReadOnly) {
+    // Degrade-locked chips get a tooltip even in label mode so the disabled edit
+    // has an explanation; plain read-only label chips stay bare as before.
+    if (isIconOnly || degradeLocked) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>

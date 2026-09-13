@@ -59,12 +59,38 @@ The merge itself (`calendar::occurrences`) is ported from the desktop's
 than ones invented here: the point is to agree with the desktop, and its suite
 is the statement of what it does.
 
-Its whole content is one rule, and it is worth stating because half of it is
-easy to miss. **Suppress every occurrence at or before the head's own date.** On
-the head's date, the head is already drawn and a projection would stack a
-second block on it. *Before* the head's date, the rule still emits dates the
-user has moved past — drag the head from Monday to Wednesday and Monday
-reappears. Filtering on the head's exact date fixes only the first.
+### The exclusion union
+
+Four things stop a rule projecting onto a date, and they arrive from three
+places: the rule's own EXDATEs; a **completed** occurrence; a **skipped** one;
+and a materialised **override** row, which is a real schedule that will be drawn
+on its own.
+
+Override dates are gathered **by rule id, never by date range**. An override
+moved out of the visible week still has to suppress the slot it came from, and a
+range query keyed on where it moved *to* misses it — leaving a ghost in the
+original slot. This port originally used the range query, because that is what
+the reference did when it was written.
+
+### Head suppression, and the version of it that was wrong
+
+Only the head's **own** date is suppressed, because the head block already draws
+it.
+
+An earlier reference suppressed every date at or *before* the head, and this
+port copied that. It is wrong, and visibly so: a daily series whose head sits on
+Wednesday still owes the user Monday and Tuesday unless they were completed or
+skipped. Moving the head shifts the rule's anchor, so genuinely vacated dates
+stop being emitted at all; anything the user actually dealt with lands in the
+exclusion union. What is left is an open gap, and hiding it makes the calendar
+quietly disagree with what is outstanding.
+
+### The synced floor
+
+A page that came from a calendar carries `syncedSince`, and occurrences before
+it are not drawn. Without that floor the visible range is the only bound on how
+far back a series reaches, so navigating to any past week paints it across —
+for a period the calendar was never asked about.
 
 ## Identity runs two ways at once
 
@@ -82,15 +108,30 @@ a real constraint rather than an accident:
 
 `CalendarGrid` therefore builds two `LayoutPage` arrays from one entry list.
 
+## One engine, not two
+
+The expansion underneath is `crates/pikos-recurrence`, which the calendar-sync
+work built. `pikos-core` had an RRULE engine of its own — written for this port,
+graded against a corpus generated from rrule.js through `packages/core` — and it
+has been deleted rather than kept in sync. TypeScript now calls the same Rust
+through wasm, so there is one implementation on both sides.
+
+Deleting the corpus that graded the old engine was not free of information.
+Replayed against the survivor, 156 of 400 fuzz cases diverged, every one on
+BYHOUR, BYMINUTE or BYSECOND — which `ParsedRule::parse` rejects by design and
+documents as rejecting. The corpus was pinning a superseded reference, not
+catching a regression. `crates/pikos-core/tests/parity.rs` records this; one
+test survives there, for wall-clock behaviour across a DST boundary, because
+that is a decision this port made rather than an rrule semantic.
+
 ## What the tests bit on
 
-Every decision above was mutation-tested. Three are worth recording because
-they passed first try and only the mutation showed they were being checked:
+Every decision was mutation-tested. Worth recording because they passed first
+try and only the mutation showed they were being checked:
 
-- Removing the head-suppression fails two tests; weakening it to `==` rather
-  than `<=` fails one. The subtle half is genuinely covered.
-- Not pulling rule heads into the expansion input fails two.
+- Not pulling rule heads into the expansion input fails two tests.
 - Turning the overlap query back into a start-bound fails one.
+- Removing head suppression fails one.
 
 And one test caught a real bug on the way in rather than after: pulling head
 pages in for expansion had them **drawn** as well, so a March-anchored standup
@@ -99,10 +140,10 @@ appeared in June *and* in March. Heads are inputs, not blocks.
 ## Known gaps
 
 - **An override row is not drawn.** It suppresses the projection, correctly, but
-  both apps read one block per page from `pages.scheduled_start`, and for an
-  rrule-backed page that column is owned by the recurring logic —
-  `refresh_schedule_denorm` returns early rather than letting a new schedule row
-  move the head. Drawing overrides is a change to both apps.
+  the desktop additionally renders synced override rows as real blocks at their
+  moved time (`toOverrideBlocks`). That is gated on sync origin, and external
+  calendar sync is deferred for iOS, so it is deferred here too — the note is
+  here so it is a known gap rather than a surprise when sync arrives.
 - **Tapping a projected occurrence opens the head page.** Editing one occurrence
   on its own has to materialise a row first, which is a feature rather than a
   side effect of a tap.

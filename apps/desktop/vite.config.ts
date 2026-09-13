@@ -22,6 +22,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // Dev/test fixtures live outside src so a grep (or an agent reading the
+      // tree) doesn't pay for ~4k lines of seed data on every pass through the
+      // app source. They are still bundled — lazily, via seedLoaders — so the
+      // alias has to resolve for `vite build` as well as dev.
+      "@seeds": fileURLToPath(new URL("./seeds", import.meta.url)),
     },
   },
   server: {

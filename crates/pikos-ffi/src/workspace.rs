@@ -22,8 +22,9 @@
 
 use std::sync::Arc;
 
-use pikos_core::calendar::occurrences::{virtual_occurrences_in_range, SeriesRule};
-use pikos_core::calendar::LayoutPage as CoreLayoutPage;
+use pikos_core::calendar::occurrences::{
+    virtual_occurrences_in_range, OverrideRow, SeriesPage, SeriesRule,
+};
 use pikos_core::dates::{next_day, parse_local_iso};
 use pikos_core::nlp::quick_add::ParseResult as QuickAddParse;
 
@@ -142,7 +143,7 @@ pub struct Page {
     pub created_at: String,
     pub updated_at: String,
     /// Which editor schema wrote `content`. A client finding a version above
-    /// its own must not save over the document — see pikos-db migration 010.
+    /// its own must not save over the document — see pikos-db migration 013.
     pub content_schema_version: i64,
 }
 
@@ -510,7 +511,7 @@ impl Workspace {
         scheduled_end: Option<String>,
         timezone: String,
     ) -> Result<(), WorkspaceError> {
-        let anchor = pikos_core::recurrence::snap_anchor_to_rule(&rrule, &scheduled_start);
+        let anchor = pikos_recurrence::snap_anchor_to_rule(&rrule, &scheduled_start);
 
         pikos_db::create_recurrence_rule_impl(
             &self.pool,
@@ -842,143 +843,165 @@ async fn calendar_range_impl(
     start: &str,
     end: &str,
 ) -> Result<Vec<CalendarEntry>, WorkspaceError> {
-    let mut pages = pikos_db::list_pages_overlapping_impl(pool, start, end).await?;
+    let drawn = pikos_db::list_pages_overlapping_impl(pool, start, end).await?;
     let rules = pikos_db::list_recurrence_rules_impl(pool).await?;
 
-    // Everything the range query returned is drawn. Rule heads appended below
+    // Everything the range query returned is drawn. Rule heads gathered below
     // are *inputs to the expansion*, not blocks — a weekly standup anchored in
     // March must project onto June without also drawing itself there in March.
-    let drawn = pages.len();
-
-    // Pull in each rule's head page when the range did not already contain it.
-    // Sequential `get_page` calls rather than one `WHERE id IN (…)` because
-    // rule counts are in the tens and the query builder for a variadic IN is
-    // more code than it saves; revisit if that stops being true.
-    if !rules.is_empty() {
-        let mut missing: Vec<&str> = Vec::new();
-        for rule in &rules {
-            let known = pages.iter().any(|p| p.id == rule.page_id);
-            if !known && !missing.contains(&rule.page_id.as_str()) {
-                missing.push(&rule.page_id);
-            }
+    let mut heads: Vec<pikos_db::PageSummary> = Vec::new();
+    for rule in &rules {
+        let known = drawn.iter().chain(heads.iter()).any(|p| p.id == rule.page_id);
+        if known {
+            continue;
         }
-        let missing: Vec<String> = missing.into_iter().map(str::to_string).collect();
-        for id in missing {
-            if let Some(page) = pikos_db::get_page(pool, &id).await? {
-                // `get_page` returns the full row, including the document.
-                // Narrowed here to the same shape the range query produced, so
-                // everything downstream sees one kind of thing.
-                pages.push(pikos_db::PageSummary {
-                    id: page.id,
-                    folder_id: page.folder_id,
-                    title: page.title,
-                    subtitle: page.subtitle,
-                    status: page.status,
-                    priority: page.priority,
-                    tags: page.tags,
-                    sort_order: page.sort_order,
-                    scheduled_start: page.scheduled_start,
-                    scheduled_end: page.scheduled_end,
-                    completed_at: page.completed_at,
-                    links: page.links,
-                    parent_id: page.parent_id,
-                    last_opened_at: page.last_opened_at,
-                    created_at: page.created_at,
-                    updated_at: page.updated_at,
-                });
-            }
+        // Sequential `get_page` rather than one `WHERE id IN (…)`: rule counts
+        // are in the tens, and a variadic IN builder is more code than it saves.
+        if let Some(page) = pikos_db::get_page(pool, &rule.page_id).await? {
+            heads.push(page_summary_of(page));
         }
     }
 
-    // An override is a real schedule row for one occurrence of a series. The
-    // rule must not also project onto that date, or it is drawn twice.
-    let overrides = pikos_db::list_page_schedules_range_impl(pool, start, end).await?;
+    // Gathered by rule, never by date range. An override moved out of the
+    // visible week still has to suppress the slot it came from, and a range
+    // query keyed on where it moved *to* misses it — leaving a ghost behind.
+    let rule_ids: Vec<String> = rules.iter().map(|r| r.id.clone()).collect();
+    let overrides = pikos_db::list_page_schedules_for_rules_impl(pool, &rule_ids).await?;
 
-    let series: Vec<SeriesRule> = rules
-        .into_iter()
-        .map(|rule| {
-            let mut excluded = rule.rrule_exdates;
-            for schedule in &overrides {
-                if schedule.rule_id.as_deref() == Some(rule.id.as_str()) {
-                    if let Some(date) = schedule.original_date.clone() {
-                        excluded.push(date);
-                    }
-                }
-            }
-            SeriesRule {
-                id: rule.id,
-                page_id: rule.page_id,
-                rrule: rule.rrule,
-                excluded_dates: excluded,
-                scheduled_start: rule.scheduled_start,
-                scheduled_end: rule.scheduled_end,
-            }
-        })
-        .collect();
-
-    let layout_pages: Vec<CoreLayoutPage> = pages
+    let series_pages: Vec<SeriesPage> = drawn
         .iter()
-        .map(|p| CoreLayoutPage {
+        .chain(heads.iter())
+        .map(|p| SeriesPage {
             id: p.id.clone(),
-            created_at: p.created_at.clone(),
             scheduled_start: p.scheduled_start.clone(),
-            scheduled_end: p.scheduled_end.clone(),
+            completed_dates: p
+                .completed_occurrences
+                .as_ref()
+                .map(|m| m.keys().cloned().collect())
+                .unwrap_or_default(),
+            skipped_dates: p.skipped_occurrences.clone().unwrap_or_default(),
+            synced_since: p.synced_since.clone(),
         })
         .collect();
 
-    // The expansion window runs to the day *after* the last visible one, since
-    // `expand_for_range` takes a half-open interval and `end` here is the last
-    // day shown. Without the extra day, the final column of a week would never
-    // show a recurring occurrence.
-    let (Some(from), Some(to)) = (parse_local_iso(start), parse_local_iso(end).map(next_day))
-    else {
-        return Err(WorkspaceError::InvalidInput {
-            message: format!("calendar range needs two YYYY-MM-DD dates, got {start} and {end}"),
-        });
-    };
+    let series_rules: Vec<SeriesRule> = rules
+        .into_iter()
+        .map(|rule| SeriesRule {
+            id: rule.id,
+            page_id: rule.page_id,
+            rrule: rule.rrule,
+            exdates: rule.rrule_exdates,
+            scheduled_start: rule.scheduled_start,
+            scheduled_end: rule.scheduled_end,
+        })
+        .collect();
 
-    let virtuals = virtual_occurrences_in_range(&layout_pages, &series, &from, &to);
-
-    let mut entries: Vec<CalendarEntry> = pages[..drawn]
-        .iter()
-        .filter_map(|page| {
-            let scheduled_start = page.scheduled_start.clone()?;
-            Some(CalendarEntry {
-                page_id: page.id.clone(),
-                key: page.id.clone(),
-                title: page.title.clone(),
-                status: page.status.clone(),
-                priority: page.priority,
-                folder_id: page.folder_id.clone(),
-                tags: page.tags.clone(),
-                created_at: page.created_at.clone(),
-                scheduled_start,
-                scheduled_end: page.scheduled_end.clone(),
-                is_virtual: false,
-                original_date: None,
+    let override_rows: Vec<OverrideRow> = overrides
+        .into_iter()
+        .filter_map(|row| {
+            Some(OverrideRow {
+                rule_id: row.rule_id?,
+                original_date: row.original_date?,
             })
         })
         .collect();
 
+    // The expansion window runs to the day *after* the last visible one, since
+    // the engine takes a half-open interval and `end` here is the last day
+    // shown. Without the extra day, the final column of a week would never show
+    // a recurring occurrence.
+    let (Some(_), Some(to)) = (parse_local_iso(start), parse_local_iso(end).map(next_day)) else {
+        return Err(WorkspaceError::InvalidInput {
+            message: format!("calendar range needs two YYYY-MM-DD dates, got {start} and {end}"),
+        });
+    };
+    let to = pikos_core::dates::format_local_iso(&to);
+
+    let virtuals =
+        virtual_occurrences_in_range(&series_pages, &series_rules, &override_rows, start, &to);
+
+    let mut entries: Vec<CalendarEntry> = drawn
+        .iter()
+        .filter_map(|page| {
+            let scheduled_start = page.scheduled_start.clone()?;
+            Some(entry_of(page, page.id.clone(), scheduled_start, page.scheduled_end.clone(), None))
+        })
+        .collect();
+
     for occurrence in virtuals {
-        let Some(page) = pages.iter().find(|p| p.id == occurrence.page_id) else {
+        let Some(page) = drawn
+            .iter()
+            .chain(heads.iter())
+            .find(|p| p.id == occurrence.page_id)
+        else {
             continue;
         };
-        entries.push(CalendarEntry {
-            page_id: occurrence.page_id.clone(),
-            key: format!("{}@{}", occurrence.page_id, occurrence.original_date),
-            title: page.title.clone(),
-            status: page.status.clone(),
-            priority: page.priority,
-            folder_id: page.folder_id.clone(),
-            tags: page.tags.clone(),
-            created_at: page.created_at.clone(),
-            scheduled_start: occurrence.scheduled_start,
-            scheduled_end: occurrence.scheduled_end,
-            is_virtual: true,
-            original_date: Some(occurrence.original_date),
-        });
+        let key = format!("{}@{}", occurrence.page_id, occurrence.original_date);
+        entries.push(entry_of(
+            page,
+            key,
+            occurrence.scheduled_start,
+            occurrence.scheduled_end,
+            Some(occurrence.original_date),
+        ));
     }
 
     Ok(entries)
+}
+
+/// One entry, from a page plus whichever schedule this occurrence has.
+fn entry_of(
+    page: &pikos_db::PageSummary,
+    key: String,
+    scheduled_start: String,
+    scheduled_end: Option<String>,
+    original_date: Option<String>,
+) -> CalendarEntry {
+    CalendarEntry {
+        page_id: page.id.clone(),
+        key,
+        title: page.title.clone(),
+        status: page.status.clone(),
+        priority: page.priority,
+        folder_id: page.folder_id.clone(),
+        tags: page.tags.clone(),
+        created_at: page.created_at.clone(),
+        scheduled_start,
+        scheduled_end,
+        is_virtual: original_date.is_some(),
+        original_date,
+    }
+}
+
+/// Narrow a full page row to the summary shape the range query returns, so
+/// everything downstream sees one kind of thing.
+fn page_summary_of(page: pikos_db::Page) -> pikos_db::PageSummary {
+    pikos_db::PageSummary {
+        id: page.id,
+        folder_id: page.folder_id,
+        title: page.title,
+        subtitle: page.subtitle,
+        status: page.status,
+        priority: page.priority,
+        tags: page.tags,
+        sort_order: page.sort_order,
+        scheduled_start: page.scheduled_start,
+        scheduled_end: page.scheduled_end,
+        completed_at: page.completed_at,
+        links: page.links,
+        parent_id: page.parent_id,
+        last_opened_at: page.last_opened_at,
+        created_at: page.created_at,
+        updated_at: page.updated_at,
+        schedule_locked: page.schedule_locked,
+        sync_state: page.sync_state,
+        timezone: page.timezone,
+        completed_occurrences: page.completed_occurrences,
+        skipped_occurrences: page.skipped_occurrences,
+        mirror_location: page.mirror_location,
+        mirror_attendees: page.mirror_attendees,
+        pending_description: page.pending_description,
+        synced_since: page.synced_since,
+        is_recurring: page.is_recurring,
+    }
 }

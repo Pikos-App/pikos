@@ -10,6 +10,24 @@ delivery plan.
 | `03-m0-spike.md`                 | The editor-in-webview spike: how to run it, how to measure each item on the pass bar, what to do if it fails         |
 | `04-parser-grammar.md`           | The quick-add parser: what it needed, what was built, and what differential fuzzing found that the corpora could not |
 | `05-calendar.md`                 | The calendar: which half is shared, why a calendar cannot draw the pages it queried, and what the mutations caught  |
+| `06-platform-audit.md`           | What iOS breaks regardless of the UI layer, carried over from the Tauri spike and re-read against Swift             |
+
+## Based on `feat/external-calendar-sync`, not `main`
+
+This branch was cut from `main` and has since been merged onto
+`feat/external-calendar-sync`, which is 295 commits ahead of main and nearing
+merge. Doing it late would have cost more than doing it early, and three things
+had already drifted:
+
+- **Migration 010 was claimed twice.** Sync took 010–012 independently; this
+  branch's `content_schema_version` is now **013**. `sqlx` records a checksum
+  per version, so two files claiming one number means a database that ran either
+  refuses to open with the other — loud, but total.
+- **There were two Rust recurrence engines.** `pikos-core`'s has been deleted in
+  favour of `crates/pikos-recurrence`, which is timezone-aware and graded
+  against rrule.js goldens. TypeScript already calls it through wasm.
+- **The calendar's occurrence merge was a port of a superseded hook.** Rebuilt:
+  see `05-calendar.md`.
 
 ## Done
 
@@ -27,7 +45,7 @@ package. Generating the bindings needs no Mac, so the API iOS will consume is
 reviewable in a pull request and drift-checked in CI; only the XCFramework build
 is platform-gated.
 
-**Documents are version-stamped.** `pages.content_schema_version` (migration 010) closes the gap that open question 2 identified. A client finding a version
+**Documents are version-stamped.** `pages.content_schema_version` (migration 013) closes the gap that open question 2 identified. A client finding a version
 above its own must not save over the document — the corruption mode a second
 writing client introduces, and the one the plan cites as its reason for
 choosing TipTap-in-webview over a native editor.

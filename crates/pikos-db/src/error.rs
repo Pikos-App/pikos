@@ -41,6 +41,9 @@ pub enum AppError {
     #[error("invalid: {0}")]
     Invalid(String),
 
+    #[error("network: {0}")]
+    Network(String),
+
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -49,7 +52,7 @@ impl AppError {
     /// Stable, content-free kind tag for frontend branching. Lives next to
     /// the variant list so adding a variant produces a compile error here
     /// before reaching the wire format.
-    fn kind(&self) -> &'static str {
+    pub fn kind(&self) -> &'static str {
         match self {
             AppError::Db(_) => "Db",
             AppError::NotFound(_) => "NotFound",
@@ -57,6 +60,7 @@ impl AppError {
             AppError::Io(_) => "Io",
             AppError::Serde(_) => "Serde",
             AppError::Invalid(_) => "Invalid",
+            AppError::Network(_) => "Network",
             AppError::Internal(_) => "Internal",
         }
     }

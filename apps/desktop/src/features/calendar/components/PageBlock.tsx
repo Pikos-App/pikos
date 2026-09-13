@@ -1,22 +1,25 @@
-import type { VirtualOccurrence } from "@pikos/core";
-import { isDone } from "@pikos/core";
+import type { CalendarBlock, VirtualOccurrence } from "@pikos/core";
+import {
+  crossingMidnightsCount,
+  DEFAULT_EVENT_COLOR,
+  formatMultiDayTimeRange,
+  formatTimeRange,
+  isDone,
+  snapY,
+} from "@pikos/core";
 import { Repeat2 } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { SyncSourceIcon } from "@/shared/components/SyncSourceIcon";
 import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
 import { useCalendarSettings } from "@/shared/context/CalendarSettingsContext";
 import { useUI } from "@/shared/context/UIContext";
-import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 
 import { useCalendarBlockPopover } from "../hooks/useCalendarBlockPopover";
 import { useRecurringActions } from "../hooks/useRecurringActions";
-import { crossingMidnightsCount } from "../utils/allDayLayout";
-import { chipFolderStyle } from "../utils/calendarColors";
-import { CHIP_BASE_CLASSES, DEFAULT_EVENT_COLOR } from "../utils/calendarConstants";
-import { snapY } from "../utils/calendarGeometry";
-import { beginDragThreshold, type CalendarBlock } from "../utils/calendarLayout";
-import { formatMultiDayTimeRange, formatTimeRange } from "../utils/calendarTimeFormat";
+import { beginDragThreshold } from "../utils/beginDragThreshold";
+import { CHIP_BASE_CLASSES, chipFolderStyle } from "../utils/calendarColors";
 import { PageBlockPopover } from "./PageBlockPopover";
 import { VirtualPageBlockPopover } from "./VirtualPageBlockPopover";
 
@@ -47,7 +50,7 @@ interface PageBlockProps {
   isCompactWidth?: boolean;
   /** Called (with initial clientX/Y) when drag threshold is crossed on the block body. */
   onDragStart?: (clientX: number, clientY: number) => void;
-  /** Called when the user mousedowns in the bottom resize zone. */
+  /** Called when the user presses in the bottom resize zone. */
   onResizeStart?: () => void;
   /**
    * When set, overrides the rendered height of the block (px).
@@ -82,14 +85,9 @@ export function PageBlock({
     top,
     widthPct,
   } = block;
-  const { requestDeletePage } = useUndoDelete();
   const { highlightedPageId } = useUI();
   const { metrics } = useCalendarSettings();
-  const {
-    isRecurring,
-    skipOccurrence: handleSkipOccurrence,
-    toggleStatus,
-  } = useRecurringActions(page);
+  const { deleteBlock, isVirtual, showsCheckbox, toggleStatus } = useRecurringActions(page);
   const isHighlighted = highlightedPageId === page.id;
 
   const isResizing = resizeHeight !== undefined;
@@ -148,7 +146,12 @@ export function PageBlock({
   // boundary, not the real event end.
   const isSplitSegment = isContinuationBefore || isContinuationAfter;
   const isSegmentB = isContinuationBefore === true;
-  const resizeEnabled = !!onResizeStart && !isContinuationAfter && !isSegmentB;
+  // Synced events have a locked schedule. The drag/resize hooks already no-op,
+  // but the gesture *affordances* (grab cursor on press-and-hold, the resize
+  // handle + row-resize cursor) must be suppressed here too — otherwise the
+  // cursor advertises a move/resize that can't happen.
+  const locked = page.scheduleLocked;
+  const resizeEnabled = !!onResizeStart && !isContinuationAfter && !isSegmentB && !locked;
 
   /**
    * Hover linkage across split segments. Both segments share `page.id`, so
@@ -169,11 +172,16 @@ export function PageBlock({
    * route through here. Segment B blocks the drag entirely so a two-segment
    * event can only be rescheduled from its start segment.
    */
-  function handleBlockMouseDown(e: React.MouseEvent) {
-    if (e.button !== 0) return; // let right-click reach ContextMenuTrigger unmodified
-    e.stopPropagation();
+  function handleBlockPointerDown(e: React.PointerEvent) {
+    if (!e.isPrimary || e.button !== 0) return; // let right-click reach ContextMenuTrigger unmodified
+    // No stopPropagation: DayColumn filters presses that land on a block by
+    // target instead, because pointerdown is what Radix listens on to dismiss
+    // an open popover from outside — see the note on its handler.
     if (!onDragStart) return;
     if (isSegmentB) return;
+    // Locked (synced): don't begin the drag threshold — a click still opens the
+    // popover (onClick), but there's no grab cursor and no reschedule attempt.
+    if (locked) return;
     const { clientX: startX, clientY: startY } = e;
     beginDragThreshold(startX, startY, {
       bodyCursor: "dragging-grab",
@@ -191,8 +199,10 @@ export function PageBlock({
    * still suppresses the popover, then waits for the threshold before telling
    * the parent to start resizing.
    */
-  function handleResizeHandleMouseDown(e: React.MouseEvent) {
-    if (e.button !== 0) return;
+  function handleResizeHandlePointerDown(e: React.PointerEvent) {
+    if (!e.isPrimary || e.button !== 0) return;
+    // Keeps handleBlockPointerDown's "does not route through here" true — both
+    // thresholds would otherwise arm and fire on the same movement.
     e.stopPropagation();
     if (!onResizeStart) return;
     markDragging();
@@ -239,9 +249,7 @@ export function PageBlock({
   // Checkbox stroke tracks the event's accent (the left-border stripe), not
   // the fill — so it stays legible on muted fills and against any folder
   // color. Same fallback the chip background uses when no folder colour is set.
-  const checkbox = isRecurring ? (
-    <Repeat2 aria-label="Recurring" className={cn("shrink-0 text-muted-foreground", iconClass)} />
-  ) : (
+  const checkbox = showsCheckbox ? (
     <TaskCheckbox
       as="span"
       borderColor={folderColor ?? DEFAULT_EVENT_COLOR}
@@ -249,14 +257,23 @@ export function PageBlock({
       className={cn(iconClass, "cursor-pointer!")}
       onChange={handleCheckboxClick}
     />
+  ) : (
+    <Repeat2 aria-label="Recurring" className={cn("shrink-0 text-muted-foreground", iconClass)} />
   );
 
+  // Synced provenance: an active mirror dims-on-detach (never strikethrough —
+  // it's still a real page). The source/broken-sync glyph is SyncSourceIcon.
+  const isDetached = page.syncState === "detached";
+
   const resizeHandle = resizeEnabled ? (
+    // touch-none: the strip's only gesture is the resize, so the browser must
+    // not claim a touch drag here for a scroll. The block body deliberately
+    // does not set it — a touch drag there still scrolls the grid.
     <div
       aria-hidden
-      className="absolute right-0 bottom-0 left-0 cursor-row-resize!"
+      className="absolute right-0 bottom-0 left-0 cursor-row-resize! touch-none"
       onClick={(e) => e.stopPropagation()}
-      onMouseDown={handleResizeHandleMouseDown}
+      onPointerDown={handleResizeHandlePointerDown}
       style={{ height: resizeZoneFor(displayHeight) }}
     />
   ) : null;
@@ -271,6 +288,7 @@ export function PageBlock({
               "absolute select-none",
               CHIP_BASE_CLASSES,
               "flex items-center gap-1 rounded-tl-xs rounded-tr-[3px] rounded-br-[3px] rounded-bl-xs",
+              isDetached && !done && "opacity-70",
               done && "opacity-50",
               isHighlighted && "animate-highlight-flash",
               (isContinuationBefore || straddlesTopBand) && "rounded-tl-none rounded-tr-none",
@@ -283,9 +301,9 @@ export function PageBlock({
             )}
             data-cal-page-id={page.id}
             onClick={handleClick}
-            onMouseDown={handleBlockMouseDown}
             onMouseEnter={() => applyHoverLink(true)}
             onMouseLeave={() => applyHoverLink(false)}
+            onPointerDown={handleBlockPointerDown}
             style={sharedStyle}
           >
             {showLabel && checkbox}
@@ -299,6 +317,12 @@ export function PageBlock({
                 {page.title || "Untitled"}
               </span>
             )}
+            {showLabel && (
+              <SyncSourceIcon
+                className={cn("ml-auto", isMicro ? "h-2.5 w-2.5" : "h-3 w-3")}
+                syncState={page.syncState}
+              />
+            )}
             {resizeHandle}
           </button>
         ) : (
@@ -309,6 +333,7 @@ export function PageBlock({
               done
                 ? "opacity-50"
                 : "transition-[opacity,box-shadow] hover:opacity-80 hover:shadow-sm",
+              isDetached && !done && "opacity-70",
               isHighlighted && "animate-highlight-flash",
               isResizing
                 ? "cursor-row-resize!"
@@ -320,9 +345,9 @@ export function PageBlock({
             )}
             data-cal-page-id={page.id}
             onClick={handleClick}
-            onMouseDown={handleBlockMouseDown}
             onMouseEnter={() => applyHoverLink(true)}
             onMouseLeave={() => applyHoverLink(false)}
+            onPointerDown={handleBlockPointerDown}
             style={sharedStyle}
           >
             {showLabel && (
@@ -336,6 +361,11 @@ export function PageBlock({
                 >
                   {page.title || "Untitled"}
                 </p>
+                {/* mt-1 (4px) added to the row's 2px top inset (py-0.5) = 6px,
+                    matching the 6px right inset (px-1.5) so the icon is evenly
+                    spaced from the top and right corner. Stays in flow so a long
+                    title reserves space and never runs under it. */}
+                <SyncSourceIcon className="mt-1 ml-auto h-3 w-3" syncState={page.syncState} />
               </div>
             )}
             {showTimeLabel && (
@@ -345,19 +375,13 @@ export function PageBlock({
           </button>
         )}
       </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-80 p-3"
-        onMouseDown={(e) => e.stopPropagation()}
-        side="right"
-        sideOffset={8}
-      >
-        {isRecurring ? (
+      <PopoverContent align="start" className="w-80 p-3" side="right" sideOffset={8}>
+        {isVirtual ? (
           <VirtualPageBlockPopover
             onClose={() => setPopoverOpen(false)}
-            onSkip={() => {
+            onDelete={() => {
               setPopoverOpen(false);
-              void handleSkipOccurrence();
+              deleteBlock();
             }}
             page={page as VirtualOccurrence}
           />
@@ -366,7 +390,7 @@ export function PageBlock({
             onClose={() => setPopoverOpen(false)}
             onDelete={() => {
               setPopoverOpen(false);
-              requestDeletePage(page);
+              deleteBlock();
             }}
             onRemoveDate={() => {
               setPopoverOpen(false);

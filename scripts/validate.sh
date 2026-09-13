@@ -21,8 +21,10 @@ RESET='\033[0m'
 step() { printf "\n${BOLD}▶ %s${RESET}${DIM} %s${RESET}\n" "$1" "$2"; }
 
 # ── verify job ────────────────────────────────────────────────────────────────
+# VERIFY_ALL forces the full unit suite: verify's default is affected-only, which
+# is right for a pre-commit gate and wrong for a release gate.
 step "verify" "typecheck + lint + prettier + depcruise + unit tests"
-pnpm verify
+VERIFY_ALL=1 pnpm verify
 
 step "coverage" "desktop + core, per-directory thresholds"
 pnpm --filter @pikos/desktop --filter @pikos/core test:coverage
@@ -45,18 +47,53 @@ step "workspace cargo clippy" "crates/* — zero warnings"
 
 step "workspace cargo test" "crates/* — includes the TS-parity corpus"
 (cd "$ROOT" && cargo test --workspace --quiet)
+# ── bindings job ──────────────────────────────────────────────────────────────
+# packages/core/src/generated is committed, so it drifts the moment a pikos-db
+# wire struct changes without a regeneration — with every gate above still green,
+# because both sides typecheck fine in isolation. First of the two cargo steps:
+# it builds pikos-db natively, which warms the cache the rust steps below reuse.
+step "bindings freshness" "committed core/generated matches pikos-db"
+"$ROOT/scripts/gen-ts-bindings.sh" >/dev/null
+if [ -n "$(git -C "$ROOT" status --porcelain packages/core/src/generated)" ]; then
+  echo "packages/core/src/generated was stale — the regeneration is in your working tree. Commit it."
+  exit 1
+fi
+
+# app.css is the same arrangement one tier up: its token blocks are rendered from
+# packages/ui/src/tokens.ts, and a stale block is a wrong color in the shipped
+# build that no typecheck can see. Cheap enough to sit next to the bindings gate.
+step "token freshness" "committed app.css matches packages/ui tokens"
+"$ROOT/scripts/check-ui-tokens.sh"
 
 # ── rust job ──────────────────────────────────────────────────────────────────
-step "cargo fmt --check" ""
+step "wasm freshness" "committed recurrence pkg matches its crate"
+"$ROOT/scripts/build-recurrence-wasm.sh" >/dev/null
+if [ -n "$(git -C "$ROOT" status --porcelain packages/recurrence-wasm/pkg)" ]; then
+  echo "packages/recurrence-wasm/pkg was stale — the rebuild is in your working tree. Commit it."
+  exit 1
+fi
+
+# Two Cargo trees. The root workspace is `crates/*` and *excludes*
+# apps/desktop/src-tauri, so `--all` inside src-tauri covers that crate alone —
+# gating only there leaves pikos-db, -cli, -calendar-sync and -recurrence unchecked.
+step "cargo fmt --check" "workspace + desktop"
+(cd "$ROOT" && cargo fmt --all --check)
 (cd "$SRC_TAURI" && cargo fmt --check)
 
-step "cargo check" "zero warnings"
+step "cargo clippy (workspace)" "zero warnings"
+(cd "$ROOT" && cargo clippy --workspace --all-targets -- -D warnings)
+
+step "cargo test (workspace)" "parser bridge rebuilt first"
+(cd "$ROOT" && pnpm --filter @pikos/bridge build >/dev/null)
+(cd "$ROOT" && cargo test --workspace --quiet)
+
+step "cargo check (desktop)" "zero warnings"
 (cd "$SRC_TAURI" && RUSTFLAGS="-D warnings" cargo check)
 
-step "cargo clippy" "zero warnings"
+step "cargo clippy (desktop)" "zero warnings"
 (cd "$SRC_TAURI" && cargo clippy --all-targets -- -D warnings)
 
-step "cargo test" ""
+step "cargo test (desktop)" ""
 (cd "$SRC_TAURI" && cargo test --all --quiet)
 
 # ── e2e job (slowest — last) ──────────────────────────────────────────────────

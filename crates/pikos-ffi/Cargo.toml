@@ -20,6 +20,7 @@ path = "src/bin/uniffi-bindgen.rs"
 [dependencies]
 pikos-core = { path = "../pikos-core" }
 pikos-db = { path = "../pikos-db" }
+pikos-recurrence = { path = "../pikos-recurrence" }
 serde_json = "1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 thiserror = "2"

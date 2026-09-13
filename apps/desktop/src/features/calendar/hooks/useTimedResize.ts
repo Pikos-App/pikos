@@ -1,10 +1,9 @@
+import type { CalendarBlock, CalendarMetrics, CollapseGeometry } from "@pikos/core";
+import { mapYToDate } from "@pikos/core";
 import { format } from "date-fns";
 import { useRef, useState } from "react";
 
 import type { BlockResizeStartInfo, ResizeGhost } from "../components/DayColumn";
-import { type CalendarMetrics, type CollapseGeometry, mapYToDate } from "../utils/calendarGeometry";
-import type { CalendarBlock } from "../utils/calendarLayout";
-
 interface ResizeRefState {
   pageId: string;
   block: CalendarBlock;
@@ -52,6 +51,8 @@ export function useTimedResize({
   function handleBlockResizeStart({ block, dayIndex, originalDate, pageId }: BlockResizeStartInfo) {
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
+    // Synced events own a locked schedule — never resizable.
+    if (block.page.scheduleLocked) return;
 
     disableSelect("dragging-resize");
     resizeRef.current = { block, dayIndex, pageId, ...(originalDate && { originalDate }) };
@@ -59,7 +60,8 @@ export function useTimedResize({
     resizeGhostBottomRef.current = initialBottom;
     setResizeRenderState({ bottom: initialBottom, dayIndex, pageId });
 
-    function onMove(ev: MouseEvent) {
+    function onMove(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
       const state = resizeRef.current;
       if (!state || !scrollRef.current) return;
 
@@ -82,9 +84,9 @@ export function useTimedResize({
       });
     }
 
-    function onUp() {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    function onUp(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
       enableSelect();
       eatNextClick();
       cancelAnimationFrame(resizeRafIdRef.current);
@@ -104,8 +106,26 @@ export function useTimedResize({
       onReschedule(state.pageId, fmt(state.block.startDate), fmt(newEnd), state.originalDate);
     }
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    /** Platform-cancelled gesture — drop the preview without committing. */
+    function onCancel(ev: PointerEvent) {
+      if (!ev.isPrimary) return;
+      teardown();
+      enableSelect();
+      cancelAnimationFrame(resizeRafIdRef.current);
+      resizeRef.current = null;
+      resizeGhostBottomRef.current = null;
+      setResizeRenderState(null);
+    }
+
+    function teardown() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   }
 
   return { handleBlockResizeStart, resizeRenderState };

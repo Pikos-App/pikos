@@ -59,6 +59,17 @@ export function localToday(): string {
   return formatDateOnly(new Date());
 }
 
+/**
+ * The 'YYYY-MM-DD' day of a Pikos date string — its first 10 chars, so a timed
+ * wall-clock ('...THH:MM:SS') and a date-only string both reduce to their day.
+ * Occurrence exclusion sets key by day (a rule yields at most one occurrence per
+ * date), so a timed exdate/override string must be day-keyed before it can match
+ * the day-only occurrence key. Mirrors the Rust engine's `date_key`.
+ */
+export function dateKey(iso: string): string {
+  return iso.slice(0, 10);
+}
+
 export function nowLocalISO(): string {
   return formatLocalISO(new Date());
 }

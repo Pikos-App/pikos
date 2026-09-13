@@ -1,0 +1,17 @@
+{
+  "name": "@pikos/recurrence-wasm",
+  "version": "0.1.0",
+  "private": true,
+  "license": "BUSL-1.1",
+  "type": "module",
+  "description": "Pikos recurrence engine (crates/pikos-recurrence) compiled to WebAssembly. The embedded module initializes synchronously at import time — no loader configuration needed in vite, vitest, esbuild, or plain node.",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "scripts": {
+    "build:wasm": "bash ../../scripts/build-recurrence-wasm.sh"
+  }
+}

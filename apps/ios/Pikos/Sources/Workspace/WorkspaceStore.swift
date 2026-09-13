@@ -87,6 +87,10 @@ public final class WorkspaceStore {
         do {
             let url = try WorkspaceLocation.databaseURL()
             workspace = try await Workspace.open(path: url.path)
+            // After the open, so the sidecar files SQLite creates get the class
+            // too. The app is the only writer, so this is the one place it can
+            // be applied without racing anyone.
+            try? WorkspaceLocation.applyProtectionClass()
             await refresh()
         } catch {
             isLoading = false

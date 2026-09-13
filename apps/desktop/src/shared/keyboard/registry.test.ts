@@ -410,3 +410,121 @@ describe("listActiveBindings", () => {
     expect(activeWithModal.map((b) => b.id)).toContain("m1");
   });
 });
+
+// ─── listCommands ───────────────────────────────────────────────────────────
+
+describe("listCommands", () => {
+  it("lists labelled bindings and skips unlabelled ones", () => {
+    Keyboard.register({ combo: "Mod+a", handler: vi.fn(), id: "c1", label: "Do the thing" });
+    Keyboard.register({ combo: "Mod+b", handler: vi.fn(), id: "c2" });
+
+    const ids = Keyboard.listCommands().map((b) => b.id);
+    expect(ids).toContain("c1");
+    expect(ids).not.toContain("c2");
+  });
+
+  it("skips a binding whose when() gate is closed", () => {
+    Keyboard.register({
+      combo: "Mod+a",
+      handler: vi.fn(),
+      id: "c-open",
+      label: "Open",
+      when: () => true,
+    });
+    Keyboard.register({
+      combo: "Mod+b",
+      handler: vi.fn(),
+      id: "c-shut",
+      label: "Shut",
+      when: () => false,
+    });
+
+    const ids = Keyboard.listCommands().map((b) => b.id);
+    expect(ids).toContain("c-open");
+    expect(ids).not.toContain("c-shut");
+  });
+
+  it("skips bindings outside the active scopes", () => {
+    Keyboard.register({
+      combo: "Mod+b",
+      handler: vi.fn(),
+      id: "c-modal",
+      label: "Modal only",
+      scope: "modal",
+    });
+
+    expect(Keyboard.listCommands().map((b) => b.id)).not.toContain("c-modal");
+
+    Keyboard.pushScope("modal");
+    expect(Keyboard.listCommands().map((b) => b.id)).toContain("c-modal");
+  });
+});
+
+// ─── listShortcutCatalog ────────────────────────────────────────────────────
+
+describe("listShortcutCatalog", () => {
+  it("remembers a labelled shortcut after its component unregisters it", () => {
+    Keyboard.register({
+      combo: "Mod+j",
+      group: "Calendar",
+      handler: vi.fn(),
+      id: "cat-1",
+      label: "Jump somewhere",
+    });
+    Keyboard.unregister("cat-1");
+
+    expect(Keyboard.listShortcutCatalog()).toContainEqual({
+      combo: "Mod+j",
+      group: "Calendar",
+      label: "Jump somewhere",
+    });
+  });
+
+  it("files a grouped-less binding under Other and ignores unlabelled ones", () => {
+    Keyboard.register({ combo: "Mod+q", handler: vi.fn(), id: "cat-2", label: "Ungrouped" });
+    Keyboard.register({ combo: "Mod+r", handler: vi.fn(), id: "cat-3" });
+
+    const catalog = Keyboard.listShortcutCatalog();
+    expect(catalog).toContainEqual({ combo: "Mod+q", group: "Other", label: "Ungrouped" });
+    expect(catalog.map((d) => d.combo)).not.toContain("Mod+r");
+  });
+});
+
+describe("palette / shortcuts page parity", () => {
+  it("lists a command on both surfaces, or on neither", () => {
+    Keyboard.register({
+      combo: "Mod+1",
+      group: "Views",
+      handler: vi.fn(),
+      id: "par-1",
+      label: "Go to Today",
+    });
+    Keyboard.register({ combo: "Mod+2", handler: vi.fn(), id: "par-2" });
+    Keyboard.register({
+      combo: "Mod+3",
+      group: "Views",
+      handler: vi.fn(),
+      id: "par-3",
+      label: "Gated off",
+      when: () => false,
+    });
+
+    const palette = Keyboard.listCommands().map((b) => b.label);
+    const documented = new Set(Keyboard.listShortcutCatalog().map((d) => d.label));
+
+    expect(palette).toContain("Go to Today");
+    expect(palette).not.toContain("Gated off");
+    expect(palette).not.toContain(undefined);
+    for (const label of palette) expect(documented).toContain(label);
+  });
+
+  it("hands the palette a runnable handler, not a copy stripped of one", () => {
+    const handler = vi.fn();
+    Keyboard.register({ combo: "Mod+k", group: "Views", handler, id: "par-4", label: "Runs" });
+
+    const command = Keyboard.listCommands().find((b) => b.label === "Runs");
+    command?.handler(new KeyboardEvent("keydown"));
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+});

@@ -22,7 +22,7 @@ Pikos is a local-first desktop app that combines a rich text editor, task manage
 - **Quick capture** — Natural language input: "Call dentist tomorrow high priority #health" creates a page with title, date, priority, and tag set automatically.
 - **Keyboard-first** — Every action has a shortcut. Navigate, create, schedule, and search without reaching for the mouse.
 - **Private by default** — Everything stored locally in SQLite. No accounts, no telemetry. The only network request is a version check at launch. Updates are never installed without your approval.
-- **Export** — SQLite backup, Markdown folder, or CSV at any time. Your data is portable.
+- **Export** — SQLite backup, Markdown folder, CSV, or an `.ics` calendar of your scheduled pages, at any time. Your data is portable.
 
 ## Stack
 
@@ -47,11 +47,15 @@ pikos/
     mobile/         — iPhone app (placeholder, not started)
   packages/
     core/           — shared TypeScript library (types, utils, Quick Add parser, storage interface)
-    pikos-bridge/   — parser + recurrence logic exposed to the Rust CLI as a node subprocess
+    pikos-bridge/   — Quick Add parser exposed to the Rust CLI as a node subprocess
+    recurrence-wasm/— the Rust recurrence engine compiled to WebAssembly for the JS apps
     ui/             — shared UI components
   crates/
-    pikos-db/       — local SQLite data layer (schema, migrations, writer) shared by desktop and CLI
-    pikos-cli/      — command-line interface, headless access to the local workspace
+    pikos-db/         — local SQLite data layer (schema, migrations, writer) shared by desktop and CLI
+    pikos-cli/        — command-line interface, headless access to the local workspace
+    pikos-calendar-sync/ — read-only CalDAV and Google Calendar sync into the local workspace
+    pikos-recurrence/ — recurrence (RRULE) engine, single-sourced for native + wasm consumers
+    pikos-recurrence-wasm/ — wasm-bindgen bindings that build packages/recurrence-wasm
 ```
 
 ## Development
@@ -77,7 +81,7 @@ pnpm dev:desktop
 
 ## Data
 
-All data is stored in a local SQLite database. The schema is defined across migration files in [`apps/desktop/src-tauri/migrations/`](apps/desktop/src-tauri/migrations/). Every page is simultaneously a rich-text document, a trackable task, and a calendar event — one `pages` table with structured metadata columns alongside ProseMirror JSON content.
+All data is stored in a local SQLite database. The schema is defined across migration files in [`crates/pikos-db/migrations/`](crates/pikos-db/migrations/). Every page is simultaneously a rich-text document, a trackable task, and a calendar event — one `pages` table with structured metadata columns alongside ProseMirror JSON content.
 
 The database location follows your OS conventions:
 - **macOS**: `~/Library/Application Support/app.pikos.desktop/`

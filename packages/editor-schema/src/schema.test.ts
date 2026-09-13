@@ -7,7 +7,7 @@ import { createDocumentExtensions } from "./index";
  * These tests pin the *shape of the stored document*, which is the only thing
  * this package exists to keep stable. If a change here is intentional it needs
  * a `content_schema_version` bump in pikos-db and a content migration — see
- * migration 010. If it is unintentional, it is a document-corruption bug that
+ * migration 013. If it is unintentional, it is a document-corruption bug that
  * would otherwise be discovered as missing content on somebody's phone.
  */
 

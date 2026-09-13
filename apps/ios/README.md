@@ -99,5 +99,9 @@ suite.
   send it from. What is missing is the button and the `PhotosPicker` behind it,
   plus writing the chosen image into the assets directory.
 - **Share extension.** M4. Capturing a URL or a selection into a new page.
-- **Notifications.** The scheduler exists in Rust and drives the desktop app;
-  delivering through `UNUserNotificationCenter` is the remaining half.
+- **Notifications.** Not a port. The desktop fires reminders from a task that
+  wakes every clock minute, and iOS suspends that within seconds of
+  backgrounding — so nearly every reminder would silently never fire. The model
+  has to invert: compute a rolling horizon and hand it to the OS in advance.
+  `docs/ios/06-platform-audit.md` has the four complications that come with
+  that.

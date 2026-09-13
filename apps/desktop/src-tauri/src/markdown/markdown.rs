@@ -395,3 +395,7 @@ fn render_marked_text(out: &mut String, text: &str, marks: Option<&Vec<Value>>) 
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "conformance_tests.rs"]
+mod conformance_tests;

@@ -1,5 +1,5 @@
 import type { PageSummary } from "@pikos/core";
-import { isOpen, localToday, parseLocalISO } from "@pikos/core";
+import { isDateGroupedView, isOpen, localToday, parseLocalISO } from "@pikos/core";
 import { useRef, useState } from "react";
 
 import { usePages } from "@/shared/context/PagesContext";
@@ -54,10 +54,14 @@ export function useCompletedPages(activeViewId: string) {
     });
   }
 
+  // Today and Upcoming are date views, not folders: "completed" there means
+  // completed today, which is the only thing that can have left one of their
+  // sections during this session. A folder view pages through its own pages.
+  const isDateView = isDateGroupedView(activeViewId);
+
   function buildFilter(offset: number) {
-    const isTodayView = activeViewId === "today";
     return {
-      ...(isTodayView
+      ...(isDateView
         ? { completedSince: localToday() }
         : activeViewId === "inbox"
           ? { folderId: null }
@@ -110,9 +114,9 @@ export function useCompletedPages(activeViewId: string) {
   const completedPages = pages
     .filter((p) => {
       if (isOpen(p)) return false;
-      if (activeViewId === "today") {
-        // Today's completed section shows every page completed today — the
-        // date check is already the session gate.
+      if (isDateView) {
+        // A date view's completed section shows every page completed today —
+        // the date check is already the session gate.
         return p.completedAt?.slice(0, 10) === localToday();
       }
       if (activeViewId === "inbox") {

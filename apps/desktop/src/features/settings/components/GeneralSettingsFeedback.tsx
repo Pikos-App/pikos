@@ -1,10 +1,9 @@
-import { appLogDir, join } from "@tauri-apps/api/path";
-import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { Bug, Check, Copy, FileText } from "lucide-react";
 import { useState } from "react";
 
 import { IS_MACOS } from "@/shared/constants/platform";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 import { SettingsSection } from "./SettingsSection";
 
@@ -31,7 +30,7 @@ export function GeneralSettingsFeedback() {
             onClick={() => {
               const os = IS_MACOS ? "macOS" : "Linux";
               const params = new URLSearchParams({ os, version: __APP_VERSION__ });
-              void openUrl(`https://pikos.app/bugs?${params.toString()}`);
+              void getPlatform().openExternal(`https://pikos.app/bugs?${params.toString()}`);
             }}
           >
             <Bug className="h-3.5 w-3.5" />
@@ -61,7 +60,7 @@ export function GeneralSettingsFeedback() {
 
 async function handleOpenLogFile() {
   try {
-    await openPath(await join(await appLogDir(), "pikos.log"));
+    await getPlatform().openLogFile();
   } catch (err) {
     log.warn("open log file failed", err);
   }

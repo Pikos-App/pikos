@@ -6,33 +6,57 @@
 // remounts the body, which resets all its state via useState initializers —
 // no reset effect, no eslint-disable, no flicker.
 
-import { getLocalTimezone, localToday, parseInput, snapAnchorToRule } from "@pikos/core";
-import type { PagePriority, PageUpdate, ParseResult } from "@pikos/core";
+import type { PagePriority, PageUpdate, ParsedInput, ParseResult } from "@pikos/core";
+import {
+  DAY_BEFORE_MINUTES,
+  fuzzyMatchFolder,
+  getLocalTimezone,
+  localToday,
+  NLP_PRIORITY_MAP,
+  parseInput,
+  snapScheduleToRule,
+} from "@pikos/core";
+import { Bell } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { DateTimePicker } from "@/shared/components/DateTimePicker";
-import { FolderChip } from "@/shared/components/FolderChip";
-import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
-import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
-import { TagsPopover } from "@/shared/components/TagsPopover";
-import { NLP_PRIORITY_MAP } from "@/shared/constants/priorities";
+import { PageMetadataChips } from "@/shared/components/PageMetadataChips";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
 import { useQuickAddPlaceholder } from "../hooks/useQuickAddPlaceholder";
-import { fuzzyMatchFolder } from "../utils/fuzzyMatchFolder";
 
-function BylineSeparator() {
-  return (
-    <span aria-hidden="true" className="shrink-0 text-muted-foreground/20">
-      ·
-    </span>
-  );
+/**
+ * Plain body text → the Tiptap document a page stores, one paragraph per line —
+ * the same shape `pikos_db::build_tiptap_doc` writes, so a page the dialog gave
+ * a body to is indistinguishable from one the CLI or the reconciler wrote, and
+ * projects back through `extractText` to exactly the text that went in.
+ */
+function bodyToTiptap(text: string): string {
+  const content = text
+    .split("\n")
+    .map((line) =>
+      line ? { content: [{ text: line, type: "text" }], type: "paragraph" } : { type: "paragraph" }
+    );
+  return JSON.stringify({ content, type: "doc" });
+}
+
+/** How a parsed reminder lead reads on the preview chip. */
+function reminderChipLabel(minutes: number): string {
+  if (minutes === DAY_BEFORE_MINUTES) return "Day before";
+  if (minutes === 0) return "At time";
+  if (minutes < 60) return `${minutes} min before`;
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return `${days} day${days === 1 ? "" : "s"} before`;
+  }
+  const hours = minutes / 60;
+  return `${hours} hour${hours === 1 ? "" : "s"} before`;
 }
 
 // ── QuickAddDialog (shell) ────────────────────────────────────────────────────
@@ -44,7 +68,11 @@ export function QuickAddDialog() {
   // Mod+N from anywhere opens the dialog. Idempotent when already open —
   // focus is kept on the input by each chip's onClose handler, so no inner
   // refocus shortcut is needed.
-  useKeyboardShortcut("Mod+N", () => setOpenDialog("quick-add"), { allowInInputs: true });
+  useKeyboardShortcut("Mod+N", () => setOpenDialog("quick-add"), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "New page",
+  });
 
   function handleOpenChange(next: boolean) {
     setOpenDialog(next ? "quick-add" : null);
@@ -82,10 +110,18 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const allTagNames = tags.map((t) => t.name);
   const { activeViewId, dialogPrefill, openPage } = useUI();
   const { defaultFolderId: settingsDefaultFolder } = useAppSettings();
+  // Reminder rows are raw CRUD — PagesContext doesn't carry them, so the new
+  // page's leads go straight to the adapter, the same call the reminder
+  // dropdown makes once the page is open.
+  const { storage } = useWorkspace();
+
+  // External-calendar folders are placement-locked — a new native page can't land
+  // in one, so they're never a quick-add target (chip, NLP, or active-view default).
+  const creatableFolders = folders.filter((f) => !f.isExternalCalendar);
 
   // Active sidebar folder takes precedence, then settings default, then Inbox (null).
   const initialFolderId =
-    folders.find((folder) => folder.id === activeViewId)?.id ?? settingsDefaultFolder;
+    creatableFolders.find((folder) => folder.id === activeViewId)?.id ?? settingsDefaultFolder;
   const dateActiveToday = activeViewId === "today";
 
   const [inputValue, setInputValue] = useState(() => dialogPrefill ?? "");
@@ -114,6 +150,9 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
   const [rruleValue, setRruleValue] = useState<string | null>(null);
   const [rruleManual, setRruleManual] = useState(false);
   const [finiteLabel, setFiniteLabel] = useState<string | null>(null);
+  // Preview only — reminders have no chip to set them from here (the picker
+  // needs a page id), so the parse is the single source and submit re-reads it.
+  const [reminderPreview, setReminderPreview] = useState<number[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const placeholder = useQuickAddPlaceholder(true);
@@ -138,7 +177,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       setDateManual(true);
       inputRef.current?.focus();
     },
-    { allowInInputs: true, preventDefault: true }
+    { allowInInputs: true, group: "Quick add", label: "Schedule for today", preventDefault: true }
   );
 
   // ── Debounce preview ─────────────────────────────────────────────────────────
@@ -157,6 +196,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         setNlpTags([]);
         if (!rruleManual) setRruleValue(null);
         setFiniteLabel(null);
+        setReminderPreview([]);
         return;
       }
 
@@ -202,7 +242,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
       if (!folderManual) {
         if (parsed.folderQuery) {
-          const match = fuzzyMatchFolder(parsed.folderQuery, folders);
+          const match = fuzzyMatchFolder(parsed.folderQuery, creatableFolders);
           setFolderValue(
             match ? match.id : parsed.folderQuery.toLowerCase() === "inbox" ? null : folderValue
           );
@@ -212,6 +252,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       }
 
       setNlpTags(parsed.tags.length > 0 ? [...new Set(parsed.tags)] : []);
+      setReminderPreview(parsed.reminderMinutes ?? []);
     }, 200);
 
     return () => clearTimeout(timer);
@@ -270,7 +311,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     // Folder: NLP folderQuery takes precedence over chip selection.
     let resolvedFolderId = folderValue;
     if (parsed?.folderQuery) {
-      const match = fuzzyMatchFolder(parsed.folderQuery, folders);
+      const match = fuzzyMatchFolder(parsed.folderQuery, creatableFolders);
       if (match) {
         resolvedFolderId = match.id;
       } else if (parsed.folderQuery.toLowerCase() === "inbox") {
@@ -300,31 +341,60 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     const patch: PageUpdate = {};
     if (resolvedPriority !== 0) patch.priority = resolvedPriority;
     if (finalTags.length > 0) patch.tags = finalTags;
+    // Body from the "//" separator, written as the page's document so opening
+    // the page shows the note already typed out.
+    if (parsed?.content) {
+      patch.content = bodyToTiptap(parsed.content);
+      patch.contentText = parsed.content;
+    }
 
-    // Chip-set rrule takes precedence. Falls back to NLP-derived rrule when
-    // the user hasn't touched the chip.
-    if (rruleValue) {
+    /** The parsed reminder leads, written as rows on a page that now exists. */
+    async function writeReminders(pageId: string, inp: ParsedInput | undefined) {
+      if (!storage) return;
+      for (const minutesBefore of inp?.reminderMinutes ?? []) {
+        await storage.createPageReminder({ minutesBefore, pageId });
+      }
+    }
+
+    // Chip-set rrule takes precedence. Otherwise take the rule from *this*
+    // submit's parse rather than the chip's debounced preview: an Enter inside
+    // the 200ms window would otherwise read a preview that never ran and commit
+    // a plain page. Every other field below already reads the fresh parse.
+    const resolvedRrule = rruleManual
+      ? rruleValue
+      : result.type === "recurring"
+        ? result.rrule
+        : null;
+
+    if (resolvedRrule) {
       // Infinite recurrence: 1 template page + recurrence rule.
       const page = await createPage({ folderId: resolvedFolderId, title });
       if (Object.keys(patch).length > 0) updatePage(page.id, patch);
 
       const tz = getLocalTimezone();
       // Snap onto the first date the rule permits — a chip-set M/W/F rule on a
-      // Sunday date must start Monday, not render a stray Sunday head. (NLP-set
-      // rrules already arrive snapped from the parser; snapping is idempotent.)
-      const ruleStart = snapAnchorToRule(rruleValue, resolvedDate ?? localToday());
+      // Sunday date must start Monday, not render a stray Sunday head. An NLP
+      // rrule can land here off-pattern too, when the input names a date *and* a
+      // cadence ("on wednesday every monday"); the end travels with the start so
+      // it can't end up before it.
+      const { end: ruleEnd, start: ruleStart } = snapScheduleToRule(
+        resolvedRrule,
+        resolvedDate ?? localToday(),
+        parsed?.scheduledEnd
+      );
       await createRecurrence({
         pageId: page.id,
-        rrule: rruleValue,
+        rrule: resolvedRrule,
         scheduledStart: ruleStart,
-        ...(parsed?.scheduledEnd ? { scheduledEnd: parsed.scheduledEnd } : {}),
+        ...(ruleEnd ? { scheduledEnd: ruleEnd } : {}),
         timezone: tz,
       });
       // Set head's scheduledStart denorm so it appears in Today/calendar
       updatePage(page.id, {
         scheduledStart: ruleStart,
-        ...(parsed?.scheduledEnd ? { scheduledEnd: parsed.scheduledEnd } : {}),
+        ...(ruleEnd ? { scheduledEnd: ruleEnd } : {}),
       });
+      await writeReminders(page.id, parsed);
       return { id: page.id, title };
     }
 
@@ -338,10 +408,15 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
         if (resolvedPriority !== 0) finPatch.priority = resolvedPriority;
         const finTags = [...new Set([...inp.tags, ...manualTags])];
         if (finTags.length > 0) finPatch.tags = finTags;
+        if (inp.content) {
+          finPatch.content = bodyToTiptap(inp.content);
+          finPatch.contentText = inp.content;
+        }
         if (Object.keys(finPatch).length > 0) updatePage(pg.id, finPatch);
         if (inp.scheduledStart) {
           await scheduleOnce(pg.id, inp.scheduledStart, inp.scheduledEnd);
         }
+        await writeReminders(pg.id, inp);
       }
       return firstId ? { id: firstId, title } : null;
     }
@@ -354,6 +429,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
       const resolvedEnd = parsed?.scheduledEnd ?? endDateValue ?? undefined;
       await scheduleOnce(page.id, resolvedDate, resolvedEnd);
     }
+    await writeReminders(page.id, parsed);
 
     return { id: page.id, title };
   }
@@ -390,6 +466,7 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
     setRruleValue(null);
     setRruleManual(false);
     setFiniteLabel(null);
+    setReminderPreview([]);
     setDateManual(false);
     setPriorityManual(false);
     // Keep folderValue and folderManual — user stays in same folder scope.
@@ -439,84 +516,130 @@ function QuickAddDialogBody({ onClose }: QuickAddDialogBodyProps) {
 
       {/* Metadata chips + Add button */}
       <div className="flex items-center gap-2 border-t border-border/40 px-4 py-2.5 text-sm text-subtle">
-        <FolderChip
-          folders={folders}
-          onChange={(id) => {
-            setFolderValue(id);
-            setFolderManual(true);
-            // Synchronous refocus on selection — onCloseAutoFocus fires later
-            // (async, after Radix processes the close), so the keyboard-only
-            // flow "pick folder → press Enter to submit" needs this to land
-            // focus on the main input before the next keypress arrives.
-            refocusInput();
-          }}
-          onClose={refocusInput}
-          value={folderValue}
-        />
-
-        <BylineSeparator />
-
-        <DateTimePicker
-          endValue={endDateValue}
-          onChange={(d) => {
-            setDateValue(d);
-            setDateManual(true);
-          }}
-          onClose={refocusInput}
-          onEndChange={(d) => {
-            setEndDateValue(d);
-            setDateManual(true);
-          }}
-          value={dateValue}
-        />
-
-        <RecurrencePopover
-          anchorDate={dateValue}
-          onChange={(rrule) => {
-            setRruleValue(rrule);
-            setRruleManual(true);
-            // If the user picks a rule without a date set, anchor to today
-            // so the chip's implicit "Starts today" becomes concrete on the
-            // date chip too.
-            if (rrule && !dateValue) {
-              setDateValue(localToday());
-              setDateManual(true);
-            }
-            // See FolderChip — sync refocus on selection.
-            refocusInput();
-          }}
-          onClose={refocusInput}
-          rrule={rruleValue}
-          variant="compact"
-          {...(finiteLabel ? { overrideLabel: finiteLabel } : {})}
-        />
-
-        <BylineSeparator />
-
-        <PriorityDropdown
-          onClose={refocusInput}
-          onSelect={(p) => {
-            setPriorityValue(p);
-            setPriorityManual(true);
-          }}
-          priority={priorityValue}
-          variant="byline"
-        />
-
-        <BylineSeparator />
-
-        <TagsPopover
-          allTags={allTagNames}
-          onClose={refocusInput}
-          onToggle={(name) => {
-            if (tagsValue.includes(name)) {
-              setNlpTags((prev) => prev.filter((t) => t !== name));
-              setManualTags((prev) => prev.filter((t) => t !== name));
-            } else {
-              setManualTags((prev) => [...prev, name]);
-            }
-          }}
-          selected={tagsValue}
+        <PageMetadataChips
+          groups={[
+            {
+              chips: [
+                {
+                  kind: "folder",
+                  props: {
+                    folders,
+                    onChange: (id) => {
+                      setFolderValue(id);
+                      setFolderManual(true);
+                      // Synchronous refocus on selection — onCloseAutoFocus fires later
+                      // (async, after Radix processes the close), so the keyboard-only
+                      // flow "pick folder → press Enter to submit" needs this to land
+                      // focus on the main input before the next keypress arrives.
+                      refocusInput();
+                    },
+                    onClose: refocusInput,
+                    value: folderValue,
+                  },
+                },
+              ],
+              key: "folder",
+            },
+            {
+              chips: [
+                {
+                  kind: "date",
+                  props: {
+                    endValue: endDateValue,
+                    onChange: (d) => {
+                      setDateValue(d);
+                      setDateManual(true);
+                    },
+                    onClose: refocusInput,
+                    onEndChange: (d) => {
+                      setEndDateValue(d);
+                      setDateManual(true);
+                    },
+                    value: dateValue,
+                  },
+                },
+                {
+                  kind: "recurrence",
+                  props: {
+                    anchorDate: dateValue,
+                    onChange: (rrule) => {
+                      setRruleValue(rrule);
+                      setRruleManual(true);
+                      // If the user picks a rule without a date set, anchor to today
+                      // so the chip's implicit "Starts today" becomes concrete on the
+                      // date chip too.
+                      if (rrule && !dateValue) {
+                        setDateValue(localToday());
+                        setDateManual(true);
+                      }
+                      // See FolderChip — sync refocus on selection.
+                      refocusInput();
+                    },
+                    onClose: refocusInput,
+                    rrule: rruleValue,
+                    variant: "compact",
+                    ...(finiteLabel ? { overrideLabel: finiteLabel } : {}),
+                  },
+                },
+                // Read-only echo of the parsed lead: the reminder picker needs a
+                // page to attach to, so before there is one the input is the only
+                // way to set this, and the chip is only here to show it landed.
+                reminderPreview.length > 0 && {
+                  id: "reminder-preview",
+                  kind: "node" as const,
+                  node: (
+                    <span
+                      className="inline-flex shrink-0 items-center gap-1.5"
+                      title="Reminder from the text you typed"
+                    >
+                      <Bell className="h-3.5 w-3.5 shrink-0" />
+                      {reminderPreview.map(reminderChipLabel).join(", ")}
+                    </span>
+                  ),
+                },
+              ],
+              key: "schedule",
+            },
+            {
+              chips: [
+                {
+                  kind: "priority",
+                  props: {
+                    onClose: refocusInput,
+                    onSelect: (p) => {
+                      setPriorityValue(p);
+                      setPriorityManual(true);
+                    },
+                    priority: priorityValue,
+                    variant: "byline",
+                  },
+                },
+              ],
+              key: "priority",
+            },
+            {
+              chips: [
+                {
+                  kind: "tags",
+                  props: {
+                    allTags: allTagNames,
+                    onClose: refocusInput,
+                    onToggle: (name) => {
+                      if (tagsValue.includes(name)) {
+                        setNlpTags((prev) => prev.filter((t) => t !== name));
+                        setManualTags((prev) => prev.filter((t) => t !== name));
+                      } else {
+                        setManualTags((prev) => [...prev, name]);
+                      }
+                    },
+                    selected: tagsValue,
+                  },
+                },
+              ],
+              key: "tags",
+            },
+          ]}
+          layout="byline"
         />
 
         <button

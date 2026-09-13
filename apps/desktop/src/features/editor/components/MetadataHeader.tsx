@@ -1,172 +1,50 @@
 // key={page.id} in parent resets all state on page switch.
 
-import type { Folder, Page, PagePriority, PageStatus } from "@pikos/core";
+import type { Page, PagePriority, PageStatus } from "@pikos/core";
 import {
   getLocalTimezone,
-  isDone,
   isTimedIso,
   localToday,
-  nowLocalISO,
   parseLocalISO,
   snapAnchorToRule,
   storageErrorUserMessage,
   toStorageError,
 } from "@pikos/core";
-import { AlertTriangle, CalendarDays } from "lucide-react";
+import { CalendarOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { FolderChip } from "@/shared/components/FolderChip";
-import { KeyboardShortcut } from "@/shared/components/KeyboardShortcut";
-import { PriorityDropdown } from "@/shared/components/PriorityDropdown";
-import { RecurrencePopover } from "@/shared/components/RecurrencePopover";
-import { ReminderDropdown } from "@/shared/components/ReminderDropdown";
-import { TagsPopover } from "@/shared/components/TagsPopover";
-import { TaskCheckbox } from "@/shared/components/TaskCheckbox";
+import { SyncedEventDetails } from "@/shared/components/SyncedEventDetails";
+import { SyncedLockHint } from "@/shared/components/SyncedLockHint";
 import { LINE_WIDTH_CLASS } from "@/shared/constants/editor";
 import { useEditorSettings } from "@/shared/context/EditorSettingsContext";
 import { usePages } from "@/shared/context/PagesContext";
-import { useRecurringCompleteDialog } from "@/shared/context/RecurringCompleteDialogContext";
 import { useUI } from "@/shared/context/UIContext";
+import { useRecurringStatusToggle } from "@/shared/hooks/useRecurringStatusToggle";
 
-import { DateSchedulePopover } from "./DateSchedulePopover";
-
-function BylineSeparator() {
-  return (
-    <span aria-hidden="true" className="text-muted-foreground/20">
-      ·
-    </span>
-  );
-}
-
-function Byline({
-  allTags,
-  folders,
-  onErrorClick,
-  onFolderChange,
-  onOpenInCalendar,
-  onPriorityChange,
-  onRecurrenceChange,
-  onStatusChange,
-  onTagToggle,
-  page,
-  saveError,
-}: {
-  page: Page;
-  folders: Folder[];
-  allTags: string[];
-  onStatusChange: (status: PageStatus) => void;
-  onFolderChange: (folderId: string | null) => void;
-  onPriorityChange: (priority: PagePriority) => void;
-  onTagToggle: (name: string) => void;
-  onRecurrenceChange: (rrule: string | null) => void;
-  onOpenInCalendar?: () => void;
-  saveError?: string | null;
-  onErrorClick?: () => void;
-}) {
-  const done = isDone(page);
-  const { recurrenceRules } = usePages();
-  const recurrenceRule = recurrenceRules.find((r) => r.pageId === page.id);
-
-  return (
-    <div className="type-ui-sm flex items-center gap-2 overflow-hidden pt-2 pb-4 text-subtle">
-      <button
-        aria-label={done ? "Mark not done" : "Mark done"}
-        className="group/status inline-flex items-center gap-1.5 rounded transition-colors hover:text-muted-foreground focus:outline-none"
-        onClick={() => onStatusChange(done ? "not_started" : "done")}
-      >
-        <TaskCheckbox
-          as="span"
-          checked={done}
-          className={!done ? "group-hover/status:border-foreground/60" : undefined}
-          onChange={() => onStatusChange(done ? "not_started" : "done")}
-        />
-        <span className="inline-block w-[2.5rem]">{done ? "Done" : "Open"}</span>
-      </button>
-
-      <BylineSeparator />
-      <FolderChip folders={folders} onChange={onFolderChange} value={page.folderId} />
-
-      <BylineSeparator />
-      <div className="inline-flex shrink-0 items-center gap-2">
-        <DateSchedulePopover page={page} />
-        {/* Reminders only apply to timed events — all-day schedules have no
-            start time to fire "minutes before" against, so the scheduler
-            ignores them (see notifications/scheduler). Hide the bell to match. */}
-        {!!page.scheduledStart && isTimedIso(page.scheduledStart) && (
-          <ReminderDropdown pageId={page.id} />
-        )}
-        <RecurrencePopover
-          anchorDate={page.scheduledStart ?? null}
-          onChange={onRecurrenceChange}
-          rrule={recurrenceRule?.rrule ?? null}
-          variant="icon"
-        />
-        {onOpenInCalendar && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                aria-label="View in calendar"
-                className="inline-flex items-center rounded transition-colors hover:text-muted-foreground focus:outline-none"
-                onClick={onOpenInCalendar}
-              >
-                <CalendarDays size={13} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <span className="inline-flex items-center gap-1.5">
-                View in calendar <KeyboardShortcut shortcut="mod+shift+c" />
-              </span>
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-
-      <BylineSeparator />
-      <PriorityDropdown onSelect={onPriorityChange} priority={page.priority} variant="byline" />
-
-      <BylineSeparator />
-      <TagsPopover allTags={allTags} onToggle={onTagToggle} selected={page.tags} />
-
-      {saveError != null && (
-        <>
-          <BylineSeparator />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                aria-label="Save failed — click to retry"
-                className="inline-flex items-center gap-1 rounded text-amber-500/70 transition-colors hover:text-amber-500 focus:outline-none"
-                onClick={onErrorClick}
-              >
-                <AlertTriangle size={12} strokeWidth={2} />
-                <span>Not saved</span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-[260px]" side="bottom">
-              {saveError}
-            </TooltipContent>
-          </Tooltip>
-        </>
-      )}
-    </div>
-  );
-}
+import { Byline } from "./Byline";
+import { CalendarDescriptionNotice } from "./CalendarDescriptionNotice";
+import { FocusTimer } from "./FocusTimer";
 
 interface MetadataHeaderProps {
   page: Page;
   onFocusEditor: () => void;
+  /** Appends text to the end of the body through the editor's own insert path,
+   *  so the write marks the page owned exactly as typing would. */
+  onAppendToBody: (text: string) => void;
   contentSaveError?: Error | null;
   onRetryContent?: () => void;
 }
 
 export function MetadataHeader({
   contentSaveError,
+  onAppendToBody,
   onFocusEditor,
   onRetryContent,
   page,
 }: MetadataHeaderProps) {
   const {
     clearPageError,
+    clearPendingDescription,
     createRecurrence,
     deleteRecurrence,
     flushPage,
@@ -178,7 +56,7 @@ export function MetadataHeader({
     updatePage,
     updateRecurrence,
   } = usePages();
-  const { request: requestRecurringComplete } = useRecurringCompleteDialog();
+  const togglePageStatus = useRecurringStatusToggle();
   const { lineWidth } = useEditorSettings();
   const { flashPageBlock, requestCalendarScroll, setReferenceDate, setRightPanel } = useUI();
   const allTagNames = tags.map((t) => t.name);
@@ -198,16 +76,7 @@ export function MetadataHeader({
   }
 
   function handleStatusChange(status: PageStatus) {
-    // Recurring pages route through the gap-resolution dialog. The dialog
-    // fast-paths when there's no gap between head and today.
-    if (status === "done" && recurrenceRules.some((r) => r.pageId === page.id)) {
-      requestRecurringComplete(page.id);
-      return;
-    }
-    updatePage(page.id, {
-      completedAt: status === "done" ? nowLocalISO() : null,
-      status,
-    });
+    togglePageStatus(page, status);
   }
 
   function handleFolderChange(folderId: string | null) {
@@ -363,11 +232,37 @@ export function MetadataHeader({
     return () => window.removeEventListener("blur", handleBlur);
   }, [flushPage, page.id]);
 
+  // A missing scheduleLocked flag defaults to editable (native); detached pages
+  // unlock (sync_state !== 'active') but stay flagged as disconnected.
+  const titleLocked = page.scheduleLocked;
+  const detached = page.syncState === "detached";
+  const calendarName = folders.find((f) => f.id === page.folderId)?.name ?? "the calendar";
+  // Only a locked (active-sync) page ever carries a withheld upstream description.
+  const showDescriptionNotice = titleLocked && !!page.pendingDescription;
+
   return (
     <div className="shrink-0">
       <div className={`mx-auto ${LINE_WIDTH_CLASS[lineWidth] ?? "max-w-[720px]"} px-8`}>
-        <div className="pt-12 pb-1">
-          {titleFocused ? (
+        {detached && (
+          <div className="mt-10 flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-amber-600/90 dark:text-amber-400/90">
+            <CalendarOff aria-hidden="true" className="shrink-0" size={14} />
+            <span className="type-ui-sm">
+              Disconnected from {calendarName} — this is now a regular page you can edit.
+            </span>
+          </div>
+        )}
+        {showDescriptionNotice && (
+          <CalendarDescriptionNotice
+            onAppend={() => {
+              onAppendToBody(page.pendingDescription!);
+              void clearPendingDescription(page.id);
+            }}
+            onDismiss={() => void clearPendingDescription(page.id)}
+            text={page.pendingDescription!}
+          />
+        )}
+        <div className={detached || showDescriptionNotice ? "pt-2 pb-1" : "pt-12 pb-1"}>
+          {titleFocused && !titleLocked ? (
             <textarea
               aria-label="Page title"
               autoCapitalize="off"
@@ -392,6 +287,17 @@ export function MetadataHeader({
               rows={1}
               value={titleValue}
             />
+          ) : titleLocked ? (
+            <div className="flex items-center gap-2">
+              <div
+                aria-label="Page title"
+                className="type-display line-clamp-2 min-w-0 cursor-default bg-transparent outline-none"
+                ref={titleDivRef}
+              >
+                {titleValue || <span className="text-faint">Untitled</span>}
+              </div>
+              <SyncedLockHint size={14} />
+            </div>
           ) : (
             <div
               aria-label="Page title"
@@ -465,19 +371,39 @@ export function MetadataHeader({
           </div>
         )}
 
-        <Byline
-          allTags={allTagNames}
-          folders={folders}
-          onErrorClick={handleErrorClick}
-          onFolderChange={handleFolderChange}
-          {...(page.scheduledStart ? { onOpenInCalendar: handleOpenInCalendar } : {})}
-          onPriorityChange={handlePriorityChange}
-          onRecurrenceChange={(rrule) => void handleRecurrenceChange(rrule)}
-          onStatusChange={handleStatusChange}
-          onTagToggle={handleTagToggle}
-          page={page}
-          saveError={hasError ? (errorMessage ?? "Save failed") : null}
-        />
+        {/* The timer repeats the byline's own `pt-2 pb-4` so both boxes have the
+            same vertical padding: `items-center` aligns boxes, not text, and the
+            byline's asymmetric padding would otherwise push the timer below the
+            copy it sits beside. `min-w-0` lets the byline keep truncating its
+            chips instead of pushing the timer off. */}
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <Byline
+              allTags={allTagNames}
+              folders={folders}
+              onErrorClick={handleErrorClick}
+              onFolderChange={handleFolderChange}
+              {...(page.scheduledStart ? { onOpenInCalendar: handleOpenInCalendar } : {})}
+              onPriorityChange={handlePriorityChange}
+              onRecurrenceChange={(rrule) => void handleRecurrenceChange(rrule)}
+              onStatusChange={handleStatusChange}
+              onTagToggle={handleTagToggle}
+              page={page}
+              saveError={hasError ? (errorMessage ?? "Save failed") : null}
+            />
+          </div>
+          <div className="pt-2 pb-4">
+            <FocusTimer pageId={page.id} />
+          </div>
+        </div>
+
+        {titleLocked && (
+          <SyncedEventDetails
+            attendees={page.mirrorAttendees}
+            className="pb-4"
+            location={page.mirrorLocation}
+          />
+        )}
       </div>
     </div>
   );

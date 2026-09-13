@@ -1971,7 +1971,7 @@ public struct Page: Equatable, Hashable {
     public var updatedAt: String
     /**
      * Which editor schema wrote `content`. A client finding a version above
-     * its own must not save over the document — see pikos-db migration 010.
+     * its own must not save over the document — see pikos-db migration 013.
      */
     public var contentSchemaVersion: Int64
 
@@ -1984,7 +1984,7 @@ public struct Page: Equatable, Hashable {
          */content: String, status: String, priority: Int64, tags: [String], scheduledStart: String?, scheduledEnd: String?, completedAt: String?, createdAt: String, updatedAt: String, 
         /**
          * Which editor schema wrote `content`. A client finding a version above
-         * its own must not save over the document — see pikos-db migration 010.
+         * its own must not save over the document — see pikos-db migration 013.
          */contentSchemaVersion: Int64) {
         self.id = id
         self.folderId = folderId

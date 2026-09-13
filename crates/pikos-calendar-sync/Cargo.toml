@@ -1,0 +1,57 @@
+[package]
+name = "pikos-calendar-sync"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+description = "Pikos external calendar sync — HTTP + OS-keychain plumbing and provider impls (CalDAV, Google) over pikos-db's SyncDelta/reconciler."
+
+[dependencies]
+pikos-db = { path = "../pikos-db" }
+# WallClock (the stored date/date-time shapes) + zoned (instant ⇄ wall clock).
+# Providers normalize to the same wall clock the engine expands, so both come
+# from the one crate that defines them rather than being re-typed here.
+pikos-recurrence = { path = "../pikos-recurrence", features = ["tz"] }
+# The engine writes the per-calendar cursor/timestamps back through the same pool
+# pikos-db owns; same version/features so the SqlitePool type unifies.
+sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }
+# rustls (no OpenSSL) keeps non-macOS builds system-lib-free.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+thiserror = "2"
+# Warn-level facade for provider-side skips (unparseable/bodyless resources); the
+# desktop app installs the logger that routes these to the shared log file.
+log = "0.4"
+# CalDAV: namespace-aware multistatus parsing + base-URL/redirect resolution +
+# the keychain credential blob ({base_url, username, password}).
+quick-xml = "0.37"
+url = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# ICS parsing: the only crate that resolves VTIMEZONE→IANA and round-trips RRULE
+# losslessly (spike-verified 2026-06-15). Pre-1.0 → pin. chrono/chrono-tz back the
+# UTC→source-zone wall-clock normalization of EXDATE/RECURRENCE-ID instants.
+calcard = "0.3.5"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono-tz = "0.10"
+oauth2 = { version = "5.0", default-features = false, features = ["reqwest", "rustls-tls"] }
+tokio = { version = "1", features = ["net", "io-util", "time"] }
+
+# OS-specific backend: apple-native on every Apple platform, none elsewhere so a
+# Linux `cargo check` stays system-lib-free (no libdbus/secret-service).
+#
+# Both Apple targets, not just macOS. iOS is `target_os = "ios"`, so a
+# macOS-only gate drops it into the arm below — and `keyring` with no backend
+# feature is a *mock* store with no persistence. Credentials would appear to
+# save and be gone on the next launch, with nothing logged and no error raised.
+# Found by the Tauri-era mobile spike; carried across because the failure is a
+# property of the gate, not of the UI layer.
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+keyring = { version = "3.6.3", features = ["apple-native"] }
+
+[target.'cfg(not(any(target_os = "macos", target_os = "ios")))'.dependencies]
+keyring = "3.6.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+# test-support re-exports test_pool + insert_test_* so the engine's Layer-3 tests
+# share pikos-db's migration tree + fixtures rather than carrying their own.
+pikos-db = { path = "../pikos-db", features = ["test-support"] }

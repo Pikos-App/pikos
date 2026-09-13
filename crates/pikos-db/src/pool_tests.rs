@@ -31,7 +31,49 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ),
     ("008", include_str!("../migrations/008_tags_nocase.sql")),
     ("009", include_str!("../migrations/009_tags_lowercase.sql")),
+    ("010", include_str!("../migrations/010_calendar_sync.sql")),
+    (
+        "011",
+        include_str!("../migrations/011_mirror_search_text.sql"),
+    ),
+    (
+        "012",
+        include_str!("../migrations/012_notification_reach.sql"),
+    ),
+    (
+        "013",
+        include_str!("../migrations/013_content_schema_version.sql"),
+    ),
 ];
+
+/// `include_str!` needs a literal path, so the list above is written by hand while
+/// the migrator reads the directory — and a migration added to the directory alone
+/// is still applied to every user's database with no test replaying it. The
+/// stepwise tests would keep passing, one version short, which reads as coverage.
+#[test]
+fn the_replay_list_holds_every_migration_on_disk() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let mut on_disk: Vec<String> = std::fs::read_dir(&dir)
+        .expect("migrations directory")
+        .map(|e| e.expect("dir entry").file_name().to_string_lossy().into())
+        .filter(|name: &String| name.ends_with(".sql"))
+        .collect();
+    on_disk.sort();
+
+    let listed: Vec<String> = MIGRATIONS.iter().map(|(v, _)| (*v).to_string()).collect();
+    let versions: Vec<String> = on_disk
+        .iter()
+        .map(|name| name.split('_').next().unwrap_or_default().to_string())
+        .collect();
+
+    assert_eq!(
+        listed,
+        versions,
+        "MIGRATIONS is out of step with {}: add the new file to the list so the \
+         stepwise and populated-workspace replays actually reach it",
+        dir.display()
+    );
+}
 
 async fn single_conn_memory_pool() -> SqlitePool {
     let opts = SqliteConnectOptions::from_str(":memory:")
@@ -192,6 +234,246 @@ async fn stepwise_preserves_seeded_data() {
             .await
             .unwrap();
     assert_eq!(denorm_tag, "work", "denorm tag must be lowercased");
+}
+
+/// The upgrade every existing install performs when 0.4.0 lands. `open_pool` runs
+/// the same tree against whatever the user already has, and 010 is the first
+/// migration to arrive after a real launch — so this is the one step whose failure
+/// mode is other people's data, with no rollback behind an auto-update.
+///
+/// The stepwise test above proves rows *survive* each migration; this one proves
+/// the workspace still **works** afterwards: pre-existing pages keep their
+/// schedules, rules and reminders, the new tables are usable, and a page that
+/// predates sync reads as unsynced rather than as anything ambiguous.
+///
+/// Note 010 is **not** idempotent — `ALTER TABLE ADD COLUMN` takes no `IF NOT
+/// EXISTS` and re-running errors on the duplicate column. It doesn't need to be:
+/// sqlx records each applied version and runs each migration in a transaction, so
+/// a failure rolls back whole and a retry starts from a clean 009. Don't "fix" it
+/// by making the ALTER conditional; the guarantee lives in the migrator.
+#[tokio::test]
+async fn the_calendar_sync_migration_lands_on_a_populated_workspace() {
+    let pool = single_conn_memory_pool().await;
+    for (name, sql) in &MIGRATIONS[..9] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
+    }
+
+    // A workspace with the shapes 010 has to carry across: a foldered page, a
+    // schedule, a recurrence rule, and a reminder (007 recreated that table, and
+    // the stepwise seed leaves it empty — so this is also the first time 007's
+    // recreate is asked to preserve a row).
+    sqlx::query("INSERT INTO folders (id, name, sort_order, created_at, updated_at) VALUES ('f1', 'Work', 0, '2026-01-01', '2026-01-01')")
+        .execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO pages
+         (id, folder_id, title, content, content_text, status, priority, tags,
+          sort_order, created_at, updated_at)
+         VALUES ('p1', 'f1', 'Weekly review', '{}', '', 'not_started', 0, '[\"work\"]',
+                 0, '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO page_schedules (id, page_id, scheduled_start, scheduled_end, timezone, status, created_at) VALUES ('s1', 'p1', '2026-06-01T09:00:00', '2026-06-01T09:30:00', 'America/New_York', 'not_started', '2026-01-01')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO page_recurrence_rules (id, page_id, rrule, rrule_exdates, scheduled_start, timezone, created_at) VALUES ('r1', 'p1', 'FREQ=WEEKLY', '[]', '2026-06-01T09:00:00', 'America/New_York', '2026-01-01')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO page_reminders (id, page_id, minutes_before, created_at) VALUES ('rem1', 'p1', 30, '2026-01-01')")
+        .execute(&pool).await.unwrap();
+
+    sqlx::raw_sql(MIGRATIONS[9].1).execute(&pool).await.unwrap();
+
+    // Nothing the user had is gone.
+    for (table, id) in [
+        ("pages", "p1"),
+        ("folders", "f1"),
+        ("page_schedules", "s1"),
+        ("page_recurrence_rules", "r1"),
+        ("page_reminders", "rem1"),
+    ] {
+        let found: i64 =
+            sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE id = '{id}'"))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(found, 1, "{table} lost its row across 010");
+    }
+
+    // The folder gained the flag, defaulted off — an existing folder is nobody's
+    // calendar, and a default of 1 would lock every folder the user already had.
+    let external: i64 =
+        sqlx::query_scalar("SELECT is_external_calendar FROM folders WHERE id = 'f1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(external, 0);
+
+    // A page from before sync existed has no link, so it reads as native.
+    let linked: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM page_sync WHERE page_id = 'p1'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(linked, 0);
+
+    // The new tables accept writes against the pre-existing page — a broken FK or
+    // a missed table would only surface the first time sync or a completion ran.
+    sqlx::query("INSERT INTO completed_set (page_id, occurrence_date, clone_id) VALUES ('p1', '2026-06-01', 'clone-1')")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO skip_set (page_id, occurrence_date) VALUES ('p1', '2026-06-08')")
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+/// The reconciler only rewrites an event whose etag moved, so a mirror synced
+/// before 011 would stay out of the index forever if the migration didn't
+/// backfill it. That backfill is a second, frozen copy of `mirror_search_text`'s
+/// projection written in SQL — this is what catches the two drifting apart.
+#[tokio::test]
+async fn the_search_migration_backfills_mirrors_synced_before_it() {
+    let pool = single_conn_memory_pool().await;
+    for (name, sql) in &MIGRATIONS[..10] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
+    }
+
+    sqlx::query(
+        "INSERT INTO pages
+         (id, title, content, content_text, status, priority, tags, sort_order, created_at, updated_at)
+         VALUES ('p1', 'Standup', '{}', '', 'not_started', 0, '[]', 0, '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO sync_account
+         (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES ('a1', 'caldav', 'you@example.com', 'basic', '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_sync
+         (id, page_id, account_id, provider, calendar_id, external_id, ical_uid,
+          mirror_location, mirror_attendees, created_at)
+         VALUES ('ps1', 'p1', 'a1', 'caldav', 'cal', '/ev.ics', 'uid-1',
+                 'Weyland Room', '[\"priya@example.com\"]', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::raw_sql(MIGRATIONS[10].1)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let projected: Option<String> =
+        sqlx::query_scalar("SELECT mirror_search_text FROM pages WHERE id = 'p1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        projected,
+        crate::reconciler::mirror_search_text(
+            Some("Weyland Room"),
+            Some(r#"["priya@example.com"]"#)
+        ),
+        "the migration's SQL projection drifted from the writer's"
+    );
+
+    for term in ["weyland", "priya"] {
+        let hits: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pages_fts WHERE pages_fts MATCH ?")
+                .bind(term)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(hits, 1, "the rebuilt index missed \"{term}\"");
+    }
+}
+
+/// 012 recreates both notification tables to widen their CHECK constraints, and
+/// a recreate is the migration shape that loses data when a column list drifts.
+/// The reminder row and the fired-notification row here are what a user upgrading
+/// mid-week actually has: dropping either would re-fire every reminder already
+/// delivered and forget every per-page lead.
+#[tokio::test]
+async fn the_reach_migration_keeps_reminders_and_the_fired_log() {
+    let pool = single_conn_memory_pool().await;
+    for (name, sql) in &MIGRATIONS[..11] {
+        sqlx::raw_sql(sql)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("migration {name} failed: {e}"));
+    }
+
+    sqlx::query(
+        "INSERT INTO pages
+         (id, title, content, content_text, status, priority, tags, sort_order, created_at, updated_at)
+         VALUES ('p1', 'Standup', '{}', '', 'not_started', 0, '[]', 0, '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES ('r1', 'p1', 15, '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at, action)
+         VALUES ('n1', 'p1', 's1#15', 'reminder', '2026-01-02 08:45:00', 'opened')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::raw_sql(MIGRATIONS[11].1)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let lead: i64 = sqlx::query_scalar("SELECT minutes_before FROM page_reminders WHERE id = 'r1'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(lead, 15, "the per-page lead did not survive the recreate");
+    let logged: (String, String) =
+        sqlx::query_as("SELECT schedule_id, action FROM notification_log WHERE id = 'n1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        logged,
+        ("s1#15".to_string(), "opened".to_string()),
+        "the dedup anchor did not survive the recreate"
+    );
+
+    // Both widenings are usable immediately after the migration, not just
+    // declared — a CHECK typo would only surface on the first real write.
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES ('r2', 'p1', -2, '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .expect("the day-before sentinel must be storable");
+    sqlx::query(
+        "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
+         VALUES ('n2', 'p1', 's2#10', 'suppressed', '2026-01-02 22:10:00')",
+    )
+    .execute(&pool)
+    .await
+    .expect("a quiet-hours suppression must be storable");
 }
 
 #[tokio::test]

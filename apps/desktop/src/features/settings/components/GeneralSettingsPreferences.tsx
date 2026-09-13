@@ -1,6 +1,7 @@
+import type { CalendarDayCount, CalendarDensity } from "@pikos/core";
+
 import { cn } from "@/lib/utils";
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
-import type { CalendarDayCount, CalendarDensity } from "@/shared/constants/calendar";
 import { IS_LINUX } from "@/shared/constants/platform";
 import { useAppSettings } from "@/shared/context/AppSettingsContext";
 import type { WeekStart } from "@/shared/context/AppSettingsContext";

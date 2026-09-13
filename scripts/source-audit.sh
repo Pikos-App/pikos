@@ -47,9 +47,12 @@ if command -v gitleaks &>/dev/null; then
   fi
 else
   # Fallback: basic pattern grep if gitleaks not installed
+  # packages/recurrence-wasm/pkg is generated (base64-embedded wasm binary);
+  # random token-shaped substrings in the blob trip the patterns.
   hits=$(src_files '*.ts' '*.tsx' '*.js' '*.jsx' '*.rs' '*.json' '*.toml' '*.yaml' '*.yml' '*.env*' \
     | xargs grep -nE '(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36,}|AIza[a-zA-Z0-9_-]{35}|AKIA[A-Z0-9]{16}|xoxb-[0-9]|-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY)' 2>/dev/null \
-    | grep -v 'node_modules' || true)
+    | grep -v 'node_modules' \
+    | grep -v 'packages/recurrence-wasm/pkg/' || true)
 
   if [ -n "$hits" ]; then
     fail "Possible secrets detected (install gitleaks for better coverage)" $hits

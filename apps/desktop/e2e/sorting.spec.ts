@@ -12,9 +12,7 @@ async function setSort(app: Page, mode: "Date" | "Title" | "Priority" | "Manual"
   await app.getByRole("button", { name: /^Sort:/ }).click();
   await app.getByRole("menuitem", { name: mode }).click();
   // Sort chip's accessible name reflects the picked value.
-  await expect(
-    app.getByRole("button", { name: `Sort: ${mode.toLowerCase()}` })
-  ).toBeVisible();
+  await expect(app.getByRole("button", { name: `Sort: ${mode.toLowerCase()}` })).toBeVisible();
 }
 
 /** Read the visible page-list-item titles in document order. Returns

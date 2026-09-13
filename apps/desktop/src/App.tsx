@@ -1,7 +1,8 @@
+import { isSmartViewId } from "@pikos/core";
 import { useEffect, useRef } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { RecurringCompleteDialog } from "@/features/calendar/components/RecurringCompleteDialog";
+import { RecurringGapDialog } from "@/features/calendar/components/RecurringGapDialog";
 import { ThreePanelLayout } from "@/features/layout";
 import { QuickAddDialog, UNDO_TOAST_DURATION_MS } from "@/features/pages";
 import { SearchPalette } from "@/features/search";
@@ -16,7 +17,7 @@ import { EditorSettingsProvider } from "@/shared/context/EditorSettingsContext";
 import { ImportProvider } from "@/shared/context/ImportContext";
 import { ListSettingsProvider } from "@/shared/context/ListSettingsContext";
 import { PagesProvider, usePages } from "@/shared/context/PagesContext";
-import { RecurringCompleteDialogProvider } from "@/shared/context/RecurringCompleteDialogContext";
+import { RecurringGapDialogProvider } from "@/shared/context/RecurringGapDialogContext";
 import { SelectionProvider } from "@/shared/context/SelectionContext";
 import { ThemeProvider } from "@/shared/context/ThemeContext";
 import { UIProvider, useUI } from "@/shared/context/UIContext";
@@ -27,6 +28,7 @@ import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useDeepLinkRouter } from "@/shared/deep-link/useDeepLinkRouter";
 import { ErrorBoundary } from "@/shared/ErrorBoundary";
 import { useExternalChangeReload } from "@/shared/hooks/useExternalChangeReload";
+import { useSyncAppliedReload } from "@/shared/hooks/useSyncAppliedReload";
 import { Keyboard } from "@/shared/keyboard/registry";
 import { useKeyboardListener, useKeyboardShortcut } from "@/shared/keyboard/useKeyboard";
 
@@ -115,8 +117,16 @@ function useGlobalShortcuts() {
     useUI();
   const { folders } = usePages();
 
-  useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), { allowInInputs: true });
-  useKeyboardShortcut("Mod+W", () => setActivePage(null), { allowInInputs: true });
+  useKeyboardShortcut("Mod+,", () => setSettingsOpen(!settingsOpen), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Settings",
+  });
+  useKeyboardShortcut("Mod+W", () => setActivePage(null), {
+    allowInInputs: true,
+    group: "Navigation",
+    label: "Close page",
+  });
   // Cmd+/ — macOS reserves Cmd+? for the Help menu's search field, so we use
   // Cmd+/ (the standard for shortcut overlays — Linear, Notion, Slack).
   useKeyboardShortcut(
@@ -125,7 +135,7 @@ function useGlobalShortcuts() {
       setSettingsSection("shortcuts");
       setSettingsOpen(true);
     },
-    { allowInInputs: true }
+    { allowInInputs: true, group: "Navigation", label: "Keyboard shortcuts" }
   );
 
   // ⌘1-9 — switch to folder by index (1-based).
@@ -149,6 +159,9 @@ function useGlobalShortcuts() {
           if (folder) setViewRef.current(folder.id);
         },
         id,
+        // Unlabelled on purpose: a label would put nine near-identical rows in
+        // both the shortcuts page and the command palette. Documented once, as
+        // a family, in ShortcutsSettings.
         scope: "global",
       });
     }
@@ -163,6 +176,7 @@ function AppShell() {
   useMenuEvents();
   useDeepLinkRouter();
   useExternalChangeReload();
+  useSyncAppliedReload();
   // Mark first usable render — workspace loaded, shell mounted, layout about to paint.
   // Perf tests measure boot time to this mark instead of domInteractive (which fires
   // before React mounts).
@@ -183,11 +197,7 @@ function AppShell() {
   if (didInitRef.current == null) {
     didInitRef.current = true;
 
-    if (
-      ui.activeViewId !== "today" &&
-      ui.activeViewId !== "inbox" &&
-      !folders.some((f) => f.id === ui.activeViewId)
-    ) {
+    if (!isSmartViewId(ui.activeViewId) && !folders.some((f) => f.id === ui.activeViewId)) {
       ui.setActiveViewId("inbox");
     }
     if (ui.activePageId !== null && !pages.some((p) => p.id === ui.activePageId)) {
@@ -285,7 +295,7 @@ export default function App() {
                           <CalendarSettingsProvider>
                             <ListSettingsProvider>
                               <UndoDeleteProvider>
-                                <RecurringCompleteDialogProvider>
+                                <RecurringGapDialogProvider>
                                   <TooltipProvider delayDuration={400}>
                                     <WorkspaceGate />
                                     <ErrorBoundary
@@ -297,10 +307,10 @@ export default function App() {
                                         />
                                       )}
                                     >
-                                      <RecurringCompleteDialog />
+                                      <RecurringGapDialog />
                                     </ErrorBoundary>
                                   </TooltipProvider>
-                                </RecurringCompleteDialogProvider>
+                                </RecurringGapDialogProvider>
                               </UndoDeleteProvider>
                             </ListSettingsProvider>
                           </CalendarSettingsProvider>

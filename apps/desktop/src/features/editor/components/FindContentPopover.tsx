@@ -111,7 +111,7 @@ export function FindContentPopover({ editor }: FindContentPopoverProps) {
       }
       requestAnimationFrame(() => inputRef.current?.focus());
     },
-    { allowInInputs: true }
+    { allowInInputs: true, group: "Editor", label: "Find in page" }
   );
 
   // Close when focus leaves the popover (covers click-outside and tab-away).

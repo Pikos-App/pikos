@@ -4,6 +4,13 @@ import type { APIContext } from "astro";
 // Keep in sync with /src/pages/blog/index.astro
 const posts = [
   {
+    slug: "your-calendar-inside-pikos",
+    title: "Your Calendar, Inside Pikos",
+    description:
+      "Pikos 0.4.0 syncs your calendar in: iCloud, Google, or any CalDAV server. Read-only, opt-in, and your notes stay on your device.",
+    date: "2026-07-05",
+  },
+  {
     slug: "the-code-is-public",
     title: "The Code Is Public",
     description:

@@ -7,6 +7,15 @@ export type Binding = {
   id: string;
   combo: string; // e.g., "Mod+Shift+D"
   scope?: string; // default: "global"
+  /**
+   * Short imperative name — "New page", "Toggle sidebar". Every user-facing
+   * binding carries one: it is what the command palette lists and what the
+   * shortcuts settings page renders, so a binding without a label is invisible
+   * to both (which is right for the internal half of a chord).
+   */
+  label?: string;
+  /** Section heading the shortcuts settings page files this under. */
+  group?: string;
   // The originating KeyboardEvent is passed so handlers can branch on e.g.
   // `e.repeat`. Handlers that don't need it can ignore the argument.
   handler: (e: KeyboardEvent) => void;
@@ -119,7 +128,19 @@ function isBlockingDialogOpen(): boolean {
   );
 }
 
+/** One labelled shortcut, as the settings page needs it. */
+export type ShortcutDoc = {
+  combo: string;
+  group: string;
+  label: string;
+};
+
 const store = new Map<string, Binding & { parsed: NormalizedCombo }>();
+// Every labelled binding this session has seen, keyed by what makes it distinct.
+// Registrations come and go with their component — the calendar header and the
+// editor pane each unregister when their panel is hidden — and a reference list
+// that empties as you switch panels documents nothing. Entries are never evicted.
+const catalog = new Map<string, ShortcutDoc>();
 let activeScopes: string[] = ["global"]; // top is last
 
 function conflictKey(parsed: NormalizedCombo): string {
@@ -177,6 +198,23 @@ export const Keyboard = {
       .map(({ parsed: _p, ...b }) => b);
   },
 
+  /**
+   * What the command palette can offer right now: bindings in an active scope
+   * that carry a label and whose `when()` gate currently passes. The gate is
+   * evaluated here rather than left to the caller so a command the key press
+   * wouldn't fire is never listed as available.
+   */
+  listCommands(): Binding[] {
+    return Keyboard.listActiveBindings().filter(
+      (b) => b.label !== undefined && (b.when?.() ?? true)
+    );
+  },
+
+  /** Every labelled shortcut registered this session — see `catalog`. */
+  listShortcutCatalog(): ShortcutDoc[] {
+    return Array.from(catalog.values());
+  },
+
   popScope(scope?: string): void {
     if (!scope) {
       activeScopes = activeScopes.slice(0, -1);
@@ -204,6 +242,14 @@ export const Keyboard = {
       if (sig === signature) {
         log.warn(`Conflict for combo ${binding.combo} in scope ${scope} (existing: ${b.id})`);
       }
+    }
+
+    if (binding.label !== undefined) {
+      catalog.set(`${scope}::${binding.combo}::${binding.label}`, {
+        combo: binding.combo,
+        group: binding.group ?? "Other",
+        label: binding.label,
+      });
     }
 
     store.set(binding.id, { ...binding, parsed, scope });

@@ -14,7 +14,7 @@
 //
 // A diff here means one of two things. If it is intentional, it needs a
 // CONTENT_SCHEMA_VERSION bump in pikos-db and a content migration (see
-// migration 010). If it is not, it is a document-corruption bug caught before
+// migration 013). If it is not, it is a document-corruption bug caught before
 // it shipped.
 import { Editor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";

@@ -15,12 +15,27 @@ env:
 
 jobs:
   # ── Validation ──────────────────────────────────────────────────────────────
-  # No validate job here. ci.yml runs the full _validate.yml sweep on every push
-  # to `main`; scripts/release.sh refuses to tag unless that run is green for the
-  # released commit (scripts/require-green-ci.sh). Re-running it on the tag was
-  # pure duplication, so the tag pipeline goes straight to build → publish.
+  # The tag is where both release paths converge, and it is the only place a
+  # beta is gated at all. release.sh requires a green ci.yml run before tagging,
+  # but that covers neither path fully: release-beta.sh cuts from a feature
+  # branch ci.yml never runs on, and release.sh tags a version-bump commit
+  # created *after* the check and pushed with [skip ci]. Publishing an unbuilt
+  # tree is what shipped 0.4.0-beta.1 with a window that never painted, so the
+  # sweep runs here on the tagged commit itself.
+  #
+  # Both gates are needed and neither subsumes the other: _validate.yml runs
+  # against the dev server, _build.yml against a production bundle under the
+  # packaged CSP.
+  validate:
+    uses: ./.github/workflows/_validate.yml
+
+  bundle:
+    name: Bundle Gate
+    uses: ./.github/workflows/_build.yml
+
   build:
     name: Build (${{ matrix.label }})
+    needs: [validate, bundle]
     strategy:
       fail-fast: false
       matrix:
@@ -76,6 +91,22 @@ jobs:
           APPLE_API_KEY_CONTENTS: ${{ secrets.APPLE_API_KEY }}
         run: printf '%s' "$APPLE_API_KEY_CONTENTS" > "$RUNNER_TEMP/apple-api-key.p8"
 
+      # The build succeeds without these and just hides Google sync, so nothing
+      # downstream would go red — a typo'd secret name would publish a release
+      # whose headline feature is invisible. Fail here instead.
+      - name: Require Google OAuth credentials
+        env:
+          PIKOS_GOOGLE_CLIENT_ID: ${{ secrets.PIKOS_GOOGLE_CLIENT_ID }}
+          PIKOS_GOOGLE_CLIENT_SECRET: ${{ secrets.PIKOS_GOOGLE_CLIENT_SECRET }}
+        run: |
+          missing=""
+          [ -n "$PIKOS_GOOGLE_CLIENT_ID" ] || missing="PIKOS_GOOGLE_CLIENT_ID"
+          [ -n "$PIKOS_GOOGLE_CLIENT_SECRET" ] || missing="$missing PIKOS_GOOGLE_CLIENT_SECRET"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repo secret(s):$missing — this build would ship with Google sync hidden. Set them with 'gh secret set <NAME>'."
+            exit 1
+          fi
+
       - name: Build Tauri app
         run: pnpm tauri build --target ${{ matrix.target }}
         working-directory: apps/desktop
@@ -90,6 +121,10 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
+          # Google OAuth client — read via option_env!, so these are compile-time
+          # inputs, not runtime config. Guarded non-empty above.
+          PIKOS_GOOGLE_CLIENT_ID: ${{ secrets.PIKOS_GOOGLE_CLIENT_ID }}
+          PIKOS_GOOGLE_CLIENT_SECRET: ${{ secrets.PIKOS_GOOGLE_CLIENT_SECRET }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -104,9 +139,95 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.tar.gz.sig
           if-no-files-found: ignore
 
+  cli:
+    name: CLI (${{ matrix.label }})
+    needs: [validate, bundle]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x86_64
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            label: macos-arm64
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            label: macos-x86_64
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cli-${{ matrix.target }}
+
+      - run: pnpm install --frozen-lockfile
+
+      # The NLP parser stays single-sourced in the TS core, so `pikos add` shells
+      # to this bundle. It ships inside the tarball; everything else is pure Rust.
+      - name: Build the parser bridge
+        run: pnpm --filter @pikos/bridge build
+
+      # `pikos --version` is clap reading CARGO_PKG_VERSION, and the crate carries
+      # its own number that no release script bumps — so a published binary would
+      # answer 0.1.0 whatever tag shipped it. Stamped here rather than in the
+      # release scripts because release.sh is the stable desktop path and this is
+      # not a reason to touch it; revisit when the CLI gets its own release tags.
+      - name: Stamp the CLI version from the tag
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          perl -0pi -e "s/^version = \"[^\"]*\"/version = \"$VERSION\"/m" \
+            crates/pikos-cli/Cargo.toml
+          grep -m1 '^version' crates/pikos-cli/Cargo.toml
+
+      - name: Build the CLI
+        run: cargo build -p pikos-cli --release --target ${{ matrix.target }}
+
+      # Layout matches what the binary looks for: `../bridge/bridge.mjs` relative
+      # to itself. The Homebrew formula also pins PIKOS_BRIDGE_JS, so an install
+      # that resolves the binary through a symlink still finds it.
+      - name: Package
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          STAGE="pikos-cli-${VERSION}-${{ matrix.target }}"
+          mkdir -p "$STAGE/bin" "$STAGE/bridge"
+          cp "target/${{ matrix.target }}/release/pikos" "$STAGE/bin/pikos"
+          cp packages/pikos-bridge/dist/bridge.mjs "$STAGE/bridge/bridge.mjs"
+          cp crates/pikos-cli/README.md "$STAGE/README.md"
+          cp LICENSE "$STAGE/LICENSE"
+          tar -czf "${STAGE}.tar.gz" "$STAGE"
+          shasum -a 256 "${STAGE}.tar.gz" | tee "${STAGE}.tar.gz.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.label }}
+          path: |
+            pikos-cli-*.tar.gz
+            pikos-cli-*.tar.gz.sha256
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, cli]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -162,12 +283,18 @@ jobs:
             echo "NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # A hyphen in the tag means a prerelease (v0.4.0-beta.1). GitHub excludes
+      # those from /releases/latest, which is the URL both the marketing site's
+      # download buttons and the in-app updater resolve — so flagging it here is
+      # the whole mechanism that keeps a beta off the default download path.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: ${{ steps.notes.outputs.body }}
           files: |
+            artifacts/**/*.tar.gz.sha256
             artifacts/**/*.deb
             artifacts/**/*.AppImage
             artifacts/**/*.AppImage.sig
@@ -175,7 +302,12 @@ jobs:
             artifacts/**/*.tar.gz
             artifacts/**/*.tar.gz.sig
 
+      # Deliberately skipped for a prerelease. /releases/latest already ignores
+      # one, so the manifest would be unreachable — but publishing it anyway
+      # leaves a live beta manifest that promotes every stable install the moment
+      # someone clears the prerelease flag.
       - name: Generate updater manifest (latest.json)
+        if: ${{ !contains(github.ref_name, '-') }}
         env:
           RELEASE_NOTES: ${{ steps.notes.outputs.body }}
         run: |
@@ -252,6 +384,7 @@ jobs:
           MANIFEST
 
       - name: Upload latest.json to release
+        if: ${{ !contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
           files: latest.json

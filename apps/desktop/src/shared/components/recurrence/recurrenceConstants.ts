@@ -1,4 +1,5 @@
 import type { RecurrenceFreq, RecurrenceOptions, RecurrenceWeekday } from "@pikos/core";
+import { getDaysInMonth } from "date-fns";
 
 export const FREQ_UNIT_LABELS: Record<RecurrenceFreq, { singular: string; plural: string }> = {
   DAILY: { plural: "Days", singular: "Day" },
@@ -43,6 +44,24 @@ function jsDayToRrule(jsDay: number): RecurrenceWeekday {
   return ((jsDay + 6) % 7) as RecurrenceWeekday;
 }
 
+/**
+ * The anchor's BYDAY ordinal — `2` for a second Tuesday, `-1` for a last one.
+ *
+ * An anchor in the final seven days of its month takes `-1` rather than its cardinal
+ * position: that late in the month it almost always means "month end", and a
+ * 5th-position rule would skip every month holding only four of that weekday. The cost
+ * is a genuine "4th Monday" that happens to also be the last one, which the preset
+ * can't author — its detail text says which reading it took before it's clicked.
+ */
+function byweekdayOrdinal(anchor: Date): number {
+  const dayOfMonth = anchor.getDate();
+  return dayOfMonth + 7 > getDaysInMonth(anchor) ? -1 : Math.ceil(dayOfMonth / 7);
+}
+
+function positionLabel(ordinal: number): string {
+  return ordinal === -1 ? "last" : `${ordinal}${ordinalSuffix(ordinal)}`;
+}
+
 function ordinalSuffix(n: number): string {
   const rem10 = n % 10;
   const rem100 = n % 100;
@@ -62,19 +81,40 @@ export interface Preset {
   startsGroup?: boolean;
 }
 
-/** Shape-compare two RecurrenceOptions, ignoring end conditions (count/until). */
+/**
+ * Every pattern term, normalised for comparison. WKST defaults to Monday so an
+ * imported rule that spells it out still matches a preset that omits it.
+ */
+function shapeKey(o: RecurrenceOptions): string {
+  return JSON.stringify([
+    o.freq,
+    o.interval,
+    o.byweekday ?? [],
+    o.byweekdayOrdinals ?? [],
+    o.bymonthday ?? [],
+    o.bymonth ?? [],
+    o.bysetpos ?? [],
+    o.wkst ?? 0,
+  ]);
+}
+
+/**
+ * Shape-compare two RecurrenceOptions, ignoring end conditions (count/until).
+ *
+ * Comparing every pattern term, not just freq/interval/byweekday: a partial
+ * compare made a richer rule ("monthly on the last day") light up the plain
+ * Monthly preset as already-active, and clicking that highlighted row then
+ * flattened the rule to the preset.
+ */
 export function shapesMatch(a: RecurrenceOptions, b: RecurrenceOptions): boolean {
-  if (a.freq !== b.freq) return false;
-  if (a.interval !== b.interval) return false;
-  const aDays = (a.byweekday ?? []).join(",");
-  const bDays = (b.byweekday ?? []).join(",");
-  return aDays === bDays;
+  return shapeKey(a) === shapeKey(b);
 }
 
 export function computePresets(anchor: Date): Preset[] {
   const weekday = jsDayToRrule(anchor.getDay());
   const weekdayAbbr = WEEKDAYS[weekday]!.abbr;
   const dayOfMonth = anchor.getDate();
+  const position = byweekdayOrdinal(anchor);
   const monthName = MONTH_NAMES_SHORT[anchor.getMonth()]!;
   return [
     { id: "daily", label: "Daily", options: { freq: "DAILY", interval: 1 } },
@@ -95,6 +135,17 @@ export function computePresets(anchor: Date): Preset[] {
       id: "monthly",
       label: "Monthly",
       options: { freq: "MONTHLY", interval: 1 },
+    },
+    {
+      detail: `${positionLabel(position)} ${weekdayAbbr}`,
+      id: "monthly-weekday",
+      label: "Monthly",
+      options: {
+        byweekday: [weekday],
+        byweekdayOrdinals: [position],
+        freq: "MONTHLY",
+        interval: 1,
+      },
     },
     {
       detail: `${monthName} ${dayOfMonth}`,

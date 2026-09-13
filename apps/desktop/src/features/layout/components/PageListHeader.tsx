@@ -1,7 +1,8 @@
-// Sort is hidden on the Today view — it's always grouped overdue → today,
-// not user-sortable.
+// Sort is hidden on the date-grouped views (Today, Upcoming) — their order comes
+// from the sections they render, not from a user choice.
 
-import type { Folder } from "@pikos/core";
+import type { Folder, SortMode } from "@pikos/core";
+import { isDateGroupedView } from "@pikos/core";
 import {
   ArrowUpDown,
   CalendarDays,
@@ -21,7 +22,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FolderSwitcher } from "@/features/folders";
-import type { SortMode } from "@/features/pages";
 import { IconToolbar } from "@/shared/components/IconToolbar";
 import { TooltipIconButton } from "@/shared/components/TooltipIconButton";
 
@@ -45,6 +45,7 @@ const SORT_OPTIONS: { value: SortMode; label: string; icon: React.ReactNode }[] 
 
 function viewName(activeViewId: string, folders: Folder[]): string {
   if (activeViewId === "today") return "Today";
+  if (activeViewId === "upcoming") return "Upcoming";
   if (activeViewId === "inbox") return "Inbox";
   return folders.find((f) => f.id === activeViewId)?.name ?? "Pages";
 }
@@ -76,7 +77,7 @@ export function PageListHeader({
           shortcut="mod+k"
           tabIndex={0}
         />
-        {activeViewId !== "today" && (
+        {!isDateGroupedView(activeViewId) && (
           <DropdownMenu
             onOpenChange={(open) => setOpenSortMenu(open ? "page-sort" : null)}
             open={openSortMenu === "page-sort"}
@@ -110,13 +111,17 @@ export function PageListHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        <TooltipIconButton
-          icon={<Plus size={15} />}
-          label="New Page"
-          onClick={() => onOpenDialog("quick-add")}
-          shortcut="mod+n"
-          tabIndex={activeViewId === "today" ? 0 : -1}
-        />
+        {/* External-calendar folders are read-only mirrors — you can't add a
+            native page to one (placement lock), so no New Page affordance. */}
+        {!folders.find((f) => f.id === activeViewId)?.isExternalCalendar && (
+          <TooltipIconButton
+            icon={<Plus size={15} />}
+            label="New Page"
+            onClick={() => onOpenDialog("quick-add")}
+            shortcut="mod+n"
+            tabIndex={isDateGroupedView(activeViewId) ? 0 : -1}
+          />
+        )}
       </IconToolbar>
     </div>
   );

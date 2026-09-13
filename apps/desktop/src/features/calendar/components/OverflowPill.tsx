@@ -1,10 +1,8 @@
-import type { PageSummary } from "@pikos/core";
+import type { OverflowPill as OverflowPillData, PageSummary } from "@pikos/core";
+import { formatTimeRange } from "@pikos/core";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-
-import type { OverflowPill as OverflowPillData } from "../utils/calendarLayout";
-import { formatTimeRange } from "../utils/calendarTimeFormat";
 
 interface OverflowPillProps {
   pill: OverflowPillData;
@@ -30,6 +28,7 @@ export function OverflowPill({ onOpen, pagesById, pill }: OverflowPillProps) {
             "transition-colors hover:border-border/80 hover:bg-accent hover:text-foreground",
             "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           )}
+          data-cal-no-create
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           style={{

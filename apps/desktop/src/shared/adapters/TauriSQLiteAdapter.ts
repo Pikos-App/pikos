@@ -1,9 +1,13 @@
 import type {
+  AccountWithCalendars,
+  CalendarSyncResult,
   CompletedPagesFilter,
   CompletedPagesResponse,
   CompleteRecurringInput,
   CompleteRecurringResult,
+  FocusSession,
   Folder,
+  NotificationHistoryEntry,
   Page,
   PageFilter,
   PageRecurrenceRule,
@@ -14,9 +18,15 @@ import type {
   RescheduleVirtualInput,
   RescheduleVirtualResult,
   SearchResponse,
+  SkipOccurrenceInput,
+  SyncCalendar,
+  TrashedPage,
+  UncompleteRecurringInput,
 } from "@pikos/core";
 import type {
   FolderUpdate,
+  NewCaldavConnection,
+  NewFocusSession,
   NewFolder,
   NewPage,
   NewPageReminder,
@@ -24,8 +34,12 @@ import type {
   NewRecurrenceRule,
   PageScheduleUpdate,
   PageUpdate,
+  RawRuleExpansion,
   RecurrenceRuleUpdate,
   StorageAdapter,
+  WorkspaceExportFormat,
+  WorkspaceExportOptions,
+  WorkspaceUsageStats,
 } from "@pikos/core";
 import { toStorageError } from "@pikos/core";
 import { invoke as rawInvoke } from "@tauri-apps/api/core";
@@ -76,15 +90,29 @@ function watchdog(command: string): void {
 
 // Commands that mutate the workspace DB. Issuing one opens a suppression
 // window so the DB watcher's change event for our own write doesn't trigger a
-// redundant reload (see shared/lib/externalChange.ts).
-const WRITE_COMMANDS = new Set([
+// redundant reload (see shared/lib/externalChange.ts). Leaving a mutating
+// command out is not inert: the watcher reads its own echo as somebody else's
+// write and refetches the workspace on top of the user's action.
+//
+// Only commands issued through this module's `invoke` are covered. The wipe/reset
+// and seeding commands go straight to `@tauri-apps/api/core` and are not listed —
+// a reload after wiping the workspace is the right outcome anyway.
+export const WRITE_COMMANDS = new Set([
   "create_page",
   "update_page",
+  "clear_pending_description",
   "delete_page",
   "soft_delete_page",
   "restore_page",
+  "purge_trashed_pages",
   "reorder_pages",
+  "set_pages_status",
   "complete_recurring_page",
+  "uncomplete_recurring_occurrence",
+  "skip_occurrence",
+  "undo_skip_occurrence",
+  "reschedule_virtual_occurrence",
+  "recompute_recurring_schedules",
   "create_folder",
   "update_folder",
   "delete_folder",
@@ -97,12 +125,59 @@ const WRITE_COMMANDS = new Set([
   "create_recurrence_rule",
   "update_recurrence_rule",
   "delete_recurrence_rule",
+  "add_rule_exdates",
+  "remove_rule_exdate",
+  "create_focus_session",
   "create_page_reminder",
   "delete_page_reminder",
   "delete_page_reminders",
-  "backdate_page",
+  "connect_caldav_account",
+  "reconnect_caldav_account",
+  "connect_google_account",
+  "disconnect_sync_account",
+  "toggle_sync_calendar",
+  "set_sync_calendar_color",
+  "resync_sync_account",
+  "refresh_sync_account",
+  // Workspace lifecycle. All three mutate what the watcher watches — a truncate,
+  // an uninstall, and a credential purge — so the app's own echo must be ignored.
   "reset_db",
   "wipe_app_data",
+  "release_sync_credentials",
+]);
+
+/** Commands that only read. Listed rather than inferred so a new command has to be
+ *  classified deliberately — the test below rejects any invoke in neither set.
+ *  `connect_db` belongs here: it opens the pool and writes no workspace data. */
+export const READ_COMMANDS = new Set([
+  "connect_db",
+  "get_page",
+  "list_pages",
+  "list_pages_today",
+  "list_trashed_pages",
+  "list_completed_pages",
+  "search_pages",
+  "search_tags",
+  "get_folder",
+  "list_folders",
+  "list_page_schedules",
+  "list_page_schedules_for_rules",
+  "get_recurrence_rule",
+  "list_recurrence_rules",
+  "expand_recurrence_range",
+  "list_page_reminders",
+  "list_notification_history",
+  "get_sync_status",
+  "list_sync_calendars",
+  "google_sync_available",
+  // Backups and exports read the workspace and write somewhere else entirely,
+  // so they leave nothing for the watcher to react to.
+  "backup_db",
+  "backup_db_before_import",
+  "export_csv",
+  "export_ics",
+  "export_markdown",
+  "get_usage_stats",
 ]);
 
 // Rust commands serialize errors as { kind, message } (see
@@ -144,12 +219,24 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<void>("delete_page", { id });
   }
 
+  clearPendingDescription(id: string): Promise<void> {
+    return invoke<void>("clear_pending_description", { id });
+  }
+
   softDeletePage(id: string): Promise<void> {
     return invoke<void>("soft_delete_page", { id });
   }
 
   restorePage(id: string): Promise<void> {
     return invoke<void>("restore_page", { id });
+  }
+
+  listTrashedPages(): Promise<TrashedPage[]> {
+    return invoke<TrashedPage[]>("list_trashed_pages");
+  }
+
+  purgeTrashedPages(olderThanDays: number): Promise<number> {
+    return invoke<number>("purge_trashed_pages", { olderThanDays });
   }
 
   listPages(filter?: PageFilter): Promise<PageSummary[]> {
@@ -236,8 +323,8 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<PageSchedule[]>("list_page_schedules", { pageId });
   }
 
-  listPageSchedulesRange(start: string, end: string): Promise<PageSchedule[]> {
-    return invoke<PageSchedule[]>("list_page_schedules_range", { end, start });
+  listPageSchedulesForRules(ruleIds: string[]): Promise<PageSchedule[]> {
+    return invoke<PageSchedule[]>("list_page_schedules_for_rules", { ruleIds });
   }
 
   // ─── Recurrence rules ────────────────────────────────────────────────────────
@@ -270,12 +357,60 @@ export class TauriSQLiteAdapter implements StorageAdapter {
     return invoke<PageRecurrenceRule[]>("list_recurrence_rules");
   }
 
+  expandRecurrenceRange(
+    rules: PageRecurrenceRule[],
+    rangeStart: string,
+    rangeEnd: string
+  ): Promise<RawRuleExpansion[]> {
+    return invoke<RawRuleExpansion[]>("expand_recurrence_range", {
+      rangeEnd,
+      rangeStart,
+      rules: rules.map((r) => ({
+        rrule: r.rrule,
+        rruleExdates: r.rruleExdates,
+        ruleId: r.id,
+        scheduledEnd: r.scheduledEnd,
+        scheduledStart: r.scheduledStart,
+      })),
+    });
+  }
+
   completeRecurringPage(data: CompleteRecurringInput): Promise<CompleteRecurringResult> {
     return invoke<CompleteRecurringResult>("complete_recurring_page", { data });
   }
 
+  uncompleteRecurringOccurrence(data: UncompleteRecurringInput): Promise<void> {
+    return invoke<void>("uncomplete_recurring_occurrence", { data });
+  }
+
+  skipOccurrence(data: SkipOccurrenceInput): Promise<void> {
+    return invoke<void>("skip_occurrence", { data });
+  }
+
+  undoSkipOccurrence(data: SkipOccurrenceInput): Promise<void> {
+    return invoke<void>("undo_skip_occurrence", { data });
+  }
+
+  recomputeRecurringSchedules(): Promise<PageSummary[]> {
+    return invoke<PageSummary[]>("recompute_recurring_schedules");
+  }
+
   rescheduleVirtualOccurrence(data: RescheduleVirtualInput): Promise<RescheduleVirtualResult> {
     return invoke<RescheduleVirtualResult>("reschedule_virtual_occurrence", { data });
+  }
+
+  // ─── Focus sessions ─────────────────────────────────────────────────────────
+
+  /** Flattened, not wrapped in `{ data }`: the command takes four scalars, which
+   *  is why `ipc_tests` carries a wire case for it — every one of them is
+   *  multi-word, so a camelCase⇄snake_case slip would be silent. */
+  createFocusSession(data: NewFocusSession): Promise<FocusSession> {
+    return invoke<FocusSession>("create_focus_session", {
+      durationS: data.durationS,
+      endedAt: data.endedAt,
+      pageId: data.pageId,
+      startedAt: data.startedAt,
+    });
   }
 
   // ─── Reminders ──────────────────────────────────────────────────────────────
@@ -294,5 +429,102 @@ export class TauriSQLiteAdapter implements StorageAdapter {
 
   deletePageReminders(pageId: string): Promise<void> {
     return invoke<void>("delete_page_reminders", { pageId });
+  }
+
+  listNotificationHistory(limit: number): Promise<NotificationHistoryEntry[]> {
+    return invoke<NotificationHistoryEntry[]>("list_notification_history", { limit });
+  }
+
+  // ─── Calendar sync ────────────────────────────────────────────────────────────
+
+  connectCaldavAccount(data: NewCaldavConnection): Promise<AccountWithCalendars> {
+    return invoke<AccountWithCalendars>("connect_caldav_account", { ...data });
+  }
+
+  reconnectCaldavAccount(accountId: string, password: string): Promise<AccountWithCalendars> {
+    return invoke<AccountWithCalendars>("reconnect_caldav_account", { accountId, password });
+  }
+
+  connectGoogleAccount(): Promise<AccountWithCalendars> {
+    return invoke<AccountWithCalendars>("connect_google_account");
+  }
+
+  googleSyncAvailable(): Promise<boolean> {
+    return invoke<boolean>("google_sync_available");
+  }
+
+  disconnectSyncAccount(accountId: string): Promise<void> {
+    return invoke<void>("disconnect_sync_account", { accountId });
+  }
+
+  listSyncCalendars(accountId: string): Promise<SyncCalendar[]> {
+    return invoke<SyncCalendar[]>("list_sync_calendars", { accountId });
+  }
+
+  toggleSyncCalendar(
+    syncCalendarId: string,
+    enabled: boolean,
+    color: string | null
+  ): Promise<SyncCalendar> {
+    return invoke<SyncCalendar>("toggle_sync_calendar", { color, enabled, syncCalendarId });
+  }
+
+  setSyncCalendarColor(syncCalendarId: string, color: string): Promise<SyncCalendar> {
+    return invoke<SyncCalendar>("set_sync_calendar_color", { color, syncCalendarId });
+  }
+
+  resyncSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
+    return invoke<CalendarSyncResult[]>("resync_sync_account", { accountId });
+  }
+
+  refreshSyncAccount(accountId: string): Promise<CalendarSyncResult[]> {
+    return invoke<CalendarSyncResult[]>("refresh_sync_account", { accountId });
+  }
+
+  getSyncStatus(): Promise<AccountWithCalendars[]> {
+    return invoke<AccountWithCalendars[]>("get_sync_status");
+  }
+
+  // ─── Workspace data lifecycle ──────────────────────────────────────────────
+
+  backupDatabase(): Promise<string> {
+    return invoke<string>("backup_db");
+  }
+
+  async backupBeforeImport(): Promise<void> {
+    await invoke<void>("backup_db_before_import");
+  }
+
+  /** Each command spelled at its own call rather than dispatched through a
+   *  lookup table: the classification test scans this source for `invoke<…>("…")`
+   *  and a name assembled at runtime is a name it can't see. */
+  exportWorkspace(
+    format: WorkspaceExportFormat,
+    { includeSynced }: WorkspaceExportOptions
+  ): Promise<string> {
+    switch (format) {
+      case "csv":
+        return invoke<string>("export_csv", { includeSynced });
+      case "ics":
+        return invoke<string>("export_ics", { includeSynced });
+      case "markdown":
+        return invoke<string>("export_markdown", { includeSynced });
+    }
+  }
+
+  getUsageStats(): Promise<WorkspaceUsageStats> {
+    return invoke<WorkspaceUsageStats>("get_usage_stats");
+  }
+
+  async resetWorkspaceData(): Promise<void> {
+    await invoke<void>("reset_db");
+  }
+
+  async wipeAllData(): Promise<void> {
+    await invoke<void>("wipe_app_data");
+  }
+
+  async releaseSyncCredentials(): Promise<void> {
+    await invoke<void>("release_sync_credentials");
   }
 }

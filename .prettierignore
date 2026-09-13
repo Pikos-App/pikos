@@ -13,3 +13,4 @@ apps/desktop/src-tauri/
 # on every regeneration, so the two would fight forever over a file no human
 # edits. Regenerate with `pnpm --filter @pikos/core gen:parity`.
 crates/pikos-core/tests/corpus/
+packages/recurrence-wasm/pkg/

@@ -1,7 +1,6 @@
 // The user-facing "Delete All Data" action lives in Data settings, not here.
 
-import { appLogDir, join } from "@tauri-apps/api/path";
-import { openPath } from "@tauri-apps/plugin-opener";
+import type { SeedScenario } from "@seeds/seedLoaders";
 import { FileText } from "lucide-react";
 import { useState } from "react";
 
@@ -10,17 +9,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useUI } from "@/shared/context/UIContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 const logger = createLogger("DeveloperSettings");
-
-type SeedScenario =
-  | "tutorial"
-  | "realistic"
-  | "stress"
-  | "notifications"
-  | "calendar"
-  | "calendar-colors"
-  | "calendar-edges";
 
 const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[] = [
   {
@@ -60,6 +51,12 @@ const SEED_SCENARIOS: { id: SeedScenario; label: string; description: string }[]
     id: "calendar-edges",
     label: "Calendar edge cases",
   },
+  {
+    description:
+      "Realistic data plus a mock external-calendar sync (no network): synced folders, a cross-zone event, all-day, a recurring series, and a detached page.",
+    id: "synced",
+    label: "Mock calendar sync",
+  },
 ];
 
 export function DeveloperSettings() {
@@ -94,8 +91,7 @@ export function DeveloperSettings() {
 
   async function handleOpenLogs() {
     try {
-      const path = await join(await appLogDir(), "pikos.log");
-      await openPath(path);
+      await getPlatform().openLogFile();
     } catch (err) {
       logger.warn("open logs failed", err);
     }
@@ -118,6 +114,7 @@ export function DeveloperSettings() {
               <p className="mt-0.5 text-xs text-muted-foreground">{s.description}</p>
             </div>
             <Button
+              aria-label={`Seed ${s.label}`}
               disabled={running || !workspace}
               onClick={() => setPending(s.id)}
               size="sm"

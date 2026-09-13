@@ -1,25 +1,35 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
-
-import {
-  type CalendarCollapseConfig,
-  DEFAULT_COLLAPSE_CONFIG,
-} from "@/features/calendar/utils/calendarConstants";
+import type {
+  CalendarCollapseConfig,
+  CalendarDayCount,
+  CalendarDensity,
+  CalendarMetrics,
+  CalendarViewMode,
+  CollapseGeometry,
+} from "@pikos/core";
 import {
   buildCollapseGeometry,
-  type CalendarMetrics,
   clampBottomHour,
   clampTopHour,
-  type CollapseGeometry,
   computeCalendarMetrics,
-} from "@/features/calendar/utils/calendarGeometry";
-import type { CalendarDayCount, CalendarDensity } from "@/shared/constants/calendar";
+  DEFAULT_COLLAPSE_CONFIG,
+} from "@pikos/core";
+import { useState } from "react";
+
+import { STORAGE_KEYS } from "@/shared/constants/storage";
+import { createSettingsContext } from "@/shared/context/createSettingsContext";
 import { useLocalStorage } from "@/shared/hooks/useLocalStorage";
 
-export type { CalendarDayCount };
+export type { CalendarDayCount, CalendarViewMode };
 
 export interface CalendarSettingsValue {
   dayCount: CalendarDayCount;
   setDayCount: (v: CalendarDayCount) => void;
+  /** Which shape the calendar renders: the day-count time grid, or month view.
+   * Persisted alongside — not inside — `dayCount`, so switching to month view
+   * and back restores the user's day count untouched, and a value already in
+   * localStorage keeps meaning exactly what it meant before month view existed. */
+  viewMode: CalendarViewMode;
+  setViewMode: (v: CalendarViewMode) => void;
   density: CalendarDensity;
   setDensity: (v: CalendarDensity) => void;
   /** Derived from density — convenient so callers don't recompute. */
@@ -39,25 +49,33 @@ export interface CalendarSettingsValue {
   setHoveredBand: (v: "top" | "bottom" | null) => void;
 }
 
-export const CalendarSettingsContext = createContext<CalendarSettingsValue | null>(null);
-
-export function CalendarSettingsProvider({ children }: { children: ReactNode }) {
-  const [dayCount, setDayCount] = useLocalStorage<CalendarDayCount>("pikos:calendarDayCount", 7);
-  const [density, setDensity] = useLocalStorage<CalendarDensity>("pikos:calendarDensity", "normal");
+function useCalendarSettingsValue(): CalendarSettingsValue {
+  const [dayCount, setDayCount] = useLocalStorage<CalendarDayCount>(
+    STORAGE_KEYS.calendarDayCount,
+    7
+  );
+  const [viewMode, setViewMode] = useLocalStorage<CalendarViewMode>(
+    STORAGE_KEYS.calendarViewMode,
+    "time"
+  );
+  const [density, setDensity] = useLocalStorage<CalendarDensity>(
+    STORAGE_KEYS.calendarDensity,
+    "normal"
+  );
   const [topCollapsed, setTopCollapsedRaw] = useLocalStorage<boolean>(
-    "pikos:calendarTopCollapsed",
+    STORAGE_KEYS.calendarTopCollapsed,
     DEFAULT_COLLAPSE_CONFIG.topCollapsed
   );
   const [bottomCollapsed, setBottomCollapsedRaw] = useLocalStorage<boolean>(
-    "pikos:calendarBottomCollapsed",
+    STORAGE_KEYS.calendarBottomCollapsed,
     DEFAULT_COLLAPSE_CONFIG.bottomCollapsed
   );
   const [topHour, setTopHourRaw] = useLocalStorage<number>(
-    "pikos:calendarTopHour",
+    STORAGE_KEYS.calendarTopHour,
     DEFAULT_COLLAPSE_CONFIG.topHour
   );
   const [bottomHour, setBottomHourRaw] = useLocalStorage<number>(
-    "pikos:calendarBottomHour",
+    STORAGE_KEYS.calendarBottomHour,
     DEFAULT_COLLAPSE_CONFIG.bottomHour
   );
 
@@ -76,7 +94,7 @@ export function CalendarSettingsProvider({ children }: { children: ReactNode }) 
   // Ephemeral, not persisted — pointer-tracking state for the band hover sync.
   const [hoveredBand, setHoveredBand] = useState<"top" | "bottom" | null>(null);
 
-  const value: CalendarSettingsValue = {
+  return {
     collapse,
     dayCount,
     density,
@@ -90,16 +108,13 @@ export function CalendarSettingsProvider({ children }: { children: ReactNode }) 
     setHoveredBand,
     setTopCollapsed: setTopCollapsedRaw,
     setTopHour,
+    setViewMode,
+    viewMode,
   };
-
-  return (
-    <CalendarSettingsContext.Provider value={value}>{children}</CalendarSettingsContext.Provider>
-  );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function useCalendarSettings(): CalendarSettingsValue {
-  const ctx = useContext(CalendarSettingsContext);
-  if (!ctx) throw new Error("useCalendarSettings must be used within <CalendarSettingsProvider>");
-  return ctx;
-}
+const calendarSettings = createSettingsContext("CalendarSettings", useCalendarSettingsValue);
+
+export const CalendarSettingsContext = calendarSettings.Context;
+export const CalendarSettingsProvider = calendarSettings.Provider;
+export const useCalendarSettings = calendarSettings.useSettings;

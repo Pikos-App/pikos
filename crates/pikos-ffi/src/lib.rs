@@ -32,7 +32,6 @@ use pikos_core::calendar::LayoutPage as CoreLayoutPage;
 use pikos_core::dates::parse_local_iso;
 use pikos_core::deep_link::{parse_deep_link as core_parse_deep_link, DeepLink as CoreDeepLink};
 use pikos_core::nlp::quick_add as core_quick_add;
-use pikos_core::recurrence as core_recurrence;
 use pikos_core::schedule as core_schedule;
 use pikos_core::text::extract_text as core_extract_text;
 
@@ -85,8 +84,8 @@ pub struct Occurrence {
     pub scheduled_end: Option<String>,
 }
 
-impl From<pikos_core::recurrence::Occurrence> for Occurrence {
-    fn from(o: pikos_core::recurrence::Occurrence) -> Self {
+impl From<pikos_recurrence::Occurrence> for Occurrence {
+    fn from(o: pikos_recurrence::Occurrence) -> Self {
         Occurrence {
             original_date: o.original_date,
             scheduled_start: o.scheduled_start,
@@ -226,9 +225,18 @@ pub fn next_occurrence_after(
     after_date: String,
     exdates: Vec<String>,
 ) -> Option<Occurrence> {
-    let after = parse_local_iso(&after_date)?;
-    core_recurrence::next_occurrence_after(&rrule, &scheduled_start, &after, &exdates)
-        .map(Into::into)
+    // The engine returns the start alone — pairing it with an end is
+    // `compute_next_end`'s job, because carrying a duration across a day
+    // boundary is a separate decision from finding the next date.
+    let (start, end) =
+        pikos_recurrence::next_occurrence_after(&rrule, &scheduled_start, &after_date, &exdates)
+            .ok()
+            .flatten()?;
+    Some(Occurrence {
+        original_date: start.get(..10).unwrap_or(&start).to_string(),
+        scheduled_start: start,
+        scheduled_end: end,
+    })
 }
 
 /// Carry a series' end onto a new start, preserving duration.
@@ -241,7 +249,7 @@ pub fn compute_next_end(base_end: String, next_start: String) -> Option<String> 
 }
 
 fn core_schedule_compute_next_end(base_end: &str, next_start: &str) -> Option<String> {
-    core_recurrence::compute_next_end(base_end, next_start)
+    pikos_recurrence::compute_next_end(base_end, next_start)
 }
 
 /// Expand a rule into occurrences within `[range_start, range_end)`.
@@ -254,18 +262,17 @@ pub fn expand_recurrence(
     range_start: String,
     range_end: String,
 ) -> Vec<Occurrence> {
-    let (Some(from), Some(to)) = (parse_local_iso(&range_start), parse_local_iso(&range_end))
-    else {
-        return Vec::new();
-    };
-    core_recurrence::expand_for_range(
+    // A rule that will not parse yields nothing rather than an error: the
+    // callers are display paths, and a malformed series must not blank a screen.
+    pikos_recurrence::expand_range(
         &rrule,
         &scheduled_start,
         scheduled_end.as_deref(),
+        &range_start,
+        &range_end,
         &exdates,
-        &from,
-        &to,
     )
+    .unwrap_or_default()
     .into_iter()
     .map(Into::into)
     .collect()

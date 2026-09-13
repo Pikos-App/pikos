@@ -53,6 +53,37 @@ public enum WorkspaceLocation {
         return container.appendingPathComponent(databaseName)
     }
 
+    /// Make the workspace readable while the device is locked, after the first
+    /// unlock since boot.
+    ///
+    /// iOS assigns a data-protection class to every file, and the strictest one
+    /// makes a file unreadable whenever the device is locked — surfacing as
+    /// open and write failures rather than as anything that names the cause.
+    /// That is not hypothetical here: a Today widget refreshes on the lock
+    /// screen, which is exactly the moment the app is backgrounded and the
+    /// device is locked.
+    ///
+    /// `.completeUntilFirstUserAuthentication` is the deliberate choice rather
+    /// than the default one. The file stays encrypted at rest and is unreadable
+    /// on a device that has not been unlocked since boot, which is the property
+    /// worth having; it does not vanish every time the screen locks, which is
+    /// the property that would make the widget lie. SQLite's sidecar files get
+    /// the same class — protecting the database and not its write-ahead log
+    /// would fail in a way that looks like corruption.
+    ///
+    /// Called on every open rather than at creation: the class is a property of
+    /// the file, and the `-wal` and `-shm` files come and go underneath us.
+    public static func applyProtectionClass() throws {
+        let database = try databaseURL()
+        for suffix in ["", "-wal", "-shm"] {
+            let path = database.path + suffix
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            try FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                ofItemAtPath: path)
+        }
+    }
+
     /// Directory holding page images, beside the database in the same container.
     ///
     /// Created on demand: the editor's scheme handler refuses to serve anything

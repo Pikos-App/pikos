@@ -52,7 +52,7 @@ appTest(
     await app.keyboard.press(mod("Mod+k"));
     const palette = app.getByRole("dialog", { name: "Search pages" });
     await expect(palette).toBeVisible();
-    const input = palette.getByPlaceholder("Search pages…");
+    const input = palette.getByPlaceholder("Search pages, or > for commands…");
     await input.fill("nonexistentquery");
 
     // Empty-state copy appears once the FTS debounce settles. The default

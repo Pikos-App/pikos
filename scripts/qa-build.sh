@@ -4,7 +4,7 @@
 # Signing (NOT notarization) is what unlocks macOS notification delivery, so we
 # always build with the real Developer ID identity — a plain `tauri build` is
 # ad-hoc signed and can't deliver notifications (UNErrorDomain error 1). This is
-# rung 2 of the build-fidelity ladder; see .agent/skills/ship-release/SKILL.md.
+# rung 2 of the build-fidelity ladder; see .claude/skills/ship-release/SKILL.md.
 #
 # Notarization is intentionally skipped: it only gates the download / Gatekeeper
 # / updater path, which a locally-run build never exercises. For a major release

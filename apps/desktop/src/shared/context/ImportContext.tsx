@@ -38,7 +38,11 @@ export function ImportProvider({ children }: { children: ReactNode }) {
     const folderIds: string[] = [];
     const pageIds: string[] = [];
 
-    const existingFoldersByName = new Map(folders.map((f) => [f.name, f]));
+    // A mirror-locked calendar folder rejects every create, so reusing one by
+    // name would fail the import mid-batch.
+    const existingFoldersByName = new Map(
+      folders.filter((f) => !f.isExternalCalendar).map((f) => [f.name, f])
+    );
 
     const folderKeyToId = new Map<string, string>();
     for (const f of data.folders) {

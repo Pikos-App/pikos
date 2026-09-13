@@ -75,6 +75,9 @@ button,
 
 @custom-variant dark (&:is(.dark *));
 
+/* GENERATED: design tokens — emitted from packages/ui/src/tokens.ts by scripts/gen-ui-tokens.mjs.
+   Edit the tokens, then re-run the generator; scripts/check-ui-tokens.sh fails the build on drift. */
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    PRIMITIVE COLOR SCALES
    Static values — available as Tailwind utilities (e.g. bg-primary-500).
@@ -430,6 +433,8 @@ button,
   --color-titlebar-border: var(--titlebar-border);
 }
 
+/* GENERATED: end design tokens */
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    BASE STYLES
    ═══════════════════════════════════════════════════════════════════════════════ */
@@ -485,6 +490,12 @@ button,
   /* Primary-tinted text selection */
   ::selection {
     background: color-mix(in srgb, var(--color-primary-400) 25%, transparent);
+  }
+
+  /* Radix tooltips are hoverable, so one covering a control eats its clicks.
+     Must target the wrapper — styling the content leaves it intercepting. */
+  [data-radix-popper-content-wrapper]:has(> [data-slot="tooltip-content"]) {
+    pointer-events: none;
   }
 
   /* Reduced motion preference */

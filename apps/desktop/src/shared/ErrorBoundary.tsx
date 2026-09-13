@@ -4,6 +4,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { IS_MACOS } from "@/shared/constants/platform";
 import { createLogger, formatError } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 const log = createLogger("ErrorBoundary");
 
@@ -76,10 +77,10 @@ export class ErrorBoundary extends Component<Props, State> {
   reportBug = () => {
     const os = IS_MACOS ? "macOS" : "Linux";
     const params = new URLSearchParams({ os, version: __APP_VERSION__ });
-    void import("@tauri-apps/plugin-opener")
-      .then((m) => m.openUrl(`https://pikos.app/bugs?${params.toString()}`))
+    getPlatform()
+      .openExternal(`https://pikos.app/bugs?${params.toString()}`)
       .catch((err: unknown) => {
-        log.warn("openUrl failed", err);
+        log.warn("openExternal failed", err);
       });
   };
 

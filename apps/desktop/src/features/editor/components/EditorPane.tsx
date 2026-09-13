@@ -94,6 +94,20 @@ export function loadPageContent(editor: Editor, doc: JSONContent): void {
   editor.chain().setMeta("addToHistory", false).setContent(doc, { emitUpdate: false }).run();
 }
 
+// Append at the very end of the doc, never at the cursor: the caller is a banner
+// above the editor, so wherever the caret happens to sit is not where the user
+// asked for this. Inserted as plain paragraphs — the text is an invite
+// description, and running it through the markdown parser would let stray
+// asterisks or a "#" line restyle it.
+function appendParagraphs(editor: Editor | null, text: string): void {
+  if (!editor || editor.isDestroyed) return;
+  const content = text.split(/\n{2,}/).map((block) => ({
+    content: [{ text: block.replace(/\n/g, " "), type: "text" }],
+    type: "paragraph",
+  }));
+  editor.chain().focus("end").insertContent(content).run();
+}
+
 export function EditorPane() {
   const { isLoading, page } = useEditorPage();
   const { updatePage } = usePages();
@@ -222,7 +236,7 @@ export function EditorPane() {
       editor.view.dom.blur();
       setIsAddingLink(true);
     },
-    { allowInInputs: true, scope: "editor" }
+    { allowInInputs: true, group: "Editor", label: "Insert / edit link", scope: "editor" }
   );
 
   if (!page) {
@@ -254,6 +268,7 @@ export function EditorPane() {
         <MetadataHeader
           contentSaveError={saveError}
           key={page.id}
+          onAppendToBody={(text) => appendParagraphs(editorRef.current, text)}
           onFocusEditor={() => !editor?.isDestroyed && editor?.commands.focus()}
           onRetryContent={() => void flush()}
           page={page}

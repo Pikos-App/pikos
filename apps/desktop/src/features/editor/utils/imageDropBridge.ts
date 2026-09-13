@@ -3,12 +3,11 @@
 // handleDrop never fires. We listen to onDragDropEvent at the window level
 // and insert image nodes manually using posAtCoords for the drop location.
 
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Editor } from "@tiptap/react";
 
 import { postNotice } from "@/shared/events/noticeBus";
 import { createLogger } from "@/shared/logger";
+import { getPlatform } from "@/shared/platform";
 
 const log = createLogger("imageDropBridge");
 
@@ -24,8 +23,8 @@ function isImagePath(path: string): boolean {
 
 async function insertImageAt(editor: Editor, sourcePath: string, pos: number): Promise<number> {
   try {
-    const savedPath = await invoke<string>("save_asset", { sourcePath });
-    const src = convertFileSrc(savedPath);
+    const savedPath = await getPlatform().saveAsset(sourcePath);
+    const src = getPlatform().assetUrl(savedPath);
     const filename = sourcePath.split(/[\\/]/).pop() ?? "image";
     const { schema } = editor.view.state;
     const node = schema.nodes["image"]?.create({
@@ -50,18 +49,16 @@ async function init(): Promise<void> {
   if (initialized) return;
   initialized = true;
   try {
-    const webview = getCurrentWebview();
-    await webview.onDragDropEvent((event) => {
-      if (event.payload.type !== "drop") return;
+    await getPlatform().onNativeFileDrop((drop) => {
       const editor = activeEditor;
       if (!editor || editor.isDestroyed) return;
-      const imagePaths = event.payload.paths.filter(isImagePath);
+      const imagePaths = drop.paths.filter(isImagePath);
       if (imagePaths.length === 0) return;
 
-      // Tauri reports physical pixels — convert to CSS pixels for posAtCoords.
+      // The host reports physical pixels — convert to CSS px for posAtCoords.
       const dpr = window.devicePixelRatio || 1;
-      const x = event.payload.position.x / dpr;
-      const y = event.payload.position.y / dpr;
+      const x = drop.position.x / dpr;
+      const y = drop.position.y / dpr;
 
       const dom = editor.view.dom;
       const rect = dom.getBoundingClientRect();
@@ -80,7 +77,7 @@ async function init(): Promise<void> {
       })();
     });
   } catch (e) {
-    // Non-Tauri env (tests, marketing site) — bridge becomes a no-op.
+    // Host without native file drops (tests, marketing site) — bridge no-ops.
     log.warn("init skipped", e);
   }
 }

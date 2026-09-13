@@ -1,0 +1,45 @@
+{
+  "kind": "calendar#events",
+  "timeZone": "America/New_York",
+  "nextSyncToken": "TOKEN-2",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "ev-series",
+      "iCalUID": "uid-series@google.com",
+      "etag": "\"series-v2\"",
+      "status": "confirmed",
+      "summary": "Weekly sync (renamed)",
+      "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=MO"],
+      "start": { "dateTime": "2026-06-01T09:00:00-04:00", "timeZone": "America/New_York" },
+      "end": { "dateTime": "2026-06-01T09:30:00-04:00", "timeZone": "America/New_York" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "ev-standup_20260622T130000Z",
+      "iCalUID": "uid-standup@google.com",
+      "etag": "\"standup-cx-v1\"",
+      "status": "cancelled",
+      "recurringEventId": "ev-standup",
+      "originalStartTime": { "dateTime": "2026-06-22T09:00:00-04:00", "timeZone": "America/New_York" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "ev-retro_20260624T140000Z",
+      "iCalUID": "uid-retro@google.com",
+      "etag": "\"retro-ov-v1\"",
+      "status": "confirmed",
+      "summary": "Retro",
+      "recurringEventId": "ev-retro",
+      "originalStartTime": { "dateTime": "2026-06-24T10:00:00-04:00", "timeZone": "America/New_York" },
+      "start": { "dateTime": "2026-06-24T16:00:00-04:00", "timeZone": "America/New_York" },
+      "end": { "dateTime": "2026-06-24T17:00:00-04:00", "timeZone": "America/New_York" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "ev-single",
+      "etag": "\"single-v2\"",
+      "status": "cancelled"
+    }
+  ]
+}

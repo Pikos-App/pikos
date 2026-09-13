@@ -429,11 +429,11 @@ async fn update_clears_reminder_log_when_start_changes() {
     .await
     .unwrap();
 
-    // Seed a reminder log entry — must be cleared when scheduled_start moves.
+    // Seed both dedup key shapes — default-lead (bare id) and per-lead composite.
     let now = now_iso();
     sqlx::query(
         "INSERT INTO notification_log (id, page_id, schedule_id, type, fired_at)
-         VALUES ('n1', 'p1', ?, 'reminder', ?)",
+         VALUES ('n1', 'p1', ?1, 'reminder', ?2), ('n3', 'p1', ?1 || '#10', 'reminder', ?2)",
     )
     .bind(&s.id)
     .bind(&now)
@@ -464,7 +464,8 @@ async fn update_clears_reminder_log_when_start_changes() {
     .unwrap();
 
     let reminders: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM notification_log WHERE schedule_id = ? AND type = 'reminder'",
+        "SELECT COUNT(*) FROM notification_log WHERE type = 'reminder'
+         AND (schedule_id = ?1 OR schedule_id LIKE ?1 || '#%')",
     )
     .bind(&s.id)
     .fetch_one(&pool)
@@ -479,6 +480,76 @@ async fn update_clears_reminder_log_when_start_changes() {
     .unwrap();
     assert_eq!(reminders, 0, "reminder log not cleared");
     assert_eq!(overdues, 1, "overdue log incorrectly cleared");
+}
+
+#[tokio::test]
+async fn moving_a_schedule_re_arms_a_fired_explicit_reminder() {
+    // Drives the real dedup key rather than seeding one: the scheduler logs
+    // whatever `due_*` returns, so a self-seeded key can pass while the user's
+    // reminder never re-fires.
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p1", "Task"))
+        .await
+        .unwrap();
+    let s = create_page_schedule_impl(
+        &pool,
+        NewPageSchedule {
+            page_id: "p1".into(),
+            scheduled_start: "2026-05-25T09:10:00".into(),
+            scheduled_end: None,
+            timezone: None,
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO page_reminders (id, page_id, minutes_before, created_at)
+         VALUES ('r1', 'p1', 10, '2026-05-01T00:00:00')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let fired = crate::notification_log::due_explicit_reminders(
+        &pool,
+        "2026-05-25 08:59:00",
+        "2026-05-25 09:00:00",
+    )
+    .await
+    .unwrap();
+    assert_eq!(fired.len(), 1);
+    crate::notification_log::log_reminder_fired(
+        &pool,
+        &fired[0].page_id,
+        &fired[0].schedule_id,
+        "2026-05-25 09:00:00",
+    )
+    .await
+    .unwrap();
+
+    update_page_schedule_impl(
+        &pool,
+        s.id.clone(),
+        PageScheduleUpdate {
+            scheduled_start: Some("2026-05-25T11:10:00".into()),
+            scheduled_end: None,
+            status: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let due = crate::notification_log::due_explicit_reminders(
+        &pool,
+        "2026-05-25 10:59:00",
+        "2026-05-25 11:00:00",
+    )
+    .await
+    .unwrap();
+    assert_eq!(due.len(), 1, "moved event's reminder never re-armed");
+    assert_eq!(due[0].schedule_id, fired[0].schedule_id);
 }
 
 // ── list_page_schedules / range / recurrence rules ─────────────────────
@@ -535,73 +606,111 @@ async fn list_page_schedules_returns_in_chronological_order() {
     assert_eq!(schedules[1].scheduled_start, "2026-05-22T09:00:00");
 }
 
-#[tokio::test]
-async fn list_page_schedules_range_excludes_soft_deleted_pages() {
-    let pool = test_pool().await;
-    insert_test_page(&pool, TestPage::new("alive", "Alive"))
-        .await
-        .unwrap();
-    insert_test_page(&pool, TestPage::new("dead", "Dead"))
-        .await
-        .unwrap();
+/// Inserts a bare recurrence rule (FK target for override rows).
+async fn insert_test_rule(pool: &sqlx::SqlitePool, id: &str, page_id: &str) {
+    sqlx::query(
+        "INSERT INTO page_recurrence_rules
+         (id, page_id, rrule, rrule_exdates, scheduled_start, timezone, created_at)
+         VALUES (?, ?, 'FREQ=WEEKLY;BYDAY=MO', '[]', '2026-05-04T09:00:00', 'UTC', '2026-01-01T00:00:00')",
+    )
+    .bind(id)
+    .bind(page_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
 
+#[tokio::test]
+async fn list_page_schedules_for_rules_excludes_soft_deleted_pages() {
+    let pool = test_pool().await;
     for id in ["alive", "dead"] {
+        insert_test_page(&pool, TestPage::new(id, id))
+            .await
+            .unwrap();
+        insert_test_rule(&pool, &format!("rule-{id}"), id).await;
         create_page_schedule_impl(
             &pool,
             NewPageSchedule {
                 page_id: id.into(),
-                scheduled_start: "2026-05-21T10:00:00".into(),
+                scheduled_start: "2026-05-11T10:00:00".into(),
                 scheduled_end: None,
                 timezone: None,
-                rule_id: None,
-                original_date: None,
+                rule_id: Some(format!("rule-{id}")),
+                original_date: Some("2026-05-11T09:00:00".into()),
             },
         )
         .await
         .unwrap();
     }
 
-    // Soft-delete the second page.
     sqlx::query("UPDATE pages SET deleted_at = datetime('now') WHERE id = 'dead'")
         .execute(&pool)
         .await
         .unwrap();
 
-    let in_range = list_page_schedules_range_impl(&pool, "2026-05-21", "2026-05-21")
-        .await
-        .unwrap();
-    assert_eq!(in_range.len(), 1, "soft-deleted page must be filtered out");
-    assert_eq!(in_range[0].page_id, "alive");
+    let rows =
+        list_page_schedules_for_rules_impl(&pool, &["rule-alive".into(), "rule-dead".into()])
+            .await
+            .unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "soft-deleted page's override must be filtered"
+    );
+    assert_eq!(rows[0].page_id, "alive");
 }
 
 #[tokio::test]
-async fn list_page_schedules_range_filters_window() {
+async fn list_page_schedules_for_rules_returns_moved_override_regardless_of_position() {
     let pool = test_pool().await;
     insert_test_page(&pool, TestPage::new("p1", "P1"))
         .await
         .unwrap();
+    insert_test_rule(&pool, "rule-a", "p1").await;
 
-    for date in ["2026-05-01", "2026-05-15", "2026-05-30"] {
+    // Two overrides of rule-a: one in-week, one moved months out. Both must
+    // return — the calendar excludes an original slot even when the instance
+    // moved to another week. The plain (non-override) block is filtered out.
+    for (original, moved) in [
+        ("2026-05-11T09:00:00", "2026-05-11T11:00:00"),
+        ("2026-05-18T09:00:00", "2026-09-01T11:00:00"),
+    ] {
         create_page_schedule_impl(
             &pool,
             NewPageSchedule {
                 page_id: "p1".into(),
-                scheduled_start: format!("{date}T09:00:00"),
+                scheduled_start: moved.into(),
                 scheduled_end: None,
                 timezone: None,
-                rule_id: None,
-                original_date: None,
+                rule_id: Some("rule-a".into()),
+                original_date: Some(original.into()),
             },
         )
         .await
         .unwrap();
     }
+    create_page_schedule_impl(
+        &pool,
+        NewPageSchedule {
+            page_id: "p1".into(),
+            scheduled_start: "2026-05-04T10:00:00".into(),
+            scheduled_end: None,
+            timezone: None,
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
 
-    let window = list_page_schedules_range_impl(&pool, "2026-05-10", "2026-05-20")
+    let rows = list_page_schedules_for_rules_impl(&pool, &["rule-a".into()])
         .await
         .unwrap();
-    assert_eq!(window.len(), 1, "only the 2026-05-15 schedule overlaps");
-    assert_eq!(window[0].scheduled_start, "2026-05-15T09:00:00");
+    let originals: Vec<_> = rows
+        .iter()
+        .filter_map(|r| r.original_date.clone())
+        .collect();
+    assert_eq!(originals, ["2026-05-11T09:00:00", "2026-05-18T09:00:00"]);
 }
 
 #[tokio::test]
@@ -820,4 +929,171 @@ async fn exdate_ops_error_on_missing_rule() {
         .await
         .unwrap_err();
     assert!(matches!(remove_err, AppError::NotFound(_)));
+}
+
+// ─── schedule/recurrence writers reject synced pages ──────────────────────────
+
+async fn synced_page(pool: &sqlx::SqlitePool, id: &str) {
+    insert_test_page(pool, TestPage::new(id, "Synced event"))
+        .await
+        .unwrap();
+    crate::pool::insert_test_page_sync(pool, id, "active")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn schedule_writers_reject_a_synced_page() {
+    let pool = test_pool().await;
+    synced_page(&pool, "p").await;
+
+    let created = create_page_schedule_impl(
+        &pool,
+        NewPageSchedule {
+            page_id: "p".into(),
+            scheduled_start: "2026-07-01T09:00:00".into(),
+            scheduled_end: None,
+            timezone: Some("America/Los_Angeles".into()),
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(created, AppError::Conflict(_)),
+        "create_page_schedule locked"
+    );
+}
+
+#[tokio::test]
+async fn recurrence_writers_reject_a_synced_page() {
+    let pool = test_pool().await;
+    synced_page(&pool, "p").await;
+
+    let created = create_recurrence_rule_impl(
+        &pool,
+        NewRecurrenceRule {
+            page_id: "p".into(),
+            rrule: "FREQ=DAILY".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-07-01T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(created, AppError::Conflict(_)),
+        "create_recurrence_rule locked"
+    );
+}
+
+#[tokio::test]
+async fn update_and_delete_schedule_reject_when_page_becomes_synced() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Event"))
+        .await
+        .unwrap();
+    // Schedule created while native, then the page is linked to sync.
+    let sched = create_page_schedule_impl(
+        &pool,
+        NewPageSchedule {
+            page_id: "p".into(),
+            scheduled_start: "2026-07-01T09:00:00".into(),
+            scheduled_end: None,
+            timezone: Some("America/Los_Angeles".into()),
+            rule_id: None,
+            original_date: None,
+        },
+    )
+    .await
+    .unwrap();
+    crate::pool::insert_test_page_sync(&pool, "p", "active")
+        .await
+        .unwrap();
+
+    let updated = update_page_schedule_impl(
+        &pool,
+        sched.id.clone(),
+        PageScheduleUpdate {
+            scheduled_start: Some("2026-07-02T09:00:00".into()),
+            scheduled_end: None,
+            status: None,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(updated, AppError::Conflict(_)));
+
+    let deleted = delete_page_schedule_impl(&pool, sched.id)
+        .await
+        .unwrap_err();
+    assert!(matches!(deleted, AppError::Conflict(_)));
+}
+
+#[tokio::test]
+async fn recurrence_mutation_and_skip_reject_when_page_is_synced() {
+    let pool = test_pool().await;
+    insert_test_page(&pool, TestPage::new("p", "Recurring event"))
+        .await
+        .unwrap();
+    // Rule created while native, then the page is linked to sync.
+    let rule = create_recurrence_rule_impl(
+        &pool,
+        NewRecurrenceRule {
+            page_id: "p".into(),
+            rrule: "FREQ=WEEKLY;BYDAY=MO".into(),
+            rrule_exdates: vec![],
+            scheduled_start: "2026-07-06T09:00:00".into(),
+            scheduled_end: None,
+            timezone: "America/Los_Angeles".into(),
+        },
+    )
+    .await
+    .unwrap();
+    crate::pool::insert_test_page_sync(&pool, "p", "active")
+        .await
+        .unwrap();
+
+    // Edit recurrence → rejected.
+    let edit = update_recurrence_rule_impl(
+        &pool,
+        rule.id.clone(),
+        RecurrenceRuleUpdate {
+            rrule: Some("FREQ=DAILY".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(edit, AppError::Conflict(_)),
+        "edit recurrence locked"
+    );
+
+    // Skip an occurrence (add exdate) → rejected.
+    let skip = add_rule_exdates_impl(&pool, rule.id.clone(), vec!["2026-07-13".into()])
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(skip, AppError::Conflict(_)),
+        "skip occurrence locked"
+    );
+
+    // Undo-skip (remove exdate) → rejected, symmetric with the add-exdate guard.
+    let unskip = remove_rule_exdate_impl(&pool, rule.id.clone(), "2026-07-13".into())
+        .await
+        .unwrap_err();
+    assert!(matches!(unskip, AppError::Conflict(_)), "undo-skip locked");
+
+    // Delete recurrence → rejected.
+    let del = delete_recurrence_rule_impl(&pool, &rule.id)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(del, AppError::Conflict(_)),
+        "delete recurrence locked"
+    );
 }

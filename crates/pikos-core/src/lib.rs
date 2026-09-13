@@ -17,7 +17,6 @@ pub mod dates;
 pub mod deep_link;
 pub mod nlp;
 pub mod page;
-pub mod recurrence;
 pub mod schedule;
 pub mod text;
 
@@ -30,8 +29,5 @@ pub use nlp::{
     parse as parse_dates, parse_first as parse_first_date, DateMatch, Granularity, MatchedDate,
 };
 pub use page::{is_done, is_open, PageStatus};
-pub use recurrence::{
-    compute_next_end, expand_for_range, next_occurrence_after, snap_anchor_to_rule, Occurrence,
-};
 pub use schedule::{compute_schedule_transition, normalize_end_input, ScheduleTransition};
 pub use text::{extract_text, extract_text_value};
