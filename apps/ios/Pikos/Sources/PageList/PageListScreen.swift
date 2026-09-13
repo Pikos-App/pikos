@@ -10,6 +10,7 @@ struct PageListScreen: View {
     @Environment(WorkspaceStore.self) private var store
 
     @State private var isQuickAddPresented = false
+    @State private var isFolderManagerPresented = false
     @State private var searchText = ""
 
     /// The list only — no `NavigationStack` of its own.
@@ -41,6 +42,9 @@ struct PageListScreen: View {
         .searchable(text: $searchText, prompt: "Filter \(store.scope.title)")
         .sheet(isPresented: $isQuickAddPresented) {
             QuickAddSheet()
+        }
+        .sheet(isPresented: $isFolderManagerPresented) {
+            FolderManagerSheet()
         }
         .alert(
             "Something went wrong",
@@ -138,6 +142,16 @@ struct PageListScreen: View {
                         Text(folder.name)
                             .tag(WorkspaceStore.Scope.folder(id: folder.id, name: folder.name))
                     }
+                }
+                // Below the picker and behind a divider: showing a folder and
+                // changing which folders exist are different intentions, and a
+                // destructive action should not sit adjacent to a navigational
+                // one in the same list.
+                Divider()
+                Button {
+                    isFolderManagerPresented = true
+                } label: {
+                    Label("Manage folders…", systemImage: "folder.badge.gearshape")
                 }
             } label: {
                 Label("Switch view", systemImage: "line.3.horizontal.decrease.circle")

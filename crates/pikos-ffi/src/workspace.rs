@@ -68,12 +68,28 @@ pub enum WorkspaceError {
     /// unchanged will fail the same way.
     #[error("{message}")]
     InvalidInput { message: String },
+
+    /// The workspace understood the request and declined it — filing a page
+    /// into a folder a calendar owns, say.
+    ///
+    /// Distinct from `Database` because nothing failed. Collapsing the two
+    /// showed the user "could not read or write" over a message that already
+    /// explained itself, which reads as a fault in the app rather than a rule
+    /// it is enforcing.
+    #[error("{message}")]
+    Refused { message: String },
 }
 
 impl From<AppError> for WorkspaceError {
     fn from(error: AppError) -> Self {
-        WorkspaceError::Database {
-            message: error.to_string(),
+        match error {
+            // The data layer's conflicts carry a sentence written for a user —
+            // "Pages cannot be moved into an external calendar folder" — so it
+            // is passed through rather than wrapped in a failure message.
+            AppError::Conflict(message) => WorkspaceError::Refused { message },
+            other => WorkspaceError::Database {
+                message: other.to_string(),
+            },
         }
     }
 }
@@ -182,6 +198,13 @@ pub struct Folder {
     pub name: String,
     pub color: Option<String>,
     pub sort_order: i64,
+    /// True for a folder that mirrors a synced calendar.
+    ///
+    /// Pikos manages it, and the data layer enforces that: it cannot be deleted
+    /// and nothing can be filed into it. Carried across so the UI can leave it
+    /// out of a folder picker rather than offering a choice that will be
+    /// refused.
+    pub is_external_calendar: bool,
 }
 
 /// Which folder a listing is scoped to.
@@ -790,7 +813,60 @@ impl Workspace {
             name: folder.name,
             color: folder.color,
             sort_order: folder.sort_order,
+            is_external_calendar: folder.is_external_calendar,
         })
+    }
+
+    /// Rename a folder.
+    ///
+    /// A calendar-owned folder is deliberately not refused here: the data layer
+    /// allows its name and colour to be edited and only locks its *placement*,
+    /// so refusing would be this layer inventing a rule the desktop does not
+    /// have.
+    pub async fn rename_folder(&self, id: String, name: String) -> Result<Folder, WorkspaceError> {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return Err(WorkspaceError::InvalidInput {
+                message: "a folder needs a name".to_string(),
+            });
+        }
+        let folder = pikos_db::update_folder_impl(
+            &self.pool,
+            id,
+            pikos_db::FolderUpdate {
+                name: Some(trimmed.to_string()),
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(Folder {
+            id: folder.id,
+            name: folder.name,
+            color: folder.color,
+            sort_order: folder.sort_order,
+            is_external_calendar: folder.is_external_calendar,
+        })
+    }
+
+    /// Move a folder to the trash, taking its pages with it.
+    ///
+    /// Soft, and cascading: the folder and every page filed in it are marked
+    /// deleted in one transaction, so the sidebar cannot lose the folder while
+    /// its pages stay visible. Recoverable through `restore_folder`, which is
+    /// why the UI can offer this without a second confirmation beyond naming
+    /// what goes with it.
+    ///
+    /// Refused for a folder a calendar owns — that one is not the user's to
+    /// delete, and the message says so.
+    pub async fn trash_folder(&self, id: String) -> Result<(), WorkspaceError> {
+        pikos_db::soft_delete_folder_impl(&self.pool, id).await?;
+        Ok(())
+    }
+
+    /// Bring a trashed folder and its pages back.
+    pub async fn restore_folder(&self, id: String) -> Result<(), WorkspaceError> {
+        pikos_db::restore_folder_impl(&self.pool, id).await?;
+        Ok(())
     }
 
     pub async fn list_folders(&self) -> Result<Vec<Folder>, WorkspaceError> {
@@ -802,6 +878,7 @@ impl Workspace {
                 name: f.name,
                 color: f.color,
                 sort_order: f.sort_order,
+                is_external_calendar: f.is_external_calendar,
             })
             .collect())
     }
@@ -926,6 +1003,7 @@ impl ReadOnlyWorkspace {
                 name: f.name,
                 color: f.color,
                 sort_order: f.sort_order,
+                is_external_calendar: f.is_external_calendar,
             })
             .collect())
     }

@@ -92,6 +92,9 @@ suite.
 - **The iPad UI.** Ships in the same universal binary, styled after the desktop
   app rather than the phone. Not started; `docs/ios/00-status.md` records the
   three things being kept true so that it stays a change of shell.
+- **Folder colours, icons and nesting.** Create, rename and delete are wired;
+  the rest of what a folder can carry is not. Nesting in particular is a data
+  shape (`parent_id`) with no iOS affordance yet.
 - **Inserting an image.** The whole path exists except its trigger: the editor
   handles `insertImage`, `EditorController.insertImage(assetPath:)` sends it,
   and `EditorWebView.onImageRequested` is wired to a `requestImagePicker`

@@ -943,6 +943,21 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func readOnly()  -> ReadOnlyWorkspace
     
+    /**
+     * Rename a folder.
+     *
+     * A calendar-owned folder is deliberately not refused here: the data layer
+     * allows its name and colour to be edited and only locks its *placement*,
+     * so refusing would be this layer inventing a rule the desktop does not
+     * have.
+     */
+    func renameFolder(id: String, name: String) async throws  -> Folder
+    
+    /**
+     * Bring a trashed folder and its pages back.
+     */
+    func restoreFolder(id: String) async throws 
+    
     func restorePage(id: String) async throws 
     
     /**
@@ -971,6 +986,20 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * expanded at display time and have no rows to derive it from.
      */
     func setRecurrence(pageId: String, rrule: String, scheduledStart: String, scheduledEnd: String?, timezone: String) async throws 
+    
+    /**
+     * Move a folder to the trash, taking its pages with it.
+     *
+     * Soft, and cascading: the folder and every page filed in it are marked
+     * deleted in one transaction, so the sidebar cannot lose the folder while
+     * its pages stay visible. Recoverable through `restore_folder`, which is
+     * why the UI can offer this without a second confirmation beyond naming
+     * what goes with it.
+     *
+     * Refused for a folder a calendar owns — that one is not the user's to
+     * delete, and the message says so.
+     */
+    func trashFolder(id: String) async throws 
     
     /**
      * Move a page to the trash. Recoverable — see `restore_page`.
@@ -1324,6 +1353,49 @@ open func readOnly() -> ReadOnlyWorkspace  {
 })
 }
     
+    /**
+     * Rename a folder.
+     *
+     * A calendar-owned folder is deliberately not refused here: the data layer
+     * allows its name and colour to be edited and only locks its *placement*,
+     * so refusing would be this layer inventing a rule the desktop does not
+     * have.
+     */
+open func renameFolder(id: String, name: String)async throws  -> Folder  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_rename_folder(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id),FfiConverterString.lower(name)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFolder_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Bring a trashed folder and its pages back.
+     */
+open func restoreFolder(id: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_restore_folder(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
 open func restorePage(id: String)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -1399,6 +1471,34 @@ open func setRecurrence(pageId: String, rrule: String, scheduledStart: String, s
             rustFutureFunc: {
                 uniffi_pikos_ffi_fn_method_workspace_set_recurrence(
                         self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(rrule),FfiConverterString.lower(scheduledStart),FfiConverterOptionString.lower(scheduledEnd),FfiConverterString.lower(timezone)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Move a folder to the trash, taking its pages with it.
+     *
+     * Soft, and cascading: the folder and every page filed in it are marked
+     * deleted in one transaction, so the sidebar cannot lose the folder while
+     * its pages stay visible. Recoverable through `restore_folder`, which is
+     * why the UI can offer this without a second confirmation beyond naming
+     * what goes with it.
+     *
+     * Refused for a folder a calendar owns — that one is not the user's to
+     * delete, and the message says so.
+     */
+open func trashFolder(id: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_trash_folder(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id)
                 )
             },
             pollFunc: ffi_pikos_ffi_rust_future_poll_void,
@@ -1770,14 +1870,32 @@ public struct Folder: Equatable, Hashable {
     public var name: String
     public var color: String?
     public var sortOrder: Int64
+    /**
+     * True for a folder that mirrors a synced calendar.
+     *
+     * Pikos manages it, and the data layer enforces that: it cannot be deleted
+     * and nothing can be filed into it. Carried across so the UI can leave it
+     * out of a folder picker rather than offering a choice that will be
+     * refused.
+     */
+    public var isExternalCalendar: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, name: String, color: String?, sortOrder: Int64) {
+    public init(id: String, name: String, color: String?, sortOrder: Int64, 
+        /**
+         * True for a folder that mirrors a synced calendar.
+         *
+         * Pikos manages it, and the data layer enforces that: it cannot be deleted
+         * and nothing can be filed into it. Carried across so the UI can leave it
+         * out of a folder picker rather than offering a choice that will be
+         * refused.
+         */isExternalCalendar: Bool) {
         self.id = id
         self.name = name
         self.color = color
         self.sortOrder = sortOrder
+        self.isExternalCalendar = isExternalCalendar
     }
 
     
@@ -1799,7 +1917,8 @@ public struct FfiConverterTypeFolder: FfiConverterRustBuffer {
                 id: FfiConverterString.read(from: &buf), 
                 name: FfiConverterString.read(from: &buf), 
                 color: FfiConverterOptionString.read(from: &buf), 
-                sortOrder: FfiConverterInt64.read(from: &buf)
+                sortOrder: FfiConverterInt64.read(from: &buf), 
+                isExternalCalendar: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -1808,6 +1927,7 @@ public struct FfiConverterTypeFolder: FfiConverterRustBuffer {
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterOptionString.write(value.color, into: &buf)
         FfiConverterInt64.write(value.sortOrder, into: &buf)
+        FfiConverterBool.write(value.isExternalCalendar, into: &buf)
     }
 }
 
@@ -3551,6 +3671,17 @@ enum WorkspaceError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError
      */
     case InvalidInput(message: String
     )
+    /**
+     * The workspace understood the request and declined it — filing a page
+     * into a folder a calendar owns, say.
+     *
+     * Distinct from `Database` because nothing failed. Collapsing the two
+     * showed the user "could not read or write" over a message that already
+     * explained itself, which reads as a fault in the app rather than a rule
+     * it is enforcing.
+     */
+    case Refused(message: String
+    )
 
     
 
@@ -3594,6 +3725,9 @@ public struct FfiConverterTypeWorkspaceError: FfiConverterRustBuffer {
         case 5: return .InvalidInput(
             message: try FfiConverterString.read(from: &buf)
             )
+        case 6: return .Refused(
+            message: try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3628,6 +3762,11 @@ public struct FfiConverterTypeWorkspaceError: FfiConverterRustBuffer {
         
         case let .InvalidInput(message):
             writeInt(&buf, Int32(5))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .Refused(message):
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -4460,6 +4599,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_read_only() != 39832) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_rename_folder() != 17853) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_restore_folder() != 50398) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_restore_page() != 5661) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4470,6 +4615,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_recurrence() != 1536) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_trash_folder() != 29209) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_trash_page() != 53299) {

@@ -353,6 +353,16 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_list_today(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_read_only(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RENAME_FOLDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RENAME_FOLDER
+uint64_t uniffi_pikos_ffi_fn_method_workspace_rename_folder(uint64_t ptr, RustBuffer id, RustBuffer name
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RESTORE_FOLDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RESTORE_FOLDER
+uint64_t uniffi_pikos_ffi_fn_method_workspace_restore_folder(uint64_t ptr, RustBuffer id
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RESTORE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RESTORE_PAGE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_restore_page(uint64_t ptr, RustBuffer id
@@ -371,6 +381,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_search(uint64_t ptr, RustBuffer qu
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_RECURRENCE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_RECURRENCE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_recurrence(uint64_t ptr, RustBuffer page_id, RustBuffer rrule, RustBuffer scheduled_start, RustBuffer scheduled_end, RustBuffer timezone
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_TRASH_FOLDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_TRASH_FOLDER
+uint64_t uniffi_pikos_ffi_fn_method_workspace_trash_folder(uint64_t ptr, RustBuffer id
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_TRASH_PAGE
@@ -882,6 +897,18 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_read_only(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RENAME_FOLDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RENAME_FOLDER
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_rename_folder(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RESTORE_FOLDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RESTORE_FOLDER
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_restore_folder(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RESTORE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RESTORE_PAGE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_restore_page(void
@@ -903,6 +930,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_search(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_RECURRENCE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_RECURRENCE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_recurrence(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_TRASH_FOLDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_TRASH_FOLDER
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_trash_folder(void
     
 );
 #endif

@@ -104,11 +104,11 @@ struct QuickAddSheet: View {
                     }
                 }
 
-                if !store.folders.isEmpty {
+                if !store.fileableFolders.isEmpty {
                     Section("Folder") {
                         Picker("Folder", selection: $folderId) {
                             Text("Inbox").tag(String?.none)
-                            ForEach(store.folders, id: \.id) { folder in
+                            ForEach(store.fileableFolders, id: \.id) { folder in
                                 Text(folder.name).tag(String?.some(folder.id))
                             }
                         }
@@ -194,7 +194,7 @@ struct QuickAddSheet: View {
         }
 
         if !folderIsManual, let query = parsed.folderQuery,
-            let match = store.folders.first(where: {
+            let match = store.fileableFolders.first(where: {
                 $0.name.compare(query, options: .caseInsensitive) == .orderedSame
             })
         {

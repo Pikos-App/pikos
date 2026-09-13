@@ -1099,3 +1099,144 @@ async fn undoing_the_latest_completion_reports_whether_it_had_one() {
         "and undoing the second returns the head to where it started"
     );
 }
+
+// ─── Folders ─────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn a_folder_can_be_renamed() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Wrok".to_string(), None).await.unwrap();
+
+    let renamed = ws
+        .rename_folder(folder.id.clone(), "  Work  ".to_string())
+        .await
+        .unwrap();
+    assert_eq!(renamed.name, "Work", "and the name is trimmed");
+
+    let listed = ws.list_folders().await.unwrap();
+    assert_eq!(
+        listed.iter().find(|f| f.id == folder.id).unwrap().name,
+        "Work"
+    );
+}
+
+/// A blank name would leave a row in the sidebar with nothing to tap.
+#[tokio::test]
+async fn a_folder_cannot_be_renamed_to_nothing() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+
+    for blank in ["", "   "] {
+        match ws.rename_folder(folder.id.clone(), blank.to_string()).await {
+            Err(WorkspaceError::InvalidInput { .. }) => {}
+            other => panic!("expected InvalidInput for {blank:?}, got {other:?}"),
+        }
+    }
+    assert_eq!(ws.list_folders().await.unwrap()[0].name, "Work");
+}
+
+/// Deleting a folder takes its pages with it, in one transaction — the sidebar
+/// must not lose the folder while its pages stay listed.
+#[tokio::test]
+async fn trashing_a_folder_takes_its_pages_and_restoring_brings_them_back() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let mut filed = new_page("Filed");
+    filed.folder_id = Some(folder.id.clone());
+    ws.create_page(filed).await.unwrap();
+    ws.create_page(new_page("Unfiled")).await.unwrap();
+
+    ws.trash_folder(folder.id.clone()).await.unwrap();
+
+    assert!(
+        ws.list_folders().await.unwrap().is_empty(),
+        "the folder is gone from the sidebar"
+    );
+    let titles: Vec<String> = ws
+        .list_pages(PageQuery::default())
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|p| p.title)
+        .collect();
+    assert_eq!(titles, ["Unfiled"], "and its pages went with it");
+
+    ws.restore_folder(folder.id.clone()).await.unwrap();
+    assert_eq!(ws.list_folders().await.unwrap().len(), 1);
+    let restored: Vec<String> = ws
+        .list_pages(PageQuery::default())
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|p| p.title)
+        .collect();
+    assert!(restored.contains(&"Filed".to_string()), "got {restored:?}");
+}
+
+/// A folder a calendar owns is not the user's to file into. The picker needs to
+/// know which those are so it can leave them out rather than offering a choice
+/// the workspace will refuse.
+#[tokio::test]
+async fn a_folder_says_whether_a_calendar_owns_it() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    assert!(!folder.is_external_calendar, "one the user made is theirs");
+    assert!(!ws.list_folders().await.unwrap()[0].is_external_calendar);
+}
+
+/// A refusal is not a failure, and the message the data layer wrote is already
+/// addressed to the user. Wrapping it in "could not read or write" reads as the
+/// app breaking rather than as a rule being enforced.
+///
+/// The flag is set through `pikos-db` because only the sync reconciler sets it
+/// in production — the same standing-in-for-the-desktop trick the override test
+/// uses.
+#[tokio::test]
+async fn filing_into_a_calendars_folder_is_refused_not_failed() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let page = ws.create_page(new_page("Notes")).await.unwrap();
+
+    {
+        let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+        sqlx::query("UPDATE folders SET is_external_calendar = 1 WHERE id = ?")
+            .bind(&folder.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    assert!(
+        ws.list_folders().await.unwrap()[0].is_external_calendar,
+        "the flag reaches the UI, so a picker can leave it out"
+    );
+
+    match ws
+        .update_page(
+            page.id.clone(),
+            PageEdit {
+                folder: Some(FolderAssignment::Folder {
+                    id: folder.id.clone(),
+                }),
+                ..Default::default()
+            },
+        )
+        .await
+    {
+        Err(WorkspaceError::Refused { message }) => assert!(
+            message.contains("external calendar"),
+            "the data layer's own sentence survives: {message}"
+        ),
+        other => panic!("expected Refused, got {other:?}"),
+    }
+
+    match ws.trash_folder(folder.id.clone()).await {
+        Err(WorkspaceError::Refused { .. }) => {}
+        other => panic!("deleting one is refused too, got {other:?}"),
+    }
+}

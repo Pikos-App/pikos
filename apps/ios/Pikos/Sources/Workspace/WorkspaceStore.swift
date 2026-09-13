@@ -195,6 +195,60 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Folders the user can file into.
+    ///
+    /// Excludes any a calendar owns: the workspace refuses a page filed into
+    /// one, so offering it in a picker is offering a choice that cannot be
+    /// taken. Better to leave it out than to explain the refusal afterwards.
+    public var fileableFolders: [Folder] {
+        folders.filter { !$0.isExternalCalendar }
+    }
+
+    @discardableResult
+    public func createFolder(named name: String) async -> Folder? {
+        guard let workspace else { return nil }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        do {
+            let folder = try await workspace.createFolder(name: trimmed, color: nil)
+            await refresh()
+            return folder
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    public func renameFolder(id: String, to name: String) async {
+        guard let workspace else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            _ = try await workspace.renameFolder(id: id, name: trimmed)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Move a folder to the trash, taking its pages with it.
+    ///
+    /// If the deleted folder was the one being shown, the scope falls back to
+    /// Today — leaving it selected would show an empty list under the name of
+    /// something that no longer exists.
+    public func trashFolder(id: String) async {
+        guard let workspace else { return }
+        do {
+            try await workspace.trashFolder(id: id)
+            if case .folder(let shown, _) = scope, shown == id {
+                scope = .today
+            }
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Set a page's priority.
     ///
     /// Stored as a number, low value first: 1 urgent through 4 low, with 0
