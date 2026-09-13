@@ -1801,13 +1801,27 @@ impl Workspace {
         query: String,
         limit: u32,
     ) -> Result<Vec<SearchHit>, WorkspaceError> {
-        let response = pikos_db::search_pages_impl(&self.pool, query, Some(false)).await?;
+        // Two ways in, decided by the query itself. A plain one is full-text
+        // search. One carrying an operator — `tag:`, `folder:`, `is:`,
+        // `priority:`, `due:` — becomes a structured query with full-text
+        // search applied to whatever words are left over, which is not
+        // something FTS5 can express: "every open page tagged work due this
+        // week" is a question about columns, and the words are the part it
+        // happens to also have.
+        let (_, now) = pikos_db::now_local_parts();
+        let parsed = pikos_core::parse_search_query(&query, now);
+        let results = if parsed.has_operators {
+            filtered_search(&self.pool, &parsed).await?
+        } else {
+            pikos_db::search_pages_impl(&self.pool, query, Some(false))
+                .await?
+                .results
+        };
         // The data layer has no limit parameter — it returns its own capped set
         // — so the cap is applied here rather than pushed down. Worth knowing if
         // a caller passes a large limit expecting more results: it will not get
         // them, and the fix belongs in search_pages_impl.
-        Ok(response
-            .results
+        Ok(results
             .into_iter()
             .take(limit as usize)
             .map(|r| SearchHit {
@@ -2163,6 +2177,114 @@ async fn calendar_range_impl(
 }
 
 /// One entry, from a page plus whichever schedule this occurrence has.
+/// The operator path: a structured listing, narrowed by the residual text.
+///
+/// A free function rather than a method, because everything in `impl Workspace`
+/// is exported over the FFI and this takes types that do not cross it.
+///
+/// The order matters. The filter runs first and full-text search second, over
+/// the whole index, and the two sets are intersected — so a mixed query keeps
+/// FTS5's ranking and its excerpts instead of degrading to a table scan. The
+/// residual text is deliberately *not* passed as `PageFilter::query`: that
+/// field is an unindexed `LIKE` over title and body which `list_pages_impl`
+/// documents as test-only.
+///
+/// Finished work is left out unless the query asked for it, which is what the
+/// plain path does too. `is:done` asks for it; nothing else does.
+async fn filtered_search(
+    pool: &sqlx::SqlitePool,
+    parsed: &pikos_core::ParsedSearchQuery,
+) -> Result<Vec<pikos_db::SearchResult>, WorkspaceError> {
+    let mut filter = pikos_db::PageFilter::default();
+
+    if let Some(name) = &parsed.folder {
+        let folders = pikos_db::list_folders_impl(pool).await?;
+        match pikos_db::fuzzy_match_folder(name, &folders) {
+            Some(folder) => filter.folder_id = Some(serde_json::Value::String(folder.id.clone())),
+            // No folder row backs the inbox — it is the pages with no folder at
+            // all.
+            None if name.eq_ignore_ascii_case("inbox") => {
+                filter.folder_id = Some(serde_json::Value::Null)
+            }
+            // A name nothing matches narrows to nothing. Returning the
+            // unfiltered set would quietly answer a different question.
+            None => return Ok(Vec::new()),
+        }
+    }
+
+    let wants_done = parsed.status == Some(pikos_core::SearchStatus::Done);
+    if let Some(status) = parsed.status {
+        filter.status = Some(status.as_str().to_string());
+    }
+    filter.priority = parsed.priority;
+    if !parsed.tags.is_empty() {
+        filter.tags = Some(parsed.tags.clone());
+    }
+    filter.scheduled_after = parsed.due_from.clone();
+    filter.scheduled_before = parsed.due_to.clone();
+    // A date bound only means anything for a scheduled page, and asking for a
+    // schedule outright is what stops unscheduled rows surviving the NULL
+    // comparison.
+    if parsed.scheduled || parsed.due_from.is_some() || parsed.due_to.is_some() {
+        filter.has_schedule = Some(true);
+    }
+
+    let summaries = pikos_db::list_pages_impl(pool, Some(filter)).await?;
+
+    // FTS5 needs something to prefix-match on; below two characters the query is
+    // too broad to run, so a single leftover character is matched on the title
+    // rather than thrown away.
+    let rows: Vec<pikos_db::SearchResult> = if parsed.text.chars().count() >= 2 {
+        let allowed: std::collections::HashSet<String> =
+            summaries.iter().map(|p| p.id.clone()).collect();
+        pikos_db::search_pages_impl(pool, parsed.text.clone(), Some(true))
+            .await?
+            .results
+            .into_iter()
+            .filter(|r| allowed.contains(&r.id))
+            .collect()
+    } else {
+        let needle = parsed.text.to_lowercase();
+        summaries
+            .into_iter()
+            .filter(|p| needle.is_empty() || p.title.to_lowercase().contains(&needle))
+            .map(summary_as_hit)
+            .collect()
+    };
+
+    Ok(rows
+        .into_iter()
+        .filter(|r| wants_done || r.status != "done")
+        .collect())
+}
+
+/// A page summary as a search hit, for the one path with no FTS row to show: a
+/// query whose free text is too short for the index, where the filter did all
+/// the work and the title carried the rest.
+///
+/// The excerpt is empty rather than invented. There is no match inside the body
+/// to quote — the page is here for its tags, its folder or its date — and a
+/// made-up excerpt would claim otherwise.
+fn summary_as_hit(page: pikos_db::PageSummary) -> pikos_db::SearchResult {
+    pikos_db::SearchResult {
+        id: page.id,
+        title: page.title,
+        excerpt: String::new(),
+        match_source: "title".to_string(),
+        status: page.status,
+        scheduled_date: page.scheduled_start,
+        priority: i32::try_from(page.priority).unwrap_or(0),
+        tags: page.tags,
+        // The subtitle twice, because the two fields mean different things and
+        // a summary only carries one of them: `subtitle` is the page's own, and
+        // `content_preview` is the first of its body a result list shows. There
+        // is no body excerpt to give here, so the nearest true thing is the
+        // subtitle it already has.
+        content_preview: page.subtitle.clone().unwrap_or_default(),
+        subtitle: page.subtitle,
+    }
+}
+
 /// A parsed rule as a [`Repeat`], or `None` when the picker cannot hold it.
 ///
 /// A second, narrower envelope than `rrule_edit_would_degrade`, and the two

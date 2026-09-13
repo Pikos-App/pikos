@@ -3538,3 +3538,311 @@ async fn a_real_block_names_no_rule_to_move_it_by() {
         "a projection has to name the rule, or it cannot be moved out of it"
     );
 }
+
+// ─── Search operators ────────────────────────────────────────────────────────
+//
+// The grammar itself — which tokens are operators, and what each one means — is
+// `pikos-core`'s, graded there against the TypeScript it replaces. What these
+// cover is the half that only exists here: turning a parsed query into a
+// storage filter, intersecting it with full-text search, and the several ways
+// that can quietly answer a different question than the one asked.
+
+/// Seeds one page with everything an operator can narrow on.
+async fn tagged_page(
+    ws: &Workspace,
+    title: &str,
+    folder_id: Option<String>,
+    tags: &[&str],
+    priority: i64,
+    scheduled_start: Option<&str>,
+) -> String {
+    let page = ws
+        .create_page(NewPage {
+            title: title.to_string(),
+            folder_id: folder_id.clone(),
+            content: None,
+            tags: Some(tags.iter().map(|t| t.to_string()).collect()),
+            scheduled_start: scheduled_start.map(str::to_string),
+            scheduled_end: None,
+        })
+        .await
+        .unwrap();
+    if priority != 0 {
+        ws.update_page(
+            page.id.clone(),
+            PageEdit {
+                priority: Some(priority),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    page.id
+}
+
+#[tokio::test]
+async fn a_tag_operator_narrows_to_that_tag() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let wanted = tagged_page(&ws, "Quarterly report", None, &["work"], 0, None).await;
+    tagged_page(&ws, "Quarterly recipe", None, &["home"], 0, None).await;
+
+    let hits = ws
+        .search("tag:work quarterly".to_string(), 10)
+        .await
+        .unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
+    assert_eq!(
+        ids,
+        [wanted.as_str()],
+        "both pages match the words; only one matches the tag"
+    );
+}
+
+/// Two tags mean both, not either.
+#[tokio::test]
+async fn tags_are_matched_conjunctively() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let both = tagged_page(&ws, "Release plan", None, &["work", "urgent"], 0, None).await;
+    tagged_page(&ws, "Release notes", None, &["work"], 0, None).await;
+
+    let hits = ws
+        .search("tag:work tag:urgent release".to_string(), 10)
+        .await
+        .unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
+    assert_eq!(ids, [both.as_str()]);
+}
+
+/// A folder named by part of its name, which is how anybody types one.
+#[tokio::test]
+async fn a_folder_operator_matches_a_folder_by_a_prefix_of_its_name() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let inside = tagged_page(&ws, "Standup notes", Some(folder.id.clone()), &[], 0, None).await;
+    tagged_page(&ws, "Standup shoes", None, &[], 0, None).await;
+
+    let hits = ws
+        .search("folder:wor standup".to_string(), 10)
+        .await
+        .unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
+    assert_eq!(ids, [inside.as_str()]);
+}
+
+/// `folder:inbox` is not a folder, and has to be spelled out.
+#[tokio::test]
+async fn the_inbox_is_the_pages_with_no_folder_at_all() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let loose = tagged_page(&ws, "Standup notes", None, &[], 0, None).await;
+    tagged_page(&ws, "Standup agenda", Some(folder.id), &[], 0, None).await;
+
+    let hits = ws
+        .search("folder:inbox standup".to_string(), 10)
+        .await
+        .unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
+    assert_eq!(ids, [loose.as_str()]);
+}
+
+/// A folder name nothing matches narrows to nothing.
+///
+/// The failure worth guarding: dropping an unresolvable filter returns the
+/// *unfiltered* set, which looks like a working search and answers a question
+/// nobody asked.
+#[tokio::test]
+async fn a_folder_that_does_not_exist_matches_nothing_rather_than_everything() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    tagged_page(&ws, "Standup notes", None, &[], 0, None).await;
+
+    let hits = ws
+        .search("folder:nowhere standup".to_string(), 10)
+        .await
+        .unwrap();
+    assert!(hits.is_empty(), "got {} hits", hits.len());
+}
+
+/// Finished work stays out of the way unless it is what was asked for.
+#[tokio::test]
+async fn done_pages_are_withheld_until_the_query_asks_for_them() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let finished = tagged_page(&ws, "Ship the release", None, &["work"], 0, None).await;
+    let open = tagged_page(&ws, "Plan the release", None, &["work"], 0, None).await;
+    ws.set_page_status(finished.clone(), true).await.unwrap();
+
+    let default = ws.search("tag:work release".to_string(), 10).await.unwrap();
+    assert_eq!(
+        default.iter().map(|h| &h.page_id).collect::<Vec<_>>(),
+        vec![&open],
+        "a tag search is about outstanding work"
+    );
+
+    let asked = ws
+        .search("tag:work is:done release".to_string(), 10)
+        .await
+        .unwrap();
+    assert_eq!(
+        asked.iter().map(|h| &h.page_id).collect::<Vec<_>>(),
+        vec![&finished],
+        "and `is:done` is how you ask for the rest"
+    );
+}
+
+#[tokio::test]
+async fn a_priority_operator_narrows_to_that_priority() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let urgent = tagged_page(&ws, "Fix the outage", None, &[], 1, None).await;
+    tagged_page(&ws, "Fix the typo", None, &[], 4, None).await;
+
+    let hits = ws
+        .search("priority:urgent fix".to_string(), 10)
+        .await
+        .unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
+    assert_eq!(ids, [urgent.as_str()]);
+}
+
+/// A date window, and the two things it has to exclude: what falls outside it,
+/// and what has no date at all.
+#[tokio::test]
+async fn a_due_window_excludes_both_the_far_future_and_the_undated() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let today = pikos_db::today_local();
+    let inside = tagged_page(&ws, "Report draft", None, &[], 0, Some(&today)).await;
+    tagged_page(&ws, "Report final", None, &[], 0, Some("2099-01-01")).await;
+    tagged_page(&ws, "Report someday", None, &[], 0, None).await;
+
+    let hits = ws.search("due:today report".to_string(), 10).await.unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
+    assert_eq!(ids, [inside.as_str()]);
+}
+
+/// `is:scheduled` means "has a date", whatever the date is.
+///
+/// The only operator whose whole effect is the `has_schedule` flag — every
+/// other one that sets it also sets a date bound, and in SQLite a date bound
+/// drops undated rows on the NULL comparison by itself. So without a case here
+/// the flag can be removed entirely and nothing notices.
+#[tokio::test]
+async fn is_scheduled_keeps_only_the_pages_that_have_a_date() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let dated = tagged_page(&ws, "Report draft", None, &[], 0, Some("2099-01-01")).await;
+    tagged_page(&ws, "Report someday", None, &[], 0, None).await;
+
+    let hits = ws
+        .search("is:scheduled report".to_string(), 10)
+        .await
+        .unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
+    assert_eq!(ids, [dated.as_str()]);
+}
+
+/// A query that is only operators still returns the pages they describe.
+///
+/// The path with no words left for full-text search to rank. Getting it wrong
+/// gives an empty result for a query that plainly describes something, which
+/// reads as "there is nothing tagged work".
+#[tokio::test]
+async fn a_query_of_nothing_but_operators_still_answers() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let wanted = tagged_page(&ws, "Anything at all", None, &["work"], 0, None).await;
+    tagged_page(&ws, "Something else", None, &["home"], 0, None).await;
+
+    let hits = ws.search("tag:work".to_string(), 10).await.unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
+    assert_eq!(ids, [wanted.as_str()]);
+}
+
+/// One leftover letter is matched on the title rather than thrown away.
+///
+/// FTS5 needs at least two characters to prefix-match on, so a single one
+/// cannot go to the index. Dropping it instead would silently widen the query:
+/// "tag:work a" would return everything tagged work, which is a different
+/// question and looks like a working search.
+#[tokio::test]
+async fn a_single_leftover_character_still_narrows() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let matching = tagged_page(&ws, "Zebra", None, &["work"], 0, None).await;
+    tagged_page(&ws, "Quilt", None, &["work"], 0, None).await;
+
+    let hits = ws.search("tag:work z".to_string(), 10).await.unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.page_id.as_str()).collect();
+    assert_eq!(ids, [matching.as_str()]);
+}
+
+/// A value the grammar rejects leaves the whole token as text.
+///
+/// `priority:9` is the sharp case: the keyword is real and the value is not.
+/// Accepting it — clamping 9 to something, or shrugging and applying no
+/// priority — sends the query down the structured path with an empty filter,
+/// which matches *everything*. Leaving it as text sends it to full-text search,
+/// which looks for the words "priority" and "9" and finds neither. The two
+/// answers could not be further apart, and only one of them is honest.
+#[tokio::test]
+async fn a_rejected_operator_value_leaves_the_token_as_text() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    tagged_page(&ws, "Fix the outage", None, &[], 1, None).await;
+    tagged_page(&ws, "Write the notes", None, &[], 0, None).await;
+
+    let hits = ws.search("priority:9".to_string(), 10).await.unwrap();
+    assert!(
+        hits.is_empty(),
+        "9 is not a priority, so this is a search for two words that appear nowhere: got {:?}",
+        hits.iter().map(|h| &h.title).collect::<Vec<_>>()
+    );
+
+    // The same shape with a value the grammar *does* know narrows instead of
+    // matching nothing — which is what makes the assertion above about the
+    // value, and not about the path being broken.
+    let hits = ws.search("priority:urgent".to_string(), 10).await.unwrap();
+    assert_eq!(
+        hits.iter().map(|h| h.title.as_str()).collect::<Vec<_>>(),
+        ["Fix the outage"]
+    );
+}
+
+/// A keyword the grammar does not have is a word.
+#[tokio::test]
+async fn an_unknown_operator_is_searched_for_rather_than_obeyed() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    tagged_page(&ws, "Fix the outage", None, &[], 1, None).await;
+    let page = ws
+        .create_page(new_page("Aspect ratio notes"))
+        .await
+        .unwrap();
+    ws.update_page(
+        page.id.clone(),
+        PageEdit {
+            content: Some(r#"{"type":"doc"}"#.to_string()),
+            content_text: Some("the ratio is 1.5 across".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // FTS5 splits on the punctuation, so this searches for "ratio", "1" and
+    // "5" — all of which that page has, and the other page has none of. A port
+    // that swallowed `ratio:` as an operator would take the structured path
+    // with an empty filter and hand back both.
+    let hits = ws.search("ratio:1.5".to_string(), 10).await.unwrap();
+    assert_eq!(
+        hits.iter().map(|h| h.page_id.as_str()).collect::<Vec<_>>(),
+        [page.id.as_str()],
+        "an unrecognised token stays in the query as text"
+    );
+}

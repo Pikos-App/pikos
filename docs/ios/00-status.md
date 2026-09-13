@@ -101,6 +101,29 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**Search takes operators, from the same grammar the desktop uses.** `tag:`,
+`folder:`, `is:`, `priority:` and `due:` lived only in `@pikos/core`, so the
+phone's search field was words and nothing else. `parseSearchQuery` is now
+`pikos-core::search`, graded against the TypeScript over every query the TS
+suite exercises plus a supplementary set — at all seven reference times,
+because `due:` is the half that reads a clock and `due:week` names different
+windows on a Sunday and a Wednesday.
+
+What the corpus grades hardest is the _negative_ half. Every case records the
+text left behind, so a port that recognises one token too many fails on the
+text even when its filter looks right: `ratio:1.5` is a search for "ratio:1.5",
+and `priority:9` is a search for "priority:9", because 9 is not a priority.
+Mutation testing found two real holes in the first corpus — `is:DONE` and
+`due:TODAY` were nowhere in it, so a port comparing values as typed passed
+everything.
+
+`Workspace::search` then takes the two paths the desktop palette takes: the
+structured filter first, full-text search over whatever words are left second,
+the two intersected, so a mixed query keeps FTS5's ranking and its excerpts
+instead of degrading to a table scan. A folder name that matches nothing
+returns nothing rather than falling through to the unfiltered set, and finished
+pages stay out unless `is:done` asks for them.
+
 **One occurrence at a time.** Long-pressing a calendar block completes or skips
 _that_ occurrence. Before this the only verb a repeating page had on the phone
 was the list's checkbox, which finishes whichever occurrence is next due — right

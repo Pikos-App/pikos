@@ -516,7 +516,7 @@ distinct. Rows are keyed by folder id, headed by account.
 | A fired reminder doesn't fire twice                          | ✅ ¹³                       | ✅ ¹³                     | ✅ ¹³                  | —                          | ○                           |
 | Trash view: list, restore, empty now                         | ✅ ⁵⁹                       | ⚠️ restore resumes sync ⁷ | ⚠️ ⁵⁹                  | ⚠️ `restore` only          | ⚠️ list + restore, no empty |
 | 30-day trash sweep                                           | ✅ destroyed                | ⚠️ kept, by design ⁵⁹     | ⚠️ kept, unintended ⁵⁹ | —                          | ✅ same sweep, same file    |
-| Search operators (`tag:` `folder:` `is:` `priority:` `due:`) | ✅ ⁶⁰                       | ✅ ⁶⁰                     | ✅ ⁶⁰                  | ⚠️ flags, not operators ⁶⁰ | ○                           |
+| Search operators (`tag:` `folder:` `is:` `priority:` `due:`) | ✅ ⁶⁰                       | ✅ ⁶⁰                     | ✅ ⁶⁰                  | ⚠️ flags, not operators ⁶⁰ | ✅ same grammar ⁶⁰          |
 | Command palette (`>` prefix)                                 | ✅ ⁶¹                       | — ⁶¹                      | — ⁶¹                   | —                          | —                           |
 | Upcoming view (next 7 days, grouped)                         | ✅                          | ✅                        | ✅                     | —                          | ✅                          |
 | Move overdue → today (bulk)                                  | ✅                          | 🚫 locked ⁶²              | ✅                     | —                          | ○                           |
@@ -620,7 +620,12 @@ one is the one the sweep reaches, so detached pages never leave the trash.
 so they compose with the free-text term rather than replacing it, and every origin is matched
 identically. `is:` reads status, never sync state. The CLI reaches the same filter through
 **flags** (`--tag`, `--priority`, `--folder`), not the operator grammar: the operators are a
-palette-input affordance, and `list` had typed flags before they existed.
+palette-input affordance, and `list` had typed flags before they existed. iOS runs the grammar
+itself rather than a second one: `parseSearchQuery` is ported to `pikos-core::search` and graded
+against the TypeScript over every query the TS suite exercises, at seven reference times because
+`due:` reads a clock. `Workspace::search` then takes the same two paths the palette does — the
+filter first, full-text search over the leftover words second, the two intersected — and hides
+finished pages unless `is:done` asks for them.
 ⁶¹ A leading `>` switches the palette from searching pages to running commands; the command
 list is derived from the keyboard registry, so a shortcut and its palette entry cannot drift.
 Commands act on the app, not on a page, so the origin columns don't apply.

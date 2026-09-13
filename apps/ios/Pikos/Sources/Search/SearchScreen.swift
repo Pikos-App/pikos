@@ -1,11 +1,18 @@
 import PikosCore
 import SwiftUI
 
-/// Full-text search over titles and page bodies.
+/// Search over titles, page bodies, and the things a page *is*.
 ///
-/// The index is SQLite's FTS5, maintained by the same data layer the desktop
-/// app uses — including for pages typed on this phone, because the editor sends
-/// its extracted plain text alongside every save.
+/// Two kinds of query, and the workspace decides which this is. Plain words go
+/// to SQLite's FTS5, maintained by the same data layer the desktop app uses —
+/// including for pages typed on this phone, because the editor sends its
+/// extracted plain text alongside every save. A query carrying an operator
+/// (`tag:`, `folder:`, `is:`, `priority:`, `due:`) becomes a structured query
+/// instead, with any remaining words still going to the index.
+///
+/// Nothing here parses any of that. The grammar is one function in Rust, shared
+/// with the desktop and graded against it, precisely so that "is:open" cannot
+/// come to mean two things.
 struct SearchScreen: View {
     @Environment(WorkspaceStore.self) private var store
 
@@ -20,9 +27,13 @@ struct SearchScreen: View {
     var body: some View {
         Group {
             if query.trimmingCharacters(in: .whitespaces).isEmpty {
-                ContentUnavailableView(
-                    "Search", systemImage: "magnifyingglass",
-                    description: Text("Find a page by its title or anything written in it."))
+                ContentUnavailableView {
+                    Label("Search", systemImage: "magnifyingglass")
+                } description: {
+                    Text("Find a page by its title or anything written in it.")
+                } actions: {
+                    operatorLegend
+                }
             } else if hits.isEmpty && !isSearching {
                 ContentUnavailableView.search(text: query)
             } else {
@@ -31,10 +42,15 @@ struct SearchScreen: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(hit.title.isEmpty ? "Untitled" : hit.title)
                                 .font(.body)
-                            Text(hit.excerpt)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                            // A hit found by its tags or its date has no
+                            // passage to quote, and an empty line under the
+                            // title reads as a page with a blank body.
+                            if !hit.excerpt.isEmpty {
+                                Text(hit.excerpt)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
                         }
                     }
                 }
@@ -59,4 +75,34 @@ struct SearchScreen: View {
             isSearching = false
         }
     }
+
+    /// What can be typed here beyond words.
+    ///
+    /// Shown on the empty state rather than in a help screen, because an
+    /// operator nobody knows about is an operator nobody uses — and the moment
+    /// somebody is looking at an empty search field is the only moment they are
+    /// asking what to type.
+    private var operatorLegend: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Self.operators, id: \.syntax) { entry in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(entry.syntax)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(Color.accentColor)
+                    Text(entry.meaning)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private static let operators: [(syntax: String, meaning: String)] = [
+        ("tag:work", "tagged work"),
+        ("folder:admin", "in that folder"),
+        ("is:open", "still open — also is:done, is:scheduled"),
+        ("priority:urgent", "at that priority"),
+        ("due:week", "due in the next seven days"),
+    ]
 }

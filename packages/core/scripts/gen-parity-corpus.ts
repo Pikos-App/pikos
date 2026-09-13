@@ -26,6 +26,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { parseInput } from "../src/nlp/parser";
+import { parseSearchQuery } from "../src/nlp/searchQuery";
 import { belongsToView, groupTodayPages, upcomingWindowEnd } from "../src/pages/pageFilters";
 import { groupUpcomingPages } from "../src/pages/upcoming";
 import type { PageRecurrenceRule, PageSummary } from "../src/types";
@@ -720,6 +721,65 @@ const SNAP_CASES: { rrule: string; anchor: string; note: string }[] = [
   },
 ];
 
+/**
+ * Search-palette queries, scraped from `searchQuery.test.ts` the same way the
+ * parser inputs are, so the corpus tracks the suite rather than drifting from
+ * it. Supplemented below with the shapes a port is most likely to get wrong.
+ */
+function scrapeSearchInputs(): string[] {
+  const src = readFileSync(resolve(ROOT, "src/nlp/searchQuery.test.ts"), "utf8");
+  const found = new Set<string>();
+  for (const m of src.matchAll(/parseSearchQuery\(\s*"((?:[^"\\]|\\.)*)"/g)) {
+    const raw = m[1]!;
+    if (raw.includes('\\"')) {
+      throw new Error(`search scraper cannot represent escaped quotes: ${raw}`);
+    }
+    found.add(raw.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\\\/g, "\\"));
+  }
+  return [...found];
+}
+
+// Shapes the suite reaches indirectly or not at all, and where a
+// reimplementation is most likely to diverge: the word-boundary rule, the
+// quoted-value branch, consecutive operators with nothing between them, and
+// every `due:` range with a side missing.
+const SUPPLEMENTARY_SEARCH_INPUTS: string[] = [
+  "   ",
+  "TAG:Work",
+  'tag:"two words" left over',
+  'tag:""',
+  'folder:"my folder" and text',
+  "notag:work",
+  "path/to:file",
+  "email is:done",
+  "a is:done b is:open c",
+  "tag:work tag:work",
+  "due:2026-03-10..2026-03-10",
+  "due:week..today",
+  "due:....",
+  "due:2026-03-10..2026-03-12..2026-03-14",
+  "priority:0",
+  "priority:none",
+  "priority:MEDIUM",
+  "priority:",
+  "is:",
+  "tag:#work",
+  // Every operator's *value* is matched case-insensitively except a tag's,
+  // which is kept verbatim. Without these a port that lowercases the keyword
+  // and compares the value as typed passes the whole corpus.
+  "is:DONE",
+  "is:Open",
+  "is:SCHEDULED",
+  "due:TODAY",
+  "due:Week..TOMORROW",
+  "FOLDER:Work",
+  "  spaced   out  tag:work   again  ",
+  "is:done is:open",
+  "due:today is:open tag:a folder:b priority:1 leftover words",
+  "\ttabbed\ttag:work",
+  "tag:work\nnewline",
+];
+
 function main(): void {
   assertEnvironment();
 
@@ -841,6 +901,17 @@ function main(): void {
     });
   });
 
+  const searchInputs = [
+    ...new Set([...scrapeSearchInputs(), ...SUPPLEMENTARY_SEARCH_INPUTS]),
+  ].sort();
+  const searchCases = [];
+  for (const ref of REFERENCES) {
+    const now = new Date(ref.iso);
+    for (const query of searchInputs) {
+      searchCases.push({ parsed: capture(() => parseSearchQuery(query, now)), query, ref: ref.id });
+    }
+  }
+
   const extractTextCases = EXTRACT_TEXT_CASES.map((c) => ({
     ...c,
     text: capture(() => extractText(c.doc)),
@@ -866,6 +937,10 @@ function main(): void {
     JSON.stringify({ meta, pages: VIEW_PAGES, viewCases }, null, 2) + "\n"
   );
   writeFileSync(
+    resolve(OUT_DIR, "search.json"),
+    JSON.stringify({ cases: searchCases, meta, queryCount: searchInputs.length }, null, 2) + "\n"
+  );
+  writeFileSync(
     resolve(OUT_DIR, "text.json"),
     JSON.stringify({ extractTextCases, meta }, null, 2) + "\n"
   );
@@ -879,6 +954,7 @@ function main(): void {
   process.stdout.write(
     `parser.json:     ${parserCases.length} cases (${inputs.length} inputs × ${REFERENCES.length} refs), ${failures} throwing\n` +
       `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion, ${snapCases.length} snap, ${degradeCases.length} degrade\n` +
+      `search.json:     ${searchCases.length} cases (${searchInputs.length} queries × ${REFERENCES.length} refs)\n` +
       `text.json:       ${extractTextCases.length} extractText\n` +
       `views.json:      ${viewCases.length} reference times × ${VIEW_PAGES.length} pages\n` +
       `out: ${OUT_DIR}\n`

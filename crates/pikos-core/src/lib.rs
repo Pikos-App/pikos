@@ -18,6 +18,7 @@ pub mod deep_link;
 pub mod nlp;
 pub mod page;
 pub mod schedule;
+pub mod search;
 pub mod text;
 pub mod views;
 
@@ -31,4 +32,5 @@ pub use nlp::{
 };
 pub use page::{is_done, is_open, PageStatus};
 pub use schedule::{compute_schedule_transition, normalize_end_input, ScheduleTransition};
+pub use search::{parse_search_query, ParsedSearchQuery, SearchStatus};
 pub use text::{extract_text, extract_text_value};
