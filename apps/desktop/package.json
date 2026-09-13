@@ -21,7 +21,8 @@
     "check:bundle": "bash ../../scripts/check-bundle-size.sh",
     "record:hero": "bash scripts/record-hero.sh",
     "screenshot:calendar": "node scripts/screenshot-calendar.mjs",
-    "gen:parity": "esbuild scripts/gen-calendar-parity.ts --bundle --platform=node --format=esm --alias:@=./src --alias:@pikos/core=../../packages/core/src/index.ts --outfile=node_modules/.cache/gen-calendar-parity.mjs && TZ=UTC node node_modules/.cache/gen-calendar-parity.mjs"
+    "gen:parity": "esbuild scripts/gen-calendar-parity.ts --bundle --platform=node --format=esm --alias:@=./src --alias:@pikos/core=../../packages/core/src/index.ts --outfile=node_modules/.cache/gen-calendar-parity.mjs && TZ=UTC node node_modules/.cache/gen-calendar-parity.mjs",
+    "gen:fuzz-calendar": "esbuild scripts/fuzz-calendar-parity.ts --bundle --platform=node --format=esm --alias:@=./src --alias:@pikos/core=../../packages/core/src/index.ts --outfile=node_modules/.cache/fuzz-calendar-parity.mjs && TZ=UTC node node_modules/.cache/fuzz-calendar-parity.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

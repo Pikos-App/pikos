@@ -357,3 +357,37 @@ its time from `DTSTART`, which makes "keep the anchor's time" and "keep the
 occurrence's time" indistinguishable. Adding `BYHOUR` to the generator killed
 it, with 2,394 differences. A fuzzer is only as good as the axes it varies, and
 that one had to be added deliberately.
+
+### And on calendar layout
+
+Layout is the weakest case of all for hand-written scenarios, because the
+behaviour is combinatorial. Which column an event lands in depends on which
+others it overlaps and in what order they were considered; which row an all-day
+bar takes depends on span lengths, ties broken by creation time, and gaps a
+later event may or may not fit into. Thirty-two arrangements cannot cover that,
+and nobody can write the one that breaks it — the difficulty is precisely that
+it is not obvious which one does.
+
+`apps/desktop/scripts/fuzz-calendar-parity.ts` composes days and weeks of
+events: overlapping and back-to-back, zero-length, spilling over midnight in
+either direction, wholly outside the day, and missing an end entirely. Creation
+times come from a pool of four so ties are common, because a tiebreaker is only
+tested when two things actually tie. It keeps the density guard from the
+hand-written generator: every scenario is laid out at all three rendering
+densities and a disagreement stops the run, because the port assumes column
+assignment is pixel-independent.
+
+Three seeds of 10,000 scenarios each: no divergences. Seven mutations of the
+Rust side each fail between 21 and 3,193 scenarios.
+
+One of the seven needed an axis added, the same way `BYHOUR` did for recurrence.
+Both sorts fall back to the page id only after everything else ties, and a
+generator that emits pages already in id order makes that tiebreak invisible —
+a stable sort preserves the order either way. Shuffling the pages before layout
+killed the mutation with 270 differences, and is the more realistic input
+besides: layout is handed whatever order the database returned.
+
+That is twice now that a fuzzer passed for the wrong reason until an axis was
+added deliberately. It is worth stating as a rule: a clean fuzz run is evidence
+about the axes the generator varies, and about nothing else. Mutation testing
+is what tells you which those are.
