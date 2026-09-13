@@ -1177,6 +1177,56 @@ impl Workspace {
         Ok(())
     }
 
+    /// Move one occurrence of a series to a new time, leaving the rest alone.
+    ///
+    /// The third thing a calendar needs and the only one that changes the shape
+    /// of the series rather than a set membership. What it does depends on where
+    /// the series came from, and the difference is in `pikos-db`, not here:
+    ///
+    ///   - A **native** series has no upstream to reclaim the date, so the
+    ///     occurrence leaves the series. It becomes an ordinary page at the new
+    ///     time and the original date joins the rule's exclusions, in one
+    ///     transaction — before that was three client-issued writes, and a
+    ///     failure between them left both the new page *and* the un-excluded
+    ///     occurrence on the calendar.
+    ///   - A **detached** series keeps the occurrence in-series as an override
+    ///     row, because `original_date` is what lets a later re-link overwrite
+    ///     that row with the provider's value. A clone would be re-mirrored
+    ///     beside it: one occurrence, two blocks, permanently.
+    ///   - An **active mirror** is refused. Its times are the calendar's.
+    ///
+    /// `rule_id` and `original_date` come off the `CalendarEntry` that was
+    /// drawn; both are `None` on a real block, which has a row of its own and
+    /// moves through `set_page_schedule` instead.
+    ///
+    /// `timezone` is the caller's own — the zone the new wall clock is written
+    /// in, which for a phone is the zone its owner is standing in.
+    pub async fn move_occurrence(
+        &self,
+        rule_id: String,
+        original_date: String,
+        scheduled_start: String,
+        scheduled_end: Option<String>,
+        timezone: String,
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::reschedule_virtual_occurrence_impl(
+            &self.pool,
+            pikos_db::RescheduleVirtualInput {
+                rule_id,
+                original_date,
+                scheduled_start,
+                scheduled_end,
+                timezone,
+            },
+        )
+        .await?;
+        // The result carries the rule's merged exclusions, for a caller holding
+        // rules in memory to update its copy. Nothing here holds one: the phone
+        // re-reads the visible range after every write, so passing them on would
+        // be a second source of truth for the caller to keep in step.
+        Ok(())
+    }
+
     /// Put a skipped occurrence back.
     ///
     /// The undo for the above, and the reason a skip is worth offering without a
@@ -2085,6 +2135,7 @@ async fn calendar_range_impl(
                 scheduled_start,
                 page.scheduled_end.clone(),
                 None,
+                None,
             ))
         })
         .collect();
@@ -2104,6 +2155,7 @@ async fn calendar_range_impl(
             occurrence.scheduled_start,
             occurrence.scheduled_end,
             Some(occurrence.original_date),
+            Some(occurrence.rule_id),
         ));
     }
 
@@ -2167,6 +2219,7 @@ fn entry_of(
     scheduled_start: String,
     scheduled_end: Option<String>,
     original_date: Option<String>,
+    rule_id: Option<String>,
 ) -> CalendarEntry {
     CalendarEntry {
         page_id: page.id.clone(),
@@ -2183,6 +2236,8 @@ fn entry_of(
         original_date,
         is_recurring: page.is_recurring,
         is_synced_origin: page.synced_since.is_some(),
+        rule_id,
+        schedule_locked: page.schedule_locked,
     }
 }
 

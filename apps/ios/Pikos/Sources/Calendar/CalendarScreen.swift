@@ -26,6 +26,7 @@ struct CalendarScreen: View {
     @State private var isLoading = true
     @State private var now = WallClockDay.instant(from: Date())
     @State private var undo: SkippedOccurrence?
+    @State private var moving: Moving?
 
     /// Moves the current-time line without a timer.
     ///
@@ -58,13 +59,15 @@ struct CalendarScreen: View {
                     hourHeightBase: settings.calendarDensity.hourHeight,
                     onOpen: { pageId in openPage(pageId) },
                     onComplete: { entry in Task { await store.completeOccurrence(entry) } },
-                    onSkip: { entry in Task { await skip(entry) } })
+                    onSkip: { entry in Task { await skip(entry) } },
+                    onMove: { entry in moving = Moving(entry: entry) })
             }
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
         .overlay(alignment: .bottom) { undoBar }
+        .sheet(item: $moving) { MoveOccurrenceSheet(entry: $0.entry) }
         // Keyed on the range *and* on the workspace's version. The range half
         // means swiping to another week cancels the query for the one being
         // left rather than racing it. The version half means a page completed
@@ -93,7 +96,18 @@ struct CalendarScreen: View {
         route.calendarPath = [pageId]
     }
 
-    // MARK: - Skipping one occurrence
+    // MARK: - Acting on one occurrence
+
+    /// The occurrence whose move sheet is open.
+    ///
+    /// A wrapper because `sheet(item:)` needs `Identifiable` and the generated
+    /// records are not. `key` is the identity being borrowed — it is distinct
+    /// per drawn occurrence, which `page_id` deliberately is not.
+    private struct Moving: Identifiable {
+        let entry: CalendarEntry
+        var id: String { entry.key }
+    }
+
 
     /// What was skipped, for as long as it can be put back.
     private struct SkippedOccurrence: Equatable {

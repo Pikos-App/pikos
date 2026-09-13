@@ -131,6 +131,17 @@ nothing is destroyed, so the way back is one call. What iOS does not ask is the
 scope question the desktop asks behind a backlog (`RecurringGapDialog`) — it
 always means _just this one_.
 
+Moving one occurrence followed, on the same menu, and closed the last row of
+that cluster. The desktop does it by dragging the block; on a phone a drag
+competes with scrolling the grid, so the gesture is a long press and a picker
+and the write underneath is the same one transaction. `CalendarEntry` gained
+`rule_id` (the operation is keyed on the rule, not the page) and
+`schedule_locked`, so the entry can be withheld on an active mirror rather than
+offered and refused. The sheet says which of the two outcomes is coming before
+it happens — a native occurrence leaves the repeat and becomes a page of its
+own, an imported one stays a member pinned to its new time — because a reader
+expecting the other one would read the result as a bug.
+
 **A repeat can be changed or switched off.** Quick add could make a page repeat
 and nothing could change it afterwards, so "every Monday" typed once was every
 Monday forever and the only way out was deleting the page. The picker covers

@@ -1038,6 +1038,34 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func listUpcoming() async throws  -> [UpcomingDay]
     
     /**
+     * Move one occurrence of a series to a new time, leaving the rest alone.
+     *
+     * The third thing a calendar needs and the only one that changes the shape
+     * of the series rather than a set membership. What it does depends on where
+     * the series came from, and the difference is in `pikos-db`, not here:
+     *
+     * - A **native** series has no upstream to reclaim the date, so the
+     * occurrence leaves the series. It becomes an ordinary page at the new
+     * time and the original date joins the rule's exclusions, in one
+     * transaction — before that was three client-issued writes, and a
+     * failure between them left both the new page *and* the un-excluded
+     * occurrence on the calendar.
+     * - A **detached** series keeps the occurrence in-series as an override
+     * row, because `original_date` is what lets a later re-link overwrite
+     * that row with the provider's value. A clone would be re-mirrored
+     * beside it: one occurrence, two blocks, permanently.
+     * - An **active mirror** is refused. Its times are the calendar's.
+     *
+     * `rule_id` and `original_date` come off the `CalendarEntry` that was
+     * drawn; both are `None` on a real block, which has a row of its own and
+     * moves through `set_page_schedule` instead.
+     *
+     * `timezone` is the caller's own — the zone the new wall clock is written
+     * in, which for a phone is the zone its owner is standing in.
+     */
+    func moveOccurrence(ruleId: String, originalDate: String, scheduledStart: String, scheduledEnd: String?, timezone: String) async throws 
+    
+    /**
      * What a page repeats as, and whether this editor may change it.
      */
     func pageRepeat(pageId: String) async throws  -> PageRepeat
@@ -1803,6 +1831,48 @@ open func listUpcoming()async throws  -> [UpcomingDay]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeUpcomingDay.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Move one occurrence of a series to a new time, leaving the rest alone.
+     *
+     * The third thing a calendar needs and the only one that changes the shape
+     * of the series rather than a set membership. What it does depends on where
+     * the series came from, and the difference is in `pikos-db`, not here:
+     *
+     * - A **native** series has no upstream to reclaim the date, so the
+     * occurrence leaves the series. It becomes an ordinary page at the new
+     * time and the original date joins the rule's exclusions, in one
+     * transaction — before that was three client-issued writes, and a
+     * failure between them left both the new page *and* the un-excluded
+     * occurrence on the calendar.
+     * - A **detached** series keeps the occurrence in-series as an override
+     * row, because `original_date` is what lets a later re-link overwrite
+     * that row with the provider's value. A clone would be re-mirrored
+     * beside it: one occurrence, two blocks, permanently.
+     * - An **active mirror** is refused. Its times are the calendar's.
+     *
+     * `rule_id` and `original_date` come off the `CalendarEntry` that was
+     * drawn; both are `None` on a real block, which has a row of its own and
+     * moves through `set_page_schedule` instead.
+     *
+     * `timezone` is the caller's own — the zone the new wall clock is written
+     * in, which for a phone is the zone its owner is standing in.
+     */
+open func moveOccurrence(ruleId: String, originalDate: String, scheduledStart: String, scheduledEnd: String?, timezone: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_move_occurrence(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(ruleId),FfiConverterString.lower(originalDate),FfiConverterString.lower(scheduledStart),FfiConverterOptionString.lower(scheduledEnd),FfiConverterString.lower(timezone)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -2600,6 +2670,18 @@ public struct CalendarEntry: Equatable, Hashable {
      * would offer to complete a native occurrence three weeks out.
      */
     public var isSyncedOrigin: Bool
+    /**
+     * The rule that projected this block, for the operations keyed on the
+     * rule rather than on the page — moving one occurrence out of the series.
+     * `None` on a real block, which has a row of its own to move instead.
+     */
+    public var ruleId: String?
+    /**
+     * A calendar owns this page's schedule, so its times are not ours to
+     * change. The workspace refuses such a move anyway; this is what lets the
+     * menu leave the entry out rather than offer it and fail.
+     */
+    public var scheduleLocked: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2642,7 +2724,17 @@ public struct CalendarEntry: Equatable, Hashable {
          * on the day it names, while a task series funnels to whichever occurrence
          * is next due. Without this field the phone cannot tell them apart, and
          * would offer to complete a native occurrence three weeks out.
-         */isSyncedOrigin: Bool) {
+         */isSyncedOrigin: Bool, 
+        /**
+         * The rule that projected this block, for the operations keyed on the
+         * rule rather than on the page — moving one occurrence out of the series.
+         * `None` on a real block, which has a row of its own to move instead.
+         */ruleId: String?, 
+        /**
+         * A calendar owns this page's schedule, so its times are not ours to
+         * change. The workspace refuses such a move anyway; this is what lets the
+         * menu leave the entry out rather than offer it and fail.
+         */scheduleLocked: Bool) {
         self.pageId = pageId
         self.key = key
         self.title = title
@@ -2657,6 +2749,8 @@ public struct CalendarEntry: Equatable, Hashable {
         self.originalDate = originalDate
         self.isRecurring = isRecurring
         self.isSyncedOrigin = isSyncedOrigin
+        self.ruleId = ruleId
+        self.scheduleLocked = scheduleLocked
     }
 
     
@@ -2688,7 +2782,9 @@ public struct FfiConverterTypeCalendarEntry: FfiConverterRustBuffer {
                 isVirtual: FfiConverterBool.read(from: &buf), 
                 originalDate: FfiConverterOptionString.read(from: &buf), 
                 isRecurring: FfiConverterBool.read(from: &buf), 
-                isSyncedOrigin: FfiConverterBool.read(from: &buf)
+                isSyncedOrigin: FfiConverterBool.read(from: &buf), 
+                ruleId: FfiConverterOptionString.read(from: &buf), 
+                scheduleLocked: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2707,6 +2803,8 @@ public struct FfiConverterTypeCalendarEntry: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.originalDate, into: &buf)
         FfiConverterBool.write(value.isRecurring, into: &buf)
         FfiConverterBool.write(value.isSyncedOrigin, into: &buf)
+        FfiConverterOptionString.write(value.ruleId, into: &buf)
+        FfiConverterBool.write(value.scheduleLocked, into: &buf)
     }
 }
 
@@ -6711,6 +6809,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_list_upcoming() != 48506) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_move_occurrence() != 25049) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_page_repeat() != 43934) {

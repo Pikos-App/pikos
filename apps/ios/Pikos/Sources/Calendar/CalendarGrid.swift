@@ -25,6 +25,8 @@ struct CalendarGrid: View {
     let onComplete: (CalendarEntry) -> Void
     /// Drop this occurrence and let the series carry on.
     let onSkip: (CalendarEntry) -> Void
+    /// Re-time this occurrence, leaving the rest of the series alone.
+    let onMove: (CalendarEntry) -> Void
 
     /// Scales the hour height with the reader's text size. A calendar whose
     /// rows stay put while its labels grow is how a block ends up with its
@@ -295,6 +297,13 @@ struct CalendarGrid: View {
                     Label("Complete this one", systemImage: "checkmark.circle")
                 }
             }
+            if canMove(entry) {
+                Button {
+                    onMove(entry)
+                } label: {
+                    Label("Move this one…", systemImage: "calendar.badge.clock")
+                }
+            }
             Button {
                 onSkip(entry)
             } label: {
@@ -319,6 +328,18 @@ struct CalendarGrid: View {
     /// both and says nothing about whether the work happened.
     private func canComplete(_ entry: CalendarEntry) -> Bool {
         entry.isSyncedOrigin || !entry.isVirtual
+    }
+
+    /// Whether this occurrence can be re-timed on its own.
+    ///
+    /// Two conditions, both structural. It has to be a projection, because a
+    /// real block is a row and a row is moved by changing the page's own
+    /// schedule — the list already offers that. And the series must not be an
+    /// active mirror: those times belong to the calendar they came from, and
+    /// the workspace refuses the write. Better to leave the entry out than to
+    /// offer it and explain the refusal afterwards.
+    private func canMove(_ entry: CalendarEntry) -> Bool {
+        entry.isVirtual && entry.ruleId != nil && !entry.scheduleLocked
     }
 
     // MARK: - Constants and labels

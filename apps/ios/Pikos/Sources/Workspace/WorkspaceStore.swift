@@ -753,6 +753,34 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Move one occurrence of a series to a new time.
+    ///
+    /// Returns whether it took, so the sheet knows whether to close. Only a
+    /// projected block can be moved this way: a real one is a row, and a row
+    /// moves through `setSchedule`. The guard is here rather than only in the
+    /// menu because a calendar can be a refresh out of date by the time a sheet
+    /// is confirmed.
+    ///
+    /// The timezone is the one the phone is in, which is the zone the new wall
+    /// clock is written in.
+    @discardableResult
+    public func moveOccurrence(_ entry: CalendarEntry, to start: String, end: String?) async
+        -> Bool
+    {
+        guard let workspace, let ruleId = entry.ruleId, let originalDate = entry.originalDate
+        else { return false }
+        do {
+            try await workspace.moveOccurrence(
+                ruleId: ruleId, originalDate: originalDate, scheduledStart: start,
+                scheduledEnd: end, timezone: TimeZone.current.identifier)
+            await refresh()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     /// Which occurrence a drawn block is, in the terms the sets are keyed by.
     ///
     /// A projected block carries the rule's own date already. A real one — the

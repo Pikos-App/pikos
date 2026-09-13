@@ -59,7 +59,7 @@ the surface exists, and five facts explain nearly every `○`:
   completes or skips _that_ occurrence, which is what a series with a backlog needs — the
   head sits on last Monday while the block on screen is this Thursday. What is missing is the
   scope question the desktop asks when there is a backlog (`RecurringGapDialog`): iOS always
-  means "just this one". Moving a single occurrence is still `○`.
+  means "just this one".
 - **Sync happens only when asked.** The desktop's five-minute poll is an in-process timer,
   which iOS suspends. Every ✅ in §9 means "on the next sync somebody starts".
 
@@ -388,7 +388,7 @@ survive soft-delete). Skipped for an active-synced head, whose cache is reconcil
 | Delete an occurrence with a backlog behind it                   | ✅ scope dialog ³⁹                              | ✅ same, copy reads local-only ³⁹      | ✅ plain delete copy ³⁹      | —                              | ⚠️ just this one, no scope ³⁹ |
 | … scope _Just this one_                                         | ✅ that date to the skip-set                    | ✅ same                                | ✅                           | —                              | ✅ the only iOS behaviour     |
 | … scope _This and everything before today_                      | ✅ every open day to the skip-set, no clones ³⁹ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴       | —                              | ○                             |
-| Move a single virtual                                           | ✅ detached clone ⁴⁰                            | 🚫 locked ⁴¹                           | ✅ mints an override ⁴²      | —                              | ○                             |
+| Move a single virtual                                           | ✅ detached clone ⁴⁰                            | 🚫 locked ⁴¹                           | ✅ mints an override ⁴²      | —                              | ✅ long press → Move ⁴⁰       |
 | Complete a single virtual                                       | 🚫 head-only ⁴³                                 | ✅ that occurrence ⁴³                  | ✅ ⁴³                        | —                              | ✅ long press ⁴³              |
 | Tick an occurrence with a backlog behind it                     | — head-only ⁴³                                  | ✅ the same scope dialog ³³ ⁴³         | ✅ ⁴³                        | —                              | ⚠️ that one, no dialog ⁴³     |
 | Render a materialized override                                  | — synced series only ⁴⁴                         | ✅ locked block at the moved slot ⁴²   | ✅ same block, unlocked ⁴²   | —                              | ✅ drawn, not distinguished   |
@@ -415,7 +415,11 @@ it never asks the scope question, so it always means _just this one_, backlog or
 ⁴⁰ Spawns an independent real page at the new time and EXDATEs the original date, in one
 transaction. Re-homing this to a `page_schedules` override is deliberately deferred past 0.4.0,
 except a **detached** series, which materializes an override row instead; native keeps the
-clone.
+clone. iOS reaches the same call from the long-press menu rather than from a drag — a drag on a
+phone competes with scrolling the grid — and only on a projected block, since a real one has a
+row of its own to move. The entry is withheld on an active mirror, which
+`ensure_rule_row_unlocked` refuses anyway; `CalendarEntry.schedule_locked` is what lets the menu
+know before offering.
 ⁴¹ Blocked at the backend (`reschedule_virtual_occurrence_impl` → `ensure_rule_row_unlocked`)
 and unreachable from the UI: `VirtualPageBlockPopover` renders the synced schedule as a
 read-only label when the series is locked, matching `PageBlockPopover`. Drag and resize on the

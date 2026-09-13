@@ -383,6 +383,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_list_trashed_pages(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_upcoming(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MOVE_OCCURRENCE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_MOVE_OCCURRENCE
+uint64_t uniffi_pikos_ffi_fn_method_workspace_move_occurrence(uint64_t ptr, RustBuffer rule_id, RustBuffer original_date, RustBuffer scheduled_start, RustBuffer scheduled_end, RustBuffer timezone
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_PAGE_REPEAT
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_PAGE_REPEAT
 uint64_t uniffi_pikos_ffi_fn_method_workspace_page_repeat(uint64_t ptr, RustBuffer page_id
@@ -1030,6 +1035,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_trashed_pages(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_UPCOMING
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_UPCOMING
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_upcoming(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_MOVE_OCCURRENCE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_MOVE_OCCURRENCE
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_move_occurrence(void
     
 );
 #endif

@@ -3370,3 +3370,171 @@ async fn detach_from_its_calendar(path: &str, page_id: &str) {
         .await
         .unwrap();
 }
+
+/// Moving one occurrence out of a native series.
+///
+/// The third verb, and the only one that changes the series rather than a set
+/// membership. A native occurrence has no upstream to reclaim its date, so it
+/// leaves: it becomes an ordinary page at the new time, and the date it came
+/// from joins the rule's exclusions so nothing is drawn twice.
+#[tokio::test]
+async fn moving_one_occurrence_detaches_it_and_leaves_the_series_alone() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let series = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "2026-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let before = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+    let monday = before
+        .iter()
+        .find(|e| e.original_date.as_deref() == Some("2026-03-23"))
+        .expect("the series projects onto the visible Monday");
+    let rule_id = monday
+        .rule_id
+        .clone()
+        .expect("a projected block names the rule that made it");
+
+    ws.move_occurrence(
+        rule_id,
+        "2026-03-23".to_string(),
+        "2026-03-25T14:00:00".to_string(),
+        Some("2026-03-25T15:30:00".to_string()),
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let after = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+    assert!(
+        !after
+            .iter()
+            .any(|e| e.original_date.as_deref() == Some("2026-03-23")),
+        "the Monday it came from stops being drawn — otherwise it is there twice"
+    );
+    let moved = after
+        .iter()
+        .find(|e| e.scheduled_start == "2026-03-25T14:00:00")
+        .expect("and it is drawn where it went");
+    assert_ne!(
+        moved.page_id, series.id,
+        "a native move makes an independent page, not a block of the series"
+    );
+    assert_eq!(
+        moved.scheduled_end.as_deref(),
+        Some("2026-03-25T15:30:00"),
+        "for as long as it was asked to run — a dropped end draws a block of the \
+         default height, which reads as the calendar guessing"
+    );
+    assert!(
+        !moved.is_recurring,
+        "which no longer repeats — later edits to the rule do not reach it"
+    );
+    assert_eq!(moved.title, "Standup", "it keeps what it was");
+}
+
+/// A calendar's times are the calendar's.
+///
+/// `reschedule_virtual_occurrence_impl` refuses an active mirror before it opens
+/// a transaction, and the iOS menu leaves the entry out rather than offering it
+/// and explaining the refusal — which is only possible because `CalendarEntry`
+/// carries the lock.
+#[tokio::test]
+async fn an_occurrence_of_a_live_mirror_cannot_be_moved() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let series = ws.create_page(new_page("Book club")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "2026-03-02T19:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+    link_to_a_calendar(&tmp.path, &series.id).await;
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+    let monday = entries
+        .iter()
+        .find(|e| e.original_date.as_deref() == Some("2026-03-23"))
+        .expect("a mirrored series is still drawn");
+    assert!(
+        monday.schedule_locked,
+        "and it says so, which is what lets the menu withhold the move"
+    );
+
+    let refused = ws
+        .move_occurrence(
+            monday.rule_id.clone().unwrap(),
+            "2026-03-23".to_string(),
+            "2026-03-25T14:00:00".to_string(),
+            None,
+            "UTC".to_string(),
+        )
+        .await;
+    assert!(refused.is_err(), "and the workspace refuses it regardless");
+
+    let after = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+    assert!(
+        after
+            .iter()
+            .any(|e| e.original_date.as_deref() == Some("2026-03-23")),
+        "with nothing half-written: the occurrence is still on its own Monday"
+    );
+}
+
+/// Only a projection carries a rule. A real block has a row to move instead.
+#[tokio::test]
+async fn a_real_block_names_no_rule_to_move_it_by() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let series = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "2026-03-23T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-04-05".to_string())
+        .await
+        .unwrap();
+    let head = entries
+        .iter()
+        .find(|e| !e.is_virtual)
+        .expect("the head's own occurrence is drawn from its row");
+    assert!(head.rule_id.is_none());
+    let projected = entries
+        .iter()
+        .find(|e| e.is_virtual)
+        .expect("and the weeks after it are projected");
+    assert!(
+        projected.rule_id.is_some(),
+        "a projection has to name the rule, or it cannot be moved out of it"
+    );
+}

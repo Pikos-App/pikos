@@ -160,6 +160,14 @@ pub struct CalendarEntry {
     /// is next due. Without this field the phone cannot tell them apart, and
     /// would offer to complete a native occurrence three weeks out.
     pub is_synced_origin: bool,
+    /// The rule that projected this block, for the operations keyed on the
+    /// rule rather than on the page — moving one occurrence out of the series.
+    /// `None` on a real block, which has a row of its own to move instead.
+    pub rule_id: Option<String>,
+    /// A calendar owns this page's schedule, so its times are not ours to
+    /// change. The workspace refuses such a move anyway; this is what lets the
+    /// menu leave the entry out rather than offer it and fail.
+    pub schedule_locked: bool,
 }
 
 /// What completing one occurrence of a series did.

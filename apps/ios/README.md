@@ -137,9 +137,6 @@ suite.
 - **Dragging in the calendar.** The grid draws; moving and resizing a block by
   dragging is not wired. On a phone both compete with scrolling and want a
   design decision rather than a port of the desktop's gestures.
-- **Moving one occurrence of a series.** Long-pressing a block on the calendar
-  will complete or skip that occurrence, but not re-time it: a move has to
-  materialise a schedule row first — see `docs/ios/05-calendar.md`.
 - **The scope question behind a backlog.** When a series has open occurrences
   before today, the desktop asks whether a skip means _just this one_ or
   _this and everything before today_. iOS always means the first.
