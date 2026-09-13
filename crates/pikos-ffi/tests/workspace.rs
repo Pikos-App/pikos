@@ -3846,3 +3846,217 @@ async fn an_unknown_operator_is_searched_for_rather_than_obeyed() {
         "an unrecognised token stays in the query as text"
     );
 }
+
+// ─── Clearing the overdue backlog ────────────────────────────────────────────
+//
+// The date arithmetic is `pikos-core`'s and graded there. What these cover is
+// this layer's half: which pages the button is allowed to act on, that the
+// writes actually landed, and that the undo puts back exactly what moved.
+
+/// Dates a page in the past, which `create_page` will not do on its own.
+async fn overdue_page(ws: &Workspace, title: &str, start: &str, end: Option<&str>) -> String {
+    let page = ws.create_page(new_page(title)).await.unwrap();
+    ws.set_page_schedule(page.id.clone(), start.to_string(), end.map(str::to_string))
+        .await
+        .unwrap();
+    page.id
+}
+
+/// Yesterday, and the day before, as the workspace's own local clock sees them.
+fn days_ago(days: i64) -> String {
+    let (today, _) = pikos_db::now_local_parts();
+    let parsed = pikos_core::dates::parse_local_iso(&today).expect("today parses");
+    pikos_core::dates::format_date_only(&(parsed - chrono::Duration::days(days)))
+}
+
+#[tokio::test]
+async fn the_bulk_move_lands_every_overdue_page_on_today_and_keeps_its_shape() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let today = pikos_db::today_local();
+
+    let all_day = overdue_page(&ws, "Tax return", &days_ago(5), None).await;
+    let timed = overdue_page(
+        &ws,
+        "Standup",
+        &format!("{}T08:00:00", days_ago(3)),
+        Some(&format!("{}T09:00:00", days_ago(3))),
+    )
+    .await;
+
+    let result = ws.move_overdue_to_today().await.unwrap();
+    assert_eq!(result.moved.len(), 2, "{}", result.label);
+
+    let moved_all_day = ws.get_page(all_day).await.unwrap();
+    assert_eq!(
+        moved_all_day.scheduled_start.as_deref(),
+        Some(today.as_str()),
+        "an all-day page lands on today as an all-day page, not at midnight"
+    );
+
+    let moved_timed = ws.get_page(timed).await.unwrap();
+    assert_eq!(
+        moved_timed.scheduled_start.as_deref(),
+        Some(format!("{today}T08:00:00").as_str()),
+        "and a timed one keeps its hour"
+    );
+    assert_eq!(
+        moved_timed.scheduled_end.as_deref(),
+        Some(format!("{today}T09:00:00").as_str()),
+        "along with its length — an end left behind makes a one-hour meeting three days long"
+    );
+}
+
+/// What the button must not touch, and must say it did not touch.
+#[tokio::test]
+async fn a_recurring_series_and_a_calendars_page_are_left_where_they_are() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let plain = overdue_page(&ws, "Tax return", &days_ago(5), None).await;
+
+    let series = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=DAILY".to_string(),
+        format!("{}T09:00:00", days_ago(4)),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let mirrored = overdue_page(&ws, "Book club", &format!("{}T19:00:00", days_ago(2)), None).await;
+    link_to_a_calendar(&tmp.path, &mirrored).await;
+
+    let before_series = ws
+        .get_page(series.id.clone())
+        .await
+        .unwrap()
+        .scheduled_start;
+    let before_mirror = ws.get_page(mirrored.clone()).await.unwrap().scheduled_start;
+
+    let result = ws.move_overdue_to_today().await.unwrap();
+
+    assert_eq!(
+        result.moved.iter().map(|m| &m.page_id).collect::<Vec<_>>(),
+        vec![&plain],
+        "only the ordinary page moves"
+    );
+    assert_eq!(result.recurring_kept, 1);
+    assert_eq!(result.synced_kept, 1);
+    assert_eq!(
+        result.label, "Moved 1 · 1 recurring, 1 synced left",
+        "and the sentence names both, or the user thinks it moved everything"
+    );
+    assert_eq!(
+        ws.get_page(series.id).await.unwrap().scheduled_start,
+        before_series,
+        "dragging a series anchor forward erases the gap rather than resolving it"
+    );
+    assert_eq!(
+        ws.get_page(mirrored).await.unwrap().scheduled_start,
+        before_mirror,
+        "and a calendar's times are not ours"
+    );
+}
+
+/// Nothing overdue is a sentence, not an empty result the caller has to
+/// interpret.
+#[tokio::test]
+async fn a_clear_backlog_reports_that_there_was_nothing_to_do() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    overdue_page(&ws, "Next week", "2099-01-01", None).await;
+
+    let result = ws.move_overdue_to_today().await.unwrap();
+    assert!(result.moved.is_empty());
+    assert_eq!(result.label, "Nothing to move");
+}
+
+/// A series that is not late is not "left behind".
+///
+/// The subtle one. Both reasons a page is kept are *counted* and shown, so the
+/// set handed to the planner has to be the overdue section and nothing else. A
+/// caller that passes every scheduled page instead still moves the right pages
+/// — the planner refuses a shift into the past — but reports "1 recurring left"
+/// about a standup happening next Tuesday, which reads as a refusal to do
+/// something nobody asked for.
+#[tokio::test]
+async fn a_series_dated_ahead_is_not_counted_as_left_behind() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let series = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2099-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let mirrored = overdue_page(&ws, "Book club", "2099-04-01T19:00:00", None).await;
+    link_to_a_calendar(&tmp.path, &mirrored).await;
+
+    let result = ws.move_overdue_to_today().await.unwrap();
+    assert_eq!(result.recurring_kept, 0);
+    assert_eq!(result.synced_kept, 0);
+    assert_eq!(
+        result.label, "Nothing to move",
+        "nothing was late, so nothing stayed behind"
+    );
+}
+
+/// A finished page is not a backlog.
+#[tokio::test]
+async fn the_bulk_move_leaves_completed_pages_alone() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let done = overdue_page(&ws, "Already handled", &days_ago(5), None).await;
+    let was = ws.get_page(done.clone()).await.unwrap().scheduled_start;
+    ws.set_page_status(done.clone(), true).await.unwrap();
+
+    let result = ws.move_overdue_to_today().await.unwrap();
+    assert!(result.moved.is_empty(), "{}", result.label);
+    assert_eq!(
+        ws.get_page(done).await.unwrap().scheduled_start,
+        was,
+        "a page that is done is not late"
+    );
+}
+
+/// The undo, and the reason the move asks for no confirmation.
+#[tokio::test]
+async fn undoing_the_bulk_move_puts_every_page_back_where_it_was() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let start = format!("{}T08:00:00", days_ago(3));
+    let end = format!("{}T09:30:00", days_ago(3));
+    let page = overdue_page(&ws, "Standup", &start, Some(&end)).await;
+
+    let result = ws.move_overdue_to_today().await.unwrap();
+    assert_eq!(result.moved.len(), 1);
+    assert_ne!(
+        ws.get_page(page.clone())
+            .await
+            .unwrap()
+            .scheduled_start
+            .as_deref(),
+        Some(start.as_str()),
+        "precondition: it moved"
+    );
+
+    let restored = ws.undo_overdue_move(result.moved).await.unwrap();
+    assert_eq!(restored, 1);
+
+    let back = ws.get_page(page).await.unwrap();
+    assert_eq!(back.scheduled_start.as_deref(), Some(start.as_str()));
+    assert_eq!(
+        back.scheduled_end.as_deref(),
+        Some(end.as_str()),
+        "the end comes back too, or undo silently shortens the meeting"
+    );
+}

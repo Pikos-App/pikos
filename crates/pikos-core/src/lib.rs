@@ -16,6 +16,7 @@ pub mod calendar;
 pub mod dates;
 pub mod deep_link;
 pub mod nlp;
+pub mod overdue;
 pub mod page;
 pub mod schedule;
 pub mod search;
@@ -29,6 +30,10 @@ pub use dates::{
 pub use deep_link::{parse_deep_link, DeepLink, SmartView};
 pub use nlp::{
     parse as parse_dates, parse_first as parse_first_date, DateMatch, Granularity, MatchedDate,
+};
+pub use overdue::{
+    move_overdue_to_today_label, plan_move_overdue_to_today, OverdueMove, OverdueMovePlan,
+    OverdueRow,
 };
 pub use page::{is_done, is_open, PageStatus};
 pub use schedule::{compute_schedule_transition, normalize_end_input, ScheduleTransition};

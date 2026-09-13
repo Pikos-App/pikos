@@ -44,6 +44,8 @@ struct PageListScreen: View {
     }
     @State private var renameText = ""
     @State private var isCompletedExpanded = false
+    @State private var lastBulkMove: BulkMove?
+    @State private var isMovingOverdue = false
 
     /// The list only — no `NavigationStack` of its own.
     ///
@@ -133,7 +135,11 @@ struct PageListScreen: View {
                     }
                 } header: {
                     if let title = section.title {
-                        Text(title)
+                        if section.id == "overdue" {
+                            overdueHeader(title)
+                        } else {
+                            Text(title)
+                        }
                     }
                 }
             }
@@ -155,6 +161,7 @@ struct PageListScreen: View {
             Button("Cancel", role: .cancel) { renaming = nil }
             Button("Rename") { commitRename() }
         }
+        .overlay(alignment: .bottom) { bulkMoveBar }
     }
 
     /// One open page: the checkbox, the link, and everything reachable from a
@@ -209,6 +216,90 @@ struct PageListScreen: View {
     /// so that unticking something puts it straight back where it came from,
     /// visibly.
     @ViewBuilder
+    // MARK: - Clearing the backlog
+
+    /// What a bulk move did, for as long as it can be put back.
+    private struct BulkMove: Equatable {
+        let label: String
+        let moved: [MovedPage]
+    }
+
+    /// The Overdue heading, with the one thing worth doing to the whole section.
+    ///
+    /// On the heading rather than in the toolbar because it acts on *this*
+    /// section and nothing else, and a toolbar button would be as available in
+    /// Upcoming, where it means nothing.
+    ///
+    /// No confirmation. The move is reversible, cheap and visible, and the
+    /// three of those together are what a confirmation exists to compensate
+    /// for — so the way back is offered afterwards instead, where it costs
+    /// nothing when it is not wanted.
+    private func overdueHeader(_ title: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            if isMovingOverdue {
+                ProgressView()
+            } else {
+                Button("Move to today") {
+                    Task { await moveOverdue() }
+                }
+                .font(.caption.weight(.semibold))
+                .textCase(nil)
+            }
+        }
+    }
+
+    private func moveOverdue() async {
+        isMovingOverdue = true
+        defer { isMovingOverdue = false }
+        guard let result = await store.moveOverdueToToday() else { return }
+        lastBulkMove = BulkMove(label: result.label, moved: result.moved)
+    }
+
+    /// What happened, and the way back.
+    ///
+    /// Says what stayed behind as well as what moved: a recurring series and a
+    /// page a calendar owns are both left alone, and a reader who is not told
+    /// will believe the section was cleared and stop looking at it.
+    ///
+    /// Clears itself on a timer rather than waiting to be dismissed — a bar
+    /// sitting over the bottom of the list until somebody notices it is worse
+    /// than a missed undo, and every move it describes is one more tap to
+    /// reverse by hand.
+    @ViewBuilder
+    private var bulkMoveBar: some View {
+        if let move = lastBulkMove {
+            HStack {
+                Text(move.label)
+                    .font(.subheadline)
+                    .lineLimit(2)
+                Spacer(minLength: 12)
+                if !move.moved.isEmpty {
+                    Button("Undo") {
+                        Task {
+                            await store.undoOverdueMove(move.moved)
+                            lastBulkMove = nil
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(radius: 6, y: 2)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .task(id: move) {
+                try? await Task.sleep(for: .seconds(6))
+                guard !Task.isCancelled else { return }
+                withAnimation(.snappy) { lastBulkMove = nil }
+            }
+        }
+    }
+
     private var completedSection: some View {
         Section {
             DisclosureGroup(isExpanded: $isCompletedExpanded) {

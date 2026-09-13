@@ -495,6 +495,30 @@ pub struct CompletedPages {
     pub total: u32,
 }
 
+/// What clearing the overdue backlog did, and what it would take to undo.
+#[derive(Debug, uniffi::Record)]
+pub struct OverdueMoveResult {
+    /// One sentence for the user, written once and shared with the desktop —
+    /// this is the only place they are told that something stayed behind.
+    pub label: String,
+    /// Every page that moved, with the date it came from. Hand this straight
+    /// back to `undo_overdue_move`.
+    pub moved: Vec<MovedPage>,
+    /// Left where they were because the series has a gap, and closing it is a
+    /// decision rather than a drag.
+    pub recurring_kept: u32,
+    /// Left where they were because a calendar owns the schedule.
+    pub synced_kept: u32,
+}
+
+/// One page's move, in the terms the undo needs.
+#[derive(Debug, uniffi::Record)]
+pub struct MovedPage {
+    pub page_id: String,
+    pub previous_start: String,
+    pub previous_end: Option<String>,
+}
+
 /// Narrows a page listing. Every field is optional; an all-default filter lists
 /// everything not deleted.
 #[derive(Debug, Default, uniffi::Record)]
@@ -1620,6 +1644,113 @@ impl Workspace {
     }
 
     /// Move a page to the trash. Recoverable — see `restore_page`.
+    /// Move everything overdue onto today.
+    ///
+    /// The one-tap answer to a Today view whose Overdue section has grown past
+    /// reading. Every page keeps its wall-clock shape — a 9:00–10:00 from last
+    /// week is 9:00–10:00 today, a two-day all-day span is still two days —
+    /// because what slipped is the day, not the appointment.
+    ///
+    /// Two kinds of page are left alone and *counted*, never silently skipped.
+    /// A recurring one, because an overdue occurrence means the series has a
+    /// gap and dragging the anchor forward erases it rather than resolving it.
+    /// And one a calendar owns, because that schedule is not ours. The result's
+    /// `label` says so in a sentence; the counts are there for a caller that
+    /// wants to say it differently.
+    ///
+    /// Which pages are overdue is decided here rather than taken from the
+    /// caller. A list on screen is as old as the last refresh, and a bulk write
+    /// keyed on a stale list moves pages the user can no longer see.
+    ///
+    /// Writes run one at a time, and one refusal does not strand the rest: each
+    /// goes through the same schedule write a single date edit does, so a page
+    /// that has become locked since the plan was made fails alone.
+    pub async fn move_overdue_to_today(&self) -> Result<OverdueMoveResult, WorkspaceError> {
+        let (today, now) = pikos_db::now_local_parts();
+        let open = pikos_db::list_pages_impl(
+            &self.pool,
+            Some(pikos_db::PageFilter {
+                open_only: Some(true),
+                has_schedule: Some(true),
+                ..Default::default()
+            }),
+        )
+        .await?;
+
+        // The same predicate Today's own overdue section is built from, so the
+        // button cannot act on a different set than the one above it.
+        let overdue: Vec<&pikos_db::PageSummary> = open
+            .iter()
+            .filter(|p| {
+                p.scheduled_start
+                    .as_deref()
+                    .is_some_and(|start| pikos_core::views::is_overdue(start, &today, &now))
+            })
+            .collect();
+        let rows: Vec<pikos_core::OverdueRow<'_>> = overdue
+            .iter()
+            .map(|p| pikos_core::OverdueRow {
+                id: &p.id,
+                scheduled_start: p.scheduled_start.as_deref(),
+                scheduled_end: p.scheduled_end.as_deref(),
+                is_recurring: p.is_recurring,
+                schedule_locked: p.schedule_locked,
+            })
+            .collect();
+
+        let plan = pikos_core::plan_move_overdue_to_today(&rows, &today);
+        let label = pikos_core::move_overdue_to_today_label(&plan);
+
+        let mut moved = Vec::with_capacity(plan.moves.len());
+        for m in &plan.moves {
+            // Serially, not concurrently. Each write reads the page's schedule
+            // rows back, and a burst of concurrent readers is the WAL
+            // contention the desktop's bulk status toggle had to serialise
+            // away.
+            match self
+                .set_page_schedule(m.page_id.clone(), m.start.clone(), m.end.clone())
+                .await
+            {
+                Ok(_) => moved.push(MovedPage {
+                    page_id: m.page_id.clone(),
+                    previous_start: m.previous_start.clone(),
+                    previous_end: m.previous_end.clone(),
+                }),
+                // Keep going: one page that has become unwritable since the
+                // plan was made must not strand the other forty.
+                Err(_) => continue,
+            }
+        }
+
+        Ok(OverdueMoveResult {
+            label,
+            moved,
+            recurring_kept: plan.recurring_kept,
+            synced_kept: plan.synced_kept,
+        })
+    }
+
+    /// Put a bulk move back, from the result it returned.
+    ///
+    /// The reason the move needs no confirmation: it is reversible, cheap and
+    /// visible. Returns how many went back, which is not always the length of
+    /// what was handed in — a page edited in between is a page whose write
+    /// fails, and overwriting that edit would be a worse answer than skipping
+    /// it.
+    pub async fn undo_overdue_move(&self, moved: Vec<MovedPage>) -> Result<u32, WorkspaceError> {
+        let mut restored = 0u32;
+        for page in moved {
+            if self
+                .set_page_schedule(page.page_id, page.previous_start, page.previous_end)
+                .await
+                .is_ok()
+            {
+                restored += 1;
+            }
+        }
+        Ok(restored)
+    }
+
     pub async fn trash_page(&self, id: String) -> Result<(), WorkspaceError> {
         pikos_db::soft_delete_page_impl(&self.pool, &id).await?;
         Ok(())

@@ -1066,6 +1066,32 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func moveOccurrence(ruleId: String, originalDate: String, scheduledStart: String, scheduledEnd: String?, timezone: String) async throws 
     
     /**
+     * Move a page to the trash. Recoverable — see `restore_page`.
+     * Move everything overdue onto today.
+     *
+     * The one-tap answer to a Today view whose Overdue section has grown past
+     * reading. Every page keeps its wall-clock shape — a 9:00–10:00 from last
+     * week is 9:00–10:00 today, a two-day all-day span is still two days —
+     * because what slipped is the day, not the appointment.
+     *
+     * Two kinds of page are left alone and *counted*, never silently skipped.
+     * A recurring one, because an overdue occurrence means the series has a
+     * gap and dragging the anchor forward erases it rather than resolving it.
+     * And one a calendar owns, because that schedule is not ours. The result's
+     * `label` says so in a sentence; the counts are there for a caller that
+     * wants to say it differently.
+     *
+     * Which pages are overdue is decided here rather than taken from the
+     * caller. A list on screen is as old as the last refresh, and a bulk write
+     * keyed on a stale list moves pages the user can no longer see.
+     *
+     * Writes run one at a time, and one refusal does not strand the rest: each
+     * goes through the same schedule write a single date edit does, so a page
+     * that has become locked since the plan was made fails alone.
+     */
+    func moveOverdueToToday() async throws  -> OverdueMoveResult
+    
+    /**
      * What a page repeats as, and whether this editor may change it.
      */
     func pageRepeat(pageId: String) async throws  -> PageRepeat
@@ -1280,9 +1306,6 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func trashFolder(id: String) async throws 
     
-    /**
-     * Move a page to the trash. Recoverable — see `restore_page`.
-     */
     func trashPage(id: String) async throws 
     
     /**
@@ -1312,6 +1335,17 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * the head, which walks back to the re-opened occurrence.
      */
     func uncompleteRecurringOccurrence(pageId: String, occurrenceDate: String) async throws 
+    
+    /**
+     * Put a bulk move back, from the result it returned.
+     *
+     * The reason the move needs no confirmation: it is reversible, cheap and
+     * visible. Returns how many went back, which is not always the length of
+     * what was handed in — a page edited in between is a page whose write
+     * fails, and overwriting that edit would be a worse answer than skipping
+     * it.
+     */
+    func undoOverdueMove(moved: [MovedPage]) async throws  -> UInt32
     
     /**
      * Put a skipped occurrence back.
@@ -1878,6 +1912,46 @@ open func moveOccurrence(ruleId: String, originalDate: String, scheduledStart: S
 }
     
     /**
+     * Move a page to the trash. Recoverable — see `restore_page`.
+     * Move everything overdue onto today.
+     *
+     * The one-tap answer to a Today view whose Overdue section has grown past
+     * reading. Every page keeps its wall-clock shape — a 9:00–10:00 from last
+     * week is 9:00–10:00 today, a two-day all-day span is still two days —
+     * because what slipped is the day, not the appointment.
+     *
+     * Two kinds of page are left alone and *counted*, never silently skipped.
+     * A recurring one, because an overdue occurrence means the series has a
+     * gap and dragging the anchor forward erases it rather than resolving it.
+     * And one a calendar owns, because that schedule is not ours. The result's
+     * `label` says so in a sentence; the counts are there for a caller that
+     * wants to say it differently.
+     *
+     * Which pages are overdue is decided here rather than taken from the
+     * caller. A list on screen is as old as the last refresh, and a bulk write
+     * keyed on a stale list moves pages the user can no longer see.
+     *
+     * Writes run one at a time, and one refusal does not strand the rest: each
+     * goes through the same schedule write a single date edit does, so a page
+     * that has become locked since the plan was made fails alone.
+     */
+open func moveOverdueToToday()async throws  -> OverdueMoveResult  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_move_overdue_to_today(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOverdueMoveResult_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * What a page repeats as, and whether this editor may change it.
      */
 open func pageRepeat(pageId: String)async throws  -> PageRepeat  {
@@ -2351,9 +2425,6 @@ open func trashFolder(id: String)async throws   {
         )
 }
     
-    /**
-     * Move a page to the trash. Recoverable — see `restore_page`.
-     */
 open func trashPage(id: String)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -2429,6 +2500,31 @@ open func uncompleteRecurringOccurrence(pageId: String, occurrenceDate: String)a
             completeFunc: ffi_pikos_ffi_rust_future_complete_void,
             freeFunc: ffi_pikos_ffi_rust_future_free_void,
             liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Put a bulk move back, from the result it returned.
+     *
+     * The reason the move needs no confirmation: it is reversible, cheap and
+     * visible. Returns how many went back, which is not always the length of
+     * what was handed in — a page edited in between is a page whose write
+     * fails, and overwriting that edit would be a worse answer than skipping
+     * it.
+     */
+open func undoOverdueMove(moved: [MovedPage])async throws  -> UInt32  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_undo_overdue_move(
+                        self.uniffiCloneHandle(),FfiConverterSequenceTypeMovedPage.lower(moved)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_u32,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_u32,
+            freeFunc: ffi_pikos_ffi_rust_future_free_u32,
+            liftFunc: FfiConverterUInt32.lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -3138,6 +3234,67 @@ public func FfiConverterTypeLayoutPage_lower(_ value: LayoutPage) -> RustBuffer 
 
 
 /**
+ * One page's move, in the terms the undo needs.
+ */
+public struct MovedPage: Equatable, Hashable {
+    public var pageId: String
+    public var previousStart: String
+    public var previousEnd: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pageId: String, previousStart: String, previousEnd: String?) {
+        self.pageId = pageId
+        self.previousStart = previousStart
+        self.previousEnd = previousEnd
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension MovedPage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMovedPage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MovedPage {
+        return
+            try MovedPage(
+                pageId: FfiConverterString.read(from: &buf), 
+                previousStart: FfiConverterString.read(from: &buf), 
+                previousEnd: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MovedPage, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pageId, into: &buf)
+        FfiConverterString.write(value.previousStart, into: &buf)
+        FfiConverterOptionString.write(value.previousEnd, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMovedPage_lift(_ buf: RustBuffer) throws -> MovedPage {
+    return try FfiConverterTypeMovedPage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMovedPage_lower(_ value: MovedPage) -> RustBuffer {
+    return FfiConverterTypeMovedPage.lower(value)
+}
+
+
+/**
  * Fields to set when creating a page. Anything omitted takes the column
  * default; `content_schema_version` is stamped by the writer and is not
  * settable, so a client cannot claim a document shape it did not produce.
@@ -3284,6 +3441,101 @@ public func FfiConverterTypeOccurrence_lift(_ buf: RustBuffer) throws -> Occurre
 #endif
 public func FfiConverterTypeOccurrence_lower(_ value: Occurrence) -> RustBuffer {
     return FfiConverterTypeOccurrence.lower(value)
+}
+
+
+/**
+ * What clearing the overdue backlog did, and what it would take to undo.
+ */
+public struct OverdueMoveResult: Equatable, Hashable {
+    /**
+     * One sentence for the user, written once and shared with the desktop —
+     * this is the only place they are told that something stayed behind.
+     */
+    public var label: String
+    /**
+     * Every page that moved, with the date it came from. Hand this straight
+     * back to `undo_overdue_move`.
+     */
+    public var moved: [MovedPage]
+    /**
+     * Left where they were because the series has a gap, and closing it is a
+     * decision rather than a drag.
+     */
+    public var recurringKept: UInt32
+    /**
+     * Left where they were because a calendar owns the schedule.
+     */
+    public var syncedKept: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * One sentence for the user, written once and shared with the desktop —
+         * this is the only place they are told that something stayed behind.
+         */label: String, 
+        /**
+         * Every page that moved, with the date it came from. Hand this straight
+         * back to `undo_overdue_move`.
+         */moved: [MovedPage], 
+        /**
+         * Left where they were because the series has a gap, and closing it is a
+         * decision rather than a drag.
+         */recurringKept: UInt32, 
+        /**
+         * Left where they were because a calendar owns the schedule.
+         */syncedKept: UInt32) {
+        self.label = label
+        self.moved = moved
+        self.recurringKept = recurringKept
+        self.syncedKept = syncedKept
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension OverdueMoveResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOverdueMoveResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OverdueMoveResult {
+        return
+            try OverdueMoveResult(
+                label: FfiConverterString.read(from: &buf), 
+                moved: FfiConverterSequenceTypeMovedPage.read(from: &buf), 
+                recurringKept: FfiConverterUInt32.read(from: &buf), 
+                syncedKept: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OverdueMoveResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.label, into: &buf)
+        FfiConverterSequenceTypeMovedPage.write(value.moved, into: &buf)
+        FfiConverterUInt32.write(value.recurringKept, into: &buf)
+        FfiConverterUInt32.write(value.syncedKept, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOverdueMoveResult_lift(_ buf: RustBuffer) throws -> OverdueMoveResult {
+    return try FfiConverterTypeOverdueMoveResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOverdueMoveResult_lower(_ value: OverdueMoveResult) -> RustBuffer {
+    return FfiConverterTypeOverdueMoveResult.lower(value)
 }
 
 
@@ -6226,6 +6478,31 @@ fileprivate struct FfiConverterSequenceTypeLayoutPage: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeMovedPage: FfiConverterRustBuffer {
+    typealias SwiftType = [MovedPage]
+
+    public static func write(_ value: [MovedPage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMovedPage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [MovedPage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [MovedPage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMovedPage.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeOccurrence: FfiConverterRustBuffer {
     typealias SwiftType = [Occurrence]
 
@@ -6814,6 +7091,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_move_occurrence() != 25049) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_move_overdue_to_today() != 5053) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_page_repeat() != 43934) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6871,7 +7151,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_trash_folder() != 29209) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_trash_page() != 53299) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_trash_page() != 59583) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_trash_retention_days() != 17542) {
@@ -6881,6 +7161,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_uncomplete_recurring_occurrence() != 33636) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_undo_overdue_move() != 58522) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_unskip_occurrence() != 25782) {

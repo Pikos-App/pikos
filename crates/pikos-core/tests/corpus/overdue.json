@@ -1,0 +1,452 @@
+{
+  "cases": [
+    {
+      "label": "Moved 3 · 1 recurring, 1 synced left",
+      "plan": {
+        "moves": [
+          {
+            "pageId": "o_allday",
+            "previousStart": "2026-03-10",
+            "start": "2026-03-15"
+          },
+          {
+            "end": "2026-03-15T09:00:00",
+            "pageId": "o_timed_span",
+            "previousEnd": "2026-03-10T09:00:00",
+            "previousStart": "2026-03-10T08:00:00",
+            "start": "2026-03-15T08:00:00"
+          },
+          {
+            "end": "2026-03-18",
+            "pageId": "o_allday_span",
+            "previousEnd": "2026-03-12",
+            "previousStart": "2026-03-09",
+            "start": "2026-03-15"
+          }
+        ],
+        "recurringKept": 1,
+        "syncedKept": 1
+      },
+      "ref": "sun_noon"
+    },
+    {
+      "label": "Moved 5 · 1 recurring, 1 synced left",
+      "plan": {
+        "moves": [
+          {
+            "pageId": "o_allday",
+            "previousStart": "2026-03-10",
+            "start": "2026-03-18"
+          },
+          {
+            "end": "2026-03-18T09:00:00",
+            "pageId": "o_timed_span",
+            "previousEnd": "2026-03-10T09:00:00",
+            "previousStart": "2026-03-10T08:00:00",
+            "start": "2026-03-18T08:00:00"
+          },
+          {
+            "end": "2026-03-21",
+            "pageId": "o_allday_span",
+            "previousEnd": "2026-03-12",
+            "previousStart": "2026-03-09",
+            "start": "2026-03-18"
+          },
+          {
+            "pageId": "o_today_early",
+            "previousStart": "2026-03-15T01:00:00",
+            "start": "2026-03-18T01:00:00"
+          },
+          {
+            "pageId": "o_today_allday",
+            "previousStart": "2026-03-15",
+            "start": "2026-03-18"
+          }
+        ],
+        "recurringKept": 1,
+        "syncedKept": 1
+      },
+      "ref": "wed_noon"
+    },
+    {
+      "label": "Moved 5 · 1 recurring, 1 synced left",
+      "plan": {
+        "moves": [
+          {
+            "pageId": "o_allday",
+            "previousStart": "2026-03-10",
+            "start": "2026-03-16"
+          },
+          {
+            "end": "2026-03-16T09:00:00",
+            "pageId": "o_timed_span",
+            "previousEnd": "2026-03-10T09:00:00",
+            "previousStart": "2026-03-10T08:00:00",
+            "start": "2026-03-16T08:00:00"
+          },
+          {
+            "end": "2026-03-19",
+            "pageId": "o_allday_span",
+            "previousEnd": "2026-03-12",
+            "previousStart": "2026-03-09",
+            "start": "2026-03-16"
+          },
+          {
+            "pageId": "o_today_early",
+            "previousStart": "2026-03-15T01:00:00",
+            "start": "2026-03-16T01:00:00"
+          },
+          {
+            "pageId": "o_today_allday",
+            "previousStart": "2026-03-15",
+            "start": "2026-03-16"
+          }
+        ],
+        "recurringKept": 1,
+        "syncedKept": 1
+      },
+      "ref": "mon_morning"
+    },
+    {
+      "label": "Moved 6 · 1 recurring, 1 synced left",
+      "plan": {
+        "moves": [
+          {
+            "pageId": "o_allday",
+            "previousStart": "2026-03-10",
+            "start": "2026-03-21"
+          },
+          {
+            "end": "2026-03-21T09:00:00",
+            "pageId": "o_timed_span",
+            "previousEnd": "2026-03-10T09:00:00",
+            "previousStart": "2026-03-10T08:00:00",
+            "start": "2026-03-21T08:00:00"
+          },
+          {
+            "end": "2026-03-24",
+            "pageId": "o_allday_span",
+            "previousEnd": "2026-03-12",
+            "previousStart": "2026-03-09",
+            "start": "2026-03-21"
+          },
+          {
+            "pageId": "o_today_early",
+            "previousStart": "2026-03-15T01:00:00",
+            "start": "2026-03-21T01:00:00"
+          },
+          {
+            "pageId": "o_today_allday",
+            "previousStart": "2026-03-15",
+            "start": "2026-03-21"
+          },
+          {
+            "pageId": "o_future",
+            "previousStart": "2026-03-20T10:00:00",
+            "start": "2026-03-21T10:00:00"
+          }
+        ],
+        "recurringKept": 1,
+        "syncedKept": 1
+      },
+      "ref": "sat_late"
+    },
+    {
+      "label": "Moved 7 · 1 recurring, 1 synced left",
+      "plan": {
+        "moves": [
+          {
+            "pageId": "o_allday",
+            "previousStart": "2026-03-10",
+            "start": "2026-03-28"
+          },
+          {
+            "end": "2026-03-28T09:00:00",
+            "pageId": "o_timed_span",
+            "previousEnd": "2026-03-10T09:00:00",
+            "previousStart": "2026-03-10T08:00:00",
+            "start": "2026-03-28T08:00:00"
+          },
+          {
+            "end": "2026-03-31",
+            "pageId": "o_allday_span",
+            "previousEnd": "2026-03-12",
+            "previousStart": "2026-03-09",
+            "start": "2026-03-28"
+          },
+          {
+            "pageId": "o_today_early",
+            "previousStart": "2026-03-15T01:00:00",
+            "start": "2026-03-28T01:00:00"
+          },
+          {
+            "pageId": "o_today_allday",
+            "previousStart": "2026-03-15",
+            "start": "2026-03-28"
+          },
+          {
+            "pageId": "o_future",
+            "previousStart": "2026-03-20T10:00:00",
+            "start": "2026-03-28T10:00:00"
+          },
+          {
+            "end": "2026-03-28T03:30:00",
+            "pageId": "o_across_dst",
+            "previousEnd": "2026-03-27T03:30:00",
+            "previousStart": "2026-03-27T02:30:00",
+            "start": "2026-03-28T02:30:00"
+          }
+        ],
+        "recurringKept": 1,
+        "syncedKept": 1
+      },
+      "ref": "dst_eve"
+    },
+    {
+      "label": "Nothing to move · 1 recurring, 1 synced left",
+      "plan": {
+        "moves": [],
+        "recurringKept": 1,
+        "syncedKept": 1
+      },
+      "ref": "leap_day"
+    },
+    {
+      "label": "Moved 7 · 1 recurring, 1 synced left",
+      "plan": {
+        "moves": [
+          {
+            "pageId": "o_allday",
+            "previousStart": "2026-03-10",
+            "start": "2026-12-31"
+          },
+          {
+            "end": "2026-12-31T09:00:00",
+            "pageId": "o_timed_span",
+            "previousEnd": "2026-03-10T09:00:00",
+            "previousStart": "2026-03-10T08:00:00",
+            "start": "2026-12-31T08:00:00"
+          },
+          {
+            "end": "2027-01-03",
+            "pageId": "o_allday_span",
+            "previousEnd": "2026-03-12",
+            "previousStart": "2026-03-09",
+            "start": "2026-12-31"
+          },
+          {
+            "pageId": "o_today_early",
+            "previousStart": "2026-03-15T01:00:00",
+            "start": "2026-12-31T01:00:00"
+          },
+          {
+            "pageId": "o_today_allday",
+            "previousStart": "2026-03-15",
+            "start": "2026-12-31"
+          },
+          {
+            "pageId": "o_future",
+            "previousStart": "2026-03-20T10:00:00",
+            "start": "2026-12-31T10:00:00"
+          },
+          {
+            "end": "2026-12-31T03:30:00",
+            "pageId": "o_across_dst",
+            "previousEnd": "2026-03-27T03:30:00",
+            "previousStart": "2026-03-27T02:30:00",
+            "start": "2026-12-31T02:30:00"
+          }
+        ],
+        "recurringKept": 1,
+        "syncedKept": 1
+      },
+      "ref": "year_end"
+    }
+  ],
+  "meta": {
+    "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
+    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",
+    "references": [
+      {
+        "id": "sun_noon",
+        "iso": "2026-03-15T12:00:00",
+        "note": "suite NOW — Sunday, midday"
+      },
+      {
+        "id": "wed_noon",
+        "iso": "2026-03-18T12:00:00",
+        "note": "midweek — forward-date rollover differs"
+      },
+      {
+        "id": "mon_morning",
+        "iso": "2026-03-16T08:00:00",
+        "note": "before 9am — 'today vs tomorrow' flips"
+      },
+      {
+        "id": "sat_late",
+        "iso": "2026-03-21T22:30:00",
+        "note": "after 8pm — 'tonight' rolls to tomorrow"
+      },
+      {
+        "id": "dst_eve",
+        "iso": "2026-03-28T12:00:00",
+        "note": "eve of EU DST change"
+      },
+      {
+        "id": "leap_day",
+        "iso": "2024-02-29T09:00:00",
+        "note": "leap day"
+      },
+      {
+        "id": "year_end",
+        "iso": "2026-12-31T23:00:00",
+        "note": "year boundary"
+      }
+    ],
+    "timezone": "UTC"
+  },
+  "pages": [
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_allday",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 1,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-10"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_timed_span",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 2,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledEnd": "2026-03-10T09:00:00",
+      "scheduledStart": "2026-03-10T08:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_allday_span",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 3,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledEnd": "2026-03-12",
+      "scheduledStart": "2026-03-09"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_recurring",
+      "isRecurring": true,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 4,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-08"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_locked",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": true,
+      "sortOrder": 5,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-08"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_today_early",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 6,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-15T01:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_today_allday",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 7,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-15"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_future",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 8,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-20T10:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_none",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 9,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "o_across_dst",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 10,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledEnd": "2026-03-27T03:30:00",
+      "scheduledStart": "2026-03-27T02:30:00"
+    }
+  ]
+}

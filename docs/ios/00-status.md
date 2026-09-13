@@ -101,6 +101,33 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**The overdue backlog clears in one tap.** "Move to today" sits on the Overdue
+section's own heading rather than in the toolbar, because it acts on that
+section and nothing else. `planMoveOverdueToToday` is ported to
+`pikos-core::overdue` and graded against the TypeScript at all seven reference
+times over one fixture set — the same page is days overdue from one reference,
+dated today from another and in the future from a third, so the boundary this
+gets wrong in only one direction is crossed in both.
+
+Two kinds of page are left alone and _counted_: a recurring one, because an
+overdue occurrence means the series has a gap and dragging the anchor forward
+erases it rather than resolving it, and one a calendar owns. The count is the
+part that needed care. Both are reported in the sentence shown afterwards, so
+the set handed to the planner has to be the overdue section and nothing else —
+a caller that passes every scheduled page still moves the right pages, because
+the planner refuses a shift into the past, but reports "1 recurring left" about
+a standup happening next Tuesday. Mutation testing is what found that: dropping
+the overdue predicate changed no page's date and no test failed until one
+existed for the counts.
+
+One mutation is left alive with its answer written down. The reference reaches
+for `addDays` rather than a seconds offset because a JavaScript `Date` is an
+absolute instant and a DST change would move the wall clock an hour; these
+values are `NaiveDateTime`, which carries no zone, so the two forms are
+identical here and the corpus says so — including for the fixture placed astride
+the EU change. `Duration::days` stays because it says what is meant, and the
+comment now says that rather than claiming a safety it is not providing.
+
 **Search takes operators, from the same grammar the desktop uses.** `tag:`,
 `folder:`, `is:`, `priority:` and `due:` lived only in `@pikos/core`, so the
 phone's search field was words and nothing else. `parseSearchQuery` is now

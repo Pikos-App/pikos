@@ -519,7 +519,7 @@ distinct. Rows are keyed by folder id, headed by account.
 | Search operators (`tag:` `folder:` `is:` `priority:` `due:`) | ✅ ⁶⁰                       | ✅ ⁶⁰                     | ✅ ⁶⁰                  | ⚠️ flags, not operators ⁶⁰ | ✅ same grammar ⁶⁰          |
 | Command palette (`>` prefix)                                 | ✅ ⁶¹                       | — ⁶¹                      | — ⁶¹                   | —                          | —                           |
 | Upcoming view (next 7 days, grouped)                         | ✅                          | ✅                        | ✅                     | —                          | ✅                          |
-| Move overdue → today (bulk)                                  | ✅                          | 🚫 locked ⁶²              | ✅                     | —                          | ○                           |
+| Move overdue → today (bulk)                                  | ✅                          | 🚫 locked ⁶²              | ✅                     | —                          | ✅ Overdue header ⁶²        |
 | Month view                                                   | ✅                          | ✅                        | ✅                     | —                          | ○                           |
 | `.ics` calendar export                                       | ✅ ⁶³                       | ✅ ⁶³                     | ✅ ⁶³                  | —                          | ○                           |
 | Notification history panel                                   | ✅ ⁶⁴                       | ✅ ⁶⁴                     | ✅ ⁶⁴                  | —                          | ○                           |
@@ -630,9 +630,14 @@ finished pages unless `is:done` asks for them.
 list is derived from the keyboard registry, so a shortcut and its palette entry cannot drift.
 Commands act on the app, not on a page, so the origin columns don't apply.
 ⁶² `planMoveOverdueToToday` skips a locked (active-synced) page and a recurring one before
-building the plan, counting each as `syncedKept` / `recurringKept` so the confirmation names
-what it will not touch. The skip is deliberate, not a failed write. A synced page's schedule is
-calendar-owned, and a recurring head advances by its own rule.
+building the plan, counting each as `syncedKept` / `recurringKept` so the notice afterwards
+names what it did not touch. There is no confirmation on either app — the move is reversible,
+cheap and visible, and the undo is offered in that same notice. The skip is deliberate, not a
+failed write. A synced page's schedule is calendar-owned, and a recurring head advances by its
+own rule. iOS runs the identical planner (`pikos-core::overdue`, graded against the TypeScript
+at seven reference times) from the Overdue section's own heading, and decides _which_ pages are
+overdue in the workspace rather than from the list on screen: a list is as old as its last
+refresh, and a bulk write keyed on a stale one moves pages the reader can no longer see.
 ⁶³ The `.ics` export shares `fetch_export_pages` with the CSV and Markdown exports, so it takes
 the same `include_synced` toggle and the same ownership predicate (⁵⁶). A live mirror the user
 never actioned is omitted unless the toggle is on. `VTIMEZONE` blocks are emitted for the zones

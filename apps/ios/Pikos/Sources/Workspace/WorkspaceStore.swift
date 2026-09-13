@@ -701,6 +701,35 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Move everything overdue onto today.
+    ///
+    /// Returns what it did, so the caller can say so and offer the way back.
+    /// Which pages are overdue is decided by the workspace, not by the list on
+    /// screen: that list is as old as the last refresh, and a bulk write keyed
+    /// on a stale one moves pages the reader can no longer see.
+    public func moveOverdueToToday() async -> OverdueMoveResult? {
+        guard let workspace else { return nil }
+        do {
+            let result = try await workspace.moveOverdueToToday()
+            await refresh()
+            return result
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Put a bulk move back.
+    public func undoOverdueMove(_ moved: [MovedPage]) async {
+        guard let workspace, !moved.isEmpty else { return }
+        do {
+            _ = try await workspace.undoOverdueMove(moved: moved)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     // MARK: - One occurrence at a time
 
     /// Finish the occurrence the user tapped, not the one the series owes.

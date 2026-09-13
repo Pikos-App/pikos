@@ -28,6 +28,10 @@ import { dirname, resolve } from "node:path";
 import { parseInput } from "../src/nlp/parser";
 import { parseSearchQuery } from "../src/nlp/searchQuery";
 import { belongsToView, groupTodayPages, upcomingWindowEnd } from "../src/pages/pageFilters";
+import {
+  moveOverdueToTodayLabel,
+  planMoveOverdueToToday,
+} from "../src/pages/moveOverdueToToday";
 import { groupUpcomingPages } from "../src/pages/upcoming";
 import type { PageRecurrenceRule, PageSummary } from "../src/types";
 import { extractText } from "../src/utils/extractText";
@@ -442,6 +446,60 @@ const VIEW_PAGES: PageSummary[] = [
 ];
 
 const VIEW_IDS = ["today", "upcoming", "inbox", "trash", "folder-1"];
+
+// ─── Overdue bulk-move corpus ────────────────────────────────────────────────
+// What "move the backlog to today" does to each kind of overdue page. Its own
+// fixture set rather than VIEW_PAGES, because the three things this turns on —
+// a recurrence, a calendar's lock, and an end time that has to travel with the
+// start — none of the view pages carry.
+//
+// Positioned around 2026-03-15 so that the seven reference times sweep each
+// page from "days overdue" through "dated today" to "in the future", which is
+// the boundary the plan is most likely to get wrong in only one direction.
+
+const OVERDUE_PAGES: PageSummary[] = [
+  // All-day, days back. Must land on today as an all-day page, not as midnight.
+  { ...TEMPLATE_PAGE, id: "o_allday", scheduledStart: "2026-03-10", sortOrder: 1 },
+  // Timed with an end: both shift by the same whole days, so a one-hour meeting
+  // stays one hour and stays at 08:00.
+  {
+    ...TEMPLATE_PAGE,
+    id: "o_timed_span",
+    scheduledEnd: "2026-03-10T09:00:00",
+    scheduledStart: "2026-03-10T08:00:00",
+    sortOrder: 2,
+  },
+  // A multi-day all-day span keeps its length.
+  {
+    ...TEMPLATE_PAGE,
+    id: "o_allday_span",
+    scheduledEnd: "2026-03-12",
+    scheduledStart: "2026-03-09",
+    sortOrder: 3,
+  },
+  // Overdue and recurring: the gap is a decision, not a drag.
+  { ...TEMPLATE_PAGE, id: "o_recurring", isRecurring: true, scheduledStart: "2026-03-08", sortOrder: 4 },
+  // Overdue and mirrored: the calendar owns the schedule.
+  { ...TEMPLATE_PAGE, id: "o_locked", scheduleLocked: true, scheduledStart: "2026-03-08", sortOrder: 5 },
+  // Earlier today. Overdue by the clock, with nowhere to go — neither moved nor
+  // reported as left behind.
+  { ...TEMPLATE_PAGE, id: "o_today_early", scheduledStart: "2026-03-15T01:00:00", sortOrder: 6 },
+  // Dated today, all-day. Same.
+  { ...TEMPLATE_PAGE, id: "o_today_allday", scheduledStart: "2026-03-15", sortOrder: 7 },
+  // Ahead of every reference but one: a negative shift must not run backwards.
+  { ...TEMPLATE_PAGE, id: "o_future", scheduledStart: "2026-03-20T10:00:00", sortOrder: 8 },
+  // No date at all.
+  { ...TEMPLATE_PAGE, id: "o_none", sortOrder: 9 },
+  // Astride the EU DST change, which the `dst_eve` reference sits next to. A
+  // shift measured in seconds rather than days lands this an hour out.
+  {
+    ...TEMPLATE_PAGE,
+    id: "o_across_dst",
+    scheduledEnd: "2026-03-27T03:30:00",
+    scheduledStart: "2026-03-27T02:30:00",
+    sortOrder: 10,
+  },
+];
 
 // ─── extractText corpus ──────────────────────────────────────────────────────
 // Tiptap JSON → plain text. iOS needs this on the `docChanged` bridge message
@@ -912,6 +970,13 @@ function main(): void {
     }
   }
 
+  const overdueCases = REFERENCES.map((ref) =>
+    withFrozenClock(ref.iso, () => {
+      const plan = planMoveOverdueToToday(OVERDUE_PAGES);
+      return { label: moveOverdueToTodayLabel(plan), plan, ref: ref.id };
+    })
+  );
+
   const extractTextCases = EXTRACT_TEXT_CASES.map((c) => ({
     ...c,
     text: capture(() => extractText(c.doc)),
@@ -937,6 +1002,10 @@ function main(): void {
     JSON.stringify({ meta, pages: VIEW_PAGES, viewCases }, null, 2) + "\n"
   );
   writeFileSync(
+    resolve(OUT_DIR, "overdue.json"),
+    JSON.stringify({ cases: overdueCases, meta, pages: OVERDUE_PAGES }, null, 2) + "\n"
+  );
+  writeFileSync(
     resolve(OUT_DIR, "search.json"),
     JSON.stringify({ cases: searchCases, meta, queryCount: searchInputs.length }, null, 2) + "\n"
   );
@@ -954,6 +1023,7 @@ function main(): void {
   process.stdout.write(
     `parser.json:     ${parserCases.length} cases (${inputs.length} inputs × ${REFERENCES.length} refs), ${failures} throwing\n` +
       `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion, ${snapCases.length} snap, ${degradeCases.length} degrade\n` +
+      `overdue.json:    ${overdueCases.length} reference times × ${OVERDUE_PAGES.length} pages\n` +
       `search.json:     ${searchCases.length} cases (${searchInputs.length} queries × ${REFERENCES.length} refs)\n` +
       `text.json:       ${extractTextCases.length} extractText\n` +
       `views.json:      ${viewCases.length} reference times × ${VIEW_PAGES.length} pages\n` +
