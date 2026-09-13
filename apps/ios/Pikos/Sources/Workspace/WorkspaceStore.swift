@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import PikosCore
+import PikosSupport
 
 /// The app's single connection to the workspace, and the state the UI observes.
 ///

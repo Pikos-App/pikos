@@ -53,6 +53,13 @@ swipe actions and completion toggles, the editor screen wired to the workspace,
 quick add, full-text search, deep-link routing, and a generated Xcode project
 from `project.yml`. Unbuilt, like the rest of the Swift.
 
+**Widgets and Shortcuts are written.** A Today widget reading the workspace
+read-only, and App Intents for creating, searching and opening. The intents live
+in the app target on purpose: intents declared there run in the app's process,
+which is what keeps the one-writer rule intact — an intent writing from an
+extension would be a second writer against a database whose WAL mode permits
+one.
+
 **The parser's scope is measured, not guessed.** Of 317 corpus inputs, 179
 reach chrono-node, and they collapse to 92 distinct forms in 9 families — see
 `04-parser-grammar.md`. The work is nine pattern families and a range

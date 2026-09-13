@@ -1,10 +1,18 @@
+import AppIntents
 import PikosCore
 import SwiftUI
 
 @main
 struct PikosApp: App {
     @State private var store = WorkspaceStore()
-    @State private var route = Route()
+    @State private var route = Route.shared
+
+    init() {
+        // App Intents run in this process and reach the router through
+        // `@Dependency`. Registered here, at the one point that runs before any
+        // intent can — an intent may be what launched the app.
+        AppDependencyManager.shared.add { Route.shared }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -14,7 +22,12 @@ struct PikosApp: App {
                 // Opening the workspace runs migrations, so it happens once,
                 // here, in the app process. A widget must never be the process
                 // that migrates.
-                .task { await store.start() }
+                .task {
+                    await store.start()
+                    // An intent or deep link may have arrived while the
+                    // workspace was still opening.
+                    route.applyPending(to: store)
+                }
                 .onOpenURL { url in route.handle(url, store: store) }
         }
     }

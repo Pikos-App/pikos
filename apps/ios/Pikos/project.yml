@@ -45,7 +45,11 @@ targets:
       - path: Sources
     dependencies:
       - package: PikosCore
+        product: PikosCore
+      - package: PikosCore
+        product: PikosSupport
       - package: PikosEditorBridge
+      - target: PikosWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios
@@ -67,3 +71,33 @@ targets:
         # No analytics, no phone-home: the privacy claims the marketing site
         # makes are claims about this binary too.
         ITSAppUsesNonExemptEncryption: false
+
+  # Today's pages on the home screen.
+  #
+  # Reads the workspace directly through PikosSupport + PikosCore's
+  # ReadOnlyWorkspace, which has no write methods — SQLite in WAL mode permits
+  # one writer, and a widget refresh racing the app for it would block the app.
+  #
+  # It does NOT depend on PikosEditorBridge: a widget has no editor, and
+  # linking a webview into an extension with a tight memory budget is how
+  # widgets get killed.
+  PikosWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../PikosWidgets/Sources
+    dependencies:
+      - package: PikosCore
+        product: PikosCore
+      - package: PikosCore
+        product: PikosSupport
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.widgets
+        CODE_SIGN_ENTITLEMENTS: ../PikosWidgets/PikosWidgets.entitlements
+    info:
+      path: ../PikosWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Pikos
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

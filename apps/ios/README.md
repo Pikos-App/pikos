@@ -42,6 +42,12 @@ swift test --package-path apps/ios/PikosCore
 swift test --package-path apps/ios/PikosEditorBridge
 ```
 
+`PikosCore` has two targets: `PikosCore` (generated bindings, overwritten by
+`scripts/gen-swift-bindings.sh`) and `PikosSupport` (hand-written, shared by the
+app and the widget — it is where the App Group path is decided, and the app and
+its extensions disagreeing about that would mean a widget reading a different
+database).
+
 `PikosCore`'s tests cover the FFI boundary — optionals that must stay nil,
 unsigned counts that must not wrap, enum payloads, UTF-8, and the workspace's
 async and read-only behaviour. `PikosEditorBridge`'s cover the wire protocol's
@@ -71,5 +77,6 @@ suite.
 - **Calendar screens.** M3.
 - **Formatting commands.** The toolbar reflects the caret's state; sending
   commands back to the editor is the return path, and M3 work.
-- **Widgets, App Intents, share extension.** M4. The read-only workspace handle
-  they need already exists.
+- **Share extension.** M4. Capturing a URL or a selection into a new page.
+- **Notifications.** The scheduler exists in Rust and drives the desktop app;
+  delivering through `UNUserNotificationCenter` is the remaining half.

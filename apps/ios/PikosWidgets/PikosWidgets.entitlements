@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The same App Group as the app. This is what lets the widget open the same
+  workspace file rather than depending on the app to leave a cached snapshot
+  behind — a cache goes stale exactly when the user has not opened the app,
+  which is when a widget matters most.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.pikos</string>
+	</array>
+</dict>
+</plist>

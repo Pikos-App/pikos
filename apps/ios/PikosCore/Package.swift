@@ -22,7 +22,8 @@ let package = Package(
     // WidgetKit, both of which M4 depends on.
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
-        .library(name: "PikosCore", targets: ["PikosCore"])
+        .library(name: "PikosCore", targets: ["PikosCore"]),
+        .library(name: "PikosSupport", targets: ["PikosSupport"]),
     ],
     targets: [
         .binaryTarget(
@@ -33,6 +34,18 @@ let package = Package(
             name: "PikosCore",
             dependencies: ["PikosFFI"],
             path: "Sources/PikosCore"
+        ),
+        // Hand-written, and separate from the generated target on purpose:
+        // Sources/PikosCore is overwritten by scripts/gen-swift-bindings.sh, and
+        // anything living there would be lost on the next generation.
+        //
+        // It is a target rather than app code because the widget and share
+        // extensions are separate processes that need the same answer about
+        // where the workspace lives — and disagreeing about that means a widget
+        // reading a different database from the app.
+        .target(
+            name: "PikosSupport",
+            path: "Sources/PikosSupport"
         ),
         .testTarget(
             name: "PikosCoreTests",
