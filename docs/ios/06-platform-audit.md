@@ -58,7 +58,7 @@ Four complications the spike names, all of which survive the change of UI layer:
 - a recurring series has no end, so the horizon needs a bound;
 - iOS caps pending notifications (the spike says ~64, and flags it as needing
   confirmation);
-- quiet hours have to be applied at *schedule* time, not at fire time;
+- quiet hours have to be applied at _schedule_ time, not at fire time;
 - any edit invalidates the scheduled set.
 
 This is net-new logic on any path. `apps/ios/README.md` lists notifications as
@@ -101,17 +101,63 @@ Exercised on 2026-09-11, per the handoff — not merely installed:
 - **All three crates cross-compile to `aarch64-apple-ios`**: `pikos-recurrence`,
   `pikos-db`, `pikos-calendar-sync`.
 
-That last line is the one that matters for the XCFramework: bundled SQLite
-compiles for iOS, and so do reqwest+rustls and oauth2. It was the largest
-unknown in any plan that shares Rust, and it is answered.
+That last line is the one that matters: bundled SQLite compiles for iOS, and so
+do reqwest+rustls and oauth2. It was the largest unknown in any plan that shares
+Rust, and it is answered.
 
-Two gaps against what `scripts/build-ios-framework.sh` actually asks for. It also
-builds `x86_64-apple-ios` (Intel simulator) and, since the host-test change,
-`aarch64-apple-darwin` and `x86_64-apple-darwin`. Those were not part of the
-spike's verification, and `rustup target add` may be a first run for them.
+It is not, however, the same set of crates the XCFramework builds, and the
+difference is worth stating precisely rather than assuming it is covered.
+
+**The verified three are not the built one.** `scripts/build-ios-framework.sh`
+builds `pikos-ffi`, which did not exist when the spike ran. Neither did
+`pikos-core`. What the spike verified reaches them transitively —
+`pikos-ffi` → `pikos-db` → bundled SQLite is the risky edge and it is
+answered — but two things are genuinely unverified:
+
+- **`pikos-core`'s own dependencies.** `fancy-regex`, `chrono-tz` and `url`, all
+  pure Rust with no system libraries. Low risk, but nobody has compiled them for
+  a phone.
+- **The link mode.** The spike compiled library crates; the XCFramework needs a
+  `staticlib`, which is a different output. `uniffi` exists to be linked into
+  iOS apps, so this is expected to work — but expected is not measured.
+
+**`pikos-calendar-sync` is verified and unused.** It is in the workspace but is
+not a dependency of `pikos-ffi`, so it is not in the XCFramework at all. The
+keychain fix above is therefore correct and currently inert: it matters when
+sync reaches iOS, not now.
+
+**Two targets were never in the spike's set.** The script also builds
+`x86_64-apple-ios` (Intel simulator) and, since the host-test change,
+`aarch64-apple-darwin` and `x86_64-apple-darwin`. Expect `rustup target add` to
+do real work on the first run.
+
+**One thing fixed while reading this.** The script built `pikos-ffi` without
+`--lib`, so it cross-compiled the crate's `uniffi-bindgen` binary to iOS too —
+a host-only tool that generates Swift and is never linked into the app. Wasted
+time at best, a link failure in something irrelevant at worst. Narrowed.
 
 Outstanding, and both GUI and both Alex's: sign into Xcode under Settings →
 Accounts, and pair a physical device once.
+
+## The line counts have moved a long way
+
+The handoff answers "the plan's first open question" with a measured table —
+`crates/` at 21,540 lines of Rust, `packages/core` at 10,506 of TypeScript. Its
+copy reaching this session was truncated mid-row, so the rest of that table was
+not readable; and the merge with `feat/external-calendar-sync` has since made
+both numbers badly out of date. Re-measured on this branch:
+
+|                                   | Lines  |
+| --------------------------------- | ------ |
+| `crates/` (Rust, excluding tests) | 50,414 |
+| `crates/` (Rust, all)             | 56,319 |
+| `packages/core/src` (TypeScript)  | 27,414 |
+| `apps/desktop/src` (TypeScript)   | 46,249 |
+| `apps/ios` (Swift, hand-written)  | 4,695  |
+
+The shared Rust has more than doubled, and so has `packages/core`. Whatever the
+original table concluded about the portable fraction, it was concluding it about
+a much smaller codebase.
 
 ## Still worth reading, if it can be found
 

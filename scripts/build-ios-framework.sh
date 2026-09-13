@@ -61,7 +61,11 @@ done
 
 echo "▶ building release staticlibs"
 for t in "${TARGETS[@]}"; do
-  (cd "$ROOT" && cargo build -p pikos-ffi --release --target "$t")
+  # --lib, so the crate's `uniffi-bindgen` binary is not cross-compiled to iOS
+  # along with it. That binary runs on the host to generate Swift and is never
+  # linked into the app; building it for a phone is wasted time at best, and a
+  # link failure in something irrelevant at worst.
+  (cd "$ROOT" && cargo build -p pikos-ffi --release --target "$t" --lib)
 done
 
 echo "▶ regenerating Swift bindings so they match this build"
