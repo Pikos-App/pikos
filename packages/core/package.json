@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "gen:parity": "esbuild scripts/gen-parity-corpus.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/gen-parity.mjs && TZ=UTC node node_modules/.cache/gen-parity.mjs"
+    "gen:parity": "esbuild scripts/gen-parity-corpus.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/gen-parity.mjs && TZ=UTC node node_modules/.cache/gen-parity.mjs",
+    "measure:parser-grammar": "esbuild scripts/parser-grammar/measure.ts --bundle --platform=node --format=esm --alias:chrono-node=./scripts/parser-grammar/chrono-recorder.ts --outfile=node_modules/.cache/measure-parser-grammar.mjs && TZ=UTC node node_modules/.cache/measure-parser-grammar.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.0",

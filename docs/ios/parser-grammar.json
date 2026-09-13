@@ -1,0 +1,160 @@
+{
+  "corpusInputs": 317,
+  "families": [
+    {
+      "distinctForms": [
+        "14:00",
+        "1pm",
+        "2pm",
+        "8am",
+        "at 09:00",
+        "at 11:59pm",
+        "at 12am",
+        "at 3:30pm",
+        "at 3pm",
+        "at 4pm",
+        "at 6am",
+        "at 6pm",
+        "at 7am",
+        "at 8am",
+        "at 9am"
+      ],
+      "family": "bare time",
+      "inputs": 59
+    },
+    {
+      "distinctForms": [
+        "today",
+        "today at 3pm",
+        "today at 6pm",
+        "today at 8pm",
+        "tomorrow",
+        "tomorrow at 2pm",
+        "tomorrow at 3pm",
+        "tomorrow at 6pm",
+        "tomorrow at 7pm",
+        "tomorrow at 8pm",
+        "tomorrow at 9am"
+      ],
+      "family": "today/tomorrow",
+      "inputs": 35
+    },
+    {
+      "distinctForms": [
+        "3pm to 5pm",
+        "3pm to 5pm tomorrow",
+        "9am-5pm",
+        "9pm to 5am",
+        "apr 18 to apr 25",
+        "apr 5-9",
+        "april 18 to april 18",
+        "april 18 to april 20",
+        "april 18 to april 25",
+        "april 18-20 at 3pm",
+        "april 18-25",
+        "april 25 to april 18",
+        "dec 28 to jan 3",
+        "from 3pm to 5pm",
+        "from 9am to 11am",
+        "may 2 to 10",
+        "may 2 to jun 5",
+        "may 2 to may 10",
+        "monday to friday",
+        "noon to 5pm",
+        "sep 1-7"
+      ],
+      "family": "range",
+      "inputs": 30
+    },
+    {
+      "distinctForms": [
+        "friday at 3pm",
+        "friday at 6pm",
+        "monday",
+        "monday 9am",
+        "monday at 9am",
+        "next friday",
+        "next friday at 3pm",
+        "next monday",
+        "next monday at 2pm",
+        "on friday",
+        "on monday at 2pm",
+        "this friday",
+        "this monday",
+        "this monday at 9am",
+        "this sunday",
+        "this wednesday",
+        "tuesday"
+      ],
+      "family": "weekday",
+      "inputs": 22
+    },
+    {
+      "distinctForms": [
+        "apr 1 2026",
+        "apr 13 2026 4pm",
+        "april 18",
+        "mar 24 2026",
+        "march",
+        "march 20",
+        "march 20 at 3:30pm",
+        "march 20 at 3pm",
+        "march 24 2pm",
+        "march 5",
+        "march20",
+        "march20 at 3:30pm",
+        "march5",
+        "may 1",
+        "may 24"
+      ],
+      "family": "month-day",
+      "inputs": 17
+    },
+    {
+      "distinctForms": [
+        "midnight",
+        "morning",
+        "noon"
+      ],
+      "family": "named time of day",
+      "inputs": 4
+    },
+    {
+      "distinctForms": [
+        "in 1 hour",
+        "in 2 weeks",
+        "in 3 days"
+      ],
+      "family": "relative offset",
+      "inputs": 4
+    },
+    {
+      "distinctForms": [
+        "2026-03-08",
+        "2026-03-09",
+        "2026-03-13"
+      ],
+      "family": "ISO date",
+      "inputs": 4
+    },
+    {
+      "distinctForms": [
+        "16/3",
+        "3/16",
+        "4/15 at 10am"
+      ],
+      "family": "numeric date",
+      "inputs": 3
+    },
+    {
+      "distinctForms": [
+        "next week"
+      ],
+      "family": "relative period",
+      "inputs": 1
+    }
+  ],
+  "generatedBy": "packages/core/scripts/parser-grammar/measure.ts",
+  "note": "Grammar the Rust parser must support, measured by recording what the current parser asks of chrono-node. Drawn from the test corpus, so a lower bound on real usage rather than a census.",
+  "reachedChrono": 179
+}
