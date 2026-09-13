@@ -26,13 +26,18 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { defaultColorForProvider, PALETTE_COLORS } from "../src/constants/colors";
+import {
+  formatElapsed,
+  formatSessionLength,
+  MIN_SESSION_S,
+} from "../src/format/focusDuration";
 import { parseInput } from "../src/nlp/parser";
 import { parseSearchQuery } from "../src/nlp/searchQuery";
-import { belongsToView, groupTodayPages, upcomingWindowEnd } from "../src/pages/pageFilters";
 import {
   moveOverdueToTodayLabel,
   planMoveOverdueToToday,
 } from "../src/pages/moveOverdueToToday";
+import { belongsToView, groupTodayPages, upcomingWindowEnd } from "../src/pages/pageFilters";
 import { groupUpcomingPages } from "../src/pages/upcoming";
 import type { PageRecurrenceRule, PageSummary } from "../src/types";
 import { extractText } from "../src/utils/extractText";
@@ -481,7 +486,7 @@ const OVERDUE_PAGES: PageSummary[] = [
   // Overdue and recurring: the gap is a decision, not a drag.
   { ...TEMPLATE_PAGE, id: "o_recurring", isRecurring: true, scheduledStart: "2026-03-08", sortOrder: 4 },
   // Overdue and mirrored: the calendar owns the schedule.
-  { ...TEMPLATE_PAGE, id: "o_locked", scheduleLocked: true, scheduledStart: "2026-03-08", sortOrder: 5 },
+  { ...TEMPLATE_PAGE, id: "o_locked", scheduledStart: "2026-03-08", scheduleLocked: true, sortOrder: 5 },
   // Earlier today. Overdue by the clock, with nowhere to go — neither moved nor
   // reported as left behind.
   { ...TEMPLATE_PAGE, id: "o_today_early", scheduledStart: "2026-03-15T01:00:00", sortOrder: 6 },
@@ -936,6 +941,7 @@ function main(): void {
       return {
         membership,
         ref: ref.id,
+        today,
         // Ids only. The rest of each page is the fixture copied through, which
         // would bloat the corpus without testing anything the ids do not.
         todayGroups: todayGroups.ok
@@ -945,14 +951,13 @@ function main(): void {
               today: todayGroups.value.today.map((p) => p.id),
             }
           : todayGroups,
-        today,
         upcomingDays: upcomingDays.ok
           ? {
-              ok: true as const,
               days: upcomingDays.value.map((d) => ({
                 date: d.date,
                 pages: d.pages.map((p) => p.id),
               })),
+              ok: true as const,
             }
           : upcomingDays,
         windowEnd: capture(() => upcomingWindowEnd(today)),
@@ -990,6 +995,23 @@ function main(): void {
     palette: PALETTE_COLORS,
   };
 
+  // Durations chosen around every boundary the two formatters have: the floor
+  // itself and either side of it, the minute rounding, the singular/plural
+  // switch, the jump to `H:MM:SS`, and an exact hour (where the "5 min" tail is
+  // dropped).
+  const focusDurations = [
+    0, 1, 29, 30, 31, 59, 60, 61, 89, 90, 119, 120, 1799, 1800, 3540, 3599, 3600, 3601, 3660,
+    5400, 7199, 7200, 86_399, 86_400,
+  ];
+  const focus = {
+    cases: focusDurations.map((seconds) => ({
+      elapsed: formatElapsed(seconds),
+      seconds,
+      sessionLength: formatSessionLength(seconds),
+    })),
+    minSessionS: MIN_SESSION_S,
+  };
+
   const extractTextCases = EXTRACT_TEXT_CASES.map((c) => ({
     ...c,
     text: capture(() => extractText(c.doc)),
@@ -1013,6 +1035,10 @@ function main(): void {
   writeFileSync(
     resolve(OUT_DIR, "views.json"),
     JSON.stringify({ meta, pages: VIEW_PAGES, viewCases }, null, 2) + "\n"
+  );
+  writeFileSync(
+    resolve(OUT_DIR, "focus.json"),
+    JSON.stringify({ ...focus, meta }, null, 2) + "\n"
   );
   writeFileSync(
     resolve(OUT_DIR, "colors.json"),
@@ -1040,6 +1066,7 @@ function main(): void {
   process.stdout.write(
     `parser.json:     ${parserCases.length} cases (${inputs.length} inputs × ${REFERENCES.length} refs), ${failures} throwing\n` +
       `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion, ${snapCases.length} snap, ${degradeCases.length} degrade\n` +
+      `focus.json:      ${focus.cases.length} durations, floor ${focus.minSessionS}s\n` +
       `colors.json:     ${colors.palette.length} palette entries, ${colors.defaults.length} provider defaults\n` +
       `overdue.json:    ${overdueCases.length} reference times × ${OVERDUE_PAGES.length} pages\n` +
       `search.json:     ${searchCases.length} cases (${searchInputs.length} queries × ${REFERENCES.length} refs)\n` +

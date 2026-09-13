@@ -16,6 +16,7 @@ pub mod calendar;
 pub mod colors;
 pub mod dates;
 pub mod deep_link;
+pub mod focus;
 pub mod markdown;
 pub mod nlp;
 pub mod overdue;
@@ -31,6 +32,7 @@ pub use dates::{
     format_date_only, format_local_iso, is_all_day_iso, is_timed_iso, parse_local_iso,
 };
 pub use deep_link::{parse_deep_link, DeepLink, SmartView};
+pub use focus::{elapsed_label, finish_session, session_length, FocusOutcome, MIN_SESSION_S};
 pub use markdown::prosemirror_to_markdown;
 pub use nlp::{
     parse as parse_dates, parse_first as parse_first_date, DateMatch, Granularity, MatchedDate,

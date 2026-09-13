@@ -20,7 +20,7 @@
 // remounts this hook per page (`key={page.id}`), so the flush happens on unmount.
 
 import type { NewFocusSession, StorageAdapter } from "@pikos/core";
-import { formatLocalISO } from "@pikos/core";
+import { formatElapsed, formatLocalISO, formatSessionLength, MIN_SESSION_S } from "@pikos/core";
 import { useEffect, useRef, useState } from "react";
 
 import { postNotice } from "@/shared/events/noticeBus";
@@ -28,8 +28,10 @@ import { createLogger } from "@/shared/logger";
 
 const log = createLogger("useFocusTimer");
 
-/** Shortest session worth recording, in seconds. */
-export const MIN_SESSION_S = 30;
+// Re-exported rather than moved out of sight: both live in `@pikos/core` now,
+// shared with the Rust the phone runs, and the components here import them from
+// the hook they belong to conceptually.
+export { formatElapsed, MIN_SESSION_S };
 
 /** What the unmount flush needs, captured while the session is running. */
 interface PendingSession {
@@ -128,27 +130,4 @@ async function writeSession(
   } catch (err) {
     log.warn("focus session not recorded", err);
   }
-}
-
-/** Whole units for the end-of-session toast: a session is worth reporting as
- *  "24 minutes", never as "24:07" — the seconds are precision nobody asked for
- *  once the thing being measured is over. */
-function formatSessionLength(totalSeconds: number): string {
-  const minutes = Math.round(totalSeconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  const hourPart = `${hours} hour${hours === 1 ? "" : "s"}`;
-  return rest === 0 ? hourPart : `${hourPart} ${rest} min`;
-}
-
-/** `M:SS`, or `H:MM:SS` once an hour is up — read at a glance beside the byline,
- *  and monospaced by the caller so the digits don't shuffle as they tick. */
-export function formatElapsed(totalSeconds: number): string {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(s / 3600);
-  const minutes = Math.floor((s % 3600) / 60);
-  const seconds = s % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
 }

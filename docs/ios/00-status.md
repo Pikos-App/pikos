@@ -101,6 +101,32 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**The focus timer works on the phone.** A button in the editor's toolbar, a
+ticking clock beside it, and a row in `focus_sessions` when a session ends.
+
+The 30-second floor and the two duration formats moved to `@pikos/core` and were
+ported to `pikos-core::focus`, graded against it across every boundary the
+formatters have — the floor, the minute rounding, the singular/plural switch, the
+jump to `H:MM:SS`, and an exact hour where the trailing minutes are dropped.
+Small functions with a lot of edges are exactly where two implementations agree
+on everything anybody tried by hand and differ on the one the user hits.
+
+Two things the phone needs that the desktop does not. The elapsed count is
+recomputed from the start instant rather than incremented, because the tick stops
+the moment the app is backgrounded and a counter adding one per tick would come
+back minutes light while looking perfectly plausible; the same recomputation runs
+on the way back to the foreground so the first second is not stale. And leaving
+the page banks the session rather than dropping it, from `onDisappear` — the only
+hook a back-swipe fires — with the write detached from the view's lifetime,
+because a Task tied to a view that is going away is a Task that may not finish.
+
+The FFI derives the duration from the two timestamps instead of taking it as an
+argument, so a caller cannot report a length its own clock disagrees with, and a
+backwards clock comes out short rather than long. A session against a page that
+has since been deleted is refused as not-found rather than as a database failure:
+that is routine on a phone — a widget, a deep link, a list one refresh behind —
+and "the workspace could not be read" is the wrong sentence for it.
+
 **The workspace can be exported, and wiped.** Four formats through the system
 share sheet — Markdown, CSV, `.ics` and a database backup — plus Delete all data
 in Settings.

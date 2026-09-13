@@ -5,6 +5,7 @@
 //! folder fields that become enums, the not-found case that becomes a distinct
 //! error, and the read-only handle that must actually be read-only.
 
+use pikos_ffi::workspace::FocusOutcome;
 use pikos_ffi::workspace::{
     CompletedScope, FolderAssignment, FolderScope, NewPage, PageEdit, PageQuery, PageRepeat,
     ReadOnlyWorkspace, Repeat, RepeatFreq, Workspace, WorkspaceError,
@@ -4381,4 +4382,155 @@ async fn deleting_all_data_leaves_nothing_behind_and_the_workspace_usable() {
     // And the workspace still works afterwards, rather than needing a restart.
     let fresh = ws.create_page(new_page("Starting over")).await.unwrap();
     assert_eq!(ws.get_page(fresh.id).await.unwrap().title, "Starting over");
+}
+
+// ─── The focus timer ─────────────────────────────────────────────────────────
+//
+// The floor and the wording are `pikos-core`'s and graded there against the
+// TypeScript. What is here is the half that writes: that a session long enough
+// to count lands a row, that one under the floor lands nothing, and that the
+// duration comes from the timestamps rather than from a caller's arithmetic.
+
+#[tokio::test]
+async fn a_session_past_the_floor_is_recorded_with_its_length() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Deep work")).await.unwrap();
+
+    let outcome = ws
+        .record_focus_session(
+            page.id.clone(),
+            "2026-03-15T09:00:00".to_string(),
+            "2026-03-15T09:25:00".to_string(),
+        )
+        .await
+        .unwrap();
+
+    match outcome {
+        FocusOutcome::Recorded { duration_s, label } => {
+            assert_eq!(duration_s, 1_500, "the duration is the span, not a claim");
+            assert_eq!(label, "Focused for 25 minutes");
+        }
+        other => panic!("expected Recorded, got {other:?}"),
+    }
+}
+
+/// Under the floor: nothing written, and the user told why.
+#[tokio::test]
+async fn a_session_under_the_floor_writes_nothing_and_says_so() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Deep work")).await.unwrap();
+
+    let outcome = ws
+        .record_focus_session(
+            page.id.clone(),
+            "2026-03-15T09:00:00".to_string(),
+            "2026-03-15T09:00:12".to_string(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        matches!(outcome, FocusOutcome::TooShort { .. }),
+        "got {outcome:?}"
+    );
+
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+    let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM focus_sessions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 0, "a declined session is not a stored session");
+}
+
+/// The duration is derived, so a caller cannot report one its own timestamps
+/// disagree with.
+#[tokio::test]
+async fn the_stored_duration_comes_from_the_two_timestamps() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Deep work")).await.unwrap();
+
+    ws.record_focus_session(
+        page.id.clone(),
+        "2026-03-15T09:00:00".to_string(),
+        "2026-03-15T10:30:00".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+    let (started, ended, duration): (String, String, i64) =
+        sqlx::query_as("SELECT started_at, ended_at, duration_s FROM focus_sessions")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(started, "2026-03-15T09:00:00");
+    assert_eq!(ended, "2026-03-15T10:30:00");
+    assert_eq!(duration, 5_400);
+}
+
+/// A clock that ran backwards is short, not long.
+#[tokio::test]
+async fn a_session_that_ends_before_it_began_is_declined() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Deep work")).await.unwrap();
+
+    let outcome = ws
+        .record_focus_session(
+            page.id.clone(),
+            "2026-03-15T10:00:00".to_string(),
+            "2026-03-15T09:00:00".to_string(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        matches!(outcome, FocusOutcome::TooShort { .. }),
+        "a negative span is not an hour: {outcome:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_session_against_a_page_that_is_gone_is_refused() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let refused = ws
+        .record_focus_session(
+            "nobody".to_string(),
+            "2026-03-15T09:00:00".to_string(),
+            "2026-03-15T09:25:00".to_string(),
+        )
+        .await;
+    assert!(
+        matches!(refused, Err(WorkspaceError::NotFound { .. })),
+        "a row pointing at nothing would still count toward the totals"
+    );
+}
+
+#[tokio::test]
+async fn a_malformed_timestamp_is_rejected_rather_than_read_as_zero() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Deep work")).await.unwrap();
+
+    let refused = ws
+        .record_focus_session(
+            page.id,
+            "not a time".to_string(),
+            "2026-03-15T09:25:00".to_string(),
+        )
+        .await;
+    assert!(matches!(refused, Err(WorkspaceError::InvalidInput { .. })));
+}
+
+/// The ticking label is served, so both apps count the same way.
+#[tokio::test]
+async fn the_elapsed_label_crosses_the_boundary_rather_than_being_reimplemented() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    assert_eq!(ws.focus_elapsed_label(0), "0:00");
+    assert_eq!(ws.focus_elapsed_label(67), "1:07");
+    assert_eq!(ws.focus_elapsed_label(3_600), "1:00:00");
 }

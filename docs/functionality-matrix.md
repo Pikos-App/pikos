@@ -537,7 +537,7 @@ whose whole job is to show what exists.
 | Notification history panel                                   | ✅ ⁶⁴                       | ✅ ⁶⁴                     | ✅ ⁶⁴                  | —                          | ○                           |
 | Notification click opens its page                            | ✅ ⁶⁵                       | ✅ ⁶⁵                     | ✅ ⁶⁵                  | —                          | ○                           |
 | Day-before reminder lead (all-day)                           | ✅ ⁶⁶                       | ✅ ⁶⁶                     | ✅ ⁶⁶                  | ✅ `add` ⁶⁶                | ○                           |
-| Focus timer on a page                                        | ✅ ⁶⁷                       | ✅ ⁶⁷                     | ✅ ⁶⁷                  | —                          | ○                           |
+| Focus timer on a page                                        | ✅ ⁶⁷                       | ✅ ⁶⁷                     | ✅ ⁶⁷                  | —                          | ✅ editor toolbar ⁶⁷        |
 | MCP tool surface (`pikos mcp`)                               | ✅ ⁶⁸                       | ✅ same guards ⁶⁸         | ✅ ⁶⁸                  | ✅ `mcp` ⁶⁸                | —                           |
 
 ⁵² Synced events are real pages, so they flow through `pages_fts` automatically. No origin
@@ -681,7 +681,14 @@ the adapters, the CSV round-trip and the mock twin; a second column would have m
 of them branch. The calendar popover now offers the lead on all-day pages, synced included.
 ⁶⁷ First writer for the `focus_sessions` table, which the schema carried unused. A session is
 keyed by page id only, so origin is irrelevant. Timing a mirror is a Pikos-side annotation and
-never touches the calendar-owned schedule.
+never touches the calendar-owned schedule. The 30-second floor and both duration formats moved to
+`@pikos/core` and were ported to `pikos-core::focus`, graded against it — a phone saying "24 min"
+where the desktop says "24 minutes" is drift nobody notices until both are on screen. The FFI
+derives the duration from the two timestamps rather than taking it as an argument, so a caller
+cannot report a length its own clock disagrees with; a backwards clock is short, not long. The
+timing stays per-app and is never persisted mid-session, and on a phone the elapsed count is
+recomputed from the start instant rather than incremented, because the tick stops the moment the
+app is backgrounded.
 
 ## 9. Upstream events & sync accounts
 

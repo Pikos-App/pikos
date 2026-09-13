@@ -113,6 +113,7 @@ export {
   toISODateTime,
 } from "./format/dateTimePicker";
 export type { TimeSlot } from "./format/dateTimePicker";
+export { formatElapsed, formatSessionLength, MIN_SESSION_S } from "./format/focusDuration";
 export { formatDateRange } from "./format/formatDateRange";
 export { formatTime12h, formatTime12hParts } from "./format/formatTime";
 export {

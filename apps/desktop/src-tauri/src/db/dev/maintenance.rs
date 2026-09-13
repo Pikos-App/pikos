@@ -122,7 +122,7 @@ pub async fn backup_db(state: tauri::State<'_, DbState>) -> AppResult<String> {
 /// and the escaping this used to do inline is the kind of detail that is wrong
 /// in exactly one of two copies.
 pub(crate) async fn vacuum_into(pool: &sqlx::SqlitePool, dest: &str) -> AppResult<()> {
-    Ok(pikos_db::export::backup_to(pool, dest).await?)
+    pikos_db::export::backup_to(pool, dest).await
 }
 
 /// Pre-import safety backup — copies the DB to {appDataDir}/backups/ before a batch import.

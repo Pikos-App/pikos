@@ -1045,6 +1045,18 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func exportMarkdown(includeSynced: Bool) async throws  -> [ExportFile]
     
+    /**
+     * `M:SS`, or `H:MM:SS` past an hour — the ticking label beside a running
+     * session.
+     *
+     * Served rather than formatted per platform because it is the same clock on
+     * both, and because the floor it counts towards is already here: a phone
+     * that rendered `24:07` beside a desktop showing `24:07` and then said
+     * something different when the session ended would be two implementations
+     * agreeing by luck.
+     */
+    func focusElapsedLabel(seconds: Int64)  -> String
+    
     func getPage(id: String) async throws  -> Page
     
     /**
@@ -1193,6 +1205,24 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * password proves itself against the server.
      */
     func reconnectCaldav(accountId: String, password: String) async throws  -> SyncAccountWithCalendars
+    
+    /**
+     * Record a finished focus session against a page.
+     *
+     * The timing is the caller's: a running session is never persisted, because
+     * a session whose end the app did not see is a guess, and a guess inside a
+     * total is worse than a missing session. What crosses here is the two
+     * wall-clock instants it actually spanned.
+     *
+     * The duration is computed from them rather than taken as a third argument,
+     * so a caller cannot report a length its own timestamps disagree with. A
+     * session under the floor is declined and says so; anything else that would
+     * make a bad row — a page that is gone, a clock that went backwards — is
+     * refused by the data layer.
+     *
+     * Both strings are local wall clocks, `yyyy-MM-ddTHH:mm:ss`.
+     */
+    func recordFocusSession(pageId: String, startedAt: String, endedAt: String) async throws  -> FocusOutcome
     
     /**
      * Stop a page repeating, leaving the page itself where it is.
@@ -1945,6 +1975,26 @@ open func exportMarkdown(includeSynced: Bool)async throws  -> [ExportFile]  {
         )
 }
     
+    /**
+     * `M:SS`, or `H:MM:SS` past an hour — the ticking label beside a running
+     * session.
+     *
+     * Served rather than formatted per platform because it is the same clock on
+     * both, and because the floor it counts towards is already here: a phone
+     * that rendered `24:07` beside a desktop showing `24:07` and then said
+     * something different when the session ended would be two implementations
+     * agreeing by luck.
+     */
+open func focusElapsedLabel(seconds: Int64) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_method_workspace_focus_elapsed_label(
+            self.uniffiCloneHandle(),
+        FfiConverterInt64.lower(seconds),uniffiCallStatus
+    )
+})
+}
+    
 open func getPage(id: String)async throws  -> Page  {
     return
         try  await uniffiRustCallAsync(
@@ -2272,6 +2322,38 @@ open func reconnectCaldav(accountId: String, password: String)async throws  -> S
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSyncAccountWithCalendars_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Record a finished focus session against a page.
+     *
+     * The timing is the caller's: a running session is never persisted, because
+     * a session whose end the app did not see is a guess, and a guess inside a
+     * total is worse than a missing session. What crosses here is the two
+     * wall-clock instants it actually spanned.
+     *
+     * The duration is computed from them rather than taken as a third argument,
+     * so a caller cannot report a length its own timestamps disagree with. A
+     * session under the floor is declined and says so; anything else that would
+     * make a bad row — a page that is gone, a clock that went backwards — is
+     * refused by the data layer.
+     *
+     * Both strings are local wall clocks, `yyyy-MM-ddTHH:mm:ss`.
+     */
+open func recordFocusSession(pageId: String, startedAt: String, endedAt: String)async throws  -> FocusOutcome  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_record_focus_session(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(startedAt),FfiConverterString.lower(endedAt)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFocusOutcome_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -5704,6 +5786,91 @@ public func FfiConverterTypeDeepLink_lower(_ value: DeepLink) -> RustBuffer {
 
 
 /**
+ * What happened to a finished focus session.
+ */
+
+public enum FocusOutcome: Equatable, Hashable {
+    
+    /**
+     * Written, and worth telling the user about.
+     */
+    case recorded(durationS: Int64, label: String
+    )
+    /**
+     * Under the floor, so nothing was written.
+     *
+     * Not an error: tapping play and moving on is not focus time. It carries a
+     * sentence because a silent discard reads exactly like a silent success.
+     */
+    case tooShort(label: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FocusOutcome: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFocusOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = FocusOutcome
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FocusOutcome {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .recorded(durationS: try FfiConverterInt64.read(from: &buf), label: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .tooShort(label: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FocusOutcome, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .recorded(durationS,label):
+            writeInt(&buf, Int32(1))
+            FfiConverterInt64.write(durationS, into: &buf)
+            FfiConverterString.write(label, into: &buf)
+            
+        
+        case let .tooShort(label):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(label, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFocusOutcome_lift(_ buf: RustBuffer) throws -> FocusOutcome {
+    return try FfiConverterTypeFocusOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFocusOutcome_lower(_ value: FocusOutcome) -> RustBuffer {
+    return FfiConverterTypeFocusOutcome.lower(value)
+}
+
+
+
+/**
  * Where a page should be filed. Distinct from [`FolderScope`], which narrows a
  * listing; this one assigns.
  */
@@ -7610,6 +7777,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_export_markdown() != 3908) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_focus_elapsed_label() != 30210) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_get_page() != 16439) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7650,6 +7820,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav() != 31810) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_record_focus_session() != 9182) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_remove_page_repeat() != 55311) {

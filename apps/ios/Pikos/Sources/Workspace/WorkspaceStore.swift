@@ -458,6 +458,43 @@ public final class WorkspaceStore {
         }
     }
 
+    // MARK: - Focus timer
+
+    /// Record a finished focus session, and return the sentence to show.
+    ///
+    /// `nil` when there is nothing to say, which is only the case where the
+    /// write failed — a lost session is a missing row on a screen nobody is
+    /// looking at, not something worth interrupting somebody mid-page for. Both
+    /// real outcomes carry their own wording from the workspace, so the phone
+    /// and the desktop say the same thing.
+    @discardableResult
+    public func recordFocusSession(pageId: String, from began: Date, to ended: Date) async
+        -> String?
+    {
+        guard let workspace else { return nil }
+        do {
+            let outcome = try await workspace.recordFocusSession(
+                pageId: pageId,
+                startedAt: WallClockDay.instant(from: began),
+                endedAt: WallClockDay.instant(from: ended))
+            switch outcome {
+            case .recorded(_, let label): return label
+            case .tooShort(let label): return label
+            }
+        } catch {
+            // Deliberately not `errorMessage`: that surfaces as an alert over
+            // the page list, and a focus session that did not save is not worth
+            // one.
+            return nil
+        }
+    }
+
+    /// `M:SS`, or `H:MM:SS` past an hour. Served by the workspace so both apps
+    /// count the same way.
+    public func focusElapsedLabel(seconds: Int) -> String {
+        workspace?.focusElapsedLabel(seconds: Int64(seconds)) ?? ""
+    }
+
     /// The colours a folder can be, served by the workspace.
     ///
     /// Read once and held: it is a constant, and the only reason it crosses the

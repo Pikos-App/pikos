@@ -104,6 +104,9 @@ struct EditorScreen: View {
                     FormattingToolbar(selection: selection, controller: controller)
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                FocusTimer(pageId: page.id)
+            }
             #if DEBUG
             // M0's cold-load bar is < 300ms on iPhone 12-class hardware. Shown
             // in debug builds so the number is visible while measuring rather

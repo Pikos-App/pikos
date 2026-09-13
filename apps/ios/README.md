@@ -185,9 +185,9 @@ suite.
   a destructive control sitting next to a restore button on a phone is the same
   mis-tap the screen exists to undo. Worth revisiting only alongside a
   confirmation step.
-- **Folder colours, icons and nesting.** Create, rename and delete are wired;
-  the rest of what a folder can carry is not. Nesting in particular is a data
-  shape (`parent_id`) with no iOS affordance yet.
+- **Folder icons.** Colour and nesting are wired — the dot on each row is the
+  colour picker, and "Move into…" is on the context menu. The `icon` column is
+  not: the desktop does not offer it either, so there is no behaviour to match.
 - **Inserting an image.** The whole path exists except its trigger: the editor
   handles `insertImage`, `EditorController.insertImage(assetPath:)` sends it,
   and `EditorWebView.onImageRequested` is wired to a `requestImagePicker`

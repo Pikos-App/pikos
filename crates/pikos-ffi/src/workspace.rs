@@ -501,6 +501,18 @@ pub struct CompletedPages {
     pub total: u32,
 }
 
+/// What happened to a finished focus session.
+#[derive(Debug, uniffi::Enum)]
+pub enum FocusOutcome {
+    /// Written, and worth telling the user about.
+    Recorded { duration_s: i64, label: String },
+    /// Under the floor, so nothing was written.
+    ///
+    /// Not an error: tapping play and moving on is not focus time. It carries a
+    /// sentence because a silent discard reads exactly like a silent success.
+    TooShort { label: String },
+}
+
 /// One file of an export, ready to be written.
 #[derive(Debug, uniffi::Record)]
 pub struct ExportFile {
@@ -2045,6 +2057,74 @@ impl Workspace {
             parent_id: folder.parent_id,
             is_external_calendar: folder.is_external_calendar,
         })
+    }
+
+    /// Record a finished focus session against a page.
+    ///
+    /// The timing is the caller's: a running session is never persisted, because
+    /// a session whose end the app did not see is a guess, and a guess inside a
+    /// total is worse than a missing session. What crosses here is the two
+    /// wall-clock instants it actually spanned.
+    ///
+    /// The duration is computed from them rather than taken as a third argument,
+    /// so a caller cannot report a length its own timestamps disagree with. A
+    /// session under the floor is declined and says so.
+    ///
+    /// Both strings are local wall clocks, `yyyy-MM-ddTHH:mm:ss`.
+    pub async fn record_focus_session(
+        &self,
+        page_id: String,
+        started_at: String,
+        ended_at: String,
+    ) -> Result<FocusOutcome, WorkspaceError> {
+        let (Some(start), Some(end)) = (
+            pikos_core::dates::parse_local_iso(&started_at),
+            pikos_core::dates::parse_local_iso(&ended_at),
+        ) else {
+            return Err(WorkspaceError::InvalidInput {
+                message: format!(
+                    "a focus session needs two local timestamps, got {started_at} and {ended_at}"
+                ),
+            });
+        };
+
+        match pikos_core::finish_session((end - start).num_seconds()) {
+            pikos_core::FocusOutcome::TooShort { label } => Ok(FocusOutcome::TooShort { label }),
+            pikos_core::FocusOutcome::Recorded { duration_s, label } => {
+                // Checked here rather than left to the data layer, which says so
+                // as a generic failure. A page that has since been deleted is
+                // routine on a phone — a widget, a deep link, a list one refresh
+                // behind — and "the workspace could not be read" is the wrong
+                // sentence for it.
+                if pikos_db::get_page(&self.pool, &page_id).await?.is_none() {
+                    return Err(WorkspaceError::NotFound {
+                        entity: "page".into(),
+                        id: page_id,
+                    });
+                }
+                pikos_db::create_focus_session(
+                    &self.pool,
+                    &page_id,
+                    &started_at,
+                    &ended_at,
+                    duration_s,
+                )
+                .await?;
+                Ok(FocusOutcome::Recorded { duration_s, label })
+            }
+        }
+    }
+
+    /// `M:SS`, or `H:MM:SS` past an hour — the ticking label beside a running
+    /// session.
+    ///
+    /// Served rather than formatted per platform because it is the same clock on
+    /// both, and because the floor it counts towards is already here: a phone
+    /// that rendered the running time its own way and then said something
+    /// different from the desktop when the session ended would be two
+    /// implementations agreeing by luck.
+    pub fn focus_elapsed_label(&self, seconds: i64) -> String {
+        pikos_core::elapsed_label(seconds)
     }
 
     /// The workspace as one CSV.

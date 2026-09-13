@@ -1,0 +1,102 @@
+import PikosCore
+import PikosSupport
+import SwiftUI
+
+/// Timing how long you actually sat with a page.
+///
+/// Two limits, both so the number stays something its owner can account for.
+/// Nothing is persisted while a session runs — a session whose end the app never
+/// saw is a guess, and a guess inside a total is worse than a missing session —
+/// and a session under the floor is discarded rather than written, because
+/// opening a page, tapping play and moving on is not focus time.
+///
+/// Neither the floor nor the wording lives here. Both are `pikos-core`'s, shared
+/// with the desktop and graded against it, so "24 minutes" means the same
+/// sentence on both.
+///
+/// The elapsed count is recomputed from the start instant on every tick rather
+/// than incremented. On a phone that matters more than it does on a desktop: the
+/// timer stops firing the moment the app is backgrounded, and a counter that
+/// added one per tick would come back minutes light while looking perfectly
+/// plausible.
+struct FocusTimer: View {
+    let pageId: String
+
+    @Environment(WorkspaceStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
+
+    @State private var startedAt: Date?
+    @State private var elapsed = 0
+    @State private var notice: String?
+
+    /// One second, which is what a visible clock needs and no more.
+    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Group {
+            if let startedAt {
+                HStack(spacing: 6) {
+                    Text(store.focusElapsedLabel(seconds: elapsed))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Button {
+                        Task { await stop(began: startedAt) }
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                    }
+                    .accessibilityLabel("Stop timing")
+                }
+            } else {
+                Button {
+                    start()
+                } label: {
+                    Image(systemName: "timer")
+                }
+                .accessibilityLabel("Start timing this page")
+            }
+        }
+        .onReceive(tick) { _ in
+            guard let startedAt else { return }
+            elapsed = Int(Date().timeIntervalSince(startedAt))
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Coming back from the background: the ticks stopped, the clock did
+            // not. Catch up before the next second would.
+            if phase == .active, let startedAt {
+                elapsed = Int(Date().timeIntervalSince(startedAt))
+            }
+        }
+        // Leaving the page banks the session where it is rather than dropping
+        // it. `onDisappear` is the only hook that fires for a back-swipe, and
+        // the work is detached from the view's lifetime on purpose — a Task tied
+        // to a view that is going away is a Task that may not finish.
+        .onDisappear {
+            guard let began = startedAt else { return }
+            startedAt = nil
+            let id = pageId
+            Task { await store.recordFocusSession(pageId: id, from: began, to: Date()) }
+        }
+        .alert(
+            "Focus", isPresented: hasNotice,
+            actions: { Button("OK", role: .cancel) { notice = nil } },
+            message: { Text(notice ?? "") })
+    }
+
+    private var hasNotice: Binding<Bool> {
+        Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })
+    }
+
+    private func start() {
+        startedAt = Date()
+        elapsed = 0
+    }
+
+    private func stop(began: Date) async {
+        startedAt = nil
+        elapsed = 0
+        // Both outcomes are worth a sentence. Stopping is otherwise invisible —
+        // the row goes to a screen nobody is looking at — and a silent discard
+        // below the floor reads exactly like a silent success.
+        notice = await store.recordFocusSession(pageId: pageId, from: began, to: Date())
+    }
+}

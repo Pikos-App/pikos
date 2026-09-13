@@ -122,10 +122,6 @@ async fn insert_rule(pool: &SqlitePool, id: &str, page_id: &str) {
     .unwrap();
 }
 
-/// A rule with an explicit RRULE, for the CSV `Repeat` column tests — the
-/// `insert_rule` above hardcodes `FREQ=DAILY`.
-
-
 async fn insert_focus_session(pool: &SqlitePool, id: &str, page_id: &str, duration_s: i64) {
     sqlx::query(
         "INSERT INTO focus_sessions (id, page_id, started_at, ended_at, duration_s)

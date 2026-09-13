@@ -368,6 +368,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_export_ics(uint64_t ptr, int8_t in
 uint64_t uniffi_pikos_ffi_fn_method_workspace_export_markdown(uint64_t ptr, int8_t include_synced
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_FOCUS_ELAPSED_LABEL
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_FOCUS_ELAPSED_LABEL
+RustBuffer uniffi_pikos_ffi_fn_method_workspace_focus_elapsed_label(uint64_t ptr, int64_t seconds, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_GET_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_GET_PAGE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_get_page(uint64_t ptr, RustBuffer id
@@ -436,6 +441,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_read_only(uint64_t ptr, RustCallSt
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECONNECT_CALDAV
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECONNECT_CALDAV
 uint64_t uniffi_pikos_ffi_fn_method_workspace_reconnect_caldav(uint64_t ptr, RustBuffer account_id, RustBuffer password
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECORD_FOCUS_SESSION
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_RECORD_FOCUS_SESSION
+uint64_t uniffi_pikos_ffi_fn_method_workspace_record_focus_session(uint64_t ptr, RustBuffer page_id, RustBuffer started_at, RustBuffer ended_at
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_REMOVE_PAGE_REPEAT
@@ -1070,6 +1080,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_export_markdown(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_FOCUS_ELAPSED_LABEL
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_FOCUS_ELAPSED_LABEL
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_focus_elapsed_label(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_GET_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_GET_PAGE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_get_page(void
@@ -1151,6 +1167,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_read_only(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECONNECT_CALDAV
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECONNECT_CALDAV
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECORD_FOCUS_SESSION
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_RECORD_FOCUS_SESSION
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_record_focus_session(void
     
 );
 #endif
