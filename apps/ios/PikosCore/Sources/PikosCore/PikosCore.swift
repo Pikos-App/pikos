@@ -565,6 +565,568 @@ fileprivate struct FfiConverterString: FfiConverter {
 }
 
 
+
+
+/**
+ * A read-only handle, for widget and intent extensions.
+ *
+ * The restriction is structural rather than advisory: this type simply has no
+ * write methods, so an extension holding one cannot write however carelessly
+ * it is used. That matters because SQLite in WAL mode permits exactly one
+ * writer, and a widget refresh racing the app for it would block the app —
+ * the visible symptom being a keystroke that does not appear.
+ */
+public protocol ReadOnlyWorkspaceProtocol: AnyObject, Sendable {
+    
+    func getPage(id: String) async throws  -> Page
+    
+    func listPages(query: PageQuery) async throws  -> [PageSummary]
+    
+    func listToday() async throws  -> [PageSummary]
+    
+}
+/**
+ * A read-only handle, for widget and intent extensions.
+ *
+ * The restriction is structural rather than advisory: this type simply has no
+ * write methods, so an extension holding one cannot write however carelessly
+ * it is used. That matters because SQLite in WAL mode permits exactly one
+ * writer, and a widget refresh racing the app for it would block the app —
+ * the visible symptom being a keystroke that does not appear.
+ */
+open class ReadOnlyWorkspace: ReadOnlyWorkspaceProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_pikos_ffi_fn_clone_readonlyworkspace(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_pikos_ffi_fn_free_readonlyworkspace(handle, $0) }
+    }
+
+    
+    /**
+     * Open an existing workspace read-only.
+     *
+     * Fails if the file does not exist rather than creating one, and never
+     * migrates: a widget must not be the process that changes the schema, and
+     * a widget that silently creates an empty database looks to the user like
+     * their notes have vanished.
+     */
+public static func openExisting(path: String)async throws  -> ReadOnlyWorkspace  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_constructor_readonlyworkspace_open_existing(FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_u64,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_u64,
+            freeFunc: ffi_pikos_ffi_rust_future_free_u64,
+            liftFunc: FfiConverterTypeReadOnlyWorkspace_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+
+    
+open func getPage(id: String)async throws  -> Page  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_readonlyworkspace_get_page(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePage_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func listPages(query: PageQuery)async throws  -> [PageSummary]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_readonlyworkspace_list_pages(
+                        self.uniffiCloneHandle(),FfiConverterTypePageQuery_lower(query)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypePageSummary.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func listToday()async throws  -> [PageSummary]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_readonlyworkspace_list_today(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypePageSummary.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReadOnlyWorkspace: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ReadOnlyWorkspace
+
+    public static func lift(_ handle: UInt64) throws -> ReadOnlyWorkspace {
+        return ReadOnlyWorkspace(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ReadOnlyWorkspace) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadOnlyWorkspace {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ReadOnlyWorkspace, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadOnlyWorkspace_lift(_ handle: UInt64) throws -> ReadOnlyWorkspace {
+    return try FfiConverterTypeReadOnlyWorkspace.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadOnlyWorkspace_lower(_ value: ReadOnlyWorkspace) -> UInt64 {
+    return FfiConverterTypeReadOnlyWorkspace.lower(value)
+}
+
+
+
+
+
+
+/**
+ * A read-write handle on a Pikos workspace.
+ *
+ * Exactly one of these should exist per process. SQLite in WAL mode tolerates
+ * concurrent readers alongside a single writer, and the app process is that
+ * writer; extensions get a [`ReadOnlyWorkspace`].
+ */
+public protocol WorkspaceProtocol: AnyObject, Sendable {
+    
+    /**
+     * The editor schema this build writes. A page whose
+     * `content_schema_version` exceeds this must not be saved over.
+     */
+    func contentSchemaVersion()  -> Int64
+    
+    func createPage(page: NewPage) async throws  -> Page
+    
+    func getPage(id: String) async throws  -> Page
+    
+    func listFolders() async throws  -> [Folder]
+    
+    func listPages(query: PageQuery) async throws  -> [PageSummary]
+    
+    /**
+     * Pages scheduled for today, plus anything overdue.
+     */
+    func listToday() async throws  -> [PageSummary]
+    
+    /**
+     * A read-only handle onto the same workspace, for passing to code that
+     * must not write.
+     */
+    func readOnly()  -> ReadOnlyWorkspace
+    
+    func restorePage(id: String) async throws 
+    
+    /**
+     * Full-text search across titles and page bodies.
+     */
+    func search(query: String, limit: UInt32) async throws  -> [SearchHit]
+    
+    /**
+     * Move a page to the trash. Recoverable — see `restore_page`.
+     */
+    func trashPage(id: String) async throws 
+    
+    func updatePage(id: String, edit: PageEdit) async throws  -> Page
+    
+}
+/**
+ * A read-write handle on a Pikos workspace.
+ *
+ * Exactly one of these should exist per process. SQLite in WAL mode tolerates
+ * concurrent readers alongside a single writer, and the app process is that
+ * writer; extensions get a [`ReadOnlyWorkspace`].
+ */
+open class Workspace: WorkspaceProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_pikos_ffi_fn_clone_workspace(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_pikos_ffi_fn_free_workspace(handle, $0) }
+    }
+
+    
+    /**
+     * Open (or create) the workspace at `path`, applying any pending
+     * migrations.
+     *
+     * Migrations run here, which is why this is the app's job and not a
+     * widget's: a widget waking to refresh a timeline must never be the
+     * process that migrates the database.
+     */
+public static func `open`(path: String)async throws  -> Workspace  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_constructor_workspace_open(FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_u64,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_u64,
+            freeFunc: ffi_pikos_ffi_rust_future_free_u64,
+            liftFunc: FfiConverterTypeWorkspace_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+
+    
+    /**
+     * The editor schema this build writes. A page whose
+     * `content_schema_version` exceeds this must not be saved over.
+     */
+open func contentSchemaVersion() -> Int64  {
+    return try!  FfiConverterInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_method_workspace_content_schema_version(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+open func createPage(page: NewPage)async throws  -> Page  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_create_page(
+                        self.uniffiCloneHandle(),FfiConverterTypeNewPage_lower(page)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePage_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func getPage(id: String)async throws  -> Page  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_get_page(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePage_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func listFolders()async throws  -> [Folder]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_folders(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeFolder.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func listPages(query: PageQuery)async throws  -> [PageSummary]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_pages(
+                        self.uniffiCloneHandle(),FfiConverterTypePageQuery_lower(query)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypePageSummary.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Pages scheduled for today, plus anything overdue.
+     */
+open func listToday()async throws  -> [PageSummary]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_today(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypePageSummary.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * A read-only handle onto the same workspace, for passing to code that
+     * must not write.
+     */
+open func readOnly() -> ReadOnlyWorkspace  {
+    return try!  FfiConverterTypeReadOnlyWorkspace_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_method_workspace_read_only(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+open func restorePage(id: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_restore_page(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Full-text search across titles and page bodies.
+     */
+open func search(query: String, limit: UInt32)async throws  -> [SearchHit]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_search(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeSearchHit.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Move a page to the trash. Recoverable — see `restore_page`.
+     */
+open func trashPage(id: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_trash_page(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+open func updatePage(id: String, edit: PageEdit)async throws  -> Page  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_update_page(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(id),FfiConverterTypePageEdit_lower(edit)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePage_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWorkspace: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = Workspace
+
+    public static func lift(_ handle: UInt64) throws -> Workspace {
+        return Workspace(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: Workspace) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Workspace {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: Workspace, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWorkspace_lift(_ handle: UInt64) throws -> Workspace {
+    return try FfiConverterTypeWorkspace.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWorkspace_lower(_ value: Workspace) -> UInt64 {
+    return FfiConverterTypeWorkspace.lower(value)
+}
+
+
+
+
 /**
  * A contiguous run of one all-day page across visible columns, in one row.
  */
@@ -647,6 +1209,68 @@ public func FfiConverterTypeAllDayBar_lift(_ buf: RustBuffer) throws -> AllDayBa
 #endif
 public func FfiConverterTypeAllDayBar_lower(_ value: AllDayBar) -> RustBuffer {
     return FfiConverterTypeAllDayBar.lower(value)
+}
+
+
+public struct Folder: Equatable, Hashable {
+    public var id: String
+    public var name: String
+    public var color: String?
+    public var sortOrder: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, name: String, color: String?, sortOrder: Int64) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.sortOrder = sortOrder
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Folder: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFolder: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Folder {
+        return
+            try Folder(
+                id: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                color: FfiConverterOptionString.read(from: &buf), 
+                sortOrder: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Folder, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.color, into: &buf)
+        FfiConverterInt64.write(value.sortOrder, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolder_lift(_ buf: RustBuffer) throws -> Folder {
+    return try FfiConverterTypeFolder.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolder_lower(_ value: Folder) -> RustBuffer {
+    return FfiConverterTypeFolder.lower(value)
 }
 
 
@@ -736,6 +1360,87 @@ public func FfiConverterTypeLayoutPage_lower(_ value: LayoutPage) -> RustBuffer 
 
 
 /**
+ * Fields to set when creating a page. Anything omitted takes the column
+ * default; `content_schema_version` is stamped by the writer and is not
+ * settable, so a client cannot claim a document shape it did not produce.
+ */
+public struct NewPage: Equatable, Hashable {
+    public var title: String
+    public var folderId: String?
+    /**
+     * Tiptap JSON. Defaults to an empty document.
+     */
+    public var content: String?
+    public var tags: [String]?
+    public var scheduledStart: String?
+    public var scheduledEnd: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, folderId: String? = nil, 
+        /**
+         * Tiptap JSON. Defaults to an empty document.
+         */content: String? = nil, tags: [String]? = nil, scheduledStart: String? = nil, scheduledEnd: String? = nil) {
+        self.title = title
+        self.folderId = folderId
+        self.content = content
+        self.tags = tags
+        self.scheduledStart = scheduledStart
+        self.scheduledEnd = scheduledEnd
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NewPage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNewPage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NewPage {
+        return
+            try NewPage(
+                title: FfiConverterString.read(from: &buf), 
+                folderId: FfiConverterOptionString.read(from: &buf), 
+                content: FfiConverterOptionString.read(from: &buf), 
+                tags: FfiConverterOptionSequenceString.read(from: &buf), 
+                scheduledStart: FfiConverterOptionString.read(from: &buf), 
+                scheduledEnd: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NewPage, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.folderId, into: &buf)
+        FfiConverterOptionString.write(value.content, into: &buf)
+        FfiConverterOptionSequenceString.write(value.tags, into: &buf)
+        FfiConverterOptionString.write(value.scheduledStart, into: &buf)
+        FfiConverterOptionString.write(value.scheduledEnd, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNewPage_lift(_ buf: RustBuffer) throws -> NewPage {
+    return try FfiConverterTypeNewPage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNewPage_lower(_ value: NewPage) -> RustBuffer {
+    return FfiConverterTypeNewPage.lower(value)
+}
+
+
+/**
  * One expanded occurrence of a recurring series.
  */
 public struct Occurrence: Equatable, Hashable {
@@ -805,6 +1510,451 @@ public func FfiConverterTypeOccurrence_lower(_ value: Occurrence) -> RustBuffer 
 
 
 /**
+ * A page with its document.
+ */
+public struct Page: Equatable, Hashable {
+    public var id: String
+    public var folderId: String?
+    public var title: String
+    public var subtitle: String?
+    /**
+     * The Tiptap document, as JSON text. Swift never parses it — it hands it
+     * to the editor webview and stores whatever comes back.
+     */
+    public var content: String
+    public var status: String
+    public var priority: Int64
+    public var tags: [String]
+    public var scheduledStart: String?
+    public var scheduledEnd: String?
+    public var completedAt: String?
+    public var createdAt: String
+    public var updatedAt: String
+    /**
+     * Which editor schema wrote `content`. A client finding a version above
+     * its own must not save over the document — see pikos-db migration 010.
+     */
+    public var contentSchemaVersion: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, folderId: String?, title: String, subtitle: String?, 
+        /**
+         * The Tiptap document, as JSON text. Swift never parses it — it hands it
+         * to the editor webview and stores whatever comes back.
+         */content: String, status: String, priority: Int64, tags: [String], scheduledStart: String?, scheduledEnd: String?, completedAt: String?, createdAt: String, updatedAt: String, 
+        /**
+         * Which editor schema wrote `content`. A client finding a version above
+         * its own must not save over the document — see pikos-db migration 010.
+         */contentSchemaVersion: Int64) {
+        self.id = id
+        self.folderId = folderId
+        self.title = title
+        self.subtitle = subtitle
+        self.content = content
+        self.status = status
+        self.priority = priority
+        self.tags = tags
+        self.scheduledStart = scheduledStart
+        self.scheduledEnd = scheduledEnd
+        self.completedAt = completedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.contentSchemaVersion = contentSchemaVersion
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Page: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Page {
+        return
+            try Page(
+                id: FfiConverterString.read(from: &buf), 
+                folderId: FfiConverterOptionString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf), 
+                subtitle: FfiConverterOptionString.read(from: &buf), 
+                content: FfiConverterString.read(from: &buf), 
+                status: FfiConverterString.read(from: &buf), 
+                priority: FfiConverterInt64.read(from: &buf), 
+                tags: FfiConverterSequenceString.read(from: &buf), 
+                scheduledStart: FfiConverterOptionString.read(from: &buf), 
+                scheduledEnd: FfiConverterOptionString.read(from: &buf), 
+                completedAt: FfiConverterOptionString.read(from: &buf), 
+                createdAt: FfiConverterString.read(from: &buf), 
+                updatedAt: FfiConverterString.read(from: &buf), 
+                contentSchemaVersion: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Page, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterOptionString.write(value.folderId, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.subtitle, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterInt64.write(value.priority, into: &buf)
+        FfiConverterSequenceString.write(value.tags, into: &buf)
+        FfiConverterOptionString.write(value.scheduledStart, into: &buf)
+        FfiConverterOptionString.write(value.scheduledEnd, into: &buf)
+        FfiConverterOptionString.write(value.completedAt, into: &buf)
+        FfiConverterString.write(value.createdAt, into: &buf)
+        FfiConverterString.write(value.updatedAt, into: &buf)
+        FfiConverterInt64.write(value.contentSchemaVersion, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePage_lift(_ buf: RustBuffer) throws -> Page {
+    return try FfiConverterTypePage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePage_lower(_ value: Page) -> RustBuffer {
+    return FfiConverterTypePage.lower(value)
+}
+
+
+/**
+ * A partial update. `None` means "leave alone", which is why this cannot use
+ * the same type as [`NewPage`] — there, `None` means "use the default".
+ */
+public struct PageEdit: Equatable, Hashable {
+    public var title: String?
+    /**
+     * Tiptap JSON. Setting this re-stamps `content_schema_version`.
+     */
+    public var content: String?
+    /**
+     * Plain text for the search index. Supply it alongside `content` — the
+     * editor extracts it already, and re-deriving it here would parse the
+     * document a second time.
+     */
+    public var contentText: String?
+    public var status: String?
+    public var priority: Int64?
+    public var tags: [String]?
+    /**
+     * Absent leaves the page where it is; see [`FolderAssignment`].
+     */
+    public var folder: FolderAssignment?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String? = nil, 
+        /**
+         * Tiptap JSON. Setting this re-stamps `content_schema_version`.
+         */content: String? = nil, 
+        /**
+         * Plain text for the search index. Supply it alongside `content` — the
+         * editor extracts it already, and re-deriving it here would parse the
+         * document a second time.
+         */contentText: String? = nil, status: String? = nil, priority: Int64? = nil, tags: [String]? = nil, 
+        /**
+         * Absent leaves the page where it is; see [`FolderAssignment`].
+         */folder: FolderAssignment? = nil) {
+        self.title = title
+        self.content = content
+        self.contentText = contentText
+        self.status = status
+        self.priority = priority
+        self.tags = tags
+        self.folder = folder
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PageEdit: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePageEdit: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PageEdit {
+        return
+            try PageEdit(
+                title: FfiConverterOptionString.read(from: &buf), 
+                content: FfiConverterOptionString.read(from: &buf), 
+                contentText: FfiConverterOptionString.read(from: &buf), 
+                status: FfiConverterOptionString.read(from: &buf), 
+                priority: FfiConverterOptionInt64.read(from: &buf), 
+                tags: FfiConverterOptionSequenceString.read(from: &buf), 
+                folder: FfiConverterOptionTypeFolderAssignment.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PageEdit, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.content, into: &buf)
+        FfiConverterOptionString.write(value.contentText, into: &buf)
+        FfiConverterOptionString.write(value.status, into: &buf)
+        FfiConverterOptionInt64.write(value.priority, into: &buf)
+        FfiConverterOptionSequenceString.write(value.tags, into: &buf)
+        FfiConverterOptionTypeFolderAssignment.write(value.folder, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageEdit_lift(_ buf: RustBuffer) throws -> PageEdit {
+    return try FfiConverterTypePageEdit.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageEdit_lower(_ value: PageEdit) -> RustBuffer {
+    return FfiConverterTypePageEdit.lower(value)
+}
+
+
+/**
+ * Narrows a page listing. Every field is optional; an all-default filter lists
+ * everything not deleted.
+ */
+public struct PageQuery: Equatable, Hashable {
+    public var folder: FolderScope?
+    /**
+     * `"not_started"` or `"done"`.
+     */
+    public var status: String?
+    public var tags: [String]?
+    /**
+     * Substring match on the title. For full-text search across page bodies,
+     * use [`Workspace::search`] instead — this does not touch the FTS index.
+     */
+    public var titleContains: String?
+    /**
+     * Inclusive lower bound on `scheduled_start`.
+     */
+    public var scheduledAfter: String?
+    /**
+     * Inclusive upper bound on `scheduled_start`.
+     */
+    public var scheduledBefore: String?
+    /**
+     * When true, only pages that have a schedule at all.
+     */
+    public var hasSchedule: Bool?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(folder: FolderScope? = nil, 
+        /**
+         * `"not_started"` or `"done"`.
+         */status: String? = nil, tags: [String]? = nil, 
+        /**
+         * Substring match on the title. For full-text search across page bodies,
+         * use [`Workspace::search`] instead — this does not touch the FTS index.
+         */titleContains: String? = nil, 
+        /**
+         * Inclusive lower bound on `scheduled_start`.
+         */scheduledAfter: String? = nil, 
+        /**
+         * Inclusive upper bound on `scheduled_start`.
+         */scheduledBefore: String? = nil, 
+        /**
+         * When true, only pages that have a schedule at all.
+         */hasSchedule: Bool? = nil) {
+        self.folder = folder
+        self.status = status
+        self.tags = tags
+        self.titleContains = titleContains
+        self.scheduledAfter = scheduledAfter
+        self.scheduledBefore = scheduledBefore
+        self.hasSchedule = hasSchedule
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PageQuery: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePageQuery: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PageQuery {
+        return
+            try PageQuery(
+                folder: FfiConverterOptionTypeFolderScope.read(from: &buf), 
+                status: FfiConverterOptionString.read(from: &buf), 
+                tags: FfiConverterOptionSequenceString.read(from: &buf), 
+                titleContains: FfiConverterOptionString.read(from: &buf), 
+                scheduledAfter: FfiConverterOptionString.read(from: &buf), 
+                scheduledBefore: FfiConverterOptionString.read(from: &buf), 
+                hasSchedule: FfiConverterOptionBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PageQuery, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeFolderScope.write(value.folder, into: &buf)
+        FfiConverterOptionString.write(value.status, into: &buf)
+        FfiConverterOptionSequenceString.write(value.tags, into: &buf)
+        FfiConverterOptionString.write(value.titleContains, into: &buf)
+        FfiConverterOptionString.write(value.scheduledAfter, into: &buf)
+        FfiConverterOptionString.write(value.scheduledBefore, into: &buf)
+        FfiConverterOptionBool.write(value.hasSchedule, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageQuery_lift(_ buf: RustBuffer) throws -> PageQuery {
+    return try FfiConverterTypePageQuery.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageQuery_lower(_ value: PageQuery) -> RustBuffer {
+    return FfiConverterTypePageQuery.lower(value)
+}
+
+
+/**
+ * A page without its content, for list and calendar screens.
+ *
+ * Content is excluded on purpose: a list of several hundred pages would
+ * otherwise carry every document across the FFI boundary to render titles.
+ */
+public struct PageSummary: Equatable, Hashable {
+    public var id: String
+    public var folderId: String?
+    public var title: String
+    public var subtitle: String?
+    public var status: String
+    public var priority: Int64
+    public var tags: [String]
+    public var sortOrder: Int64
+    /**
+     * Local wall-clock ISO string. See the note on dates in `lib.rs`.
+     */
+    public var scheduledStart: String?
+    public var scheduledEnd: String?
+    public var completedAt: String?
+    public var parentId: String?
+    public var createdAt: String
+    public var updatedAt: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, folderId: String?, title: String, subtitle: String?, status: String, priority: Int64, tags: [String], sortOrder: Int64, 
+        /**
+         * Local wall-clock ISO string. See the note on dates in `lib.rs`.
+         */scheduledStart: String?, scheduledEnd: String?, completedAt: String?, parentId: String?, createdAt: String, updatedAt: String) {
+        self.id = id
+        self.folderId = folderId
+        self.title = title
+        self.subtitle = subtitle
+        self.status = status
+        self.priority = priority
+        self.tags = tags
+        self.sortOrder = sortOrder
+        self.scheduledStart = scheduledStart
+        self.scheduledEnd = scheduledEnd
+        self.completedAt = completedAt
+        self.parentId = parentId
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PageSummary: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePageSummary: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PageSummary {
+        return
+            try PageSummary(
+                id: FfiConverterString.read(from: &buf), 
+                folderId: FfiConverterOptionString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf), 
+                subtitle: FfiConverterOptionString.read(from: &buf), 
+                status: FfiConverterString.read(from: &buf), 
+                priority: FfiConverterInt64.read(from: &buf), 
+                tags: FfiConverterSequenceString.read(from: &buf), 
+                sortOrder: FfiConverterInt64.read(from: &buf), 
+                scheduledStart: FfiConverterOptionString.read(from: &buf), 
+                scheduledEnd: FfiConverterOptionString.read(from: &buf), 
+                completedAt: FfiConverterOptionString.read(from: &buf), 
+                parentId: FfiConverterOptionString.read(from: &buf), 
+                createdAt: FfiConverterString.read(from: &buf), 
+                updatedAt: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PageSummary, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterOptionString.write(value.folderId, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.subtitle, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterInt64.write(value.priority, into: &buf)
+        FfiConverterSequenceString.write(value.tags, into: &buf)
+        FfiConverterInt64.write(value.sortOrder, into: &buf)
+        FfiConverterOptionString.write(value.scheduledStart, into: &buf)
+        FfiConverterOptionString.write(value.scheduledEnd, into: &buf)
+        FfiConverterOptionString.write(value.completedAt, into: &buf)
+        FfiConverterOptionString.write(value.parentId, into: &buf)
+        FfiConverterString.write(value.createdAt, into: &buf)
+        FfiConverterString.write(value.updatedAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageSummary_lift(_ buf: RustBuffer) throws -> PageSummary {
+    return try FfiConverterTypePageSummary.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePageSummary_lower(_ value: PageSummary) -> RustBuffer {
+    return FfiConverterTypePageSummary.lower(value)
+}
+
+
+/**
  * Result of moving a schedule's start. `end` of `None` is a single occurrence.
  */
 public struct ScheduleTransition: Equatable, Hashable {
@@ -858,6 +2008,82 @@ public func FfiConverterTypeScheduleTransition_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeScheduleTransition_lower(_ value: ScheduleTransition) -> RustBuffer {
     return FfiConverterTypeScheduleTransition.lower(value)
+}
+
+
+public struct SearchHit: Equatable, Hashable {
+    public var pageId: String
+    public var title: String
+    /**
+     * The matching text with surrounding context.
+     */
+    public var excerpt: String
+    /**
+     * Which column matched — `"title"`, `"body"`, and so on. Lets the UI say
+     * why a result is a result.
+     */
+    public var matchSource: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pageId: String, title: String, 
+        /**
+         * The matching text with surrounding context.
+         */excerpt: String, 
+        /**
+         * Which column matched — `"title"`, `"body"`, and so on. Lets the UI say
+         * why a result is a result.
+         */matchSource: String) {
+        self.pageId = pageId
+        self.title = title
+        self.excerpt = excerpt
+        self.matchSource = matchSource
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SearchHit: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchHit: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchHit {
+        return
+            try SearchHit(
+                pageId: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf), 
+                excerpt: FfiConverterString.read(from: &buf), 
+                matchSource: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchHit, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pageId, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.excerpt, into: &buf)
+        FfiConverterString.write(value.matchSource, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchHit_lift(_ buf: RustBuffer) throws -> SearchHit {
+    return try FfiConverterTypeSearchHit.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchHit_lower(_ value: SearchHit) -> RustBuffer {
+    return FfiConverterTypeSearchHit.lower(value)
 }
 
 
@@ -1038,6 +2264,174 @@ public func FfiConverterTypeDeepLink_lower(_ value: DeepLink) -> RustBuffer {
 
 
 
+/**
+ * Where a page should be filed. Distinct from [`FolderScope`], which narrows a
+ * listing; this one assigns.
+ */
+
+public enum FolderAssignment: Equatable, Hashable {
+    
+    /**
+     * Remove the page from any folder, leaving it in the inbox.
+     */
+    case inbox
+    case folder(id: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FolderAssignment: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFolderAssignment: FfiConverterRustBuffer {
+    typealias SwiftType = FolderAssignment
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FolderAssignment {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .inbox
+        
+        case 2: return .folder(id: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FolderAssignment, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .inbox:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .folder(id):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(id, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolderAssignment_lift(_ buf: RustBuffer) throws -> FolderAssignment {
+    return try FfiConverterTypeFolderAssignment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolderAssignment_lower(_ value: FolderAssignment) -> RustBuffer {
+    return FfiConverterTypeFolderAssignment.lower(value)
+}
+
+
+
+/**
+ * Which folder a listing is scoped to.
+ *
+ * The data layer models this as an optional JSON value where absent means
+ * "any" and null means "inbox" — a tri-state that does not survive an FFI
+ * boundary, and reads as a trap even in Rust. Three named cases instead.
+ */
+
+public enum FolderScope: Equatable, Hashable {
+    
+    /**
+     * Every folder, and the inbox.
+     */
+    case any
+    /**
+     * Only pages with no folder.
+     */
+    case inbox
+    /**
+     * One specific folder.
+     */
+    case folder(id: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FolderScope: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFolderScope: FfiConverterRustBuffer {
+    typealias SwiftType = FolderScope
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FolderScope {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .any
+        
+        case 2: return .inbox
+        
+        case 3: return .folder(id: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FolderScope, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .any:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .inbox:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .folder(id):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(id, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolderScope_lift(_ buf: RustBuffer) throws -> FolderScope {
+    return try FfiConverterTypeFolderScope.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolderScope_lower(_ value: FolderScope) -> RustBuffer {
+    return FfiConverterTypeFolderScope.lower(value)
+}
+
+
+
 
 public enum SmartView: Equatable, Hashable {
     
@@ -1102,6 +2496,180 @@ public func FfiConverterTypeSmartView_lower(_ value: SmartView) -> RustBuffer {
     return FfiConverterTypeSmartView.lower(value)
 }
 
+
+
+/**
+ * What can go wrong, in terms Swift can act on.
+ *
+ * Deliberately coarse. Swift's realistic responses are "tell the user",
+ * "retry" and "this is a bug", and a fine-grained enum here would invite
+ * `switch` statements that add nothing. The message carries the detail for
+ * logs and bug reports.
+ */
+public 
+enum WorkspaceError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    /**
+     * The workspace could not be opened — a bad path, a corrupt file, or a
+     * migration that failed. Not retryable without changing something.
+     */
+    case Open(message: String
+    )
+    /**
+     * The requested row does not exist. Distinct from a failure because it is
+     * routine: a widget can hold a page id that has since been deleted.
+     */
+    case NotFound(entity: String, id: String
+    )
+    /**
+     * Everything else the data layer reported.
+     */
+    case Database(message: String
+    )
+    /**
+     * A write was attempted through a read-only handle. A programming error
+     * rather than a runtime condition — see the note on `ReadOnlyWorkspace`.
+     */
+    case ReadOnly
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension WorkspaceError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWorkspaceError: FfiConverterRustBuffer {
+    typealias SwiftType = WorkspaceError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WorkspaceError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .Open(
+            message: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .NotFound(
+            entity: try FfiConverterString.read(from: &buf), 
+            id: try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .Database(
+            message: try FfiConverterString.read(from: &buf)
+            )
+        case 4: return .ReadOnly
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WorkspaceError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .Open(message):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .NotFound(entity,id):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(entity, into: &buf)
+            FfiConverterString.write(id, into: &buf)
+            
+        
+        case let .Database(message):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case .ReadOnly:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWorkspaceError_lift(_ buf: RustBuffer) throws -> WorkspaceError {
+    return try FfiConverterTypeWorkspaceError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWorkspaceError_lower(_ value: WorkspaceError) -> RustBuffer {
+    return FfiConverterTypeWorkspaceError.lower(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionInt64: FfiConverterRustBuffer {
+    typealias SwiftType = Int64?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterInt64.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterInt64.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1178,6 +2746,78 @@ fileprivate struct FfiConverterOptionTypeDeepLink: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFolderAssignment: FfiConverterRustBuffer {
+    typealias SwiftType = FolderAssignment?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFolderAssignment.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFolderAssignment.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFolderScope: FfiConverterRustBuffer {
+    typealias SwiftType = FolderScope?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFolderScope.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFolderScope.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -1220,6 +2860,31 @@ fileprivate struct FfiConverterSequenceTypeAllDayBar: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAllDayBar.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFolder: FfiConverterRustBuffer {
+    typealias SwiftType = [Folder]
+
+    public static func write(_ value: [Folder], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFolder.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Folder] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Folder]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFolder.read(from: &buf))
         }
         return seq
     }
@@ -1278,6 +2943,56 @@ fileprivate struct FfiConverterSequenceTypeOccurrence: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePageSummary: FfiConverterRustBuffer {
+    typealias SwiftType = [PageSummary]
+
+    public static func write(_ value: [PageSummary], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePageSummary.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PageSummary] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PageSummary]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePageSummary.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSearchHit: FfiConverterRustBuffer {
+    typealias SwiftType = [SearchHit]
+
+    public static func write(_ value: [SearchHit], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSearchHit.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SearchHit] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SearchHit]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSearchHit.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTimedBlock: FfiConverterRustBuffer {
     typealias SwiftType = [TimedBlock]
 
@@ -1297,6 +3012,54 @@ fileprivate struct FfiConverterSequenceTypeTimedBlock: FfiConverterRustBuffer {
             seq.append(try FfiConverterTypeTimedBlock.read(from: &buf))
         }
         return seq
+    }
+}
+private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
+private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
+
+fileprivate let uniffiContinuationHandleMap = UniffiHandleMap<UnsafeContinuation<Int8, Never>>()
+
+fileprivate func uniffiRustCallAsync<F, T>(
+    rustFutureFunc: () -> UInt64,
+    pollFunc: (UInt64, @escaping UniffiRustFutureContinuationCallback, UInt64) -> (),
+    completeFunc: (UInt64, UnsafeMutablePointer<RustCallStatus>) -> F,
+    freeFunc: (UInt64) -> (),
+    liftFunc: (F) throws -> T,
+    errorHandler: ((RustBuffer) throws -> Swift.Error)?
+) async throws -> T {
+    // Make sure to call the ensure init function since future creation doesn't have a
+    // RustCallStatus param, so doesn't use makeRustCall()
+    uniffiEnsurePikosFfiInitialized()
+    let rustFuture = rustFutureFunc()
+    defer {
+        freeFunc(rustFuture)
+    }
+    var pollResult: Int8;
+    repeat {
+        pollResult = await withUnsafeContinuation {
+            pollFunc(
+                rustFuture,
+                { handle, pollResult in
+                    uniffiFutureContinuationCallback(handle: handle, pollResult: pollResult)
+                },
+                uniffiContinuationHandleMap.insert(obj: $0)
+            )
+        }
+    } while pollResult != UNIFFI_RUST_FUTURE_POLL_READY
+
+    return try liftFunc(makeRustCall(
+        { completeFunc(rustFuture, $0) },
+        errorHandler: errorHandler
+    ))
+}
+
+// Callback handlers for an async calls.  These are invoked by Rust when the future is ready.  They
+// lift the return value or error and resume the suspended function.
+fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) {
+    if let continuation = try? uniffiContinuationHandleMap.remove(handle: handle) {
+        continuation.resume(returning: pollResult)
+    } else {
+        print("uniffiFutureContinuationCallback invalid handle")
     }
 }
 /**
@@ -1501,6 +3264,54 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_func_parse_deep_link() != 54718) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_get_page() != 40977) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_pages() != 18100) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today() != 33378) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_content_schema_version() != 7147) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_create_page() != 8067) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_get_page() != 16439) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_folders() != 57405) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_pages() != 58039) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_today() != 40259) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_read_only() != 39832) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_restore_page() != 5661) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_search() != 52923) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_trash_page() != 53299) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_update_page() != 63112) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_constructor_readonlyworkspace_open_existing() != 14894) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_constructor_workspace_open() != 47348) {
         return InitializationResult.apiChecksumMismatch
     }
 

@@ -35,6 +35,13 @@ use pikos_core::recurrence as core_recurrence;
 use pikos_core::schedule as core_schedule;
 use pikos_core::text::extract_text as core_extract_text;
 
+pub mod workspace;
+
+pub use workspace::{
+    Folder, FolderAssignment, FolderScope, NewPage, Page, PageEdit, PageQuery, PageSummary,
+    ReadOnlyWorkspace, SearchHit, Workspace, WorkspaceError,
+};
+
 uniffi::setup_scaffolding!();
 
 // ─── Records ─────────────────────────────────────────────────────────────────

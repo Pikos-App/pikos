@@ -87,24 +87,68 @@ swift test --package-path apps/ios/PikosCore # boundary tests
 The alternative — committing a multi-megabyte binary — was rejected because the
 thing worth reviewing is the Swift API, and that _is_ committed.
 
-## Not yet bridged: the database
+## The database
 
-`pikos-ffi` currently exposes pure logic only. `pikos-db` is async (sqlx over
-tokio) and UniFFI supports async exports, so this is not a technical blocker;
-it is blocked on two decisions that belong to the Swift side and should not be
-guessed at from here:
+Bridged. `Workspace` is a read-write handle; `ReadOnlyWorkspace` is the one
+extensions get.
 
-1. **Where the database file lives.** It has to be in the App Group container
-   so WidgetKit extensions can read it. That means an App Group identifier,
-   which means a provisioning profile — neither of which exists yet.
-2. **Who writes.** The plan's rule is one writer in the app process, widgets
-   read-only, WAL mode. That wants enforcing in the binding's shape — a
-   read-only handle type for extensions — rather than by convention, and the
-   shape should be designed once the container path is known.
+```swift
+let workspace = try await Workspace.open(path: containerURL.path)
+let pages = try await workspace.listPages(query: PageQuery(folder: .inbox))
+let page  = try await workspace.getPage(id: pageId)
+_ = try await workspace.updatePage(
+    id: page.id,
+    edit: PageEdit(content: json, contentText: plainText))
+let hits  = try await workspace.search(query: "invoice", limit: 20)
+```
 
-Sequencing suggestion: do the M0 editor-in-webview spike first. It needs no
-database — a page can be loaded from a file — and if it fails, the plan says
-stop, and none of the database bridging would have been worth building.
+It wraps `pikos-db`, which is already the single writer behind the desktop app
+and the CLI. Nothing is reimplemented here — a second implementation of storage
+is how two clients end up disagreeing about what a page is.
+
+### Where the file lives is the caller's business
+
+`open` takes a path. On iOS that will be inside the App Group container so
+widget extensions can read the same database, but the container identifier is a
+provisioning concern, and baking a build setting into a Rust crate would be the
+wrong place for it.
+
+This was previously recorded here as a blocker. It was not one — the decision
+belongs on the Swift side and never needed to reach the Rust API at all.
+
+### One writer, enforced by the type
+
+The plan's rule is one writer in the app process, extensions read-only, WAL
+mode. `ReadOnlyWorkspace` has no write methods, so an extension holding one
+cannot write however carelessly it is used. That matters because SQLite in WAL
+mode permits exactly one writer: a widget refresh racing the app for it would
+block the app, and the visible symptom is a keystroke that does not appear.
+
+`ReadOnlyWorkspace.openExisting` also refuses to create a database, and never
+migrates. A widget must not be the process that changes the schema, and one
+that silently creates an empty workspace looks to the user exactly like their
+notes disappearing.
+
+### Two tri-states became enums
+
+`PageFilter.folder_id` and `PageUpdate.folder_id` are `Option<serde_json::Value>`
+in the data layer, where absent, JSON null and a string mean three different
+things. That does not survive an FFI boundary and reads as a trap even in Rust,
+so the binding uses named cases instead: `FolderScope` (`.any`, `.inbox`,
+`.folder(id:)`) for narrowing a listing, and `FolderAssignment` (`.inbox`,
+`.folder(id:)`) for assigning one, wrapped in an `Optional` that means "leave
+alone".
+
+Collapsing any of those cases is the obvious bug, and two of the first tests
+written for them passed anyway — the fixtures could not tell the cases apart.
+Both now start from data where the difference is visible.
+
+### Known rough edge
+
+`search`'s `limit` is applied after the query returns, because
+`search_pages_impl` has no limit parameter and returns its own capped set. A
+caller passing a large limit expecting more results will not get them; the fix
+belongs in the data layer rather than here.
 
 ## Maintenance
 

@@ -19,7 +19,17 @@ path = "src/bin/uniffi-bindgen.rs"
 
 [dependencies]
 pikos-core = { path = "../pikos-core" }
-uniffi = { version = "0.32", features = ["cli"] }
+pikos-db = { path = "../pikos-db" }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+thiserror = "2"
+# The async exports below need a runtime UniFFI can drive. Multi-threaded so a
+# widget refresh and a foreground query are not serialised behind each other.
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
+uniffi = { version = "0.32", features = ["cli", "tokio"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 
 [build-dependencies]
 uniffi = { version = "0.32", features = ["build"] }

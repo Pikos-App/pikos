@@ -43,6 +43,16 @@ both with regression tests.
 `apps/ios/PikosEditorBridge` are complete and buildable. The bridge protocol is
 declared once and generates both halves.
 
+**The database is bridged.** `Workspace` and `ReadOnlyWorkspace` expose pages,
+folders and search as async Swift. The read-only handle has no write methods,
+so the plan's one-writer rule is enforced by the type an extension can hold
+rather than by everyone remembering it.
+
+**The parser's scope is measured, not guessed.** Of 317 corpus inputs, 179
+reach chrono-node, and they collapse to 92 distinct forms in 9 families — see
+`04-parser-grammar.md`. The work is nine pattern families and a range
+combinator, not a port of chrono-node.
+
 ## Needs a Mac
 
 Nothing here is blocked on design — only on hardware.
@@ -63,17 +73,15 @@ Nothing here is blocked on design — only on hardware.
    far was deliberately shaped so that a failure discards only
    `packages/editor-mobile` and `PikosEditorBridge` — the Rust port, the FFI
    boundary and the shared schema survive any of the three fallback options.
-2. **Bridge the database.** `pikos-db` is async and UniFFI supports async
-   exports, so this is not blocked technically. It is blocked on two decisions
-   that belong to the Swift side: the App Group container path, and a read-only
-   handle shape for widgets. See `02-ffi-surface.md`.
-3. **Decide the parser.** Porting `parseInput` to Rust is the largest remaining
+2. **Decide the parser.** Porting `parseInput` to Rust is the largest remaining
    piece and is larger than its 861 lines suggest — it depends on chrono-node's
    certainty flags, match extents and range ends, none of which any Rust crate
    provides. Three options are set out in `01-business-logic-inventory.md`; the
    corpus makes the third (deliberately narrowing what quick-add supports)
-   measurable rather than speculative, and that measurement should come before
-   the estimate.
+   measurable rather than speculative — and `04-parser-grammar.md` now contains
+   that measurement.
+3. **Wire an M2 app shell** once M0 passes: a page list and an editor screen,
+   both of which the FFI already supports.
 
 ## Corrections made to the plan
 
