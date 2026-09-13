@@ -117,7 +117,7 @@ estimate in the other direction.
 
 The English casual locale is **~1,400 lines**, and the part Pikos reaches is
 eleven parsers and thirteen refiners over a shared known/implied component
-model. That is bigger than nine hand-written patterns, but it is *mechanical*:
+model. That is bigger than nine hand-written patterns, but it is _mechanical_:
 each piece is a regex and twenty lines of field assignment, and there is a
 reference implementation to check every one against. Hand-writing nine families
 would have been smaller to type and much harder to be sure about, because
@@ -126,17 +126,17 @@ nothing would have told me where the boundary fell until a user found it.
 So `crates/pikos-core/src/nlp/` is a port of that subset, not a
 reimplementation:
 
-| Module          | What it is                                                       |
-| --------------- | ---------------------------------------------------------------- |
-| `jsdate.rs`     | JavaScript `Date` arithmetic — overflow normalisation and all     |
-| `components.rs` | the known/implied split the certainty flags come from             |
-| `dict.rs`       | word lists and the regex fragments built from them                |
-| `engine.rs`     | the parse/refine pipeline                                        |
-| `parsers.rs`    | sixteen parsers                                                  |
-| `refiners.rs`   | thirteen refiners, in the order that decides the result          |
+| Module          | What it is                                                    |
+| --------------- | ------------------------------------------------------------- |
+| `jsdate.rs`     | JavaScript `Date` arithmetic — overflow normalisation and all |
+| `components.rs` | the known/implied split the certainty flags come from         |
+| `dict.rs`       | word lists and the regex fragments built from them            |
+| `engine.rs`     | the parse/refine pipeline                                     |
+| `parsers.rs`    | sixteen parsers                                               |
+| `refiners.rs`   | thirteen refiners, in the order that decides the result       |
 
 `jsdate.rs` is the one that looks like over-engineering and is not. chrono-node
-*relies* on `new Date(2026, 1, 31)` silently becoming 3 March: that is how
+_relies_ on `new Date(2026, 1, 31)` silently becoming 3 March: that is how
 `isValidDate` rejects 31 February. Wrapping `chrono::NaiveDate`, which returns
 `None` instead, would have changed which results survive the filter.
 
@@ -145,7 +145,7 @@ reimplementation:
 The caveat above no longer applies in the form it was written. `end of next
 month` and `a week on Tuesday` do not parse under this engine — but they do not
 parse under chrono-node either; they were never in the nine families because
-they were never in the grammar. The engine's coverage *is* chrono's coverage for
+they were never in the grammar. The engine's coverage _is_ chrono's coverage for
 English casual text, so there is no new boundary for users to discover, and
 nothing needs to fail visibly that did not already.
 
@@ -162,7 +162,7 @@ Two narrowings are real and deliberate, both recorded in the module docs:
 Two corpora, both generated from the TypeScript reference:
 
 - `date-expressions.json` — 644 cases: each distinct expression alone, at every
-  pinned reference. Says *which family* broke.
+  pinned reference. Says _which family_ broke.
 - `date-calls.json` — 1,628 cases: what chrono-node was actually asked,
   recorded through the real parser. Whole titles, so it grades match extents
   and candidate choice. **596 of its cases contain no date at all**, which is
@@ -193,12 +193,12 @@ The date engine was the part with no Rust equivalent. The other 861 lines of
 title that is whatever survives them — are now ported too, in
 `crates/pikos-core/src/nlp/quick_add/`.
 
-| Module           | What it is                                                     |
-| ---------------- | -------------------------------------------------------------- |
-| `text.rs`        | extract-and-strip regex replacement, and `date-fns` arithmetic  |
-| `tokens.rs`      | the rewrites, then `#tag` / `~folder` / `!urgent` / duration / window |
-| `recurrence.rs`  | cadence detection, RRULE strings, weekly expansion              |
-| `mod.rs`         | the pipeline, date assembly, title cleanup, result type         |
+| Module          | What it is                                                            |
+| --------------- | --------------------------------------------------------------------- |
+| `text.rs`       | extract-and-strip regex replacement, and `date-fns` arithmetic        |
+| `tokens.rs`     | the rewrites, then `#tag` / `~folder` / `!urgent` / duration / window |
+| `recurrence.rs` | cadence detection, RRULE strings, weekly expansion                    |
+| `mod.rs`        | the pipeline, date assembly, title cleanup, result type               |
 
 `text.rs` carries `date-fns` semantics deliberately kept apart from the date
 engine's `jsdate.rs`: `addMonths` on 31 January clamps to 28 February, where
@@ -207,7 +207,7 @@ JavaScript's `setMonth` rolls to 3 March. Both appear in the original — one in
 a silent few-days error.
 
 The pipeline order is load-bearing and matches the reference: rewrite, extract
-markers, detect cadence, *then* read the date. Cadence has to come first or
+markers, detect cadence, _then_ read the date. Cadence has to come first or
 "every tuesday" is consumed as the date "tuesday" and the recurrence is lost.
 
 ### How it is graded
@@ -265,17 +265,17 @@ time.
 The first sweep — 20,000 lines × 7 reference times — found **124 divergent
 inputs**, in five classes:
 
-| What was wrong                                                      | Where           |
-| ------------------------------------------------------------------- | --------------- |
-| A series dropped the end date a time range had given it              | `quick_add/mod` |
-| A series with a time but no date took the wrong branch entirely      | `quick_add/mod` |
-| `ExtractTimezoneOffsetRefiner` was missing                           | `refiners`      |
-| `String.substring`'s argument swap was not reproduced                | `engine`        |
-| A fixed week budget capped long series below the real limit          | `quick_add/recurrence` |
+| What was wrong                                                  | Where                  |
+| --------------------------------------------------------------- | ---------------------- |
+| A series dropped the end date a time range had given it         | `quick_add/mod`        |
+| A series with a time but no date took the wrong branch entirely | `quick_add/mod`        |
+| `ExtractTimezoneOffsetRefiner` was missing                      | `refiners`             |
+| `String.substring`'s argument swap was not reproduced           | `engine`               |
+| A fixed week budget capped long series below the real limit     | `quick_add/recurrence` |
 
 A second sweep with a different seed, after all five were fixed, found a
 **sixth** class the first had missed: a weekly rule injected the weekday of the
-*resolved date* rather than the weekday the text named, so "every 2 weeks on
+_resolved date_ rather than the weekday the text named, so "every 2 weeks on
 friday dec 28" — a Friday stated over a Monday — became a Monday rule.
 
 Three of the six deserve naming, because none of them is the kind of thing
@@ -297,7 +297,7 @@ showed that was too narrow a description of it. `ExtractTimezoneOffsetRefiner`
 looks for a sign and one or two digits after whatever was just matched, and a
 hyphen after a date is not rare: in "may 2 to 10 2026-04-01" the month-name
 parser claims "may 2 to 10 2026", and the refiner reads the "-04" of the
-*following date* as UTC-4. The user typed two dates and got a four-hour shift.
+_following date_ as UTC-4. The user typed two dates and got a four-hour shift.
 It is now reproduced, because parity is the bar — but it is a bug in the
 reference, and the fix belongs there, where it would land for both platforms at
 once.
@@ -309,7 +309,7 @@ to respect still had room. The week budget is now derived from the limit, so
 there is one bound rather than two, and the visible one wins.
 
 That 2,026-page series is itself worth knowing about. "mon/wed/fri 10 times"
-resolves "fri 10" to a concrete date, leaving "2026  times" behind, which the
+resolves "fri 10" to a concrete date, leaving "2026 times" behind, which the
 window rule reads as a count of 2026. The reference then hands that number
 straight to the expander — it has no cap of any kind, so "99999 times" would
 try to build 99,999 pages. This port caps at 10,000, which is a deliberate
@@ -319,8 +319,8 @@ divergence at the extreme and the one place the two do not agree.
 
 Three independent seeds, 20,000 / 25,000 / 30,000 lines each, at seven
 reference times: **no divergences**. Every class found is also pinned by a unit
-test, because a regression corpus says *that* something broke and a unit test
-says *what*.
+test, because a regression corpus says _that_ something broke and a unit test
+says _what_.
 
 A 500-line sample is committed as `tests/corpus/parser-fuzz.json`, seeded and
 regenerable, with every input that ever diverged included by name in

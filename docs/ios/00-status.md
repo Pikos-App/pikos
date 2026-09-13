@@ -3,11 +3,12 @@
 Index for `docs/ios/`. Written 2026-09-12, against the architecture and
 delivery plan.
 
-| Doc                              | What it is                                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `01-business-logic-inventory.md` | Every module classified rust / ts-portable / ui-only, with three addenda correcting the first pass           |
-| `02-ffi-surface.md`              | The Swift ↔ Rust boundary: what crosses it, and why dates cross as strings                                   |
-| `03-m0-spike.md`                 | The editor-in-webview spike: how to run it, how to measure each item on the pass bar, what to do if it fails |
+| Doc                              | What it is                                                                                                           |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `01-business-logic-inventory.md` | Every module classified rust / ts-portable / ui-only, with three addenda correcting the first pass                   |
+| `02-ffi-surface.md`              | The Swift ↔ Rust boundary: what crosses it, and why dates cross as strings                                           |
+| `03-m0-spike.md`                 | The editor-in-webview spike: how to run it, how to measure each item on the pass bar, what to do if it fails         |
+| `04-parser-grammar.md`           | The quick-add parser: what it needed, what was built, and what differential fuzzing found that the corpora could not |
 
 ## Done
 
@@ -66,8 +67,20 @@ the rest of it: cadence, tags, folders, priorities, durations, windows. Graded
 against 2,219 corpus cases generated from the TypeScript reference, plus 1,628
 recorded date-engine calls and 644 isolated expressions, and mutation-tested
 throughout. `parse_quick_add` is the pure surface; `create_from_quick_add` is
-the one that writes the pages. See `04-parser-grammar.md`, which records both
-the original measurement and what was actually built.
+the one that writes the pages, and the iOS sheet parses as you type with the
+native pickers kept alongside.
+
+**Every ported module is differentially fuzzed, and it mattered.** Passing all
+2,219 parser cases turned out to mean less than it sounded: a fuzzer that
+composes lines from fragments _in random order_ found six divergence classes the
+corpus never reached, because every input in it exercises one feature at a time
+and the parser is a pipeline whose ordering is load-bearing. Recurrence and
+calendar layout now have the same treatment. Three seeds each, no divergences
+left, and every generator is mutation-tested — twice a clean run turned out to
+be clean for the wrong reason until an axis was added deliberately.
+`04-parser-grammar.md` has the detail; the rule it ends on is worth carrying
+elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
+nothing else._
 
 ## Needs a Mac
 
@@ -83,6 +96,27 @@ Nothing here is blocked on design — only on hardware.
    the method for each item on the pass bar, and `EditorScreen` shows the
    cold-load time in the navigation bar on debug builds so one of them needs no
    instrumentation at all.
+
+## What to expect on the first build
+
+Nothing here has seen a Swift compiler, so expect the first build to be a
+session of its own. What has been done instead:
+
+- **Call sites are checked against the bindings.** `pnpm check:ios-ffi` compares
+  every `NewPage(…)`, `PageEdit(…)` and `workspace.x(…)` in the app against the
+  generated Swift — labels must exist, and Swift requires them in declaration
+  order. 53 call sites, all clean. It runs in CI, so it cannot rot.
+- **The Swift was read adversarially instead of compiled.** That found, among
+  others: a `.sheet` whose `onDismiss` cannot be a second trailing closure
+  because it is declared before `content`; two main-actor helpers called from
+  non-isolated code; a missing `dismantleUIView` leaking a message handler; and
+  a SwiftUI feedback loop where the parse writing to a control fired the same
+  `onChange` that records a manual override.
+- **What that cannot find** is the rest: wrong types, missing `await`, strict
+  concurrency on the webview coordinator (which conforms to two delegate
+  protocols that are main-actor in practice), and anything about the
+  XCFramework linking. `SWIFT_STRICT_CONCURRENCY: complete` is set on purpose,
+  so expect it to have opinions.
 
 ## Next, in order
 
