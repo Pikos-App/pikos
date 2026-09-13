@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { CONTENT_SCHEMA_VERSION } from "../types";
 import type { Page, PageSummary } from "../types";
 import { deriveTags, findRecurringOccurrenceClone, isDone, isOpen, toPageSummary } from "./page";
 
@@ -45,6 +46,7 @@ describe("toPageSummary", () => {
     const page: Page = {
       ...makeSummary({ tags: ["a"], title: "Full" }),
       content: '{"type":"doc"}',
+      contentSchemaVersion: CONTENT_SCHEMA_VERSION,
       contentText: "body text",
     };
     const summary = toPageSummary(page);

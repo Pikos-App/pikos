@@ -6,7 +6,6 @@ import type { BuildPageListRowsInput } from "./buildPageListRows";
 
 function makePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return {
-    contentSchemaVersion: CONTENT_SCHEMA_VERSION,
     createdAt: "2026-01-01T00:00:00",
     folderId: null,
     id: overrides.id ?? crypto.randomUUID(),

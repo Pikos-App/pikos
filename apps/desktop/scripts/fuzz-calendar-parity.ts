@@ -26,11 +26,10 @@ import { dirname, resolve } from "node:path";
 
 import type { PageSummary } from "@pikos/core";
 import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
-
-import { assignStableAllDayRows, buildAllDayBars } from "@/features/calendar/utils/allDayLayout";
-import { computeCalendarMetrics } from "@/features/calendar/utils/calendarGeometry";
-import { buildDayBlocks } from "@/features/calendar/utils/calendarLayout";
-import type { CalendarDensity } from "@/shared/constants/calendar";
+import { assignStableAllDayRows, buildAllDayBars } from "@pikos/core";
+import { computeCalendarMetrics } from "@pikos/core";
+import { buildDayBlocks } from "@pikos/core";
+import type { CalendarDensity } from "@pikos/core";
 
 const EXPECTED_TZ = "UTC";
 const DENSITIES: CalendarDensity[] = ["compact", "normal", "spacious"];

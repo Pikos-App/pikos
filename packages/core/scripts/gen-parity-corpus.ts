@@ -331,11 +331,12 @@ const EXPANSION_CASES: {
  *  values are irrelevant to the logic under test — only the occurrence dates
  *  the expander computes are projected into the corpus below. */
 const TEMPLATE_PAGE: PageSummary = {
-  contentSchemaVersion: CONTENT_SCHEMA_VERSION,
   createdAt: "2026-03-01T00:00:00",
   folderId: null,
   id: "page-0000",
+  isRecurring: false,
   priority: 0,
+  scheduleLocked: false,
   sortOrder: 0,
   status: "not_started",
   tags: [],

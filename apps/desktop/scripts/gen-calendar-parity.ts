@@ -44,18 +44,17 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import type { PageSummary } from "@pikos/core";
-import { CONTENT_SCHEMA_VERSION } from "@pikos/core";
-
 import {
   assignStableAllDayRows,
   buildAllDayBars,
   crossingMidnightsCount,
-} from "@/features/calendar/utils/allDayLayout";
-import { computeCalendarMetrics } from "@/features/calendar/utils/calendarGeometry";
-import { buildDayBlocks } from "@/features/calendar/utils/calendarLayout";
-import type { CalendarDensity } from "@/shared/constants/calendar";
+} from "@pikos/core";
+import { computeCalendarMetrics } from "@pikos/core";
+import { buildDayBlocks } from "@pikos/core";
+import type { CalendarDensity } from "@pikos/core";
+import { computeScheduleTransition, normalizeEndInput } from "@pikos/core";
+
 import { parseDeepLink } from "@/shared/deep-link/parseDeepLink";
-import { computeScheduleTransition, normalizeEndInput } from "@/shared/utils/schedule";
 
 const EXPECTED_TZ = "UTC";
 const DENSITIES: CalendarDensity[] = ["compact", "normal", "spacious"];
@@ -97,13 +96,14 @@ function page(
   createdAt = "2026-03-01T00:00:00"
 ): PageSummary {
   return {
-    contentSchemaVersion: CONTENT_SCHEMA_VERSION,
     createdAt,
     folderId: null,
     id,
+    isRecurring: false,
     priority: 0,
     scheduledEnd: scheduledEnd ?? null,
     scheduledStart,
+    scheduleLocked: false,
     sortOrder: 0,
     status: "not_started",
     tags: [],
