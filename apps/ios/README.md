@@ -107,6 +107,14 @@ suite.
   only. The finished pages come from their own paginated query and a filter
   over the rows that happen to be loaded would search a fifth of the folder
   while looking like it searched all of it.
+- **Most of the desktop's settings.** Five tabs there, one screen here, on
+  purpose: keyboard shortcuts, window state and an editor line width describe
+  things a phone does not have, and the calendar's day count is an iPad
+  question. What is on the screen is theme, list and calendar density, week
+  start and the default folder — every one of them wired to something, because
+  a settings row that does nothing is indistinguishable from one that is
+  broken. Notifications and import/export are still missing entirely, not
+  omitted by design.
 - **Ending a series from the list.** The context menu's "Clear Date" is left
   out on a repeating page, where it would remove the one-off schedule rows and
   change nothing the user can see — a page with a rule owns its

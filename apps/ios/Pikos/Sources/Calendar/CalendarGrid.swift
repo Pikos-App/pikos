@@ -16,13 +16,23 @@ struct CalendarGrid: View {
     let days: [String]
     let entries: [CalendarEntry]
     let now: String
+    /// Points per hour before Dynamic Type is applied — the reader's calendar
+    /// density setting.
+    let hourHeightBase: CGFloat
     let onOpen: (String) -> Void
 
     /// Scales the hour height with the reader's text size. A calendar whose
-    /// rows stay 64pt while its labels grow is how a block ends up with its
+    /// rows stay put while its labels grow is how a block ends up with its
     /// title clipped at the accessibility sizes.
-    @ScaledMetric(relativeTo: .body) private var hourHeight: CGFloat = 64
+    ///
+    /// A percentage rather than the height itself, because `@ScaledMetric`
+    /// takes its base from a literal and the base is now a setting. Scaling a
+    /// nominal 100 and multiplying gives the same curve from whichever height
+    /// the reader chose.
+    @ScaledMetric(relativeTo: .body) private var typeScale: CGFloat = 100
     @State private var allDayExpanded = false
+
+    private var hourHeight: CGFloat { hourHeightBase * typeScale / 100 }
 
     private var metrics: CalendarGeometry.Metrics {
         CalendarGeometry.Metrics(hourHeight: hourHeight)

@@ -37,6 +37,12 @@ struct CompletionToggle: View {
 struct PageRow: View {
     let page: PageSummary
 
+    /// Read from the environment rather than passed in. Density is a property
+    /// of every row in the app, not of one list, and a parameter would have to
+    /// be threaded through each new place a row appears — the failure being a
+    /// single section that quietly ignores the setting.
+    @Environment(SettingsStore.self) private var settings
+
     private var isDone: Bool { page.status == "done" }
 
     var body: some View {
@@ -82,7 +88,7 @@ struct PageRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 2 + settings.listDensity.rowPadding)
     }
 }
 

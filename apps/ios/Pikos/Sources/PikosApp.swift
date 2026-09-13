@@ -5,6 +5,7 @@ import SwiftUI
 @main
 struct PikosApp: App {
     @State private var store = WorkspaceStore()
+    @State private var settings = SettingsStore()
     @State private var route = Route.shared
 
     init() {
@@ -18,6 +19,7 @@ struct PikosApp: App {
         WindowGroup {
             RootView()
                 .environment(store)
+                .environment(settings)
                 .environment(route)
                 // Opening the workspace runs migrations, so it happens once,
                 // here, in the app process. A widget must never be the process
@@ -36,6 +38,7 @@ struct PikosApp: App {
 struct RootView: View {
     @Environment(Route.self) private var route
     @Environment(WorkspaceStore.self) private var store
+    @Environment(SettingsStore.self) private var settings
 
     var body: some View {
         @Bindable var route = route
@@ -49,6 +52,11 @@ struct RootView: View {
         // and the editor as detail, closer to the desktop app than to this —
         // replaces this view and nothing else. `PageListScreen` and
         // `SearchScreen` do not know which shell they are in.
+        // Both applied at the root rather than per screen. `preferredColorScheme`
+        // has to sit above the sheets or a presented sheet keeps the system
+        // appearance while the app behind it does not, and the calendar is read
+        // by every `DatePicker` below here — including the ones inside sheets,
+        // which is exactly what a per-screen modifier would miss.
         TabView(selection: $route.tab) {
             NavigationStack(path: $route.pagesPath) {
                 PageListScreen()
@@ -90,5 +98,7 @@ struct RootView: View {
             guard pending != nil else { return }
             route.applyPending(to: store)
         }
+        .preferredColorScheme(settings.colorScheme)
+        .environment(\.calendar, settings.calendar)
     }
 }

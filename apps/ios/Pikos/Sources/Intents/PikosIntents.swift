@@ -85,8 +85,23 @@ struct CreatePageIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let workspace = try await openWorkspace()
+        // An intent has no sheet to show a folder picker in, so an unanswered
+        // folder parameter falls back to the preference rather than to the
+        // Inbox. This is the path that setting is mostly *for*: in the app the
+        // user can see the picker and change it, and here they cannot.
+        //
+        // The stored id can name a folder that has since been deleted, in
+        // which case the create would fail on the foreign key — so it is
+        // checked first and the Inbox is the fallback, the same resolution the
+        // settings screen describes.
+        let folderId: String?
+        if let chosen = folder?.id {
+            folderId = chosen
+        } else {
+            folderId = await preferredFolderID(in: workspace)
+        }
         let page = try await workspace.createPage(
-            page: NewPage(title: title, folderId: folder?.id))
+            page: NewPage(title: title, folderId: folderId))
 
         // The widget shows today's pages, and a page created by voice should
         // appear there without waiting for the next scheduled refresh.
@@ -94,6 +109,18 @@ struct CreatePageIntent: AppIntent {
 
         return .result(dialog: "Added \(page.title).")
     }
+}
+
+/// The default folder, if it still exists.
+///
+/// Read through the handle the intent already holds rather than opening a
+/// second one: two handles on the same file is the one-writer rule's near miss,
+/// and this needs nothing the existing handle cannot answer.
+@MainActor
+private func preferredFolderID(in workspace: Workspace) async -> String? {
+    guard let preferred = Preferences.shared.defaultFolderID else { return nil }
+    let folders = (try? await workspace.listFolders()) ?? []
+    return folders.contains { $0.id == preferred && !$0.isExternalCalendar } ? preferred : nil
 }
 
 // MARK: - Search

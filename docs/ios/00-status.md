@@ -101,6 +101,16 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**Settings exist.** Theme, list density, calendar density, week start and the
+default folder for new pages, in the App Group's `UserDefaults` so the widget
+and the intents read the same values the app does. Deliberately a fraction of
+the desktop's five tabs — most of what is there describes a window, a keyboard
+or a three-column calendar — and every row that did ship is wired to something:
+theme and week start go into the environment at the root so sheets and every
+`DatePicker` below pick them up, density reaches the calendar grid and the list
+rows, and the default folder is honoured by quick add _and_ by the App Intent,
+which is the path it mostly exists for since an intent has no picker to show.
+
 **The two date views exist, and porting them found a dead link.** Today now
 splits into overdue and due-today, and Upcoming — a whole smart view iOS did
 not have — groups the next seven days. The membership, the overdue rule and the

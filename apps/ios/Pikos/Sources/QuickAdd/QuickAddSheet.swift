@@ -24,6 +24,7 @@ import SwiftUI
 /// title that will be saved, which is the thing most likely to be wrong.
 struct QuickAddSheet: View {
     @Environment(WorkspaceStore.self) private var store
+    @Environment(SettingsStore.self) private var settings
     @Environment(\.dismiss) private var dismiss
 
     @State private var line: String
@@ -133,6 +134,18 @@ struct QuickAddSheet: View {
             // costs one tap and a sentence.
             .onAppear {
                 lineFocused = true
+                // The preferred folder, unless the line names one. Applied here
+                // rather than in `init` because the store is not reachable from
+                // an initialiser, and set through `appliedFolderId` as well so
+                // the parse can still override it — a default is where a page
+                // goes when nothing says otherwise, and "~work" in the line
+                // says otherwise.
+                if !folderIsManual, let preferred = settings.defaultFolderID,
+                    store.fileableFolders.contains(where: { $0.id == preferred })
+                {
+                    folderId = preferred
+                    appliedFolderId = preferred
+                }
                 // A prefill never fired `onChange`, so it has not been read yet.
                 if !line.isEmpty { reparse() }
             }

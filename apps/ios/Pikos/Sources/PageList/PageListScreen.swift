@@ -12,6 +12,7 @@ struct PageListScreen: View {
     @State private var isQuickAddPresented = false
     @State private var isFolderManagerPresented = false
     @State private var isTrashPresented = false
+    @State private var isSettingsPresented = false
     @State private var searchText = ""
     @State private var renaming: PageSummary?
     @State private var renameText = ""
@@ -57,6 +58,9 @@ struct PageListScreen: View {
         }
         .sheet(isPresented: $isTrashPresented) {
             TrashSheet()
+        }
+        .sheet(isPresented: $isSettingsPresented) {
+            SettingsScreen()
         }
         .alert(
             "Something went wrong",
@@ -376,6 +380,12 @@ struct PageListScreen: View {
                     isTrashPresented = true
                 } label: {
                     Label("Recently Deleted…", systemImage: "trash")
+                }
+                Divider()
+                Button {
+                    isSettingsPresented = true
+                } label: {
+                    Label("Settings…", systemImage: "gearshape")
                 }
             } label: {
                 Label("Switch view", systemImage: "line.3.horizontal.decrease.circle")

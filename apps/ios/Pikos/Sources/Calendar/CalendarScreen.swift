@@ -17,6 +17,7 @@ import SwiftUI
 struct CalendarScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
+    @Environment(SettingsStore.self) private var settings
     @Environment(\.horizontalSizeClass) private var widthClass
 
     @State private var anchor = Date()
@@ -53,6 +54,7 @@ struct CalendarScreen: View {
                     days: dayStrings,
                     entries: entries,
                     now: now,
+                    hourHeightBase: settings.calendarDensity.hourHeight,
                     onOpen: { pageId in openPage(pageId) })
             }
         }
