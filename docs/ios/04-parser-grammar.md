@@ -106,3 +106,80 @@ The safest sequencing follows from that: build the Rust parser, run it against
 the corpus alongside the TypeScript one, and ship it behind a flag on desktop
 first — the same approach that let recurrence and calendar layout land without
 risk. Real usage will then show what the test suite did not.
+
+---
+
+## Addendum: what was actually built
+
+The plan above — write a parser for the nine families and accept a narrower
+boundary — was not what shipped. Reading chrono-node's source changed the
+estimate in the other direction.
+
+The English casual locale is **~1,400 lines**, and the part Pikos reaches is
+eleven parsers and thirteen refiners over a shared known/implied component
+model. That is bigger than nine hand-written patterns, but it is *mechanical*:
+each piece is a regex and twenty lines of field assignment, and there is a
+reference implementation to check every one against. Hand-writing nine families
+would have been smaller to type and much harder to be sure about, because
+nothing would have told me where the boundary fell until a user found it.
+
+So `crates/pikos-core/src/nlp/` is a port of that subset, not a
+reimplementation:
+
+| Module          | What it is                                                       |
+| --------------- | ---------------------------------------------------------------- |
+| `jsdate.rs`     | JavaScript `Date` arithmetic — overflow normalisation and all     |
+| `components.rs` | the known/implied split the certainty flags come from             |
+| `dict.rs`       | word lists and the regex fragments built from them                |
+| `engine.rs`     | the parse/refine pipeline                                        |
+| `parsers.rs`    | sixteen parsers                                                  |
+| `refiners.rs`   | thirteen refiners, in the order that decides the result          |
+
+`jsdate.rs` is the one that looks like over-engineering and is not. chrono-node
+*relies* on `new Date(2026, 1, 31)` silently becoming 3 March: that is how
+`isValidDate` rejects 31 February. Wrapping `chrono::NaiveDate`, which returns
+`None` instead, would have changed which results survive the filter.
+
+### What this means for the caveat
+
+The caveat above no longer applies in the form it was written. `end of next
+month` and `a week on Tuesday` do not parse under this engine — but they do not
+parse under chrono-node either; they were never in the nine families because
+they were never in the grammar. The engine's coverage *is* chrono's coverage for
+English casual text, so there is no new boundary for users to discover, and
+nothing needs to fail visibly that did not already.
+
+Two narrowings are real and deliberate, both recorded in the module docs:
+
+1. **No timezones.** `3pm EST` parses as 3pm and leaves `EST` in the title,
+   where chrono-node would absorb it and shift the result. Pikos stores
+   wall-clock values, so there is nothing for an offset to apply to.
+2. **English only, casual only.** The other eight locales and the strict
+   configuration are not built. Quick-add never reaches them.
+
+### How it is graded
+
+Two corpora, both generated from the TypeScript reference:
+
+- `date-expressions.json` — 644 cases: each distinct expression alone, at every
+  pinned reference. Says *which family* broke.
+- `date-calls.json` — 1,628 cases: what chrono-node was actually asked,
+  recorded through the real parser. Whole titles, so it grades match extents
+  and candidate choice. **596 of its cases contain no date at all**, which is
+  what catches over-matching — the likelier failure mode, and the one a
+  corpus of only-positive cases would miss entirely.
+
+Both passed on the first run, which is not by itself evidence of anything.
+Fifteen deliberate mutations — implied hour, overlap ordering, the `may` verb
+check, each refiner removed in turn, pm arithmetic, slash-date field order —
+were each confirmed to fail the suite. Five initially survived the corpora;
+every one was a corpus gap rather than a test bug, and each is now covered by a
+unit test whose expectation was read off the reference with
+`pnpm --filter @pikos/core probe:chrono`, not reasoned out.
+
+### What is still TypeScript
+
+`parseInput`'s pre-processing: recurrence, tags, priority, folder, duration,
+and the rewriting that turns "tonight" and "this afternoon" into explicit forms
+before the date engine sees them. That is the rest of the port, and it is where
+the remaining 138 corpus inputs live.

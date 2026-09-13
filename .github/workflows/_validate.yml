@@ -54,6 +54,22 @@ jobs:
               exit 1
             }
 
+      # The Rust date engine is graded against corpora recorded from the
+      # TypeScript parser, which stays the reference until the port replaces it.
+      # A change to parser.ts that moves what chrono-node is asked would leave
+      # the corpora describing the old behaviour, and the Rust side would keep
+      # passing against a stale reference. Regenerating and failing on a diff is
+      # what makes that change show up here instead of on a user's phone.
+      - name: Date-engine corpora are up to date
+        run: |
+          pnpm --filter @pikos/core gen:date-corpus
+          pnpm --filter @pikos/core gen:date-calls
+          git diff --exit-code -- crates/pikos-core/tests/corpus \
+            || {
+              echo "::error::The date-engine corpora are stale. Run 'pnpm --filter @pikos/core gen:date-corpus && pnpm --filter @pikos/core gen:date-calls' and commit the result — then check crates/pikos-core/tests/date_parity.rs still passes."
+              exit 1
+            }
+
       - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
         run: pnpm audit:source
 

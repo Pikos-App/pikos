@@ -16,6 +16,17 @@ import type * as ChronoNode from "chrono-node";
 
 const real = createRequire(import.meta.url)("chrono-node") as typeof ChronoNode;
 
+/** Everything the parser reads back off a chrono result. */
+export interface RecordedResult {
+  index: number;
+  text: string;
+  /** Local wall-clock ISO, matching how Pikos stores dates. */
+  start: string;
+  startCertain: string[];
+  end: string | null;
+  endCertain: string[];
+}
+
 export interface RecordedCall {
   fn: "parse" | "parseDate";
   /** Text as it reached chrono — after the parser's own rewriting. */
@@ -27,17 +38,23 @@ export interface RecordedCall {
   certain: string[];
   /** Whether chrono parsed a range. */
   hasEnd: boolean;
+  /** The first result in full, or null when chrono found no date. */
+  result: RecordedResult | null;
 }
 
 export const calls: RecordedCall[] = [];
 
 const GRANULARITIES = ["hour", "minute", "second", "day", "month", "year", "weekday"] as const;
 
-export function parse(
-  text: string,
-  ref?: unknown,
-  opts?: unknown
-): ReturnType<typeof real.parse> {
+function localIso(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+}
+
+export function parse(text: string, ref?: unknown, opts?: unknown): ReturnType<typeof real.parse> {
   const results = real.parse(text, ref as Date, opts as Parameters<typeof real.parse>[2]);
   const first = results[0];
   calls.push({
@@ -46,6 +63,16 @@ export function parse(
     hasEnd: Boolean(first?.end),
     index: first ? first.index : null,
     matched: first ? first.text : null,
+    result: first
+      ? {
+          end: first.end ? localIso(first.end.date()) : null,
+          endCertain: first.end ? GRANULARITIES.filter((g) => first.end!.isCertain(g)) : [],
+          index: first.index,
+          start: localIso(first.start.date()),
+          startCertain: GRANULARITIES.filter((g) => first.start.isCertain(g)),
+          text: first.text,
+        }
+      : null,
     text,
   });
   return results;
@@ -59,6 +86,7 @@ export function parseDate(text: string, ref?: unknown, opts?: unknown): Date | n
     hasEnd: false,
     index: null,
     matched: result ? text : null,
+    result: null,
     text,
   });
   return result;

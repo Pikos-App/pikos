@@ -15,6 +15,7 @@
 pub mod calendar;
 pub mod dates;
 pub mod deep_link;
+pub mod nlp;
 pub mod page;
 pub mod recurrence;
 pub mod schedule;
@@ -25,6 +26,9 @@ pub use dates::{
     format_date_only, format_local_iso, is_all_day_iso, is_timed_iso, parse_local_iso,
 };
 pub use deep_link::{parse_deep_link, DeepLink, SmartView};
+pub use nlp::{
+    parse as parse_dates, parse_first as parse_first_date, DateMatch, Granularity, MatchedDate,
+};
 pub use page::{is_done, is_open, PageStatus};
 pub use recurrence::{compute_next_end, expand_for_range, next_occurrence_after, Occurrence};
 pub use schedule::{compute_schedule_transition, normalize_end_input, ScheduleTransition};
