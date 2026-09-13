@@ -113,10 +113,14 @@ as the user intended; every occurrence that had not happened yet is gone.
 
 It was undetectable before the merge, because nothing on the iOS side knew a
 page could repeat. `PageSummary` gained `is_recurring` with the sync work, and
-that is what made the question askable. The toggle now routes through
-`complete_recurring_occurrence` / `uncomplete_latest_recurring_occurrence`, and
-`a_plain_status_flip_on_a_recurring_head_ends_the_series` records what the wrong
-path does so nobody reintroduces it.
+that is what made the question askable. The first fix routed in Swift, reading `is_recurring` from the cached page list
+and defaulting to false when the page was not in it. Correct for the list
+screen, and a trap for everything else: a widget action or an App Intent
+completing a page it never listed would take the corrupting path silently. The
+routing now lives in `Workspace::set_page_status`, so the safe call is the only
+call — `a_plain_status_flip_on_a_recurring_head_ends_the_series` records what
+the wrong path does, and `the_status_toggle_routes_by_kind_without_being_told`
+records that no caller has to know which kind it holds.
 
 ## Needs a Mac
 

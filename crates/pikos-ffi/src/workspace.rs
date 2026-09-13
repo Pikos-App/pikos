@@ -573,6 +573,57 @@ impl Workspace {
         Ok(())
     }
 
+    /// Tick or untick a page, whatever kind it is.
+    ///
+    /// The single safe entry point for a checkbox, and the reason it exists is
+    /// that the unsafe one is indistinguishable at the call site. Setting
+    /// `status` on a recurring head ends the series; completing an occurrence
+    /// of it clones the head and advances it. A caller that has to know which
+    /// kind of page it holds before it can tick a box will eventually hold one
+    /// it has not checked — and the failure is silent and destroys data.
+    ///
+    /// The first version of this lived in Swift and read `is_recurring` from
+    /// the cached page list, defaulting to false when the page was not in it.
+    /// That is safe for the list screen and a trap for everything else: a
+    /// widget action or an App Intent completing a page it never listed would
+    /// take the corrupting path. Deciding here removes the trap rather than
+    /// documenting it.
+    pub async fn set_page_status(&self, page_id: String, done: bool) -> Result<(), WorkspaceError> {
+        let page = pikos_db::get_page(&self.pool, &page_id)
+            .await?
+            .ok_or_else(|| WorkspaceError::NotFound {
+                entity: "page".into(),
+                id: page_id.clone(),
+            })?;
+
+        if page.is_recurring {
+            if done {
+                self.complete_recurring_occurrence(page_id, None).await?;
+                return Ok(());
+            }
+            // A series with nothing completed has no occurrence to reopen; the
+            // head itself is what is ticked, so it flips like any other page.
+            if self
+                .uncomplete_latest_recurring_occurrence(page_id.clone())
+                .await?
+            {
+                return Ok(());
+            }
+        }
+
+        let status = if done { "done" } else { "not_started" };
+        pikos_db::update_page_impl(
+            &self.pool,
+            page_id,
+            pikos_db::PageUpdate {
+                status: Some(status.to_string()),
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Complete one occurrence of a recurring page.
     ///
     /// Not the same operation as setting `status` to done, and the difference is

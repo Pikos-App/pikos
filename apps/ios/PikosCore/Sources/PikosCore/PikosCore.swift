@@ -974,6 +974,25 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func search(query: String, limit: UInt32) async throws  -> [SearchHit]
     
     /**
+     * Tick or untick a page, whatever kind it is.
+     *
+     * The single safe entry point for a checkbox, and the reason it exists is
+     * that the unsafe one is indistinguishable at the call site. Setting
+     * `status` on a recurring head ends the series; completing an occurrence
+     * of it clones the head and advances it. A caller that has to know which
+     * kind of page it holds before it can tick a box will eventually hold one
+     * it has not checked — and the failure is silent and destroys data.
+     *
+     * The first version of this lived in Swift and read `is_recurring` from
+     * the cached page list, defaulting to false when the page was not in it.
+     * That is safe for the list screen and a trap for everything else: a
+     * widget action or an App Intent completing a page it never listed would
+     * take the corrupting path. Deciding here removes the trap rather than
+     * documenting it.
+     */
+    func setPageStatus(pageId: String, done: Bool) async throws 
+    
+    /**
      * Make a page recurring.
      *
      * `scheduled_start` is snapped onto the first date the rule actually
@@ -1449,6 +1468,39 @@ open func search(query: String, limit: UInt32)async throws  -> [SearchHit]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeSearchHit.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Tick or untick a page, whatever kind it is.
+     *
+     * The single safe entry point for a checkbox, and the reason it exists is
+     * that the unsafe one is indistinguishable at the call site. Setting
+     * `status` on a recurring head ends the series; completing an occurrence
+     * of it clones the head and advances it. A caller that has to know which
+     * kind of page it holds before it can tick a box will eventually hold one
+     * it has not checked — and the failure is silent and destroys data.
+     *
+     * The first version of this lived in Swift and read `is_recurring` from
+     * the cached page list, defaulting to false when the page was not in it.
+     * That is safe for the list screen and a trap for everything else: a
+     * widget action or an App Intent completing a page it never listed would
+     * take the corrupting path. Deciding here removes the trap rather than
+     * documenting it.
+     */
+open func setPageStatus(pageId: String, done: Bool)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_page_status(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterBool.lower(done)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -4612,6 +4664,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_search() != 52923) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_page_status() != 12587) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_recurrence() != 1536) {

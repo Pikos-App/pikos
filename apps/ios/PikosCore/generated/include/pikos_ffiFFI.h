@@ -378,6 +378,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_schedule_page(uint64_t ptr, RustBu
 uint64_t uniffi_pikos_ffi_fn_method_workspace_search(uint64_t ptr, RustBuffer query, uint32_t limit
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_STATUS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_STATUS
+uint64_t uniffi_pikos_ffi_fn_method_workspace_set_page_status(uint64_t ptr, RustBuffer page_id, int8_t done
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_RECURRENCE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_RECURRENCE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_recurrence(uint64_t ptr, RustBuffer page_id, RustBuffer rrule, RustBuffer scheduled_start, RustBuffer scheduled_end, RustBuffer timezone
@@ -924,6 +929,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_schedule_page(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SEARCH
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_search(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_PAGE_STATUS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_PAGE_STATUS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_page_status(void
     
 );
 #endif

@@ -1240,3 +1240,116 @@ async fn filing_into_a_calendars_folder_is_refused_not_failed() {
         other => panic!("deleting one is refused too, got {other:?}"),
     }
 }
+
+/// The safe checkbox, on every kind of page.
+///
+/// The point of testing this rather than only the two paths underneath is that
+/// the *routing* is the part a caller cannot see. A caller holding a page id and
+/// a boolean has no way to know which of two destructive-if-wrong operations it
+/// is asking for, which is why the decision does not belong at the call site.
+#[tokio::test]
+async fn the_status_toggle_routes_by_kind_without_being_told() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let plain = ws.create_page(new_page("Buy milk")).await.unwrap();
+    ws.set_page_status(plain.id.clone(), true).await.unwrap();
+    assert_eq!(ws.get_page(plain.id.clone()).await.unwrap().status, "done");
+    ws.set_page_status(plain.id.clone(), false).await.unwrap();
+    assert_eq!(
+        ws.get_page(plain.id.clone()).await.unwrap().status,
+        "not_started"
+    );
+
+    let series = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2099-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+    let first = ws
+        .get_page(series.id.clone())
+        .await
+        .unwrap()
+        .scheduled_start
+        .unwrap();
+
+    ws.set_page_status(series.id.clone(), true).await.unwrap();
+    let after = ws.get_page(series.id.clone()).await.unwrap();
+    assert_eq!(
+        after.status, "not_started",
+        "the series is not finished by one tick"
+    );
+    assert!(
+        after.scheduled_start.as_deref() > Some(first.as_str()),
+        "the head advanced instead"
+    );
+
+    ws.set_page_status(series.id.clone(), false).await.unwrap();
+    assert_eq!(
+        ws.get_page(series.id.clone())
+            .await
+            .unwrap()
+            .scheduled_start,
+        Some(first),
+        "and unticking walks it back"
+    );
+}
+
+/// Unticking a recurring head that is `done` with nothing completed recovers it.
+///
+/// That state should not arise from this app any more, but it is exactly what a
+/// plain status flip leaves behind — and such rows already exist in databases
+/// this app will open, because that is the bug being fixed. Without the
+/// fallback, `uncomplete_latest` finds no occurrence to reopen, returns false,
+/// and the tap does nothing at all: a checkbox stuck on with no way to clear it.
+#[tokio::test]
+async fn unticking_recovers_a_head_left_done_with_no_completions() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let series = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2099-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    // The damaged state, produced the way it gets produced.
+    ws.update_page(
+        series.id.clone(),
+        PageEdit {
+            status: Some("done".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(ws.get_page(series.id.clone()).await.unwrap().status, "done");
+
+    ws.set_page_status(series.id.clone(), false).await.unwrap();
+    assert_eq!(
+        ws.get_page(series.id.clone()).await.unwrap().status,
+        "not_started",
+        "the head is tickable again rather than stuck on"
+    );
+}
+
+/// A caller holding a stale id — a widget timeline, a restored navigation
+/// stack — gets a distinct answer rather than a silent no-op.
+#[tokio::test]
+async fn toggling_a_page_that_is_gone_is_not_found() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    match ws.set_page_status("no-such-page".to_string(), true).await {
+        Err(WorkspaceError::NotFound { entity, .. }) => assert_eq!(entity, "page"),
+        other => panic!("expected NotFound, got {other:?}"),
+    }
+}
