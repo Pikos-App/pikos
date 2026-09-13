@@ -31,6 +31,7 @@ use pikos_core::calendar::timed::assign_timed_columns;
 use pikos_core::calendar::LayoutPage as CoreLayoutPage;
 use pikos_core::dates::parse_local_iso;
 use pikos_core::deep_link::{parse_deep_link as core_parse_deep_link, DeepLink as CoreDeepLink};
+use pikos_core::nlp::quick_add as core_quick_add;
 use pikos_core::recurrence as core_recurrence;
 use pikos_core::schedule as core_schedule;
 use pikos_core::text::extract_text as core_extract_text;
@@ -233,6 +234,118 @@ pub fn expand_recurrence(
     .into_iter()
     .map(Into::into)
     .collect()
+}
+
+// ─── Quick add ───────────────────────────────────────────────────────────────
+
+/// What a quick-add line said about priority.
+///
+/// Three states, not two: writing nothing leaves an existing priority alone,
+/// while `!0` clears it. Collapsing them into an optional would make "no
+/// priority mentioned" indistinguishable from "remove the priority", and the
+/// second is a real edit.
+#[derive(uniffi::Enum)]
+pub enum PriorityEdit {
+    Unchanged,
+    Cleared,
+    Set { priority: Priority },
+}
+
+#[derive(uniffi::Enum)]
+pub enum Priority {
+    Urgent,
+    High,
+    Medium,
+    Low,
+}
+
+/// One page's worth of quick-add input.
+#[derive(uniffi::Record)]
+pub struct QuickAddInput {
+    pub title: String,
+    /// `YYYY-MM-DD` for an all-day page, `YYYY-MM-DDTHH:MM:SS` for a timed one.
+    pub scheduled_start: Option<String>,
+    pub scheduled_end: Option<String>,
+    pub duration_minutes: Option<i64>,
+    pub tags: Vec<String>,
+    /// A folder *name* as typed, not an id — matching it against the workspace
+    /// is the caller's job, because only it knows the folder tree.
+    pub folder_query: Option<String>,
+    pub priority: PriorityEdit,
+}
+
+/// What a quick-add line asked for.
+#[derive(uniffi::Enum)]
+pub enum QuickAddResult {
+    /// One page.
+    Single { input: QuickAddInput },
+    /// Several concrete pages — the user named specific days ("m/w/f",
+    /// "weekdays") rather than a rule.
+    Finite { inputs: Vec<QuickAddInput> },
+    /// One page plus a recurrence rule; occurrences are expanded at display
+    /// time rather than written out.
+    Recurring { input: QuickAddInput, rrule: String },
+}
+
+/// Parse a line of quick-add input — "standup every weekday at 9am #work".
+///
+/// `reference` is "now" as a wall-clock ISO string, and it is a parameter
+/// rather than read from the clock so the same line parses the same way in a
+/// test, in a widget, and in the app. `None` when `reference` is malformed;
+/// an input with nothing parseable in it is not an error, it is a page whose
+/// title is the whole line.
+#[uniffi::export]
+pub fn parse_quick_add(input: String, reference: String) -> Option<QuickAddResult> {
+    let reference = parse_local_iso(&reference)?;
+    Some(core_quick_add::parse_input(&input, reference).into())
+}
+
+impl From<core_quick_add::Priority> for Priority {
+    fn from(priority: core_quick_add::Priority) -> Self {
+        match priority {
+            core_quick_add::Priority::Urgent => Priority::Urgent,
+            core_quick_add::Priority::High => Priority::High,
+            core_quick_add::Priority::Medium => Priority::Medium,
+            core_quick_add::Priority::Low => Priority::Low,
+        }
+    }
+}
+
+impl From<core_quick_add::ParsedInput> for QuickAddInput {
+    fn from(input: core_quick_add::ParsedInput) -> Self {
+        Self {
+            title: input.title,
+            scheduled_start: input.scheduled_start,
+            scheduled_end: input.scheduled_end,
+            duration_minutes: input.duration_minutes,
+            tags: input.tags,
+            folder_query: input.folder_query,
+            priority: match input.priority {
+                None => PriorityEdit::Unchanged,
+                Some(None) => PriorityEdit::Cleared,
+                Some(Some(priority)) => PriorityEdit::Set {
+                    priority: priority.into(),
+                },
+            },
+        }
+    }
+}
+
+impl From<core_quick_add::ParseResult> for QuickAddResult {
+    fn from(result: core_quick_add::ParseResult) -> Self {
+        match result {
+            core_quick_add::ParseResult::Single { input } => QuickAddResult::Single {
+                input: input.into(),
+            },
+            core_quick_add::ParseResult::Finite { inputs } => QuickAddResult::Finite {
+                inputs: inputs.into_iter().map(Into::into).collect(),
+            },
+            core_quick_add::ParseResult::Recurring { input, rrule } => QuickAddResult::Recurring {
+                input: input.into(),
+                rrule,
+            },
+        }
+    }
 }
 
 // ─── Calendar layout ─────────────────────────────────────────────────────────

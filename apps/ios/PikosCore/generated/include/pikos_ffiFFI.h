@@ -293,6 +293,11 @@ uint64_t uniffi_pikos_ffi_fn_constructor_workspace_open(RustBuffer path
 int64_t uniffi_pikos_ffi_fn_method_workspace_content_schema_version(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CREATE_FOLDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CREATE_FOLDER
+uint64_t uniffi_pikos_ffi_fn_method_workspace_create_folder(uint64_t ptr, RustBuffer name, RustBuffer color
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CREATE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CREATE_PAGE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_create_page(uint64_t ptr, RustBuffer page
@@ -397,6 +402,11 @@ RustBuffer uniffi_pikos_ffi_fn_func_normalize_end_input(RustBuffer current_start
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PARSE_DEEP_LINK
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PARSE_DEEP_LINK
 RustBuffer uniffi_pikos_ffi_fn_func_parse_deep_link(RustBuffer url, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PARSE_QUICK_ADD
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PARSE_QUICK_ADD
+RustBuffer uniffi_pikos_ffi_fn_func_parse_quick_add(RustBuffer input, RustBuffer reference, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_PIKOS_FFI_RUSTBUFFER_ALLOC
@@ -725,6 +735,12 @@ uint16_t uniffi_pikos_ffi_checksum_func_parse_deep_link(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PARSE_QUICK_ADD
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PARSE_QUICK_ADD
+uint16_t uniffi_pikos_ffi_checksum_func_parse_quick_add(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_GET_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_GET_PAGE
 uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_get_page(void
@@ -746,6 +762,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CONTENT_SCHEMA_VERSION
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CONTENT_SCHEMA_VERSION
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_content_schema_version(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CREATE_FOLDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CREATE_FOLDER
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_create_folder(void
     
 );
 #endif

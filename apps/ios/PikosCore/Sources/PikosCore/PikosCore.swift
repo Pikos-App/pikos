@@ -783,6 +783,8 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func contentSchemaVersion()  -> Int64
     
+    func createFolder(name: String, color: String?) async throws  -> Folder
+    
     func createPage(page: NewPage) async throws  -> Page
     
     func getPage(id: String) async throws  -> Page
@@ -911,6 +913,22 @@ open func contentSchemaVersion() -> Int64  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+    
+open func createFolder(name: String, color: String?)async throws  -> Folder  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_create_folder(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(name),FfiConverterOptionString.lower(color)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFolder_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
 }
     
 open func createPage(page: NewPage)async throws  -> Page  {
@@ -1955,6 +1973,97 @@ public func FfiConverterTypePageSummary_lower(_ value: PageSummary) -> RustBuffe
 
 
 /**
+ * One page's worth of quick-add input.
+ */
+public struct QuickAddInput: Equatable, Hashable {
+    public var title: String
+    /**
+     * `YYYY-MM-DD` for an all-day page, `YYYY-MM-DDTHH:MM:SS` for a timed one.
+     */
+    public var scheduledStart: String?
+    public var scheduledEnd: String?
+    public var durationMinutes: Int64?
+    public var tags: [String]
+    /**
+     * A folder *name* as typed, not an id — matching it against the workspace
+     * is the caller's job, because only it knows the folder tree.
+     */
+    public var folderQuery: String?
+    public var priority: PriorityEdit
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, 
+        /**
+         * `YYYY-MM-DD` for an all-day page, `YYYY-MM-DDTHH:MM:SS` for a timed one.
+         */scheduledStart: String?, scheduledEnd: String?, durationMinutes: Int64?, tags: [String], 
+        /**
+         * A folder *name* as typed, not an id — matching it against the workspace
+         * is the caller's job, because only it knows the folder tree.
+         */folderQuery: String?, priority: PriorityEdit) {
+        self.title = title
+        self.scheduledStart = scheduledStart
+        self.scheduledEnd = scheduledEnd
+        self.durationMinutes = durationMinutes
+        self.tags = tags
+        self.folderQuery = folderQuery
+        self.priority = priority
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension QuickAddInput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQuickAddInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QuickAddInput {
+        return
+            try QuickAddInput(
+                title: FfiConverterString.read(from: &buf), 
+                scheduledStart: FfiConverterOptionString.read(from: &buf), 
+                scheduledEnd: FfiConverterOptionString.read(from: &buf), 
+                durationMinutes: FfiConverterOptionInt64.read(from: &buf), 
+                tags: FfiConverterSequenceString.read(from: &buf), 
+                folderQuery: FfiConverterOptionString.read(from: &buf), 
+                priority: FfiConverterTypePriorityEdit.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: QuickAddInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.scheduledStart, into: &buf)
+        FfiConverterOptionString.write(value.scheduledEnd, into: &buf)
+        FfiConverterOptionInt64.write(value.durationMinutes, into: &buf)
+        FfiConverterSequenceString.write(value.tags, into: &buf)
+        FfiConverterOptionString.write(value.folderQuery, into: &buf)
+        FfiConverterTypePriorityEdit.write(value.priority, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuickAddInput_lift(_ buf: RustBuffer) throws -> QuickAddInput {
+    return try FfiConverterTypeQuickAddInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuickAddInput_lower(_ value: QuickAddInput) -> RustBuffer {
+    return FfiConverterTypeQuickAddInput.lower(value)
+}
+
+
+/**
  * Result of moving a schedule's start. `end` of `None` is a single occurrence.
  */
 public struct ScheduleTransition: Equatable, Hashable {
@@ -2433,6 +2542,267 @@ public func FfiConverterTypeFolderScope_lower(_ value: FolderScope) -> RustBuffe
 
 
 
+public enum Priority: Equatable, Hashable {
+    
+    case urgent
+    case high
+    case medium
+    case low
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension Priority: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePriority: FfiConverterRustBuffer {
+    typealias SwiftType = Priority
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Priority {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .urgent
+        
+        case 2: return .high
+        
+        case 3: return .medium
+        
+        case 4: return .low
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Priority, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .urgent:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .high:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .medium:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .low:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePriority_lift(_ buf: RustBuffer) throws -> Priority {
+    return try FfiConverterTypePriority.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePriority_lower(_ value: Priority) -> RustBuffer {
+    return FfiConverterTypePriority.lower(value)
+}
+
+
+
+/**
+ * What a quick-add line said about priority.
+ *
+ * Three states, not two: writing nothing leaves an existing priority alone,
+ * while `!0` clears it. Collapsing them into an optional would make "no
+ * priority mentioned" indistinguishable from "remove the priority", and the
+ * second is a real edit.
+ */
+
+public enum PriorityEdit: Equatable, Hashable {
+    
+    case unchanged
+    case cleared
+    case set(priority: Priority
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PriorityEdit: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePriorityEdit: FfiConverterRustBuffer {
+    typealias SwiftType = PriorityEdit
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PriorityEdit {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .unchanged
+        
+        case 2: return .cleared
+        
+        case 3: return .set(priority: try FfiConverterTypePriority.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PriorityEdit, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .unchanged:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .cleared:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .set(priority):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypePriority.write(priority, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePriorityEdit_lift(_ buf: RustBuffer) throws -> PriorityEdit {
+    return try FfiConverterTypePriorityEdit.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePriorityEdit_lower(_ value: PriorityEdit) -> RustBuffer {
+    return FfiConverterTypePriorityEdit.lower(value)
+}
+
+
+
+/**
+ * What a quick-add line asked for.
+ */
+
+public enum QuickAddResult: Equatable, Hashable {
+    
+    /**
+     * One page.
+     */
+    case single(input: QuickAddInput
+    )
+    /**
+     * Several concrete pages — the user named specific days ("m/w/f",
+     * "weekdays") rather than a rule.
+     */
+    case finite(inputs: [QuickAddInput]
+    )
+    /**
+     * One page plus a recurrence rule; occurrences are expanded at display
+     * time rather than written out.
+     */
+    case recurring(input: QuickAddInput, rrule: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension QuickAddResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQuickAddResult: FfiConverterRustBuffer {
+    typealias SwiftType = QuickAddResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QuickAddResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .single(input: try FfiConverterTypeQuickAddInput.read(from: &buf)
+        )
+        
+        case 2: return .finite(inputs: try FfiConverterSequenceTypeQuickAddInput.read(from: &buf)
+        )
+        
+        case 3: return .recurring(input: try FfiConverterTypeQuickAddInput.read(from: &buf), rrule: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: QuickAddResult, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .single(input):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeQuickAddInput.write(input, into: &buf)
+            
+        
+        case let .finite(inputs):
+            writeInt(&buf, Int32(2))
+            FfiConverterSequenceTypeQuickAddInput.write(inputs, into: &buf)
+            
+        
+        case let .recurring(input,rrule):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeQuickAddInput.write(input, into: &buf)
+            FfiConverterString.write(rrule, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuickAddResult_lift(_ buf: RustBuffer) throws -> QuickAddResult {
+    return try FfiConverterTypeQuickAddResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuickAddResult_lower(_ value: QuickAddResult) -> RustBuffer {
+    return FfiConverterTypeQuickAddResult.lower(value)
+}
+
+
+
+
 public enum SmartView: Equatable, Hashable {
     
     case today
@@ -2794,6 +3164,30 @@ fileprivate struct FfiConverterOptionTypeFolderScope: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeQuickAddResult: FfiConverterRustBuffer {
+    typealias SwiftType = QuickAddResult?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeQuickAddResult.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeQuickAddResult.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]?
 
@@ -2960,6 +3354,31 @@ fileprivate struct FfiConverterSequenceTypePageSummary: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypePageSummary.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeQuickAddInput: FfiConverterRustBuffer {
+    typealias SwiftType = [QuickAddInput]
+
+    public static func write(_ value: [QuickAddInput], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeQuickAddInput.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [QuickAddInput] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [QuickAddInput]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeQuickAddInput.read(from: &buf))
         }
         return seq
     }
@@ -3217,6 +3636,24 @@ public func parseDeepLink(url: String) -> DeepLink?  {
     )
 })
 }
+/**
+ * Parse a line of quick-add input — "standup every weekday at 9am #work".
+ *
+ * `reference` is "now" as a wall-clock ISO string, and it is a parameter
+ * rather than read from the clock so the same line parses the same way in a
+ * test, in a widget, and in the app. `None` when `reference` is malformed;
+ * an input with nothing parseable in it is not an error, it is a page whose
+ * title is the whole line.
+ */
+public func parseQuickAdd(input: String, reference: String) -> QuickAddResult?  {
+    return try!  FfiConverterOptionTypeQuickAddResult.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_func_parse_quick_add(
+        FfiConverterString.lower(input),
+        FfiConverterString.lower(reference),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -3266,6 +3703,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_func_parse_deep_link() != 54718) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_func_parse_quick_add() != 46428) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_get_page() != 40977) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3276,6 +3716,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_content_schema_version() != 7147) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_create_folder() != 527) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_create_page() != 8067) {

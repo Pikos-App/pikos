@@ -54,6 +54,7 @@ mod dict;
 mod engine;
 mod jsdate;
 mod parsers;
+pub mod quick_add;
 mod refiners;
 
 use chrono::NaiveDateTime;
@@ -154,10 +155,20 @@ impl DateMatch {
 ///
 /// Results are ordered by position, and never overlap.
 pub fn parse(text: &str, reference: NaiveDateTime) -> Vec<DateMatch> {
+    parse_with(text, reference, true)
+}
+
+/// As [`parse`], but with the forward rule under the caller's control.
+///
+/// Quick-add wants dates pushed into the future, and that is what [`parse`]
+/// does. Reading a *boundary* out of "every monday through march 19" does not:
+/// the boundary is whatever date was named, and forcing it forward would turn a
+/// window that has already closed into one a year out.
+pub fn parse_with(text: &str, reference: NaiveDateTime, forward_date: bool) -> Vec<DateMatch> {
     let context = Context {
         text,
         reference: Reference::new(JsDate::from_naive(reference)),
-        forward_date: true,
+        forward_date,
     };
 
     let mut results = Vec::new();
@@ -178,6 +189,15 @@ pub fn parse(text: &str, reference: NaiveDateTime) -> Vec<DateMatch> {
 /// The first date in `text`, which is what quick-add uses.
 pub fn parse_first(text: &str, reference: NaiveDateTime) -> Option<DateMatch> {
     parse(text, reference).into_iter().next()
+}
+
+/// The first date in `text`, with the forward rule under the caller's control.
+pub fn parse_first_with(
+    text: &str,
+    reference: NaiveDateTime,
+    forward_date: bool,
+) -> Option<DateMatch> {
+    parse_with(text, reference, forward_date).into_iter().next()
 }
 
 fn into_match(result: components::ParsingResult) -> Option<DateMatch> {

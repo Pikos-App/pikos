@@ -183,3 +183,61 @@ unit test whose expectation was read off the reference with
 and the rewriting that turns "tonight" and "this afternoon" into explicit forms
 before the date engine sees them. That is the rest of the port, and it is where
 the remaining 138 corpus inputs live.
+
+---
+
+## Addendum 2: the rest of `parseInput`
+
+The date engine was the part with no Rust equivalent. The other 861 lines of
+`parser.ts` — cadence, tags, folders, priorities, durations, windows, and the
+title that is whatever survives them — are now ported too, in
+`crates/pikos-core/src/nlp/quick_add/`.
+
+| Module           | What it is                                                     |
+| ---------------- | -------------------------------------------------------------- |
+| `text.rs`        | extract-and-strip regex replacement, and `date-fns` arithmetic  |
+| `tokens.rs`      | the rewrites, then `#tag` / `~folder` / `!urgent` / duration / window |
+| `recurrence.rs`  | cadence detection, RRULE strings, weekly expansion              |
+| `mod.rs`         | the pipeline, date assembly, title cleanup, result type         |
+
+`text.rs` carries `date-fns` semantics deliberately kept apart from the date
+engine's `jsdate.rs`: `addMonths` on 31 January clamps to 28 February, where
+JavaScript's `setMonth` rolls to 3 March. Both appear in the original — one in
+`parseInput`, one inside chrono-node — and getting them the wrong way round is
+a silent few-days error.
+
+The pipeline order is load-bearing and matches the reference: rewrite, extract
+markers, detect cadence, *then* read the date. Cadence has to come first or
+"every tuesday" is consumed as the date "tuesday" and the recurrence is lost.
+
+### How it is graded
+
+`crates/pikos-core/tests/quick_add_parity.rs` runs all 2,219 cases of
+`parser.json` — 317 inputs at 7 reference times, of which 756 are recurring, 98
+finite, and the rest single. The test asserts the shape of what it compared
+(every case reached, enough recurring, finite and priority-carrying cases among
+them), because a comparison that silently skipped everything would pass too.
+
+All 2,219 passed on the first run. Eighteen mutations were then applied —
+window arithmetic, the "tonight" cutoff, priority clearing, the connector
+strip, week-start for expansion, `UNTIL` inclusivity, `INTERVAL` emission, each
+cadence precedence rule — and every one failed the suite. Sixteen were caught
+by the corpus itself (3 to 147 cases each); the two it cannot reach are the
+"tonight" cutoff at exactly 20:00 (no corpus reference falls on that hour) and
+a plural day list deferring to a cadence already set ("run m/w/f tuesdays").
+Both are now unit-tested against behaviour read off the reference with
+`pnpm --filter @pikos/core probe:parser`.
+
+One faithful quirk worth naming: "every 2 weeks mondays" comes out as
+`FREQ=WEEKLY;BYDAY=MO`, losing the interval, because the plural-day rule
+rebuilds the cadence from scratch. That is what the reference does, so it is
+what this does, and there is a test saying so rather than a reader wondering.
+
+### The FFI surface
+
+`parse_quick_add(input, reference)` returns a `QuickAddResult` — single, finite
+or recurring. `reference` is a wall-clock ISO string rather than the clock, so
+the same line parses the same way in a test, a widget and the app; a malformed
+one returns `nil` rather than a guess. Priority crosses as a three-state
+`PriorityEdit` (`unchanged` / `cleared` / `set`), because writing nothing and
+writing `!0` are different edits and an optional cannot hold both.
