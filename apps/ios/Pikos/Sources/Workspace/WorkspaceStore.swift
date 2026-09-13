@@ -349,6 +349,27 @@ public final class WorkspaceStore {
         }
     }
 
+    /// What is in the trash, newest first.
+    ///
+    /// Fetched on demand rather than held: the trash is a screen someone opens
+    /// rarely and deliberately, so keeping it live would be paying for it on
+    /// every refresh of a list nobody is looking at.
+    public func trashedPages() async -> [TrashedPage] {
+        guard let workspace else { return [] }
+        do {
+            return try await workspace.listTrashedPages()
+        } catch {
+            errorMessage = error.localizedDescription
+            return []
+        }
+    }
+
+    /// How long the trash keeps a page. Read from the workspace so the sentence
+    /// shown to the user cannot drift from the purge that enforces it.
+    public var trashRetentionDays: Int64 {
+        workspace?.trashRetentionDays() ?? 30
+    }
+
     public func trash(pageId: String) async {
         guard let workspace else { return }
         do {

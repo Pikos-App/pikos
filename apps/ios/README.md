@@ -66,6 +66,12 @@ unsigned counts that must not wrap, enum payloads, UTF-8, and the workspace's
 async and read-only behaviour. `PikosEditorBridge`'s cover the wire protocol's
 encoding and the scheme handler's path handling, including traversal attempts.
 
+`PikosSupport`'s need nothing linked at all — no XCFramework, no database, no
+device — which is why the arithmetic worth testing is put there rather than in
+the app: `CalendarGeometry` (a stored wall clock to a position on screen) and
+`StorageTimestamp` (the UTC instant columns, which are _not_ the same format as
+the scheduling ones, and were briefly read as if they were).
+
 The editor's own behaviour is tested separately and more thoroughly, in a real
 browser: `pnpm --filter @pikos/editor-mobile test:e2e`.
 
@@ -92,6 +98,11 @@ suite.
 - **The iPad UI.** Ships in the same universal binary, styled after the desktop
   app rather than the phone. Not started; `docs/ios/00-status.md` records the
   three things being kept true so that it stays a change of shell.
+- **Emptying the trash by hand.** "Recently Deleted" restores; it does not
+  offer a permanent delete. The retention window already clears the trash, and
+  a destructive control sitting next to a restore button on a phone is the same
+  mis-tap the screen exists to undo. Worth revisiting only alongside a
+  confirmation step.
 - **Folder colours, icons and nesting.** Create, rename and delete are wired;
   the rest of what a folder can carry is not. Nesting in particular is a data
   shape (`parent_id`) with no iOS affordance yet.

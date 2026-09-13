@@ -938,6 +938,15 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func listToday() async throws  -> [PageSummary]
     
     /**
+     * What is in the trash, newest first.
+     *
+     * Exists because the phone had no way back. Swipe-to-delete was wired and
+     * nothing listed or restored, which made a mis-swipe unrecoverable on the
+     * one device most likely to produce one.
+     */
+    func listTrashedPages() async throws  -> [TrashedPage]
+    
+    /**
      * A read-only handle onto the same workspace, for passing to code that
      * must not write.
      */
@@ -1024,6 +1033,15 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * Move a page to the trash. Recoverable — see `restore_page`.
      */
     func trashPage(id: String) async throws 
+    
+    /**
+     * How long the trash keeps a page before purging it.
+     *
+     * Surfaced so the UI can say "deleted pages are removed after 30 days"
+     * with the number the data layer actually uses, rather than a second copy
+     * that drifts.
+     */
+    func trashRetentionDays()  -> Int64
     
     /**
      * Undo the most recent completed occurrence of a series.
@@ -1360,6 +1378,29 @@ open func listToday()async throws  -> [PageSummary]  {
 }
     
     /**
+     * What is in the trash, newest first.
+     *
+     * Exists because the phone had no way back. Swipe-to-delete was wired and
+     * nothing listed or restored, which made a mis-swipe unrecoverable on the
+     * one device most likely to produce one.
+     */
+open func listTrashedPages()async throws  -> [TrashedPage]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_trashed_pages(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeTrashedPage.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * A read-only handle onto the same workspace, for passing to code that
      * must not write.
      */
@@ -1578,6 +1619,22 @@ open func trashPage(id: String)async throws   {
             liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
+}
+    
+    /**
+     * How long the trash keeps a page before purging it.
+     *
+     * Surfaced so the UI can say "deleted pages are removed after 30 days"
+     * with the number the data layer actually uses, rather than a second copy
+     * that drifts.
+     */
+open func trashRetentionDays() -> Int64  {
+    return try!  FfiConverterInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_method_workspace_trash_retention_days(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
 }
     
     /**
@@ -3084,6 +3141,105 @@ public func FfiConverterTypeTimedBlock_lower(_ value: TimedBlock) -> RustBuffer 
 
 
 /**
+ * A page in the trash, as the recovery list shows it.
+ */
+public struct TrashedPage: Equatable, Hashable {
+    public var id: String
+    public var title: String
+    /**
+     * The folder it would return to. `None` for the Inbox, and also when its
+     * folder was trashed alongside it — there is no surviving name to show,
+     * and restoring the page alone would not bring the folder back.
+     */
+    public var folderName: String?
+    /**
+     * When it was trashed, UTC. Drives both the "deleted N days ago" label and
+     * the auto-purge clock.
+     */
+    public var deletedAt: String
+    /**
+     * True while the page still exists in a calendar upstream. Such a row
+     * carries the tombstone that suppresses the upstream event, so the trash
+     * cannot destroy it — deleting it outright would hand the next sync pass a
+     * page to resurrect. Restoring one gives it back to its calendar.
+     */
+    public var isSynced: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, title: String, 
+        /**
+         * The folder it would return to. `None` for the Inbox, and also when its
+         * folder was trashed alongside it — there is no surviving name to show,
+         * and restoring the page alone would not bring the folder back.
+         */folderName: String?, 
+        /**
+         * When it was trashed, UTC. Drives both the "deleted N days ago" label and
+         * the auto-purge clock.
+         */deletedAt: String, 
+        /**
+         * True while the page still exists in a calendar upstream. Such a row
+         * carries the tombstone that suppresses the upstream event, so the trash
+         * cannot destroy it — deleting it outright would hand the next sync pass a
+         * page to resurrect. Restoring one gives it back to its calendar.
+         */isSynced: Bool) {
+        self.id = id
+        self.title = title
+        self.folderName = folderName
+        self.deletedAt = deletedAt
+        self.isSynced = isSynced
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TrashedPage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTrashedPage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TrashedPage {
+        return
+            try TrashedPage(
+                id: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf), 
+                folderName: FfiConverterOptionString.read(from: &buf), 
+                deletedAt: FfiConverterString.read(from: &buf), 
+                isSynced: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TrashedPage, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.folderName, into: &buf)
+        FfiConverterString.write(value.deletedAt, into: &buf)
+        FfiConverterBool.write(value.isSynced, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrashedPage_lift(_ buf: RustBuffer) throws -> TrashedPage {
+    return try FfiConverterTypeTrashedPage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrashedPage_lower(_ value: TrashedPage) -> RustBuffer {
+    return FfiConverterTypeTrashedPage.lower(value)
+}
+
+
+/**
  * A parsed `pikos://` link.
  */
 
@@ -4330,6 +4486,31 @@ fileprivate struct FfiConverterSequenceTypeTimedBlock: FfiConverterRustBuffer {
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTrashedPage: FfiConverterRustBuffer {
+    typealias SwiftType = [TrashedPage]
+
+    public static func write(_ value: [TrashedPage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTrashedPage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TrashedPage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TrashedPage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTrashedPage.read(from: &buf))
+        }
+        return seq
+    }
+}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
 
@@ -4648,6 +4829,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_list_today() != 40259) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_trashed_pages() != 62776) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_read_only() != 39832) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4676,6 +4860,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_trash_page() != 53299) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_trash_retention_days() != 17542) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_uncomplete_latest_recurring_occurrence() != 13132) {

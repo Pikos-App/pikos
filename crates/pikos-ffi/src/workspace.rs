@@ -192,6 +192,25 @@ impl From<pikos_db::Page> for Page {
     }
 }
 
+/// A page in the trash, as the recovery list shows it.
+#[derive(Debug, uniffi::Record)]
+pub struct TrashedPage {
+    pub id: String,
+    pub title: String,
+    /// The folder it would return to. `None` for the Inbox, and also when its
+    /// folder was trashed alongside it — there is no surviving name to show,
+    /// and restoring the page alone would not bring the folder back.
+    pub folder_name: Option<String>,
+    /// When it was trashed, UTC. Drives both the "deleted N days ago" label and
+    /// the auto-purge clock.
+    pub deleted_at: String,
+    /// True while the page still exists in a calendar upstream. Such a row
+    /// carries the tombstone that suppresses the upstream event, so the trash
+    /// cannot destroy it — deleting it outright would hand the next sync pass a
+    /// page to resurrect. Restoring one gives it back to its calendar.
+    pub is_synced: bool,
+}
+
 #[derive(Debug, uniffi::Record)]
 pub struct Folder {
     pub id: String,
@@ -813,6 +832,34 @@ impl Workspace {
     pub async fn trash_page(&self, id: String) -> Result<(), WorkspaceError> {
         pikos_db::soft_delete_page_impl(&self.pool, &id).await?;
         Ok(())
+    }
+
+    /// What is in the trash, newest first.
+    ///
+    /// Exists because the phone had no way back. Swipe-to-delete was wired and
+    /// nothing listed or restored, which made a mis-swipe unrecoverable on the
+    /// one device most likely to produce one.
+    pub async fn list_trashed_pages(&self) -> Result<Vec<TrashedPage>, WorkspaceError> {
+        let rows = pikos_db::list_trashed_pages_impl(&self.pool).await?;
+        Ok(rows
+            .into_iter()
+            .map(|t| TrashedPage {
+                id: t.id,
+                title: t.title,
+                folder_name: t.folder_name,
+                deleted_at: t.deleted_at,
+                is_synced: t.is_synced,
+            })
+            .collect())
+    }
+
+    /// How long the trash keeps a page before purging it.
+    ///
+    /// Surfaced so the UI can say "deleted pages are removed after 30 days"
+    /// with the number the data layer actually uses, rather than a second copy
+    /// that drifts.
+    pub fn trash_retention_days(&self) -> i64 {
+        pikos_db::TRASH_RETENTION_DAYS
     }
 
     pub async fn restore_page(&self, id: String) -> Result<(), WorkspaceError> {

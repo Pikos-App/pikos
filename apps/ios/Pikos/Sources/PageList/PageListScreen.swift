@@ -11,6 +11,7 @@ struct PageListScreen: View {
 
     @State private var isQuickAddPresented = false
     @State private var isFolderManagerPresented = false
+    @State private var isTrashPresented = false
     @State private var searchText = ""
 
     /// The list only — no `NavigationStack` of its own.
@@ -45,6 +46,9 @@ struct PageListScreen: View {
         }
         .sheet(isPresented: $isFolderManagerPresented) {
             FolderManagerSheet()
+        }
+        .sheet(isPresented: $isTrashPresented) {
+            TrashSheet()
         }
         .alert(
             "Something went wrong",
@@ -152,6 +156,15 @@ struct PageListScreen: View {
                     isFolderManagerPresented = true
                 } label: {
                     Label("Manage folders…", systemImage: "folder.badge.gearshape")
+                }
+                // The way back from the swipe action two dozen lines up. It
+                // lives here rather than behind a scope in the picker because
+                // the trash is not a view of the workspace — nothing in it can
+                // be opened, filed or completed, only restored.
+                Button {
+                    isTrashPresented = true
+                } label: {
+                    Label("Recently Deleted…", systemImage: "trash")
                 }
             } label: {
                 Label("Switch view", systemImage: "line.3.horizontal.decrease.circle")

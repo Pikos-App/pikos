@@ -101,6 +101,17 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**A mis-swipe is recoverable from the phone.** Swipe-to-delete was wired with
+no way back: the delete had been soft all along, but nothing on iOS listed or
+restored a trashed page, so as far as the user could tell it was gone. The
+workspace now exposes `list_trashed_pages()` and `trash_retention_days()`, and
+"Recently Deleted" sits behind the view switcher with a restore on each row.
+Two things it is deliberately careful about — it does not offer a permanent
+delete (a destructive control next to a restore button on a small screen is the
+same mis-tap the screen exists to undo), and it marks the rows that mirror a
+calendar, because those are never purged and the retention sentence is not true
+of them.
+
 ## One bug the merge exposed, worth its own note
 
 `WorkspaceStore.setStatus` flipped `status` on every page, recurring ones

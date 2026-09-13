@@ -348,6 +348,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_list_pages(uint64_t ptr, RustBuffe
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_today(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TRASHED_PAGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TRASHED_PAGES
+uint64_t uniffi_pikos_ffi_fn_method_workspace_list_trashed_pages(uint64_t ptr
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_ONLY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_ONLY
 uint64_t uniffi_pikos_ffi_fn_method_workspace_read_only(uint64_t ptr, RustCallStatus *_Nonnull out_status
@@ -396,6 +401,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_trash_folder(uint64_t ptr, RustBuf
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_TRASH_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_TRASH_PAGE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_trash_page(uint64_t ptr, RustBuffer id
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_TRASH_RETENTION_DAYS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_TRASH_RETENTION_DAYS
+int64_t uniffi_pikos_ffi_fn_method_workspace_trash_retention_days(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_UNCOMPLETE_LATEST_RECURRING_OCCURRENCE
@@ -896,6 +906,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_today(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TRASHED_PAGES
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TRASHED_PAGES
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_trashed_pages(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_READ_ONLY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_READ_ONLY
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_read_only(void
@@ -953,6 +969,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_trash_folder(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_TRASH_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_TRASH_PAGE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_trash_page(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_TRASH_RETENTION_DAYS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_TRASH_RETENTION_DAYS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_trash_retention_days(void
     
 );
 #endif

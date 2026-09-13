@@ -1353,3 +1353,75 @@ async fn toggling_a_page_that_is_gone_is_not_found() {
         other => panic!("expected NotFound, got {other:?}"),
     }
 }
+
+// ─── Trash ───────────────────────────────────────────────────────────────────
+
+/// The round trip a mis-swipe depends on. Without the listing there is no way
+/// back on a phone, which is the device most likely to produce one.
+#[tokio::test]
+async fn a_trashed_page_can_be_found_and_brought_back() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let mut filed = new_page("Filed");
+    filed.folder_id = Some(folder.id.clone());
+    let filed = ws.create_page(filed).await.unwrap();
+    let loose = ws.create_page(new_page("Unfiled")).await.unwrap();
+
+    assert!(ws.list_trashed_pages().await.unwrap().is_empty());
+
+    ws.trash_page(filed.id.clone()).await.unwrap();
+    ws.trash_page(loose.id.clone()).await.unwrap();
+
+    let trashed = ws.list_trashed_pages().await.unwrap();
+    assert_eq!(trashed.len(), 2);
+    let of = |id: &str| trashed.iter().find(|t| t.id == id).unwrap();
+    assert_eq!(of(&filed.id).folder_name.as_deref(), Some("Work"));
+    assert_eq!(
+        of(&loose.id).folder_name,
+        None,
+        "an Inbox page has no folder to name"
+    );
+    assert!(!of(&filed.id).deleted_at.is_empty());
+
+    ws.restore_page(filed.id.clone()).await.unwrap();
+    assert_eq!(
+        ws.list_trashed_pages().await.unwrap().len(),
+        1,
+        "restoring takes it out of the trash"
+    );
+    assert!(ws
+        .list_pages(PageQuery::default())
+        .await
+        .unwrap()
+        .iter()
+        .any(|p| p.id == filed.id));
+}
+
+/// A folder trashed with its pages leaves them with no name to show. Naming the
+/// folder anyway would promise a restore that does not happen — the page comes
+/// back, the folder does not.
+#[tokio::test]
+async fn a_page_whose_folder_went_with_it_has_no_folder_name() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let mut filed = new_page("Filed");
+    filed.folder_id = Some(folder.id.clone());
+    let filed = ws.create_page(filed).await.unwrap();
+
+    ws.trash_folder(folder.id.clone()).await.unwrap();
+
+    let trashed = ws.list_trashed_pages().await.unwrap();
+    let entry = trashed.iter().find(|t| t.id == filed.id).unwrap();
+    assert_eq!(entry.folder_name, None);
+}
+
+/// The UI states the retention window, so it has to read the one the purge
+/// actually uses rather than carry a second copy that drifts.
+#[tokio::test]
+async fn the_retention_window_comes_from_the_data_layer() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    assert_eq!(ws.trash_retention_days(), 30);
+}
