@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import type { PageRecurrenceRule, PageSchedule, PageSummary } from "../types";
-import { CONTENT_SCHEMA_VERSION } from "../types";
 import {
   alignWeeklyRuleToAnchor,
   buildRrule,

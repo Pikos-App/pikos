@@ -27,7 +27,6 @@ import { dirname, resolve } from "node:path";
 
 import { parseInput } from "../src/nlp/parser";
 import type { PageRecurrenceRule, PageSummary } from "../src/types";
-import { CONTENT_SCHEMA_VERSION } from "../src/types";
 import { extractText } from "../src/utils/extractText";
 import {
   computeNextEnd,
