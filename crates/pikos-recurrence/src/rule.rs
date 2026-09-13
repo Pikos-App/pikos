@@ -256,6 +256,95 @@ fn parse_until(value: &str) -> Option<NaiveDateTime> {
 /// this series bounded?": `parse_rrule` returns `None` on an out-of-envelope FREQ
 /// (e.g. `FREQ=HOURLY`), misreading a bounded rule as unbounded. Format handling
 /// is shared with the enumerator via [`parse_until`].
+/// A `UNTIL` token reduced to the one form the editor rebuilds: floating
+/// end-of-day.
+///
+/// Two inputs collapse to it losslessly. A trailing `Z` is syntactic — the
+/// engine reads every instant as a wall clock — and a date-only `UNTIL` pairs
+/// with an all-day start whose final occurrence sits at midnight. Any other
+/// time of day is the provider's own cut-off, and rebuilding it as end-of-day
+/// would gain the occurrence it excluded.
+fn normalized_until(value: &str) -> String {
+    let stamp = value.trim().to_ascii_uppercase();
+    let stamp = stamp.strip_suffix('Z').unwrap_or(&stamp);
+    if stamp.contains('T') {
+        stamp.to_string()
+    } else {
+        format!("{stamp}T235959")
+    }
+}
+
+/// A comma-separated term reduced to a canonical form: upper-cased, `+`
+/// dropped, sorted. `BYDAY=TU,MO` and `BYDAY=mo,+tu` are the same rule.
+///
+/// The sort is defensive rather than load-bearing, and measurably so: today
+/// `parse_rrule` preserves the order it read and `build_rrule` emits it back
+/// unchanged, so the two sides of the comparison are always in the same order
+/// and no corpus case can exercise it. Carried anyway, because it is in the
+/// reference and because a builder that later canonicalises order would
+/// otherwise start reporting every list rule as un-editable.
+fn normalized_list(value: &str) -> String {
+    let mut tokens: Vec<String> = value
+        .split(',')
+        .map(|token| {
+            let token = token.trim().to_ascii_uppercase();
+            token.strip_prefix('+').unwrap_or(&token).to_string()
+        })
+        .collect();
+    tokens.sort();
+    tokens.join(",")
+}
+
+/// Every term an RRULE states, with the two the builder always emits defaulted
+/// in so a rule that omits them compares equal to one that spells them out.
+fn rule_terms(rrule: &str) -> std::collections::BTreeMap<String, String> {
+    let mut terms = std::collections::BTreeMap::from([
+        ("INTERVAL".to_string(), "1".to_string()),
+        ("WKST".to_string(), "MO".to_string()),
+    ]);
+    // Case-insensitive, because the prefix is optional and providers spell it
+    // both ways.
+    let body = match rrule.get(..6) {
+        Some(prefix) if prefix.eq_ignore_ascii_case("RRULE:") => &rrule[6..],
+        _ => rrule,
+    };
+    for part in body.split(';') {
+        let Some((key, value)) = part.split_once('=') else {
+            continue;
+        };
+        let term = key.trim().to_ascii_uppercase();
+        let value = if term == "UNTIL" {
+            normalized_until(value)
+        } else {
+            normalized_list(value)
+        };
+        terms.insert(term, value);
+    }
+    terms
+}
+
+/// True when saving the rule back through a structured editor would change
+/// which occurrences it yields.
+///
+/// Port of `rruleEditWouldDegrade`. [`RecurrenceOptions`] carries every term the
+/// engine enumerates, so what is left over is the tail outside that envelope —
+/// `BYWEEKNO`, `BYYEARDAY`, `BYHOUR` — plus rules that do not parse at all.
+///
+/// Derived from the round-trip rather than from a list of lossy terms, and
+/// deliberately so: such a list is only ever as complete as the last person to
+/// notice a gap, and the TypeScript's missed `BYMONTH` — "15 March, annually" —
+/// for exactly that reason.
+///
+/// This is what an editor should ask before offering to change a rule. Offering
+/// it anyway is not a cosmetic bug: the user edits the interval and silently
+/// loses the terms that made the rule theirs.
+pub fn rrule_edit_would_degrade(rrule: &str) -> bool {
+    let Some(options) = parse_rrule(rrule) else {
+        return true;
+    };
+    rule_terms(rrule) != rule_terms(&build_rrule(&options))
+}
+
 pub fn extract_until(rrule: &str) -> Option<NaiveDateTime> {
     rrule
         .split(';')

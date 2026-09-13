@@ -34,6 +34,7 @@ import {
   computeNextEnd,
   expandRecurrenceForRange,
   nextOccurrenceAfter,
+  rruleEditWouldDegrade,
   snapAnchorToRule,
 } from "../src/utils/recurrence";
 
@@ -625,6 +626,42 @@ function capture<T>(fn: () => T): Captured<T> {
 // by-weekday rule, a wall-clock time that must survive the move, an exhausted
 // COUNT, and an unparseable rule.
 
+// ─── Editable-rule corpus ────────────────────────────────────────────────────
+// `rruleEditWouldDegrade` decides whether a structured editor may touch a rule
+// at all. Getting it wrong in the permissive direction is the expensive one: the
+// user changes an interval and silently loses the terms that made the rule
+// theirs. So the cases below deliberately straddle the envelope —
+// `RecurrenceOptions` carries FREQ/INTERVAL/BYDAY/BYSETPOS/BYMONTHDAY/BYMONTH/
+// WKST/COUNT/UNTIL, and anything outside it, or unparseable, must lock.
+
+const DEGRADE_CASES: { rrule: string; note: string }[] = [
+  { note: "plain daily", rrule: "FREQ=DAILY" },
+  { note: "interval spelled out", rrule: "FREQ=DAILY;INTERVAL=1" },
+  { note: "weekly single day", rrule: "FREQ=WEEKLY;BYDAY=MO" },
+  { note: "weekly several days, out of order", rrule: "FREQ=WEEKLY;BYDAY=WE,MO,FR" },
+  { note: "lower case", rrule: "freq=weekly;byday=mo" },
+  { note: "with the RRULE: prefix", rrule: "RRULE:FREQ=WEEKLY;BYDAY=MO" },
+  { note: "monthly by ordinal weekday", rrule: "FREQ=MONTHLY;BYDAY=3TU" },
+  { note: "monthly by month-day", rrule: "FREQ=MONTHLY;BYMONTHDAY=15" },
+  { note: "last weekday of the month", rrule: "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1" },
+  { note: "yearly on a fixed date — the gap a term list missed", rrule: "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15" },
+  { note: "week start changes weekly grouping", rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=SU" },
+  { note: "count", rrule: "FREQ=DAILY;COUNT=10" },
+  { note: "until, date only", rrule: "FREQ=DAILY;UNTIL=20260401" },
+  { note: "until with a Z — syntactic only", rrule: "FREQ=DAILY;UNTIL=20260401T235959Z" },
+  { note: "until at the provider's own cut-off", rrule: "FREQ=DAILY;UNTIL=20260401T120000" },
+  { note: "plus-signed weekday", rrule: "FREQ=WEEKLY;BYDAY=+1MO" },
+  // Outside the envelope — each must lock.
+  { note: "byhour", rrule: "FREQ=DAILY;BYHOUR=9" },
+  { note: "byminute", rrule: "FREQ=DAILY;BYMINUTE=30" },
+  { note: "byweekno", rrule: "FREQ=YEARLY;BYWEEKNO=20" },
+  { note: "byyearday", rrule: "FREQ=YEARLY;BYYEARDAY=100" },
+  { note: "unsupported freq", rrule: "FREQ=HOURLY" },
+  { note: "no freq at all", rrule: "INTERVAL=2" },
+  { note: "not a rule", rrule: "banana" },
+  { note: "empty", rrule: "" },
+];
+
 const SNAP_CASES: { rrule: string; anchor: string; note: string }[] = [
   { anchor: "2026-03-16T09:00:00", note: "already allowed", rrule: "FREQ=WEEKLY;BYDAY=MO" },
   {
@@ -743,6 +780,11 @@ function main(): void {
     return { ...c, occurrences };
   });
 
+  const degradeCases = DEGRADE_CASES.map((c) => ({
+    ...c,
+    degrades: capture(() => rruleEditWouldDegrade(c.rrule)),
+  }));
+
   const snapCases = SNAP_CASES.map((c) => ({
     ...c,
     snapped: capture(() => snapAnchorToRule(c.rrule, c.anchor)),
@@ -829,13 +871,14 @@ function main(): void {
   );
   writeFileSync(
     resolve(OUT_DIR, "recurrence.json"),
-    JSON.stringify({ expansionCases, meta, recurrenceCases, snapCases }, null, 2) + "\n"
+    JSON.stringify({ degradeCases, expansionCases, meta, recurrenceCases, snapCases }, null, 2) +
+      "\n"
   );
 
   const failures = parserCases.filter((c) => !c.result.ok).length;
   process.stdout.write(
     `parser.json:     ${parserCases.length} cases (${inputs.length} inputs × ${REFERENCES.length} refs), ${failures} throwing\n` +
-      `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion, ${snapCases.length} snap\n` +
+      `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion, ${snapCases.length} snap, ${degradeCases.length} degrade\n` +
       `text.json:       ${extractTextCases.length} extractText\n` +
       `views.json:      ${viewCases.length} reference times × ${VIEW_PAGES.length} pages\n` +
       `out: ${OUT_DIR}\n`

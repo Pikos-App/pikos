@@ -1,4 +1,198 @@
 {
+  "degradeCases": [
+    {
+      "note": "plain daily",
+      "rrule": "FREQ=DAILY",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "interval spelled out",
+      "rrule": "FREQ=DAILY;INTERVAL=1",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "weekly single day",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "weekly several days, out of order",
+      "rrule": "FREQ=WEEKLY;BYDAY=WE,MO,FR",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "lower case",
+      "rrule": "freq=weekly;byday=mo",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "with the RRULE: prefix",
+      "rrule": "RRULE:FREQ=WEEKLY;BYDAY=MO",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "monthly by ordinal weekday",
+      "rrule": "FREQ=MONTHLY;BYDAY=3TU",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "monthly by month-day",
+      "rrule": "FREQ=MONTHLY;BYMONTHDAY=15",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "last weekday of the month",
+      "rrule": "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "yearly on a fixed date \u2014 the gap a term list missed",
+      "rrule": "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "week start changes weekly grouping",
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=SU",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "count",
+      "rrule": "FREQ=DAILY;COUNT=10",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "until, date only",
+      "rrule": "FREQ=DAILY;UNTIL=20260401",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "until with a Z \u2014 syntactic only",
+      "rrule": "FREQ=DAILY;UNTIL=20260401T235959Z",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "until at the provider's own cut-off",
+      "rrule": "FREQ=DAILY;UNTIL=20260401T120000",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "plus-signed weekday",
+      "rrule": "FREQ=WEEKLY;BYDAY=+1MO",
+      "degrades": {
+        "ok": true,
+        "value": false
+      }
+    },
+    {
+      "note": "byhour",
+      "rrule": "FREQ=DAILY;BYHOUR=9",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "byminute",
+      "rrule": "FREQ=DAILY;BYMINUTE=30",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "byweekno",
+      "rrule": "FREQ=YEARLY;BYWEEKNO=20",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "byyearday",
+      "rrule": "FREQ=YEARLY;BYYEARDAY=100",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "unsupported freq",
+      "rrule": "FREQ=HOURLY",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "no freq at all",
+      "rrule": "INTERVAL=2",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "not a rule",
+      "rrule": "banana",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    },
+    {
+      "note": "empty",
+      "rrule": "",
+      "degrades": {
+        "ok": true,
+        "value": true
+      }
+    }
+  ],
   "expansionCases": [
     {
       "exdates": [],
@@ -396,27 +590,27 @@
   ],
   "meta": {
     "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
-    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",
+    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff \u2014 an unexpected line here is a regression, not a rebase.",
     "references": [
       {
         "id": "sun_noon",
         "iso": "2026-03-15T12:00:00",
-        "note": "suite NOW — Sunday, midday"
+        "note": "suite NOW \u2014 Sunday, midday"
       },
       {
         "id": "wed_noon",
         "iso": "2026-03-18T12:00:00",
-        "note": "midweek — forward-date rollover differs"
+        "note": "midweek \u2014 forward-date rollover differs"
       },
       {
         "id": "mon_morning",
         "iso": "2026-03-16T08:00:00",
-        "note": "before 9am — 'today vs tomorrow' flips"
+        "note": "before 9am \u2014 'today vs tomorrow' flips"
       },
       {
         "id": "sat_late",
         "iso": "2026-03-21T22:30:00",
-        "note": "after 8pm — 'tonight' rolls to tomorrow"
+        "note": "after 8pm \u2014 'tonight' rolls to tomorrow"
       },
       {
         "id": "dst_eve",
