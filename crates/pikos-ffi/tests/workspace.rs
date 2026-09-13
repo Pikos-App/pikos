@@ -566,10 +566,7 @@ async fn a_recurring_series_appears_in_a_week_its_head_is_not_in() {
         .await
         .unwrap();
 
-    let drawn: Vec<&str> = entries
-        .iter()
-        .map(|e| e.scheduled_start.as_str())
-        .collect();
+    let drawn: Vec<&str> = entries.iter().map(|e| e.scheduled_start.as_str()).collect();
     assert_eq!(
         drawn,
         ["2026-03-23T09:00:00"],
@@ -578,7 +575,10 @@ async fn a_recurring_series_appears_in_a_week_its_head_is_not_in() {
     assert!(entries[0].is_virtual);
     assert_eq!(entries[0].original_date.as_deref(), Some("2026-03-23"));
     assert_eq!(entries[0].page_id, page.id);
-    assert_eq!(entries[0].title, "Standup", "a virtual carries its page's title");
+    assert_eq!(
+        entries[0].title, "Standup",
+        "a virtual carries its page's title"
+    );
 }
 
 /// The last visible day is inclusive. Off by one here and the final column of
@@ -661,7 +661,10 @@ async fn a_scheduled_page_is_drawn_once_and_is_not_virtual() {
         .unwrap();
 
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0].key, page.id, "a real block keys on the page alone");
+    assert_eq!(
+        entries[0].key, page.id,
+        "a real block keys on the page alone"
+    );
     assert!(!entries[0].is_virtual);
     assert!(entries[0].original_date.is_none());
 }

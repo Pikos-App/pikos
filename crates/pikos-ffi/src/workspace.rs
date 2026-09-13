@@ -851,7 +851,10 @@ async fn calendar_range_impl(
     // March must project onto June without also drawing itself there in March.
     let mut heads: Vec<pikos_db::PageSummary> = Vec::new();
     for rule in &rules {
-        let known = drawn.iter().chain(heads.iter()).any(|p| p.id == rule.page_id);
+        let known = drawn
+            .iter()
+            .chain(heads.iter())
+            .any(|p| p.id == rule.page_id);
         if known {
             continue;
         }
@@ -924,7 +927,13 @@ async fn calendar_range_impl(
         .iter()
         .filter_map(|page| {
             let scheduled_start = page.scheduled_start.clone()?;
-            Some(entry_of(page, page.id.clone(), scheduled_start, page.scheduled_end.clone(), None))
+            Some(entry_of(
+                page,
+                page.id.clone(),
+                scheduled_start,
+                page.scheduled_end.clone(),
+                None,
+            ))
         })
         .collect();
 

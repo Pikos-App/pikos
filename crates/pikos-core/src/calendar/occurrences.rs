@@ -278,10 +278,8 @@ mod tests {
         )];
 
         assert!(
-            !dates(virtual_occurrences_in_range(
-                &pages, &rules, &[], from, to
-            ))
-            .contains(&"2026-03-09".to_string()),
+            !dates(virtual_occurrences_in_range(&pages, &rules, &[], from, to))
+                .contains(&"2026-03-09".to_string()),
             "the real head occupies that slot"
         );
     }
@@ -297,12 +295,15 @@ mod tests {
     fn dates_before_the_head_are_still_shown() {
         let (from, to) = week_of_march_9();
         let pages = vec![page("page-1", Some("2026-03-11T09:00:00"))];
-        let rules = vec![rule("rule-1", "page-1", "FREQ=DAILY", "2026-03-02T09:00:00")];
+        let rules = vec![rule(
+            "rule-1",
+            "page-1",
+            "FREQ=DAILY",
+            "2026-03-02T09:00:00",
+        )];
 
         assert_eq!(
-            dates(virtual_occurrences_in_range(
-                &pages, &rules, &[], from, to
-            )),
+            dates(virtual_occurrences_in_range(&pages, &rules, &[], from, to)),
             [
                 "2026-03-09",
                 "2026-03-10",
@@ -320,15 +321,14 @@ mod tests {
         let (from, to) = week_of_march_9();
         let mut p = page("page-1", Some("2026-03-02T09:00:00"));
         p.completed_dates = vec!["2026-03-10".to_string()];
-        let rules = vec![rule("rule-1", "page-1", "FREQ=DAILY", "2026-03-02T09:00:00")];
+        let rules = vec![rule(
+            "rule-1",
+            "page-1",
+            "FREQ=DAILY",
+            "2026-03-02T09:00:00",
+        )];
 
-        let got = dates(virtual_occurrences_in_range(
-            &[p],
-            &rules,
-            &[],
-            from,
-            to,
-        ));
+        let got = dates(virtual_occurrences_in_range(&[p], &rules, &[], from, to));
         assert!(!got.contains(&"2026-03-10".to_string()), "got {got:?}");
         assert!(got.contains(&"2026-03-11".to_string()), "and only that one");
     }
@@ -341,16 +341,17 @@ mod tests {
         let (from, to) = week_of_march_9();
         let mut p = page("page-1", Some("2026-03-02T09:00:00"));
         p.completed_dates = vec!["2026-03-10T09:00:00".to_string()];
-        let rules = vec![rule("rule-1", "page-1", "FREQ=DAILY", "2026-03-02T09:00:00")];
+        let rules = vec![rule(
+            "rule-1",
+            "page-1",
+            "FREQ=DAILY",
+            "2026-03-02T09:00:00",
+        )];
 
-        assert!(!dates(virtual_occurrences_in_range(
-            &[p],
-            &rules,
-            &[],
-            from,
-            to
-        ))
-        .contains(&"2026-03-10".to_string()));
+        assert!(
+            !dates(virtual_occurrences_in_range(&[p], &rules, &[], from, to))
+                .contains(&"2026-03-10".to_string())
+        );
     }
 
     #[test]
@@ -358,16 +359,17 @@ mod tests {
         let (from, to) = week_of_march_9();
         let mut p = page("page-1", Some("2026-03-02T09:00:00"));
         p.skipped_dates = vec!["2026-03-12".to_string()];
-        let rules = vec![rule("rule-1", "page-1", "FREQ=DAILY", "2026-03-02T09:00:00")];
+        let rules = vec![rule(
+            "rule-1",
+            "page-1",
+            "FREQ=DAILY",
+            "2026-03-02T09:00:00",
+        )];
 
-        assert!(!dates(virtual_occurrences_in_range(
-            &[p],
-            &rules,
-            &[],
-            from,
-            to
-        ))
-        .contains(&"2026-03-12".to_string()));
+        assert!(
+            !dates(virtual_occurrences_in_range(&[p], &rules, &[], from, to))
+                .contains(&"2026-03-12".to_string())
+        );
     }
 
     /// The case that motivates gathering overrides by rule rather than by date
@@ -388,9 +390,7 @@ mod tests {
             original_date: "2026-03-09".to_string(),
         }];
 
-        assert!(
-            virtual_occurrences_in_range(&pages, &rules, &overrides, from, to).is_empty()
-        );
+        assert!(virtual_occurrences_in_range(&pages, &rules, &overrides, from, to).is_empty());
     }
 
     /// An override belonging to another series must not suppress this one.
@@ -438,16 +438,15 @@ mod tests {
         let (from, to) = week_of_march_9();
         let mut p = page("page-1", Some("2026-03-02T09:00:00"));
         p.synced_since = Some("2026-03-12".to_string());
-        let rules = vec![rule("rule-1", "page-1", "FREQ=DAILY", "2026-03-02T09:00:00")];
+        let rules = vec![rule(
+            "rule-1",
+            "page-1",
+            "FREQ=DAILY",
+            "2026-03-02T09:00:00",
+        )];
 
         assert_eq!(
-            dates(virtual_occurrences_in_range(
-                &[p],
-                &rules,
-                &[],
-                from,
-                to
-            )),
+            dates(virtual_occurrences_in_range(&[p], &rules, &[], from, to)),
             ["2026-03-12", "2026-03-13", "2026-03-14", "2026-03-15"]
         );
     }
@@ -503,7 +502,12 @@ mod tests {
     fn an_all_day_series_projects_date_only_occurrences() {
         let (from, to) = week_of_march_9();
         let pages = vec![page("page-1", Some("2026-03-02"))];
-        let rules = vec![rule("rule-1", "page-1", "FREQ=WEEKLY;BYDAY=MO", "2026-03-02")];
+        let rules = vec![rule(
+            "rule-1",
+            "page-1",
+            "FREQ=WEEKLY;BYDAY=MO",
+            "2026-03-02",
+        )];
 
         let virtuals = virtual_occurrences_in_range(&pages, &rules, &[], from, to);
         assert_eq!(virtuals.len(), 1);
