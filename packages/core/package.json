@@ -19,7 +19,8 @@
     "probe:chrono": "esbuild scripts/parser-grammar/probe.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/probe-chrono.mjs && TZ=UTC node node_modules/.cache/probe-chrono.mjs",
     "probe:parser": "esbuild scripts/parser-grammar/probe-parser.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/probe-parser.mjs && TZ=UTC node node_modules/.cache/probe-parser.mjs",
     "probe:snap": "esbuild scripts/parser-grammar/probe-snap.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/probe-snap.mjs && TZ=UTC node node_modules/.cache/probe-snap.mjs",
-    "gen:fuzz": "esbuild scripts/parser-grammar/fuzz.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/fuzz.mjs && TZ=UTC node node_modules/.cache/fuzz.mjs"
+    "gen:fuzz": "esbuild scripts/parser-grammar/fuzz.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/fuzz.mjs && TZ=UTC node node_modules/.cache/fuzz.mjs",
+    "gen:fuzz-recurrence": "esbuild scripts/parser-grammar/fuzz-recurrence.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/fuzz-recurrence.mjs && TZ=UTC node node_modules/.cache/fuzz-recurrence.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.0",

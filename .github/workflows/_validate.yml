@@ -320,6 +320,13 @@ jobs:
           PIKOS_FUZZ_CORPUS=/tmp/fuzz-wide.json PIKOS_FUZZ_FAILURES=/tmp/fuzz-failures.json \
             cargo test --release -p pikos-core --test quick_add_fuzz
 
+      - name: Wider differential fuzz against the TypeScript recurrence
+        run: |
+          FUZZ_CASES=20000 FUZZ_SEED=${{ github.run_number }} \
+            FUZZ_OUT=/tmp/recurrence-wide.json pnpm --filter @pikos/core gen:fuzz-recurrence
+          PIKOS_RECURRENCE_FUZZ=/tmp/recurrence-wide.json \
+            cargo test --release -p pikos-core --test recurrence_fuzz
+
       - uses: actions/upload-artifact@v6
         if: ${{ failure() }}
         with:

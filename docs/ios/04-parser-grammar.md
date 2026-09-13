@@ -331,3 +331,29 @@ failure uploads the offending inputs as an artifact.
 The honest summary: the hand-written corpus proved the port handled what
 someone thought to write down. The fuzzer proved it handles what they did not —
 and it took six fixes to get there.
+
+### The same technique on recurrence
+
+`parity.rs` grades the recurrence port — next occurrence, carried end, anchor
+snapping, range expansion — against 35 hand-written cases, and found nothing.
+That is the same thing the 317-input parser corpus said.
+
+`fuzz-recurrence.ts` composes rules the same way: frequencies, intervals,
+`BYDAY` including ordinals like `3TU`, `BYMONTHDAY` including days a month does
+not have, `BYHOUR`, `COUNT` and `UNTIL`, exdates placed near the anchor so they
+have a real chance of landing on an occurrence, and anchors chosen for their
+edges — a leap day, month ends, both sides of a DST transition, a year end.
+
+Three seeds of 20,000 cases each found **no divergences**, which is a different
+statement from "the 35 cases passed": five mutations of the Rust side — ignoring
+exdates, treating all-day as timed, seeding the search at midnight instead of
+end-of-day, dropping the wall-clock reapplication in snapping, and cutting the
+occurrence limit — each fail between 393 and 4,750 comparisons. The corpus is
+gradient, not a pass/fail bit.
+
+One of those five is worth noting: the wall-clock reapplication in snapping
+survived the first fuzz run, because every rule the generator produced inherited
+its time from `DTSTART`, which makes "keep the anchor's time" and "keep the
+occurrence's time" indistinguishable. Adding `BYHOUR` to the generator killed
+it, with 2,394 differences. A fuzzer is only as good as the axes it varies, and
+that one had to be added deliberately.
