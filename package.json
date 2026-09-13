@@ -18,6 +18,7 @@
     "qa:build": "bash scripts/qa-build.sh",
     "fix:notifications": "bash scripts/reset-launch-services.sh",
     "audit:source": "bash scripts/source-audit.sh",
+    "check:ios-ffi": "python3 scripts/check-swift-ffi-usage.py",
     "release": "bash scripts/release.sh",
     "release:retry": "bash scripts/release-retry.sh"
   },

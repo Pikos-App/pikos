@@ -70,6 +70,15 @@ jobs:
               exit 1
             }
 
+      # The bindings drift check above proves the bindings match the Rust. This
+      # proves the app matches the bindings — the other half, and the one that
+      # cannot be caught here any other way, because building the app needs a
+      # Mac. Rename a field in the FFI and the bindings regenerate cleanly while
+      # every call site using the old name stays broken until somebody opens
+      # Xcode.
+      - name: iOS call sites match the generated bindings
+        run: pnpm check:ios-ffi
+
       - name: Source audit (secrets, XSS, SQL, Tauri capabilities)
         run: pnpm audit:source
 
