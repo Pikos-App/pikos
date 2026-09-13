@@ -5,8 +5,8 @@ use super::stats::*;
 use crate::db::DbState;
 use pikos_db::{
     create_focus_session, create_folder_impl, create_page_impl, insert_test_folder,
-    insert_test_page, list_folders_impl, list_pages_impl, now_iso,
-    test_pool, NewFolder, NewPage, TestPage,
+    insert_test_page, list_folders_impl, list_pages_impl, now_iso, test_pool, NewFolder, NewPage,
+    TestPage,
 };
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -75,7 +75,6 @@ async fn set_status(pool: &SqlitePool, id: &str, status: &str) {
         .await
         .unwrap();
 }
-
 
 async fn soft_delete(pool: &SqlitePool, id: &str) {
     sqlx::query("UPDATE pages SET deleted_at = ? WHERE id = ?")

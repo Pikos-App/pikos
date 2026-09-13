@@ -33,7 +33,14 @@ pub async fn reset_db(state: tauri::State<'_, DbState>) -> AppResult<()> {
 pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
     let before: Vec<(&str, i64)> = {
         let mut counts = Vec::new();
-        for table in ["pages", "folders", "page_schedules", "page_recurrence_rules", "focus_sessions", "sync_account"] {
+        for table in [
+            "pages",
+            "folders",
+            "page_schedules",
+            "page_recurrence_rules",
+            "focus_sessions",
+            "sync_account",
+        ] {
             let n: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}")) // sql-ok: table is a literal from the list above
                 .fetch_one(pool)
                 .await?;
