@@ -864,6 +864,23 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func calendarRange(start: String, end: String) async throws  -> [CalendarEntry]
     
     /**
+     * Complete one occurrence of a recurring page.
+     *
+     * Not the same operation as setting `status` to done, and the difference is
+     * destructive rather than cosmetic. A recurring page is stored as a head
+     * row plus a rule; completing an occurrence clones the head at that date,
+     * marks the clone done, and *advances the head* to the next open
+     * occurrence. Flipping the head's own status instead marks the whole
+     * series finished — `pikos-db` says so directly above
+     * `set_pages_status_impl`: "a plain status flip would corrupt the series".
+     *
+     * `occurrence_date` is required only for a page a calendar owns, whose own
+     * date stays pinned to where the series began. For a page created in Pikos,
+     * omit it and the next-due date is used.
+     */
+    func completeRecurringOccurrence(pageId: String, occurrenceDate: String?) async throws  -> RecurringCompletion
+    
+    /**
      * The editor schema this build writes. A page whose
      * `content_schema_version` exceeds this must not be saved over.
      */
@@ -959,6 +976,25 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * Move a page to the trash. Recoverable — see `restore_page`.
      */
     func trashPage(id: String) async throws 
+    
+    /**
+     * Undo the most recent completed occurrence of a series.
+     *
+     * Returns false when there is nothing to undo — no rule, no completions,
+     * or a schedule a calendar owns — which is the caller's signal to fall back
+     * to a plain status flip. Deciding *which* occurrence here rather than in
+     * the UI keeps the whole `completedOccurrences` map off the wire, and keeps
+     * the choice somewhere it can be tested.
+     */
+    func uncompleteLatestRecurringOccurrence(pageId: String) async throws  -> Bool
+    
+    /**
+     * Undo one completed occurrence, and let the head recompute.
+     *
+     * The mirror of the above: it drops the completion record and re-derives
+     * the head, which walks back to the re-opened occurrence.
+     */
+    func uncompleteRecurringOccurrence(pageId: String, occurrenceDate: String) async throws 
     
     func updatePage(id: String, edit: PageEdit) async throws  -> Page
     
@@ -1078,6 +1114,37 @@ open func calendarRange(start: String, end: String)async throws  -> [CalendarEnt
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeCalendarEntry.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Complete one occurrence of a recurring page.
+     *
+     * Not the same operation as setting `status` to done, and the difference is
+     * destructive rather than cosmetic. A recurring page is stored as a head
+     * row plus a rule; completing an occurrence clones the head at that date,
+     * marks the clone done, and *advances the head* to the next open
+     * occurrence. Flipping the head's own status instead marks the whole
+     * series finished — `pikos-db` says so directly above
+     * `set_pages_status_impl`: "a plain status flip would corrupt the series".
+     *
+     * `occurrence_date` is required only for a page a calendar owns, whose own
+     * date stays pinned to where the series began. For a page created in Pikos,
+     * omit it and the next-due date is used.
+     */
+open func completeRecurringOccurrence(pageId: String, occurrenceDate: String?)async throws  -> RecurringCompletion  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_complete_recurring_occurrence(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterOptionString.lower(occurrenceDate)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRecurringCompletion_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -1351,6 +1418,53 @@ open func trashPage(id: String)async throws   {
             rustFutureFunc: {
                 uniffi_pikos_ffi_fn_method_workspace_trash_page(
                         self.uniffiCloneHandle(),FfiConverterString.lower(id)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Undo the most recent completed occurrence of a series.
+     *
+     * Returns false when there is nothing to undo — no rule, no completions,
+     * or a schedule a calendar owns — which is the caller's signal to fall back
+     * to a plain status flip. Deciding *which* occurrence here rather than in
+     * the UI keeps the whole `completedOccurrences` map off the wire, and keeps
+     * the choice somewhere it can be tested.
+     */
+open func uncompleteLatestRecurringOccurrence(pageId: String)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_uncomplete_latest_recurring_occurrence(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_i8,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_i8,
+            freeFunc: ffi_pikos_ffi_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Undo one completed occurrence, and let the head recompute.
+     *
+     * The mirror of the above: it drops the completion record and re-derives
+     * the head, which walks back to the re-opened occurrence.
+     */
+open func uncompleteRecurringOccurrence(pageId: String, occurrenceDate: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_uncomplete_recurring_occurrence(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(occurrenceDate)
                 )
             },
             pollFunc: ffi_pikos_ffi_rust_future_poll_void,
@@ -2303,13 +2417,30 @@ public struct PageSummary: Equatable, Hashable {
     public var parentId: String?
     public var createdAt: String
     public var updatedAt: String
+    /**
+     * Whether this page repeats.
+     *
+     * Carried because the UI cannot complete a page correctly without knowing:
+     * setting `status` on a recurring head ends the series instead of
+     * completing one occurrence of it. Cheaper than the alternative of asking
+     * per row, and the one flag that changes what a checkbox means.
+     */
+    public var isRecurring: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(id: String, folderId: String?, title: String, subtitle: String?, status: String, priority: Int64, tags: [String], sortOrder: Int64, 
         /**
          * Local wall-clock ISO string. See the note on dates in `lib.rs`.
-         */scheduledStart: String?, scheduledEnd: String?, completedAt: String?, parentId: String?, createdAt: String, updatedAt: String) {
+         */scheduledStart: String?, scheduledEnd: String?, completedAt: String?, parentId: String?, createdAt: String, updatedAt: String, 
+        /**
+         * Whether this page repeats.
+         *
+         * Carried because the UI cannot complete a page correctly without knowing:
+         * setting `status` on a recurring head ends the series instead of
+         * completing one occurrence of it. Cheaper than the alternative of asking
+         * per row, and the one flag that changes what a checkbox means.
+         */isRecurring: Bool) {
         self.id = id
         self.folderId = folderId
         self.title = title
@@ -2324,6 +2455,7 @@ public struct PageSummary: Equatable, Hashable {
         self.parentId = parentId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.isRecurring = isRecurring
     }
 
     
@@ -2355,7 +2487,8 @@ public struct FfiConverterTypePageSummary: FfiConverterRustBuffer {
                 completedAt: FfiConverterOptionString.read(from: &buf), 
                 parentId: FfiConverterOptionString.read(from: &buf), 
                 createdAt: FfiConverterString.read(from: &buf), 
-                updatedAt: FfiConverterString.read(from: &buf)
+                updatedAt: FfiConverterString.read(from: &buf), 
+                isRecurring: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2374,6 +2507,7 @@ public struct FfiConverterTypePageSummary: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.parentId, into: &buf)
         FfiConverterString.write(value.createdAt, into: &buf)
         FfiConverterString.write(value.updatedAt, into: &buf)
+        FfiConverterBool.write(value.isRecurring, into: &buf)
     }
 }
 
@@ -2481,6 +2615,91 @@ public func FfiConverterTypeQuickAddInput_lift(_ buf: RustBuffer) throws -> Quic
 #endif
 public func FfiConverterTypeQuickAddInput_lower(_ value: QuickAddInput) -> RustBuffer {
     return FfiConverterTypeQuickAddInput.lower(value)
+}
+
+
+/**
+ * What completing one occurrence of a series did.
+ *
+ * Narrow on purpose. The caller refreshes its list afterwards, so the full
+ * rows would be thrown away; what it cannot get from a refresh is *which*
+ * clone was created, and whether the head advanced or the series is finished.
+ */
+public struct RecurringCompletion: Equatable, Hashable {
+    /**
+     * The completed clone. Keeping this is what makes the completion undoable
+     * without re-deriving which occurrence was meant.
+     */
+    public var cloneId: String
+    /**
+     * `"done"` once the series is exhausted; otherwise the head has advanced.
+     */
+    public var headStatus: String
+    /**
+     * Where the head advanced to, if anywhere.
+     */
+    public var headScheduledStart: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The completed clone. Keeping this is what makes the completion undoable
+         * without re-deriving which occurrence was meant.
+         */cloneId: String, 
+        /**
+         * `"done"` once the series is exhausted; otherwise the head has advanced.
+         */headStatus: String, 
+        /**
+         * Where the head advanced to, if anywhere.
+         */headScheduledStart: String?) {
+        self.cloneId = cloneId
+        self.headStatus = headStatus
+        self.headScheduledStart = headScheduledStart
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RecurringCompletion: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRecurringCompletion: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecurringCompletion {
+        return
+            try RecurringCompletion(
+                cloneId: FfiConverterString.read(from: &buf), 
+                headStatus: FfiConverterString.read(from: &buf), 
+                headScheduledStart: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RecurringCompletion, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cloneId, into: &buf)
+        FfiConverterString.write(value.headStatus, into: &buf)
+        FfiConverterOptionString.write(value.headScheduledStart, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecurringCompletion_lift(_ buf: RustBuffer) throws -> RecurringCompletion {
+    return try FfiConverterTypeRecurringCompletion.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecurringCompletion_lower(_ value: RecurringCompletion) -> RustBuffer {
+    return FfiConverterTypeRecurringCompletion.lower(value)
 }
 
 
@@ -4211,6 +4430,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_calendar_range() != 23142) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_complete_recurring_occurrence() != 16483) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_content_schema_version() != 7147) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4251,6 +4473,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_trash_page() != 53299) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_uncomplete_latest_recurring_occurrence() != 13132) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_uncomplete_recurring_occurrence() != 33636) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_update_page() != 63112) {

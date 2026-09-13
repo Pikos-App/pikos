@@ -55,8 +55,19 @@ struct PageRow: View {
                         .lineLimit(1)
                 }
 
-                if let scheduled = page.scheduledStart {
-                    ScheduleLabel(iso: scheduled)
+                HStack(spacing: 5) {
+                    // A repeating page's checkbox does something different — it
+                    // completes one occurrence and advances the series rather
+                    // than finishing it. Marked so that is not a surprise.
+                    if page.isRecurring {
+                        Image(systemName: "repeat")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Repeats")
+                    }
+                    if let scheduled = page.scheduledStart {
+                        ScheduleLabel(iso: scheduled)
+                    }
                 }
             }
 

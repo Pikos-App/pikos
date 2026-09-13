@@ -822,3 +822,280 @@ async fn an_overridden_occurrence_is_not_also_projected() {
         "the rule must not project onto a date it has been overridden on, got {entries:#?}"
     );
 }
+
+// ─── Recurring completion ────────────────────────────────────────────────────
+
+/// Completing an occurrence must advance the series, not end it.
+///
+/// `pikos-db` states the hazard directly above `set_pages_status_impl`:
+/// "Recurring heads must NOT be passed here — completing a recurring page
+/// clones the head and advances it; a plain status flip would corrupt the
+/// series." A checkbox that routes every page through `update_page` does
+/// exactly that, and the damage is invisible at the moment it happens: the row
+/// reads `done`, which is what the user asked for. What is gone is every
+/// occurrence that had not happened yet.
+#[tokio::test]
+async fn completing_an_occurrence_advances_the_head_rather_than_ending_the_series() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2099-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let before = ws.get_page(page.id.clone()).await.unwrap();
+    let first = before
+        .scheduled_start
+        .clone()
+        .expect("the head is scheduled");
+
+    let result = ws
+        .complete_recurring_occurrence(page.id.clone(), None)
+        .await
+        .unwrap();
+
+    assert!(
+        !result.clone_id.is_empty(),
+        "the completed occurrence is recorded as its own page"
+    );
+    assert_eq!(
+        result.head_status, "not_started",
+        "a daily series with no end is never finished by one completion"
+    );
+
+    let after = ws.get_page(page.id.clone()).await.unwrap();
+    assert_eq!(after.status, "not_started", "the head is still open");
+    assert!(
+        after.scheduled_start.as_deref() > Some(first.as_str()),
+        "the head must advance past the completed occurrence: was {first}, now {:?}",
+        after.scheduled_start
+    );
+}
+
+/// The clone is a real page, and it is the thing that reads as done.
+#[tokio::test]
+async fn the_completed_occurrence_becomes_a_done_page_of_its_own() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2099-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let result = ws
+        .complete_recurring_occurrence(page.id.clone(), None)
+        .await
+        .unwrap();
+
+    let clone = ws.get_page(result.clone_id.clone()).await.unwrap();
+    assert_eq!(clone.status, "done");
+    assert_eq!(clone.title, "Standup", "it carries the series' title");
+    assert_ne!(clone.id, page.id, "and it is not the head");
+}
+
+/// Undo has to walk the head back, or completing by mistake costs the
+/// occurrence permanently.
+#[tokio::test]
+async fn uncompleting_an_occurrence_walks_the_head_back() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2099-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let original = ws
+        .get_page(page.id.clone())
+        .await
+        .unwrap()
+        .scheduled_start
+        .expect("the head is scheduled");
+    let occurrence_date = original[..10].to_string();
+
+    ws.complete_recurring_occurrence(page.id.clone(), None)
+        .await
+        .unwrap();
+    let advanced = ws.get_page(page.id.clone()).await.unwrap().scheduled_start;
+    assert_ne!(
+        advanced,
+        Some(original.clone()),
+        "precondition: it advanced"
+    );
+
+    ws.uncomplete_recurring_occurrence(page.id.clone(), occurrence_date)
+        .await
+        .unwrap();
+
+    let restored = ws.get_page(page.id.clone()).await.unwrap();
+    assert_eq!(
+        restored.scheduled_start,
+        Some(original),
+        "the head returns to the re-opened occurrence"
+    );
+    assert_eq!(restored.status, "not_started");
+}
+/// What the wrong path does, pinned so nobody reintroduces it.
+///
+/// This is not a test of desired behaviour — it is a record of the damage, kept
+/// because the damage is invisible at the moment it happens. Setting `status` on
+/// a recurring head leaves the head exactly where it was and marks it done: no
+/// clone, no completion record, and the head never advances. A daily series
+/// stops dead at its first occurrence, and the row reads `done`, which is what
+/// the user asked for. Everything that had not happened yet is simply gone.
+///
+/// If this assertion ever starts failing because `update_page` learned to route
+/// recurring heads itself, that is good news — delete this test and simplify
+/// the callers. Until then it is the reason `complete_recurring_occurrence`
+/// exists as a separate call.
+#[tokio::test]
+async fn a_plain_status_flip_on_a_recurring_head_ends_the_series() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2099-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let before = ws.get_page(page.id.clone()).await.unwrap();
+    ws.update_page(
+        page.id.clone(),
+        PageEdit {
+            status: Some("done".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let after = ws.get_page(page.id.clone()).await.unwrap();
+
+    assert_eq!(after.status, "done");
+    assert_eq!(
+        after.scheduled_start, before.scheduled_start,
+        "the head did not advance — which is the whole problem"
+    );
+}
+
+/// The list has to be able to tell a recurring page from a plain one, because
+/// the checkbox means something different on each.
+#[tokio::test]
+async fn a_summary_says_whether_its_page_repeats() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let plain = ws.create_page(new_page("Buy milk")).await.unwrap();
+    let series = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2099-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let pages = ws.list_pages(PageQuery::default()).await.unwrap();
+    let by_id = |id: &str| pages.iter().find(|p| p.id == id).unwrap();
+    assert!(by_id(&series.id).is_recurring);
+    assert!(!by_id(&plain.id).is_recurring);
+}
+
+/// Undo picks the newest completed occurrence, and says so when there is
+/// nothing to pick — which is what tells the caller to fall back to a plain
+/// status flip rather than silently doing nothing.
+#[tokio::test]
+async fn undoing_the_latest_completion_reports_whether_it_had_one() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let plain = ws.create_page(new_page("Buy milk")).await.unwrap();
+    assert!(
+        !ws.uncomplete_latest_recurring_occurrence(plain.id.clone())
+            .await
+            .unwrap(),
+        "a page with no rule has no occurrence to undo"
+    );
+
+    let series = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2099-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+    assert!(
+        !ws.uncomplete_latest_recurring_occurrence(series.id.clone())
+            .await
+            .unwrap(),
+        "a series with nothing completed has nothing to undo either"
+    );
+
+    let first = ws
+        .get_page(series.id.clone())
+        .await
+        .unwrap()
+        .scheduled_start
+        .unwrap();
+    ws.complete_recurring_occurrence(series.id.clone(), None)
+        .await
+        .unwrap();
+    ws.complete_recurring_occurrence(series.id.clone(), None)
+        .await
+        .unwrap();
+
+    assert!(
+        ws.uncomplete_latest_recurring_occurrence(series.id.clone())
+            .await
+            .unwrap(),
+        "two completions, so there is one to undo"
+    );
+    let after_one = ws
+        .get_page(series.id.clone())
+        .await
+        .unwrap()
+        .scheduled_start;
+    assert_ne!(
+        after_one,
+        Some(first.clone()),
+        "undoing the newest walks back one occurrence, not all of them"
+    );
+
+    assert!(ws
+        .uncomplete_latest_recurring_occurrence(series.id.clone())
+        .await
+        .unwrap());
+    assert_eq!(
+        ws.get_page(series.id.clone())
+            .await
+            .unwrap()
+            .scheduled_start,
+        Some(first),
+        "and undoing the second returns the head to where it started"
+    );
+}

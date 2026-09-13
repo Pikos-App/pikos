@@ -101,6 +101,23 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+## One bug the merge exposed, worth its own note
+
+`WorkspaceStore.setStatus` flipped `status` on every page, recurring ones
+included. `pikos-db` warns about exactly that above `set_pages_status_impl` —
+"a plain status flip would corrupt the series" — and the damage is invisible as
+it happens: a recurring page is a head row plus a rule, and completing an
+occurrence is supposed to clone the head at that date and advance it. Flipping
+the head instead leaves it where it is and marks it done. The row reads exactly
+as the user intended; every occurrence that had not happened yet is gone.
+
+It was undetectable before the merge, because nothing on the iOS side knew a
+page could repeat. `PageSummary` gained `is_recurring` with the sync work, and
+that is what made the question askable. The toggle now routes through
+`complete_recurring_occurrence` / `uncomplete_latest_recurring_occurrence`, and
+`a_plain_status_flip_on_a_recurring_head_ends_the_series` records what the wrong
+path does so nobody reintroduces it.
+
 ## Needs a Mac
 
 Nothing here is blocked on design — only on hardware.

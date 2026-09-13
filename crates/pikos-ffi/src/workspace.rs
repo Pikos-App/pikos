@@ -28,7 +28,7 @@ use pikos_core::calendar::occurrences::{
 use pikos_core::dates::{next_day, parse_local_iso};
 use pikos_core::nlp::quick_add::ParseResult as QuickAddParse;
 
-use crate::CalendarEntry;
+use crate::{CalendarEntry, RecurringCompletion};
 use pikos_db::{
     AppError, NewPage as DbNewPage, PageFilter as DbPageFilter, PageUpdate as DbPageUpdate,
 };
@@ -101,6 +101,13 @@ pub struct PageSummary {
     pub parent_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// Whether this page repeats.
+    ///
+    /// Carried because the UI cannot complete a page correctly without knowing:
+    /// setting `status` on a recurring head ends the series instead of
+    /// completing one occurrence of it. Cheaper than the alternative of asking
+    /// per row, and the one flag that changes what a checkbox means.
+    pub is_recurring: bool,
 }
 
 impl From<pikos_db::PageSummary> for PageSummary {
@@ -120,6 +127,7 @@ impl From<pikos_db::PageSummary> for PageSummary {
             parent_id: p.parent_id,
             created_at: p.created_at,
             updated_at: p.updated_at,
+            is_recurring: p.is_recurring,
         }
     }
 }
@@ -536,6 +544,96 @@ impl Workspace {
                     None => serde_json::Value::Null,
                 }),
                 ..Default::default()
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Complete one occurrence of a recurring page.
+    ///
+    /// Not the same operation as setting `status` to done, and the difference is
+    /// destructive rather than cosmetic. A recurring page is stored as a head
+    /// row plus a rule; completing an occurrence clones the head at that date,
+    /// marks the clone done, and *advances the head* to the next open
+    /// occurrence. Flipping the head's own status instead marks the whole
+    /// series finished — `pikos-db` says so directly above
+    /// `set_pages_status_impl`: "a plain status flip would corrupt the series".
+    ///
+    /// `occurrence_date` is required only for a page a calendar owns, whose own
+    /// date stays pinned to where the series began. For a page created in Pikos,
+    /// omit it and the next-due date is used.
+    pub async fn complete_recurring_occurrence(
+        &self,
+        page_id: String,
+        occurrence_date: Option<String>,
+    ) -> Result<RecurringCompletion, WorkspaceError> {
+        let result = pikos_db::complete_recurring_page_impl(
+            &self.pool,
+            pikos_db::CompleteRecurringInput {
+                page_id,
+                occurrence_date,
+                scheduled_start: None,
+                scheduled_end: None,
+                expected_occurrence_date: None,
+            },
+        )
+        .await?;
+        Ok(RecurringCompletion {
+            clone_id: result.clone.id,
+            head_status: result.head.status,
+            head_scheduled_start: result.head.scheduled_start,
+        })
+    }
+
+    /// Undo the most recent completed occurrence of a series.
+    ///
+    /// Returns false when there is nothing to undo — no rule, no completions,
+    /// or a schedule a calendar owns — which is the caller's signal to fall back
+    /// to a plain status flip. Deciding *which* occurrence here rather than in
+    /// the UI keeps the whole `completedOccurrences` map off the wire, and keeps
+    /// the choice somewhere it can be tested.
+    pub async fn uncomplete_latest_recurring_occurrence(
+        &self,
+        page_id: String,
+    ) -> Result<bool, WorkspaceError> {
+        let Some(page) = pikos_db::get_page(&self.pool, &page_id).await? else {
+            return Ok(false);
+        };
+        // `schedule_locked` is the one that does work here: a calendar owns that
+        // page's schedule, so walking its head back is not ours to do. The
+        // `is_recurring` half is belt-and-braces — a page with no rule has no
+        // completions map either, so the check below would refuse it anyway.
+        if !page.is_recurring || page.schedule_locked {
+            return Ok(false);
+        }
+        let Some(completed) = page.completed_occurrences else {
+            return Ok(false);
+        };
+        // The newest by date. Dates are zero-padded ISO, so the lexical maximum
+        // is the calendar maximum.
+        let Some(newest) = completed.keys().max().cloned() else {
+            return Ok(false);
+        };
+        self.uncomplete_recurring_occurrence(page_id, newest)
+            .await?;
+        Ok(true)
+    }
+
+    /// Undo one completed occurrence, and let the head recompute.
+    ///
+    /// The mirror of the above: it drops the completion record and re-derives
+    /// the head, which walks back to the re-opened occurrence.
+    pub async fn uncomplete_recurring_occurrence(
+        &self,
+        page_id: String,
+        occurrence_date: String,
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::uncomplete_recurring_occurrence_impl(
+            &self.pool,
+            pikos_db::UncompleteRecurringInput {
+                page_id,
+                occurrence_date,
             },
         )
         .await?;

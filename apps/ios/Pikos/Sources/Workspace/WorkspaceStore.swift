@@ -261,17 +261,49 @@ public final class WorkspaceStore {
         return formatter.string(from: date)
     }
 
+    /// Tick or untick a page.
+    ///
+    /// Two different operations wear one checkbox, and picking the wrong one is
+    /// destructive in a way the user cannot see. A recurring page is stored as a
+    /// head row plus a rule; completing an occurrence clones the head at that
+    /// date and advances the head to the next one. Setting `status` on the head
+    /// instead leaves it where it is and marks it done — the row reads exactly
+    /// as the user intended, and every occurrence that had not happened yet is
+    /// gone. `pikos-db` says as much above `set_pages_status_impl`, and
+    /// `a_plain_status_flip_on_a_recurring_head_ends_the_series` pins it.
+    ///
+    /// Dispatched in one place for the same reason the desktop centralises it:
+    /// the failure mode of spreading this across call sites is that it
+    /// half-lands.
     public func setStatus(pageId: String, done: Bool) async {
         guard let workspace else { return }
-        // Optimistic: a task checkbox that waits for a database round trip
-        // before filling in feels broken, and the write practically never fails.
-        // The refresh below reconciles if it does.
-        if let index = pages.firstIndex(where: { $0.id == pageId }) {
+        let isRecurring = pages.first { $0.id == pageId }?.isRecurring ?? false
+
+        // Optimistic, but only for a plain page. A recurring one does not
+        // simply become done — the head advances and a completed clone appears
+        // beside it — so there is nothing honest to show before the write
+        // lands.
+        if !isRecurring, let index = pages.firstIndex(where: { $0.id == pageId }) {
             pages[index].status = done ? "done" : "not_started"
         }
+
         do {
-            _ = try await workspace.updatePage(
-                id: pageId, edit: PageEdit(status: done ? "done" : "not_started"))
+            if isRecurring {
+                if done {
+                    _ = try await workspace.completeRecurringOccurrence(
+                        pageId: pageId, occurrenceDate: nil)
+                } else if try await workspace.uncompleteLatestRecurringOccurrence(pageId: pageId) {
+                    // The head walked back; nothing else to do.
+                } else {
+                    // A series with nothing completed — the head itself is what
+                    // is ticked, so flip it like any other page.
+                    _ = try await workspace.updatePage(
+                        id: pageId, edit: PageEdit(status: "not_started"))
+                }
+            } else {
+                _ = try await workspace.updatePage(
+                    id: pageId, edit: PageEdit(status: done ? "done" : "not_started"))
+            }
             await refresh()
         } catch {
             errorMessage = error.localizedDescription

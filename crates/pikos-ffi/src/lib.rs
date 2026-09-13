@@ -143,6 +143,22 @@ pub struct CalendarEntry {
     pub original_date: Option<String>,
 }
 
+/// What completing one occurrence of a series did.
+///
+/// Narrow on purpose. The caller refreshes its list afterwards, so the full
+/// rows would be thrown away; what it cannot get from a refresh is *which*
+/// clone was created, and whether the head advanced or the series is finished.
+#[derive(uniffi::Record, Debug)]
+pub struct RecurringCompletion {
+    /// The completed clone. Keeping this is what makes the completion undoable
+    /// without re-deriving which occurrence was meant.
+    pub clone_id: String,
+    /// `"done"` once the series is exhausted; otherwise the head has advanced.
+    pub head_status: String,
+    /// Where the head advanced to, if anywhere.
+    pub head_scheduled_start: Option<String>,
+}
+
 /// A contiguous run of one all-day page across visible columns, in one row.
 #[derive(uniffi::Record)]
 pub struct AllDayBar {
