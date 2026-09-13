@@ -9,8 +9,8 @@ delivery plan.
 | `02-ffi-surface.md`              | The Swift ↔ Rust boundary: what crosses it, and why dates cross as strings                                           |
 | `03-m0-spike.md`                 | The editor-in-webview spike: how to run it, how to measure each item on the pass bar, what to do if it fails         |
 | `04-parser-grammar.md`           | The quick-add parser: what it needed, what was built, and what differential fuzzing found that the corpora could not |
-| `05-calendar.md`                 | The calendar: which half is shared, why a calendar cannot draw the pages it queried, and what the mutations caught  |
-| `06-platform-audit.md`           | What iOS breaks regardless of the UI layer, carried over from the Tauri spike and re-read against Swift             |
+| `05-calendar.md`                 | The calendar: which half is shared, why a calendar cannot draw the pages it queried, and what the mutations caught   |
+| `06-platform-audit.md`           | What iOS breaks regardless of the UI layer, carried over from the Tauri spike and re-read against Swift              |
 
 ## Based on `feat/external-calendar-sync`, not `main`
 
@@ -134,7 +134,6 @@ session of its own. What has been done instead:
 
   The second pass covered everything the first had not, and found seven more.
   Three were behavioural and would have shipped looking like something else:
-
   - **The scheme handler crashed on a cancelled load.** WebKit raises
     `NSInternalInconsistencyException` — not an ignored call — if a response is
     delivered to a task it has already stopped, and `stop` did nothing but
@@ -142,7 +141,7 @@ session of its own. What has been done instead:
     fast enough is all it takes. Live tasks are tracked now, and three tests
     cover it.
   - **The checkbox's 44pt touch target was inert.** `contentShape` describes
-    the view it is applied to, and it sat *before* the frame that enlarged it —
+    the view it is applied to, and it sat _before_ the frame that enlarged it —
     so the hit area stayed the 17pt glyph. The comment above it was about
     exactly this and the order defeated it.
   - **"Open today" did nothing to an app already running.** `Route.showToday()`
@@ -151,7 +150,6 @@ session of its own. What has been done instead:
     applied one. `RootView` watches `pendingScope` now.
 
   Two were correctness under the seams:
-
   - **Quick add parsed against one clock and saved against another.**
     `createFromQuickAdd` takes a reference time for the stated reason that a
     line typed at 23:59 must not resolve to a different day — and the sheet let
@@ -163,7 +161,7 @@ session of its own. What has been done instead:
 
   Two were cost rather than correctness: a `DateFormatter` built two or three
   times per row per frame in the page list, and Shortcuts entity queries
-  opening a *writable* handle to populate a picker, against the one-writer rule
+  opening a _writable_ handle to populate a picker, against the one-writer rule
   the file they live in is entirely about. `ReadOnlyWorkspace` gained
   `listFolders` so the folder picker could use it.
 
@@ -177,7 +175,6 @@ session of its own. What has been done instead:
   `SWIFT_STRICT_CONCURRENCY: complete` means those are errors, not warnings, so
   expect them to be most of the first build. Three suspects, written down so
   the session is a checklist rather than an exploration:
-
   1. **`EditorWebView.Coordinator`** conforms to `EditorMessageSink`
      (`@MainActor`) as well as `WKScriptMessageHandler` and
      `WKNavigationDelegate`. If WebKit's delegate protocols are audited as
@@ -218,8 +215,8 @@ Three things follow, and they are the whole of it:
    iPad build a new SKU instead of an update, which is the one mistake here
    that cannot be taken back.
 3. **Nothing platform-specific goes in the Rust.** Already true, and worth
-   keeping true for a reason that is about to matter: the calendar's *layout*
-   is shared and its *pixel mapping* is deliberately not, because density
+   keeping true for a reason that is about to matter: the calendar's _layout_
+   is shared and its _pixel mapping_ is deliberately not, because density
    tables and text-collision heuristics encode one renderer's font metrics.
    iPad will want metrics closer to the desktop's than to the phone's, which
    is exactly why that line was drawn where it is.
