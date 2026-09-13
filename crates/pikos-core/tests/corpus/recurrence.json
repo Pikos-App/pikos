@@ -667,5 +667,151 @@
         "value": null
       }
     }
+  ],
+  "snapCases": [
+    {
+      "anchor": "2026-03-16T09:00:00",
+      "note": "already allowed",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-16T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:00:00",
+      "note": "sunday anchor on a M/W/F rule",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-16T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15",
+      "note": "date-only anchor",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-16"
+      }
+    },
+    {
+      "anchor": "2026-03-15T14:30:00",
+      "note": "wall-clock time survives the move",
+      "rrule": "FREQ=WEEKLY;BYDAY=TU",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-17T14:30:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:00:00",
+      "note": "daily needs no move",
+      "rrule": "FREQ=DAILY",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-15T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:00:00",
+      "note": "interval rule",
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-27T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:00:00",
+      "note": "monthly by weekday",
+      "rrule": "FREQ=MONTHLY;BYDAY=3TU",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-17T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:00:00",
+      "note": "monthly by month-day skips short months",
+      "rrule": "FREQ=MONTHLY;BYMONTHDAY=31",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-31T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:00:00",
+      "note": "count already exhausted",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO;COUNT=0",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-15T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:00:00",
+      "note": "until already passed",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260101T235959Z",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-15T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:00:00",
+      "note": "unparseable rule",
+      "rrule": "NOT A RULE",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-15T09:00:00"
+      }
+    },
+    {
+      "anchor": "2024-02-28T09:00:00",
+      "note": "leap day",
+      "rrule": "FREQ=WEEKLY;BYDAY=TH",
+      "snapped": {
+        "ok": true,
+        "value": "2024-02-29T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-12-31T23:00:00",
+      "note": "crosses the year",
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "snapped": {
+        "ok": true,
+        "value": "2027-01-04T23:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:00:00",
+      "note": "rule names an hour the anchor overrides",
+      "rrule": "FREQ=DAILY;BYHOUR=14",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-15T09:00:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15T09:15:00",
+      "note": "rule names hour and minute, anchor overrides both",
+      "rrule": "FREQ=WEEKLY;BYDAY=WE;BYHOUR=6;BYMINUTE=30",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-18T09:15:00"
+      }
+    },
+    {
+      "anchor": "2026-03-15",
+      "note": "date-only anchor against a rule that names an hour",
+      "rrule": "FREQ=DAILY;BYHOUR=14",
+      "snapped": {
+        "ok": true,
+        "value": "2026-03-15"
+      }
+    }
   ]
 }

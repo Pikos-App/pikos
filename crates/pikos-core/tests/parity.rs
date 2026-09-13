@@ -21,7 +21,9 @@ use std::path::PathBuf;
 
 use chrono::NaiveDateTime;
 use pikos_core::dates::parse_local_iso;
-use pikos_core::recurrence::{compute_next_end, expand_for_range, next_occurrence_after};
+use pikos_core::recurrence::{
+    compute_next_end, expand_for_range, next_occurrence_after, snap_anchor_to_rule,
+};
 use serde::Deserialize;
 
 fn corpus_path(name: &str) -> PathBuf {
@@ -116,9 +118,21 @@ struct ExpansionCase {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SnapCase {
+    rrule: String,
+    anchor: String,
+    /// What the case is for, echoed into the failure message so a red run
+    /// names the behaviour rather than just the inputs.
+    note: String,
+    snapped: Captured<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RecurrenceCorpus {
     recurrence_cases: Vec<RecurrenceCase>,
     expansion_cases: Vec<ExpansionCase>,
+    snap_cases: Vec<SnapCase>,
     meta: Meta,
 }
 
@@ -142,6 +156,28 @@ fn corpus_is_present_and_pinned() {
     );
     assert!(!corpus.recurrence_cases.is_empty());
     assert!(!corpus.expansion_cases.is_empty());
+    assert!(!corpus.snap_cases.is_empty());
+}
+
+#[test]
+fn anchor_snapping_matches_typescript() {
+    let corpus: RecurrenceCorpus = load("recurrence.json");
+    let mut compared = 0usize;
+
+    for case in &corpus.snap_cases {
+        let expected = case.snapped.expect_ok(&case.note);
+        let actual = snap_anchor_to_rule(&case.rrule, &case.anchor);
+        assert_eq!(
+            &actual, expected,
+            "{}: {} anchored at {}",
+            case.note, case.rrule, case.anchor
+        );
+        compared += 1;
+    }
+
+    // A loop that compared nothing would pass, so the count is asserted too.
+    assert_eq!(compared, corpus.snap_cases.len());
+    assert!(compared >= 16, "only {compared} snap cases compared");
 }
 
 #[test]

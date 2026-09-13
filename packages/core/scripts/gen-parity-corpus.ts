@@ -33,6 +33,7 @@ import {
   computeNextEnd,
   expandRecurrenceForRange,
   nextOccurrenceAfter,
+  snapAnchorToRule,
 } from "../src/utils/recurrence";
 
 /**
@@ -444,7 +445,10 @@ const EXTRACT_TEXT_CASES: { id: string; doc: string }[] = [
   {
     doc: JSON.stringify({
       content: [
-        { content: [{ content: [{ text: "quoted", type: "text" }], type: "paragraph" }], type: "blockquote" },
+        {
+          content: [{ content: [{ text: "quoted", type: "text" }], type: "paragraph" }],
+          type: "blockquote",
+        },
       ],
       type: "doc",
     }),
@@ -512,6 +516,75 @@ function capture<T>(fn: () => T): Captured<T> {
   }
 }
 
+// ─── Anchor snapping ─────────────────────────────────────────────────────────
+// snapAnchorToRule moves a page's head onto the first date its own rule allows.
+// Quick-add needs it: "every m/w/f" typed on a Sunday would otherwise leave the
+// head on Sunday — a date the rule excludes — rendering a stray first run
+// detached from the occurrences after it.
+//
+// The cases cover: an anchor the rule already permits (unchanged), one it
+// excludes (moved forward), a date-only anchor, an interval rule, a monthly
+// by-weekday rule, a wall-clock time that must survive the move, an exhausted
+// COUNT, and an unparseable rule.
+
+const SNAP_CASES: { rrule: string; anchor: string; note: string }[] = [
+  { anchor: "2026-03-16T09:00:00", note: "already allowed", rrule: "FREQ=WEEKLY;BYDAY=MO" },
+  {
+    anchor: "2026-03-15T09:00:00",
+    note: "sunday anchor on a M/W/F rule",
+    rrule: "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+  },
+  { anchor: "2026-03-15", note: "date-only anchor", rrule: "FREQ=WEEKLY;BYDAY=MO,WE,FR" },
+  {
+    anchor: "2026-03-15T14:30:00",
+    note: "wall-clock time survives the move",
+    rrule: "FREQ=WEEKLY;BYDAY=TU",
+  },
+  { anchor: "2026-03-15T09:00:00", note: "daily needs no move", rrule: "FREQ=DAILY" },
+  {
+    anchor: "2026-03-15T09:00:00",
+    note: "interval rule",
+    rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR",
+  },
+  { anchor: "2026-03-15T09:00:00", note: "monthly by weekday", rrule: "FREQ=MONTHLY;BYDAY=3TU" },
+  {
+    anchor: "2026-03-15T09:00:00",
+    note: "monthly by month-day skips short months",
+    rrule: "FREQ=MONTHLY;BYMONTHDAY=31",
+  },
+  {
+    anchor: "2026-03-15T09:00:00",
+    note: "count already exhausted",
+    rrule: "FREQ=WEEKLY;BYDAY=MO;COUNT=0",
+  },
+  {
+    anchor: "2026-03-15T09:00:00",
+    note: "until already passed",
+    rrule: "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260101T235959Z",
+  },
+  { anchor: "2026-03-15T09:00:00", note: "unparseable rule", rrule: "NOT A RULE" },
+  { anchor: "2024-02-28T09:00:00", note: "leap day", rrule: "FREQ=WEEKLY;BYDAY=TH" },
+  { anchor: "2026-12-31T23:00:00", note: "crosses the year", rrule: "FREQ=WEEKLY;BYDAY=MO" },
+  // The anchor's wall-clock time wins over a time named by the rule itself.
+  // Without these the snapped time is indistinguishable from the occurrence's
+  // own, because every other rule here inherits its time from DTSTART.
+  {
+    anchor: "2026-03-15T09:00:00",
+    note: "rule names an hour the anchor overrides",
+    rrule: "FREQ=DAILY;BYHOUR=14",
+  },
+  {
+    anchor: "2026-03-15T09:15:00",
+    note: "rule names hour and minute, anchor overrides both",
+    rrule: "FREQ=WEEKLY;BYDAY=WE;BYHOUR=6;BYMINUTE=30",
+  },
+  {
+    anchor: "2026-03-15",
+    note: "date-only anchor against a rule that names an hour",
+    rrule: "FREQ=DAILY;BYHOUR=14",
+  },
+];
+
 function main(): void {
   assertEnvironment();
 
@@ -572,6 +645,11 @@ function main(): void {
     return { ...c, occurrences };
   });
 
+  const snapCases = SNAP_CASES.map((c) => ({
+    ...c,
+    snapped: capture(() => snapAnchorToRule(c.rrule, c.anchor)),
+  }));
+
   const extractTextCases = EXTRACT_TEXT_CASES.map((c) => ({
     ...c,
     text: capture(() => extractText(c.doc)),
@@ -598,13 +676,13 @@ function main(): void {
   );
   writeFileSync(
     resolve(OUT_DIR, "recurrence.json"),
-    JSON.stringify({ expansionCases, meta, recurrenceCases }, null, 2) + "\n"
+    JSON.stringify({ expansionCases, meta, recurrenceCases, snapCases }, null, 2) + "\n"
   );
 
   const failures = parserCases.filter((c) => !c.result.ok).length;
   process.stdout.write(
     `parser.json:     ${parserCases.length} cases (${inputs.length} inputs × ${REFERENCES.length} refs), ${failures} throwing\n` +
-      `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion\n` +
+      `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion, ${snapCases.length} snap\n` +
       `text.json:       ${extractTextCases.length} extractText\n` +
       `out: ${OUT_DIR}\n`
   );

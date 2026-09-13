@@ -128,6 +128,48 @@ pub fn next_occurrence_after(
     None
 }
 
+/// Move an anchor onto the first date its own rule allows, on or after the
+/// anchor itself, keeping the anchor's wall-clock time.
+///
+/// Quick-add is why this exists. "every m/w/f" typed on a Sunday produces a
+/// page anchored to Sunday and a rule that excludes it, so the page's head
+/// renders as a stray first run on a day the series does not contain, detached
+/// from every occurrence after it. Snapping moves the head to Monday.
+///
+/// The anchor comes back unchanged when it already satisfies the rule, when the
+/// rule yields nothing (an exhausted `COUNT`, an `UNTIL` already past), or when
+/// the rule does not parse — all three mean "nothing to move it to", and
+/// leaving the page where the user put it beats inventing a date.
+pub fn snap_anchor_to_rule(rrule_str: &str, anchor: &str) -> String {
+    let unchanged = || anchor.to_string();
+    let Some(base_start) = parse_local_iso(anchor) else {
+        return unchanged();
+    };
+    let all_day = is_all_day_iso(anchor);
+
+    let Some(set) = build_set(rrule_str, &base_start) else {
+        return unchanged();
+    };
+    let Some(anchor_utc) = to_fake_utc(&base_start) else {
+        return unchanged();
+    };
+
+    // DTSTART is the anchor, so every occurrence is at or after it; taking the
+    // first means the anchor itself when the rule permits it.
+    let Some(first) = set.after(anchor_utc).all(1).dates.into_iter().next() else {
+        return unchanged();
+    };
+
+    let local = from_fake_utc(&first);
+    if all_day {
+        return format_date_only(&local);
+    }
+    match with_time_of_day(local, &base_start) {
+        Some(adjusted) => format_local_iso(&adjusted),
+        None => unchanged(),
+    }
+}
+
 /// Carry a series' end time onto a new start, preserving duration across the
 /// day boundary.
 ///

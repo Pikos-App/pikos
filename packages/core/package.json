@@ -17,7 +17,8 @@
     "gen:date-corpus": "esbuild scripts/parser-grammar/date-corpus.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/date-corpus.mjs && TZ=UTC node node_modules/.cache/date-corpus.mjs",
     "gen:date-calls": "esbuild scripts/parser-grammar/call-corpus.ts --bundle --platform=node --format=esm --alias:chrono-node=./scripts/parser-grammar/chrono-recorder.ts --outfile=node_modules/.cache/date-calls.mjs && TZ=UTC node node_modules/.cache/date-calls.mjs",
     "probe:chrono": "esbuild scripts/parser-grammar/probe.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/probe-chrono.mjs && TZ=UTC node node_modules/.cache/probe-chrono.mjs",
-    "probe:parser": "esbuild scripts/parser-grammar/probe-parser.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/probe-parser.mjs && TZ=UTC node node_modules/.cache/probe-parser.mjs"
+    "probe:parser": "esbuild scripts/parser-grammar/probe-parser.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/probe-parser.mjs && TZ=UTC node node_modules/.cache/probe-parser.mjs",
+    "probe:snap": "esbuild scripts/parser-grammar/probe-snap.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/probe-snap.mjs && TZ=UTC node node_modules/.cache/probe-snap.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.0",
