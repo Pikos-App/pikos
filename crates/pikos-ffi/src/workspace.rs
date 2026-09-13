@@ -78,6 +78,16 @@ pub enum WorkspaceError {
     /// it is enforcing.
     #[error("{message}")]
     Refused { message: String },
+
+    /// The network was the problem — a server that did not answer, a name that
+    /// did not resolve, a phone with no signal.
+    ///
+    /// Distinct because it is the one failure here that is worth retrying
+    /// unchanged, and the only one where "try again" is honest advice. Folded
+    /// into `Database` it would tell somebody on a train that their workspace
+    /// is broken.
+    #[error("{message}")]
+    Network { message: String },
 }
 
 impl From<AppError> for WorkspaceError {
@@ -87,6 +97,10 @@ impl From<AppError> for WorkspaceError {
             // "Pages cannot be moved into an external calendar folder" — so it
             // is passed through rather than wrapped in a failure message.
             AppError::Conflict(message) => WorkspaceError::Refused { message },
+            // Sync is the only caller that can produce one of these, and it is
+            // the difference between "your calendar server is unreachable" and
+            // "your notes are damaged".
+            AppError::Network(message) => WorkspaceError::Network { message },
             other => WorkspaceError::Database {
                 message: other.to_string(),
             },
@@ -267,6 +281,132 @@ pub enum CompletedScope {
     Inbox,
     /// Everything ever completed in one folder.
     Folder { id: String },
+}
+
+// ─── External calendars ──────────────────────────────────────────────────────
+//
+// What reaches the phone, and what deliberately does not.
+//
+// CalDAV account management and a manual sync are plain async functions over
+// the pool and the OS keychain, so they port unchanged. Two things do not, and
+// both are structural rather than unfinished:
+//
+//   - **Google.** The grant waits on a loopback TCP listener inside the app
+//     process. Leaving for the browser starts iOS suspending that process, so
+//     the wait outlives the app. It needs `ASWebAuthenticationSession`; the
+//     PKCE half is transport-agnostic and ports as-is when somebody builds it.
+//   - **Background polling.** `run_sync_loop` is an in-process timer, which
+//     iOS suspends within seconds of backgrounding. Every sync here is one the
+//     user asked for, by hand, with the app open.
+//
+// So this surface is honest about being manual. `docs/ios/06-platform-audit.md`
+// has the detail.
+
+/// One connected calendar account.
+#[derive(Debug, uniffi::Record)]
+pub struct SyncAccount {
+    pub id: String,
+    /// `caldav` or `google`. Google accounts can appear here — the desktop may
+    /// have connected one against the same workspace — but cannot be created
+    /// or repaired from the phone.
+    pub provider: String,
+    /// What the user calls it: an email, or server·username for CalDAV.
+    pub display_name: String,
+    pub auth_kind: String,
+    pub created_at: String,
+    /// Set when a poll hit a rejected credential. The account is then skipped
+    /// entirely until somebody fixes it, so a screen that does not surface this
+    /// shows an account that looks connected and silently syncs nothing.
+    pub reconnect_needed: bool,
+}
+
+/// One calendar inside an account.
+#[derive(Debug, uniffi::Record)]
+pub struct SyncCalendar {
+    pub id: String,
+    pub account_id: String,
+    pub display_name: String,
+    /// Hex, as the server gave it. `None` when the server said nothing.
+    pub color: Option<String>,
+    pub enabled: bool,
+    pub last_synced_at: Option<String>,
+    /// The folder this calendar's events mirror into, once it has one.
+    pub folder_id: Option<String>,
+    /// How many pages this calendar left behind when it was switched off —
+    /// ones the user had edited, so they were kept rather than deleted.
+    /// Switching it back on reclaims them and the calendar's values win, which
+    /// is worth confirming first. Zero means there is nothing to ask about.
+    pub detached_pages: i64,
+}
+
+/// An account and its calendars — the shape the settings screen reads.
+#[derive(Debug, uniffi::Record)]
+pub struct SyncAccountWithCalendars {
+    pub account: SyncAccount,
+    pub calendars: Vec<SyncCalendar>,
+}
+
+/// How one calendar's sync went.
+#[derive(Debug, uniffi::Record)]
+pub struct CalendarSyncResult {
+    pub calendar_id: String,
+    /// `synced`, `offline`, or `reconnectNeeded`.
+    ///
+    /// A string rather than an enum because it is the data layer's own
+    /// vocabulary and the desktop already branches on these exact spellings;
+    /// two enums that must agree across a language boundary is the drift this
+    /// avoids.
+    pub status: String,
+    /// True when the calendar was re-read from scratch rather than from its
+    /// cursor.
+    pub full_resync: bool,
+}
+
+impl From<pikos_db::SyncAccount> for SyncAccount {
+    fn from(a: pikos_db::SyncAccount) -> Self {
+        SyncAccount {
+            id: a.id,
+            provider: a.provider,
+            display_name: a.display_name,
+            auth_kind: a.auth_kind,
+            created_at: a.created_at,
+            reconnect_needed: a.reconnect_needed,
+        }
+    }
+}
+
+impl From<pikos_db::SyncCalendar> for SyncCalendar {
+    fn from(c: pikos_db::SyncCalendar) -> Self {
+        SyncCalendar {
+            id: c.id,
+            account_id: c.account_id,
+            display_name: c.display_name,
+            color: c.color,
+            enabled: c.enabled,
+            last_synced_at: c.last_synced_at,
+            folder_id: c.folder_id,
+            detached_pages: c.detached_pages,
+        }
+    }
+}
+
+impl From<pikos_db::AccountWithCalendars> for SyncAccountWithCalendars {
+    fn from(a: pikos_db::AccountWithCalendars) -> Self {
+        SyncAccountWithCalendars {
+            account: a.account.into(),
+            calendars: a.calendars.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<pikos_calendar_sync::CalendarSyncResult> for CalendarSyncResult {
+    fn from(r: pikos_calendar_sync::CalendarSyncResult) -> Self {
+        CalendarSyncResult {
+            calendar_id: r.calendar_id,
+            status: r.status,
+            full_resync: r.full_resync,
+        }
+    }
 }
 
 /// Today's list, already split into the two sections it is drawn as.
@@ -1107,6 +1247,143 @@ impl Workspace {
     pub async fn restore_page(&self, id: String) -> Result<(), WorkspaceError> {
         pikos_db::restore_page_impl(&self.pool, &id).await?;
         Ok(())
+    }
+
+    // ─── External calendars ──────────────────────────────────────────────
+    //
+    // Manual by construction. See the note above `SyncAccount` for what iOS
+    // structurally cannot do here and why.
+
+    /// Every connected account with its calendars, dormant ones included.
+    ///
+    /// Dormant accounts are listed rather than filtered because a disconnect is
+    /// reversible: the row survives so a later reconnect re-links detached
+    /// pages by their iCal UID instead of duplicating every event. Hiding them
+    /// would make reconnecting look like connecting, which is the outcome that
+    /// duplicates a calendar.
+    pub async fn sync_status(&self) -> Result<Vec<SyncAccountWithCalendars>, WorkspaceError> {
+        let accounts = pikos_db::get_sync_status_impl(&self.pool).await?;
+        Ok(accounts.into_iter().map(Into::into).collect())
+    }
+
+    /// Connect a CalDAV server, or repair the connection to one already known.
+    ///
+    /// The password goes to the OS keychain and never to the database.
+    /// Discovery runs first, so a wrong URL or password fails before anything
+    /// is stored — which is also why this is slow enough to need a spinner.
+    ///
+    /// An account already known by provider and display name is *reused* rather
+    /// than duplicated, whether it is dormant or active. That is what makes
+    /// reconnecting safe: a second row would re-sync every event a second time
+    /// and leave the first row's mirrors orphaned.
+    pub async fn connect_caldav(
+        &self,
+        base_url: String,
+        username: String,
+        password: String,
+        display_name: String,
+    ) -> Result<SyncAccountWithCalendars, WorkspaceError> {
+        let account = pikos_calendar_sync::connect_caldav(
+            &self.pool,
+            pikos_calendar_sync::Keychain::system(),
+            base_url,
+            username,
+            password,
+            display_name,
+        )
+        .await?;
+        Ok(account.into())
+    }
+
+    /// Swap the password on a CalDAV account whose credential stopped working.
+    ///
+    /// Takes the password alone: the base URL and username are already in the
+    /// keychain blob, and re-collecting them would let a typo create a *second*
+    /// account instead of repairing this one. Nothing is written until the new
+    /// password proves itself against the server.
+    pub async fn reconnect_caldav(
+        &self,
+        account_id: String,
+        password: String,
+    ) -> Result<SyncAccountWithCalendars, WorkspaceError> {
+        let account = pikos_calendar_sync::reconnect_caldav(
+            &self.pool,
+            pikos_calendar_sync::Keychain::system(),
+            &account_id,
+            password,
+        )
+        .await?;
+        Ok(account.into())
+    }
+
+    /// Disconnect an account: release its credential and stop syncing it.
+    ///
+    /// Dormancy, not deletion. The row and its calendars stay so a later
+    /// reconnect re-links the pages this account mirrored rather than creating
+    /// a second copy of every one of them.
+    pub async fn disconnect_sync_account(&self, account_id: String) -> Result<(), WorkspaceError> {
+        pikos_calendar_sync::disconnect_account(
+            &self.pool,
+            pikos_calendar_sync::Keychain::system(),
+            &account_id,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Turn one calendar's mirroring on or off.
+    ///
+    /// Switching off is not free and the UI should say so: pages the user
+    /// edited are kept and detached, and un-actioned mirrors are deleted.
+    /// `SyncCalendar::detached_pages` counts what a re-enable would reclaim —
+    /// and a reclaim lets the calendar's values win over the local edits, which
+    /// is why it is worth confirming rather than doing quietly.
+    pub async fn set_calendar_enabled(
+        &self,
+        sync_calendar_id: String,
+        enabled: bool,
+    ) -> Result<SyncCalendar, WorkspaceError> {
+        let calendar =
+            pikos_db::toggle_sync_calendar_impl(&self.pool, &sync_calendar_id, enabled, None)
+                .await?;
+        Ok(calendar.into())
+    }
+
+    /// Sync one account now, from where each calendar left off.
+    ///
+    /// The ordinary "pull down to refresh" of calendar sync. Nothing calls this
+    /// on a timer on iOS — see the note above `SyncAccount`.
+    pub async fn sync_account_now(
+        &self,
+        account_id: String,
+    ) -> Result<Vec<CalendarSyncResult>, WorkspaceError> {
+        let results = pikos_calendar_sync::resync_account_auto(
+            &self.pool,
+            pikos_calendar_sync::Keychain::system(),
+            &account_id,
+        )
+        .await?;
+        Ok(results.into_iter().map(Into::into).collect())
+    }
+
+    /// Re-read an account's calendars in full, discarding every cursor.
+    ///
+    /// The repair path for a mirror that has drifted — an upstream change a
+    /// cursor advanced past, or a deletion made while nothing was polling.
+    /// Deliberately not a teardown: unchanged events are recognised by their
+    /// etag, so this leaves pages, folders and timestamps alone. Slower than a
+    /// plain sync and worth offering separately rather than instead.
+    pub async fn resync_account_fully(
+        &self,
+        account_id: String,
+    ) -> Result<Vec<CalendarSyncResult>, WorkspaceError> {
+        let results = pikos_calendar_sync::refresh_account_auto(
+            &self.pool,
+            pikos_calendar_sync::Keychain::system(),
+            &account_id,
+        )
+        .await?;
+        Ok(results.into_iter().map(Into::into).collect())
     }
 
     /// Full-text search across titles and page bodies.

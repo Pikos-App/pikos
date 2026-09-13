@@ -2108,3 +2108,165 @@ async fn upcoming_lists_open_work_only() {
         "a finished page is not upcoming work"
     );
 }
+
+// ─── External calendars ──────────────────────────────────────────────────────
+//
+// What is testable here is the half that does not need a server: the status
+// read, the calendar toggle, and the error a call makes when the network is the
+// problem. Connecting is a live CalDAV discovery and belongs to the sync
+// crate's own suite, which has the transport to fake.
+
+/// An account and its calendars arrive in one read, dormant accounts included.
+///
+/// Listing dormant accounts is deliberate rather than an oversight. A
+/// disconnect keeps the row so a later reconnect re-links the pages it
+/// mirrored; a screen that hid them would make reconnecting look like
+/// connecting, which is what duplicates a calendar.
+#[tokio::test]
+async fn sync_status_lists_accounts_with_their_calendars() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    seed_account(
+        &tmp.path,
+        "acct",
+        "Fastmail",
+        &[("cal-work", "Work"), ("cal-home", "Home")],
+    )
+    .await;
+
+    let status = ws.sync_status().await.unwrap();
+    assert_eq!(status.len(), 1);
+    assert_eq!(status[0].account.display_name, "Fastmail");
+    assert!(!status[0].account.reconnect_needed);
+
+    let mut names: Vec<String> = status[0]
+        .calendars
+        .iter()
+        .map(|c| c.display_name.clone())
+        .collect();
+    names.sort();
+    assert_eq!(names, vec!["Home".to_string(), "Work".to_string()]);
+}
+
+/// A rejected credential has to reach the screen.
+///
+/// The scheduler skips a flagged account entirely, so an interface that does
+/// not carry this flag shows an account that looks connected and silently syncs
+/// nothing — the failure mode the flag exists to make visible.
+#[tokio::test]
+async fn an_account_needing_reconnection_says_so() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    seed_account(&tmp.path, "acct", "Fastmail", &[("cal-work", "Work")]).await;
+
+    {
+        let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+        pikos_db::set_reconnect_needed_impl(&pool, "acct", true)
+            .await
+            .unwrap();
+    }
+
+    assert!(ws.sync_status().await.unwrap()[0].account.reconnect_needed);
+}
+
+/// Toggling a calendar round-trips, and the returned row is the new state
+/// rather than the old one — a screen that redrew from the argument it sent
+/// would be right by luck.
+#[tokio::test]
+async fn a_calendar_can_be_switched_off_and_back_on() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    seed_account(&tmp.path, "acct", "Fastmail", &[("cal-work", "Work")]).await;
+
+    let id = ws.sync_status().await.unwrap()[0].calendars[0].id.clone();
+
+    let off = ws.set_calendar_enabled(id.clone(), false).await.unwrap();
+    assert!(!off.enabled);
+    assert!(!ws.sync_status().await.unwrap()[0].calendars[0].enabled);
+
+    let on = ws.set_calendar_enabled(id.clone(), true).await.unwrap();
+    assert!(on.enabled);
+    assert!(ws.sync_status().await.unwrap()[0].calendars[0].enabled);
+}
+
+/// A server that cannot be reached is not a broken workspace.
+///
+/// The distinction is the whole reason `WorkspaceError::Network` exists: it is
+/// the one failure here worth retrying unchanged, and the only one where "try
+/// again" is honest advice. Folded into `Database` it would tell somebody on a
+/// train that their notes are damaged.
+#[tokio::test]
+async fn an_unreachable_server_reads_as_a_network_problem() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    // A host that resolves nowhere. `.invalid` is reserved by RFC 2606
+    // precisely so a test can be sure it will never be registered.
+    match ws
+        .connect_caldav(
+            "https://nothing.invalid/dav/".to_string(),
+            "someone".to_string(),
+            "hunter2".to_string(),
+            "Nowhere".to_string(),
+        )
+        .await
+    {
+        Err(WorkspaceError::Network { .. }) => {}
+        other => panic!("expected Network, got {other:?}"),
+    }
+
+    assert!(
+        ws.sync_status().await.unwrap().is_empty(),
+        "a failed connection stores nothing — discovery runs before the write"
+    );
+}
+
+/// Repairing an account that does not exist is a not-found, not a crash.
+#[tokio::test]
+async fn reconnecting_an_unknown_account_is_an_error_rather_than_a_panic() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    assert!(ws
+        .reconnect_caldav("nope".to_string(), "hunter2".to_string())
+        .await
+        .is_err());
+}
+
+/// Seed an account and its calendars directly.
+///
+/// Written against the tables because the real path is a live CalDAV discovery,
+/// and the behaviour under test here is the read and the toggle rather than the
+/// transport. Enabled by default, matching what discovery produces.
+async fn seed_account(path: &str, account_id: &str, name: &str, calendars: &[(&str, &str)]) {
+    let pool = pikos_db::open_pool(path).await.unwrap();
+    let now = "2026-01-01T00:00:00.000Z";
+    sqlx::query(
+        "INSERT INTO sync_account
+           (id, provider, display_name, auth_kind, created_at, updated_at)
+         VALUES (?, 'caldav', ?, 'basic', ?, ?)",
+    )
+    .bind(account_id)
+    .bind(name)
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    for (calendar_id, display) in calendars {
+        sqlx::query(
+            "INSERT INTO sync_calendar
+               (id, account_id, calendar_id, display_name, enabled, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 1, ?, ?)",
+        )
+        .bind(format!("sc-{calendar_id}"))
+        .bind(account_id)
+        .bind(calendar_id)
+        .bind(display)
+        .bind(now)
+        .bind(now)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+}

@@ -908,6 +908,20 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func completeRecurringOccurrence(pageId: String, occurrenceDate: String?) async throws  -> RecurringCompletion
     
     /**
+     * Connect a CalDAV server, or repair the connection to one already known.
+     *
+     * The password goes to the OS keychain and never to the database.
+     * Discovery runs first, so a wrong URL or password fails before anything
+     * is stored — which is also why this is slow enough to need a spinner.
+     *
+     * An account already known by provider and display name is *reused* rather
+     * than duplicated, whether it is dormant or active. That is what makes
+     * reconnecting safe: a second row would re-sync every event a second time
+     * and leave the first row's mirrors orphaned.
+     */
+    func connectCaldav(baseUrl: String, username: String, password: String, displayName: String) async throws  -> SyncAccountWithCalendars
+    
+    /**
      * The editor schema this build writes. A page whose
      * `content_schema_version` exceeds this must not be saved over.
      */
@@ -952,6 +966,15 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * what makes the date real.
      */
     func createPage(page: NewPage) async throws  -> Page
+    
+    /**
+     * Disconnect an account: release its credential and stop syncing it.
+     *
+     * Dormancy, not deletion. The row and its calendars stay so a later
+     * reconnect re-links the pages this account mirrored rather than creating
+     * a second copy of every one of them.
+     */
+    func disconnectSyncAccount(accountId: String) async throws 
     
     func getPage(id: String) async throws  -> Page
     
@@ -1018,6 +1041,16 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func readOnly()  -> ReadOnlyWorkspace
     
     /**
+     * Swap the password on a CalDAV account whose credential stopped working.
+     *
+     * Takes the password alone: the base URL and username are already in the
+     * keychain blob, and re-collecting them would let a typo create a *second*
+     * account instead of repairing this one. Nothing is written until the new
+     * password proves itself against the server.
+     */
+    func reconnectCaldav(accountId: String, password: String) async throws  -> SyncAccountWithCalendars
+    
+    /**
      * Rename a folder.
      *
      * A calendar-owned folder is deliberately not refused here: the data layer
@@ -1035,6 +1068,17 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func restorePage(id: String) async throws 
     
     /**
+     * Re-read an account's calendars in full, discarding every cursor.
+     *
+     * The repair path for a mirror that has drifted — an upstream change a
+     * cursor advanced past, or a deletion made while nothing was polling.
+     * Deliberately not a teardown: unchanged events are recognised by their
+     * etag, so this leaves pages, folders and timestamps alone. Slower than a
+     * plain sync and worth offering separately rather than instead.
+     */
+    func resyncAccountFully(accountId: String) async throws  -> [CalendarSyncResult]
+    
+    /**
      * Give a page a date, or another one.
      *
      * Pages can carry several schedules; the earliest still ahead is the one
@@ -1046,6 +1090,17 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * Full-text search across titles and page bodies.
      */
     func search(query: String, limit: UInt32) async throws  -> [SearchHit]
+    
+    /**
+     * Turn one calendar's mirroring on or off.
+     *
+     * Switching off is not free and the UI should say so: pages the user
+     * edited are kept and detached, and un-actioned mirrors are deleted.
+     * `SyncCalendar::detached_pages` counts what a re-enable would reclaim —
+     * and a reclaim lets the calendar's values win over the local edits, which
+     * is why it is worth confirming rather than doing quietly.
+     */
+    func setCalendarEnabled(syncCalendarId: String, enabled: Bool) async throws  -> SyncCalendar
     
     /**
      * Tick or untick a page, whatever kind it is.
@@ -1079,6 +1134,25 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * expanded at display time and have no rows to derive it from.
      */
     func setRecurrence(pageId: String, rrule: String, scheduledStart: String, scheduledEnd: String?, timezone: String) async throws 
+    
+    /**
+     * Sync one account now, from where each calendar left off.
+     *
+     * The ordinary "pull down to refresh" of calendar sync. Nothing calls this
+     * on a timer on iOS — see the note above `SyncAccount`.
+     */
+    func syncAccountNow(accountId: String) async throws  -> [CalendarSyncResult]
+    
+    /**
+     * Every connected account with its calendars, dormant ones included.
+     *
+     * Dormant accounts are listed rather than filtered because a disconnect is
+     * reversible: the row survives so a later reconnect re-links detached
+     * pages by their iCal UID instead of duplicating every event. Hiding them
+     * would make reconnecting look like connecting, which is the outcome that
+     * duplicates a calendar.
+     */
+    func syncStatus() async throws  -> [SyncAccountWithCalendars]
     
     /**
      * Move a folder to the trash, taking its pages with it.
@@ -1322,6 +1396,34 @@ open func completeRecurringOccurrence(pageId: String, occurrenceDate: String?)as
 }
     
     /**
+     * Connect a CalDAV server, or repair the connection to one already known.
+     *
+     * The password goes to the OS keychain and never to the database.
+     * Discovery runs first, so a wrong URL or password fails before anything
+     * is stored — which is also why this is slow enough to need a spinner.
+     *
+     * An account already known by provider and display name is *reused* rather
+     * than duplicated, whether it is dormant or active. That is what makes
+     * reconnecting safe: a second row would re-sync every event a second time
+     * and leave the first row's mirrors orphaned.
+     */
+open func connectCaldav(baseUrl: String, username: String, password: String, displayName: String)async throws  -> SyncAccountWithCalendars  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_connect_caldav(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(baseUrl),FfiConverterString.lower(username),FfiConverterString.lower(password),FfiConverterString.lower(displayName)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncAccountWithCalendars_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * The editor schema this build writes. A page whose
      * `content_schema_version` exceeds this must not be saved over.
      */
@@ -1412,6 +1514,29 @@ open func createPage(page: NewPage)async throws  -> Page  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePage_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Disconnect an account: release its credential and stop syncing it.
+     *
+     * Dormancy, not deletion. The row and its calendars stay so a later
+     * reconnect re-links the pages this account mirrored rather than creating
+     * a second copy of every one of them.
+     */
+open func disconnectSyncAccount(accountId: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_disconnect_sync_account(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(accountId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -1600,6 +1725,30 @@ open func readOnly() -> ReadOnlyWorkspace  {
 }
     
     /**
+     * Swap the password on a CalDAV account whose credential stopped working.
+     *
+     * Takes the password alone: the base URL and username are already in the
+     * keychain blob, and re-collecting them would let a typo create a *second*
+     * account instead of repairing this one. Nothing is written until the new
+     * password proves itself against the server.
+     */
+open func reconnectCaldav(accountId: String, password: String)async throws  -> SyncAccountWithCalendars  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_reconnect_caldav(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(accountId),FfiConverterString.lower(password)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncAccountWithCalendars_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Rename a folder.
      *
      * A calendar-owned folder is deliberately not refused here: the data layer
@@ -1659,6 +1808,31 @@ open func restorePage(id: String)async throws   {
 }
     
     /**
+     * Re-read an account's calendars in full, discarding every cursor.
+     *
+     * The repair path for a mirror that has drifted — an upstream change a
+     * cursor advanced past, or a deletion made while nothing was polling.
+     * Deliberately not a teardown: unchanged events are recognised by their
+     * etag, so this leaves pages, folders and timestamps alone. Slower than a
+     * plain sync and worth offering separately rather than instead.
+     */
+open func resyncAccountFully(accountId: String)async throws  -> [CalendarSyncResult]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_resync_account_fully(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(accountId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeCalendarSyncResult.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Give a page a date, or another one.
      *
      * Pages can carry several schedules; the earliest still ahead is the one
@@ -1695,6 +1869,31 @@ open func search(query: String, limit: UInt32)async throws  -> [SearchHit]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeSearchHit.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Turn one calendar's mirroring on or off.
+     *
+     * Switching off is not free and the UI should say so: pages the user
+     * edited are kept and detached, and un-actioned mirrors are deleted.
+     * `SyncCalendar::detached_pages` counts what a re-enable would reclaim —
+     * and a reclaim lets the calendar's values win over the local edits, which
+     * is why it is worth confirming rather than doing quietly.
+     */
+open func setCalendarEnabled(syncCalendarId: String, enabled: Bool)async throws  -> SyncCalendar  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_calendar_enabled(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(syncCalendarId),FfiConverterBool.lower(enabled)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncCalendar_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -1756,6 +1955,53 @@ open func setRecurrence(pageId: String, rrule: String, scheduledStart: String, s
             completeFunc: ffi_pikos_ffi_rust_future_complete_void,
             freeFunc: ffi_pikos_ffi_rust_future_free_void,
             liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Sync one account now, from where each calendar left off.
+     *
+     * The ordinary "pull down to refresh" of calendar sync. Nothing calls this
+     * on a timer on iOS — see the note above `SyncAccount`.
+     */
+open func syncAccountNow(accountId: String)async throws  -> [CalendarSyncResult]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_sync_account_now(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(accountId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeCalendarSyncResult.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Every connected account with its calendars, dormant ones included.
+     *
+     * Dormant accounts are listed rather than filtered because a disconnect is
+     * reversible: the row survives so a later reconnect re-links detached
+     * pages by their iCal UID instead of duplicating every event. Hiding them
+     * would make reconnecting look like connecting, which is the outcome that
+     * duplicates a calendar.
+     */
+open func syncStatus()async throws  -> [SyncAccountWithCalendars]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_sync_status(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeSyncAccountWithCalendars.lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -2157,6 +2403,91 @@ public func FfiConverterTypeCalendarEntry_lift(_ buf: RustBuffer) throws -> Cale
 #endif
 public func FfiConverterTypeCalendarEntry_lower(_ value: CalendarEntry) -> RustBuffer {
     return FfiConverterTypeCalendarEntry.lower(value)
+}
+
+
+/**
+ * How one calendar's sync went.
+ */
+public struct CalendarSyncResult: Equatable, Hashable {
+    public var calendarId: String
+    /**
+     * `synced`, `offline`, or `reconnectNeeded`.
+     *
+     * A string rather than an enum because it is the data layer's own
+     * vocabulary and the desktop already branches on these exact spellings;
+     * two enums that must agree across a language boundary is the drift this
+     * avoids.
+     */
+    public var status: String
+    /**
+     * True when the calendar was re-read from scratch rather than from its
+     * cursor.
+     */
+    public var fullResync: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(calendarId: String, 
+        /**
+         * `synced`, `offline`, or `reconnectNeeded`.
+         *
+         * A string rather than an enum because it is the data layer's own
+         * vocabulary and the desktop already branches on these exact spellings;
+         * two enums that must agree across a language boundary is the drift this
+         * avoids.
+         */status: String, 
+        /**
+         * True when the calendar was re-read from scratch rather than from its
+         * cursor.
+         */fullResync: Bool) {
+        self.calendarId = calendarId
+        self.status = status
+        self.fullResync = fullResync
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CalendarSyncResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCalendarSyncResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CalendarSyncResult {
+        return
+            try CalendarSyncResult(
+                calendarId: FfiConverterString.read(from: &buf), 
+                status: FfiConverterString.read(from: &buf), 
+                fullResync: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CalendarSyncResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.calendarId, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterBool.write(value.fullResync, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCalendarSyncResult_lift(_ buf: RustBuffer) throws -> CalendarSyncResult {
+    return try FfiConverterTypeCalendarSyncResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCalendarSyncResult_lower(_ value: CalendarSyncResult) -> RustBuffer {
+    return FfiConverterTypeCalendarSyncResult.lower(value)
 }
 
 
@@ -3355,6 +3686,267 @@ public func FfiConverterTypeSearchHit_lower(_ value: SearchHit) -> RustBuffer {
 
 
 /**
+ * One connected calendar account.
+ */
+public struct SyncAccount: Equatable, Hashable {
+    public var id: String
+    /**
+     * `caldav` or `google`. Google accounts can appear here — the desktop may
+     * have connected one against the same workspace — but cannot be created
+     * or repaired from the phone.
+     */
+    public var provider: String
+    /**
+     * What the user calls it: an email, or server·username for CalDAV.
+     */
+    public var displayName: String
+    public var authKind: String
+    public var createdAt: String
+    /**
+     * Set when a poll hit a rejected credential. The account is then skipped
+     * entirely until somebody fixes it, so a screen that does not surface this
+     * shows an account that looks connected and silently syncs nothing.
+     */
+    public var reconnectNeeded: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, 
+        /**
+         * `caldav` or `google`. Google accounts can appear here — the desktop may
+         * have connected one against the same workspace — but cannot be created
+         * or repaired from the phone.
+         */provider: String, 
+        /**
+         * What the user calls it: an email, or server·username for CalDAV.
+         */displayName: String, authKind: String, createdAt: String, 
+        /**
+         * Set when a poll hit a rejected credential. The account is then skipped
+         * entirely until somebody fixes it, so a screen that does not surface this
+         * shows an account that looks connected and silently syncs nothing.
+         */reconnectNeeded: Bool) {
+        self.id = id
+        self.provider = provider
+        self.displayName = displayName
+        self.authKind = authKind
+        self.createdAt = createdAt
+        self.reconnectNeeded = reconnectNeeded
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncAccount: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncAccount: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncAccount {
+        return
+            try SyncAccount(
+                id: FfiConverterString.read(from: &buf), 
+                provider: FfiConverterString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf), 
+                authKind: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterString.read(from: &buf), 
+                reconnectNeeded: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncAccount, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.provider, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.authKind, into: &buf)
+        FfiConverterString.write(value.createdAt, into: &buf)
+        FfiConverterBool.write(value.reconnectNeeded, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncAccount_lift(_ buf: RustBuffer) throws -> SyncAccount {
+    return try FfiConverterTypeSyncAccount.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncAccount_lower(_ value: SyncAccount) -> RustBuffer {
+    return FfiConverterTypeSyncAccount.lower(value)
+}
+
+
+/**
+ * An account and its calendars — the shape the settings screen reads.
+ */
+public struct SyncAccountWithCalendars: Equatable, Hashable {
+    public var account: SyncAccount
+    public var calendars: [SyncCalendar]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(account: SyncAccount, calendars: [SyncCalendar]) {
+        self.account = account
+        self.calendars = calendars
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncAccountWithCalendars: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncAccountWithCalendars: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncAccountWithCalendars {
+        return
+            try SyncAccountWithCalendars(
+                account: FfiConverterTypeSyncAccount.read(from: &buf), 
+                calendars: FfiConverterSequenceTypeSyncCalendar.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncAccountWithCalendars, into buf: inout [UInt8]) {
+        FfiConverterTypeSyncAccount.write(value.account, into: &buf)
+        FfiConverterSequenceTypeSyncCalendar.write(value.calendars, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncAccountWithCalendars_lift(_ buf: RustBuffer) throws -> SyncAccountWithCalendars {
+    return try FfiConverterTypeSyncAccountWithCalendars.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncAccountWithCalendars_lower(_ value: SyncAccountWithCalendars) -> RustBuffer {
+    return FfiConverterTypeSyncAccountWithCalendars.lower(value)
+}
+
+
+/**
+ * One calendar inside an account.
+ */
+public struct SyncCalendar: Equatable, Hashable {
+    public var id: String
+    public var accountId: String
+    public var displayName: String
+    /**
+     * Hex, as the server gave it. `None` when the server said nothing.
+     */
+    public var color: String?
+    public var enabled: Bool
+    public var lastSyncedAt: String?
+    /**
+     * The folder this calendar's events mirror into, once it has one.
+     */
+    public var folderId: String?
+    /**
+     * How many pages this calendar left behind when it was switched off —
+     * ones the user had edited, so they were kept rather than deleted.
+     * Switching it back on reclaims them and the calendar's values win, which
+     * is worth confirming first. Zero means there is nothing to ask about.
+     */
+    public var detachedPages: Int64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, accountId: String, displayName: String, 
+        /**
+         * Hex, as the server gave it. `None` when the server said nothing.
+         */color: String?, enabled: Bool, lastSyncedAt: String?, 
+        /**
+         * The folder this calendar's events mirror into, once it has one.
+         */folderId: String?, 
+        /**
+         * How many pages this calendar left behind when it was switched off —
+         * ones the user had edited, so they were kept rather than deleted.
+         * Switching it back on reclaims them and the calendar's values win, which
+         * is worth confirming first. Zero means there is nothing to ask about.
+         */detachedPages: Int64) {
+        self.id = id
+        self.accountId = accountId
+        self.displayName = displayName
+        self.color = color
+        self.enabled = enabled
+        self.lastSyncedAt = lastSyncedAt
+        self.folderId = folderId
+        self.detachedPages = detachedPages
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SyncCalendar: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncCalendar: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncCalendar {
+        return
+            try SyncCalendar(
+                id: FfiConverterString.read(from: &buf), 
+                accountId: FfiConverterString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf), 
+                color: FfiConverterOptionString.read(from: &buf), 
+                enabled: FfiConverterBool.read(from: &buf), 
+                lastSyncedAt: FfiConverterOptionString.read(from: &buf), 
+                folderId: FfiConverterOptionString.read(from: &buf), 
+                detachedPages: FfiConverterInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncCalendar, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.accountId, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterOptionString.write(value.color, into: &buf)
+        FfiConverterBool.write(value.enabled, into: &buf)
+        FfiConverterOptionString.write(value.lastSyncedAt, into: &buf)
+        FfiConverterOptionString.write(value.folderId, into: &buf)
+        FfiConverterInt64.write(value.detachedPages, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncCalendar_lift(_ buf: RustBuffer) throws -> SyncCalendar {
+    return try FfiConverterTypeSyncCalendar.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncCalendar_lower(_ value: SyncCalendar) -> RustBuffer {
+    return FfiConverterTypeSyncCalendar.lower(value)
+}
+
+
+/**
  * Structural placement of one timed event within a day.
  *
  * Carries no pixels. The cascade column says which lane the event occupies;
@@ -4302,6 +4894,7 @@ public func FfiConverterTypeQuickAddResult_lower(_ value: QuickAddResult) -> Rus
 public enum SmartView: Equatable, Hashable {
     
     case today
+    case upcoming
     case inbox
 
 
@@ -4326,7 +4919,9 @@ public struct FfiConverterTypeSmartView: FfiConverterRustBuffer {
         
         case 1: return .today
         
-        case 2: return .inbox
+        case 2: return .upcoming
+        
+        case 3: return .inbox
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -4340,8 +4935,12 @@ public struct FfiConverterTypeSmartView: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case .inbox:
+        case .upcoming:
             writeInt(&buf, Int32(2))
+        
+        
+        case .inbox:
+            writeInt(&buf, Int32(3))
         
         }
     }
@@ -4418,6 +5017,17 @@ enum WorkspaceError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError
      */
     case Refused(message: String
     )
+    /**
+     * The network was the problem — a server that did not answer, a name that
+     * did not resolve, a phone with no signal.
+     *
+     * Distinct because it is the one failure here that is worth retrying
+     * unchanged, and the only one where "try again" is honest advice. Folded
+     * into `Database` it would tell somebody on a train that their workspace
+     * is broken.
+     */
+    case Network(message: String
+    )
 
     
 
@@ -4464,6 +5074,9 @@ public struct FfiConverterTypeWorkspaceError: FfiConverterRustBuffer {
         case 6: return .Refused(
             message: try FfiConverterString.read(from: &buf)
             )
+        case 7: return .Network(
+            message: try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -4503,6 +5116,11 @@ public struct FfiConverterTypeWorkspaceError: FfiConverterRustBuffer {
         
         case let .Refused(message):
             writeInt(&buf, Int32(6))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .Network(message):
+            writeInt(&buf, Int32(7))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -4818,6 +5436,31 @@ fileprivate struct FfiConverterSequenceTypeCalendarEntry: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCalendarSyncResult: FfiConverterRustBuffer {
+    typealias SwiftType = [CalendarSyncResult]
+
+    public static func write(_ value: [CalendarSyncResult], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCalendarSyncResult.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CalendarSyncResult] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CalendarSyncResult]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCalendarSyncResult.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFolder: FfiConverterRustBuffer {
     typealias SwiftType = [Folder]
 
@@ -4985,6 +5628,56 @@ fileprivate struct FfiConverterSequenceTypeSearchHit: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeSearchHit.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSyncAccountWithCalendars: FfiConverterRustBuffer {
+    typealias SwiftType = [SyncAccountWithCalendars]
+
+    public static func write(_ value: [SyncAccountWithCalendars], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSyncAccountWithCalendars.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SyncAccountWithCalendars] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SyncAccountWithCalendars]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSyncAccountWithCalendars.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSyncCalendar: FfiConverterRustBuffer {
+    typealias SwiftType = [SyncCalendar]
+
+    public static func write(_ value: [SyncCalendar], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSyncCalendar.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SyncCalendar] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SyncCalendar]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSyncCalendar.read(from: &buf))
         }
         return seq
     }
@@ -5361,6 +6054,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_complete_recurring_occurrence() != 16483) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_connect_caldav() != 61641) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_content_schema_version() != 7147) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5371,6 +6067,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_create_page() != 13844) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_disconnect_sync_account() != 11852) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_get_page() != 16439) {
@@ -5400,6 +6099,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_read_only() != 39832) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav() != 31810) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_rename_folder() != 17853) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5409,16 +6111,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_restore_page() != 5661) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_resync_account_fully() != 10468) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_schedule_page() != 2015) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_search() != 52923) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_calendar_enabled() != 65191) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_page_status() != 12587) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_recurrence() != 1536) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_sync_account_now() != 48127) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_sync_status() != 10651) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_trash_folder() != 29209) {

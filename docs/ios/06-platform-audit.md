@@ -66,8 +66,10 @@ missing; this is the shape of what is missing.
 
 ### Google OAuth and background sync are structurally blocked
 
-Both are deferred with external calendar sync, but the reasons are worth having
-written down so they are not rediscovered:
+Still true, and now load-bearing rather than hypothetical: CalDAV sync ships on
+iOS (`Workspace::connect_caldav` and friends, `CalendarSyncScreen`), and these
+two are exactly what it stops short of. The screen says so to the user rather
+than leaving it to be discovered.
 
 - The grant waits on a **loopback TCP listener inside the app process**. Leaving
   for the browser starts iOS suspending that process, so the wait outlives the
@@ -121,10 +123,17 @@ answered — but two things are genuinely unverified:
   `staticlib`, which is a different output. `uniffi` exists to be linked into
   iOS apps, so this is expected to work — but expected is not measured.
 
-**`pikos-calendar-sync` is verified and unused.** It is in the workspace but is
-not a dependency of `pikos-ffi`, so it is not in the XCFramework at all. The
-keychain fix above is therefore correct and currently inert: it matters when
-sync reaches iOS, not now.
+**`pikos-calendar-sync` is now in the XCFramework.** It was verified to
+cross-compile and then sat unused, because it was not a dependency of
+`pikos-ffi`. It is one now, which makes the keychain fix above live rather than
+inert and pulls reqwest+rustls into the iOS static library for the first time.
+What it does _not_ pull in is the scheduler: `run_sync_loop` is never called
+from the FFI, because an in-process timer is precisely what iOS suspends.
+
+Two consequences worth knowing before the first device build. The binary grows
+by whatever rustls and reqwest cost. And App Transport Security will refuse a
+plain-`http` CalDAV server — correct behaviour, and the right answer is a
+certificate on the server rather than an ATS exception in the app.
 
 **Two targets were never in the spike's set.** The script also builds
 `x86_64-apple-ios` (Intel simulator) and, since the host-test change,

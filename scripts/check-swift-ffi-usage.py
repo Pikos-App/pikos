@@ -7,11 +7,18 @@ the *app* still matches the bindings. Rename a field, reorder a record, drop a
 method, and the bindings update cleanly while every call site that used the old
 shape stays broken until somebody opens Xcode.
 
-Swift is strict about both things this checks, and both are easy to get wrong
-writing code without a compiler:
+Swift is strict about all three things this checks, and each is easy to get
+wrong writing code without a compiler:
 
-  * argument labels must exist on the callee, and
-  * they must appear in declaration order.
+  * argument labels must exist on the callee,
+  * they must appear in declaration order, and
+  * an enum case must be spelled exactly as declared.
+
+The third was added after `if case .notFound = error` sat in the tree for
+weeks. UniFFI spells an error case as the Rust variant is spelled — `NotFound`,
+capitalised — and Swift's own convention is lowerCamelCase, so the wrong
+spelling is the one a Swift author writes from habit. It compiles nowhere and
+nothing here noticed.
 
 This is text analysis, not a type checker. It will not catch a wrong type, a
 missing `await`, or anything about SwiftUI — it catches stale call sites, which
@@ -49,6 +56,48 @@ def labels_of(signature: str) -> list[str]:
         if re.fullmatch(r"\w+", label):
             out.append(label)
     return out
+
+
+def read_enum_cases(bindings: str) -> dict[str, set[str]]:
+    """Case names of every public enum the bindings expose.
+
+    Keyed by enum name, so a case spelled for one enum is not accepted for
+    another. Payload parentheses are dropped — what is checked is the name.
+    """
+    cases: dict[str, set[str]] = {}
+    for match in re.finditer(r"public\s+enum (\w+)[^{]*\{(.*?)\n\}", bindings, re.S):
+        name, body = match.group(1), strip_comments(match.group(2))
+        found = set(re.findall(r"^\s*case (\w+)", body, re.M))
+        if found:
+            cases[name] = found
+    return cases
+
+
+def check_enum_cases(sources: list[pathlib.Path], cases: dict[str, set[str]]) -> list[str]:
+    """Flag `case .x` matches whose spelling no enum declares.
+
+    Deliberately permissive: a bare `.something` could belong to any type, and
+    this has no type information. So a spelling is accepted when *some* enum
+    declares it, and flagged only when one differs from a declared case by case
+    alone — which is precisely the mistake being hunted and almost never a
+    legitimate `.padding` or `.leading`.
+    """
+    declared = {case for names in cases.values() for case in names}
+    folded = {case.lower(): case for case in declared}
+
+    problems: list[str] = []
+    for path in sources:
+        for match in re.finditer(r"case\s+\.(\w+)\b", path.read_text()):
+            used = match.group(1)
+            if used in declared:
+                continue
+            correct = folded.get(used.lower())
+            if correct is not None:
+                problems.append(
+                    f"{path.relative_to(REPO)}: `case .{used}` — the bindings declare"
+                    f" `{correct}`, and Swift matches a case by its exact spelling"
+                )
+    return problems
 
 
 def read_api(bindings: str) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
@@ -116,7 +165,9 @@ def main() -> int:
         print(f"error: {BINDINGS.relative_to(REPO)} is missing — run scripts/gen-swift-bindings.sh")
         return 1
 
-    inits, methods = read_api(BINDINGS.read_text())
+    bindings = BINDINGS.read_text()
+    inits, methods = read_api(bindings)
+    enum_cases = read_enum_cases(bindings)
     if not inits or not methods:
         print("error: could not read any API out of the bindings; has their shape changed?")
         return 1
@@ -164,7 +215,12 @@ def main() -> int:
                         f" which is {expected}"
                     )
 
-    print(f"checked {checked} call sites in {len(sources)} files against the generated bindings")
+    problems += check_enum_cases(sources, enum_cases)
+
+    print(
+        f"checked {checked} call sites and {len(enum_cases)} enums"
+        f" in {len(sources)} files against the generated bindings"
+    )
     for problem in sorted(set(problems)):
         print(f"  ✗ {problem}")
     if problems:

@@ -21,6 +21,12 @@ path = "src/bin/uniffi-bindgen.rs"
 pikos-core = { path = "../pikos-core" }
 pikos-db = { path = "../pikos-db" }
 pikos-recurrence = { path = "../pikos-recurrence" }
+# CalDAV account management and manual sync. Brings reqwest+rustls and the
+# keychain into the iOS static library; both were verified to cross-compile to
+# aarch64-apple-ios by the M0 spike (docs/ios/06-platform-audit.md). What it
+# does NOT bring is the scheduler: `run_sync_loop` is an in-process timer that
+# iOS suspends within seconds of backgrounding, so nothing here polls.
+pikos-calendar-sync = { path = "../pikos-calendar-sync" }
 serde_json = "1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 thiserror = "2"

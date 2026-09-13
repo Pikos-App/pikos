@@ -156,6 +156,17 @@ public final class WorkspaceStore {
 
     private var workspace: Workspace?
 
+    /// The open workspace, for the one caller that needs the handle rather than
+    /// this store's methods.
+    ///
+    /// `CalendarSyncStore` talks to the same file but keeps its own state,
+    /// because its failures are a different kind — a server that is down, a
+    /// password that was rotated — and folding them into this store's single
+    /// `errorMessage` would show "could not read or write" over all of them.
+    /// Read-only: the one-writer rule still means every *write* goes through a
+    /// method here or on that store, never through a handle passed around.
+    public var handle: Workspace? { workspace }
+
     public init() {}
 
     /// Open the workspace and load the first screen's worth of data.
@@ -321,7 +332,10 @@ public final class WorkspaceStore {
         } catch let error as WorkspaceError {
             // A page that has been deleted is routine — a stale deep link, a
             // widget tap, a restored navigation stack. Not worth an alert.
-            if case .notFound = error { return nil }
+            // `NotFound`, capitalised: UniFFI spells an error case exactly as
+            // the Rust variant is spelled, not in Swift's lowerCamelCase. The
+            // lowercase form compiles nowhere and is easy to write from habit.
+            if case .NotFound = error { return nil }
             errorMessage = error.localizedDescription
             return nil
         } catch {

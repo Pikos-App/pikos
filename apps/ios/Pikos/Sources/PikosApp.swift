@@ -4,8 +4,12 @@ import SwiftUI
 
 @main
 struct PikosApp: App {
-    @State private var store = WorkspaceStore()
+    // No default values: `store` and `sync` are built together in `init` so the
+    // second can read the first, and a default here would construct a
+    // `WorkspaceStore` that is then thrown away.
+    @State private var store: WorkspaceStore
     @State private var settings = SettingsStore()
+    @State private var sync: CalendarSyncStore
     @State private var route = Route.shared
 
     init() {
@@ -13,6 +17,14 @@ struct PikosApp: App {
         // `@Dependency`. Registered here, at the one point that runs before any
         // intent can — an intent may be what launched the app.
         AppDependencyManager.shared.add { Route.shared }
+
+        // The sync store reads the workspace through a closure rather than
+        // holding it: `WorkspaceStore.start()` opens it asynchronously, so
+        // there is nothing to hand over at construction time and capturing nil
+        // once would leave sync permanently unable to do anything.
+        let pages = WorkspaceStore()
+        _store = State(initialValue: pages)
+        _sync = State(initialValue: CalendarSyncStore(workspace: { pages.handle }))
     }
 
     var body: some Scene {
@@ -20,6 +32,7 @@ struct PikosApp: App {
             RootView()
                 .environment(store)
                 .environment(settings)
+                .environment(sync)
                 .environment(route)
                 // Opening the workspace runs migrations, so it happens once,
                 // here, in the app process. A widget must never be the process

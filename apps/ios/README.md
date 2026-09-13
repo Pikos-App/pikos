@@ -107,6 +107,13 @@ suite.
   only. The finished pages come from their own paginated query and a filter
   over the rows that happen to be loaded would search a fifth of the folder
   while looking like it searched all of it.
+- **Google calendars, and background sync.** CalDAV accounts can be added,
+  repaired, toggled and synced from the phone. Google cannot: its grant waits on
+  a loopback TCP listener inside the app process, and leaving for the browser is
+  what starts iOS suspending that process. And nothing polls — the desktop's
+  scheduler is an in-process timer, so every sync here is one the user asked
+  for. The screen says both out loud rather than leaving a day-stale calendar to
+  be read as a bug.
 - **Most of the desktop's settings.** Five tabs there, one screen here, on
   purpose: keyboard shortcuts, window state and an editor line width describe
   things a phone does not have, and the calendar's day count is an iPad

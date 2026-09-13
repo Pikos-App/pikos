@@ -16,6 +16,7 @@ import SwiftUI
 struct SettingsScreen: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(WorkspaceStore.self) private var store
+    @Environment(CalendarSyncStore.self) private var sync
     @Environment(\.dismiss) private var dismiss
 
     @State private var isResetConfirmed = false
@@ -68,6 +69,16 @@ struct SettingsScreen: View {
                     Text(defaultFolderFooter)
                 }
 
+                Section {
+                    NavigationLink {
+                        CalendarSyncScreen()
+                    } label: {
+                        LabeledContent("Calendars", value: calendarSummary)
+                    }
+                } header: {
+                    Text("External calendars")
+                }
+
                 Section("About") {
                     LabeledContent("Version", value: Self.version)
                     // Not decoration: a page written by a newer build cannot be
@@ -84,6 +95,7 @@ struct SettingsScreen: View {
                     Text("Returns the settings above to their defaults. Your pages are not touched.")
                 }
             }
+            .task { await sync.load() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -100,6 +112,18 @@ struct SettingsScreen: View {
                 Text("Theme, density, week start and default folder go back to their defaults.")
             }
         }
+    }
+
+    /// How many calendars are mirroring, so the row says something without
+    /// being opened.
+    ///
+    /// Counts enabled calendars rather than accounts: an account with every
+    /// calendar switched off is connected and syncing nothing, and "1 account"
+    /// would describe that as working.
+    private var calendarSummary: String {
+        let enabled = sync.accounts.flatMap(\.calendars).filter(\.enabled).count
+        if sync.accounts.isEmpty { return "None" }
+        return enabled == 1 ? "1 syncing" : "\(enabled) syncing"
     }
 
     /// Says out loud when the stored folder no longer exists.

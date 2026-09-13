@@ -43,7 +43,7 @@ final class WorkspaceTests: XCTestCase {
             _ = try await workspace.getPage(id: "nope")
             XCTFail("expected a thrown error")
         } catch let error as WorkspaceError {
-            guard case .notFound(let entity, let id) = error else {
+            guard case .NotFound(let entity, let id) = error else {
                 return XCTFail("expected notFound, got \(error)")
             }
             XCTAssertEqual(entity, "page")
@@ -117,7 +117,7 @@ final class WorkspaceTests: XCTestCase {
             _ = try await ReadOnlyWorkspace.openExisting(path: path)
             XCTFail("expected a thrown error")
         } catch let error as WorkspaceError {
-            guard case .open = error else {
+            guard case .Open = error else {
                 return XCTFail("expected .open, got \(error)")
             }
         }
