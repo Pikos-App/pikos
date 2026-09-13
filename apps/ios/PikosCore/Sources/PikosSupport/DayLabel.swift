@@ -85,10 +85,14 @@ public enum DayLabel {
 
     /// A Gregorian calendar in the same time zone as `calendar`.
     ///
+    /// Internal rather than private: `StorageTimestamp.wallClock` needs the same
+    /// guarantee for the same reason, and two copies of "force Gregorian, keep
+    /// the zone" is one place for them to disagree.
+    ///
     /// The time zone is the caller's business — which instant "2026-09-13 noon"
     /// is depends on where they are. Which *numbering system* names that day is
     /// not: the database has exactly one answer.
-    private static func gregorian(like calendar: Calendar) -> Calendar {
+    static func gregorian(like calendar: Calendar) -> Calendar {
         if calendar.identifier == .gregorian { return calendar }
         var copy = Calendar(identifier: .gregorian)
         copy.timeZone = calendar.timeZone

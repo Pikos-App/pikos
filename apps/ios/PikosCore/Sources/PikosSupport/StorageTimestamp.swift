@@ -9,8 +9,8 @@ import Foundation
 ///     These are moments in time and must be read as UTC. This type reads them.
 ///   - **Local wall clocks** — `scheduled_start` and friends, written by
 ///     `now_local_iso()` with no zone suffix at all. 09:00 means 09:00 wherever
-///     the reader is, so these must *not* be converted, and this type must not
-///     be pointed at them. `ScheduleLabel` reads those.
+///     the reader is, so these must *not* be converted. `wallClock(_:in:)`
+///     below reads those; `utc(_:)` must not be pointed at them.
 ///
 /// Confusing the two fails quietly in the worst way: a wall clock read as UTC
 /// shifts by the reader's offset, which is invisible in London and wrong by a
@@ -32,6 +32,45 @@ public enum StorageTimestamp {
         // it always emits milliseconds, but a stamp arriving from an import or
         // a future writer should still read as a date.
         (try? withMillis.parse(stamp)) ?? (try? wholeSeconds.parse(stamp))
+    }
+
+    /// Parses a local wall-clock column, in either of its shapes: `yyyy-MM-dd`
+    /// for an all-day value, `yyyy-MM-ddTHH:mm:ss` for a timed one.
+    ///
+    /// Resolved in `calendar`'s time zone — the reader's own by default, which
+    /// is what makes 09:00 mean 09:00 everywhere — and always on the Gregorian
+    /// calendar, because that is the one the stored string is written in.
+    ///
+    /// An all-day value lands on noon rather than midnight. Midnight is the one
+    /// instant a spring-forward can delete, and in a zone that moves at 00:00
+    /// asking for it yields either nil or the previous day.
+    ///
+    /// Field ranges are checked; validity beyond that is left to `Calendar`. A
+    /// timed value inside a DST gap — 02:30 on a day that jumps from 02:00 to
+    /// 03:00 — is a real stored value that no instant matches, and having
+    /// `Calendar` shift it forward is a better answer than refusing to show the
+    /// page at all.
+    public static func wallClock(_ stamp: String, in calendar: Calendar = .current) -> Date? {
+        let halves = stamp.split(separator: "T", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let day = halves.first.map(String.init),
+            let noon = DayLabel.date(from: day, in: calendar)
+        else { return nil }
+        guard halves.count == 2 else { return noon }
+
+        let time = halves[1].split(separator: ":")
+        guard time.count >= 2,
+            let hour = Int(time[0]), let minute = Int(time[1]),
+            (0...23).contains(hour), (0...59).contains(minute)
+        else { return nil }
+        let second = time.count > 2 ? Int(time[2]) : 0
+        guard let second, (0...59).contains(second) else { return nil }
+
+        let gregorian = DayLabel.gregorian(like: calendar)
+        var parts = gregorian.dateComponents([.year, .month, .day], from: noon)
+        parts.hour = hour
+        parts.minute = minute
+        parts.second = second
+        return gregorian.date(from: parts)
     }
 
     private static let withMillis = Date.ISO8601FormatStyle(

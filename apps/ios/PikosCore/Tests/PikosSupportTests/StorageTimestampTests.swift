@@ -50,3 +50,84 @@ final class StorageTimestampTests: XCTestCase {
         }
     }
 }
+
+/// Reading the wall-clock columns — the other half of the split, and the one a
+/// schedule editor writes back through.
+///
+/// A wall clock is not an instant: 09:00 means 09:00 wherever the reader is.
+/// The tests that matter are the ones where treating it as an instant would
+/// still look right — same zone, no DST — so each of these deliberately stands
+/// somewhere it would not.
+extension StorageTimestampTests {
+    private var london: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/London") ?? .gmt
+        return calendar
+    }
+
+    func testReadsBothShapes() {
+        let allDay = StorageTimestamp.wallClock("2026-03-15", in: london)
+        XCTAssertNotNil(allDay)
+        // Noon, not midnight: midnight is the instant a spring-forward deletes.
+        XCTAssertEqual(london.component(.hour, from: allDay!), 12)
+
+        let timed = StorageTimestamp.wallClock("2026-03-15T09:30:00", in: london)
+        XCTAssertNotNil(timed)
+        XCTAssertEqual(london.component(.hour, from: timed!), 9)
+        XCTAssertEqual(london.component(.minute, from: timed!), 30)
+    }
+
+    /// The same string is a different instant in a different zone, and the same
+    /// *reading* in each. That is the whole contract.
+    func testTheSameWallClockIsTheSameReadingInEveryZone() {
+        var auckland = Calendar(identifier: .gregorian)
+        auckland.timeZone = TimeZone(identifier: "Pacific/Auckland") ?? .gmt
+
+        let here = StorageTimestamp.wallClock("2026-03-15T09:00:00", in: london)!
+        let there = StorageTimestamp.wallClock("2026-03-15T09:00:00", in: auckland)!
+        XCTAssertNotEqual(here, there, "different zones, different instants")
+        XCTAssertEqual(london.component(.hour, from: here), 9)
+        XCTAssertEqual(auckland.component(.hour, from: there), 9)
+    }
+
+    /// Seconds are optional in the wild even though `now_local_iso` writes them.
+    func testSecondsMayBeOmitted() {
+        let parsed = StorageTimestamp.wallClock("2026-03-15T09:30", in: london)
+        XCTAssertEqual(parsed, StorageTimestamp.wallClock("2026-03-15T09:30:00", in: london))
+    }
+
+    /// A UTC instant read as a wall clock would be silently wrong rather than
+    /// absent, which is exactly the confusion the two functions exist to keep
+    /// apart. The trailing `Z` makes the seconds unreadable, so it is refused.
+    func testAUtcInstantIsNotAWallClock() {
+        XCTAssertNil(StorageTimestamp.wallClock("2026-03-15T09:30:00.123Z", in: london))
+        XCTAssertNil(StorageTimestamp.wallClock("2026-03-15T09:30:00Z", in: london))
+    }
+
+    func testOutOfRangeFieldsAreRefused() {
+        for bad in [
+            "2026-03-15T24:00:00", "2026-03-15T09:60:00", "2026-03-15T09:30:60",
+            "2026-13-01", "2026-03-15T", "2026-03-15Tnope", "",
+        ] {
+            XCTAssertNil(StorageTimestamp.wallClock(bad, in: london), "should refuse \(bad)")
+        }
+    }
+
+    /// A device on a non-Gregorian calendar must still read the stored string,
+    /// which is written in Gregorian years whatever the phone displays.
+    func testANonGregorianDeviceCalendarStillReadsTheStoredString() {
+        var buddhist = Calendar(identifier: .buddhist)
+        buddhist.timeZone = TimeZone(identifier: "Europe/London") ?? .gmt
+
+        XCTAssertEqual(
+            StorageTimestamp.wallClock("2026-03-15T09:00:00", in: buddhist),
+            StorageTimestamp.wallClock("2026-03-15T09:00:00", in: london))
+    }
+
+    /// 02:30 on a spring-forward day is a real stored value that no instant
+    /// matches. Shifting it forward beats refusing to show the page.
+    func testATimeInsideADstGapStillResolves() {
+        // Europe/London moves 01:00 → 02:00 on 2026-03-29, so 01:30 is missing.
+        XCTAssertNotNil(StorageTimestamp.wallClock("2026-03-29T01:30:00", in: london))
+    }
+}

@@ -143,20 +143,20 @@ un-tombstones what that delete set. So detached survives the trash round-trip.
 
 ## 2. Schedule (non-recurring)
 
-| Functionality                                   | Native                | Synced                               | Detached                          | CLI                       | iOS                        |
-| ----------------------------------------------- | --------------------- | ------------------------------------ | --------------------------------- | ------------------------- | -------------------------- |
-| Adjust page date                                | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `update --due` ¹⁰      | ○                          |
-| Adjust page time                                | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `--due` with a time ¹⁰ | ○                          |
-| Adjust duration (end)                           | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `--end` ¹⁰             | ○                          |
-| Clear the schedule                              | ✅                    | 🚫 locked ⁴                          | ✅                                | 🚫 ¹⁰                     | ✅ long press → Clear Date |
-| Drag block on calendar                          | ✅                    | 🚫 locked ¹¹                         | ✅                                | —                         | ○                          |
-| Resize block on calendar                        | ✅                    | 🚫 locked ¹¹                         | ✅                                | —                         | ○                          |
-| Drag page from list onto calendar               | ✅                    | 🚫 locked ¹²                         | ✅                                | —                         | ○                          |
-| Set / change per-page reminder                  | ✅ timed only ¹³      | ✅ same ¹³                           | ✅ same ¹³                        | ⚠️ `reminders add` ¹³     | ○                          |
-| Reminder fires with no explicit lead set        | ✅ global default ¹³  | ✅ same ¹³                           | ✅ same ¹³                        | —                         | ○                          |
-| Several leads on one page                       | ✅ each fires once ¹³ | ✅ same ¹³                           | ✅ same ¹³                        | —                         | ○                          |
-| Re-timing re-arms a reminder that already fired | ✅ ¹³                 | 🚫 locked; upstream move re-arms ¹³  | ✅ page and override ¹³           | ✅ `update --due` ¹³      | ○                          |
-| Timezone semantics                              | floats (device-local) | ⚠️ timed absolute, all-day floats ¹⁴ | ⚠️ floats, converted at detach ¹⁵ | —                         | same store, same rules     |
+| Functionality                                   | Native                | Synced                               | Detached                          | CLI                       | iOS                         |
+| ----------------------------------------------- | --------------------- | ------------------------------------ | --------------------------------- | ------------------------- | --------------------------- |
+| Adjust page date                                | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `update --due` ¹⁰      | ✅ long press → Change Date |
+| Adjust page time                                | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `--due` with a time ¹⁰ | ✅ same sheet               |
+| Adjust duration (end)                           | ✅                    | 🚫 locked ⁴                          | ✅                                | ✅ `--end` ¹⁰             | ✅ same sheet               |
+| Clear the schedule                              | ✅                    | 🚫 locked ⁴                          | ✅                                | 🚫 ¹⁰                     | ✅ long press → Clear Date  |
+| Drag block on calendar                          | ✅                    | 🚫 locked ¹¹                         | ✅                                | —                         | ○                           |
+| Resize block on calendar                        | ✅                    | 🚫 locked ¹¹                         | ✅                                | —                         | ○                           |
+| Drag page from list onto calendar               | ✅                    | 🚫 locked ¹²                         | ✅                                | —                         | ○                           |
+| Set / change per-page reminder                  | ✅ timed only ¹³      | ✅ same ¹³                           | ✅ same ¹³                        | ⚠️ `reminders add` ¹³     | ○                           |
+| Reminder fires with no explicit lead set        | ✅ global default ¹³  | ✅ same ¹³                           | ✅ same ¹³                        | —                         | ○                           |
+| Several leads on one page                       | ✅ each fires once ¹³ | ✅ same ¹³                           | ✅ same ¹³                        | —                         | ○                           |
+| Re-timing re-arms a reminder that already fired | ✅ ¹³                 | 🚫 locked; upstream move re-arms ¹³  | ✅ page and override ¹³           | ✅ `update --due` ¹³      | ○                           |
+| Timezone semantics                              | floats (device-local) | ⚠️ timed absolute, all-day floats ¹⁴ | ⚠️ floats, converted at detach ¹⁵ | —                         | same store, same rules      |
 
 ¹⁰ Three flags, and none of them changes a page's shape by inference: `--due` moves it
 (zero-padded date, or a full timed ISO), `--all-day` is the only way to drop an existing time,
@@ -216,20 +216,20 @@ discriminator everywhere. `isAllDayIso` (`packages/core/src/utils/dates.ts`); th
 flag column. Ends are stored **inclusive**: the last day the event covers. All-day is
 orthogonal to origin _and_ to recurrence, so every row here stacks on top of §1–§2.
 
-| Functionality                  | Native                               | Synced                                                  | Detached                    | CLI                                    | iOS                           |
-| ------------------------------ | ------------------------------------ | ------------------------------------------------------- | --------------------------- | -------------------------------------- | ----------------------------- |
-| Create as all-day              | ✅ click / drag the all-day strip ¹⁶ | 🚫 ¹                                                    | 🚫 ¹                        | ✅ date-only NL date ¹⁷                | ✅ quick add                  |
-| Convert timed ↔ all-day        | ✅ date picker ¹⁸                    | 🚫 locked ⁴                                             | ✅                          | ✅ `--all-day` / a timed `--due` ¹⁰ ¹⁷ | ○                             |
-| Multi-day span                 | ✅                                   | ✅                                                      | ✅                          | ✅ `add`, or `update --end` ¹⁷         | ✅ renders; no way to set one |
-| Drag across days               | ✅                                   | 🚫 locked ¹⁹                                            | ✅                          | —                                      | ○                             |
-| Edge-resize the span           | ⚠️ not while recurring ²⁰            | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                             |
-| Extend past the week edge      | ⚠️ popover only ²⁰                   | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                             |
-| Stored end convention          | inclusive                            | inclusive; provider's exclusive end decremented once ²¹ | inclusive, frozen at detach | inclusive                              | inclusive                     |
-| Timezone semantics             | floats                               | floats ¹⁴ ²²                                            | floats                      | floats ²²                              | same store, same rules        |
-| Set / change per-page reminder | ✅ day-before lead only ²³           | ✅ same                                                 | ✅ same                     | ⚠️ `add` only ²³                       | ○                             |
-| Counted in the daily summary   | ✅ ²⁴                                | ✅ ²⁴                                                   | ✅ ²⁴                       | —                                      | ○                             |
-| Overdue / Today classification | ✅ date compare ²⁵                   | ✅ same                                                 | ✅ same                     | ✅ same                                | ✅ same predicate             |
-| Recurring all-day series       | ✅ one bar per day ²⁶                | ✅ same                                                 | ✅ same                     | —                                      | ✅ renders                    |
+| Functionality                  | Native                               | Synced                                                  | Detached                    | CLI                                    | iOS                    |
+| ------------------------------ | ------------------------------------ | ------------------------------------------------------- | --------------------------- | -------------------------------------- | ---------------------- |
+| Create as all-day              | ✅ click / drag the all-day strip ¹⁶ | 🚫 ¹                                                    | 🚫 ¹                        | ✅ date-only NL date ¹⁷                | ✅ quick add           |
+| Convert timed ↔ all-day        | ✅ date picker ¹⁸                    | 🚫 locked ⁴                                             | ✅                          | ✅ `--all-day` / a timed `--due` ¹⁰ ¹⁷ | ✅ same sheet          |
+| Multi-day span                 | ✅                                   | ✅                                                      | ✅                          | ✅ `add`, or `update --end` ¹⁷         | ✅                     |
+| Drag across days               | ✅                                   | 🚫 locked ¹⁹                                            | ✅                          | —                                      | ○                      |
+| Edge-resize the span           | ⚠️ not while recurring ²⁰            | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                      |
+| Extend past the week edge      | ⚠️ popover only ²⁰                   | 🚫 locked ¹⁹                                            | ⚠️ same ²⁰                  | —                                      | ○                      |
+| Stored end convention          | inclusive                            | inclusive; provider's exclusive end decremented once ²¹ | inclusive, frozen at detach | inclusive                              | inclusive              |
+| Timezone semantics             | floats                               | floats ¹⁴ ²²                                            | floats                      | floats ²²                              | same store, same rules |
+| Set / change per-page reminder | ✅ day-before lead only ²³           | ✅ same                                                 | ✅ same                     | ⚠️ `add` only ²³                       | ○                      |
+| Counted in the daily summary   | ✅ ²⁴                                | ✅ ²⁴                                                   | ✅ ²⁴                       | —                                      | ○                      |
+| Overdue / Today classification | ✅ date compare ²⁵                   | ✅ same                                                 | ✅ same                     | ✅ same                                | ✅ same predicate      |
+| Recurring all-day series       | ✅ one bar per day ²⁶                | ✅ same                                                 | ✅ same                     | —                                      | ✅ renders             |
 
 ¹⁶ A click in the all-day strip creates a single-day page; a drag across columns creates a span
 (`useAllDayCreate`). Quick Add with a date-only date does the same.
@@ -320,17 +320,17 @@ the raw base. The completed/skip sets survive a wholesale rule rewrite and push 
 
 ## 5. The head page (materialized)
 
-| Functionality                              | Native                                   | Synced                                                | Detached               | CLI                             | iOS                          |
-| ------------------------------------------ | ---------------------------------------- | ----------------------------------------------------- | ---------------------- | ------------------------------- | ---------------------------- |
-| Move the head (drag / date edit)           | ⚠️ snaps to rule ³¹                      | 🚫 locked ⁴ ¹¹                                        | ⚠️ ³¹                  | 🚫 refused ¹⁰ ³¹                | ○                            |
-| Complete head, on time or future           | ✅ fast path ³²                          | ✅ same command ³²                                    | ✅                     | ✅ `done`                       | ✅ checkbox                  |
-| Complete head, overdue                     | ✅ scope dialog ³³                       | ✅ same dialog ³⁴                                     | ✅ same dialog         | ⚠️ one occurrence, no prompt ³⁵ | ⚠️ one occurrence, no dialog |
-| … scope _Just this one_                    | ✅ head's own day; the rest stay open ³³ | ✅ same                                               | ✅                     | ✅ the only CLI behavior ³⁵     | ✅ the only iOS behaviour    |
-| … scope _This and everything before today_ | ✅ a done clone per open day ³³          | ✅ same, bounded by the connect day ³⁴                | ✅ bounded the same ³⁴ | 🚫 ³⁵                           | ○                            |
-| Uncomplete (uncheck a done clone)          | ✅ ³⁶                                    | ✅ ³⁶                                                 | ✅                     | —                               | ✅ checkbox                  |
-| Delete the head                            | ✅ series stops ³⁷                       | ⚠️ soft + tombstone ⁷ ³⁷                              | ✅ ³⁷                  | ✅ soft ⁹ ³⁷                    | ✅                           |
-| Restore the head                           | ✅ series returns ³⁸                     | ✅ ³⁸                                                 | ✅                     | —                               | ✅                           |
-| Terminal state (series exhausted)          | ✅ head marked done, no clone            | ✅ same, and **un-marked** if the provider re-extends | ✅                     | ✅                              | ✅ same derivation           |
+| Functionality                              | Native                                   | Synced                                                | Detached               | CLI                             | iOS                              |
+| ------------------------------------------ | ---------------------------------------- | ----------------------------------------------------- | ---------------------- | ------------------------------- | -------------------------------- |
+| Move the head (drag / date edit)           | ⚠️ snaps to rule ³¹                      | 🚫 locked ⁴ ¹¹                                        | ⚠️ ³¹                  | 🚫 refused ¹⁰ ³¹                | 🚫 refused, anchor move unported |
+| Complete head, on time or future           | ✅ fast path ³²                          | ✅ same command ³²                                    | ✅                     | ✅ `done`                       | ✅ checkbox                      |
+| Complete head, overdue                     | ✅ scope dialog ³³                       | ✅ same dialog ³⁴                                     | ✅ same dialog         | ⚠️ one occurrence, no prompt ³⁵ | ⚠️ one occurrence, no dialog     |
+| … scope _Just this one_                    | ✅ head's own day; the rest stay open ³³ | ✅ same                                               | ✅                     | ✅ the only CLI behavior ³⁵     | ✅ the only iOS behaviour        |
+| … scope _This and everything before today_ | ✅ a done clone per open day ³³          | ✅ same, bounded by the connect day ³⁴                | ✅ bounded the same ³⁴ | 🚫 ³⁵                           | ○                                |
+| Uncomplete (uncheck a done clone)          | ✅ ³⁶                                    | ✅ ³⁶                                                 | ✅                     | —                               | ✅ checkbox                      |
+| Delete the head                            | ✅ series stops ³⁷                       | ⚠️ soft + tombstone ⁷ ³⁷                              | ✅ ³⁷                  | ✅ soft ⁹ ³⁷                    | ✅                               |
+| Restore the head                           | ✅ series returns ³⁸                     | ✅ ³⁸                                                 | ✅                     | —                               | ✅                               |
+| Terminal state (series exhausted)          | ✅ head marked done, no clone            | ✅ same, and **un-marked** if the provider re-extends | ✅                     | ✅                              | ✅ same derivation               |
 
 ³¹ The sets model can't represent a head parked on a date the rule can't yield, and the heal
 would silently revert it on relaunch (decided 2026-07-03), so an off-pattern move lands on a

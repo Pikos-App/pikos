@@ -107,6 +107,13 @@ suite.
   only. The finished pages come from their own paginated query and a filter
   over the rows that happen to be loaded would search a fifth of the folder
   while looking like it searched all of it.
+- **Moving a repeating page's date.** Every other page can be scheduled,
+  moved, given an end or converted between timed and all-day from the context
+  menu. A recurring head cannot: its date belongs to its rule, so moving it has
+  to realign the anchor and snap onto a day the rule yields, and without that
+  the next recompute silently reverts the edit. `resolveAnchorMove` in
+  `@pikos/core` is the logic; it is not ported, so the workspace refuses rather
+  than corrupting a series — the same line `pikos update --due` draws.
 - **Google calendars, and background sync.** CalDAV accounts can be added,
   repaired, toggled and synced from the phone. Google cannot: its grant waits on
   a loopback TCP listener inside the app process, and leaving for the browser is

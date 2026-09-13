@@ -494,6 +494,27 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Move a page to a date, or give one to a page that had none.
+    ///
+    /// Replaces whatever one-off date the page carried rather than adding a
+    /// second — a page can hold several, and the earliest still ahead is the
+    /// one it shows, so adding when the user meant moving leaves the old date
+    /// to resurface days later.
+    ///
+    /// Both strings are local wall clocks: `yyyy-MM-dd` for an all-day page,
+    /// `yyyy-MM-ddTHH:mm:ss` for a timed one, and the workspace refuses a
+    /// mismatched pair.
+    public func setSchedule(pageId: String, start: String, end: String?) async {
+        guard let workspace else { return }
+        do {
+            _ = try await workspace.setPageSchedule(
+                pageId: pageId, scheduledStart: start, scheduledEnd: end)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Take a page's date away, leaving any recurrence intact.
     public func clearDate(pageId: String) async {
         guard let workspace else { return }

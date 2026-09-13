@@ -101,6 +101,21 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**A page can be put on a date, which it could not before.** Filling in the
+matrix's iOS column made the largest gap obvious: a page took its date from
+quick add's natural-language line and nothing could change it afterwards, so one
+created without a date could never get one and a meeting that moved had to be
+deleted and retyped. `set_page_schedule` replaces the one-off date rather than
+adding beside it — `schedule_page` _adds_, and a page shows the earliest date
+still ahead, so an edit built on that leaves the old one to resurface days
+later. Start and end must be the same shape, because the storage format cannot
+say "all day, ending at 3pm".
+
+It refuses on a repeating page. That date belongs to the rule: moving it has to
+realign the anchor and snap onto a day the rule can yield, and `resolveAnchorMove`
+is not ported. Refusing is the honest version of that, and the same line the CLI
+draws.
+
 **CalDAV calendars sync from the phone, and the checker grew teeth.**
 `pikos-calendar-sync` is a dependency of `pikos-ffi` for the first time, so
 connecting an account, repairing a password, toggling a calendar and syncing on

@@ -15,6 +15,19 @@ struct PageListScreen: View {
     @State private var isSettingsPresented = false
     @State private var searchText = ""
     @State private var renaming: PageSummary?
+    @State private var scheduling: Scheduling?
+
+    /// A wrapper rather than a conformance on the generated `PageSummary`.
+    ///
+    /// `sheet(item:)` wants `Identifiable` and the summary is a UniFFI record
+    /// this repo does not own — the same reason `CalendarSyncScreen` wraps an
+    /// account. A retroactive conformance is a name the next regeneration could
+    /// collide with, and `@retroactive` is Swift 6 syntax on a package still on
+    /// tools 5.9.
+    private struct Scheduling: Identifiable {
+        let page: PageSummary
+        var id: String { page.id }
+    }
     @State private var renameText = ""
     @State private var isCompletedExpanded = false
 
@@ -61,6 +74,9 @@ struct PageListScreen: View {
         }
         .sheet(isPresented: $isSettingsPresented) {
             SettingsScreen()
+        }
+        .sheet(item: $scheduling) { target in
+            SchedulePageSheet(page: target.page)
         }
         .alert(
             "Something went wrong",
@@ -252,19 +268,32 @@ struct PageListScreen: View {
                 Label("Move to Folder", systemImage: "folder")
             }
 
-            // Not offered on a repeating page, where it would do nothing
-            // visible: a page with a rule owns its `scheduled_start` directly,
-            // so clearing the one-off rows underneath leaves the date on
-            // screen exactly where it was. Ending a series is a different
-            // action and wants its own affordance, not this one silently
-            // failing to be it. `pikos-ffi`'s
+            // Not offered on a repeating page. Its date belongs to its rule:
+            // moving it has to realign the anchor and snap onto a day the rule
+            // yields, or the next recompute reverts the edit, and clearing it
+            // does nothing visible at all because the head owns its own
+            // `scheduled_start`. The workspace refuses both — `pikos-ffi`'s
+            // `a_repeating_page_refuses_a_plain_date_change` and
             // `clearing_a_repeating_page_s_date_leaves_the_head_where_it_is`
-            // pins the behaviour this is avoiding.
-            if page.scheduledStart != nil && !page.isRecurring {
+            // pin them — so the menu declines to offer what would fail.
+            if !page.isRecurring {
                 Button {
-                    Task { await store.clearDate(pageId: page.id) }
+                    scheduling = Scheduling(page: page)
                 } label: {
-                    Label("Clear Date", systemImage: "calendar.badge.minus")
+                    Label(
+                        page.scheduledStart == nil ? "Schedule…" : "Change Date…",
+                        systemImage: "calendar")
+                }
+
+                // Kept beside the sheet rather than folded into it. Taking a
+                // date off is the one schedule change that is a single tap, and
+                // making it three would be a worse trade than the extra row.
+                if page.scheduledStart != nil {
+                    Button {
+                        Task { await store.clearDate(pageId: page.id) }
+                    } label: {
+                        Label("Clear Date", systemImage: "calendar.badge.minus")
+                    }
                 }
             }
         }

@@ -428,6 +428,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_search(uint64_t ptr, RustBuffer qu
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_calendar_enabled(uint64_t ptr, RustBuffer sync_calendar_id, int8_t enabled
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_SCHEDULE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_SCHEDULE
+uint64_t uniffi_pikos_ffi_fn_method_workspace_set_page_schedule(uint64_t ptr, RustBuffer page_id, RustBuffer scheduled_start, RustBuffer scheduled_end
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_STATUS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_PAGE_STATUS
 uint64_t uniffi_pikos_ffi_fn_method_workspace_set_page_status(uint64_t ptr, RustBuffer page_id, int8_t done
@@ -1054,6 +1059,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_search(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_CALENDAR_ENABLED
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_calendar_enabled(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_PAGE_SCHEDULE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_PAGE_SCHEDULE
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_page_schedule(void
     
 );
 #endif

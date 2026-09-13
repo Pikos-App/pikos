@@ -2270,3 +2270,258 @@ async fn seed_account(path: &str, account_id: &str, name: &str, calendars: &[(&s
         .unwrap();
     }
 }
+
+/// Moving a page replaces its date rather than adding a second one.
+///
+/// The distinction matters because `schedule_page` *adds*: a page can hold
+/// several schedule rows and shows the earliest still ahead. An "edit" built on
+/// that leaves the old date behind to resurface once the new one passes, which
+/// reads as the app forgetting the change days later.
+#[tokio::test]
+async fn setting_a_date_replaces_the_one_that_was_there() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Dentist")
+        })
+        .await
+        .unwrap();
+
+    let moved = ws
+        .set_page_schedule(
+            page.id.clone(),
+            "2099-03-20T14:00:00".to_string(),
+            Some("2099-03-20T15:00:00".to_string()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        moved.scheduled_start.as_deref(),
+        Some("2099-03-20T14:00:00")
+    );
+    assert_eq!(moved.scheduled_end.as_deref(), Some("2099-03-20T15:00:00"));
+
+    let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+    let rows = pikos_db::list_page_schedules_impl(&pool, &page.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "the old row is gone, not sitting behind the new one: {rows:?}"
+    );
+}
+
+/// A page with no date can be given one — the case quick add cannot reach
+/// afterwards, and the reason this exists.
+#[tokio::test]
+async fn an_unscheduled_page_can_be_given_a_date() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Someday")).await.unwrap();
+    assert_eq!(page.scheduled_start, None, "precondition: no date");
+
+    let scheduled = ws
+        .set_page_schedule(page.id.clone(), "2099-04-01".to_string(), None)
+        .await
+        .unwrap();
+    assert_eq!(scheduled.scheduled_start.as_deref(), Some("2099-04-01"));
+}
+
+/// Timed and all-day are the same field in two shapes, so converting between
+/// them is just writing the other one.
+#[tokio::test]
+async fn a_timed_page_can_become_all_day_and_back() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Conference")
+        })
+        .await
+        .unwrap();
+
+    let all_day = ws
+        .set_page_schedule(page.id.clone(), "2099-03-16".to_string(), None)
+        .await
+        .unwrap();
+    assert_eq!(all_day.scheduled_start.as_deref(), Some("2099-03-16"));
+
+    let timed = ws
+        .set_page_schedule(page.id.clone(), "2099-03-16T11:00:00".to_string(), None)
+        .await
+        .unwrap();
+    assert_eq!(
+        timed.scheduled_start.as_deref(),
+        Some("2099-03-16T11:00:00")
+    );
+}
+
+/// A multi-day all-day span survives, which is what the matching-shapes rule
+/// protects.
+#[tokio::test]
+async fn an_all_day_span_keeps_both_ends() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Holiday")).await.unwrap();
+
+    let spanned = ws
+        .set_page_schedule(
+            page.id.clone(),
+            "2099-07-01".to_string(),
+            Some("2099-07-08".to_string()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(spanned.scheduled_start.as_deref(), Some("2099-07-01"));
+    assert_eq!(spanned.scheduled_end.as_deref(), Some("2099-07-08"));
+}
+
+/// Mixed shapes are refused rather than stored.
+///
+/// The storage format has no way to say "all day, ending at 3pm", so a mixed
+/// pair would be written and then read back as something nobody asked for.
+#[tokio::test]
+async fn a_start_and_end_of_different_shapes_are_refused() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Muddle")).await.unwrap();
+
+    for (start, end) in [
+        ("2099-07-01", "2099-07-08T15:00:00"),
+        ("2099-07-01T09:00:00", "2099-07-08"),
+    ] {
+        match ws
+            .set_page_schedule(page.id.clone(), start.to_string(), Some(end.to_string()))
+            .await
+        {
+            Err(WorkspaceError::InvalidInput { .. }) => {}
+            other => panic!("expected InvalidInput for {start}..{end}, got {other:?}"),
+        }
+    }
+    assert_eq!(
+        ws.get_page(page.id.clone()).await.unwrap().scheduled_start,
+        None,
+        "and nothing was written"
+    );
+}
+
+/// An end before its start is refused. Stored, it gives every occurrence
+/// derived from the page a negative span.
+#[tokio::test]
+async fn an_end_before_the_start_is_refused() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Backwards")).await.unwrap();
+
+    match ws
+        .set_page_schedule(
+            page.id.clone(),
+            "2099-07-08T15:00:00".to_string(),
+            Some("2099-07-08T14:00:00".to_string()),
+        )
+        .await
+    {
+        Err(WorkspaceError::InvalidInput { .. }) => {}
+        other => panic!("expected InvalidInput, got {other:?}"),
+    }
+}
+
+/// A repeating page is refused, and the refusal arrives as a refusal.
+///
+/// Its date belongs to the rule: moving it has to realign the anchor and snap
+/// onto a day the rule yields, and without that the next recompute reverts the
+/// edit. Refusing is the honest version of not having ported that yet — the
+/// same line `pikos update --due` draws.
+#[tokio::test]
+async fn a_repeating_page_refuses_a_plain_date_change() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Standup")
+        })
+        .await
+        .unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "2099-03-16T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let before = ws.get_page(page.id.clone()).await.unwrap().scheduled_start;
+    match ws
+        .set_page_schedule(page.id.clone(), "2099-03-18T09:00:00".to_string(), None)
+        .await
+    {
+        Err(WorkspaceError::Refused { message }) => {
+            assert!(message.contains("repeat"), "explains itself: {message}")
+        }
+        other => panic!("expected Refused, got {other:?}"),
+    }
+    assert_eq!(
+        ws.get_page(page.id.clone()).await.unwrap().scheduled_start,
+        before,
+        "and the series is untouched"
+    );
+}
+
+/// A calendar's page is refused by the data layer's own guard, reached through
+/// this path like any other.
+#[tokio::test]
+async fn a_calendar_owned_page_refuses_a_date_change() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws
+        .create_page(NewPage {
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Standup")
+        })
+        .await
+        .unwrap();
+    link_to_a_calendar(&tmp.path, &page.id).await;
+
+    match ws
+        .set_page_schedule(page.id.clone(), "2099-03-18T09:00:00".to_string(), None)
+        .await
+    {
+        Err(WorkspaceError::Refused { .. }) => {}
+        other => panic!("expected Refused, got {other:?}"),
+    }
+    assert_eq!(
+        ws.get_page(page.id.clone())
+            .await
+            .unwrap()
+            .scheduled_start
+            .as_deref(),
+        Some("2099-03-16T09:00:00"),
+        "and the date the calendar owns is unchanged"
+    );
+}
+
+/// Nonsense in, error out — rather than a row nothing can read back.
+#[tokio::test]
+async fn a_malformed_date_is_refused() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Whenever")).await.unwrap();
+
+    for bad in ["", "tomorrow", "2099-13-45", "2099-07-01T25:00:00"] {
+        match ws
+            .set_page_schedule(page.id.clone(), bad.to_string(), None)
+            .await
+        {
+            Err(WorkspaceError::InvalidInput { .. }) => {}
+            other => panic!("expected InvalidInput for {bad:?}, got {other:?}"),
+        }
+    }
+}

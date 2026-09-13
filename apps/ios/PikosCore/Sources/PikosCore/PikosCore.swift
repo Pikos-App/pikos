@@ -1103,6 +1103,32 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func setCalendarEnabled(syncCalendarId: String, enabled: Bool) async throws  -> SyncCalendar
     
     /**
+     * Give a page a date, replacing whatever one-off date it already had.
+     *
+     * The everyday "move this to Thursday". Distinct from
+     * [`Workspace::schedule_page`], which *adds* a date — a page can carry
+     * several, and the earliest still ahead is the one it shows. Adding when
+     * the user meant moving leaves the old date behind to resurface once the
+     * new one passes, which reads as the app forgetting the edit.
+     *
+     * Shapes must match: both all-day (`YYYY-MM-DD`) or both timed
+     * (`YYYY-MM-DDTHH:MM:SS`). Mixing them is how a multi-day all-day event
+     * ends up with a time on one end only, and the storage format has no way
+     * to represent that.
+     *
+     * **Refused on a repeating page.** A recurring head's date belongs to its
+     * rule: moving it has to realign the rule's anchor and snap the drop onto
+     * a day the rule can yield, or the next recompute silently reverts it.
+     * That logic is `resolveAnchorMove` in `@pikos/core` and is not ported
+     * yet, so this refuses rather than corrupting a series — the same line the
+     * CLI draws (`update --due`, matrix §5).
+     *
+     * Refused on a page a calendar owns, by the data layer: its schedule is
+     * upstream's.
+     */
+    func setPageSchedule(pageId: String, scheduledStart: String, scheduledEnd: String?) async throws  -> Page
+    
+    /**
      * Tick or untick a page, whatever kind it is.
      *
      * The single safe entry point for a checkbox, and the reason it exists is
@@ -1894,6 +1920,46 @@ open func setCalendarEnabled(syncCalendarId: String, enabled: Bool)async throws 
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSyncCalendar_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Give a page a date, replacing whatever one-off date it already had.
+     *
+     * The everyday "move this to Thursday". Distinct from
+     * [`Workspace::schedule_page`], which *adds* a date — a page can carry
+     * several, and the earliest still ahead is the one it shows. Adding when
+     * the user meant moving leaves the old date behind to resurface once the
+     * new one passes, which reads as the app forgetting the edit.
+     *
+     * Shapes must match: both all-day (`YYYY-MM-DD`) or both timed
+     * (`YYYY-MM-DDTHH:MM:SS`). Mixing them is how a multi-day all-day event
+     * ends up with a time on one end only, and the storage format has no way
+     * to represent that.
+     *
+     * **Refused on a repeating page.** A recurring head's date belongs to its
+     * rule: moving it has to realign the rule's anchor and snap the drop onto
+     * a day the rule can yield, or the next recompute silently reverts it.
+     * That logic is `resolveAnchorMove` in `@pikos/core` and is not ported
+     * yet, so this refuses rather than corrupting a series — the same line the
+     * CLI draws (`update --due`, matrix §5).
+     *
+     * Refused on a page a calendar owns, by the data layer: its schedule is
+     * upstream's.
+     */
+open func setPageSchedule(pageId: String, scheduledStart: String, scheduledEnd: String?)async throws  -> Page  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_page_schedule(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(scheduledStart),FfiConverterOptionString.lower(scheduledEnd)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePage_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -6121,6 +6187,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_calendar_enabled() != 65191) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_page_schedule() != 23911) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_set_page_status() != 12587) {

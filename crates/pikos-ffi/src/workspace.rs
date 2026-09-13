@@ -1177,6 +1177,83 @@ impl Workspace {
         }
     }
 
+    /// Give a page a date, replacing whatever one-off date it already had.
+    ///
+    /// The everyday "move this to Thursday". Distinct from
+    /// [`Workspace::schedule_page`], which *adds* a date — a page can carry
+    /// several, and the earliest still ahead is the one it shows. Adding when
+    /// the user meant moving leaves the old date behind to resurface once the
+    /// new one passes, which reads as the app forgetting the edit.
+    ///
+    /// Shapes must match: both all-day (`YYYY-MM-DD`) or both timed
+    /// (`YYYY-MM-DDTHH:MM:SS`). Mixing them is how a multi-day all-day event
+    /// ends up with a time on one end only, and the storage format has no way
+    /// to represent that.
+    ///
+    /// **Refused on a repeating page.** A recurring head's date belongs to its
+    /// rule: moving it has to realign the rule's anchor and snap the drop onto
+    /// a day the rule can yield, or the next recompute silently reverts it.
+    /// That logic is `resolveAnchorMove` in `@pikos/core` and is not ported
+    /// yet, so this refuses rather than corrupting a series — the same line the
+    /// CLI draws (`update --due`, matrix §5).
+    ///
+    /// Refused on a page a calendar owns, by the data layer: its schedule is
+    /// upstream's.
+    pub async fn set_page_schedule(
+        &self,
+        page_id: String,
+        scheduled_start: String,
+        scheduled_end: Option<String>,
+    ) -> Result<Page, WorkspaceError> {
+        let page = pikos_db::get_page(&self.pool, &page_id)
+            .await?
+            .ok_or_else(|| WorkspaceError::NotFound {
+                entity: "page".into(),
+                id: page_id.clone(),
+            })?;
+        if page.is_recurring {
+            return Err(WorkspaceError::Refused {
+                message: "A repeating page's date comes from its rule. Change the repeat instead."
+                    .to_string(),
+            });
+        }
+
+        let start = pikos_core::dates::parse_local_iso(&scheduled_start).ok_or_else(|| {
+            WorkspaceError::InvalidInput {
+                message: format!("not a wall-clock date or datetime: {scheduled_start}"),
+            }
+        })?;
+        let all_day = pikos_core::dates::is_all_day_iso(&scheduled_start);
+
+        if let Some(ref end) = scheduled_end {
+            let parsed = pikos_core::dates::parse_local_iso(end).ok_or_else(|| {
+                WorkspaceError::InvalidInput {
+                    message: format!("not a wall-clock date or datetime: {end}"),
+                }
+            })?;
+            if pikos_core::dates::is_all_day_iso(end) != all_day {
+                return Err(WorkspaceError::InvalidInput {
+                    message: "the start and end must both be all-day or both carry a time"
+                        .to_string(),
+                });
+            }
+            if parsed < start {
+                return Err(WorkspaceError::InvalidInput {
+                    message: "the end cannot be before the start".to_string(),
+                });
+            }
+        }
+
+        // Clear first, then write. Not one transaction — each of these is its
+        // own, as they are on the desktop — but the order is the safe one: a
+        // failure between them leaves the page with no date, which the user can
+        // see and redo, rather than with two.
+        self.clear_page_schedule(page_id.clone()).await?;
+        self.schedule_page(page_id.clone(), scheduled_start, scheduled_end)
+            .await?;
+        self.get_page(page_id).await
+    }
+
     /// Take a page's date away, leaving any recurrence it has intact.
     ///
     /// A page can carry several schedule rows and they are not all the same
