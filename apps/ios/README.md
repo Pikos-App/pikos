@@ -80,13 +80,53 @@ the scheduling ones, and were briefly read as if they were).
 The editor's own behaviour is tested separately and more thoroughly, in a real
 browser: `pnpm --filter @pikos/editor-mobile test:e2e`.
 
+## Testing
+
+Three layers, and the cheapest one carries the most:
+
+| Layer                                        | Where                                            | Needs                         |
+| -------------------------------------------- | ------------------------------------------------ | ----------------------------- |
+| The logic under the Swift                    | `crates/`                                        | nothing — runs on any machine |
+| `swift test` for the packages                | `PikosCore`, `PikosSupport`, `PikosEditorBridge` | a Mac; **no simulator**       |
+| `xcodebuild test -only-testing:PikosUITests` | the tier-1 flows                                 | a Mac and a simulator         |
+
+`PikosSupport` exists partly for the middle row. Anything that is arithmetic
+rather than appearance goes there — `CalendarGeometry`, `DayLabel`,
+`StorageTimestamp`, `Preferences` — and runs in seconds against the macOS slice
+`build-ios-framework.sh` produces, which is why that script builds Darwin
+targets at all.
+
+`PikosUITests` is XCUITest, the native analogue of the desktop's Playwright
+suite: it launches the real app and queries the **accessibility tree**. The
+labels scattered through the screens — `Mark as done`, `Switch view`, the
+combined row labels — are what it selects on, so they are contract rather than
+decoration.
+
+It is deliberately five flows, matching the desktop's `@tier1` set: the app
+launches, a page can be made, ticked, found and opened. A UI suite earns its
+keep by being fast enough that nobody skips it; detail belongs in the two rows
+above.
+
+Each test gets its own empty workspace. `XCUIApplication` can set the
+environment of the process it launches but cannot reach inside it, so
+`WorkspaceLocation.workspaceOverrideKey` is the seam — a **debug-only**
+environment variable naming a directory. That buys isolation between tests and
+keeps CI out of the provisioning question, since the app then never opens the
+App Group container. A release build ignores it: storage location is not an
+input.
+
+CI runs the first two on every push (`.github/workflows/_ios.yml`); the UI
+flows are behind a `run-ui-tests` input because a simulator takes minutes to
+boot.
+
 ## Status
 
-**None of this Swift has been compiled.** It was written where no Swift
-toolchain was available, so expect the first build to surface work — most
-likely strict-concurrency annotations on `EditorWebView.Coordinator`, which
-conforms to two WebKit delegate protocols. `docs/ios/03-m0-spike.md` says what
-to expect and why annotations were not added speculatively.
+**None of this Swift has been compiled yet.** It was written where no Swift
+toolchain was available — and until `_ios.yml` landed, nothing anywhere built
+it, so the first green run is likely to surface work. Most likely
+strict-concurrency annotations on `EditorWebView.Coordinator`, which conforms
+to two WebKit delegate protocols. `docs/ios/03-m0-spike.md` says what to expect
+and why annotations were not added speculatively.
 
 Everything beneath the Swift _is_ tested: the Rust is graded against a corpus
 generated from the TypeScript it replaces, and the editor against a browser

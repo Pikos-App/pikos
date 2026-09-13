@@ -247,11 +247,13 @@ struct PageListScreen: View {
     /// "Completed" until the count is known, then "Completed (12)".
     ///
     /// The number comes from the query's total rather than from the rows
-    /// loaded, so it does not read as 20 for a folder holding hundreds.
+    /// loaded, so it does not read as 20 for a folder holding hundreds — and it
+    /// is shown whether or not the section has been opened, because `refresh()`
+    /// fetches the count either way. Gating it on having expanded the section
+    /// hid a number the app already had, which made a closed section look empty
+    /// when it was not.
     private var completedTitle: String {
-        store.hasLoadedCompleted && store.completedTotal > 0
-            ? "Completed (\(store.completedTotal))"
-            : "Completed"
+        store.completedTotal > 0 ? "Completed (\(store.completedTotal))" : "Completed"
     }
 
     /// The long press menu — desktop's right-click menu, minus what a phone

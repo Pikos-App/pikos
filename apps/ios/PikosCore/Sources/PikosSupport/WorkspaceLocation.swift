@@ -37,13 +37,42 @@ public enum WorkspaceLocation {
         }
     }
 
-    /// The shared container's database URL.
+    /// Environment variable a debug build reads instead of the App Group.
+    ///
+    /// Exists for UI tests. `XCUIApplication` can set the environment of the
+    /// process it launches but cannot reach inside it, so this is the seam that
+    /// lets a test hand the app a throwaway workspace.
+    ///
+    /// Two things it buys, and the second is the one that matters. A run is
+    /// isolated — each test gets an empty database instead of inheriting
+    /// whatever the last one left — and CI does not need the App Group
+    /// entitlement to be honoured on a simulator, which is provisioning-
+    /// dependent and would otherwise make "can this app launch" a question
+    /// about certificates.
+    public static let workspaceOverrideKey = "PIKOS_WORKSPACE_DIRECTORY"
+
+    /// The database's URL.
     ///
     /// Throws rather than falling back to the app's private container. A silent
     /// fallback would work perfectly in the app and leave widgets reading an
     /// empty database — the kind of failure that looks like a widget bug for
     /// weeks before anyone suspects provisioning.
     public static func databaseURL() throws -> URL {
+        // DEBUG only, deliberately. A release build that could be pointed at
+        // another directory by an environment variable is a release build whose
+        // storage location is an input, and the container is the one thing
+        // about this app that should not be negotiable at launch.
+        #if DEBUG
+            if let override = ProcessInfo.processInfo.environment[workspaceOverrideKey],
+                !override.isEmpty
+            {
+                let directory = URL(fileURLWithPath: override, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: directory, withIntermediateDirectories: true)
+                return directory.appendingPathComponent(databaseName)
+            }
+        #endif
+
         guard
             let container = FileManager.default.containerURL(
                 forSecurityApplicationGroupIdentifier: appGroupIdentifier)

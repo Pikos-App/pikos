@@ -1,0 +1,148 @@
+name: iOS
+
+# The Swift half, compiled and run.
+#
+# Until this existed, nothing anywhere built `apps/ios`. CI checked that the
+# generated bindings were not *stale* — a real check, and a different one — so
+# thousands of lines of Swift accumulated that no machine had ever type-checked.
+# The most valuable step here is therefore the plain build: it turns "we will
+# find out on somebody's laptop, eventually" into a failure on the push that
+# caused it.
+#
+# Its own workflow rather than another job in _validate.yml, because this is the
+# only thing in the repo needing a macOS runner. Those bill at ten times a Linux
+# minute, so being able to see, schedule and skip it on its own is worth the
+# extra file.
+
+on:
+  workflow_call:
+    inputs:
+      run-ui-tests:
+        description: >-
+          Boot a simulator and run the tier-1 XCUITest flows. Off by default:
+          the build and the package suites catch most of what breaks, in a
+          fraction of the time a simulator takes to come up.
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: 24
+  PNPM_VERSION: 10.30.3
+  SIMULATOR: iPhone 16
+
+jobs:
+  ios:
+    name: Build + test
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      # Recorded rather than pinned, for now. Pinning is the right end state —
+      # a runner image rolling to a new Xcode changes the Swift compiler
+      # underneath this, and that should be a deliberate bump in this file
+      # rather than a mystery on a Monday. It is not pinned yet because nobody
+      # has seen which Xcodes this image actually carries; read this line from
+      # the first green run and pin it.
+      - name: Record the toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          ls /Applications | grep -i '^Xcode' || true
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ios-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ios-cargo-
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install the build tools
+        run: brew install xcodegen xcbeautify
+
+      # ── The two artifacts the Xcode project cannot build for itself ────────
+      #
+      # Both are gitignored: a multi-megabyte binary and a bundled webview
+      # payload have no business in git. That makes building them the first step
+      # of any checkout, here as on a laptop.
+
+      - name: Build the editor bundle
+        run: bash scripts/build-editor-bundle.sh
+
+      # Also builds the macOS slices, which is what lets the package suites
+      # below run on the host instead of in a simulator.
+      - name: Build PikosFFI.xcframework
+        run: bash scripts/build-ios-framework.sh
+
+      # ── The fast tests ────────────────────────────────────────────────────
+      #
+      # First, and on the host. `PikosSupport` needs no simulator at all and
+      # `PikosCore`'s boundary tests need only the macOS slice, so both answer
+      # in seconds — and a failure names a function rather than a screen.
+
+      - name: Test PikosCore and PikosSupport
+        run: swift test --package-path apps/ios/PikosCore
+
+      - name: Test PikosEditorBridge
+        run: swift test --package-path apps/ios/PikosEditorBridge
+
+      # ── Compile the app ───────────────────────────────────────────────────
+      #
+      # The step this workflow exists for. Everything under `apps/ios/Pikos` —
+      # every screen, every store — is compiled here and nowhere else.
+      #
+      # `CODE_SIGNING_ALLOWED=NO` because a simulator build needs no identity,
+      # and requiring one would make this a question about certificates rather
+      # than about the code. The app reads its workspace from an environment
+      # variable under test (`WorkspaceLocation.workspaceOverrideKey`), so it
+      # never needs the App Group entitlement a signed build would carry.
+
+      - name: Generate the Xcode project
+        run: cd apps/ios/Pikos && xcodegen generate
+
+      - name: Build the app
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project apps/ios/Pikos/Pikos.xcodeproj \
+            -scheme Pikos \
+            -destination "platform=iOS Simulator,name=$SIMULATOR" \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify
+
+      - name: Tier-1 UI flows
+        if: inputs.run-ui-tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project apps/ios/Pikos/Pikos.xcodeproj \
+            -scheme Pikos \
+            -destination "platform=iOS Simulator,name=$SIMULATOR" \
+            -only-testing:PikosUITests \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify
+
+      # A UI test that fails on a runner nobody can attach to is only as useful
+      # as what it leaves behind.
+      - name: Upload the test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: ~/Library/Developer/Xcode/DerivedData/**/Logs/Test/*.xcresult
+          retention-days: 7
+          if-no-files-found: ignore

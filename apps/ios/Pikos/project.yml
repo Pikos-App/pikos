@@ -116,3 +116,28 @@ targets:
         CFBundleDisplayName: Pikos
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+  # The tier-1 flows, driven through the real app.
+  #
+  # XCUITest rather than a unit test: what these cover is the wiring between
+  # screens — a sheet that opens, a row that appears, a tap that lands on the
+  # checkbox and not the row behind it — and none of that is reachable from a
+  # unit test, which is exactly why those bugs survive one.
+  #
+  # Deliberately small. Five flows chosen to match the desktop's `@tier1`
+  # Playwright set, because a UI suite earns its keep by being fast enough that
+  # nobody is tempted to skip it. Detail belongs in the Rust and in
+  # `PikosSupport`, both of which run in milliseconds.
+  PikosUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: ../PikosUITests/Sources
+    dependencies:
+      - target: Pikos
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios.uitests
+        # No entitlements of its own. The test bundle never touches the App
+        # Group — it hands the app a throwaway directory instead, through
+        # `WorkspaceLocation.workspaceOverrideKey`.
