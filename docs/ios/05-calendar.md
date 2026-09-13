@@ -8,12 +8,12 @@ was found while wiring the two together.
 
 `crates/pikos-core/src/calendar/` decides **structure** and stops:
 
-| Shared                                            | Per platform                                   |
-| ------------------------------------------------- | ---------------------------------------------- |
-| overlap clustering, sweep-line column assignment  | hour ↔ point mapping                            |
-| all-day row packing, bar coalescing               | density, block minimum heights                  |
-| continuation flags, midnight crossing             | the cascade's visual inset and its cap          |
-| which occurrences exist in a range at all         | the text-collision heuristic                    |
+| Shared                                           | Per platform                           |
+| ------------------------------------------------ | -------------------------------------- |
+| overlap clustering, sweep-line column assignment | hour ↔ point mapping                   |
+| all-day row packing, bar coalescing              | density, block minimum heights         |
+| continuation flags, midnight crossing            | the cascade's visual inset and its cap |
+| which occurrences exist in a range at all        | the text-collision heuristic           |
 
 The line is not arbitrary. The desktop's `HOUR_HEIGHT` of 64px makes a
 15-minute slot 16px, which is fine for a mouse and less than half the 44pt a
@@ -68,7 +68,7 @@ on its own.
 
 Override dates are gathered **by rule id, never by date range**. An override
 moved out of the visible week still has to suppress the slot it came from, and a
-range query keyed on where it moved *to* misses it — leaving a ghost in the
+range query keyed on where it moved _to_ misses it — leaving a ghost in the
 original slot. This port originally used the range query, because that is what
 the reference did when it was written.
 
@@ -77,7 +77,7 @@ the reference did when it was written.
 Only the head's **own** date is suppressed, because the head block already draws
 it.
 
-An earlier reference suppressed every date at or *before* the head, and this
+An earlier reference suppressed every date at or _before_ the head, and this
 port copied that. It is wrong, and visibly so: a daily series whose head sits on
 Wednesday still owes the user Monday and Tuesday unless they were completed or
 skipped. Moving the head shifts the rule's anchor, so genuinely vacated dates
@@ -101,7 +101,7 @@ a real constraint rather than an accident:
   the occurrence's date). Two occurrences of one series can land on one day, and
   a shared id would leave the layout unable to tell them apart.
 - **All-day bars key on the page.** The row packer identifies a span by id and
-  *relies* on every occurrence of a series sharing one, so a Mon/Wed/Fri series
+  _relies_ on every occurrence of a series sharing one, so a Mon/Wed/Fri series
   claims three separate days in a single row rather than a contiguous block
   through Tuesday and Thursday. The Rust says so in a comment; it is load
   bearing.
@@ -135,7 +135,7 @@ try and only the mutation showed they were being checked:
 
 And one test caught a real bug on the way in rather than after: pulling head
 pages in for expansion had them **drawn** as well, so a March-anchored standup
-appeared in June *and* in March. Heads are inputs, not blocks.
+appeared in June _and_ in March. Heads are inputs, not blocks.
 
 ## Known gaps
 
@@ -157,7 +157,7 @@ appeared in June *and* in March. Heads are inputs, not blocks.
 The grid takes a list of days, so a week is not a different view — it is the
 same one with seven columns. `CalendarSpan` picks its default from the width
 class and then leaves the choice to the user, because the useful default and
-the useful *option* are different questions: a week is cramped on a phone and
+the useful _option_ are different questions: a week is cramped on a phone and
 perfectly usable when someone deliberately asks for it, and an iPad in a narrow
 split view is a phone-shaped screen on a large device.
 
