@@ -578,6 +578,15 @@ fileprivate struct FfiConverterString: FfiConverter {
  */
 public protocol ReadOnlyWorkspaceProtocol: AnyObject, Sendable {
     
+    /**
+     * The calendar's range query, read-only — see [`Workspace::calendar_range`].
+     *
+     * Present here because a calendar is exactly the kind of thing an
+     * extension shows, and a widget reaching for it must not be able to open
+     * a writable handle to get it.
+     */
+    func calendarRange(start: String, end: String) async throws  -> [CalendarEntry]
+    
     func getPage(id: String) async throws  -> Page
     
     /**
@@ -678,6 +687,29 @@ public static func openExisting(path: String)async throws  -> ReadOnlyWorkspace 
 }
     
 
+    
+    /**
+     * The calendar's range query, read-only — see [`Workspace::calendar_range`].
+     *
+     * Present here because a calendar is exactly the kind of thing an
+     * extension shows, and a widget reaching for it must not be able to open
+     * a writable handle to get it.
+     */
+open func calendarRange(start: String, end: String)async throws  -> [CalendarEntry]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_readonlyworkspace_calendar_range(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(start),FfiConverterString.lower(end)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeCalendarEntry.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
     
 open func getPage(id: String)async throws  -> Page  {
     return
@@ -808,6 +840,28 @@ public func FfiConverterTypeReadOnlyWorkspace_lower(_ value: ReadOnlyWorkspace) 
  * writer; extensions get a [`ReadOnlyWorkspace`].
  */
 public protocol WorkspaceProtocol: AnyObject, Sendable {
+    
+    /**
+     * Everything to draw for a visible range, in one call.
+     *
+     * `start` and `end` are `YYYY-MM-DD`; `end` is inclusive, being the last
+     * day shown. One day for a phone, seven for a week grid — the same call
+     * either way.
+     *
+     * Three sources go in and one list comes out:
+     *
+     * 1. Pages whose schedule *overlaps* the range, not merely starts in it,
+     * so a multi-day event that began earlier still appears.
+     * 2. Every recurrence rule, and the head page of each — the head is
+     * usually outside the range, since the point of a series is that it
+     * was anchored once and runs on. Omitting these was the mistake worth
+     * guarding against: expansion needs the head, and without it a weekly
+     * standup silently shows nothing at all.
+     * 3. Materialised override rows in the range, whose dates are folded into
+     * each rule's exclusions so an overridden occurrence is drawn once,
+     * from its row, rather than twice.
+     */
+    func calendarRange(start: String, end: String) async throws  -> [CalendarEntry]
     
     /**
      * The editor schema this build writes. A page whose
@@ -991,6 +1045,42 @@ public static func `open`(path: String)async throws  -> Workspace  {
 }
     
 
+    
+    /**
+     * Everything to draw for a visible range, in one call.
+     *
+     * `start` and `end` are `YYYY-MM-DD`; `end` is inclusive, being the last
+     * day shown. One day for a phone, seven for a week grid — the same call
+     * either way.
+     *
+     * Three sources go in and one list comes out:
+     *
+     * 1. Pages whose schedule *overlaps* the range, not merely starts in it,
+     * so a multi-day event that began earlier still appears.
+     * 2. Every recurrence rule, and the head page of each — the head is
+     * usually outside the range, since the point of a series is that it
+     * was anchored once and runs on. Omitting these was the mistake worth
+     * guarding against: expansion needs the head, and without it a weekly
+     * standup silently shows nothing at all.
+     * 3. Materialised override rows in the range, whose dates are folded into
+     * each rule's exclusions so an overridden occurrence is drawn once,
+     * from its row, rather than twice.
+     */
+open func calendarRange(start: String, end: String)async throws  -> [CalendarEntry]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_calendar_range(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(start),FfiConverterString.lower(end)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeCalendarEntry.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
     
     /**
      * The editor schema this build writes. A page whose
@@ -1417,6 +1507,147 @@ public func FfiConverterTypeAllDayBar_lift(_ buf: RustBuffer) throws -> AllDayBa
 #endif
 public func FfiConverterTypeAllDayBar_lower(_ value: AllDayBar) -> RustBuffer {
     return FfiConverterTypeAllDayBar.lower(value)
+}
+
+
+/**
+ * One thing for the calendar to draw.
+ *
+ * Flattened on purpose. A recurring page is stored once — a head row plus a
+ * rule — and its other occurrences are projected at display time rather than
+ * written out, so the calendar's input is not "the pages in this range": it is
+ * the pages *plus* whatever the rules project onto it. Working that out needs
+ * three queries and a merge, and doing it in Swift would mean reimplementing
+ * the desktop's `useRecurrenceExpansion` a second time, in a second language,
+ * with no way to grade it. `Workspace::calendar_range` does it once.
+ */
+public struct CalendarEntry: Equatable, Hashable {
+    public var pageId: String
+    /**
+     * Distinct per drawn item — the page id for a real block, and the page id
+     * plus the occurrence's date for a projected one. `page_id` is *not*
+     * unique here: a weekly series appears several times in a week and every
+     * one of those carries the same page id, deliberately (see
+     * `pikos_core::calendar::occurrences`).
+     */
+    public var key: String
+    public var title: String
+    public var status: String
+    public var priority: Int64
+    public var folderId: String?
+    public var tags: [String]
+    /**
+     * Tiebreaker for equal-length all-day spans, and nothing else.
+     */
+    public var createdAt: String
+    public var scheduledStart: String
+    public var scheduledEnd: String?
+    /**
+     * Projected from a recurrence rule: there is no row behind it, so editing
+     * it has to materialise one first.
+     */
+    public var isVirtual: Bool
+    /**
+     * The rule's own date for this occurrence, which is how a skip or an
+     * override is matched back to it. `None` on a real block.
+     */
+    public var originalDate: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pageId: String, 
+        /**
+         * Distinct per drawn item — the page id for a real block, and the page id
+         * plus the occurrence's date for a projected one. `page_id` is *not*
+         * unique here: a weekly series appears several times in a week and every
+         * one of those carries the same page id, deliberately (see
+         * `pikos_core::calendar::occurrences`).
+         */key: String, title: String, status: String, priority: Int64, folderId: String?, tags: [String], 
+        /**
+         * Tiebreaker for equal-length all-day spans, and nothing else.
+         */createdAt: String, scheduledStart: String, scheduledEnd: String?, 
+        /**
+         * Projected from a recurrence rule: there is no row behind it, so editing
+         * it has to materialise one first.
+         */isVirtual: Bool, 
+        /**
+         * The rule's own date for this occurrence, which is how a skip or an
+         * override is matched back to it. `None` on a real block.
+         */originalDate: String?) {
+        self.pageId = pageId
+        self.key = key
+        self.title = title
+        self.status = status
+        self.priority = priority
+        self.folderId = folderId
+        self.tags = tags
+        self.createdAt = createdAt
+        self.scheduledStart = scheduledStart
+        self.scheduledEnd = scheduledEnd
+        self.isVirtual = isVirtual
+        self.originalDate = originalDate
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CalendarEntry: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCalendarEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CalendarEntry {
+        return
+            try CalendarEntry(
+                pageId: FfiConverterString.read(from: &buf), 
+                key: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf), 
+                status: FfiConverterString.read(from: &buf), 
+                priority: FfiConverterInt64.read(from: &buf), 
+                folderId: FfiConverterOptionString.read(from: &buf), 
+                tags: FfiConverterSequenceString.read(from: &buf), 
+                createdAt: FfiConverterString.read(from: &buf), 
+                scheduledStart: FfiConverterString.read(from: &buf), 
+                scheduledEnd: FfiConverterOptionString.read(from: &buf), 
+                isVirtual: FfiConverterBool.read(from: &buf), 
+                originalDate: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CalendarEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pageId, into: &buf)
+        FfiConverterString.write(value.key, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterInt64.write(value.priority, into: &buf)
+        FfiConverterOptionString.write(value.folderId, into: &buf)
+        FfiConverterSequenceString.write(value.tags, into: &buf)
+        FfiConverterString.write(value.createdAt, into: &buf)
+        FfiConverterString.write(value.scheduledStart, into: &buf)
+        FfiConverterOptionString.write(value.scheduledEnd, into: &buf)
+        FfiConverterBool.write(value.isVirtual, into: &buf)
+        FfiConverterOptionString.write(value.originalDate, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCalendarEntry_lift(_ buf: RustBuffer) throws -> CalendarEntry {
+    return try FfiConverterTypeCalendarEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCalendarEntry_lower(_ value: CalendarEntry) -> RustBuffer {
+    return FfiConverterTypeCalendarEntry.lower(value)
 }
 
 
@@ -3468,6 +3699,31 @@ fileprivate struct FfiConverterSequenceTypeAllDayBar: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCalendarEntry: FfiConverterRustBuffer {
+    typealias SwiftType = [CalendarEntry]
+
+    public static func write(_ value: [CalendarEntry], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCalendarEntry.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CalendarEntry] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CalendarEntry]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCalendarEntry.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFolder: FfiConverterRustBuffer {
     typealias SwiftType = [Folder]
 
@@ -3937,6 +4193,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_func_parse_quick_add() != 46428) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_calendar_range() != 3295) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_get_page() != 40977) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3947,6 +4206,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today() != 33378) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_calendar_range() != 23142) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_content_schema_version() != 7147) {

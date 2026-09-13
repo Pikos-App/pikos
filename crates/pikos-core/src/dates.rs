@@ -59,6 +59,18 @@ pub fn format_date_only(dt: &NaiveDateTime) -> String {
     dt.format("%Y-%m-%d").to_string()
 }
 
+/// Midnight on the day after `dt`.
+///
+/// Written against the date's own successor rather than by adding 86,400
+/// seconds: these are wall clocks, and a day is not always that long. Saturates
+/// at the representable maximum rather than wrapping.
+pub fn next_day(dt: NaiveDateTime) -> NaiveDateTime {
+    match dt.date().succ_opt().and_then(|d| d.and_hms_opt(0, 0, 0)) {
+        Some(next) => next,
+        None => dt,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

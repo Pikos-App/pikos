@@ -535,3 +535,287 @@ async fn a_quick_add_line_with_a_malformed_reference_is_refused() {
     let pages = ws.list_pages(PageQuery::default()).await.unwrap();
     assert!(pages.is_empty());
 }
+
+// ─── Calendar range ──────────────────────────────────────────────────────────
+
+/// The case the whole `calendar_range` design exists for.
+///
+/// A weekly series is stored once — a head row plus a rule — and its other
+/// occurrences are projected at display time. A calendar that simply drew the
+/// pages it queried would show a weekly standup anchored months ago exactly
+/// zero times this week, and an empty calendar looks like an empty calendar.
+#[tokio::test]
+async fn a_recurring_series_appears_in_a_week_its_head_is_not_in() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Standup")).await.unwrap();
+
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "2026-03-02T09:00:00".to_string(),
+        Some("2026-03-02T09:15:00".to_string()),
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    // A week three Mondays later. The head sits outside it entirely.
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+
+    let drawn: Vec<&str> = entries
+        .iter()
+        .map(|e| e.scheduled_start.as_str())
+        .collect();
+    assert_eq!(
+        drawn,
+        ["2026-03-23T09:00:00"],
+        "the series should project onto the visible Monday"
+    );
+    assert!(entries[0].is_virtual);
+    assert_eq!(entries[0].original_date.as_deref(), Some("2026-03-23"));
+    assert_eq!(entries[0].page_id, page.id);
+    assert_eq!(entries[0].title, "Standup", "a virtual carries its page's title");
+}
+
+/// The last visible day is inclusive. Off by one here and the final column of
+/// a week grid silently never shows a recurring occurrence — the kind of bug
+/// that survives a demo because nobody scrolls to Sunday.
+#[tokio::test]
+async fn the_last_day_of_the_range_is_included() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Daily")).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2026-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+
+    let dates: Vec<String> = entries
+        .iter()
+        .filter_map(|e| e.original_date.clone())
+        .collect();
+    assert_eq!(dates.len(), 7, "seven days, inclusive of both ends");
+    assert_eq!(dates.first().map(String::as_str), Some("2026-03-23"));
+    assert_eq!(dates.last().map(String::as_str), Some("2026-03-29"));
+}
+
+/// A page that began before the range and is still running through it. Filtering
+/// on `scheduled_start` alone would drop it, which is why the query is an
+/// overlap rather than a bound.
+#[tokio::test]
+async fn a_multi_day_page_spanning_into_the_range_is_included() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Conference")).await.unwrap();
+    ws.schedule_page(
+        page.id.clone(),
+        "2026-03-20".to_string(),
+        Some("2026-03-25".to_string()),
+    )
+    .await
+    .unwrap();
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].page_id, page.id);
+    assert!(!entries[0].is_virtual);
+    assert_eq!(entries[0].scheduled_start, "2026-03-20");
+    assert_eq!(entries[0].scheduled_end.as_deref(), Some("2026-03-25"));
+}
+
+/// A plain page in the range, and nothing invented around it.
+#[tokio::test]
+async fn a_scheduled_page_is_drawn_once_and_is_not_virtual() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Dentist")).await.unwrap();
+    ws.schedule_page(
+        page.id.clone(),
+        "2026-03-24T14:00:00".to_string(),
+        Some("2026-03-24T15:00:00".to_string()),
+    )
+    .await
+    .unwrap();
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].key, page.id, "a real block keys on the page alone");
+    assert!(!entries[0].is_virtual);
+    assert!(entries[0].original_date.is_none());
+}
+
+/// Every drawn item needs a distinct identity, or a list rendering them
+/// collapses duplicates. Page ids will not do: a weekly series shares one
+/// across every occurrence, deliberately.
+#[tokio::test]
+async fn occurrences_of_one_series_have_distinct_keys() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Daily")).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        "2026-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+
+    let mut keys: Vec<&str> = entries.iter().map(|e| e.key.as_str()).collect();
+    let total = keys.len();
+    keys.sort_unstable();
+    keys.dedup();
+    assert_eq!(keys.len(), total, "keys must be unique across occurrences");
+    assert!(
+        entries.iter().all(|e| e.page_id == page.id),
+        "while the page id stays shared, which all-day row assignment relies on"
+    );
+}
+
+/// Nothing scheduled is not an error, and an empty range is not a failure.
+#[tokio::test]
+async fn an_empty_range_is_empty_rather_than_an_error() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    ws.create_page(new_page("Unscheduled")).await.unwrap();
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+    assert!(entries.is_empty());
+}
+
+#[tokio::test]
+async fn a_malformed_range_is_refused() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    match ws
+        .calendar_range("not-a-date".to_string(), "2026-03-29".to_string())
+        .await
+    {
+        Err(WorkspaceError::InvalidInput { .. }) => {}
+        other => panic!("expected InvalidInput, got {other:?}"),
+    }
+}
+
+/// The read-only handle serves the calendar too — a widget showing a day must
+/// not be able to open a writable one to get it.
+#[tokio::test]
+async fn the_read_only_handle_serves_the_calendar() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Dentist")).await.unwrap();
+    ws.schedule_page(page.id.clone(), "2026-03-24T14:00:00".to_string(), None)
+        .await
+        .unwrap();
+
+    let reader = ReadOnlyWorkspace::open_existing(tmp.path.clone())
+        .await
+        .unwrap();
+    let entries = reader
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].page_id, page.id);
+}
+
+/// An override written by the *other* app must suppress the projection.
+///
+/// The desktop can materialise a real schedule row for one occurrence of a
+/// series, carrying the rule id and the date it replaces. Both apps share one
+/// database, so iOS meets these rows without having any way to create one, and
+/// a rule that still projected onto that date would draw the occurrence twice.
+///
+/// Pairs with `a_recurring_series_appears_in_a_week_its_head_is_not_in`, which
+/// is the same setup without the override and *does* get a block on the 23rd.
+/// Neither test means much alone: together they say the override is what
+/// removed it.
+///
+/// Written through `pikos-db` rather than the FFI because the FFI has no writer
+/// for it. That is the point — this stands in for the desktop.
+///
+/// Note what is deliberately not asserted: that the override row is *drawn*.
+/// It is not, and the desktop does not draw it either. Both read one block per
+/// page from `pages.scheduled_start`, and for an rrule-backed page that column
+/// is owned by the recurring logic — `refresh_schedule_denorm` returns early
+/// rather than letting a new schedule row move the head. Drawing overrides
+/// would be a change to both apps, not to this one.
+#[tokio::test]
+async fn an_overridden_occurrence_is_not_also_projected() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "2026-03-02T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    {
+        let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+        let rule = pikos_db::get_recurrence_rule_impl(&pool, &page.id)
+            .await
+            .unwrap()
+            .expect("the rule was just created");
+        // The user moved the 23rd's standup to 11:00. The row replaces it.
+        pikos_db::create_page_schedule_impl(
+            &pool,
+            pikos_db::NewPageSchedule {
+                page_id: page.id.clone(),
+                scheduled_start: "2026-03-23T11:00:00".to_string(),
+                scheduled_end: None,
+                timezone: Some("UTC".to_string()),
+                rule_id: Some(rule.id.clone()),
+                original_date: Some("2026-03-23".to_string()),
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+
+    assert!(
+        !entries
+            .iter()
+            .any(|e| e.is_virtual && e.original_date.as_deref() == Some("2026-03-23")),
+        "the rule must not project onto a date it has been overridden on, got {entries:#?}"
+    );
+}

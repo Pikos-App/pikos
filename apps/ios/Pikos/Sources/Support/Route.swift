@@ -20,6 +20,7 @@ final class Route {
 
     enum Tab: Hashable {
         case pages
+        case calendar
         case search
     }
 
@@ -31,12 +32,13 @@ final class Route {
     /// — a deep link, a widget tap, an App Intent — can push. The screens are
     /// content; the container owns navigation.
     ///
-    /// Two paths rather than one because the tabs are independent on a phone.
-    /// An iPad split view has a single detail column instead and would read
-    /// `pagesPath.last` as its selection; keeping the paths here rather than
-    /// inside the screens is what makes that a change of shell rather than a
-    /// rewrite of both screens.
+    /// One per tab, because the tabs are independent on a phone. An iPad split
+    /// view has a single detail column instead and would read the active tab's
+    /// `.last` as its selection; keeping the paths here rather than inside the
+    /// screens is what makes that a change of shell rather than a rewrite of
+    /// every screen.
     var pagesPath: [String] = []
+    var calendarPath: [String] = []
     var searchPath: [String] = []
 
     var isQuickAddPresented = false
@@ -98,8 +100,8 @@ final class Route {
             pagesPath = [pageId]
 
         case .calendar:
-            // No calendar screen yet (M3). Today is the nearest thing.
-            showToday(store: store)
+            tab = .calendar
+            calendarPath = []
 
         case .quickAdd(let prefill):
             // The prefill is parsed like anything typed by hand, so a link

@@ -109,6 +109,41 @@ pub struct TimedBlock {
     pub is_continuation_after: bool,
 }
 
+/// One thing for the calendar to draw.
+///
+/// Flattened on purpose. A recurring page is stored once — a head row plus a
+/// rule — and its other occurrences are projected at display time rather than
+/// written out, so the calendar's input is not "the pages in this range": it is
+/// the pages *plus* whatever the rules project onto it. Working that out needs
+/// three queries and a merge, and doing it in Swift would mean reimplementing
+/// the desktop's `useRecurrenceExpansion` a second time, in a second language,
+/// with no way to grade it. `Workspace::calendar_range` does it once.
+#[derive(uniffi::Record, Debug)]
+pub struct CalendarEntry {
+    pub page_id: String,
+    /// Distinct per drawn item — the page id for a real block, and the page id
+    /// plus the occurrence's date for a projected one. `page_id` is *not*
+    /// unique here: a weekly series appears several times in a week and every
+    /// one of those carries the same page id, deliberately (see
+    /// `pikos_core::calendar::occurrences`).
+    pub key: String,
+    pub title: String,
+    pub status: String,
+    pub priority: i64,
+    pub folder_id: Option<String>,
+    pub tags: Vec<String>,
+    /// Tiebreaker for equal-length all-day spans, and nothing else.
+    pub created_at: String,
+    pub scheduled_start: String,
+    pub scheduled_end: Option<String>,
+    /// Projected from a recurrence rule: there is no row behind it, so editing
+    /// it has to materialise one first.
+    pub is_virtual: bool,
+    /// The rule's own date for this occurrence, which is how a skip or an
+    /// override is matched back to it. `None` on a real block.
+    pub original_date: Option<String>,
+}
+
 /// A contiguous run of one all-day page across visible columns, in one row.
 #[derive(uniffi::Record)]
 pub struct AllDayBar {

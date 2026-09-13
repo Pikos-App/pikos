@@ -29,6 +29,12 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
 uniffi = { version = "0.32", features = ["cli", "tokio"] }
 
 [dev-dependencies]
+# Reached directly by one test, which writes the kind of row only the desktop
+# writes today — a materialised override for a single occurrence of a series.
+# iOS must honour one it finds, and there is no iOS-side writer to create it
+# with, so the test plays the part of the other app.
+pikos-db = { path = "../pikos-db" }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 
 [build-dependencies]

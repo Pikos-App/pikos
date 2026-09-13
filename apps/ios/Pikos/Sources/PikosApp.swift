@@ -57,6 +57,13 @@ struct RootView: View {
             .tabItem { Label("Pages", systemImage: "doc.text") }
             .tag(Route.Tab.pages)
 
+            NavigationStack(path: $route.calendarPath) {
+                CalendarScreen()
+                    .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
+            }
+            .tabItem { Label("Calendar", systemImage: "calendar") }
+            .tag(Route.Tab.calendar)
+
             NavigationStack(path: $route.searchPath) {
                 SearchScreen()
                     .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }

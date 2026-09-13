@@ -57,6 +57,16 @@ public final class WorkspaceStore {
     /// reads as data loss.
     public private(set) var isLoading = true
 
+    /// Bumped whenever the workspace has been written to and re-read.
+    ///
+    /// `pages` is enough for the list, which observes it directly. The calendar
+    /// asks a different question — occurrences projected onto the days on
+    /// screen — and its answer is not in `pages`, so without something to
+    /// observe it would keep showing what it fetched when the range last
+    /// changed. Completing a task from the editor and coming back to a calendar
+    /// still showing it undone is the symptom.
+    public private(set) var dataVersion = 0
+
     public var scope: Scope = .today {
         didSet {
             guard scope != oldValue else { return }
@@ -97,6 +107,7 @@ public final class WorkspaceStore {
             }
             folders = try await workspace.listFolders()
             isLoading = false
+            dataVersion += 1
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
@@ -118,6 +129,24 @@ public final class WorkspaceStore {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    /// Everything the calendar draws for a visible range, inclusive of both
+    /// ends and in `YYYY-MM-DD`.
+    ///
+    /// Not cached and not folded into `pages`. The calendar's question is a
+    /// different one — it needs recurring occurrences projected onto the days
+    /// on screen, which no page list contains — and the range changes as the
+    /// user swipes, so a cache keyed on nothing in particular would be a
+    /// staleness bug waiting to happen.
+    public func calendarRange(from start: String, to end: String) async -> [CalendarEntry] {
+        guard let workspace else { return [] }
+        do {
+            return try await workspace.calendarRange(start: start, end: end)
+        } catch {
+            errorMessage = error.localizedDescription
+            return []
         }
     }
 

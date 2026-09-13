@@ -83,10 +83,12 @@ suite.
 
 ## What is deliberately missing
 
-- **Calendar screens.** M3. The layout algorithms are already ported and
-  fuzzed (`crates/pikos-core/src/calendar/`, exported as `layoutTimedDay` and
-  `layoutAllDay`), so what is missing is the grid that draws what they return —
-  and the pixel mapping, which is deliberately per-platform.
+- **Dragging in the calendar.** The grid draws; moving and resizing a block by
+  dragging is not wired. On a phone both compete with scrolling and want a
+  design decision rather than a port of the desktop's gestures.
+- **Editing one occurrence of a series.** Tapping a projected occurrence opens
+  its head page. Changing just that occurrence has to materialise a schedule
+  row first — see `docs/ios/05-calendar.md`.
 - **The iPad UI.** Ships in the same universal binary, styled after the desktop
   app rather than the phone. Not started; `docs/ios/00-status.md` records the
   three things being kept true so that it stays a change of shell.

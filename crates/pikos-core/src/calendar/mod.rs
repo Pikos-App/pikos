@@ -23,6 +23,7 @@
 //! the pipeline that genuinely does vary with pixel density.
 
 pub mod all_day;
+pub mod occurrences;
 pub mod timed;
 
 /// The subset of a page the layout algorithms actually read.

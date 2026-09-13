@@ -52,5 +52,15 @@ let package = Package(
             dependencies: ["PikosCore"],
             path: "Tests/PikosCoreTests"
         ),
+        // Separate from PikosCoreTests because PikosSupport is a separate
+        // target, and because these need nothing linked: no XCFramework, no
+        // database, no device. `swift test` runs them on the host in under a
+        // second, which is the point of putting the calendar's geometry here
+        // rather than in the app.
+        .testTarget(
+            name: "PikosSupportTests",
+            dependencies: ["PikosSupport"],
+            path: "Tests/PikosSupportTests"
+        ),
     ]
 )

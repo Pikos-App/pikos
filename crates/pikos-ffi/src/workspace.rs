@@ -22,7 +22,12 @@
 
 use std::sync::Arc;
 
+use pikos_core::calendar::occurrences::{virtual_occurrences_in_range, SeriesRule};
+use pikos_core::calendar::LayoutPage as CoreLayoutPage;
+use pikos_core::dates::{next_day, parse_local_iso};
 use pikos_core::nlp::quick_add::ParseResult as QuickAddParse;
+
+use crate::CalendarEntry;
 use pikos_db::{
     AppError, NewPage as DbNewPage, PageFilter as DbPageFilter, PageUpdate as DbPageUpdate,
 };
@@ -702,6 +707,32 @@ impl Workspace {
             .collect())
     }
 
+    /// Everything to draw for a visible range, in one call.
+    ///
+    /// `start` and `end` are `YYYY-MM-DD`; `end` is inclusive, being the last
+    /// day shown. One day for a phone, seven for a week grid — the same call
+    /// either way.
+    ///
+    /// Three sources go in and one list comes out:
+    ///
+    /// 1. Pages whose schedule *overlaps* the range, not merely starts in it,
+    ///    so a multi-day event that began earlier still appears.
+    /// 2. Every recurrence rule, and the head page of each — the head is
+    ///    usually outside the range, since the point of a series is that it
+    ///    was anchored once and runs on. Omitting these was the mistake worth
+    ///    guarding against: expansion needs the head, and without it a weekly
+    ///    standup silently shows nothing at all.
+    /// 3. Materialised override rows in the range, whose dates are folded into
+    ///    each rule's exclusions so an overridden occurrence is drawn once,
+    ///    from its row, rather than twice.
+    pub async fn calendar_range(
+        &self,
+        start: String,
+        end: String,
+    ) -> Result<Vec<CalendarEntry>, WorkspaceError> {
+        calendar_range_impl(&self.pool, &start, &end).await
+    }
+
     /// A read-only handle onto the same workspace, for passing to code that
     /// must not write.
     pub fn read_only(&self) -> Arc<ReadOnlyWorkspace> {
@@ -769,6 +800,19 @@ impl ReadOnlyWorkspace {
         }
     }
 
+    /// The calendar's range query, read-only — see [`Workspace::calendar_range`].
+    ///
+    /// Present here because a calendar is exactly the kind of thing an
+    /// extension shows, and a widget reaching for it must not be able to open
+    /// a writable handle to get it.
+    pub async fn calendar_range(
+        &self,
+        start: String,
+        end: String,
+    ) -> Result<Vec<CalendarEntry>, WorkspaceError> {
+        calendar_range_impl(&self.pool, &start, &end).await
+    }
+
     /// The folder list, for pickers outside the app.
     ///
     /// A read like any other here. It exists so a Shortcuts folder parameter
@@ -786,4 +830,155 @@ impl ReadOnlyWorkspace {
             })
             .collect())
     }
+}
+
+// ─── Calendar ────────────────────────────────────────────────────────────────
+
+/// Shared by both handles. A free function rather than a trait: it needs the
+/// pool and nothing else, and two one-line forwarding methods are cheaper to
+/// read than a trait with two implementors.
+async fn calendar_range_impl(
+    pool: &sqlx::SqlitePool,
+    start: &str,
+    end: &str,
+) -> Result<Vec<CalendarEntry>, WorkspaceError> {
+    let mut pages = pikos_db::list_pages_overlapping_impl(pool, start, end).await?;
+    let rules = pikos_db::list_recurrence_rules_impl(pool).await?;
+
+    // Everything the range query returned is drawn. Rule heads appended below
+    // are *inputs to the expansion*, not blocks — a weekly standup anchored in
+    // March must project onto June without also drawing itself there in March.
+    let drawn = pages.len();
+
+    // Pull in each rule's head page when the range did not already contain it.
+    // Sequential `get_page` calls rather than one `WHERE id IN (…)` because
+    // rule counts are in the tens and the query builder for a variadic IN is
+    // more code than it saves; revisit if that stops being true.
+    if !rules.is_empty() {
+        let mut missing: Vec<&str> = Vec::new();
+        for rule in &rules {
+            let known = pages.iter().any(|p| p.id == rule.page_id);
+            if !known && !missing.contains(&rule.page_id.as_str()) {
+                missing.push(&rule.page_id);
+            }
+        }
+        let missing: Vec<String> = missing.into_iter().map(str::to_string).collect();
+        for id in missing {
+            if let Some(page) = pikos_db::get_page(pool, &id).await? {
+                // `get_page` returns the full row, including the document.
+                // Narrowed here to the same shape the range query produced, so
+                // everything downstream sees one kind of thing.
+                pages.push(pikos_db::PageSummary {
+                    id: page.id,
+                    folder_id: page.folder_id,
+                    title: page.title,
+                    subtitle: page.subtitle,
+                    status: page.status,
+                    priority: page.priority,
+                    tags: page.tags,
+                    sort_order: page.sort_order,
+                    scheduled_start: page.scheduled_start,
+                    scheduled_end: page.scheduled_end,
+                    completed_at: page.completed_at,
+                    links: page.links,
+                    parent_id: page.parent_id,
+                    last_opened_at: page.last_opened_at,
+                    created_at: page.created_at,
+                    updated_at: page.updated_at,
+                });
+            }
+        }
+    }
+
+    // An override is a real schedule row for one occurrence of a series. The
+    // rule must not also project onto that date, or it is drawn twice.
+    let overrides = pikos_db::list_page_schedules_range_impl(pool, start, end).await?;
+
+    let series: Vec<SeriesRule> = rules
+        .into_iter()
+        .map(|rule| {
+            let mut excluded = rule.rrule_exdates;
+            for schedule in &overrides {
+                if schedule.rule_id.as_deref() == Some(rule.id.as_str()) {
+                    if let Some(date) = schedule.original_date.clone() {
+                        excluded.push(date);
+                    }
+                }
+            }
+            SeriesRule {
+                id: rule.id,
+                page_id: rule.page_id,
+                rrule: rule.rrule,
+                excluded_dates: excluded,
+                scheduled_start: rule.scheduled_start,
+                scheduled_end: rule.scheduled_end,
+            }
+        })
+        .collect();
+
+    let layout_pages: Vec<CoreLayoutPage> = pages
+        .iter()
+        .map(|p| CoreLayoutPage {
+            id: p.id.clone(),
+            created_at: p.created_at.clone(),
+            scheduled_start: p.scheduled_start.clone(),
+            scheduled_end: p.scheduled_end.clone(),
+        })
+        .collect();
+
+    // The expansion window runs to the day *after* the last visible one, since
+    // `expand_for_range` takes a half-open interval and `end` here is the last
+    // day shown. Without the extra day, the final column of a week would never
+    // show a recurring occurrence.
+    let (Some(from), Some(to)) = (parse_local_iso(start), parse_local_iso(end).map(next_day))
+    else {
+        return Err(WorkspaceError::InvalidInput {
+            message: format!("calendar range needs two YYYY-MM-DD dates, got {start} and {end}"),
+        });
+    };
+
+    let virtuals = virtual_occurrences_in_range(&layout_pages, &series, &from, &to);
+
+    let mut entries: Vec<CalendarEntry> = pages[..drawn]
+        .iter()
+        .filter_map(|page| {
+            let scheduled_start = page.scheduled_start.clone()?;
+            Some(CalendarEntry {
+                page_id: page.id.clone(),
+                key: page.id.clone(),
+                title: page.title.clone(),
+                status: page.status.clone(),
+                priority: page.priority,
+                folder_id: page.folder_id.clone(),
+                tags: page.tags.clone(),
+                created_at: page.created_at.clone(),
+                scheduled_start,
+                scheduled_end: page.scheduled_end.clone(),
+                is_virtual: false,
+                original_date: None,
+            })
+        })
+        .collect();
+
+    for occurrence in virtuals {
+        let Some(page) = pages.iter().find(|p| p.id == occurrence.page_id) else {
+            continue;
+        };
+        entries.push(CalendarEntry {
+            page_id: occurrence.page_id.clone(),
+            key: format!("{}@{}", occurrence.page_id, occurrence.original_date),
+            title: page.title.clone(),
+            status: page.status.clone(),
+            priority: page.priority,
+            folder_id: page.folder_id.clone(),
+            tags: page.tags.clone(),
+            created_at: page.created_at.clone(),
+            scheduled_start: occurrence.scheduled_start,
+            scheduled_end: occurrence.scheduled_end,
+            is_virtual: true,
+            original_date: Some(occurrence.original_date),
+        });
+    }
+
+    Ok(entries)
 }

@@ -258,6 +258,11 @@ void uniffi_pikos_ffi_fn_free_readonlyworkspace(uint64_t handle, RustCallStatus 
 uint64_t uniffi_pikos_ffi_fn_constructor_readonlyworkspace_open_existing(RustBuffer path
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_READONLYWORKSPACE_CALENDAR_RANGE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_READONLYWORKSPACE_CALENDAR_RANGE
+uint64_t uniffi_pikos_ffi_fn_method_readonlyworkspace_calendar_range(uint64_t ptr, RustBuffer start, RustBuffer end
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_READONLYWORKSPACE_GET_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_READONLYWORKSPACE_GET_PAGE
 uint64_t uniffi_pikos_ffi_fn_method_readonlyworkspace_get_page(uint64_t ptr, RustBuffer id
@@ -291,6 +296,11 @@ void uniffi_pikos_ffi_fn_free_workspace(uint64_t handle, RustCallStatus *_Nonnul
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_CONSTRUCTOR_WORKSPACE_OPEN
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_CONSTRUCTOR_WORKSPACE_OPEN
 uint64_t uniffi_pikos_ffi_fn_constructor_workspace_open(RustBuffer path
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CALENDAR_RANGE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CALENDAR_RANGE
+uint64_t uniffi_pikos_ffi_fn_method_workspace_calendar_range(uint64_t ptr, RustBuffer start, RustBuffer end
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CONTENT_SCHEMA_VERSION
@@ -761,6 +771,12 @@ uint16_t uniffi_pikos_ffi_checksum_func_parse_quick_add(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_CALENDAR_RANGE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_CALENDAR_RANGE
+uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_calendar_range(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_GET_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_GET_PAGE
 uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_get_page(void
@@ -782,6 +798,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_pages(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_LIST_TODAY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_LIST_TODAY
 uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CALENDAR_RANGE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CALENDAR_RANGE
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_calendar_range(void
     
 );
 #endif

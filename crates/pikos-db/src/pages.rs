@@ -611,6 +611,38 @@ pub async fn list_pages_impl(
     Ok(summaries)
 }
 
+/// Pages whose schedule overlaps `[start, end]` (both `YYYY-MM-DD`, inclusive).
+///
+/// Distinct from filtering on `scheduled_after`/`scheduled_before`, which bound
+/// `scheduled_start` alone and so miss the case a calendar meets constantly: a
+/// multi-day event that began before the visible range and is still running
+/// through it. A three-day conference starting Sunday simply would not appear
+/// on Tuesday.
+///
+/// Reads the denormalised columns on `pages` rather than joining
+/// `page_schedules`, matching what the desktop calendar draws from — one block
+/// per page, at the page's nearest schedule.
+pub async fn list_pages_overlapping_impl(
+    pool: &sqlx::SqlitePool,
+    start: &str,
+    end: &str,
+) -> AppResult<Vec<PageSummary>> {
+    let query = format!(
+        "SELECT {SUMMARY_COLUMNS} FROM pages
+         WHERE deleted_at IS NULL
+           AND scheduled_start IS NOT NULL
+           AND date(scheduled_start) <= ?
+           AND date(COALESCE(scheduled_end, scheduled_start)) >= ?
+         ORDER BY sort_order ASC"
+    );
+    let rows = sqlx::query_as::<_, PageSummaryRow>(&query)
+        .bind(end)
+        .bind(start)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(PageSummary::from).collect())
+}
+
 pub async fn list_pages_today_impl(pool: &sqlx::SqlitePool) -> AppResult<Vec<PageSummary>> {
     let query = format!(
         "SELECT DISTINCT {cols} FROM pages
