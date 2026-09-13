@@ -88,7 +88,16 @@ final class Route {
         case .view(let viewId):
             tab = .pages
             pagesPath = []
-            let scope: WorkspaceStore.Scope = viewId == .today ? .today : .inbox
+            // Exhaustive rather than a ternary. The Rust side had exactly this
+            // as an if/else over two views, which is how `pikos://upcoming`
+            // came to be a link that silently did nothing when the desktop
+            // grew a third.
+            let scope: WorkspaceStore.Scope =
+                switch viewId {
+                case .today: .today
+                case .upcoming: .upcoming
+                case .inbox: .inbox
+                }
             store.scope = scope
             pendingScope = scope
 

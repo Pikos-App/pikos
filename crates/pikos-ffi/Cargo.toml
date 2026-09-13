@@ -30,6 +30,10 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
 uniffi = { version = "0.32", features = ["cli", "tokio"] }
 
 [dev-dependencies]
+# The date-view tests position pages relative to the machine's own today, which
+# is what those views are computed against — a fixed date in the fixture would
+# fall out of the window the day after it was written.
+chrono = "0.4"
 # Reached directly by one test, which writes the kind of row only the desktop
 # writes today — a materialised override for a single occurrence of a series.
 # iOS must honour one it finds, and there is no iOS-side writer to create it

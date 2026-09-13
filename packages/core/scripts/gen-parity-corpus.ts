@@ -26,6 +26,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { parseInput } from "../src/nlp/parser";
+import { belongsToView, groupTodayPages, upcomingWindowEnd } from "../src/pages/pageFilters";
+import { groupUpcomingPages } from "../src/pages/upcoming";
 import type { PageRecurrenceRule, PageSummary } from "../src/types";
 import { extractText } from "../src/utils/extractText";
 import {
@@ -343,6 +345,102 @@ const TEMPLATE_PAGE: PageSummary = {
   updatedAt: "2026-03-01T00:00:00",
 };
 
+// ─── Date-grouped views corpus ───────────────────────────────────────────────
+// Today and Upcoming. Membership, the overdue split and the day grouping — the
+// three things that decide what a phone shows on its home screen and in what
+// order.
+//
+// These read the wall clock, which is why the capture below freezes it. Three
+// of the functions here reach for `new Date()` or `Date.now()` internally and
+// take no reference parameter: `localToday`, `groupTodayPages`'s "now", and the
+// rule inside `toSortMs` that sorts an all-day item dated *today* at the
+// current moment rather than at midnight. That last one is the subtle
+// behaviour most worth pinning and the one a corpus taken from a live clock
+// could never reproduce twice.
+
+const REAL_DATE = Date;
+
+/**
+ * Run `fn` with `new Date()` and `Date.now()` pinned to `iso`.
+ *
+ * Replacing the global is heavy-handed and deliberate: the functions being
+ * captured take no clock parameter, so the only seam is the global one. Scoped
+ * to a single call and restored in a `finally`, so a throwing case cannot leave
+ * the rest of the generator running against a frozen clock.
+ */
+function withFrozenClock<T>(iso: string, fn: () => T): T {
+  const frozen = new REAL_DATE(iso).getTime();
+  class FrozenDate extends REAL_DATE {
+    // `unknown[]` rather than `ConstructorParameters<typeof Date>`: that helper
+    // resolves to the last overload alone, a one-tuple, which makes the
+    // zero-argument branch below unreachable as far as the compiler is
+    // concerned — and the zero-argument branch is the entire point.
+    constructor(...args: unknown[]) {
+      if (args.length === 0) super(frozen);
+      else if (args.length === 1) super(args[0] as string | number | Date);
+      else super(...(args as [number, number, number, number, number, number, number]));
+    }
+    static override now(): number {
+      return frozen;
+    }
+  }
+  globalThis.Date = FrozenDate as unknown as DateConstructor;
+  try {
+    return fn();
+  } finally {
+    globalThis.Date = REAL_DATE;
+  }
+}
+
+/**
+ * Pages positioned relative to the suite's reference days rather than to fixed
+ * dates, so one fixture set exercises every reference time. Each is a literal
+ * date chosen to sit a known distance from `sun_noon` (2026-03-15).
+ */
+const VIEW_PAGES: PageSummary[] = [
+  // Overdue by days, all-day — must stay overdue whatever the hour.
+  { ...TEMPLATE_PAGE, id: "v_old_allday", scheduledStart: "2026-03-10", sortOrder: 1 },
+  // Overdue by days, timed.
+  { ...TEMPLATE_PAGE, id: "v_old_timed", scheduledStart: "2026-03-10T08:00:00", sortOrder: 2 },
+  // Earlier today, timed — overdue after that hour, not before. The boundary
+  // the reference times are chosen to cross.
+  { ...TEMPLATE_PAGE, id: "v_today_early", scheduledStart: "2026-03-15T01:45:00", sortOrder: 3 },
+  // All-day today — never overdue, and sorts at "now".
+  { ...TEMPLATE_PAGE, id: "v_today_allday", scheduledStart: "2026-03-15", sortOrder: 4 },
+  // Later today, timed.
+  { ...TEMPLATE_PAGE, id: "v_today_late", scheduledStart: "2026-03-15T18:30:00", sortOrder: 5 },
+  // Two sharing a moment, to pin the sort's stability.
+  { ...TEMPLATE_PAGE, id: "v_tie_a", scheduledStart: "2026-03-16T09:00:00", sortOrder: 6 },
+  { ...TEMPLATE_PAGE, id: "v_tie_b", scheduledStart: "2026-03-16T09:00:00", sortOrder: 7 },
+  // Inside the Upcoming window from sun_noon; outside it from later references.
+  { ...TEMPLATE_PAGE, id: "v_day3", scheduledStart: "2026-03-17T12:00:00", sortOrder: 8 },
+  { ...TEMPLATE_PAGE, id: "v_day7", scheduledStart: "2026-03-21", sortOrder: 9 },
+  // The eighth day — out of the window from sun_noon, in from later ones.
+  { ...TEMPLATE_PAGE, id: "v_day8", scheduledStart: "2026-03-22T10:00:00", sortOrder: 10 },
+  // Far future and unscheduled: in no date view at all.
+  { ...TEMPLATE_PAGE, id: "v_far", scheduledStart: "2026-09-01", sortOrder: 11 },
+  { ...TEMPLATE_PAGE, id: "v_none", sortOrder: 12 },
+  // Done — every date view lists open work only.
+  {
+    ...TEMPLATE_PAGE,
+    completedAt: "2026-03-15T09:00:00",
+    id: "v_done",
+    scheduledStart: "2026-03-15T07:00:00",
+    sortOrder: 13,
+    status: "done",
+  },
+  // Filed, to keep the folder/inbox arms of belongsToView honest.
+  {
+    ...TEMPLATE_PAGE,
+    folderId: "folder-1",
+    id: "v_filed",
+    scheduledStart: "2026-03-16",
+    sortOrder: 14,
+  },
+];
+
+const VIEW_IDS = ["today", "upcoming", "inbox", "trash", "folder-1"];
+
 // ─── extractText corpus ──────────────────────────────────────────────────────
 // Tiptap JSON → plain text. iOS needs this on the `docChanged` bridge message
 // to keep the FTS column populated, so it is a prerequisite for the editor
@@ -650,6 +748,57 @@ function main(): void {
     snapped: capture(() => snapAnchorToRule(c.rrule, c.anchor)),
   }));
 
+  // One case per reference time. Each captures what the two date views would
+  // show at that moment: which pages belong where, the window's last day, and
+  // the sections the list is actually built from.
+  const viewCases = REFERENCES.map((ref) => {
+    const today = ref.iso.slice(0, 10);
+    return withFrozenClock(ref.iso, () => {
+      const membership = VIEW_PAGES.map((page) => ({
+        id: page.id,
+        views: Object.fromEntries(
+          VIEW_IDS.map((viewId) => [viewId, belongsToView(page, viewId, today)])
+        ),
+      }));
+      // The composition the list performs: open pages that belong to the view,
+      // in the order the sections put them.
+      const open = VIEW_PAGES.filter((p) => p.status !== "done");
+      const todayGroups = capture(() =>
+        groupTodayPages(open.filter((p) => belongsToView(p, "today", today)))
+      );
+      const upcomingDays = capture(() =>
+        groupUpcomingPages(
+          open.filter((p) => belongsToView(p, "upcoming", today)),
+          today
+        )
+      );
+      return {
+        membership,
+        ref: ref.id,
+        // Ids only. The rest of each page is the fixture copied through, which
+        // would bloat the corpus without testing anything the ids do not.
+        todayGroups: todayGroups.ok
+          ? {
+              ok: true as const,
+              overdue: todayGroups.value.overdue.map((p) => p.id),
+              today: todayGroups.value.today.map((p) => p.id),
+            }
+          : todayGroups,
+        today,
+        upcomingDays: upcomingDays.ok
+          ? {
+              ok: true as const,
+              days: upcomingDays.value.map((d) => ({
+                date: d.date,
+                pages: d.pages.map((p) => p.id),
+              })),
+            }
+          : upcomingDays,
+        windowEnd: capture(() => upcomingWindowEnd(today)),
+      };
+    });
+  });
+
   const extractTextCases = EXTRACT_TEXT_CASES.map((c) => ({
     ...c,
     text: capture(() => extractText(c.doc)),
@@ -671,6 +820,10 @@ function main(): void {
     JSON.stringify({ cases: parserCases, inputCount: inputs.length, meta }, null, 2) + "\n"
   );
   writeFileSync(
+    resolve(OUT_DIR, "views.json"),
+    JSON.stringify({ meta, pages: VIEW_PAGES, viewCases }, null, 2) + "\n"
+  );
+  writeFileSync(
     resolve(OUT_DIR, "text.json"),
     JSON.stringify({ extractTextCases, meta }, null, 2) + "\n"
   );
@@ -684,6 +837,7 @@ function main(): void {
     `parser.json:     ${parserCases.length} cases (${inputs.length} inputs × ${REFERENCES.length} refs), ${failures} throwing\n` +
       `recurrence.json: ${recurrenceCases.length} next-occurrence, ${expansionCases.length} expansion, ${snapCases.length} snap\n` +
       `text.json:       ${extractTextCases.length} extractText\n` +
+      `views.json:      ${viewCases.length} reference times × ${VIEW_PAGES.length} pages\n` +
       `out: ${OUT_DIR}\n`
   );
 }

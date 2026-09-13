@@ -27,6 +27,7 @@ pub enum DeepLink {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SmartView {
     Today,
+    Upcoming,
     Inbox,
 }
 
@@ -34,6 +35,7 @@ impl SmartView {
     pub fn as_str(self) -> &'static str {
         match self {
             SmartView::Today => "today",
+            SmartView::Upcoming => "upcoming",
             SmartView::Inbox => "inbox",
         }
     }
@@ -86,17 +88,22 @@ pub fn parse_deep_link(raw: &str) -> Option<DeepLink> {
                 page_id: (*id).to_string(),
             })
         }
-        "today" | "inbox" => {
+        // Matched by name rather than by an if/else on one of them. The first
+        // port of this arm handled exactly two views and read `if head ==
+        // "today" { Today } else { Inbox }`, so when Upcoming was added on the
+        // desktop there was no arm to add it to and no test to notice: the URL
+        // simply did nothing on the phone. Exhaustive here, so a fourth view is
+        // a compile error rather than a dead link.
+        "today" | "upcoming" | "inbox" => {
             if !rest.is_empty() {
                 return None;
             }
-            Some(DeepLink::View {
-                view_id: if *head == "today" {
-                    SmartView::Today
-                } else {
-                    SmartView::Inbox
-                },
-            })
+            let view_id = match *head {
+                "today" => SmartView::Today,
+                "upcoming" => SmartView::Upcoming,
+                _ => SmartView::Inbox,
+            };
+            Some(DeepLink::View { view_id })
         }
         "calendar" => {
             if !rest.is_empty() {

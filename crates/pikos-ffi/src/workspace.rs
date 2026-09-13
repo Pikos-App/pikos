@@ -269,6 +269,31 @@ pub enum CompletedScope {
     Folder { id: String },
 }
 
+/// Today's list, already split into the two sections it is drawn as.
+///
+/// Split here rather than in the shell because the rule is not a rendering
+/// choice: an all-day item stays in "today" until midnight while a timed one
+/// slips the moment it passes, and a shell reimplementing that is a second
+/// definition of overdue that drifts from this one.
+#[derive(Debug, uniffi::Record)]
+pub struct TodaySections {
+    /// Already slipped, soonest first. Drawn above, because it is the part
+    /// worth acting on.
+    pub overdue: Vec<PageSummary>,
+    /// Due today and not yet passed.
+    pub today: Vec<PageSummary>,
+}
+
+/// One day of the Upcoming view.
+#[derive(Debug, uniffi::Record)]
+pub struct UpcomingDay {
+    /// `YYYY-MM-DD`. Deliberately not a label: "Today" / "Tomorrow" / "Thu, 27
+    /// Aug" is locale work, and the platform does it better than a second
+    /// implementation here would.
+    pub date: String,
+    pub pages: Vec<PageSummary>,
+}
+
 /// One page of finished pages, plus how many there are in total.
 ///
 /// `total` is the count matching the scope, not the length of `pages` — it is
@@ -509,6 +534,77 @@ impl Workspace {
     pub async fn list_today(&self) -> Result<Vec<PageSummary>, WorkspaceError> {
         let pages = pikos_db::list_pages_today_impl(&self.pool).await?;
         Ok(pages.into_iter().map(Into::into).collect())
+    }
+
+    /// Today, split into overdue and due-today.
+    ///
+    /// The same rows [`Workspace::list_today`] returns, grouped and ordered.
+    /// Both exist because they answer different questions: a widget wants a
+    /// flat list of what is due, and the app wants the sections.
+    pub async fn list_today_sections(&self) -> Result<TodaySections, WorkspaceError> {
+        let pages: Vec<PageSummary> = pikos_db::list_pages_today_impl(&self.pool)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let (today, now) = pikos_db::now_local_parts();
+        let groups = pikos_core::views::group_today(pages, &today, &now, |page| {
+            page.scheduled_start.as_deref()
+        });
+        Ok(TodaySections {
+            overdue: groups.overdue,
+            today: groups.today,
+        })
+    }
+
+    /// The week ahead, grouped by day.
+    ///
+    /// The window is today through today+6 and it deliberately overlaps Today:
+    /// a view of what is coming that starts tomorrow leaves the reader
+    /// wondering where today went. What it does *not* carry is the overdue
+    /// backlog — that is Today's job, and an Upcoming list that repeated it
+    /// would be the same list twice.
+    ///
+    /// Only days holding something get an entry. An empty day is a header that
+    /// says nothing the next populated one does not.
+    pub async fn list_upcoming(&self) -> Result<Vec<UpcomingDay>, WorkspaceError> {
+        let (today, now) = pikos_db::now_local_parts();
+        let Some(end) = pikos_core::views::upcoming_window_end(&today) else {
+            return Err(WorkspaceError::InvalidInput {
+                message: format!("today is not a date: {today}"),
+            });
+        };
+        let pages: Vec<PageSummary> = pikos_db::list_pages_impl(
+            &self.pool,
+            Some(pikos_db::PageFilter {
+                scheduled_after: Some(today.clone()),
+                // The window's last day plus a time at the end of it. The
+                // column holds `YYYY-MM-DD` for an all-day row and
+                // `YYYY-MM-DDTHH:MM:SS` for a timed one, and the comparison is
+                // lexicographic — so a bare date as the upper bound would
+                // admit the last day's all-day rows and silently drop every
+                // timed row on it, `"2026-09-19T14:00:00" > "2026-09-19"`.
+                scheduled_before: Some(format!("{end}T23:59:59")),
+                open_only: Some(true),
+                ..Default::default()
+            }),
+        )
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+        Ok(
+            pikos_core::views::group_upcoming(pages, &today, &now, |page| {
+                page.scheduled_start.as_deref()
+            })
+            .into_iter()
+            .map(|day| UpcomingDay {
+                date: day.date,
+                pages: day.pages,
+            })
+            .collect(),
+        )
     }
 
     /// Finished pages for one view, newest first.

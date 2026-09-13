@@ -1,0 +1,1503 @@
+{
+  "meta": {
+    "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
+    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",
+    "references": [
+      {
+        "id": "sun_noon",
+        "iso": "2026-03-15T12:00:00",
+        "note": "suite NOW — Sunday, midday"
+      },
+      {
+        "id": "wed_noon",
+        "iso": "2026-03-18T12:00:00",
+        "note": "midweek — forward-date rollover differs"
+      },
+      {
+        "id": "mon_morning",
+        "iso": "2026-03-16T08:00:00",
+        "note": "before 9am — 'today vs tomorrow' flips"
+      },
+      {
+        "id": "sat_late",
+        "iso": "2026-03-21T22:30:00",
+        "note": "after 8pm — 'tonight' rolls to tomorrow"
+      },
+      {
+        "id": "dst_eve",
+        "iso": "2026-03-28T12:00:00",
+        "note": "eve of EU DST change"
+      },
+      {
+        "id": "leap_day",
+        "iso": "2024-02-29T09:00:00",
+        "note": "leap day"
+      },
+      {
+        "id": "year_end",
+        "iso": "2026-12-31T23:00:00",
+        "note": "year boundary"
+      }
+    ],
+    "timezone": "UTC"
+  },
+  "pages": [
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_old_allday",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 1,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-10"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_old_timed",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 2,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-10T08:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_today_early",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 3,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-15T01:45:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_today_allday",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 4,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-15"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_today_late",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 5,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-15T18:30:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_tie_a",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 6,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-16T09:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_tie_b",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 7,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-16T09:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_day3",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 8,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-17T12:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_day7",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 9,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-21"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_day8",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 10,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-22T10:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_far",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 11,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-09-01"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_none",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 12,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": null,
+      "id": "v_done",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 13,
+      "status": "done",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "completedAt": "2026-03-15T09:00:00",
+      "scheduledStart": "2026-03-15T07:00:00"
+    },
+    {
+      "createdAt": "2026-03-01T00:00:00",
+      "folderId": "folder-1",
+      "id": "v_filed",
+      "isRecurring": false,
+      "priority": 0,
+      "scheduleLocked": false,
+      "sortOrder": 14,
+      "status": "not_started",
+      "tags": [],
+      "title": "template",
+      "updatedAt": "2026-03-01T00:00:00",
+      "scheduledStart": "2026-03-16"
+    }
+  ],
+  "viewCases": [
+    {
+      "membership": [
+        {
+          "id": "v_old_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_old_timed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_early",
+          "views": {
+            "today": true,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_allday",
+          "views": {
+            "today": true,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_late",
+          "views": {
+            "today": true,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_a",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_b",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day3",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day7",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day8",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_far",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_none",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_done",
+          "views": {
+            "today": true,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_filed",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": false,
+            "trash": false,
+            "folder-1": true
+          }
+        }
+      ],
+      "ref": "sun_noon",
+      "todayGroups": {
+        "ok": true,
+        "overdue": [
+          "v_old_allday",
+          "v_old_timed",
+          "v_today_early"
+        ],
+        "today": [
+          "v_today_allday",
+          "v_today_late"
+        ]
+      },
+      "today": "2026-03-15",
+      "upcomingDays": {
+        "ok": true,
+        "days": [
+          {
+            "date": "2026-03-15",
+            "pages": [
+              "v_today_early",
+              "v_today_allday",
+              "v_today_late"
+            ]
+          },
+          {
+            "date": "2026-03-16",
+            "pages": [
+              "v_filed",
+              "v_tie_a",
+              "v_tie_b"
+            ]
+          },
+          {
+            "date": "2026-03-17",
+            "pages": [
+              "v_day3"
+            ]
+          },
+          {
+            "date": "2026-03-21",
+            "pages": [
+              "v_day7"
+            ]
+          }
+        ]
+      },
+      "windowEnd": {
+        "ok": true,
+        "value": "2026-03-21"
+      }
+    },
+    {
+      "membership": [
+        {
+          "id": "v_old_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_old_timed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_early",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_late",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_a",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_b",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day3",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day7",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day8",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_far",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_none",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_done",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_filed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": false,
+            "trash": false,
+            "folder-1": true
+          }
+        }
+      ],
+      "ref": "wed_noon",
+      "todayGroups": {
+        "ok": true,
+        "overdue": [
+          "v_old_allday",
+          "v_old_timed",
+          "v_today_allday",
+          "v_today_early",
+          "v_today_late",
+          "v_filed",
+          "v_tie_a",
+          "v_tie_b",
+          "v_day3"
+        ],
+        "today": []
+      },
+      "today": "2026-03-18",
+      "upcomingDays": {
+        "ok": true,
+        "days": [
+          {
+            "date": "2026-03-21",
+            "pages": [
+              "v_day7"
+            ]
+          },
+          {
+            "date": "2026-03-22",
+            "pages": [
+              "v_day8"
+            ]
+          }
+        ]
+      },
+      "windowEnd": {
+        "ok": true,
+        "value": "2026-03-24"
+      }
+    },
+    {
+      "membership": [
+        {
+          "id": "v_old_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_old_timed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_early",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_late",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_a",
+          "views": {
+            "today": true,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_b",
+          "views": {
+            "today": true,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day3",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day7",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day8",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_far",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_none",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_done",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_filed",
+          "views": {
+            "today": true,
+            "upcoming": true,
+            "inbox": false,
+            "trash": false,
+            "folder-1": true
+          }
+        }
+      ],
+      "ref": "mon_morning",
+      "todayGroups": {
+        "ok": true,
+        "overdue": [
+          "v_old_allday",
+          "v_old_timed",
+          "v_today_allday",
+          "v_today_early",
+          "v_today_late"
+        ],
+        "today": [
+          "v_filed",
+          "v_tie_a",
+          "v_tie_b"
+        ]
+      },
+      "today": "2026-03-16",
+      "upcomingDays": {
+        "ok": true,
+        "days": [
+          {
+            "date": "2026-03-16",
+            "pages": [
+              "v_filed",
+              "v_tie_a",
+              "v_tie_b"
+            ]
+          },
+          {
+            "date": "2026-03-17",
+            "pages": [
+              "v_day3"
+            ]
+          },
+          {
+            "date": "2026-03-21",
+            "pages": [
+              "v_day7"
+            ]
+          },
+          {
+            "date": "2026-03-22",
+            "pages": [
+              "v_day8"
+            ]
+          }
+        ]
+      },
+      "windowEnd": {
+        "ok": true,
+        "value": "2026-03-22"
+      }
+    },
+    {
+      "membership": [
+        {
+          "id": "v_old_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_old_timed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_early",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_late",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_a",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_b",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day3",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day7",
+          "views": {
+            "today": true,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day8",
+          "views": {
+            "today": false,
+            "upcoming": true,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_far",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_none",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_done",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_filed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": false,
+            "trash": false,
+            "folder-1": true
+          }
+        }
+      ],
+      "ref": "sat_late",
+      "todayGroups": {
+        "ok": true,
+        "overdue": [
+          "v_old_allday",
+          "v_old_timed",
+          "v_today_allday",
+          "v_today_early",
+          "v_today_late",
+          "v_filed",
+          "v_tie_a",
+          "v_tie_b",
+          "v_day3"
+        ],
+        "today": [
+          "v_day7"
+        ]
+      },
+      "today": "2026-03-21",
+      "upcomingDays": {
+        "ok": true,
+        "days": [
+          {
+            "date": "2026-03-21",
+            "pages": [
+              "v_day7"
+            ]
+          },
+          {
+            "date": "2026-03-22",
+            "pages": [
+              "v_day8"
+            ]
+          }
+        ]
+      },
+      "windowEnd": {
+        "ok": true,
+        "value": "2026-03-27"
+      }
+    },
+    {
+      "membership": [
+        {
+          "id": "v_old_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_old_timed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_early",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_late",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_a",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_b",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day3",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day7",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day8",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_far",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_none",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_done",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_filed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": false,
+            "trash": false,
+            "folder-1": true
+          }
+        }
+      ],
+      "ref": "dst_eve",
+      "todayGroups": {
+        "ok": true,
+        "overdue": [
+          "v_old_allday",
+          "v_old_timed",
+          "v_today_allday",
+          "v_today_early",
+          "v_today_late",
+          "v_filed",
+          "v_tie_a",
+          "v_tie_b",
+          "v_day3",
+          "v_day7",
+          "v_day8"
+        ],
+        "today": []
+      },
+      "today": "2026-03-28",
+      "upcomingDays": {
+        "ok": true,
+        "days": []
+      },
+      "windowEnd": {
+        "ok": true,
+        "value": "2026-04-03"
+      }
+    },
+    {
+      "membership": [
+        {
+          "id": "v_old_allday",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_old_timed",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_early",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_allday",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_late",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_a",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_b",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day3",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day7",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day8",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_far",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_none",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_done",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_filed",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": false,
+            "trash": false,
+            "folder-1": true
+          }
+        }
+      ],
+      "ref": "leap_day",
+      "todayGroups": {
+        "ok": true,
+        "overdue": [],
+        "today": []
+      },
+      "today": "2024-02-29",
+      "upcomingDays": {
+        "ok": true,
+        "days": []
+      },
+      "windowEnd": {
+        "ok": true,
+        "value": "2024-03-06"
+      }
+    },
+    {
+      "membership": [
+        {
+          "id": "v_old_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_old_timed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_early",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_allday",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_today_late",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_a",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_tie_b",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day3",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day7",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_day8",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_far",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_none",
+          "views": {
+            "today": false,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_done",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": true,
+            "trash": false,
+            "folder-1": false
+          }
+        },
+        {
+          "id": "v_filed",
+          "views": {
+            "today": true,
+            "upcoming": false,
+            "inbox": false,
+            "trash": false,
+            "folder-1": true
+          }
+        }
+      ],
+      "ref": "year_end",
+      "todayGroups": {
+        "ok": true,
+        "overdue": [
+          "v_old_allday",
+          "v_old_timed",
+          "v_today_allday",
+          "v_today_early",
+          "v_today_late",
+          "v_filed",
+          "v_tie_a",
+          "v_tie_b",
+          "v_day3",
+          "v_day7",
+          "v_day8",
+          "v_far"
+        ],
+        "today": []
+      },
+      "today": "2026-12-31",
+      "upcomingDays": {
+        "ok": true,
+        "days": []
+      },
+      "windowEnd": {
+        "ok": true,
+        "value": "2027-01-06"
+      }
+    }
+  ]
+}

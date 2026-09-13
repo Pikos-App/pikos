@@ -36,7 +36,7 @@ struct PageListScreen: View {
                 // would put that work out of reach of the screen it belongs to.
                 // The count comes back with every refresh for exactly this.
                 emptyState
-            } else if visiblePages.isEmpty && !searchText.isEmpty {
+            } else if visibleSections.isEmpty && !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else {
                 list
@@ -76,44 +76,26 @@ struct PageListScreen: View {
             // Reached when everything in the view has been finished. Said
             // plainly rather than left as a bare gap above the Completed
             // section, which reads as a loading failure.
-            if visiblePages.isEmpty {
+            if visibleSections.isEmpty {
                 Text("Nothing open here.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(visiblePages, id: \.id) { page in
-                // The checkbox sits beside the link rather than inside it: a
-                // Button inside a NavigationLink's label does not reliably get
-                // the tap, because the link swallows it, and the symptom is a
-                // checkbox that navigates instead of completing.
-                HStack(spacing: 0) {
-                    CompletionToggle(isDone: page.status == "done") { done in
-                        Task { await store.setStatus(pageId: page.id, done: done) }
+            ForEach(visibleSections) { section in
+                // One shape for every view. A folder is a single untitled
+                // section; Today is up to two; Upcoming is one per day that
+                // holds something. `Section` with a nil header draws no
+                // header, so the untitled case costs nothing.
+                Section {
+                    ForEach(section.pages, id: \.id) { page in
+                        row(page)
                     }
-                    NavigationLink(value: page.id) {
-                        PageRow(page: page)
-                    }
-                }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        Task { await store.trash(pageId: page.id) }
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                } header: {
+                    if let title = section.title {
+                        Text(title)
                     }
                 }
-                .swipeActions(edge: .leading) {
-                    let done = page.status == "done"
-                    Button {
-                        Task { await store.setStatus(pageId: page.id, done: !done) }
-                    } label: {
-                        Label(
-                            done ? "Reopen" : "Complete",
-                            systemImage: done ? "arrow.uturn.backward" : "checkmark")
-                    }
-                    .tint(done ? .orange : .green)
-                }
-                .contextMenu { menu(for: page) }
             }
 
             completedSection
@@ -133,6 +115,49 @@ struct PageListScreen: View {
             Button("Cancel", role: .cancel) { renaming = nil }
             Button("Rename") { commitRename() }
         }
+    }
+
+    /// One open page: the checkbox, the link, and everything reachable from a
+    /// swipe or a long press.
+    ///
+    /// Extracted when the list became sectioned. Two call sites — the open
+    /// sections here and the Completed section below — and a second copy of
+    /// wiring this particular is a second place to quietly lose a swipe
+    /// action. A finished page gets the same row: its checkbox reads ticked
+    /// from its own status, and its leading swipe says "Reopen" for the same
+    /// reason.
+    private func row(_ page: PageSummary) -> some View {
+        // The checkbox sits beside the link rather than inside it: a Button
+        // inside a NavigationLink's label does not reliably get the tap,
+        // because the link swallows it, and the symptom is a checkbox that
+        // navigates instead of completing.
+        HStack(spacing: 0) {
+            CompletionToggle(isDone: page.status == "done") { done in
+                Task { await store.setStatus(pageId: page.id, done: done) }
+            }
+            NavigationLink(value: page.id) {
+                PageRow(page: page)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                Task { await store.trash(pageId: page.id) }
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .leading) {
+            let done = page.status == "done"
+            Button {
+                Task { await store.setStatus(pageId: page.id, done: !done) }
+            } label: {
+                Label(
+                    done ? "Reopen" : "Complete",
+                    systemImage: done ? "arrow.uturn.backward" : "checkmark")
+            }
+            .tint(done ? .orange : .green)
+        }
+        .contextMenu { menu(for: page) }
     }
 
     /// Finished work, below the open list and folded away.
@@ -156,15 +181,7 @@ struct PageListScreen: View {
                     .foregroundStyle(.secondary)
                 } else {
                     ForEach(store.completedPages, id: \.id) { page in
-                        HStack(spacing: 0) {
-                            CompletionToggle(isDone: true) { done in
-                                Task { await store.setStatus(pageId: page.id, done: done) }
-                            }
-                            NavigationLink(value: page.id) {
-                                PageRow(page: page)
-                            }
-                        }
-                        .contextMenu { menu(for: page) }
+                        row(page)
                     }
                     if store.hasMoreCompleted {
                         Button("Show more") {
@@ -280,18 +297,31 @@ struct PageListScreen: View {
         Task { await store.renamePage(id: page.id, to: renameText) }
     }
 
-    /// The current view, narrowed by the filter field.
+    /// The current view's sections, narrowed by the filter field.
     ///
-    /// Case- and diacritic-insensitive so "cafe" finds "Café" — `localizedStandardContains`
-    /// is the same comparison Finder and Mail use, which is what someone typing
-    /// into a filter field expects.
-    private var visiblePages: [PageSummary] {
+    /// Filtering inside each section rather than flattening first: a filter is
+    /// a narrower view of the same list, not a different list, and collapsing
+    /// Upcoming's days into one run the moment somebody types would lose the
+    /// only structure it has.
+    ///
+    /// Case- and diacritic-insensitive so "cafe" finds "Café" —
+    /// `localizedStandardContains` is the same comparison Finder and Mail use,
+    /// which is what someone typing into a filter field expects.
+    private var visibleSections: [WorkspaceStore.Section] {
         let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return store.pages }
-        return store.pages.filter { page in
-            page.title.localizedStandardContains(needle)
-                || (page.subtitle?.localizedStandardContains(needle) ?? false)
-                || page.tags.contains { $0.localizedStandardContains(needle) }
+        guard !needle.isEmpty else {
+            return store.sections.filter { !$0.pages.isEmpty }
+        }
+        return store.sections.compactMap { section in
+            let matches = section.pages.filter { page in
+                page.title.localizedStandardContains(needle)
+                    || (page.subtitle?.localizedStandardContains(needle) ?? false)
+                    || page.tags.contains { $0.localizedStandardContains(needle) }
+            }
+            // A day with nothing left in it becomes a header over a gap.
+            return matches.isEmpty
+                ? nil
+                : WorkspaceStore.Section(id: section.id, title: section.title, pages: matches)
         }
     }
 
@@ -308,6 +338,7 @@ struct PageListScreen: View {
     private var emptyDescription: String {
         switch store.scope {
         case .today: return "Pages scheduled for today will appear here."
+        case .upcoming: return "Pages scheduled in the next week will appear here."
         case .inbox: return "Pages you haven't filed will appear here."
         case .folder(_, let name): return "Nothing in \(name) yet."
         }
@@ -319,6 +350,8 @@ struct PageListScreen: View {
             Menu {
                 Picker("View", selection: scopeBinding) {
                     Label("Today", systemImage: "sun.max").tag(WorkspaceStore.Scope.today)
+                    Label("Upcoming", systemImage: "calendar")
+                        .tag(WorkspaceStore.Scope.upcoming)
                     Label("Inbox", systemImage: "tray").tag(WorkspaceStore.Scope.inbox)
                     ForEach(store.folders, id: \.id) { folder in
                         Text(folder.name)

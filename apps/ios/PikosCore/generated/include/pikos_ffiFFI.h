@@ -358,9 +358,19 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_list_pages(uint64_t ptr, RustBuffe
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_today(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TODAY_SECTIONS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TODAY_SECTIONS
+uint64_t uniffi_pikos_ffi_fn_method_workspace_list_today_sections(uint64_t ptr
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TRASHED_PAGES
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_TRASHED_PAGES
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_trashed_pages(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_UPCOMING
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_UPCOMING
+uint64_t uniffi_pikos_ffi_fn_method_workspace_list_upcoming(uint64_t ptr
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_READ_ONLY
@@ -928,9 +938,21 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_today(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TODAY_SECTIONS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TODAY_SECTIONS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_today_sections(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TRASHED_PAGES
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_TRASHED_PAGES
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_trashed_pages(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_UPCOMING
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_UPCOMING
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_upcoming(void
     
 );
 #endif

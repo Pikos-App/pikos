@@ -980,6 +980,15 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func listToday() async throws  -> [PageSummary]
     
     /**
+     * Today, split into overdue and due-today.
+     *
+     * The same rows [`Workspace::list_today`] returns, grouped and ordered.
+     * Both exist because they answer different questions: a widget wants a
+     * flat list of what is due, and the app wants the sections.
+     */
+    func listTodaySections() async throws  -> TodaySections
+    
+    /**
      * What is in the trash, newest first.
      *
      * Exists because the phone had no way back. Swipe-to-delete was wired and
@@ -987,6 +996,20 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * one device most likely to produce one.
      */
     func listTrashedPages() async throws  -> [TrashedPage]
+    
+    /**
+     * The week ahead, grouped by day.
+     *
+     * The window is today through today+6 and it deliberately overlaps Today:
+     * a view of what is coming that starts tomorrow leaves the reader
+     * wondering where today went. What it does *not* carry is the overdue
+     * backlog — that is Today's job, and an Upcoming list that repeated it
+     * would be the same list twice.
+     *
+     * Only days holding something get an entry. An empty day is a header that
+     * says nothing the next populated one does not.
+     */
+    func listUpcoming() async throws  -> [UpcomingDay]
     
     /**
      * A read-only handle onto the same workspace, for passing to code that
@@ -1490,6 +1513,29 @@ open func listToday()async throws  -> [PageSummary]  {
 }
     
     /**
+     * Today, split into overdue and due-today.
+     *
+     * The same rows [`Workspace::list_today`] returns, grouped and ordered.
+     * Both exist because they answer different questions: a widget wants a
+     * flat list of what is due, and the app wants the sections.
+     */
+open func listTodaySections()async throws  -> TodaySections  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_today_sections(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTodaySections_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * What is in the trash, newest first.
      *
      * Exists because the phone had no way back. Swipe-to-delete was wired and
@@ -1508,6 +1554,34 @@ open func listTrashedPages()async throws  -> [TrashedPage]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeTrashedPage.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * The week ahead, grouped by day.
+     *
+     * The window is today through today+6 and it deliberately overlaps Today:
+     * a view of what is coming that starts tomorrow leaves the reader
+     * wondering where today went. What it does *not* carry is the overdue
+     * backlog — that is Today's job, and an Upcoming list that repeated it
+     * would be the same list twice.
+     *
+     * Only days holding something get an entry. An empty day is a header that
+     * says nothing the next populated one does not.
+     */
+open func listUpcoming()async throws  -> [UpcomingDay]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_upcoming(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeUpcomingDay.lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -3356,6 +3430,82 @@ public func FfiConverterTypeTimedBlock_lower(_ value: TimedBlock) -> RustBuffer 
 
 
 /**
+ * Today's list, already split into the two sections it is drawn as.
+ *
+ * Split here rather than in the shell because the rule is not a rendering
+ * choice: an all-day item stays in "today" until midnight while a timed one
+ * slips the moment it passes, and a shell reimplementing that is a second
+ * definition of overdue that drifts from this one.
+ */
+public struct TodaySections: Equatable, Hashable {
+    /**
+     * Already slipped, soonest first. Drawn above, because it is the part
+     * worth acting on.
+     */
+    public var overdue: [PageSummary]
+    /**
+     * Due today and not yet passed.
+     */
+    public var today: [PageSummary]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Already slipped, soonest first. Drawn above, because it is the part
+         * worth acting on.
+         */overdue: [PageSummary], 
+        /**
+         * Due today and not yet passed.
+         */today: [PageSummary]) {
+        self.overdue = overdue
+        self.today = today
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TodaySections: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTodaySections: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TodaySections {
+        return
+            try TodaySections(
+                overdue: FfiConverterSequenceTypePageSummary.read(from: &buf), 
+                today: FfiConverterSequenceTypePageSummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TodaySections, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypePageSummary.write(value.overdue, into: &buf)
+        FfiConverterSequenceTypePageSummary.write(value.today, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTodaySections_lift(_ buf: RustBuffer) throws -> TodaySections {
+    return try FfiConverterTypeTodaySections.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTodaySections_lower(_ value: TodaySections) -> RustBuffer {
+    return FfiConverterTypeTodaySections.lower(value)
+}
+
+
+/**
  * A page in the trash, as the recovery list shows it.
  */
 public struct TrashedPage: Equatable, Hashable {
@@ -3451,6 +3601,73 @@ public func FfiConverterTypeTrashedPage_lift(_ buf: RustBuffer) throws -> Trashe
 #endif
 public func FfiConverterTypeTrashedPage_lower(_ value: TrashedPage) -> RustBuffer {
     return FfiConverterTypeTrashedPage.lower(value)
+}
+
+
+/**
+ * One day of the Upcoming view.
+ */
+public struct UpcomingDay: Equatable, Hashable {
+    /**
+     * `YYYY-MM-DD`. Deliberately not a label: "Today" / "Tomorrow" / "Thu, 27
+     * Aug" is locale work, and the platform does it better than a second
+     * implementation here would.
+     */
+    public var date: String
+    public var pages: [PageSummary]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `YYYY-MM-DD`. Deliberately not a label: "Today" / "Tomorrow" / "Thu, 27
+         * Aug" is locale work, and the platform does it better than a second
+         * implementation here would.
+         */date: String, pages: [PageSummary]) {
+        self.date = date
+        self.pages = pages
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension UpcomingDay: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUpcomingDay: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UpcomingDay {
+        return
+            try UpcomingDay(
+                date: FfiConverterString.read(from: &buf), 
+                pages: FfiConverterSequenceTypePageSummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UpcomingDay, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.date, into: &buf)
+        FfiConverterSequenceTypePageSummary.write(value.pages, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpcomingDay_lift(_ buf: RustBuffer) throws -> UpcomingDay {
+    return try FfiConverterTypeUpcomingDay.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpcomingDay_lower(_ value: UpcomingDay) -> RustBuffer {
+    return FfiConverterTypeUpcomingDay.lower(value)
 }
 
 
@@ -4822,6 +5039,31 @@ fileprivate struct FfiConverterSequenceTypeTrashedPage: FfiConverterRustBuffer {
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeUpcomingDay: FfiConverterRustBuffer {
+    typealias SwiftType = [UpcomingDay]
+
+    public static func write(_ value: [UpcomingDay], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUpcomingDay.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UpcomingDay] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UpcomingDay]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUpcomingDay.read(from: &buf))
+        }
+        return seq
+    }
+}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
 
@@ -5146,7 +5388,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_list_today() != 40259) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_today_sections() != 3533) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_list_trashed_pages() != 62776) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_upcoming() != 48506) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_read_only() != 39832) {

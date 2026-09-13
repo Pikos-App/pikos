@@ -1493,6 +1493,7 @@ dependencies = [
 name = "pikos-ffi"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "pikos-core",
  "pikos-db",
  "pikos-recurrence",

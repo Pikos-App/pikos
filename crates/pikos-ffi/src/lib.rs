@@ -192,6 +192,7 @@ pub enum DeepLink {
 #[derive(uniffi::Enum)]
 pub enum SmartView {
     Today,
+    Upcoming,
     Inbox,
 }
 
@@ -219,6 +220,7 @@ pub fn parse_deep_link(url: String) -> Option<DeepLink> {
         CoreDeepLink::View { view_id } => DeepLink::View {
             view_id: match view_id {
                 pikos_core::deep_link::SmartView::Today => SmartView::Today,
+                pikos_core::deep_link::SmartView::Upcoming => SmartView::Upcoming,
                 pikos_core::deep_link::SmartView::Inbox => SmartView::Inbox,
             },
         },

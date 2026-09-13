@@ -49,6 +49,22 @@ pub fn today_local() -> String {
     WallClock::all_day(chrono::Local::now().date_naive()).format()
 }
 
+/// Today's local date and the local moment, from a single reading of the clock.
+///
+/// Two calls to the clock are two different answers, and the date views need
+/// them to agree: the partition asks "has this slipped, as of now" and the sort
+/// asks "where does this sit relative to now". Taken a microsecond apart across
+/// a second boundary, a page can satisfy neither — it is sorted as though it
+/// were still ahead and filed as though it had passed. One reading cannot
+/// disagree with itself.
+///
+/// The date half is formatted exactly as [`today_local`] formats it, so the
+/// list's membership query and its grouping cannot land on different days.
+pub fn now_local_parts() -> (String, chrono::NaiveDateTime) {
+    let now = chrono::Local::now().naive_local();
+    (WallClock::all_day(now.date()).format(), now)
+}
+
 /// The device's IANA zone, resolved once per process — the lookup reads OS config
 /// and one caller runs inside the detach transaction, where a per-value lookup
 /// would widen the write lock under a racing editor write. An OS zone chrono-tz

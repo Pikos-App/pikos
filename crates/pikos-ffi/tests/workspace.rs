@@ -1933,3 +1933,178 @@ async fn a_limit_of_zero_returns_the_count_and_no_rows() {
     assert_eq!(counted.total, 3);
     assert!(counted.pages.is_empty(), "no rows were asked for");
 }
+
+/// Today arrives already split, and the split is by the clock rather than by
+/// the day.
+///
+/// The pikos-core port is graded against the TypeScript on a corpus; what this
+/// covers is the wiring — that the rows reaching the sections are the right
+/// rows, and that the two halves are not silently the same list twice.
+#[tokio::test]
+async fn todays_sections_separate_what_slipped_from_what_is_still_due() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    // Relative to the machine clock, because the view is. Yesterday is overdue
+    // whatever the hour; a bare date for today never is; a time far enough
+    // ahead is not yet. The core's own tests stand on the boundary itself —
+    // here the cases are chosen so no reasonable run time can flip them.
+    let today = chrono::Local::now().date_naive();
+    let yesterday = (today - chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let today_str = today.format("%Y-%m-%d").to_string();
+
+    let slipped = ws
+        .create_page(NewPage {
+            scheduled_start: Some(yesterday.clone()),
+            ..new_page("Yesterday's")
+        })
+        .await
+        .unwrap();
+    let all_day = ws
+        .create_page(NewPage {
+            scheduled_start: Some(today_str.clone()),
+            ..new_page("Sometime today")
+        })
+        .await
+        .unwrap();
+
+    let sections = ws.list_today_sections().await.unwrap();
+    let ids = |pages: &[pikos_ffi::workspace::PageSummary]| {
+        pages.iter().map(|p| p.id.clone()).collect::<Vec<_>>()
+    };
+    assert_eq!(ids(&sections.overdue), vec![slipped.id.clone()]);
+    assert_eq!(
+        ids(&sections.today),
+        vec![all_day.id.clone()],
+        "a bare date for today is not overdue at any hour"
+    );
+
+    // Ticking it takes it out of both, rather than out of one.
+    ws.set_page_status(slipped.id.clone(), true).await.unwrap();
+    let after = ws.list_today_sections().await.unwrap();
+    assert!(after.overdue.is_empty());
+    assert_eq!(ids(&after.today), vec![all_day.id]);
+}
+
+/// Upcoming's window, at both ends.
+///
+/// The upper bound is the one worth a test with a database behind it: the
+/// column is compared lexicographically and holds two different shapes, so a
+/// bare date as the bound admits the last day's all-day rows and silently drops
+/// every timed row on it. That failure looks like a calendar that just forgets
+/// next Saturday's meetings.
+#[tokio::test]
+async fn upcoming_spans_seven_days_and_keeps_the_last_days_timed_pages() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let today = chrono::Local::now().date_naive();
+    let day = |offset: i64| {
+        (today + chrono::Duration::days(offset))
+            .format("%Y-%m-%d")
+            .to_string()
+    };
+
+    let mut expected: Vec<(String, Vec<String>)> = Vec::new();
+    for offset in [0_i64, 3, 6] {
+        let timed = ws
+            .create_page(NewPage {
+                scheduled_start: Some(format!("{}T14:00:00", day(offset))),
+                ..new_page(&format!("timed +{offset}"))
+            })
+            .await
+            .unwrap();
+        expected.push((day(offset), vec![timed.id]));
+    }
+    // The eighth day is out.
+    ws.create_page(NewPage {
+        scheduled_start: Some(format!("{}T09:00:00", day(7))),
+        ..new_page("too far")
+    })
+    .await
+    .unwrap();
+    // So is yesterday — Upcoming does not carry the backlog.
+    ws.create_page(NewPage {
+        scheduled_start: Some(day(-1)),
+        ..new_page("already slipped")
+    })
+    .await
+    .unwrap();
+
+    let days = ws.list_upcoming().await.unwrap();
+    let actual: Vec<(String, Vec<String>)> = days
+        .into_iter()
+        .map(|d| (d.date, d.pages.into_iter().map(|p| p.id).collect()))
+        .collect();
+    assert_eq!(actual, expected);
+}
+
+/// Only days holding something get a section, and the pages inside one are in
+/// schedule order rather than in creation order.
+#[tokio::test]
+async fn upcoming_skips_empty_days_and_orders_within_one() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let today = chrono::Local::now().date_naive();
+    let in_two = (today + chrono::Duration::days(2))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    // Created late-first, so creation order and schedule order disagree.
+    let late = ws
+        .create_page(NewPage {
+            scheduled_start: Some(format!("{in_two}T17:00:00")),
+            ..new_page("Evening")
+        })
+        .await
+        .unwrap();
+    let early = ws
+        .create_page(NewPage {
+            scheduled_start: Some(format!("{in_two}T08:00:00")),
+            ..new_page("Morning")
+        })
+        .await
+        .unwrap();
+
+    let days = ws.list_upcoming().await.unwrap();
+    assert_eq!(days.len(), 1, "the empty days in between get no section");
+    assert_eq!(days[0].date, in_two);
+    assert_eq!(
+        days[0]
+            .pages
+            .iter()
+            .map(|p| p.id.clone())
+            .collect::<Vec<_>>(),
+        vec![early.id, late.id],
+        "soonest first, not newest first"
+    );
+}
+
+/// Finished work is not what is coming.
+#[tokio::test]
+async fn upcoming_lists_open_work_only() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let today = chrono::Local::now().date_naive();
+    let tomorrow = (today + chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let done = ws
+        .create_page(NewPage {
+            scheduled_start: Some(format!("{tomorrow}T09:00:00")),
+            ..new_page("Already handled")
+        })
+        .await
+        .unwrap();
+    ws.set_page_status(done.id.clone(), true).await.unwrap();
+
+    assert!(
+        ws.list_upcoming().await.unwrap().is_empty(),
+        "a finished page is not upcoming work"
+    );
+}

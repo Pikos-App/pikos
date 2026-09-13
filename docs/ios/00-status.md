@@ -101,6 +101,27 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**The two date views exist, and porting them found a dead link.** Today now
+splits into overdue and due-today, and Upcoming — a whole smart view iOS did
+not have — groups the next seven days. The membership, the overdue rule and the
+ordering are ported into `pikos-core` and graded against the TypeScript on a
+new corpus (`views.json`), because two of the ordering rules would look fine
+while being wrong: an all-day item stays "today" until midnight while a timed
+one slips the moment it passes, and an all-day item dated today sorts at _now_
+so it lands between what has gone and what has not. The day _labels_ are
+deliberately not ported — "Today" / "Tomorrow" / "Thu, 27 Aug" is locale work
+the platform does better, so the date crosses the boundary and `DayLabel` names
+it.
+
+Two things fell out of that. The corpus rejected the first version of one test,
+which asserted that no page could be in both date views — a page dated today is
+in both, deliberately, because they ask different questions of it. And
+`pikos://upcoming` had been a dead link on iOS since the port: the Rust arm read
+`if head == "today" { Today } else { Inbox }`, so a third view had nowhere to
+go, and the deep-link corpus never tried the URL. Both the arm and the corpus
+are fixed; the arm is exhaustive now, so a fourth view is a compile error rather
+than a link that quietly does nothing.
+
 **Finished pages have somewhere to go, and a bug on the way there.** iOS was
 inconsistent with itself: Today filtered `status != 'done'`, so ticking a page
 made it vanish with no way back short of search; Inbox and folder views had no
@@ -159,6 +180,27 @@ routing now lives in `Workspace::set_page_status`, so the safe call is the only
 call — `a_plain_status_flip_on_a_recurring_head_ends_the_series` records what
 the wrong path does, and `the_status_toggle_routes_by_kind_without_being_told`
 records that no caller has to know which kind it holds.
+
+## The parser corpus has drifted from its reference
+
+`quick_add_parity` grades the Rust parser against
+`crates/pikos-core/tests/corpus/parser.json`, which is a frozen capture of the
+TypeScript. Regenerating it from the _current_ TypeScript changes 238 of the
+2,219 shared cases — so the test is green against a reference that no longer
+describes the implementation it is meant to be tracking. The TypeScript suite
+has also gained inputs (362 where the corpus has 317), several of which exercise
+a `//` comment syntax the Rust does not implement at all.
+
+Almost all of the 238 are RRULE serialisation: the TypeScript now writes
+`FREQ=WEEKLY;INTERVAL=2;BYDAY=TU` where the Rust writes
+`FREQ=WEEKLY;BYDAY=TU;INTERVAL=2`, and drops the `Z` from `UNTIL`. That is a
+canonical-ordering difference rather than a semantic one — both parse to the
+same rule — but it means a rule string written on the phone is not byte-equal to
+one written on the desktop, which matters for anything comparing them as text.
+
+Found while adding `views.json` to the same generator, and deliberately **not**
+fixed here: regenerating the corpus would silently redefine the reference, and
+the actual work is on the Rust side. The corpus is left exactly as committed.
 
 ## Needs a Mac
 

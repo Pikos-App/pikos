@@ -66,6 +66,11 @@ unsigned counts that must not wrap, enum payloads, UTF-8, and the workspace's
 async and read-only behaviour. `PikosEditorBridge`'s cover the wire protocol's
 encoding and the scheme handler's path handling, including traversal attempts.
 
+`PikosSupport` also holds `DayLabel`, which names a `YYYY-MM-DD` for a reader —
+and the trap its tests exist for: a `YYYY-MM-DD` is always proleptic Gregorian
+because that is what SQLite holds, so a device set to the Buddhist calendar must
+not write 2569 into a key that then matches no row.
+
 `PikosSupport`'s need nothing linked at all — no XCFramework, no database, no
 device — which is why the arithmetic worth testing is put there rather than in
 the app: `CalendarGeometry` (a stored wall clock to a position on screen) and

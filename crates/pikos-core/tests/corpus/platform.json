@@ -54,6 +54,24 @@
     {
       "action": {
         "type": "view",
+        "viewId": "upcoming"
+      },
+      "url": "pikos://upcoming"
+    },
+    {
+      "action": {
+        "type": "view",
+        "viewId": "upcoming"
+      },
+      "url": "pikos://upcoming/"
+    },
+    {
+      "action": null,
+      "url": "pikos://upcoming/extra"
+    },
+    {
+      "action": {
+        "type": "view",
         "viewId": "inbox"
       },
       "url": "pikos://inbox"

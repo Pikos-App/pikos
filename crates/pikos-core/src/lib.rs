@@ -19,6 +19,7 @@ pub mod nlp;
 pub mod page;
 pub mod schedule;
 pub mod text;
+pub mod views;
 
 pub use calendar::LayoutPage;
 pub use dates::{

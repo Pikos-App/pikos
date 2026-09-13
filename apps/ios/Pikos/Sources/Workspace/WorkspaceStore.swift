@@ -21,6 +21,7 @@ public final class WorkspaceStore {
     /// view switcher is a Picker over these.
     public enum Scope: Hashable {
         case today
+        case upcoming
         case inbox
         case folder(id: String, name: String)
 
@@ -29,8 +30,9 @@ public final class WorkspaceStore {
         /// where it was filed — see `completedScope`.
         var query: PageQuery {
             switch self {
-            case .today:
-                // `listToday` covers this case; the query is unused.
+            case .today, .upcoming:
+                // The date views have their own listings, which arrive already
+                // sectioned; this query is unused for them.
                 return PageQuery()
             case .inbox:
                 return PageQuery(folder: .inbox, openOnly: true)
@@ -40,26 +42,64 @@ public final class WorkspaceStore {
         }
 
         /// What this view's Completed section means, which is not the same
-        /// question in each. Today asks "what did I finish today", across every
-        /// folder; a folder asks "what have I ever finished in here".
+        /// question in each. Today and Upcoming ask "what did I finish today",
+        /// across every folder — they have no folder of their own, and what
+        /// left their sections since this morning is the only finished work
+        /// they can sensibly claim. A folder asks "what have I ever finished in
+        /// here".
         var completedScope: CompletedScope {
             switch self {
-            case .today: return .today
+            case .today, .upcoming: return .today
             case .inbox: return .inbox
             case .folder(let id, _): return .folder(id: id)
+            }
+        }
+
+        /// Whether this view's order comes from the schedule rather than from
+        /// how the user arranged it. A sort control has nothing to act on in
+        /// one of these, which is also why they are the two that arrive in
+        /// sections.
+        var isDateGrouped: Bool {
+            switch self {
+            case .today, .upcoming: return true
+            case .inbox, .folder: return false
             }
         }
 
         var title: String {
             switch self {
             case .today: return "Today"
+            case .upcoming: return "Upcoming"
             case .inbox: return "Inbox"
             case .folder(_, let name): return name
             }
         }
     }
 
-    public private(set) var pages: [PageSummary] = []
+    /// One run of rows under one heading.
+    ///
+    /// Every view produces these, including the ones with no headings at all —
+    /// a folder is a single untitled section. Uniform on purpose: the
+    /// alternative is a screen that branches on the view to decide whether it
+    /// is drawing a list or a set of lists, and the two date views would be the
+    /// only ones exercising the second branch.
+    public struct Section: Identifiable, Hashable {
+        /// Stable across refreshes, so SwiftUI keeps scroll position and row
+        /// identity when the contents change under it.
+        public let id: String
+        /// `nil` for a view that is one undifferentiated list.
+        public let title: String?
+        public let pages: [PageSummary]
+    }
+
+    public private(set) var sections: [Section] = []
+
+    /// Every listed page, regardless of which section it is in.
+    ///
+    /// Derived rather than stored so it cannot fall out of step with
+    /// `sections`. The filter field and the empty-state check both want the
+    /// whole set and neither cares how it is grouped.
+    public var pages: [PageSummary] { sections.flatMap(\.pages) }
     public private(set) var folders: [Folder] = []
 
     /// Set when something failed in a way the user should see. Cleared when
@@ -144,11 +184,7 @@ public final class WorkspaceStore {
             // Sequential rather than concurrent. These are two local SQLite
             // queries measured in single-digit milliseconds; overlapping them
             // would buy nothing and put two readers on the pool for no reason.
-            if scope == .today {
-                pages = try await workspace.listToday()
-            } else {
-                pages = try await workspace.listPages(query: scope.query)
-            }
+            sections = try await load(scope)
             folders = try await workspace.listFolders()
             // An opened section re-reads its rows; a closed one re-reads only
             // its count. The count is not decoration: the screen decides
@@ -164,6 +200,48 @@ public final class WorkspaceStore {
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// The rows for one view, already grouped the way it is drawn.
+    ///
+    /// The two date views come back sectioned from the workspace rather than
+    /// being sectioned here. Both rules behind the grouping are subtle enough
+    /// to be worth having in one place: an all-day item stays "today" until
+    /// midnight while a timed one slips the moment it passes, and an all-day
+    /// item dated today sorts at *now* so it lands between what has gone and
+    /// what has not. A Swift copy of either would be a second definition that
+    /// drifts from the one the desktop is graded against.
+    private func load(_ scope: Scope) async throws -> [Section] {
+        guard let workspace else { return [] }
+        switch scope {
+        case .today:
+            let split = try await workspace.listTodaySections()
+            // A heading only when there is something under it, and none at all
+            // when nothing has slipped — an empty "Overdue" is a small daily
+            // accusation, and a lone "Today" over the only list on screen is a
+            // label for something that needs none.
+            guard !split.overdue.isEmpty else {
+                return [Section(id: "today", title: nil, pages: split.today)]
+            }
+            return [
+                Section(id: "overdue", title: "Overdue", pages: split.overdue),
+                Section(id: "today", title: "Today", pages: split.today),
+            ].filter { !$0.pages.isEmpty }
+
+        case .upcoming:
+            let today = DayLabel.today()
+            return try await workspace.listUpcoming().map { day in
+                Section(
+                    id: day.date,
+                    title: DayLabel.relative(day.date, today: today),
+                    pages: day.pages)
+            }
+
+        case .inbox, .folder:
+            return [
+                Section(id: "all", title: nil, pages: try await workspace.listPages(query: scope.query))
+            ]
         }
     }
 
