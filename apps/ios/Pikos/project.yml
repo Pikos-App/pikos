@@ -1,0 +1,69 @@
+# XcodeGen spec for the Pikos iOS app.
+#
+# The Xcode project is generated rather than committed: a .xcodeproj is a
+# directory of XML that merges badly and hides its own diffs, and this file says
+# the same things in a form that can be reviewed. Generate with:
+#
+#   cd apps/ios/Pikos && xcodegen generate
+#
+# Prerequisites, in order:
+#   1. bash scripts/build-ios-framework.sh   (macOS — builds PikosCore's XCFramework)
+#   2. bash scripts/build-editor-bundle.sh   (anywhere — builds the editor)
+#   3. xcodegen generate
+#
+# Neither the XCFramework nor the editor bundle is committed; both are build
+# artifacts, and the scripts that produce them are.
+
+name: Pikos
+options:
+  bundleIdPrefix: app.pikos
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    # The plan calls for strict concurrency. Expect this to surface work on the
+    # first build — the webview coordinator in particular conforms to two
+    # delegate protocols that are main-actor bound in practice.
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEVELOPMENT_TEAM: "" # set locally; deliberately not committed
+
+packages:
+  PikosCore:
+    path: ../PikosCore
+  PikosEditorBridge:
+    path: ../PikosEditorBridge
+
+targets:
+  Pikos:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: PikosCore
+      - package: PikosEditorBridge
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: >-
+          UIInterfaceOrientationPortrait
+          UIInterfaceOrientationLandscapeLeft
+          UIInterfaceOrientationLandscapeRight
+        CODE_SIGN_ENTITLEMENTS: Pikos.entitlements
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Pikos
+        # The scheme the desktop app already uses, so one link grammar serves
+        # both. Parsed by shared Rust — see Support/Route.swift.
+        CFBundleURLTypes:
+          - CFBundleURLName: app.pikos.deeplink
+            CFBundleURLSchemes: [pikos]
+        # No analytics, no phone-home: the privacy claims the marketing site
+        # makes are claims about this binary too.
+        ITSAppUsesNonExemptEncryption: false

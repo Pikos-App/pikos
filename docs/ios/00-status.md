@@ -48,6 +48,11 @@ folders and search as async Swift. The read-only handle has no write methods,
 so the plan's one-writer rule is enforced by the type an extension can hold
 rather than by everyone remembering it.
 
+**The app shell exists.** `apps/ios/Pikos` is a SwiftUI app — page list with
+swipe actions and completion toggles, the editor screen wired to the workspace,
+quick add, full-text search, deep-link routing, and a generated Xcode project
+from `project.yml`. Unbuilt, like the rest of the Swift.
+
 **The parser's scope is measured, not guessed.** Of 317 corpus inputs, 179
 reach chrono-node, and they collapse to 92 distinct forms in 9 families — see
 `04-parser-grammar.md`. The work is nine pattern families and a range
@@ -64,7 +69,9 @@ Nothing here is blocked on design — only on hardware.
 3. `swift test --package-path apps/ios/PikosCore` and the same for
    `PikosEditorBridge` — the boundary tests, unrun.
 4. **Run M0 on a physical device** and record the numbers. `03-m0-spike.md` has
-   the method for each item on the pass bar.
+   the method for each item on the pass bar, and `EditorScreen` shows the
+   cold-load time in the navigation bar on debug builds so one of them needs no
+   instrumentation at all.
 
 ## Next, in order
 
@@ -80,8 +87,9 @@ Nothing here is blocked on design — only on hardware.
    corpus makes the third (deliberately narrowing what quick-add supports)
    measurable rather than speculative — and `04-parser-grammar.md` now contains
    that measurement.
-3. **Wire an M2 app shell** once M0 passes: a page list and an editor screen,
-   both of which the FFI already supports.
+3. **Compile the Swift.** The app, both packages and their tests are written
+   and unbuilt. Expect strict-concurrency work; `apps/ios/README.md` has the
+   first-run sequence.
 
 ## Corrections made to the plan
 
