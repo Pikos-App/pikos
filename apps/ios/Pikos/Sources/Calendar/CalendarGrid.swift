@@ -20,6 +20,11 @@ struct CalendarGrid: View {
     /// density setting.
     let hourHeightBase: CGFloat
     let onOpen: (String) -> Void
+    /// Finish the occurrence this block is, rather than the one the series
+    /// owes next. See `WorkspaceStore.completeOccurrence`.
+    let onComplete: (CalendarEntry) -> Void
+    /// Drop this occurrence and let the series carry on.
+    let onSkip: (CalendarEntry) -> Void
 
     /// Scales the hour height with the reader's text size. A calendar whose
     /// rows stay put while its labels grow is how a block ends up with its
@@ -161,6 +166,7 @@ struct CalendarGrid: View {
                 y: CGFloat(bar.row) * metrics.allDayRowHeight)
             .onTapGesture { if let entry { onOpen(entry.pageId) } }
             .accessibilityAddTraits(.isButton)
+            .contextMenu { if let entry { occurrenceMenu(entry) } }
     }
 
     // MARK: - Timed
@@ -238,6 +244,7 @@ struct CalendarGrid: View {
                         .frame(width: max(columnWidth - inset - 3, 1), height: placed.height)
                         .offset(x: inset + 1.5, y: placed.top)
                         .onTapGesture { onOpen(entry.pageId) }
+                        .contextMenu { occurrenceMenu(entry) }
                 }
             }
 
@@ -257,6 +264,61 @@ struct CalendarGrid: View {
                 Circle().fill(Color.red).frame(width: 6, height: 6).offset(x: -2)
             }
             .accessibilityHidden(true)
+    }
+
+    // MARK: - What can be done to one block
+
+    /// The actions that apply to a single occurrence.
+    ///
+    /// Only shown for a repeating page, because for anything else there is no
+    /// such thing as "this one": a one-off page *is* the occurrence, and the
+    /// list already has the checkbox and the delete for it.
+    ///
+    /// What is deliberately absent is a delete. Deleting a block of a series
+    /// has no meaning short of deleting the series, which is the whole thing —
+    /// every occurrence behind this one and every one ahead — and offering that
+    /// from a single Tuesday is how people lose a year of a habit. Skip is the
+    /// operation they actually want, and it is undoable.
+    @ViewBuilder
+    private func occurrenceMenu(_ entry: CalendarEntry) -> some View {
+        Button {
+            onOpen(entry.pageId)
+        } label: {
+            Label("Open", systemImage: "doc.text")
+        }
+
+        if entry.isRecurring && entry.status != "done" {
+            if canComplete(entry) {
+                Button {
+                    onComplete(entry)
+                } label: {
+                    Label("Complete this one", systemImage: "checkmark.circle")
+                }
+            }
+            Button {
+                onSkip(entry)
+            } label: {
+                Label("Skip this one", systemImage: "calendar.badge.minus")
+            }
+        }
+    }
+
+    /// Whether *this* occurrence is a thing that can be finished on its own.
+    ///
+    /// The same rule the desktop draws its checkbox by
+    /// (`useRecurringActions.showsCheckbox`), and it turns on where the series
+    /// came from rather than on whether it is still mirrored. An occurrence of
+    /// an imported calendar is resolved on the day it names — a birthday is
+    /// done on the birthday — so every one of them can be completed. A native
+    /// task series funnels to whichever occurrence is next due instead, and
+    /// that one is its head: a real block, not a projection. Offering "complete
+    /// this one" on a native occurrence three weeks out would mint a finished
+    /// page for work nobody has done.
+    ///
+    /// Skip is offered either way, because dropping a date is meaningful for
+    /// both and says nothing about whether the work happened.
+    private func canComplete(_ entry: CalendarEntry) -> Bool {
+        entry.isSyncedOrigin || !entry.isVirtual
     }
 
     // MARK: - Constants and labels

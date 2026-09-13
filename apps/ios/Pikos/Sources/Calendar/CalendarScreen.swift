@@ -25,6 +25,7 @@ struct CalendarScreen: View {
     @State private var entries: [CalendarEntry] = []
     @State private var isLoading = true
     @State private var now = WallClockDay.instant(from: Date())
+    @State private var undo: SkippedOccurrence?
 
     /// Moves the current-time line without a timer.
     ///
@@ -55,12 +56,15 @@ struct CalendarScreen: View {
                     entries: entries,
                     now: now,
                     hourHeightBase: settings.calendarDensity.hourHeight,
-                    onOpen: { pageId in openPage(pageId) })
+                    onOpen: { pageId in openPage(pageId) },
+                    onComplete: { entry in Task { await store.completeOccurrence(entry) } },
+                    onSkip: { entry in Task { await skip(entry) } })
             }
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
+        .overlay(alignment: .bottom) { undoBar }
         // Keyed on the range *and* on the workspace's version. The range half
         // means swiping to another week cancels the query for the one being
         // left rather than racing it. The version half means a page completed
@@ -87,6 +91,66 @@ struct CalendarScreen: View {
     /// not a side effect of tapping.
     private func openPage(_ pageId: String) {
         route.calendarPath = [pageId]
+    }
+
+    // MARK: - Skipping one occurrence
+
+    /// What was skipped, for as long as it can be put back.
+    private struct SkippedOccurrence: Equatable {
+        let pageId: String
+        let date: String
+        let title: String
+    }
+
+    private func skip(_ entry: CalendarEntry) async {
+        guard let date = await store.skipOccurrence(entry) else { return }
+        undo = SkippedOccurrence(
+            pageId: entry.pageId, date: date,
+            title: entry.title.isEmpty ? "Untitled" : entry.title)
+    }
+
+    /// The way back, and the reason skipping asks for no confirmation.
+    ///
+    /// A confirmation before every skip would make the common case — clearing
+    /// one week's standup — two taps and a decision, for something that destroys
+    /// nothing. An undo afterwards costs nothing when it is not wanted, which is
+    /// almost always.
+    ///
+    /// It clears itself on a timer rather than waiting to be dismissed, because
+    /// a bar that sits over the last hour of the day until somebody notices it
+    /// is worse than a missed undo: the skip is reversible from the desktop for
+    /// as long as the series exists.
+    @ViewBuilder
+    private var undoBar: some View {
+        if let undo {
+            HStack {
+                Text("Skipped \(undo.title)")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Button("Undo") {
+                    Task {
+                        await store.unskipOccurrence(pageId: undo.pageId, on: undo.date)
+                        self.undo = nil
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(radius: 6, y: 2)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Keyed on the occurrence, so skipping a second one restarts the
+            // countdown instead of inheriting the first one's remaining time.
+            .task(id: undo) {
+                try? await Task.sleep(for: .seconds(6))
+                guard !Task.isCancelled else { return }
+                withAnimation(.snappy) { self.undo = nil }
+            }
+        }
     }
 
     private var title: String {

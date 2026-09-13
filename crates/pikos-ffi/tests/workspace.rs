@@ -9,6 +9,7 @@ use pikos_ffi::workspace::{
     CompletedScope, FolderAssignment, FolderScope, NewPage, PageEdit, PageQuery, PageRepeat,
     ReadOnlyWorkspace, Repeat, RepeatFreq, Workspace, WorkspaceError,
 };
+use pikos_ffi::Occurrence;
 
 /// A workspace in a fresh temporary file.
 ///
@@ -1608,7 +1609,7 @@ async fn link_to_a_calendar(path: &str, page_id: &str) {
     let pool = pikos_db::open_pool(path).await.unwrap();
     let now = "2026-01-01T00:00:00.000Z";
     sqlx::query(
-        "INSERT INTO sync_account
+        "INSERT OR IGNORE INTO sync_account
            (id, provider, display_name, auth_kind, created_at, updated_at)
          VALUES ('acct', 'caldav', 'Test calendar', 'basic', ?, ?)",
     )
@@ -2967,4 +2968,405 @@ async fn an_interval_of_zero_is_refused() {
         ws.page_repeat(page.id).await.unwrap(),
         PageRepeat::Never
     ));
+}
+
+// ─── One occurrence at a time ────────────────────────────────────────────────
+//
+// A repeating page is one row plus a rule, and everything the calendar draws
+// beyond the head is a projection. So the three things a person can do to a
+// single occurrence — finish it, drop it, put it back — all come down to
+// writing a date into a set and re-deriving the head from what is left. What
+// makes them worth testing at this layer is that the wrong call is quiet: the
+// destructive one and the correct one both leave a screen that looks right.
+
+/// Seeds a daily series and returns its id and the head's first occurrence.
+async fn daily_series(ws: &Workspace, title: &str, from: &str) -> (String, String) {
+    let page = ws.create_page(new_page(title)).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        format!("{from}T09:00:00"),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+    let head = ws.get_page(page.id.clone()).await.unwrap();
+    (
+        page.id,
+        head.scheduled_start.expect("the head is scheduled"),
+    )
+}
+
+/// Skipping is the third verb, and the one with no home before this.
+///
+/// Without it the only way to make one occurrence go away is to trash the head,
+/// which takes the entire series — every occurrence behind it and every one
+/// ahead. The user reaching for "not this week" means neither.
+#[tokio::test]
+async fn skipping_an_occurrence_advances_the_head_past_it() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let (id, first) = daily_series(&ws, "Standup", "2099-03-02").await;
+
+    ws.skip_occurrence(id.clone(), first[..10].to_string())
+        .await
+        .unwrap();
+
+    let after = ws.get_page(id).await.unwrap();
+    assert_eq!(
+        after.scheduled_start.as_deref(),
+        Some("2099-03-03T09:00:00"),
+        "the series carries on at the next occurrence"
+    );
+    assert_eq!(
+        after.status, "not_started",
+        "dropping one occurrence does not finish the series"
+    );
+}
+
+/// The difference between skipping and completing, stated as an assertion.
+///
+/// They look identical from the head's point of view — both advance it — which
+/// is exactly why this is worth pinning. A skip must leave no record saying the
+/// work was done: no clone, nothing in Completed, nothing in the history a
+/// person would later read as "I did that".
+#[tokio::test]
+async fn a_skipped_occurrence_is_not_a_completed_one() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let (id, first) = daily_series(&ws, "Standup", "2099-03-02").await;
+
+    ws.skip_occurrence(id.clone(), first[..10].to_string())
+        .await
+        .unwrap();
+
+    let completed = ws
+        .list_completed(CompletedScope::Inbox, 50, 0)
+        .await
+        .unwrap();
+    assert_eq!(
+        completed.total,
+        0,
+        "a skip writes no completed page: {:?}",
+        completed.pages.iter().map(|p| &p.title).collect::<Vec<_>>()
+    );
+}
+
+/// Undo, and the reason a skip needs no confirmation.
+#[tokio::test]
+async fn unskipping_brings_the_occurrence_back() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let (id, first) = daily_series(&ws, "Standup", "2099-03-02").await;
+    let date = first[..10].to_string();
+
+    ws.skip_occurrence(id.clone(), date.clone()).await.unwrap();
+    assert_ne!(
+        ws.get_page(id.clone()).await.unwrap().scheduled_start,
+        Some(first.clone()),
+        "precondition: it moved on"
+    );
+
+    ws.unskip_occurrence(id.clone(), date).await.unwrap();
+
+    assert_eq!(
+        ws.get_page(id).await.unwrap().scheduled_start,
+        Some(first),
+        "the head returns to the restored occurrence"
+    );
+}
+
+/// Both halves are safe to retry.
+///
+/// A tap that gets no response is a tap the user makes again. Skipping an
+/// already-skipped date must not advance the head a second time — that would
+/// silently eat tomorrow's occurrence as well — and un-skipping a date that was
+/// never skipped must do nothing at all.
+#[tokio::test]
+async fn skipping_and_unskipping_are_both_repeatable() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let (id, first) = daily_series(&ws, "Standup", "2099-03-02").await;
+    let date = first[..10].to_string();
+
+    ws.skip_occurrence(id.clone(), date.clone()).await.unwrap();
+    let once = ws.get_page(id.clone()).await.unwrap().scheduled_start;
+    ws.skip_occurrence(id.clone(), date.clone()).await.unwrap();
+    assert_eq!(
+        ws.get_page(id.clone()).await.unwrap().scheduled_start,
+        once,
+        "a second skip of the same date must not eat another occurrence"
+    );
+
+    ws.unskip_occurrence(id.clone(), date.clone())
+        .await
+        .unwrap();
+    let back = ws.get_page(id.clone()).await.unwrap().scheduled_start;
+    ws.unskip_occurrence(id.clone(), date).await.unwrap();
+    assert_eq!(
+        ws.get_page(id).await.unwrap().scheduled_start,
+        back,
+        "and un-skipping twice is the same as once"
+    );
+}
+
+/// A date the series never produced is not an error.
+///
+/// The set is keyed by date and expansion only ever asks about dates the rule
+/// yields, so a stray entry is inert. Worth pinning because the alternative —
+/// validating against the rule on the way in — would make a skip fail for a
+/// client whose calendar is one refresh behind, which is every client.
+#[tokio::test]
+async fn skipping_a_date_outside_the_series_changes_nothing() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let (id, first) = daily_series(&ws, "Weekly review", "2099-03-02").await;
+    // Weekly from a Monday, so the Tuesday is a date the rule never yields.
+    ws.set_page_repeat(
+        id.clone(),
+        Repeat {
+            freq: RepeatFreq::Weekly,
+            interval: 1,
+            weekdays: vec![0],
+        },
+    )
+    .await
+    .unwrap();
+    let before = ws.get_page(id.clone()).await.unwrap().scheduled_start;
+
+    ws.skip_occurrence(id.clone(), "2099-03-03".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        ws.get_page(id).await.unwrap().scheduled_start,
+        before,
+        "the head is unmoved by a skip the rule cannot match: {first}"
+    );
+}
+
+/// Completing the occurrence you tapped, not the one you owe.
+///
+/// The backlog case, and the reason `Occurrence` exists. A series left alone
+/// for a week has its head sitting on the oldest occurrence still open, while
+/// the block the user actually tapped in the calendar is days ahead of it.
+/// Completing "the next one due" there finishes the wrong day and leaves the
+/// tapped block still sitting on screen, undone.
+#[tokio::test]
+async fn completing_a_particular_occurrence_leaves_the_backlog_alone() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let (id, first) = daily_series(&ws, "Standup", "2099-03-02").await;
+
+    let result = ws
+        .complete_recurring_occurrence(
+            id.clone(),
+            Some(Occurrence {
+                original_date: "2099-03-04".to_string(),
+                scheduled_start: "2099-03-04T09:00:00".to_string(),
+                scheduled_end: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        ws.get_page(id).await.unwrap().scheduled_start,
+        Some(first),
+        "the two occurrences still owed stay owed"
+    );
+    let clone = ws.get_page(result.clone_id).await.unwrap();
+    assert_eq!(clone.status, "done");
+    assert_eq!(
+        clone.scheduled_start.as_deref(),
+        Some("2099-03-04T09:00:00"),
+        "and the finished page is dated the day that was finished"
+    );
+}
+
+/// The regression this call could not survive before.
+///
+/// `pikos-db` refuses an occurrence date supplied without the occurrence's own
+/// start — it has to write that start onto the clone. The FFI used to hard-code
+/// both extra fields to `None`, so *any* caller naming an occurrence was
+/// rejected at runtime with a message about synced series, and the only reachable
+/// behaviour was "complete whatever is next". Passing the three fields as one
+/// record is what makes the broken call unrepresentable.
+#[tokio::test]
+async fn naming_an_occurrence_does_not_need_a_second_argument() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let (id, first) = daily_series(&ws, "Standup", "2099-03-02").await;
+
+    ws.complete_recurring_occurrence(
+        id.clone(),
+        Some(Occurrence {
+            original_date: first[..10].to_string(),
+            scheduled_start: first.clone(),
+            scheduled_end: None,
+        }),
+    )
+    .await
+    .expect("naming the occurrence you are looking at must be enough");
+
+    assert_ne!(
+        ws.get_page(id).await.unwrap().scheduled_start,
+        Some(first),
+        "and it is the occurrence that was named which got completed"
+    );
+}
+
+/// Skipping one occurrence out of the middle, with work still owed behind it.
+#[tokio::test]
+async fn an_occurrence_can_be_skipped_from_behind_a_backlog() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let (id, first) = daily_series(&ws, "Standup", "2099-03-02").await;
+
+    ws.skip_occurrence(id.clone(), "2099-03-04".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        ws.get_page(id.clone()).await.unwrap().scheduled_start,
+        Some(first),
+        "the head stays on the oldest occurrence still open"
+    );
+
+    // Clear the two in front of it and the skipped day is the one the series
+    // steps over, rather than the one it lands on.
+    for day in ["2099-03-02", "2099-03-03"] {
+        ws.skip_occurrence(id.clone(), day.to_string())
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        ws.get_page(id).await.unwrap().scheduled_start.as_deref(),
+        Some("2099-03-05T09:00:00"),
+        "the skipped day is passed over, not landed on"
+    );
+}
+
+/// The block that looks like a one-off and is not.
+///
+/// A repeating page's own row is drawn as a real block — no `original_date`,
+/// `is_virtual` false — and it is the occurrence most often on screen, because
+/// the head sits on the next one due. A calendar that decides "is this an
+/// occurrence?" by asking whether the block is virtual therefore gets the
+/// common case exactly backwards, and offers the series-wide delete for the one
+/// thing the user meant to drop from this week.
+#[tokio::test]
+async fn a_series_head_draws_as_a_real_block_that_still_knows_it_repeats() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let one_off = ws.create_page(new_page("Dentist")).await.unwrap();
+    ws.set_page_schedule(one_off.id.clone(), "2026-03-24T11:00:00".to_string(), None)
+        .await
+        .unwrap();
+
+    let series = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        series.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO".to_string(),
+        "2026-03-23T09:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+
+    let head = entries
+        .iter()
+        .find(|e| e.page_id == series.id && !e.is_virtual)
+        .expect("the head's own occurrence is drawn from its row");
+    assert!(
+        head.is_recurring,
+        "and it has to say so, since nothing else about it does"
+    );
+
+    let dentist = entries
+        .iter()
+        .find(|e| e.page_id == one_off.id)
+        .expect("the one-off is drawn too");
+    assert!(
+        !dentist.is_recurring,
+        "while a page that does not repeat must not be offered occurrence actions"
+    );
+}
+
+/// Where an occurrence came from, which decides whether it can be finished on
+/// its own.
+///
+/// The desktop draws a checkbox on an occurrence of an imported calendar and
+/// withholds it from one of a native series — a birthday is resolved on the day
+/// it names, while a task series funnels to whichever occurrence is next due.
+/// The phone can only apply that rule if the block says which kind it is, and
+/// the answer is sync *origin*: a detached series is unlocked and still an
+/// imported calendar.
+#[tokio::test]
+async fn a_drawn_occurrence_says_whether_its_series_came_from_a_calendar() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let native = ws.create_page(new_page("Standup")).await.unwrap();
+    let imported = ws.create_page(new_page("Book club")).await.unwrap();
+    let detached = ws.create_page(new_page("Five-a-side")).await.unwrap();
+    for id in [&native.id, &imported.id, &detached.id] {
+        ws.set_recurrence(
+            id.clone(),
+            "FREQ=WEEKLY;BYDAY=MO".to_string(),
+            "2026-03-02T09:00:00".to_string(),
+            None,
+            "UTC".to_string(),
+        )
+        .await
+        .unwrap();
+    }
+    link_to_a_calendar(&tmp.path, &imported.id).await;
+    link_to_a_calendar(&tmp.path, &detached.id).await;
+    detach_from_its_calendar(&tmp.path, &detached.id).await;
+
+    let entries = ws
+        .calendar_range("2026-03-23".to_string(), "2026-03-29".to_string())
+        .await
+        .unwrap();
+
+    let of = |page_id: &str| {
+        entries
+            .iter()
+            .find(|e| e.page_id == page_id)
+            .unwrap_or_else(|| panic!("both series project onto this week"))
+    };
+    assert!(
+        of(&imported.id).is_synced_origin,
+        "an occurrence of an imported series is completable on its own"
+    );
+    assert!(
+        of(&detached.id).is_synced_origin,
+        "and so is one of a series that was imported and then unlinked — this is \
+         the case that separates origin from whether the schedule is locked"
+    );
+    assert!(
+        !of(&native.id).is_synced_origin,
+        "an occurrence of a native series is not — it funnels to the head"
+    );
+}
+
+/// Unlink a page from its calendar, leaving the link row behind.
+///
+/// Which is the whole point of a detached series: the page remembers where it
+/// came from, and nothing upstream governs it any more.
+async fn detach_from_its_calendar(path: &str, page_id: &str) {
+    let pool = pikos_db::open_pool(path).await.unwrap();
+    sqlx::query("UPDATE page_sync SET sync_state = 'detached' WHERE page_id = ?")
+        .bind(page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
 }

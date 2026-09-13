@@ -28,7 +28,7 @@ use pikos_core::calendar::occurrences::{
 use pikos_core::dates::{next_day, parse_local_iso};
 use pikos_core::nlp::quick_add::ParseResult as QuickAddParse;
 
-use crate::{CalendarEntry, RecurringCompletion};
+use crate::{CalendarEntry, Occurrence, RecurringCompletion};
 use pikos_db::{
     AppError, NewPage as DbNewPage, PageFilter as DbPageFilter, PageUpdate as DbPageUpdate,
 };
@@ -1052,21 +1052,32 @@ impl Workspace {
     /// series finished — `pikos-db` says so directly above
     /// `set_pages_status_impl`: "a plain status flip would corrupt the series".
     ///
-    /// `occurrence_date` is required only for a page a calendar owns, whose own
-    /// date stays pinned to where the series began. For a page created in Pikos,
-    /// omit it and the next-due date is used.
+    /// Pass an `occurrence` to complete a particular one — the block the user
+    /// tapped in the calendar, which for a series with a backlog is usually not
+    /// the oldest one open. Omit it and the next-due occurrence is completed,
+    /// which is what ticking the page in a list means. A page a calendar owns
+    /// has no next-due to fall back on: its own date stays pinned to where the
+    /// series began, so it must be told which occurrence, and refuses otherwise.
     pub async fn complete_recurring_occurrence(
         &self,
         page_id: String,
-        occurrence_date: Option<String>,
+        occurrence: Option<Occurrence>,
     ) -> Result<RecurringCompletion, WorkspaceError> {
+        let (occurrence_date, scheduled_start, scheduled_end) = match occurrence {
+            Some(o) => (
+                Some(o.original_date),
+                Some(o.scheduled_start),
+                o.scheduled_end,
+            ),
+            None => (None, None, None),
+        };
         let result = pikos_db::complete_recurring_page_impl(
             &self.pool,
             pikos_db::CompleteRecurringInput {
                 page_id,
                 occurrence_date,
-                scheduled_start: None,
-                scheduled_end: None,
+                scheduled_start,
+                scheduled_end,
                 expected_occurrence_date: None,
             },
         )
@@ -1124,6 +1135,61 @@ impl Workspace {
         pikos_db::uncomplete_recurring_occurrence_impl(
             &self.pool,
             pikos_db::UncompleteRecurringInput {
+                page_id,
+                occurrence_date,
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Drop one occurrence of a repeating page without finishing it.
+    ///
+    /// The third thing that can happen to an occurrence, beside leaving it and
+    /// completing it: this week's is cancelled, and the series carries on. It is
+    /// deliberately not a completion — nothing is cloned, nothing lands in the
+    /// Completed list, and no history is written saying the work was done. It is
+    /// also not a delete: `trash_page` on the head would take the whole series,
+    /// every past occurrence and every future one, which is the destructive
+    /// mistake a user reaching for "delete this one" would otherwise make.
+    ///
+    /// `occurrence_date` is the rule's own date — a `CalendarEntry`'s
+    /// `original_date`, not the day the block was drawn on, which differ once an
+    /// occurrence has been moved.
+    ///
+    /// Skipping a date that is already skipped does nothing, and so does
+    /// skipping a date the rule never produced: the set is keyed by date, and
+    /// expansion simply never asks about a date outside the series. Both are
+    /// silent rather than errors, so a retry after a dropped response is safe.
+    pub async fn skip_occurrence(
+        &self,
+        page_id: String,
+        occurrence_date: String,
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::skip_occurrence_impl(
+            &self.pool,
+            pikos_db::SkipOccurrenceInput {
+                page_id,
+                occurrence_date,
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Put a skipped occurrence back.
+    ///
+    /// The undo for the above, and the reason a skip is worth offering without a
+    /// confirmation: nothing was destroyed, so bringing it back is one call. A
+    /// no-op when the date was not skipped.
+    pub async fn unskip_occurrence(
+        &self,
+        page_id: String,
+        occurrence_date: String,
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::undo_skip_occurrence_impl(
+            &self.pool,
+            pikos_db::SkipOccurrenceInput {
                 page_id,
                 occurrence_date,
             },
@@ -2115,6 +2181,8 @@ fn entry_of(
         scheduled_end,
         is_virtual: original_date.is_some(),
         original_date,
+        is_recurring: page.is_recurring,
+        is_synced_origin: page.synced_since.is_some(),
     }
 }
 

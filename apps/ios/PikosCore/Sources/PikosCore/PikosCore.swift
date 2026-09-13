@@ -901,11 +901,14 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * series finished — `pikos-db` says so directly above
      * `set_pages_status_impl`: "a plain status flip would corrupt the series".
      *
-     * `occurrence_date` is required only for a page a calendar owns, whose own
-     * date stays pinned to where the series began. For a page created in Pikos,
-     * omit it and the next-due date is used.
+     * Pass an `occurrence` to complete a particular one — the block the user
+     * tapped in the calendar, which for a series with a backlog is usually not
+     * the oldest one open. Omit it and the next-due occurrence is completed,
+     * which is what ticking the page in a list means. A page a calendar owns
+     * has no next-due to fall back on: its own date stays pinned to where the
+     * series began, so it must be told which occurrence, and refuses otherwise.
      */
-    func completeRecurringOccurrence(pageId: String, occurrenceDate: String?) async throws  -> RecurringCompletion
+    func completeRecurringOccurrence(pageId: String, occurrence: Occurrence?) async throws  -> RecurringCompletion
     
     /**
      * Connect a CalDAV server, or repair the connection to one already known.
@@ -1195,6 +1198,28 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func setRecurrence(pageId: String, rrule: String, scheduledStart: String, scheduledEnd: String?, timezone: String) async throws 
     
     /**
+     * Drop one occurrence of a repeating page without finishing it.
+     *
+     * The third thing that can happen to an occurrence, beside leaving it and
+     * completing it: this week's is cancelled, and the series carries on. It is
+     * deliberately not a completion — nothing is cloned, nothing lands in the
+     * Completed list, and no history is written saying the work was done. It is
+     * also not a delete: `trash_page` on the head would take the whole series,
+     * every past occurrence and every future one, which is the destructive
+     * mistake a user reaching for "delete this one" would otherwise make.
+     *
+     * `occurrence_date` is the rule's own date — a `CalendarEntry`'s
+     * `original_date`, not the day the block was drawn on, which differ once an
+     * occurrence has been moved.
+     *
+     * Skipping a date that is already skipped does nothing, and so does
+     * skipping a date the rule never produced: the set is keyed by date, and
+     * expansion simply never asks about a date outside the series. Both are
+     * silent rather than errors, so a retry after a dropped response is safe.
+     */
+    func skipOccurrence(pageId: String, occurrenceDate: String) async throws 
+    
+    /**
      * Sync one account now, from where each calendar left off.
      *
      * The ordinary "pull down to refresh" of calendar sync. Nothing calls this
@@ -1259,6 +1284,15 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * the head, which walks back to the re-opened occurrence.
      */
     func uncompleteRecurringOccurrence(pageId: String, occurrenceDate: String) async throws 
+    
+    /**
+     * Put a skipped occurrence back.
+     *
+     * The undo for the above, and the reason a skip is worth offering without a
+     * confirmation: nothing was destroyed, so bringing it back is one call. A
+     * no-op when the date was not skipped.
+     */
+    func unskipOccurrence(pageId: String, occurrenceDate: String) async throws 
     
     func updatePage(id: String, edit: PageEdit) async throws  -> Page
     
@@ -1434,16 +1468,19 @@ open func clearPageSchedule(pageId: String)async throws  -> UInt32  {
      * series finished — `pikos-db` says so directly above
      * `set_pages_status_impl`: "a plain status flip would corrupt the series".
      *
-     * `occurrence_date` is required only for a page a calendar owns, whose own
-     * date stays pinned to where the series began. For a page created in Pikos,
-     * omit it and the next-due date is used.
+     * Pass an `occurrence` to complete a particular one — the block the user
+     * tapped in the calendar, which for a series with a backlog is usually not
+     * the oldest one open. Omit it and the next-due occurrence is completed,
+     * which is what ticking the page in a list means. A page a calendar owns
+     * has no next-due to fall back on: its own date stays pinned to where the
+     * series began, so it must be told which occurrence, and refuses otherwise.
      */
-open func completeRecurringOccurrence(pageId: String, occurrenceDate: String?)async throws  -> RecurringCompletion  {
+open func completeRecurringOccurrence(pageId: String, occurrence: Occurrence?)async throws  -> RecurringCompletion  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_pikos_ffi_fn_method_workspace_complete_recurring_occurrence(
-                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterOptionString.lower(occurrenceDate)
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterOptionTypeOccurrence.lower(occurrence)
                 )
             },
             pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
@@ -2134,6 +2171,42 @@ open func setRecurrence(pageId: String, rrule: String, scheduledStart: String, s
 }
     
     /**
+     * Drop one occurrence of a repeating page without finishing it.
+     *
+     * The third thing that can happen to an occurrence, beside leaving it and
+     * completing it: this week's is cancelled, and the series carries on. It is
+     * deliberately not a completion — nothing is cloned, nothing lands in the
+     * Completed list, and no history is written saying the work was done. It is
+     * also not a delete: `trash_page` on the head would take the whole series,
+     * every past occurrence and every future one, which is the destructive
+     * mistake a user reaching for "delete this one" would otherwise make.
+     *
+     * `occurrence_date` is the rule's own date — a `CalendarEntry`'s
+     * `original_date`, not the day the block was drawn on, which differ once an
+     * occurrence has been moved.
+     *
+     * Skipping a date that is already skipped does nothing, and so does
+     * skipping a date the rule never produced: the set is keyed by date, and
+     * expansion simply never asks about a date outside the series. Both are
+     * silent rather than errors, so a retry after a dropped response is safe.
+     */
+open func skipOccurrence(pageId: String, occurrenceDate: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_skip_occurrence(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(occurrenceDate)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Sync one account now, from where each calendar left off.
      *
      * The ordinary "pull down to refresh" of calendar sync. Nothing calls this
@@ -2279,6 +2352,29 @@ open func uncompleteRecurringOccurrence(pageId: String, occurrenceDate: String)a
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_pikos_ffi_fn_method_workspace_uncomplete_recurring_occurrence(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(occurrenceDate)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Put a skipped occurrence back.
+     *
+     * The undo for the above, and the reason a skip is worth offering without a
+     * confirmation: nothing was destroyed, so bringing it back is one call. A
+     * no-op when the date was not skipped.
+     */
+open func unskipOccurrence(pageId: String, occurrenceDate: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_unskip_occurrence(
                         self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(occurrenceDate)
                 )
             },
@@ -2481,6 +2577,29 @@ public struct CalendarEntry: Equatable, Hashable {
      * override is matched back to it. `None` on a real block.
      */
     public var originalDate: String?
+    /**
+     * The page behind this block repeats — so the block is one occurrence of a
+     * series rather than the whole of anything.
+     *
+     * Not the same question as `is_virtual`, and the difference is what makes
+     * this field necessary. A repeating page's *own* row is a real block with
+     * no `original_date`, and it is the one most often on screen: this week's
+     * standup, drawn from the head. Treating it as a one-off is how "delete
+     * this occurrence" becomes "delete the series".
+     */
+    public var isRecurring: Bool
+    /**
+     * The page came from a calendar, whether or not it is still mirrored.
+     *
+     * Sync *origin*, deliberately, and not "is locked": a detached series is
+     * unlocked and still an imported calendar. The desktop draws a checkbox on
+     * an occurrence of a synced-origin series and not on one of a native
+     * series, because the two mean different things — a birthday is resolved
+     * on the day it names, while a task series funnels to whichever occurrence
+     * is next due. Without this field the phone cannot tell them apart, and
+     * would offer to complete a native occurrence three weeks out.
+     */
+    public var isSyncedOrigin: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2502,7 +2621,28 @@ public struct CalendarEntry: Equatable, Hashable {
         /**
          * The rule's own date for this occurrence, which is how a skip or an
          * override is matched back to it. `None` on a real block.
-         */originalDate: String?) {
+         */originalDate: String?, 
+        /**
+         * The page behind this block repeats — so the block is one occurrence of a
+         * series rather than the whole of anything.
+         *
+         * Not the same question as `is_virtual`, and the difference is what makes
+         * this field necessary. A repeating page's *own* row is a real block with
+         * no `original_date`, and it is the one most often on screen: this week's
+         * standup, drawn from the head. Treating it as a one-off is how "delete
+         * this occurrence" becomes "delete the series".
+         */isRecurring: Bool, 
+        /**
+         * The page came from a calendar, whether or not it is still mirrored.
+         *
+         * Sync *origin*, deliberately, and not "is locked": a detached series is
+         * unlocked and still an imported calendar. The desktop draws a checkbox on
+         * an occurrence of a synced-origin series and not on one of a native
+         * series, because the two mean different things — a birthday is resolved
+         * on the day it names, while a task series funnels to whichever occurrence
+         * is next due. Without this field the phone cannot tell them apart, and
+         * would offer to complete a native occurrence three weeks out.
+         */isSyncedOrigin: Bool) {
         self.pageId = pageId
         self.key = key
         self.title = title
@@ -2515,6 +2655,8 @@ public struct CalendarEntry: Equatable, Hashable {
         self.scheduledEnd = scheduledEnd
         self.isVirtual = isVirtual
         self.originalDate = originalDate
+        self.isRecurring = isRecurring
+        self.isSyncedOrigin = isSyncedOrigin
     }
 
     
@@ -2544,7 +2686,9 @@ public struct FfiConverterTypeCalendarEntry: FfiConverterRustBuffer {
                 scheduledStart: FfiConverterString.read(from: &buf), 
                 scheduledEnd: FfiConverterOptionString.read(from: &buf), 
                 isVirtual: FfiConverterBool.read(from: &buf), 
-                originalDate: FfiConverterOptionString.read(from: &buf)
+                originalDate: FfiConverterOptionString.read(from: &buf), 
+                isRecurring: FfiConverterBool.read(from: &buf), 
+                isSyncedOrigin: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -2561,6 +2705,8 @@ public struct FfiConverterTypeCalendarEntry: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.scheduledEnd, into: &buf)
         FfiConverterBool.write(value.isVirtual, into: &buf)
         FfiConverterOptionString.write(value.originalDate, into: &buf)
+        FfiConverterBool.write(value.isRecurring, into: &buf)
+        FfiConverterBool.write(value.isSyncedOrigin, into: &buf)
     }
 }
 
@@ -6522,7 +6668,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_clear_page_schedule() != 51741) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_complete_recurring_occurrence() != 16483) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_complete_recurring_occurrence() != 65429) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_connect_caldav() != 61641) {
@@ -6612,6 +6758,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_set_recurrence() != 1536) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_skip_occurrence() != 64454) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_sync_account_now() != 48127) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6631,6 +6780,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_uncomplete_recurring_occurrence() != 33636) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_unskip_occurrence() != 25782) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_update_page() != 63112) {

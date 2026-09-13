@@ -46,19 +46,20 @@ It shares the origin columns' behaviour wherever it does anything at all: the gu
 `pikos-db`, so a mirror is as locked on the phone as in the app. What differs is how much of
 the surface exists, and five facts explain nearly every `○`:
 
-- **Nothing is scheduled after the fact.** A page gets its date when it is created and can
-  have it cleared; there is no affordance to move one. `Workspace::schedule_page` is exposed
-  and unused. The same is true of priority, tags and recurrence: quick add's natural-language
-  line sets all three at creation and nothing edits them afterwards.
+- **Nothing is moved by hand.** Date, priority, tags, folder and repeat are all editable
+  now, each from the long-press menu. What stays `○` in §1 and §2 is the gestural half:
+  dragging a page onto a folder, reordering a list by dragging its rows.
 - **No notifications.** Not a port. The desktop fires reminders from a task that wakes every
   clock minute, and iOS suspends that within seconds of backgrounding, so the model has to
   invert — compute a horizon and hand it to `UNUserNotificationCenter` in advance. Every
   reminder, quiet-hours and summary row is `○` for this one reason.
 - **No dragging.** The calendar draws; moving and resizing a block compete with scrolling on
   a touch screen and want a design decision rather than a port of the desktop's gestures.
-- **No single-occurrence operations.** Ticking a repeating page completes its next occurrence
-  (that routing lives in Rust, so a checkbox cannot corrupt a series), but skipping, moving
-  or deleting one occurrence has no affordance.
+- **One occurrence at a time, but only one at a time.** Long-pressing a block on the calendar
+  completes or skips _that_ occurrence, which is what a series with a backlog needs — the
+  head sits on last Monday while the block on screen is this Thursday. What is missing is the
+  scope question the desktop asks when there is a backlog (`RecurringGapDialog`): iOS always
+  means "just this one". Moving a single occurrence is still `○`.
 - **Sync happens only when asked.** The desktop's five-minute poll is an in-process timer,
   which iOS suspends. Every ✅ in §9 means "on the next sync somebody starts".
 
@@ -379,25 +380,25 @@ survive soft-delete). Skipped for an active-synced head, whose cache is reconcil
 
 ## 6. A single occurrence
 
-| Functionality                                                   | Native                                          | Synced                                 | Detached                     | CLI                            | iOS                         |
-| --------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------- | ---------------------------- | ------------------------------ | --------------------------- |
-| Render a virtual occurrence                                     | ✅ repeat glyph, no checkbox                    | ✅ checkbox                            | ✅ checkbox                  | — no expansion; real rows only | ✅ calendar only            |
-| Open a virtual occurrence                                       | ✅ opens the head                               | ✅                                     | ✅                           | —                              | ✅ opens the head           |
-| Delete a single virtual                                         | ✅ skip-set + undo toast ³⁹                     | ✅ skip-set survives sync ³⁹           | ✅                           | —                              | ○                           |
-| Delete an occurrence with a backlog behind it                   | ✅ scope dialog ³⁹                              | ✅ same, copy reads local-only ³⁹      | ✅ plain delete copy ³⁹      | —                              | ○                           |
-| … scope _Just this one_                                         | ✅ that date to the skip-set                    | ✅ same                                | ✅                           | —                              | ✅ the only iOS behaviour   |
-| … scope _This and everything before today_                      | ✅ every open day to the skip-set, no clones ³⁹ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴       | —                              | ○                           |
-| Move a single virtual                                           | ✅ detached clone ⁴⁰                            | 🚫 locked ⁴¹                           | ✅ mints an override ⁴²      | —                              | ○                           |
-| Complete a single virtual                                       | 🚫 head-only ⁴³                                 | ✅ that occurrence ⁴³                  | ✅ ⁴³                        | —                              | ○                           |
-| Tick an occurrence with a backlog behind it                     | — head-only ⁴³                                  | ✅ the same scope dialog ³³ ⁴³         | ✅ ⁴³                        | —                              | ○                           |
-| Render a materialized override                                  | — synced series only ⁴⁴                         | ✅ locked block at the moved slot ⁴²   | ✅ same block, unlocked ⁴²   | —                              | ✅ drawn, not distinguished |
-| Move a materialized override                                    | — synced series only ⁴⁴                         | 🚫 provider-owned                      | ✅ moves the row in place ⁴² | —                              | ○                           |
-| Delete a materialized override                                  | — synced series only ⁴⁴                         | ✅ skip-set, series intact ³⁹          | ✅ same ³⁹                   | —                              | ○                           |
-| Complete a materialized override                                | — synced series only ⁴⁴                         | ✅ keyed on `original_date` ⁴²         | ✅ same key ⁴²               | —                              | ○                           |
-| Re-link after moving a detached override                        | —                                               | —                                      | ⚠️ provider's time wins ⁴²   | —                              | —                           |
-| Move / complete / delete a done clone                           | ✅ independent                                  | ✅ independent (native page)           | ✅                           | ✅ ⁹                           | ✅ an ordinary page         |
-| Per-occurrence reminder fires (lead, multi-lead, re-arm: §2 ¹³) | ✅ device-local wall-clock                      | ✅ source-zone → absolute              | ⚠️ device-local ¹⁵           | —                              | ○                           |
-| Per-occurrence body / notes                                     | 🚫 body is series-wide ⁴⁵                       | 🚫 same                                | 🚫 same                      | —                              | —                           |
+| Functionality                                                   | Native                                          | Synced                                 | Detached                     | CLI                            | iOS                           |
+| --------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------- | ---------------------------- | ------------------------------ | ----------------------------- |
+| Render a virtual occurrence                                     | ✅ repeat glyph, no checkbox                    | ✅ checkbox                            | ✅ checkbox                  | — no expansion; real rows only | ✅ calendar only              |
+| Open a virtual occurrence                                       | ✅ opens the head                               | ✅                                     | ✅                           | —                              | ✅ opens the head             |
+| Delete a single virtual                                         | ✅ skip-set + undo toast ³⁹                     | ✅ skip-set survives sync ³⁹           | ✅                           | —                              | ✅ long press → Skip ³⁹       |
+| Delete an occurrence with a backlog behind it                   | ✅ scope dialog ³⁹                              | ✅ same, copy reads local-only ³⁹      | ✅ plain delete copy ³⁹      | —                              | ⚠️ just this one, no scope ³⁹ |
+| … scope _Just this one_                                         | ✅ that date to the skip-set                    | ✅ same                                | ✅                           | —                              | ✅ the only iOS behaviour     |
+| … scope _This and everything before today_                      | ✅ every open day to the skip-set, no clones ³⁹ | ✅ same, bounded by the connect day ³⁴ | ✅ bounded the same ³⁴       | —                              | ○                             |
+| Move a single virtual                                           | ✅ detached clone ⁴⁰                            | 🚫 locked ⁴¹                           | ✅ mints an override ⁴²      | —                              | ○                             |
+| Complete a single virtual                                       | 🚫 head-only ⁴³                                 | ✅ that occurrence ⁴³                  | ✅ ⁴³                        | —                              | ✅ long press ⁴³              |
+| Tick an occurrence with a backlog behind it                     | — head-only ⁴³                                  | ✅ the same scope dialog ³³ ⁴³         | ✅ ⁴³                        | —                              | ⚠️ that one, no dialog ⁴³     |
+| Render a materialized override                                  | — synced series only ⁴⁴                         | ✅ locked block at the moved slot ⁴²   | ✅ same block, unlocked ⁴²   | —                              | ✅ drawn, not distinguished   |
+| Move a materialized override                                    | — synced series only ⁴⁴                         | 🚫 provider-owned                      | ✅ moves the row in place ⁴² | —                              | ○                             |
+| Delete a materialized override                                  | — synced series only ⁴⁴                         | ✅ skip-set, series intact ³⁹          | ✅ same ³⁹                   | —                              | ○                             |
+| Complete a materialized override                                | — synced series only ⁴⁴                         | ✅ keyed on `original_date` ⁴²         | ✅ same key ⁴²               | —                              | ○                             |
+| Re-link after moving a detached override                        | —                                               | —                                      | ⚠️ provider's time wins ⁴²   | —                              | —                             |
+| Move / complete / delete a done clone                           | ✅ independent                                  | ✅ independent (native page)           | ✅                           | ✅ ⁹                           | ✅ an ordinary page           |
+| Per-occurrence reminder fires (lead, multi-lead, re-arm: §2 ¹³) | ✅ device-local wall-clock                      | ✅ source-zone → absolute              | ⚠️ device-local ¹⁵           | —                              | ○                             |
+| Per-occurrence body / notes                                     | 🚫 body is series-wide ⁴⁵                       | 🚫 same                                | 🚫 same                      | —                              | —                             |
 
 ³⁹ Dismissals go to `skip_set`, **not** rule EXDATEs. That's what makes a synced dismissal
 survive a wholesale provider rule rewrite: the reconciler never writes the skip-set
@@ -408,7 +409,9 @@ completion never dismisses anything (§5 ³³). A moved occurrence deletes on th
 to its `original_date`, so the block that reads as one event can't take the whole series with
 it. The popover is shaped from the series page, and a page-level delete there trashed every
 occurrence. On an active mirror the copy reads local-only ("Remove from Pikos"): read-first,
-nothing is written upstream.
+nothing is written upstream. iOS reaches the same skip-set from a long press on a calendar
+block ("Skip this one"), for every kind of series, with an undo bar rather than a toast — but
+it never asks the scope question, so it always means _just this one_, backlog or no backlog.
 ⁴⁰ Spawns an independent real page at the new time and EXDATEs the original date, in one
 transaction. Re-homing this to a `page_schedules` override is deliberately deferred past 0.4.0,
 except a **detached** series, which materializes an override row instead; native keeps the
@@ -441,6 +444,11 @@ birthday rather than a meeting, so "done" means resolved, and the record belongs
 names. Its popover carries the matching Status row. A **native** virtual keeps the repeat glyph
 and no checkbox: a task series funnels to its head, which is the next thing due. To complete a
 specific future native occurrence, materialize it first, then complete the resulting real page.
+iOS applies the identical rule from `CalendarEntry.is_synced_origin`, which carries sync
+_origin_ and not the lock: "Complete this one" appears on any occurrence of a synced-origin
+series and on a native series' own head block — a real block, drawn from the row — and never on
+a native virtual. The occurrence it names travels as one `Occurrence` record, because
+`complete_recurring_page_impl` needs the date and the start together.
 ⁴⁴ Override rows exist only on synced series, whichever side authored them. A native move
 produces a clone + EXDATE instead. Why, and what a re-link does to them: ⁴² above.
 ⁴⁵ Content lives on the head and applies to every occurrence. Per-occurrence notes happen

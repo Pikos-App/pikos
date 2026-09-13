@@ -141,6 +141,25 @@ pub struct CalendarEntry {
     /// The rule's own date for this occurrence, which is how a skip or an
     /// override is matched back to it. `None` on a real block.
     pub original_date: Option<String>,
+    /// The page behind this block repeats — so the block is one occurrence of a
+    /// series rather than the whole of anything.
+    ///
+    /// Not the same question as `is_virtual`, and the difference is what makes
+    /// this field necessary. A repeating page's *own* row is a real block with
+    /// no `original_date`, and it is the one most often on screen: this week's
+    /// standup, drawn from the head. Treating it as a one-off is how "delete
+    /// this occurrence" becomes "delete the series".
+    pub is_recurring: bool,
+    /// The page came from a calendar, whether or not it is still mirrored.
+    ///
+    /// Sync *origin*, deliberately, and not "is locked": a detached series is
+    /// unlocked and still an imported calendar. The desktop draws a checkbox on
+    /// an occurrence of a synced-origin series and not on one of a native
+    /// series, because the two mean different things — a birthday is resolved
+    /// on the day it names, while a task series funnels to whichever occurrence
+    /// is next due. Without this field the phone cannot tell them apart, and
+    /// would offer to complete a native occurrence three weeks out.
+    pub is_synced_origin: bool,
 }
 
 /// What completing one occurrence of a series did.

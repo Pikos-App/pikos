@@ -701,6 +701,72 @@ public final class WorkspaceStore {
         }
     }
 
+    // MARK: - One occurrence at a time
+
+    /// Finish the occurrence the user tapped, not the one the series owes.
+    ///
+    /// `setStatus` completes whichever occurrence is next due, which is right
+    /// for a checkbox in a list — that row *is* the next one due. On a calendar
+    /// it is wrong the moment a series falls behind: the head sits on last
+    /// Monday while the block on screen is this Thursday's, and ticking the
+    /// block would close last Monday and leave Thursday drawn undone.
+    ///
+    /// So the calendar names its occurrence. Every field comes off the entry it
+    /// drew, which is the only place they agree.
+    public func completeOccurrence(_ entry: CalendarEntry) async {
+        guard let workspace else { return }
+        do {
+            _ = try await workspace.completeRecurringOccurrence(
+                pageId: entry.pageId, occurrence: occurrence(of: entry))
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Drop one occurrence without finishing it — "not this week".
+    ///
+    /// Returns the date it skipped, for an undo. Nothing is destroyed, so the
+    /// undo is one call back the other way and the action needs no confirmation.
+    @discardableResult
+    public func skipOccurrence(_ entry: CalendarEntry) async -> String? {
+        guard let workspace else { return nil }
+        let date = occurrence(of: entry).originalDate
+        do {
+            try await workspace.skipOccurrence(pageId: entry.pageId, occurrenceDate: date)
+            await refresh()
+            return date
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Put a skipped occurrence back.
+    public func unskipOccurrence(pageId: String, on date: String) async {
+        guard let workspace else { return }
+        do {
+            try await workspace.unskipOccurrence(pageId: pageId, occurrenceDate: date)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Which occurrence a drawn block is, in the terms the sets are keyed by.
+    ///
+    /// A projected block carries the rule's own date already. A real one — the
+    /// series head, drawn from its row — does not, and its date is the first ten
+    /// characters of its start: the same slice `pikos-db` takes when it resolves
+    /// the head's occurrence itself, so the two cannot disagree about which day
+    /// was meant.
+    private func occurrence(of entry: CalendarEntry) -> Occurrence {
+        Occurrence(
+            originalDate: entry.originalDate ?? String(entry.scheduledStart.prefix(10)),
+            scheduledStart: entry.scheduledStart,
+            scheduledEnd: entry.scheduledEnd)
+    }
+
     /// What is in the trash, newest first.
     ///
     /// Fetched on demand rather than held: the trash is a screen someone opens

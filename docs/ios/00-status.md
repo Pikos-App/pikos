@@ -101,6 +101,36 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**One occurrence at a time.** Long-pressing a calendar block completes or skips
+_that_ occurrence. Before this the only verb a repeating page had on the phone
+was the list's checkbox, which finishes whichever occurrence is next due — right
+for a row that _is_ the next one due, wrong on a calendar the moment a series
+falls behind, where the head sits on last Monday and the block on screen is this
+Thursday's.
+
+Skipping had no path at all. The primitives were in `pikos-db` and never reached
+the FFI, so the nearest thing to "not this week" was trashing the head, which
+takes the series: every occurrence behind it and every one ahead.
+
+Two things the work turned up. `complete_recurring_occurrence` could not
+actually complete a named occurrence — `pikos-db` refuses an occurrence date
+supplied without the occurrence's own start, and the binding hard-coded both
+extra fields to `None`, so any caller naming one was rejected at runtime with a
+message about synced series. The three fields now travel as one `Occurrence`
+record, which is what makes the broken call unrepresentable rather than
+documented. And `CalendarEntry` gained two fields for questions the phone could
+not otherwise answer: `is_recurring`, because a series' _own_ row draws as a
+real block with no occurrence key and is the one most often on screen; and
+`is_synced_origin`, because the desktop offers completion per-occurrence on an
+imported series and withholds it from a native one, and that rule turns on where
+the series came from rather than on whether it is still mirrored — a detached
+series is unlocked and still an imported calendar.
+
+Skip is offered on every kind of series, with an undo bar and no confirmation:
+nothing is destroyed, so the way back is one call. What iOS does not ask is the
+scope question the desktop asks behind a backlog (`RecurringGapDialog`) — it
+always means _just this one_.
+
 **A repeat can be changed or switched off.** Quick add could make a page repeat
 and nothing could change it afterwards, so "every Monday" typed once was every
 Monday forever and the only way out was deleting the page. The picker covers
