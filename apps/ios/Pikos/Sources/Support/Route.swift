@@ -25,6 +25,9 @@ final class Route {
 
     var tab: Tab = .pages
     var isQuickAddPresented = false
+    /// Text to open quick add with, from a `pikos://quick-add?text=…` link.
+    /// Cleared when the sheet closes so the next manual open starts empty.
+    var quickAddPrefill = ""
 
     /// Show today's pages. Also the landing point for the "Open today" intent,
     /// which has no view to route through and moves this state directly.
@@ -75,10 +78,11 @@ final class Route {
             // No calendar screen yet (M3). Today is the nearest thing.
             showToday(store: store)
 
-        case .quickAdd:
-            // The prefill is dropped for now: quick add has no free-text date
-            // parsing on iOS yet, so a prefill like "tomorrow at 3pm" would be
-            // taken literally as a title. See docs/ios/04-parser-grammar.md.
+        case .quickAdd(let prefill):
+            // The prefill is parsed like anything typed by hand, so a link
+            // carrying "tomorrow at 3pm" schedules rather than naming a page
+            // that.
+            quickAddPrefill = prefill
             tab = .pages
             isQuickAddPresented = true
 

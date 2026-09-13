@@ -298,6 +298,11 @@ int64_t uniffi_pikos_ffi_fn_method_workspace_content_schema_version(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_create_folder(uint64_t ptr, RustBuffer name, RustBuffer color
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CREATE_FROM_QUICK_ADD
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CREATE_FROM_QUICK_ADD
+uint64_t uniffi_pikos_ffi_fn_method_workspace_create_from_quick_add(uint64_t ptr, RustBuffer input, RustBuffer reference, RustBuffer folder_id, RustBuffer timezone
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CREATE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CREATE_PAGE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_create_page(uint64_t ptr, RustBuffer page
@@ -333,9 +338,19 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_read_only(uint64_t ptr, RustCallSt
 uint64_t uniffi_pikos_ffi_fn_method_workspace_restore_page(uint64_t ptr, RustBuffer id
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SCHEDULE_PAGE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SCHEDULE_PAGE
+uint64_t uniffi_pikos_ffi_fn_method_workspace_schedule_page(uint64_t ptr, RustBuffer page_id, RustBuffer scheduled_start, RustBuffer scheduled_end
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SEARCH
 uint64_t uniffi_pikos_ffi_fn_method_workspace_search(uint64_t ptr, RustBuffer query, uint32_t limit
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_RECURRENCE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_SET_RECURRENCE
+uint64_t uniffi_pikos_ffi_fn_method_workspace_set_recurrence(uint64_t ptr, RustBuffer page_id, RustBuffer rrule, RustBuffer scheduled_start, RustBuffer scheduled_end, RustBuffer timezone
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_TRASH_PAGE
@@ -771,6 +786,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_create_folder(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CREATE_FROM_QUICK_ADD
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CREATE_FROM_QUICK_ADD
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_create_from_quick_add(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CREATE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CREATE_PAGE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_create_page(void
@@ -813,9 +834,21 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_restore_page(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SCHEDULE_PAGE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SCHEDULE_PAGE
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_schedule_page(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SEARCH
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SEARCH
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_search(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_RECURRENCE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_SET_RECURRENCE
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_set_recurrence(void
     
 );
 #endif

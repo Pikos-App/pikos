@@ -785,6 +785,42 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     
     func createFolder(name: String, color: String?) async throws  -> Folder
     
+    /**
+     * Create everything one quick-add line asks for.
+     *
+     * "standup every weekday at 9am #work" is one user action, and this is the
+     * one call that performs it: parse the line, create the page or pages,
+     * give them their dates, and attach a recurrence rule when there is one.
+     * Doing it here rather than in Swift keeps the ordering — a rule's anchor
+     * has to be snapped before it is written — in the same place as the rules
+     * that require it.
+     *
+     * `reference` is "now" as a wall-clock ISO string, so the same line parses
+     * the same way in the app, a widget, and a test. `timezone` is the IANA
+     * name stored on a recurrence rule.
+     *
+     * Returns the created pages: one for a single or recurring line, several
+     * for one that named specific days ("run m/w/f").
+     *
+     * **Not atomic.** A page and its recurrence rule are two writes, and
+     * SQLite is not holding a transaction across them. If the rule fails the
+     * page is trashed again rather than left behind as a silent one-off, but a
+     * multi-page line that fails partway leaves the pages it already made —
+     * they are real pages the user asked for, and deleting them would be the
+     * more surprising outcome.
+     */
+    func createFromQuickAdd(input: String, reference: String, folderId: String?, timezone: String) async throws  -> [Page]
+    
+    /**
+     * Create a page.
+     *
+     * A `scheduled_start` becomes a real schedule row, not just a value on the
+     * page. `pages.scheduled_start` is a *denormalised* copy of the page's
+     * earliest `page_schedules` row, recomputed from that table whenever a
+     * schedule changes — so a date written straight onto the page looks right
+     * until the first reschedule, then silently vanishes. Writing the row is
+     * what makes the date real.
+     */
     func createPage(page: NewPage) async throws  -> Page
     
     func getPage(id: String) async throws  -> Page
@@ -807,9 +843,31 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func restorePage(id: String) async throws 
     
     /**
+     * Give a page a date, or another one.
+     *
+     * Pages can carry several schedules; the earliest still ahead is the one
+     * the page shows. Adding a date does not replace the ones already there.
+     */
+    func schedulePage(pageId: String, scheduledStart: String, scheduledEnd: String?) async throws 
+    
+    /**
      * Full-text search across titles and page bodies.
      */
     func search(query: String, limit: UInt32) async throws  -> [SearchHit]
+    
+    /**
+     * Make a page recurring.
+     *
+     * `scheduled_start` is snapped onto the first date the rule actually
+     * permits, so a M/W/F rule anchored to a Sunday starts on the Monday
+     * rather than showing a first run on a day the series excludes. Snapping
+     * is idempotent, so an already-valid anchor is left alone.
+     *
+     * The page's own date is then set from the snapped anchor. A recurring
+     * page owns that field directly — the occurrences after the first are
+     * expanded at display time and have no rows to derive it from.
+     */
+    func setRecurrence(pageId: String, rrule: String, scheduledStart: String, scheduledEnd: String?, timezone: String) async throws 
     
     /**
      * Move a page to the trash. Recoverable — see `restore_page`.
@@ -931,6 +989,56 @@ open func createFolder(name: String, color: String?)async throws  -> Folder  {
         )
 }
     
+    /**
+     * Create everything one quick-add line asks for.
+     *
+     * "standup every weekday at 9am #work" is one user action, and this is the
+     * one call that performs it: parse the line, create the page or pages,
+     * give them their dates, and attach a recurrence rule when there is one.
+     * Doing it here rather than in Swift keeps the ordering — a rule's anchor
+     * has to be snapped before it is written — in the same place as the rules
+     * that require it.
+     *
+     * `reference` is "now" as a wall-clock ISO string, so the same line parses
+     * the same way in the app, a widget, and a test. `timezone` is the IANA
+     * name stored on a recurrence rule.
+     *
+     * Returns the created pages: one for a single or recurring line, several
+     * for one that named specific days ("run m/w/f").
+     *
+     * **Not atomic.** A page and its recurrence rule are two writes, and
+     * SQLite is not holding a transaction across them. If the rule fails the
+     * page is trashed again rather than left behind as a silent one-off, but a
+     * multi-page line that fails partway leaves the pages it already made —
+     * they are real pages the user asked for, and deleting them would be the
+     * more surprising outcome.
+     */
+open func createFromQuickAdd(input: String, reference: String, folderId: String?, timezone: String)async throws  -> [Page]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_create_from_quick_add(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(input),FfiConverterString.lower(reference),FfiConverterOptionString.lower(folderId),FfiConverterString.lower(timezone)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypePage.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Create a page.
+     *
+     * A `scheduled_start` becomes a real schedule row, not just a value on the
+     * page. `pages.scheduled_start` is a *denormalised* copy of the page's
+     * earliest `page_schedules` row, recomputed from that table whenever a
+     * schedule changes — so a date written straight onto the page looks right
+     * until the first reschedule, then silently vanishes. Writing the row is
+     * what makes the date real.
+     */
 open func createPage(page: NewPage)async throws  -> Page  {
     return
         try  await uniffiRustCallAsync(
@@ -1044,6 +1152,28 @@ open func restorePage(id: String)async throws   {
 }
     
     /**
+     * Give a page a date, or another one.
+     *
+     * Pages can carry several schedules; the earliest still ahead is the one
+     * the page shows. Adding a date does not replace the ones already there.
+     */
+open func schedulePage(pageId: String, scheduledStart: String, scheduledEnd: String?)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_schedule_page(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(scheduledStart),FfiConverterOptionString.lower(scheduledEnd)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Full-text search across titles and page bodies.
      */
 open func search(query: String, limit: UInt32)async throws  -> [SearchHit]  {
@@ -1058,6 +1188,34 @@ open func search(query: String, limit: UInt32)async throws  -> [SearchHit]  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeSearchHit.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Make a page recurring.
+     *
+     * `scheduled_start` is snapped onto the first date the rule actually
+     * permits, so a M/W/F rule anchored to a Sunday starts on the Monday
+     * rather than showing a first run on a day the series excludes. Snapping
+     * is idempotent, so an already-valid anchor is left alone.
+     *
+     * The page's own date is then set from the snapped anchor. A recurring
+     * page owns that field directly — the occurrences after the first are
+     * expanded at display time and have no rows to derive it from.
+     */
+open func setRecurrence(pageId: String, rrule: String, scheduledStart: String, scheduledEnd: String?, timezone: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_set_recurrence(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(rrule),FfiConverterString.lower(scheduledStart),FfiConverterOptionString.lower(scheduledEnd),FfiConverterString.lower(timezone)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -2903,6 +3061,14 @@ enum WorkspaceError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError
      * rather than a runtime condition — see the note on `ReadOnlyWorkspace`.
      */
     case ReadOnly
+    /**
+     * An argument could not be used — a reference time that is not a
+     * wall-clock datetime, say. Distinct from `Database` because nothing is
+     * wrong with the workspace: the call was malformed and retrying it
+     * unchanged will fail the same way.
+     */
+    case InvalidInput(message: String
+    )
 
     
 
@@ -2943,6 +3109,9 @@ public struct FfiConverterTypeWorkspaceError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
             )
         case 4: return .ReadOnly
+        case 5: return .InvalidInput(
+            message: try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2974,6 +3143,11 @@ public struct FfiConverterTypeWorkspaceError: FfiConverterRustBuffer {
         case .ReadOnly:
             writeInt(&buf, Int32(4))
         
+        
+        case let .InvalidInput(message):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(message, into: &buf)
+            
         }
     }
 }
@@ -3329,6 +3503,31 @@ fileprivate struct FfiConverterSequenceTypeOccurrence: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeOccurrence.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePage: FfiConverterRustBuffer {
+    typealias SwiftType = [Page]
+
+    public static func write(_ value: [Page], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Page] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Page]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePage.read(from: &buf))
         }
         return seq
     }
@@ -3721,7 +3920,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_create_folder() != 527) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_create_page() != 8067) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_create_from_quick_add() != 35946) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_create_page() != 13844) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_get_page() != 16439) {
@@ -3742,7 +3944,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_restore_page() != 5661) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_schedule_page() != 2015) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_search() != 52923) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_set_recurrence() != 1536) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_trash_page() != 53299) {

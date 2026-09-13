@@ -48,8 +48,14 @@ struct RootView: View {
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 .tag(Route.Tab.search)
         }
-        .sheet(isPresented: $route.isQuickAddPresented) {
-            QuickAddSheet()
+        .sheet(
+            isPresented: $route.isQuickAddPresented,
+            // Otherwise the next manual open would inherit the last link's
+            // text. `onDismiss` is declared before `content`, so it cannot be
+            // written as a second trailing closure.
+            onDismiss: { route.quickAddPrefill = "" }
+        ) {
+            QuickAddSheet(prefill: route.quickAddPrefill)
         }
     }
 }

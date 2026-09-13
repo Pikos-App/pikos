@@ -344,3 +344,169 @@ async fn opening_a_workspace_twice_shares_its_contents() {
     let pages = reader.list_pages(PageQuery::default()).await.unwrap();
     assert_eq!(pages.len(), 1);
 }
+
+#[tokio::test]
+async fn a_created_date_survives_a_later_reschedule() {
+    // `pages.scheduled_start` is a denormalised copy of the page's earliest
+    // `page_schedules` row, recomputed from that table whenever a schedule
+    // changes. A date written straight onto the page has no row behind it, so
+    // it reads back correctly right up until something touches the schedule —
+    // and then it is gone. Adding a *later* date is the cheapest way to make
+    // that recomputation happen: the earlier one should win, and can only win
+    // if it was ever really there.
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let created = ws
+        .create_page(NewPage {
+            title: "Dentist".to_string(),
+            scheduled_start: Some("2099-03-16T09:00:00".to_string()),
+            ..new_page("Dentist")
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        created.scheduled_start.as_deref(),
+        Some("2099-03-16T09:00:00")
+    );
+
+    ws.schedule_page(created.id.clone(), "2099-03-20T09:00:00".to_string(), None)
+        .await
+        .unwrap();
+
+    let refetched = ws.get_page(created.id.clone()).await.unwrap();
+    assert_eq!(
+        refetched.scheduled_start.as_deref(),
+        Some("2099-03-16T09:00:00"),
+        "the earliest date should still be the page's, so the original must have a schedule row"
+    );
+}
+
+#[tokio::test]
+async fn a_recurring_page_starts_on_a_day_its_rule_allows() {
+    // A M/W/F rule anchored to a Sunday must not leave the page's head on the
+    // Sunday — that day is not in the series, so it would render as a stray
+    // first run detached from every occurrence after it.
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let created = ws.create_page(new_page("Run")).await.unwrap();
+    ws.set_recurrence(
+        created.id.clone(),
+        "FREQ=WEEKLY;BYDAY=MO,WE,FR".to_string(),
+        // 2099-03-15 is a Sunday.
+        "2099-03-15T07:00:00".to_string(),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let refetched = ws.get_page(created.id.clone()).await.unwrap();
+    assert_eq!(
+        refetched.scheduled_start.as_deref(),
+        Some("2099-03-16T07:00:00"),
+        "the head should have moved to the Monday"
+    );
+}
+
+#[tokio::test]
+async fn a_quick_add_line_becomes_a_page_with_everything_it_named() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let pages = ws
+        .create_from_quick_add(
+            "call the plumber #home !urgent tomorrow at 3pm".to_string(),
+            "2099-03-15T12:00:00".to_string(),
+            None,
+            "UTC".to_string(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(pages.len(), 1);
+    let page = &pages[0];
+    assert_eq!(page.title, "call the plumber");
+    assert_eq!(page.tags, ["home"]);
+    assert_eq!(page.priority, 1);
+    assert_eq!(page.scheduled_start.as_deref(), Some("2099-03-16T15:00:00"));
+}
+
+#[tokio::test]
+async fn a_quick_add_line_naming_days_becomes_one_page_each() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let pages = ws
+        .create_from_quick_add(
+            "run m/w/f at 7am".to_string(),
+            "2099-03-15T12:00:00".to_string(),
+            None,
+            "UTC".to_string(),
+        )
+        .await
+        .unwrap();
+
+    let starts: Vec<_> = pages
+        .iter()
+        .map(|page| page.scheduled_start.as_deref().unwrap_or_default())
+        .collect();
+    assert_eq!(
+        starts,
+        [
+            "2099-03-16T07:00:00",
+            "2099-03-18T07:00:00",
+            "2099-03-20T07:00:00"
+        ]
+    );
+    assert!(pages.iter().all(|page| page.title == "run"));
+}
+
+#[tokio::test]
+async fn a_recurring_quick_add_line_gets_a_rule_and_a_snapped_head() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    // 2099-03-15 is a Sunday, so a M/W/F rule has to start on the Monday.
+    let pages = ws
+        .create_from_quick_add(
+            "standup every mon/wed/fri at 9am".to_string(),
+            "2099-03-15T12:00:00".to_string(),
+            None,
+            "UTC".to_string(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(pages.len(), 1);
+    assert_eq!(pages[0].title, "standup");
+    assert_eq!(
+        pages[0].scheduled_start.as_deref(),
+        Some("2099-03-16T09:00:00")
+    );
+}
+
+#[tokio::test]
+async fn a_quick_add_line_with_a_malformed_reference_is_refused() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let error = ws
+        .create_from_quick_add(
+            "call bob".to_string(),
+            "not-a-datetime".to_string(),
+            None,
+            "UTC".to_string(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, WorkspaceError::InvalidInput { .. }),
+        "a malformed argument should not look like a broken database: {error:?}"
+    );
+
+    // And nothing was created on the way to failing.
+    let pages = ws.list_pages(PageQuery::default()).await.unwrap();
+    assert!(pages.is_empty());
+}

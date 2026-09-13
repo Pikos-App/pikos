@@ -162,6 +162,72 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Set a page's priority.
+    ///
+    /// Stored as a number, low value first: 1 urgent through 4 low, with 0
+    /// meaning none. The naming runs the opposite way to the number, which is
+    /// exactly why this mapping lives in one place.
+    public func setPriority(pageId: String, priority: Priority) async {
+        guard let workspace else { return }
+        let stored: Int64
+        switch priority {
+        case .urgent: stored = 1
+        case .high: stored = 2
+        case .medium: stored = 3
+        case .low: stored = 4
+        }
+        do {
+            _ = try await workspace.updatePage(id: pageId, edit: PageEdit(priority: stored))
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Create whatever a quick-add line asks for — one page, several, or a
+    /// recurring one — and return them.
+    ///
+    /// The line is parsed in Rust, by the same code the desktop's parser is
+    /// graded against, so "standup every weekday at 9am #work" means the same
+    /// thing on both. `reference` is passed explicitly rather than read from
+    /// the clock inside, so a line typed at 23:59 cannot resolve against a
+    /// different day than the one the user is looking at.
+    public func createFromQuickAdd(
+        _ line: String,
+        reference: Date = Date(),
+        folderId: String? = nil
+    ) async -> [Page] {
+        guard let workspace else { return [] }
+        do {
+            let created = try await workspace.createFromQuickAdd(
+                input: line,
+                reference: Self.wallClock(reference),
+                folderId: folderId,
+                timezone: TimeZone.current.identifier
+            )
+            await refresh()
+            return created
+        } catch {
+            errorMessage = error.localizedDescription
+            return []
+        }
+    }
+
+    /// A `Date` as the wall-clock string the workspace speaks.
+    ///
+    /// Fixed format and fixed locale, with no timezone conversion: the stored
+    /// value is a wall clock and `Date` is an instant, so converting is the
+    /// mistake the string-typed boundary exists to prevent.
+    ///
+    /// `nonisolated` because it reads nothing from the store — the class is
+    /// main-actor bound and callers of this are not.
+    nonisolated static func wallClock(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return formatter.string(from: date)
+    }
+
     public func setStatus(pageId: String, done: Bool) async {
         guard let workspace else { return }
         // Optimistic: a task checkbox that waits for a database round trip

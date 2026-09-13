@@ -60,10 +60,14 @@ which is what keeps the one-writer rule intact — an intent writing from an
 extension would be a second writer against a database whose WAL mode permits
 one.
 
-**The parser's scope is measured, not guessed.** Of 317 corpus inputs, 179
-reach chrono-node, and they collapse to 92 distinct forms in 9 families — see
-`04-parser-grammar.md`. The work is nine pattern families and a range
-combinator, not a port of chrono-node.
+**Quick add parses natural language.** The whole of `parseInput` is ported —
+the date engine (a port of the subset of chrono-node the parser reaches) and
+the rest of it: cadence, tags, folders, priorities, durations, windows. Graded
+against 2,219 corpus cases generated from the TypeScript reference, plus 1,628
+recorded date-engine calls and 644 isolated expressions, and mutation-tested
+throughout. `parse_quick_add` is the pure surface; `create_from_quick_add` is
+the one that writes the pages. See `04-parser-grammar.md`, which records both
+the original measurement and what was actually built.
 
 ## Needs a Mac
 
@@ -87,14 +91,7 @@ Nothing here is blocked on design — only on hardware.
    far was deliberately shaped so that a failure discards only
    `packages/editor-mobile` and `PikosEditorBridge` — the Rust port, the FFI
    boundary and the shared schema survive any of the three fallback options.
-2. **Decide the parser.** Porting `parseInput` to Rust is the largest remaining
-   piece and is larger than its 861 lines suggest — it depends on chrono-node's
-   certainty flags, match extents and range ends, none of which any Rust crate
-   provides. Three options are set out in `01-business-logic-inventory.md`; the
-   corpus makes the third (deliberately narrowing what quick-add supports)
-   measurable rather than speculative — and `04-parser-grammar.md` now contains
-   that measurement.
-3. **Compile the Swift.** The app, both packages and their tests are written
+2. **Compile the Swift.** The app, both packages and their tests are written
    and unbuilt. Expect strict-concurrency work; `apps/ios/README.md` has the
    first-run sequence.
 

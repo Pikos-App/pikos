@@ -22,6 +22,7 @@
 
 use std::sync::Arc;
 
+use pikos_core::nlp::quick_add::ParseResult as QuickAddParse;
 use pikos_db::{
     AppError, NewPage as DbNewPage, PageFilter as DbPageFilter, PageUpdate as DbPageUpdate,
 };
@@ -54,6 +55,13 @@ pub enum WorkspaceError {
     /// rather than a runtime condition — see the note on `ReadOnlyWorkspace`.
     #[error("this workspace is read-only")]
     ReadOnly,
+
+    /// An argument could not be used — a reference time that is not a
+    /// wall-clock datetime, say. Distinct from `Database` because nothing is
+    /// wrong with the workspace: the call was malformed and retrying it
+    /// unchanged will fail the same way.
+    #[error("{message}")]
+    InvalidInput { message: String },
 }
 
 impl From<AppError> for WorkspaceError {
@@ -290,6 +298,68 @@ pub struct SearchHit {
     pub match_source: String,
 }
 
+/// One page from one parsed line. `schedule` is false for the head of a
+/// recurring series, whose date the rule writes instead.
+async fn create_quick_add_page(
+    workspace: &Workspace,
+    input: pikos_core::nlp::quick_add::ParsedInput,
+    folder_id: Option<String>,
+    schedule: bool,
+) -> Result<Page, WorkspaceError> {
+    let priority = quick_add_priority(&input.priority);
+    let page = workspace
+        .create_page(NewPage {
+            title: input.title,
+            folder_id,
+            content: None,
+            tags: Some(input.tags),
+            scheduled_start: if schedule {
+                input.scheduled_start
+            } else {
+                None
+            },
+            scheduled_end: if schedule { input.scheduled_end } else { None },
+        })
+        .await?;
+
+    // Priority is not a `NewPage` field, so it takes a second write. Only
+    // when the line actually said something about it — "unchanged" on a
+    // brand-new page means the default, which is already what it has.
+    let Some(priority) = priority else {
+        return Ok(page);
+    };
+    let updated = pikos_db::update_page_impl(
+        &workspace.pool,
+        page.id.clone(),
+        DbPageUpdate {
+            priority: Some(priority),
+            ..Default::default()
+        },
+    )
+    .await?;
+    Ok(updated.into())
+}
+
+/// The stored priority for what a quick-add line said, or `None` when it said
+/// nothing. `0` is "no priority", and is what a new page already has, so
+/// "cleared" and "unmentioned" differ only for an *existing* page — a
+/// distinction this call never has to make, but one the parser preserves so the
+/// edit path can.
+fn quick_add_priority(
+    priority: &Option<Option<pikos_core::nlp::quick_add::Priority>>,
+) -> Option<i64> {
+    use pikos_core::nlp::quick_add::Priority as P;
+    let named = priority.as_ref()?;
+    Some(match named {
+        Some(P::Urgent) => 1,
+        Some(P::High) => 2,
+        Some(P::Medium) => 3,
+        Some(P::Low) => 4,
+        // `!0` — an explicit clear, which on a new page is already the default.
+        None => 0,
+    })
+}
+
 // ─── Workspace ───────────────────────────────────────────────────────────────
 
 /// A read-write handle on a Pikos workspace.
@@ -350,7 +420,17 @@ impl Workspace {
         }
     }
 
+    /// Create a page.
+    ///
+    /// A `scheduled_start` becomes a real schedule row, not just a value on the
+    /// page. `pages.scheduled_start` is a *denormalised* copy of the page's
+    /// earliest `page_schedules` row, recomputed from that table whenever a
+    /// schedule changes — so a date written straight onto the page looks right
+    /// until the first reschedule, then silently vanishes. Writing the row is
+    /// what makes the date real.
     pub async fn create_page(&self, page: NewPage) -> Result<Page, WorkspaceError> {
+        let scheduled_start = page.scheduled_start;
+        let scheduled_end = page.scheduled_end;
         let created = pikos_db::create_page_impl(
             &self.pool,
             DbNewPage {
@@ -362,8 +442,8 @@ impl Workspace {
                 status: "not_started".to_string(),
                 priority: 0,
                 tags: page.tags.unwrap_or_default(),
-                scheduled_start: page.scheduled_start,
-                scheduled_end: page.scheduled_end,
+                scheduled_start: None,
+                scheduled_end: None,
                 completed_at: None,
                 links: Vec::new(),
                 parent_id: None,
@@ -373,7 +453,87 @@ impl Workspace {
             },
         )
         .await?;
-        Ok(created.into())
+
+        let Some(start) = scheduled_start else {
+            return Ok(created.into());
+        };
+        self.schedule_page(created.id.clone(), start, scheduled_end)
+            .await?;
+        self.get_page(created.id).await
+    }
+
+    /// Give a page a date, or another one.
+    ///
+    /// Pages can carry several schedules; the earliest still ahead is the one
+    /// the page shows. Adding a date does not replace the ones already there.
+    pub async fn schedule_page(
+        &self,
+        page_id: String,
+        scheduled_start: String,
+        scheduled_end: Option<String>,
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::create_page_schedule_impl(
+            &self.pool,
+            pikos_db::NewPageSchedule {
+                page_id,
+                scheduled_start,
+                scheduled_end,
+                timezone: None,
+                rule_id: None,
+                original_date: None,
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Make a page recurring.
+    ///
+    /// `scheduled_start` is snapped onto the first date the rule actually
+    /// permits, so a M/W/F rule anchored to a Sunday starts on the Monday
+    /// rather than showing a first run on a day the series excludes. Snapping
+    /// is idempotent, so an already-valid anchor is left alone.
+    ///
+    /// The page's own date is then set from the snapped anchor. A recurring
+    /// page owns that field directly — the occurrences after the first are
+    /// expanded at display time and have no rows to derive it from.
+    pub async fn set_recurrence(
+        &self,
+        page_id: String,
+        rrule: String,
+        scheduled_start: String,
+        scheduled_end: Option<String>,
+        timezone: String,
+    ) -> Result<(), WorkspaceError> {
+        let anchor = pikos_core::recurrence::snap_anchor_to_rule(&rrule, &scheduled_start);
+
+        pikos_db::create_recurrence_rule_impl(
+            &self.pool,
+            pikos_db::NewRecurrenceRule {
+                page_id: page_id.clone(),
+                rrule,
+                rrule_exdates: Vec::new(),
+                scheduled_start: anchor.clone(),
+                scheduled_end: scheduled_end.clone(),
+                timezone,
+            },
+        )
+        .await?;
+
+        pikos_db::update_page_impl(
+            &self.pool,
+            page_id,
+            DbPageUpdate {
+                scheduled_start: Some(serde_json::Value::String(anchor)),
+                scheduled_end: Some(match scheduled_end {
+                    Some(end) => serde_json::Value::String(end),
+                    None => serde_json::Value::Null,
+                }),
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(())
     }
 
     pub async fn update_page(&self, id: String, edit: PageEdit) -> Result<Page, WorkspaceError> {
@@ -397,6 +557,78 @@ impl Workspace {
         )
         .await?;
         Ok(updated.into())
+    }
+
+    /// Create everything one quick-add line asks for.
+    ///
+    /// "standup every weekday at 9am #work" is one user action, and this is the
+    /// one call that performs it: parse the line, create the page or pages,
+    /// give them their dates, and attach a recurrence rule when there is one.
+    /// Doing it here rather than in Swift keeps the ordering — a rule's anchor
+    /// has to be snapped before it is written — in the same place as the rules
+    /// that require it.
+    ///
+    /// `reference` is "now" as a wall-clock ISO string, so the same line parses
+    /// the same way in the app, a widget, and a test. `timezone` is the IANA
+    /// name stored on a recurrence rule.
+    ///
+    /// Returns the created pages: one for a single or recurring line, several
+    /// for one that named specific days ("run m/w/f").
+    ///
+    /// **Not atomic.** A page and its recurrence rule are two writes, and
+    /// SQLite is not holding a transaction across them. If the rule fails the
+    /// page is trashed again rather than left behind as a silent one-off, but a
+    /// multi-page line that fails partway leaves the pages it already made —
+    /// they are real pages the user asked for, and deleting them would be the
+    /// more surprising outcome.
+    pub async fn create_from_quick_add(
+        &self,
+        input: String,
+        reference: String,
+        folder_id: Option<String>,
+        timezone: String,
+    ) -> Result<Vec<Page>, WorkspaceError> {
+        let now = pikos_core::dates::parse_local_iso(&reference).ok_or_else(|| {
+            WorkspaceError::InvalidInput {
+                message: format!("reference is not a wall-clock datetime: {reference}"),
+            }
+        })?;
+
+        match pikos_core::nlp::quick_add::parse_input(&input, now) {
+            QuickAddParse::Single { input } => {
+                let page = create_quick_add_page(self, input, folder_id, true).await?;
+                Ok(vec![page])
+            }
+            QuickAddParse::Finite { inputs } => {
+                let mut pages = Vec::with_capacity(inputs.len());
+                for input in inputs {
+                    pages.push(create_quick_add_page(self, input, folder_id.clone(), true).await?);
+                }
+                Ok(pages)
+            }
+            QuickAddParse::Recurring { input, rrule } => {
+                // The rule owns the page's date, so the page is created without
+                // one: a non-rule schedule row would linger at the original
+                // anchor and fight the rule for the head.
+                let anchor = input
+                    .scheduled_start
+                    .clone()
+                    .unwrap_or_else(|| pikos_core::dates::format_date_only(&now));
+                let scheduled_end = input.scheduled_end.clone();
+                let page = create_quick_add_page(self, input, folder_id, false).await?;
+
+                if let Err(error) = self
+                    .set_recurrence(page.id.clone(), rrule, anchor, scheduled_end, timezone)
+                    .await
+                {
+                    // A page with no rule is not what was asked for, and it
+                    // would look like an ordinary one-off. Take it back.
+                    let _ = self.trash_page(page.id.clone()).await;
+                    return Err(error);
+                }
+                Ok(vec![self.get_page(page.id).await?])
+            }
+        }
     }
 
     /// Move a page to the trash. Recoverable — see `restore_page`.

@@ -70,10 +70,6 @@ suite.
 
 ## What is deliberately missing
 
-- **Natural-language quick add.** The parser is still TypeScript. Quick add uses
-  a native date picker instead, which on a phone is arguably better anyway —
-  when the parser lands it should be added alongside, not replace it. See
-  `docs/ios/04-parser-grammar.md`.
 - **Calendar screens.** M3.
 - **Formatting commands.** The toolbar reflects the caret's state; sending
   commands back to the editor is the return path, and M3 work.
