@@ -88,6 +88,25 @@ function mount(): Editor {
     },
   });
 
+  // Tapping a link reports it to the host, which decides whether to open it.
+  //
+  // The schema sets `openOnClick: false` — correct for an editor, where a tap
+  // should place the caret rather than navigate — so nothing happens on its
+  // own. On desktop the app supplies the rest; here, without this, a link in a
+  // page was simply inert. The host must be the one to act on it in any case:
+  // a webview that navigated would replace the editor with a web page.
+  element.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest("a");
+    const href = anchor?.getAttribute("href");
+    if (!href) return;
+    // The caret still moves; only the navigation is refused, and there is none
+    // to refuse unless the browser decided to follow the href itself.
+    event.preventDefault();
+    send("linkTapped", { url: href });
+  });
+
   // iOS can suspend the process shortly after backgrounding, which would take a
   // pending debounce — and the user's last keystrokes — with it.
   document.addEventListener("visibilitychange", () => {

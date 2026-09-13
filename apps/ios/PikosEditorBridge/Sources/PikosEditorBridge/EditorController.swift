@@ -1,6 +1,21 @@
 import Foundation
 import WebKit
 
+/// Whatever can carry a message into a live editor.
+///
+/// A protocol rather than a direct reference to `EditorWebView.Coordinator` for
+/// two reasons. The coordinator lives inside a `UIViewRepresentable`, which
+/// exists only where UIKit does — naming it here would make this file, and the
+/// tests that cover it, iOS-only for no reason. And a controller that talks to
+/// an interface can be driven by a test double, which is the only way the
+/// "drop commands until the editor is ready" rule below gets covered at all.
+@MainActor
+protocol EditorMessageSink: AnyObject {
+    /// Whether the editor has reported itself ready to receive messages.
+    var isReady: Bool { get }
+    func deliver(_ message: EditorBridge.Outgoing)
+}
+
 /// A handle for sending commands into a live editor.
 ///
 /// `EditorWebView` is a value type recreated on every SwiftUI update, so it is
@@ -14,22 +29,19 @@ import WebKit
 /// would be one whose moment has passed by the time it could run.
 @MainActor
 public final class EditorController {
-    private weak var webView: WKWebView?
-    private weak var coordinator: EditorWebView.Coordinator?
+    private weak var sink: (any EditorMessageSink)?
 
     public init() {}
 
     /// True once the editor has reported itself ready.
-    public var isReady: Bool { coordinator?.isReady ?? false }
+    public var isReady: Bool { sink?.isReady ?? false }
 
-    func attach(webView: WKWebView, coordinator: EditorWebView.Coordinator) {
-        self.webView = webView
-        self.coordinator = coordinator
+    func attach(_ sink: any EditorMessageSink) {
+        self.sink = sink
     }
 
     func detach() {
-        webView = nil
-        coordinator = nil
+        sink = nil
     }
 
     /// Toggle an inline mark over the selection.
@@ -63,8 +75,8 @@ public final class EditorController {
     }
 
     private func send(_ message: EditorBridge.Outgoing) {
-        guard let webView, let coordinator, coordinator.isReady else { return }
-        coordinator.send(message, on: webView)
+        guard let sink, sink.isReady else { return }
+        sink.deliver(message)
     }
 
     // MARK: - Vocabulary

@@ -37,6 +37,16 @@ public final class EditorAssetSchemeHandler: NSObject, WKURLSchemeHandler {
     private let editorBundle: URL
     private let queue = DispatchQueue(label: "app.pikos.editor.assets", qos: .userInitiated)
 
+    /// Tasks WebKit has started and not yet stopped.
+    ///
+    /// Delivering a response to a stopped task is not a no-op — WKWebView
+    /// raises `NSInternalInconsistencyException` and the app dies. It happens
+    /// whenever a load is cancelled while a read is in flight, which here means
+    /// scrolling a long page fast enough that images go out of view before
+    /// their data arrives. Only ever touched on the main thread, which is where
+    /// both callbacks and the delivery hop run.
+    private var live: Set<ObjectIdentifier> = []
+
     public init(assetRoot: URL, editorBundle: URL) {
         self.assetRoot = assetRoot.standardizedFileURL
         self.editorBundle = editorBundle
@@ -58,11 +68,17 @@ public final class EditorAssetSchemeHandler: NSObject, WKURLSchemeHandler {
             return url.path == "/index.html" ? editorBundle : nil
 
         case Self.assetHost:
+            // `URL.path` is already percent-decoded. Decoding it a second time
+            // was both wrong and dangerous: wrong because a file legitimately
+            // named `50%.png` arrives as `50%.png` and a second pass mangles
+            // it, and dangerous because `%252e%252e` would survive the first
+            // decode as `%2e%2e` and become `..` on the second. The root check
+            // below catches that today, but a filter that depends on a second
+            // filter to be correct is one edit away from not being.
             let relative = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             guard !relative.isEmpty else { return nil }
-            guard let decoded = relative.removingPercentEncoding else { return nil }
 
-            let candidate = assetRoot.appendingPathComponent(decoded).standardizedFileURL
+            let candidate = assetRoot.appendingPathComponent(relative).standardizedFileURL
             let rootPath = assetRoot.resolvingSymlinksInPath().path
             let candidatePath = candidate.resolvingSymlinksInPath().path
 
@@ -77,7 +93,11 @@ public final class EditorAssetSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     public func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
+        let token = ObjectIdentifier(urlSchemeTask)
+        begin(token)
+
         guard let url = urlSchemeTask.request.url, let file = resolve(url) else {
+            forget(token)
             urlSchemeTask.didFailWithError(
                 NSError(domain: NSURLErrorDomain, code: NSURLErrorBadURL))
             return
@@ -93,18 +113,47 @@ public final class EditorAssetSchemeHandler: NSObject, WKURLSchemeHandler {
                     textEncodingName: nil
                 )
                 DispatchQueue.main.async {
+                    guard self.finish(token) else { return }
                     urlSchemeTask.didReceive(response)
                     urlSchemeTask.didReceive(data)
                     urlSchemeTask.didFinish()
                 }
             } catch {
-                DispatchQueue.main.async { urlSchemeTask.didFailWithError(error) }
+                DispatchQueue.main.async {
+                    guard self.finish(token) else { return }
+                    urlSchemeTask.didFailWithError(error)
+                }
             }
         }
     }
 
     public func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {
-        // Reads are short and the task is checked before use; nothing to unwind.
+        // The read already in flight cannot be cancelled, but its result must
+        // not be delivered: WebKit throws on a stopped task rather than
+        // ignoring the call. Forgetting the task here is what makes the check
+        // in `finish` say no.
+        forget(ObjectIdentifier(urlSchemeTask))
+    }
+
+    // MARK: - Task bookkeeping
+    //
+    // Three one-line methods rather than inline set operations, so the rule
+    // lives in one place and a test can drive exactly the decision the
+    // callbacks make — a `WKURLSchemeTask` cannot be constructed in a unit
+    // test, so testing through the callbacks is not an option.
+
+    func begin(_ token: ObjectIdentifier) {
+        live.insert(token)
+    }
+
+    func forget(_ token: ObjectIdentifier) {
+        live.remove(token)
+    }
+
+    /// Claim a task for delivery, or refuse if WebKit has since stopped it.
+    /// Refuses a second time too, so a double delivery cannot slip through.
+    func finish(_ token: ObjectIdentifier) -> Bool {
+        live.remove(token) != nil
     }
 
     /// Content types for what a page can legitimately contain.

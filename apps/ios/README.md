@@ -42,6 +42,19 @@ swift test --package-path apps/ios/PikosCore
 swift test --package-path apps/ios/PikosEditorBridge
 ```
 
+Both run on the host, in seconds, rather than through a simulator — which took
+a little arranging and is worth knowing so it does not get undone. `swift test`
+builds for macOS, so `PikosCore`'s XCFramework carries macOS slices alongside
+the device and simulator ones (`scripts/build-ios-framework.sh`), and
+`EditorWebView` — the only UIKit-bound file in `PikosEditorBridge` — is behind
+`#if canImport(UIKit)`. Nothing under test touches a webview: the controller
+talks to an `EditorMessageSink`, which the coordinator conforms to and a test
+double stands in for.
+
+Step 1 of **First run** is a prerequisite for the first and step 2 for the
+second — `Bundle.module` will not compile against a resource that is not there
+yet, and the failure names the file rather than the reason.
+
 `PikosCore` has two targets: `PikosCore` (generated bindings, overwritten by
 `scripts/gen-swift-bindings.sh`) and `PikosSupport` (hand-written, shared by the
 app and the widget — it is where the App Group path is decided, and the app and
@@ -71,8 +84,12 @@ suite.
 ## What is deliberately missing
 
 - **Calendar screens.** M3.
-- **Formatting commands.** The toolbar reflects the caret's state; sending
-  commands back to the editor is the return path, and M3 work.
+- **Inserting an image.** The whole path exists except its trigger: the editor
+  handles `insertImage`, `EditorController.insertImage(assetPath:)` sends it,
+  and `EditorWebView.onImageRequested` is wired to a `requestImagePicker`
+  message — which nothing in the editor sends, because there is no control to
+  send it from. What is missing is the button and the `PhotosPicker` behind it,
+  plus writing the chosen image into the assets directory.
 - **Share extension.** M4. Capturing a URL or a selection into a new page.
 - **Notifications.** The scheduler exists in Rust and drives the desktop app;
   delivering through `UNUserNotificationCenter` is the remaining half.

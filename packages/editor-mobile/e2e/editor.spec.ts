@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   clearMessages,
+  docWithLink,
   docWithText,
   installFakeHost,
   messagesOfType,
@@ -176,6 +177,59 @@ test.describe("reporting changes", () => {
         return (latest?.payload["marks"] as string[] | undefined) ?? [];
       })
       .toContain("bold");
+  });
+});
+
+test.describe("links", () => {
+  // The schema sets `openOnClick: false`, which is right for an editor — a tap
+  // should place the caret, not navigate. The consequence is that a link does
+  // nothing at all unless the editor reports it, and the host acts on it: a
+  // webview that followed the href would replace the editor with a web page.
+  test("reports a tapped link to the host", async ({ page }) => {
+    await sendToEditor(page, "load", {
+      doc: docWithLink("the docs", "https://example.com/a b"),
+      pageId: "p1",
+    });
+    await clearMessages(page);
+
+    await page.locator(".ProseMirror a").click();
+
+    await expect.poll(async () => (await messagesOfType(page, "linkTapped")).length).toBe(1);
+    const [tapped] = await messagesOfType(page, "linkTapped");
+    // Verbatim, including the space. Escaping is the host's to do, and doing it
+    // twice is how a URL with a space in it stops resolving.
+    expect(tapped?.payload["url"]).toBe("https://example.com/a b");
+  });
+
+  test("a tap on ordinary text reports nothing", async ({ page }) => {
+    await sendToEditor(page, "load", { doc: docWithText("no links here"), pageId: "p1" });
+    await clearMessages(page);
+
+    await page.locator(".ProseMirror").click();
+
+    await expect
+      .poll(async () => (await messagesOfType(page, "selectionChanged")).length)
+      .toBeGreaterThan(0);
+    expect(await messagesOfType(page, "linkTapped")).toHaveLength(0);
+  });
+
+  test("tapping a link still moves the caret into it", async ({ page }) => {
+    // Refusing the navigation must not cost the user the ability to edit the
+    // link text, which on a phone is the only way to correct one.
+    await sendToEditor(page, "load", {
+      doc: docWithLink("the docs", "https://example.com"),
+      pageId: "p1",
+    });
+    await clearMessages(page);
+
+    await page.locator(".ProseMirror a").click();
+
+    await expect
+      .poll(async () => {
+        const latest = (await messagesOfType(page, "selectionChanged")).at(-1);
+        return (latest?.payload["marks"] as string[] | undefined) ?? [];
+      })
+      .toContain("link");
   });
 });
 

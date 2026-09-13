@@ -35,13 +35,23 @@ command -v xcodebuild >/dev/null 2>&1 || {
   exit 1
 }
 
-# Device plus both simulator architectures. The simulator slices are fused into
-# one fat static library because an XCFramework permits only one slice per
-# platform+variant pair.
+# Device, both simulator architectures, and macOS.
+#
+# The simulator slices are fused into one fat static library, as are the two
+# macOS ones, because an XCFramework permits only one slice per platform+variant
+# pair.
+#
+# macOS is here for one reason: `swift test --package-path apps/ios/PikosCore`
+# builds for the host, and without a macOS slice it cannot link — so the
+# boundary tests would be runnable only in a simulator, which is minutes rather
+# than seconds. PikosCore/Package.swift already declares `.macOS(.v14)`; this is
+# what makes that declaration true.
 TARGETS=(
   aarch64-apple-ios          # device
   aarch64-apple-ios-sim      # simulator, Apple silicon
   x86_64-apple-ios           # simulator, Intel
+  aarch64-apple-darwin       # host tests, Apple silicon
+  x86_64-apple-darwin        # host tests, Intel
 )
 
 echo "▶ ensuring Rust targets are installed"
@@ -57,18 +67,22 @@ done
 echo "▶ regenerating Swift bindings so they match this build"
 bash "$ROOT/scripts/gen-swift-bindings.sh"
 
-echo "▶ fusing simulator slices"
+echo "▶ fusing the multi-architecture slices"
 rm -rf "$BUILD"
-mkdir -p "$BUILD/sim" "$BUILD/device/Headers" "$BUILD/sim/Headers"
+mkdir -p "$BUILD/device/Headers" "$BUILD/sim/Headers" "$BUILD/macos/Headers"
 lipo -create \
   "$ROOT/target/aarch64-apple-ios-sim/release/libpikos_ffi.a" \
   "$ROOT/target/x86_64-apple-ios/release/libpikos_ffi.a" \
   -output "$BUILD/sim/libpikos_ffi.a"
+lipo -create \
+  "$ROOT/target/aarch64-apple-darwin/release/libpikos_ffi.a" \
+  "$ROOT/target/x86_64-apple-darwin/release/libpikos_ffi.a" \
+  -output "$BUILD/macos/libpikos_ffi.a"
 
-cp "$PKG/generated/include/pikos_ffiFFI.h" "$BUILD/device/Headers/"
-cp "$PKG/generated/include/module.modulemap" "$BUILD/device/Headers/"
-cp "$PKG/generated/include/pikos_ffiFFI.h" "$BUILD/sim/Headers/"
-cp "$PKG/generated/include/module.modulemap" "$BUILD/sim/Headers/"
+for variant in device sim macos; do
+  cp "$PKG/generated/include/pikos_ffiFFI.h" "$BUILD/$variant/Headers/"
+  cp "$PKG/generated/include/module.modulemap" "$BUILD/$variant/Headers/"
+done
 
 echo "▶ assembling the XCFramework"
 rm -rf "$XCFRAMEWORK"
@@ -78,6 +92,8 @@ xcodebuild -create-xcframework \
   -headers "$BUILD/device/Headers" \
   -library "$BUILD/sim/libpikos_ffi.a" \
   -headers "$BUILD/sim/Headers" \
+  -library "$BUILD/macos/libpikos_ffi.a" \
+  -headers "$BUILD/macos/Headers" \
   -output "$XCFRAMEWORK"
 
 echo "✓ $XCFRAMEWORK"

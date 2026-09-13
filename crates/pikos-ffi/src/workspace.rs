@@ -768,4 +768,22 @@ impl ReadOnlyWorkspace {
             }),
         }
     }
+
+    /// The folder list, for pickers outside the app.
+    ///
+    /// A read like any other here. It exists so a Shortcuts folder parameter
+    /// does not have to open a writable handle to populate itself — the one
+    /// case where a *query*, rather than an intent run, needed the database.
+    pub async fn list_folders(&self) -> Result<Vec<Folder>, WorkspaceError> {
+        let folders = pikos_db::list_folders_impl(&self.pool).await?;
+        Ok(folders
+            .into_iter()
+            .map(|f| Folder {
+                id: f.id,
+                name: f.name,
+                color: f.color,
+                sort_order: f.sort_order,
+            })
+            .collect())
+    }
 }

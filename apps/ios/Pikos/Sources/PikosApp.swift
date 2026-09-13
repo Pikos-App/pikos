@@ -35,6 +35,7 @@ struct PikosApp: App {
 
 struct RootView: View {
     @Environment(Route.self) private var route
+    @Environment(WorkspaceStore.self) private var store
 
     var body: some View {
         @Bindable var route = route
@@ -56,6 +57,16 @@ struct RootView: View {
             onDismiss: { route.quickAddPrefill = "" }
         ) {
             QuickAddSheet(prefill: route.quickAddPrefill)
+        }
+        // An App Intent can ask for a scope at any time, not only during
+        // launch. `Route.showToday()` has no store to move — it runs from
+        // `perform()`, which has no view — so it records the request and this
+        // applies it. Without it, "Open today" on an app that is already
+        // running switched the tab and left the list showing whatever folder
+        // the user was last in.
+        .onChange(of: route.pendingScope) { _, pending in
+            guard pending != nil else { return }
+            route.applyPending(to: store)
         }
     }
 }

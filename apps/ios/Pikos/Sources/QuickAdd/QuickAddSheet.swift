@@ -212,7 +212,12 @@ struct QuickAddSheet: View {
             // A folder picked by hand is still honoured — the parser only ever
             // reports a folder *name*, and matching it to one is this side's
             // job, so passing the id through covers both cases.
-            _ = await store.createFromQuickAdd(line, folderId: folderId)
+            // The same reference the summary was computed from, not the clock
+            // at the moment Add was tapped. `createFromQuickAdd` takes one for
+            // exactly this reason, and defaulting it here would let a line
+            // typed at 23:59 land on a different day than the one shown.
+            _ = await store.createFromQuickAdd(
+                line, reference: parsed?.reference ?? Date(), folderId: folderId)
             dismiss()
             return
         }
@@ -272,7 +277,15 @@ struct ParsedLine {
     /// it ("every weekday", "3 pages").
     var repeats: String?
 
+    /// The clock this line was read against.
+    ///
+    /// Kept so saving can resolve against the same instant the summary was
+    /// computed from. "tomorrow" typed at 23:59:58 and saved three seconds
+    /// later must not mean two different days.
+    let reference: Date
+
     init(line: String, reference: Date) {
+        self.reference = reference
         guard
             let result = parseQuickAdd(
                 input: line, reference: WorkspaceStore.wallClock(reference))

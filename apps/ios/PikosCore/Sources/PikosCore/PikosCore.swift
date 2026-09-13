@@ -580,6 +580,15 @@ public protocol ReadOnlyWorkspaceProtocol: AnyObject, Sendable {
     
     func getPage(id: String) async throws  -> Page
     
+    /**
+     * The folder list, for pickers outside the app.
+     *
+     * A read like any other here. It exists so a Shortcuts folder parameter
+     * does not have to open a writable handle to populate itself — the one
+     * case where a *query*, rather than an intent run, needed the database.
+     */
+    func listFolders() async throws  -> [Folder]
+    
     func listPages(query: PageQuery) async throws  -> [PageSummary]
     
     func listToday() async throws  -> [PageSummary]
@@ -682,6 +691,29 @@ open func getPage(id: String)async throws  -> Page  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePage_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * The folder list, for pickers outside the app.
+     *
+     * A read like any other here. It exists so a Shortcuts folder parameter
+     * does not have to open a writable handle to populate itself — the one
+     * case where a *query*, rather than an intent run, needed the database.
+     */
+open func listFolders()async throws  -> [Folder]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_readonlyworkspace_list_folders(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeFolder.lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -3906,6 +3938,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_get_page() != 40977) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_folders() != 18394) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_pages() != 18100) {

@@ -75,3 +75,16 @@ export function docWithText(text: string): string {
     type: "doc",
   });
 }
+
+/** A document with one paragraph containing a single link. */
+export function docWithLink(text: string, href: string): string {
+  return JSON.stringify({
+    content: [
+      {
+        content: [{ marks: [{ attrs: { href }, type: "link" }], text, type: "text" }],
+        type: "paragraph",
+      },
+    ],
+    type: "doc",
+  });
+}

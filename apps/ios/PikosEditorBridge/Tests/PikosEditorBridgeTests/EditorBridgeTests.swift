@@ -110,6 +110,106 @@ final class EditorBridgeProtocolTests: XCTestCase {
     }
 }
 
+/// A stand-in editor, so the controller can be driven without a webview.
+@MainActor
+private final class RecordingSink: EditorMessageSink {
+    var isReady = false
+    var delivered: [EditorBridge.Outgoing] = []
+
+    func deliver(_ message: EditorBridge.Outgoing) {
+        delivered.append(message)
+    }
+
+    /// The message types that arrived, in order. Comparing type names rather
+    /// than the payloads keeps these assertions about routing, which is what
+    /// the controller decides; the payloads are the protocol's business and are
+    /// covered above.
+    var types: [String] {
+        delivered.compactMap { message -> String? in
+            guard let json = try? message.encoded(),
+                let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)),
+                let fields = object as? [String: Any]
+            else { return nil }
+            return fields["type"] as? String
+        }
+    }
+}
+
+/// `EditorController` decides one thing — whether a command goes anywhere — and
+/// it is the kind of rule that is invisible when wrong: a toolbar button that
+/// does nothing looks like a bug in the editor, not in the routing.
+@MainActor
+final class EditorControllerTests: XCTestCase {
+
+    func testCommandsAreDroppedWithNoEditorAttached() {
+        let controller = EditorController()
+        XCTAssertFalse(controller.isReady)
+        // The bar is that this does not trap; there is nowhere for it to go.
+        controller.toggleMark(.bold)
+        controller.focus()
+    }
+
+    /// The editor is mounted but has not finished loading. Sending now would
+    /// reach a `window.pikosEditor` that does not exist yet, and the command
+    /// would be lost with no indication.
+    func testCommandsAreDroppedUntilTheEditorReports() {
+        let sink = RecordingSink()
+        let controller = EditorController()
+        controller.attach(sink)
+
+        controller.toggleMark(.bold)
+        XCTAssertEqual(sink.delivered.count, 0)
+
+        sink.isReady = true
+        controller.toggleMark(.bold)
+        XCTAssertEqual(sink.types, ["toggleMark"])
+    }
+
+    func testEveryCommandRoutesToItsMessage() {
+        let sink = RecordingSink()
+        sink.isReady = true
+        let controller = EditorController()
+        controller.attach(sink)
+
+        controller.toggleMark(.italic)
+        controller.toggleBlock(.heading(level: 2))
+        controller.focus()
+        controller.blur()
+        controller.insertImage(assetPath: "assets/a.png")
+
+        XCTAssertEqual(
+            sink.types, ["toggleMark", "toggleBlock", "focus", "blur", "insertImage"])
+    }
+
+    /// `dismantleUIView` detaches when the screen goes away. A controller that
+    /// kept sending would be talking to a webview that has been torn down.
+    func testDetachingStopsDelivery() {
+        let sink = RecordingSink()
+        sink.isReady = true
+        let controller = EditorController()
+        controller.attach(sink)
+        controller.detach()
+
+        controller.focus()
+        XCTAssertEqual(sink.delivered.count, 0)
+        XCTAssertFalse(controller.isReady)
+    }
+
+    /// The controller holds the sink weakly — the webview owns the coordinator,
+    /// not the other way round — so a torn-down editor must not be kept alive
+    /// by a controller the screen still holds.
+    func testTheSinkIsNotRetained() {
+        let controller = EditorController()
+        do {
+            let sink = RecordingSink()
+            sink.isReady = true
+            controller.attach(sink)
+            XCTAssertTrue(controller.isReady)
+        }
+        XCTAssertFalse(controller.isReady, "the sink should have been released")
+    }
+}
+
 /// The scheme handler is the webview's only route to the filesystem, and the
 /// paths it receives come out of documents — which are user content. These
 /// cover the boundary rather than the happy path.
@@ -179,6 +279,64 @@ final class EditorAssetSchemeHandlerTests: XCTestCase {
         try Data("x".utf8).write(to: root.appendingPathComponent("my photo.png"))
         XCTAssertEqual(
             resolve("pikos-asset://asset/my%20photo.png")?.lastPathComponent, "my photo.png")
+    }
+
+    /// `URL.path` decodes once already. Decoding again turned a percent sign in
+    /// a filename into an escape sequence, so an image the user had named
+    /// `50%.png` resolved to a file that does not exist and silently failed to
+    /// load.
+    func testPercentSignsInFilenamesSurvive() throws {
+        try Data("x".utf8).write(to: root.appendingPathComponent("50%.png"))
+        XCTAssertEqual(
+            resolve("pikos-asset://asset/50%25.png")?.lastPathComponent, "50%.png")
+    }
+
+    /// The other half of the same bug. A doubly-encoded traversal decoded once
+    /// into `..` — harmless only because the root check caught it afterwards.
+    /// It is now read as what it literally is: a directory whose name happens
+    /// to be `%2e%2e`, still inside the root.
+    func testDoublyEncodedTraversalIsTakenLiterally() throws {
+        let resolved = resolve("pikos-asset://asset/%252e%252e/secret")
+        XCTAssertEqual(resolved?.pathComponents.suffix(2).joined(separator: "/"), "%2e%2e/secret")
+        XCTAssertTrue(
+            resolved?.path.hasPrefix(root.resolvingSymlinksInPath().path) ?? false,
+            "still inside the asset root")
+    }
+
+    /// WebKit raises `NSInternalInconsistencyException` — a crash, not an
+    /// ignored call — if a response is delivered to a task it has already
+    /// stopped. It happens whenever a load is cancelled while a read is in
+    /// flight, which on a long page is just scrolling quickly.
+    func testAStoppedTaskIsNotDeliveredTo() {
+        // The object is held for the whole test on purpose: `ObjectIdentifier`
+        // is an address, and a freed one can be handed straight back to the
+        // next allocation — which would make this pass or fail by luck.
+        let task = NSObject()
+        withExtendedLifetime(task) {
+            let token = ObjectIdentifier(task)
+            handler.begin(token)
+            handler.forget(token)
+            XCTAssertFalse(handler.finish(token))
+        }
+    }
+
+    func testALiveTaskIsDeliveredToExactlyOnce() {
+        let task = NSObject()
+        withExtendedLifetime(task) {
+            let token = ObjectIdentifier(task)
+            handler.begin(token)
+            XCTAssertTrue(handler.finish(token))
+            XCTAssertFalse(handler.finish(token), "a second delivery would also throw")
+        }
+    }
+
+    /// A task never started — or one belonging to a different handler — is not
+    /// something to deliver to either.
+    func testAnUnknownTaskIsRefused() {
+        let task = NSObject()
+        withExtendedLifetime(task) {
+            XCTAssertFalse(handler.finish(ObjectIdentifier(task)))
+        }
     }
 
     /// Anything not recognised is served as binary, so an unexpected file

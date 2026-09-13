@@ -106,17 +106,74 @@ session of its own. What has been done instead:
   every `NewPage(…)`, `PageEdit(…)` and `workspace.x(…)` in the app against the
   generated Swift — labels must exist, and Swift requires them in declaration
   order. 53 call sites, all clean. It runs in CI, so it cannot rot.
-- **The Swift was read adversarially instead of compiled.** That found, among
-  others: a `.sheet` whose `onDismiss` cannot be a second trailing closure
-  because it is declared before `content`; two main-actor helpers called from
-  non-isolated code; a missing `dismantleUIView` leaking a message handler; and
-  a SwiftUI feedback loop where the parse writing to a control fired the same
-  `onChange` that records a manual override.
-- **What that cannot find** is the rest: wrong types, missing `await`, strict
-  concurrency on the webview coordinator (which conforms to two delegate
-  protocols that are main-actor in practice), and anything about the
-  XCFramework linking. `SWIFT_STRICT_CONCURRENCY: complete` is set on purpose,
-  so expect it to have opinions.
+- **The Swift was read adversarially instead of compiled.** Two passes now. The
+  first found, among others: a `.sheet` whose `onDismiss` cannot be a second
+  trailing closure because it is declared before `content`; two main-actor
+  helpers called from non-isolated code; a missing `dismantleUIView` leaking a
+  message handler; and a SwiftUI feedback loop where the parse writing to a
+  control fired the same `onChange` that records a manual override.
+
+  The second pass covered everything the first had not, and found seven more.
+  Three were behavioural and would have shipped looking like something else:
+
+  - **The scheme handler crashed on a cancelled load.** WebKit raises
+    `NSInternalInconsistencyException` — not an ignored call — if a response is
+    delivered to a task it has already stopped, and `stop` did nothing but
+    carry a comment claiming the task was checked. Scrolling a page of images
+    fast enough is all it takes. Live tasks are tracked now, and three tests
+    cover it.
+  - **The checkbox's 44pt touch target was inert.** `contentShape` describes
+    the view it is applied to, and it sat *before* the frame that enlarged it —
+    so the hit area stayed the 17pt glyph. The comment above it was about
+    exactly this and the order defeated it.
+  - **"Open today" did nothing to an app already running.** `Route.showToday()`
+    has no store to move — it runs from an intent's `perform()`, which has no
+    view — so it records the request, and only the launch-time `.task` ever
+    applied one. `RootView` watches `pendingScope` now.
+
+  Two were correctness under the seams:
+
+  - **Quick add parsed against one clock and saved against another.**
+    `createFromQuickAdd` takes a reference time for the stated reason that a
+    line typed at 23:59 must not resolve to a different day — and the sheet let
+    it default. The parse's own reference is carried through now.
+  - **The asset handler decoded percent-escapes twice.** `URL.path` decodes
+    already, so an image named `50%.png` resolved to a file that does not
+    exist, and `%252e%252e` survived the first pass to become `..` on the
+    second — caught today only by the root check underneath it.
+
+  Two were cost rather than correctness: a `DateFormatter` built two or three
+  times per row per frame in the page list, and Shortcuts entity queries
+  opening a *writable* handle to populate a picker, against the one-writer rule
+  the file they live in is entirely about. `ReadOnlyWorkspace` gained
+  `listFolders` so the folder picker could use it.
+
+- **The Swift tests now run on the host.** Both packages, in seconds, no
+  simulator — see `apps/ios/README.md`. That is what made the controller
+  testable at all: it talks to an `EditorMessageSink` rather than naming the
+  representable's coordinator, so a test double can drive it.
+
+- **What none of this can find** is the rest: wrong types, missing `await`, and
+  strict concurrency. `SWIFT_VERSION: 6.0` with
+  `SWIFT_STRICT_CONCURRENCY: complete` means those are errors, not warnings, so
+  expect them to be most of the first build. Three suspects, written down so
+  the session is a checklist rather than an exploration:
+
+  1. **`EditorWebView.Coordinator`** conforms to `EditorMessageSink`
+     (`@MainActor`) as well as `WKScriptMessageHandler` and
+     `WKNavigationDelegate`. If WebKit's delegate protocols are audited as
+     main-actor in the SDK in use, this lines up; if not, the conformances
+     disagree and the coordinator needs `nonisolated` methods that hop.
+  2. **`TodayProvider`** calls WidgetKit's completion handlers from inside a
+     `Task`. `TimelineProvider` is not main-actor, so if those handlers are not
+     `@Sendable` in the SDK, capturing them is an error. The fix is a sendable
+     box around the handler, not a redesign.
+  3. **`AppDependencyManager.shared.add { Route.shared }`** reads a main-actor
+     singleton from a closure whose isolation depends on that API's signature.
+
+  Note that both Swift packages declare `swift-tools-version: 5.9`, so they
+  build in Swift 5 mode regardless of the app's setting — suspects 1 and 2 are
+  warnings there and errors only where app code touches them.
 
 ## Next, in order
 

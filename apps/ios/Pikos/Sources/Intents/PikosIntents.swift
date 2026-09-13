@@ -43,6 +43,27 @@ private func openWorkspace() async throws -> Workspace {
     }
 }
 
+/// Open the workspace read-only, for the parts of an intent that only look.
+///
+/// Entity queries are not intent runs: Shortcuts calls `suggestedEntities` to
+/// populate a parameter picker while the user is still assembling a shortcut,
+/// and `entities(for:)` to resolve saved references. Opening a writable handle
+/// for those would put a second writer on a database whose WAL mode permits
+/// one, which is the rule this whole file is arranged around — so the type
+/// enforces it here too rather than the comment above doing it alone.
+///
+/// `openExisting` also refuses to create a database, which matters: a picker
+/// shown before the app has ever run must come back empty, not leave an empty
+/// workspace behind for the app to find.
+private func openForReading() async throws -> ReadOnlyWorkspace {
+    do {
+        let url = try WorkspaceLocation.databaseURL()
+        return try await ReadOnlyWorkspace.openExisting(path: url.path)
+    } catch {
+        throw PikosIntentError.workspaceUnavailable
+    }
+}
+
 // MARK: - Create
 
 struct CreatePageIntent: AppIntent {
@@ -143,7 +164,7 @@ struct PageEntity: AppEntity, Identifiable {
 
 struct PageEntityQuery: EntityQuery {
     func entities(for identifiers: [String]) async throws -> [PageEntity] {
-        let workspace = try await openWorkspace()
+        let workspace = try await openForReading()
         var found: [PageEntity] = []
         for id in identifiers {
             // A page in a saved shortcut may since have been deleted. Skipping
@@ -156,9 +177,14 @@ struct PageEntityQuery: EntityQuery {
         return found
     }
 
+    /// Shortcuts calls this to fill a parameter picker, which can happen
+    /// before Pikos has ever been opened and so before a database exists. An
+    /// empty picker is the honest answer there; throwing would show the user an
+    /// error for a app they have simply not used yet.
     func suggestedEntities() async throws -> [PageEntity] {
-        let workspace = try await openWorkspace()
-        let pages = try await workspace.listToday()
+        guard let workspace = try? await openForReading(),
+            let pages = try? await workspace.listToday()
+        else { return [] }
         return pages.prefix(10).map { PageEntity(id: $0.id, title: $0.title) }
     }
 }
@@ -182,12 +208,14 @@ struct FolderEntityQuery: EntityQuery {
         try await allFolders().filter { identifiers.contains($0.id) }
     }
 
+    /// Empty rather than an error before the app has run — see the note on
+    /// `PageEntityQuery.suggestedEntities`.
     func suggestedEntities() async throws -> [FolderEntity] {
-        try await allFolders()
+        (try? await allFolders()) ?? []
     }
 
     private func allFolders() async throws -> [FolderEntity] {
-        let workspace = try await openWorkspace()
+        let workspace = try await openForReading()
         return try await workspace.listFolders().map { FolderEntity(id: $0.id, name: $0.name) }
     }
 }

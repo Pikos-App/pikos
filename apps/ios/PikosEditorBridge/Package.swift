@@ -10,7 +10,11 @@ import PackageDescription
 // gitignored rather than committed.
 let package = Package(
     name: "PikosEditorBridge",
-    platforms: [.iOS(.v17)],
+    // macOS is not a shipping target — `EditorWebView` is `#if canImport(UIKit)`
+    // and simply is not there. It is declared so `swift test` can run the
+    // protocol, controller and scheme-handler tests on the host in seconds
+    // rather than through a simulator; those touch no webview.
+    platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "PikosEditorBridge", targets: ["PikosEditorBridge"])
     ],

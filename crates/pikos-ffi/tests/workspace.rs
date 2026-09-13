@@ -331,6 +331,31 @@ async fn a_read_only_workspace_refuses_to_create_a_database() {
 }
 
 #[tokio::test]
+async fn a_read_only_handle_lists_folders() {
+    // The Shortcuts folder picker runs as an `EntityQuery`, not an intent, and
+    // opening a writable handle to populate a picker would put a second writer
+    // on a database whose WAL mode permits one. It reads through this.
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    ws.create_folder("Work".to_string(), None).await.unwrap();
+    ws.create_folder("Home".to_string(), None).await.unwrap();
+
+    let reader = ReadOnlyWorkspace::open_existing(tmp.path.clone())
+        .await
+        .unwrap();
+    let names: Vec<String> = reader
+        .list_folders()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|f| f.name)
+        .collect();
+    assert_eq!(names.len(), 2);
+    assert!(names.contains(&"Work".to_string()));
+    assert!(names.contains(&"Home".to_string()));
+}
+
+#[tokio::test]
 async fn opening_a_workspace_twice_shares_its_contents() {
     // The app and an extension open the same path independently. WAL mode
     // permits that; this pins it rather than assuming it.

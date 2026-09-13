@@ -1,3 +1,12 @@
+// UIKit-only, and gated so it says so.
+//
+// `UIViewRepresentable`, `UIScrollView` and `UIColor` exist only where UIKit
+// does. Without this guard the package cannot build for the host at all, which
+// would mean `swift test --package-path apps/ios/PikosEditorBridge` had to go
+// through a simulator — minutes instead of seconds — to run protocol and
+// scheme-handler tests that touch no webview.
+#if canImport(UIKit)
+
 import SwiftUI
 import WebKit
 
@@ -101,13 +110,13 @@ public struct EditorWebView: UIViewRepresentable {
         #if DEBUG
         // Safari's Web Inspector can attach to the editor on a debug build,
         // which is the only practical way to diagnose a layout problem inside
-        // the webview on a real device.
-        if #available(iOS 16.4, *) {
-            webView.isInspectable = true
-        }
+        // the webview on a real device. No availability check: `isInspectable`
+        // arrived in 16.4 and this package's floor is iOS 17.
+        webView.isInspectable = true
         #endif
 
-        controller?.attach(webView: webView, coordinator: context.coordinator)
+        context.coordinator.webView = webView
+        controller?.attach(context.coordinator)
 
         context.coordinator.loadStartedAt = Date()
         // Loaded through the scheme handler rather than loadFileURL so the
@@ -168,8 +177,13 @@ public struct EditorWebView: UIViewRepresentable {
 
     // MARK: - Coordinator
 
-    public final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+    public final class Coordinator: NSObject, EditorMessageSink, WKScriptMessageHandler,
+        WKNavigationDelegate
+    {
         var parent: EditorWebView
+        /// The webview this coordinator drives. Weak because the webview owns
+        /// its configuration, which owns this through the message handler.
+        weak var webView: WKWebView?
         var isReady = false
         var loadedPageId: String?
         var appliedTheme: String?
@@ -183,7 +197,13 @@ public struct EditorWebView: UIViewRepresentable {
             self.controller = parent.controller
         }
 
-        /// Internal rather than private: `EditorController` forwards through it.
+        /// `EditorMessageSink`. The controller has no webview of its own, so
+        /// the one attached in `makeUIView` is the one commands go to.
+        func deliver(_ message: EditorBridge.Outgoing) {
+            guard let webView else { return }
+            send(message, on: webView)
+        }
+
         func send(_ message: EditorBridge.Outgoing, on webView: WKWebView) {
             do {
                 let json = try message.encoded()
@@ -293,3 +313,5 @@ public struct EditorWebView: UIViewRepresentable {
         }
     }
 }
+
+#endif
