@@ -842,6 +842,19 @@ public func FfiConverterTypeReadOnlyWorkspace_lower(_ value: ReadOnlyWorkspace) 
 public protocol WorkspaceProtocol: AnyObject, Sendable {
     
     /**
+     * Copy the whole database to `destination`.
+     *
+     * A byte copy of the file would not do: SQLite in WAL mode is three files
+     * and possibly a writer mid-commit, so a copy taken that way can be missing
+     * its most recent writes or refuse to open. This takes a read lock and
+     * writes one defragmented file.
+     *
+     * Everything is in it — the trash, and the sync bookkeeping. Credentials
+     * are not: those live in the keychain and never reach the database.
+     */
+    func backupDatabase(destination: String) async throws 
+    
+    /**
      * Everything to draw for a visible range, in one call.
      *
      * `start` and `end` are `YYYY-MM-DD`; `end` is inclusive, being the last
@@ -971,6 +984,22 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func createPage(page: NewPage) async throws  -> Page
     
     /**
+     * Delete everything in the workspace.
+     *
+     * Every page, folder, schedule, repeat and calendar link, with no trash to
+     * recover from afterwards — this is the button for handing the phone on,
+     * not for tidying up. The caller is expected to have asked twice; nothing
+     * here confirms.
+     *
+     * Calendar accounts are disconnected first so their credentials leave the
+     * keychain, where the database cannot reach them. That is best-effort on
+     * purpose: a server that will not answer must not be able to stop somebody
+     * wiping their own device, so a failure there is logged past rather than
+     * returned. The local rows go either way.
+     */
+    func deleteAllData() async throws 
+    
+    /**
      * Disconnect an account: release its credential and stop syncing it.
      *
      * Dormancy, not deletion. The row and its calendars stay so a later
@@ -978,6 +1007,43 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * a second copy of every one of them.
      */
     func disconnectSyncAccount(accountId: String) async throws 
+    
+    /**
+     * The workspace as one CSV.
+     *
+     * Column-for-column what the desktop writes, because it is the same
+     * function: the header names are a contract with the importer, so a phone
+     * export that round-trips anywhere else is a phone export that round-trips
+     * here.
+     *
+     * `include_synced` decides whether calendar events the user never touched
+     * come too. Off by default everywhere: a mirror nobody actioned is the
+     * calendar's copy of its own event, not the user's work, and including it
+     * silently doubles a calendar the person already has.
+     */
+    func exportCsv(includeSynced: Bool) async throws  -> String
+    
+    /**
+     * Every scheduled page as one RFC 5545 calendar.
+     */
+    func exportIcs(includeSynced: Bool) async throws  -> String
+    
+    /**
+     * The workspace as a tree of Markdown files.
+     *
+     * Returned rather than written, because where they go is the platform's
+     * question — a Downloads folder on a desktop, a temporary directory on the
+     * way to a share sheet on a phone. `path` is relative to wherever the
+     * caller decides the root is.
+     *
+     * Image references are left as the absolute paths they are stored as. The
+     * desktop copies those files into an `assets/` directory and rewrites them;
+     * nothing on iOS writes such an asset today, so there is nothing to copy
+     * and nothing to rewrite. When that changes, `render_markdown_page` is the
+     * function to call with whatever was copied — this method deliberately does
+     * not decide.
+     */
+    func exportMarkdown(includeSynced: Bool) async throws  -> [ExportFile]
     
     func getPage(id: String) async throws  -> Page
     
@@ -1487,6 +1553,33 @@ public static func `open`(path: String)async throws  -> Workspace  {
 
     
     /**
+     * Copy the whole database to `destination`.
+     *
+     * A byte copy of the file would not do: SQLite in WAL mode is three files
+     * and possibly a writer mid-commit, so a copy taken that way can be missing
+     * its most recent writes or refuse to open. This takes a read lock and
+     * writes one defragmented file.
+     *
+     * Everything is in it — the trash, and the sync bookkeeping. Credentials
+     * are not: those live in the keychain and never reach the database.
+     */
+open func backupDatabase(destination: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_backup_database(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(destination)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Everything to draw for a visible range, in one call.
      *
      * `start` and `end` are `YYYY-MM-DD`; `end` is inclusive, being the last
@@ -1721,6 +1814,36 @@ open func createPage(page: NewPage)async throws  -> Page  {
 }
     
     /**
+     * Delete everything in the workspace.
+     *
+     * Every page, folder, schedule, repeat and calendar link, with no trash to
+     * recover from afterwards — this is the button for handing the phone on,
+     * not for tidying up. The caller is expected to have asked twice; nothing
+     * here confirms.
+     *
+     * Calendar accounts are disconnected first so their credentials leave the
+     * keychain, where the database cannot reach them. That is best-effort on
+     * purpose: a server that will not answer must not be able to stop somebody
+     * wiping their own device, so a failure there is logged past rather than
+     * returned. The local rows go either way.
+     */
+open func deleteAllData()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_delete_all_data(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Disconnect an account: release its credential and stop syncing it.
      *
      * Dormancy, not deletion. The row and its calendars stay so a later
@@ -1739,6 +1862,85 @@ open func disconnectSyncAccount(accountId: String)async throws   {
             completeFunc: ffi_pikos_ffi_rust_future_complete_void,
             freeFunc: ffi_pikos_ffi_rust_future_free_void,
             liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * The workspace as one CSV.
+     *
+     * Column-for-column what the desktop writes, because it is the same
+     * function: the header names are a contract with the importer, so a phone
+     * export that round-trips anywhere else is a phone export that round-trips
+     * here.
+     *
+     * `include_synced` decides whether calendar events the user never touched
+     * come too. Off by default everywhere: a mirror nobody actioned is the
+     * calendar's copy of its own event, not the user's work, and including it
+     * silently doubles a calendar the person already has.
+     */
+open func exportCsv(includeSynced: Bool)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_export_csv(
+                        self.uniffiCloneHandle(),FfiConverterBool.lower(includeSynced)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Every scheduled page as one RFC 5545 calendar.
+     */
+open func exportIcs(includeSynced: Bool)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_export_ics(
+                        self.uniffiCloneHandle(),FfiConverterBool.lower(includeSynced)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * The workspace as a tree of Markdown files.
+     *
+     * Returned rather than written, because where they go is the platform's
+     * question — a Downloads folder on a desktop, a temporary directory on the
+     * way to a share sheet on a phone. `path` is relative to wherever the
+     * caller decides the root is.
+     *
+     * Image references are left as the absolute paths they are stored as. The
+     * desktop copies those files into an `assets/` directory and rewrites them;
+     * nothing on iOS writes such an asset today, so there is nothing to copy
+     * and nothing to rewrite. When that changes, `render_markdown_page` is the
+     * function to call with whatever was copied — this method deliberately does
+     * not decide.
+     */
+open func exportMarkdown(includeSynced: Bool)async throws  -> [ExportFile]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_export_markdown(
+                        self.uniffiCloneHandle(),FfiConverterBool.lower(includeSynced)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeExportFile.lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -3186,6 +3388,73 @@ public func FfiConverterTypeCompletedPages_lift(_ buf: RustBuffer) throws -> Com
 #endif
 public func FfiConverterTypeCompletedPages_lower(_ value: CompletedPages) -> RustBuffer {
     return FfiConverterTypeCompletedPages.lower(value)
+}
+
+
+/**
+ * One file of an export, ready to be written.
+ */
+public struct ExportFile: Equatable, Hashable {
+    /**
+     * Path relative to the export's root, `/` separated — `"Work/Notes.md"`.
+     * Never absolute and never above the root; the caller joins it to whatever
+     * directory it is writing into.
+     */
+    public var path: String
+    public var contents: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Path relative to the export's root, `/` separated — `"Work/Notes.md"`.
+         * Never absolute and never above the root; the caller joins it to whatever
+         * directory it is writing into.
+         */path: String, contents: String) {
+        self.path = path
+        self.contents = contents
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ExportFile: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExportFile: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExportFile {
+        return
+            try ExportFile(
+                path: FfiConverterString.read(from: &buf), 
+                contents: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ExportFile, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.path, into: &buf)
+        FfiConverterString.write(value.contents, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExportFile_lift(_ buf: RustBuffer) throws -> ExportFile {
+    return try FfiConverterTypeExportFile.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExportFile_lower(_ value: ExportFile) -> RustBuffer {
+    return FfiConverterTypeExportFile.lower(value)
 }
 
 
@@ -6640,6 +6909,31 @@ fileprivate struct FfiConverterSequenceTypeCalendarSyncResult: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeExportFile: FfiConverterRustBuffer {
+    typealias SwiftType = [ExportFile]
+
+    public static func write(_ value: [ExportFile], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeExportFile.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ExportFile] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ExportFile]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeExportFile.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFolder: FfiConverterRustBuffer {
     typealias SwiftType = [Folder]
 
@@ -7274,6 +7568,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today() != 33378) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_backup_database() != 64326) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_calendar_range() != 23142) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7298,7 +7595,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_create_page() != 13844) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_delete_all_data() != 15051) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_disconnect_sync_account() != 11852) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_export_csv() != 47268) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_export_ics() != 1251) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_export_markdown() != 3908) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_get_page() != 16439) {

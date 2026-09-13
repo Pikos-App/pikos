@@ -1475,10 +1475,12 @@ dependencies = [
 name = "pikos-db"
 version = "0.1.0"
 dependencies = [
+ "calcard",
  "chrono",
  "chrono-tz",
  "iana-time-zone",
  "log",
+ "pikos-core",
  "pikos-recurrence",
  "serde",
  "serde_json",
@@ -1494,6 +1496,7 @@ name = "pikos-ffi"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "log",
  "pikos-calendar-sync",
  "pikos-core",
  "pikos-db",

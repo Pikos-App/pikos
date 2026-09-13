@@ -298,6 +298,11 @@ void uniffi_pikos_ffi_fn_free_workspace(uint64_t handle, RustCallStatus *_Nonnul
 uint64_t uniffi_pikos_ffi_fn_constructor_workspace_open(RustBuffer path
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BACKUP_DATABASE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BACKUP_DATABASE
+uint64_t uniffi_pikos_ffi_fn_method_workspace_backup_database(uint64_t ptr, RustBuffer destination
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CALENDAR_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_CALENDAR_RANGE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_calendar_range(uint64_t ptr, RustBuffer start, RustBuffer end
@@ -338,9 +343,29 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_create_from_quick_add(uint64_t ptr
 uint64_t uniffi_pikos_ffi_fn_method_workspace_create_page(uint64_t ptr, RustBuffer page
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_DELETE_ALL_DATA
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_DELETE_ALL_DATA
+uint64_t uniffi_pikos_ffi_fn_method_workspace_delete_all_data(uint64_t ptr
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_DISCONNECT_SYNC_ACCOUNT
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_DISCONNECT_SYNC_ACCOUNT
 uint64_t uniffi_pikos_ffi_fn_method_workspace_disconnect_sync_account(uint64_t ptr, RustBuffer account_id
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_EXPORT_CSV
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_EXPORT_CSV
+uint64_t uniffi_pikos_ffi_fn_method_workspace_export_csv(uint64_t ptr, int8_t include_synced
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_EXPORT_ICS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_EXPORT_ICS
+uint64_t uniffi_pikos_ffi_fn_method_workspace_export_ics(uint64_t ptr, int8_t include_synced
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_EXPORT_MARKDOWN
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_EXPORT_MARKDOWN
+uint64_t uniffi_pikos_ffi_fn_method_workspace_export_markdown(uint64_t ptr, int8_t include_synced
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_GET_PAGE
@@ -961,6 +986,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BACKUP_DATABASE
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_BACKUP_DATABASE
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_backup_database(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CALENDAR_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_CALENDAR_RANGE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_calendar_range(void
@@ -1009,9 +1040,33 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_create_page(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_DELETE_ALL_DATA
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_DELETE_ALL_DATA
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_delete_all_data(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_DISCONNECT_SYNC_ACCOUNT
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_DISCONNECT_SYNC_ACCOUNT
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_disconnect_sync_account(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_EXPORT_CSV
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_EXPORT_CSV
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_export_csv(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_EXPORT_ICS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_EXPORT_ICS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_export_ics(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_EXPORT_MARKDOWN
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_EXPORT_MARKDOWN
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_export_markdown(void
     
 );
 #endif

@@ -10,6 +10,7 @@ struct PikosApp: App {
     @State private var store: WorkspaceStore
     @State private var settings = SettingsStore()
     @State private var sync: CalendarSyncStore
+    @State private var exports: ExportStore
     @State private var route = Route.shared
 
     init() {
@@ -25,6 +26,7 @@ struct PikosApp: App {
         let pages = WorkspaceStore()
         _store = State(initialValue: pages)
         _sync = State(initialValue: CalendarSyncStore(workspace: { pages.handle }))
+        _exports = State(initialValue: ExportStore(workspace: { pages.handle }))
     }
 
     var body: some Scene {
@@ -33,6 +35,7 @@ struct PikosApp: App {
                 .environment(store)
                 .environment(settings)
                 .environment(sync)
+                .environment(exports)
                 .environment(route)
                 // Opening the workspace runs migrations, so it happens once,
                 // here, in the app process. A widget must never be the process

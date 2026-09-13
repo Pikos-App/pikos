@@ -17,9 +17,13 @@ struct SettingsScreen: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(WorkspaceStore.self) private var store
     @Environment(CalendarSyncStore.self) private var sync
+    @Environment(ExportStore.self) private var exports
     @Environment(\.dismiss) private var dismiss
 
     @State private var isResetConfirmed = false
+    @State private var isDeleteConfirmed = false
+    @State private var isDeleting = false
+    @State private var includeSyncedInExport = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -79,6 +83,8 @@ struct SettingsScreen: View {
                     Text("External calendars")
                 }
 
+                exportSection
+
                 Section("About") {
                     LabeledContent("Version", value: Self.version)
                     // Not decoration: a page written by a newer build cannot be
@@ -93,6 +99,26 @@ struct SettingsScreen: View {
                     }
                 } footer: {
                     Text("Returns the settings above to their defaults. Your pages are not touched.")
+                }
+
+                Section {
+                    if isDeleting {
+                        HStack {
+                            ProgressView()
+                            Text("Deleting…").foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Button("Delete all data", role: .destructive) {
+                            isDeleteConfirmed = true
+                        }
+                    }
+                } footer: {
+                    // Said before the tap. The trash makes an ordinary delete
+                    // recoverable, and somebody who has learned that will
+                    // reasonably expect the same here.
+                    Text(
+                        "Removes every page, folder and calendar connection from this device. There is no trash to recover from — export first if you want a copy."
+                    )
                 }
             }
             .task { await sync.load() }
@@ -111,7 +137,91 @@ struct SettingsScreen: View {
             } message: {
                 Text("Theme, density, week start and default folder go back to their defaults.")
             }
+            .confirmationDialog(
+                "Delete everything on this device?", isPresented: $isDeleteConfirmed,
+                titleVisibility: .visible
+            ) {
+                Button("Delete all data", role: .destructive) {
+                    Task { await deleteEverything() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Every page, folder and calendar connection. This cannot be undone.")
+            }
+            .sheet(item: exportReady) { ready in
+                ShareSheet(url: ready.url) { exports.ready = nil }
+            }
+            .alert(
+                "Export failed", isPresented: exportFailed,
+                actions: { Button("OK", role: .cancel) { exports.errorMessage = nil } },
+                message: { Text(exports.errorMessage ?? "") })
         }
+    }
+
+    // MARK: - Export
+
+    /// Four formats, each saying what it is for before it is tapped.
+    ///
+    /// They are not interchangeable, and the difference only becomes visible
+    /// once the file is somewhere else — a CSV that imports back, a Markdown
+    /// tree that opens anywhere, a calendar file, and a backup that is the whole
+    /// workspace including the trash.
+    @ViewBuilder
+    private var exportSection: some View {
+        Section {
+            ForEach(ExportStore.Format.allCases) { format in
+                Button {
+                    Task { await exports.export(format, includeSynced: includeSyncedInExport) }
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(format.title).foregroundStyle(Color.primary)
+                            Text(format.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if exports.isExporting == format {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(exports.isExporting != nil)
+            }
+
+            // Only when there is a calendar to include. Without one the toggle
+            // is a question about something the reader does not have.
+            if hasCalendars {
+                Toggle("Include calendar events", isOn: $includeSyncedInExport)
+            }
+        } header: {
+            Text("Export")
+        } footer: {
+            if hasCalendars {
+                Text(
+                    "Off by default: events mirrored from a calendar are that calendar's copy, and your calendar app already has them."
+                )
+            }
+        }
+    }
+
+    private var hasCalendars: Bool {
+        sync.accounts.contains { !$0.calendars.isEmpty }
+    }
+
+    private var exportReady: Binding<ExportStore.Ready?> {
+        Binding(get: { exports.ready }, set: { exports.ready = $0 })
+    }
+
+    private var exportFailed: Binding<Bool> {
+        Binding(get: { exports.errorMessage != nil }, set: { if !$0 { exports.errorMessage = nil } })
+    }
+
+    private func deleteEverything() async {
+        isDeleting = true
+        defer { isDeleting = false }
+        await store.deleteAllData()
+        dismiss()
     }
 
     /// How many calendars are mirroring, so the row says something without

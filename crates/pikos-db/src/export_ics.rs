@@ -34,9 +34,8 @@ use chrono::{Datelike, Days, Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use pikos_recurrence::{rewrite_until_with, zoned, WallClock};
 use sqlx::Row;
 
-use super::export::fetch_export_pages;
-use crate::db::DbState;
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
+use crate::export::fetch_export_pages;
 
 /// How far past the last exported occurrence the generated `VTIMEZONE` spells
 /// its transitions out. An unbounded `RRULE` outruns any window; 30 years puts
@@ -488,11 +487,8 @@ struct OverrideRow {
 
 /// Build the whole calendar. Split from [`export_ics`] so the folding, escaping
 /// and value-type rules are testable without touching the disk.
-pub(crate) async fn build_export_ics_impl(
-    pool: &sqlx::SqlitePool,
-    include_synced: bool,
-) -> AppResult<String> {
-    let device = pikos_db::device_zone().name().to_string();
+pub async fn build_export_ics(pool: &sqlx::SqlitePool, include_synced: bool) -> AppResult<String> {
+    let device = crate::device_zone().name().to_string();
     let now = chrono::Utc::now();
     let dtstamp = now.format("%Y%m%dT%H%M%SZ").to_string();
 
@@ -764,36 +760,9 @@ fn january_first(year: i32) -> NaiveDateTime {
         .and_time(NaiveTime::MIN)
 }
 
-/// Export every scheduled page as one `.ics` file in ~/Downloads. Same
-/// destination shape and same return value as the CSV export, so the settings
-/// panel treats all three exports identically.
-#[tauri::command]
-pub async fn export_ics(
-    state: tauri::State<'_, DbState>,
-    include_synced: bool,
-) -> AppResult<String> {
-    let pool = state.get_pool().await?;
-    let out = build_export_ics_impl(&pool, include_synced).await?;
-
-    let home =
-        std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
-    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
-    let dest = format!("{home}/Downloads/pikos-export-{timestamp}.ics");
-
-    let event_count = out.matches("BEGIN:VEVENT").count();
-    std::fs::write(&dest, out)?;
-
-    log::info!(
-        "export_ics events={} dest={}",
-        event_count,
-        dest.replacen(&home, "~", 1)
-    );
-    Ok(dest)
-}
-
 // A child module (rather than a sibling in `dev/tests.rs`) because the folding,
 // escaping and offset helpers it pins are private to this file — testing them
 // through a sibling would mean widening them for the tests' benefit.
 #[cfg(test)]
-#[path = "ics_tests.rs"]
-mod ics_tests;
+#[path = "export_ics_tests.rs"]
+mod tests;

@@ -25,42 +25,33 @@ pub async fn reset_db(state: tauri::State<'_, DbState>) -> AppResult<()> {
     reset_db_impl(&pool).await
 }
 
+/// Empty every table the workspace owns.
+///
+/// The deletes themselves moved to `pikos_db::export::reset_workspace` when the
+/// phone needed the same button; what stays here is the logging, which counts
+/// what went so the line in the log says how much was lost.
 pub(crate) async fn reset_db_impl(pool: &sqlx::SqlitePool) -> AppResult<()> {
-    let sessions = sqlx::query("DELETE FROM focus_sessions")
-        .execute(pool)
-        .await?
-        .rows_affected();
+    let before: Vec<(&str, i64)> = {
+        let mut counts = Vec::new();
+        for table in ["pages", "folders", "page_schedules", "page_recurrence_rules", "focus_sessions", "sync_account"] {
+            let n: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}")) // sql-ok: table is a literal from the list above
+                .fetch_one(pool)
+                .await?;
+            counts.push((table, n));
+        }
+        counts
+    };
 
-    let schedules = sqlx::query("DELETE FROM page_schedules")
-        .execute(pool)
-        .await?
-        .rows_affected();
-
-    let rules = sqlx::query("DELETE FROM page_recurrence_rules")
-        .execute(pool)
-        .await?
-        .rows_affected();
-
-    let pages = sqlx::query("DELETE FROM pages")
-        .execute(pool)
-        .await?
-        .rows_affected();
-
-    let folders = sqlx::query("DELETE FROM folders")
-        .execute(pool)
-        .await?
-        .rows_affected();
-
-    // Cascades sync_calendar and page_sync. Normal disconnect keeps dormant rows for
-    // reconnect-relink; a reset deletes the pages too, so there's nothing to re-link.
-    let accounts = sqlx::query("DELETE FROM sync_account")
-        .execute(pool)
-        .await?
-        .rows_affected();
+    pikos_db::export::reset_workspace(pool).await?;
 
     log::info!(
-        "reset_db pages={pages} folders={folders} schedules={schedules} \
-         rules={rules} sessions={sessions} sync_accounts={accounts}"
+        "reset_db pages={} folders={} schedules={} rules={} sessions={} sync_accounts={}",
+        before[0].1,
+        before[1].1,
+        before[2].1,
+        before[3].1,
+        before[4].1,
+        before[5].1
     );
     Ok(())
 }
@@ -125,12 +116,13 @@ pub async fn backup_db(state: tauri::State<'_, DbState>) -> AppResult<String> {
 }
 
 /// VACUUM INTO a destination path — a defragmented single-file copy made while
-/// the DB stays open. The single-quote escaping guards the literal SQL (SQLite
-/// rejects a bound parameter for VACUUM INTO's target).
+/// the DB stays open.
+///
+/// Delegates to `pikos_db::export::backup_to`: the phone takes the same backup,
+/// and the escaping this used to do inline is the kind of detail that is wrong
+/// in exactly one of two copies.
 pub(crate) async fn vacuum_into(pool: &sqlx::SqlitePool, dest: &str) -> AppResult<()> {
-    let sql = format!("VACUUM INTO '{}'", dest.replace('\'', "''"));
-    sqlx::query(&sql).execute(pool).await?;
-    Ok(())
+    Ok(pikos_db::export::backup_to(pool, dest).await?)
 }
 
 /// Pre-import safety backup — copies the DB to {appDataDir}/backups/ before a batch import.

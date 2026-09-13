@@ -501,6 +501,16 @@ pub struct CompletedPages {
     pub total: u32,
 }
 
+/// One file of an export, ready to be written.
+#[derive(Debug, uniffi::Record)]
+pub struct ExportFile {
+    /// Path relative to the export's root, `/` separated — `"Work/Notes.md"`.
+    /// Never absolute and never above the root; the caller joins it to whatever
+    /// directory it is writing into.
+    pub path: String,
+    pub contents: String,
+}
+
 /// One colour a folder can be.
 #[derive(Debug, uniffi::Record)]
 pub struct PaletteColor {
@@ -2035,6 +2045,92 @@ impl Workspace {
             parent_id: folder.parent_id,
             is_external_calendar: folder.is_external_calendar,
         })
+    }
+
+    /// The workspace as one CSV.
+    ///
+    /// Column-for-column what the desktop writes, because it is the same
+    /// function: the header names are a contract with the importer, so a phone
+    /// export that round-trips anywhere else is a phone export that round-trips
+    /// here.
+    ///
+    /// `include_synced` decides whether calendar events the user never touched
+    /// come too. Off by default everywhere: a mirror nobody actioned is the
+    /// calendar's copy of its own event, not the user's work, and including it
+    /// silently doubles a calendar the person already has.
+    pub async fn export_csv(&self, include_synced: bool) -> Result<String, WorkspaceError> {
+        Ok(pikos_db::export::build_export_csv(&self.pool, include_synced).await?)
+    }
+
+    /// Every scheduled page as one RFC 5545 calendar.
+    pub async fn export_ics(&self, include_synced: bool) -> Result<String, WorkspaceError> {
+        Ok(pikos_db::export_ics::build_export_ics(&self.pool, include_synced).await?)
+    }
+
+    /// The workspace as a tree of Markdown files.
+    ///
+    /// Returned rather than written, because where they go is the platform's
+    /// question — a Downloads folder on a desktop, a temporary directory on the
+    /// way to a share sheet on a phone. `path` is relative to wherever the
+    /// caller decides the root is.
+    ///
+    /// Image references are left as the absolute paths they are stored as. The
+    /// desktop copies those files into an `assets/` directory and rewrites them;
+    /// nothing on iOS writes such an asset today, so there is nothing to copy
+    /// and nothing to rewrite. When that changes, `render_markdown_page` is the
+    /// function to call with whatever was copied — this method deliberately does
+    /// not decide.
+    pub async fn export_markdown(
+        &self,
+        include_synced: bool,
+    ) -> Result<Vec<ExportFile>, WorkspaceError> {
+        let plan = pikos_db::export::plan_markdown_export(&self.pool, include_synced).await?;
+        let nothing_copied = std::collections::HashMap::new();
+        Ok(plan
+            .iter()
+            .map(|page| ExportFile {
+                path: page.path.clone(),
+                contents: pikos_db::export::render_markdown_page(page, &nothing_copied),
+            })
+            .collect())
+    }
+
+    /// Copy the whole database to `destination`.
+    ///
+    /// A byte copy of the file would not do: SQLite in WAL mode is three files
+    /// and possibly a writer mid-commit, so a copy taken that way can be missing
+    /// its most recent writes or refuse to open. This takes a read lock and
+    /// writes one defragmented file.
+    ///
+    /// Everything is in it — the trash, and the sync bookkeeping. Credentials
+    /// are not: those live in the keychain and never reach the database.
+    pub async fn backup_database(&self, destination: String) -> Result<(), WorkspaceError> {
+        Ok(pikos_db::export::backup_to(&self.pool, &destination).await?)
+    }
+
+    /// Delete everything in the workspace.
+    ///
+    /// Every page, folder, schedule, repeat and calendar link, with no trash to
+    /// recover from afterwards — this is the button for handing the phone on,
+    /// not for tidying up. The caller is expected to have asked twice; nothing
+    /// here confirms.
+    ///
+    /// Calendar accounts are disconnected first so their credentials leave the
+    /// keychain, where the database cannot reach them. That is best-effort on
+    /// purpose: a server that will not answer must not be able to stop somebody
+    /// wiping their own device, so a failure there is logged past rather than
+    /// returned. The local rows go either way.
+    pub async fn delete_all_data(&self) -> Result<(), WorkspaceError> {
+        if let Err(error) = pikos_calendar_sync::disconnect_all_accounts(
+            &self.pool,
+            pikos_calendar_sync::Keychain::system(),
+        )
+        .await
+        {
+            log::warn!("delete_all_data: could not disconnect the sync accounts: {error}");
+        }
+        pikos_db::export::reset_workspace(&self.pool).await?;
+        Ok(())
     }
 
     /// The colours a folder can be.

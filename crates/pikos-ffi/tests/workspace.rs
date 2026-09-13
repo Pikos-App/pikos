@@ -4222,3 +4222,163 @@ async fn mark_as_calendar_folder(path: &str, folder_id: &str) {
         .await
         .unwrap();
 }
+
+// ─── Getting the workspace out, and wiping it ────────────────────────────────
+//
+// What each export *contains* is tested in `pikos-db`, beside the code that
+// builds it, against the columns the importer reads back. What is tested here
+// is that the phone reaches the same builders and that the two destructive
+// operations do what their names say.
+
+#[tokio::test]
+async fn the_csv_export_carries_the_pages_and_the_importers_header() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    tagged_page(
+        &ws,
+        "Quarterly report",
+        Some(folder.id),
+        &["urgent"],
+        1,
+        None,
+    )
+    .await;
+
+    let csv = ws.export_csv(false).await.unwrap();
+    let mut lines = csv.lines();
+    assert_eq!(
+        lines.next(),
+        Some("Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Repeat,Reminder,Created At,Updated At,Completed At"),
+        "the header is a contract with the importer"
+    );
+    let row = lines.next().expect("one page, one row");
+    assert!(row.starts_with("Quarterly report,"));
+    assert!(
+        row.contains(",Work,"),
+        "the folder by name, not by id: {row}"
+    );
+    assert!(row.contains(",urgent,"), "and its tags: {row}");
+}
+
+#[tokio::test]
+async fn the_ics_export_is_a_calendar_of_the_scheduled_pages() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    tagged_page(&ws, "Dentist", None, &[], 0, Some("2026-03-24T11:00:00")).await;
+    tagged_page(&ws, "Someday", None, &[], 0, None).await;
+
+    let ics = ws.export_ics(false).await.unwrap();
+    assert!(ics.starts_with("BEGIN:VCALENDAR"));
+    assert!(ics.trim_end().ends_with("END:VCALENDAR"));
+    assert_eq!(
+        ics.matches("BEGIN:VEVENT").count(),
+        1,
+        "a page with no date is not an event"
+    );
+    assert!(ics.contains("Dentist"));
+}
+
+#[tokio::test]
+async fn the_markdown_export_is_a_tree_of_relative_paths() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    tagged_page(&ws, "Standup notes", Some(folder.id), &[], 0, None).await;
+    tagged_page(&ws, "Loose thought", None, &[], 0, None).await;
+
+    let files = ws.export_markdown(false).await.unwrap();
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    assert!(paths.contains(&"Work/Standup notes.md"), "{paths:?}");
+    assert!(
+        paths.contains(&"Loose thought.md"),
+        "an unfiled page sits at the root"
+    );
+    assert!(
+        paths
+            .iter()
+            .all(|p| !p.starts_with('/') && !p.contains("..")),
+        "a path that escapes the export root would write outside it: {paths:?}"
+    );
+    let filed = files.iter().find(|f| f.path.starts_with("Work/")).unwrap();
+    assert!(
+        filed
+            .contents
+            .starts_with("---\ntitle: \"Standup notes\"\n"),
+        "each file opens with its frontmatter: {:?}",
+        filed.contents
+    );
+}
+
+/// A title with a slash in it must not become a directory.
+#[tokio::test]
+async fn a_title_that_looks_like_a_path_is_flattened_into_a_filename() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    tagged_page(&ws, "Q1/Q2 planning", None, &[], 0, None).await;
+
+    let files = ws.export_markdown(false).await.unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(
+        files[0].path, "Q1_Q2 planning.md",
+        "or the export writes into a directory nobody asked for"
+    );
+}
+
+/// The backup is a database, not a byte copy of one.
+#[tokio::test]
+async fn the_backup_is_a_database_that_opens_and_carries_the_pages() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    tagged_page(&ws, "Quarterly report", None, &[], 0, None).await;
+
+    let destination = format!("{}-backup.sqlite", tmp.path);
+    ws.backup_database(destination.clone()).await.unwrap();
+
+    // Opening it is the assertion. A file that is not a usable database — the
+    // failure a plain byte copy of a WAL-mode SQLite produces — fails here.
+    let restored = Workspace::open(destination.clone()).await.unwrap();
+    let pages = restored.list_pages(PageQuery::default()).await.unwrap();
+    assert_eq!(
+        pages.iter().map(|p| p.title.as_str()).collect::<Vec<_>>(),
+        ["Quarterly report"]
+    );
+    let _ = std::fs::remove_file(&destination);
+}
+
+#[tokio::test]
+async fn deleting_all_data_leaves_nothing_behind_and_the_workspace_usable() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+    let page = tagged_page(&ws, "Standup", Some(folder.id), &[], 0, None).await;
+    ws.set_page_repeat(
+        page.clone(),
+        Repeat {
+            freq: RepeatFreq::Daily,
+            interval: 1,
+            weekdays: vec![],
+        },
+    )
+    .await
+    .ok();
+    let trashed = tagged_page(&ws, "Mistake", None, &[], 0, None).await;
+    ws.trash_page(trashed).await.unwrap();
+
+    ws.delete_all_data().await.unwrap();
+
+    assert!(ws
+        .list_pages(PageQuery::default())
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(ws.list_folders().await.unwrap().is_empty());
+    assert!(
+        ws.list_trashed_pages().await.unwrap().is_empty(),
+        "the trash goes too — this is not a tidy-up"
+    );
+
+    // And the workspace still works afterwards, rather than needing a restart.
+    let fresh = ws.create_page(new_page("Starting over")).await.unwrap();
+    assert_eq!(ws.get_page(fresh.id).await.unwrap().title, "Starting over");
+}

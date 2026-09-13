@@ -10,6 +10,9 @@
 #![allow(clippy::drop_non_drop)]
 
 pub mod error;
+pub mod export;
+pub mod export_ics;
+
 pub mod focus;
 pub mod folders;
 pub mod notification_log;
@@ -40,6 +43,8 @@ pub mod tx;
 pub const CONTENT_SCHEMA_VERSION: i64 = 1;
 
 pub use error::{AppError, AppResult};
+pub use export::*;
+pub use export_ics::build_export_ics;
 pub use focus::*;
 pub use folders::*;
 pub use notification_log::*;

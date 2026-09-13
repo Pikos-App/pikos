@@ -1248,6 +1248,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fancy-regex"
+version = "0.19.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
+dependencies = [
+ "bit-set",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3266,7 +3277,6 @@ name = "pikos"
 version = "0.4.0-beta.3"
 dependencies = [
  "block2",
- "calcard",
  "chrono",
  "log",
  "notify",
@@ -3319,6 +3329,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pikos-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "chrono-tz",
+ "fancy-regex",
+ "pikos-recurrence",
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "pikos-db"
 version = "0.1.0"
 dependencies = [
@@ -3326,6 +3349,7 @@ dependencies = [
  "chrono-tz",
  "iana-time-zone",
  "log",
+ "pikos-core",
  "pikos-recurrence",
  "serde",
  "serde_json",
@@ -3799,9 +3823,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.14"
+version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e1dd4122fc1595e8162618945476892eefca7b88c52820e74af6262213cae8f"
+checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
 dependencies = [
  "aho-corasick",
  "memchr",

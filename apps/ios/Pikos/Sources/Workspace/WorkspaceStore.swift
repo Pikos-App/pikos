@@ -439,6 +439,25 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Delete everything on this device.
+    ///
+    /// No trash, no undo, and nothing here asks — the screen offering this has
+    /// asked twice by the time it is called. The workspace stays open and
+    /// usable afterwards rather than needing a restart, which is why this
+    /// refreshes instead of tearing anything down.
+    public func deleteAllData() async {
+        guard let workspace else { return }
+        do {
+            try await workspace.deleteAllData()
+            // Back to the view that always has something to show, since the one
+            // that was open may have been a folder that no longer exists.
+            scope = .today
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// The colours a folder can be, served by the workspace.
     ///
     /// Read once and held: it is a constant, and the only reason it crosses the

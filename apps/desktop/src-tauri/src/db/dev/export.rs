@@ -1,11 +1,20 @@
-//! Workspace exports: the full JSON snapshot, the Markdown tree, and the CSV
-//! the importer can read back.
+//! The desktop half of the exports: where a file goes.
+//!
+//! Everything about *what* is exported — the ownership predicate, the CSV
+//! columns, the Markdown frontmatter, the whole `.ics` — moved to
+//! `pikos_db::export` when the phone needed it too. What stayed is the part
+//! that is genuinely a desktop question: a path under `~/Downloads`, a
+//! timestamped name, and copying a page's images out of the workspace.
+//!
+//! The JSON snapshot below has no command and no caller. It stays because it is
+//! the shape the export → re-import round-trip tests assert against, and the
+//! place to start from if a JSON export is ever offered again.
 
 use sqlx::{Column, Row};
 
 use crate::db::DbState;
 use crate::error::{AppError, AppResult};
-use crate::markdown::prosemirror_to_markdown;
+use pikos_db::export::collect_asset_paths;
 
 /// Build the full export object: every table as an array of dynamic-column
 /// objects, plus the asset paths its pages reference. Includes folders, pages
@@ -88,51 +97,17 @@ pub(crate) async fn build_export_json_impl(
 }
 
 /// Collect absolute asset paths from image nodes in ProseMirror JSON.
-pub(super) fn collect_asset_paths(node: &serde_json::Value, paths: &mut Vec<String>) {
-    let node_type = node.get("type").and_then(|t| t.as_str()).unwrap_or("");
-    if node_type == "image" {
-        if let Some(path) = node
-            .get("attrs")
-            .and_then(|a| a.get("data-asset-path"))
-            .and_then(|p| p.as_str())
-        {
-            if !path.is_empty() {
-                paths.push(path.to_string());
-            }
-        }
-    }
-    if let Some(content) = node.get("content").and_then(|c| c.as_array()) {
-        for child in content {
-            collect_asset_paths(child, paths);
-        }
-    }
-}
-
-/// The pages a user-facing export ships. An un-actioned mirror is the calendar's
-/// copy of an event and none of the user's work, so it stays out unless
-/// `include_synced` asks for it; everything the user completed, edited or detached
-/// exports either way. Shared by the Markdown and CSV exports so the two can't
-/// drift on what counts as the user's own.
-pub(super) async fn fetch_export_pages(
-    pool: &sqlx::SqlitePool,
-    columns: &str,
-    include_synced: bool,
-) -> AppResult<Vec<sqlx::sqlite::SqliteRow>> {
-    let exclude_mirrors = if include_synced {
-        String::new()
-    } else {
-        format!(" AND NOT {}", pikos_db::unactioned_mirror_sql())
-    };
-    let sql = format!(
-        "SELECT {columns} FROM pages p \
-         WHERE p.deleted_at IS NULL{exclude_mirrors} ORDER BY p.sort_order"
-    );
-    Ok(sqlx::query(&sql).fetch_all(pool).await?)
+/// `~/Downloads/pikos-<suffix>`, with the timestamp every export shares.
+fn download_path(suffix: &str) -> AppResult<(String, String)> {
+    let home =
+        std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
+    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
+    Ok((format!("{home}/Downloads/pikos-{suffix}-{timestamp}"), home))
 }
 
 /// Export all pages as Markdown files to ~/Downloads/pikos-markdown-<timestamp>/.
-/// Each page becomes a .md file with YAML frontmatter (title, status, priority, tags,
-/// scheduled dates). Folder structure is preserved as subdirectories.
+/// Each page becomes a .md file with YAML frontmatter (title, status, priority,
+/// tags, scheduled dates). Folder structure is preserved as subdirectories.
 /// Images are copied into an assets/ subdirectory with references rewritten.
 #[tauri::command]
 pub async fn export_markdown(
@@ -140,139 +115,56 @@ pub async fn export_markdown(
     include_synced: bool,
 ) -> AppResult<String> {
     let pool = state.get_pool().await?;
+    let plan = pikos_db::export::plan_markdown_export(&pool, include_synced).await?;
 
-    let folders =
-        sqlx::query_as::<_, (String, String)>("SELECT id, name FROM folders ORDER BY sort_order")
-            .fetch_all(&pool)
-            .await?;
-
-    let folder_names: std::collections::HashMap<String, String> = folders.into_iter().collect();
-
-    let pages = fetch_export_pages(
-        &pool,
-        "id, folder_id, title, content, status, priority, tags, \
-         scheduled_start, scheduled_end, created_at, updated_at",
-        include_synced,
-    )
-    .await?;
-
-    let home =
-        std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
-    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
-    let base_dir = format!("{home}/Downloads/pikos-markdown-{timestamp}");
-
+    let (base_dir, home) = download_path("markdown")?;
     std::fs::create_dir_all(&base_dir)?;
 
-    // Track copied assets to avoid duplicates (absolute source → relative export path)
-    let mut copied_assets: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
+    // Absolute source → path relative to the export root, for assets that
+    // actually arrived. A page whose asset did not copy keeps its original
+    // reference rather than pointing at a file that is not there.
+    let mut copied: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut assets_dir_created = false;
 
-    for row in &pages {
-        let title: String = row.try_get("title").unwrap_or_default();
-        let content: String = row.try_get("content").unwrap_or_default();
-        let status: String = row.try_get("status").unwrap_or_default();
-        let priority: i64 = row.try_get("priority").unwrap_or(0);
-        let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
-        let scheduled_start: Option<String> = row.try_get("scheduled_start").ok();
-        let scheduled_end: Option<String> = row.try_get("scheduled_end").ok();
-        let created_at: String = row.try_get("created_at").unwrap_or_default();
-        let updated_at: String = row.try_get("updated_at").unwrap_or_default();
-        let folder_id: Option<String> = row.try_get("folder_id").ok();
-
-        // Collect and copy image assets from the page content
-        if !content.is_empty() && content != "{}" {
-            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&content) {
-                let mut asset_paths = Vec::new();
-                collect_asset_paths(&doc, &mut asset_paths);
-
-                for abs_path in &asset_paths {
-                    if copied_assets.contains_key(abs_path) {
-                        continue;
-                    }
-                    let source = std::path::Path::new(abs_path);
-                    if !source.exists() {
-                        continue;
-                    }
-
-                    if !assets_dir_created {
-                        let dir = format!("{base_dir}/assets");
-                        std::fs::create_dir_all(&dir)?;
-                        assets_dir_created = true;
-                    }
-
-                    let filename = source
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("asset.bin");
-                    let dest = format!("{}/assets/{}", base_dir, filename);
-                    let relative = format!("assets/{}", filename);
-
-                    if let Err(e) = std::fs::copy(source, &dest) {
-                        // abs_path is a user asset path — log only the io::ErrorKind, not the path.
-                        log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
-                        continue;
-                    }
-                    copied_assets.insert(abs_path.to_string(), relative);
-                }
+    for page in &plan {
+        for source_path in &page.assets {
+            if copied.contains_key(source_path) {
+                continue;
             }
+            let source = std::path::Path::new(source_path);
+            if !source.exists() {
+                continue;
+            }
+            if !assets_dir_created {
+                std::fs::create_dir_all(format!("{base_dir}/assets"))?;
+                assets_dir_created = true;
+            }
+            let filename = source
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("asset.bin");
+            if let Err(e) = std::fs::copy(source, format!("{base_dir}/assets/{filename}")) {
+                // source_path is a user asset path — log only the io::ErrorKind, not the path.
+                log::warn!("export_markdown_copy_asset_failed kind={:?}", e.kind());
+                continue;
+            }
+            copied.insert(source_path.clone(), format!("assets/{filename}"));
         }
 
-        let out_dir = match folder_id.as_deref() {
-            Some(folder_id) => {
-                let folder_name = folder_names
-                    .get(folder_id)
-                    .map(|n| sanitize_filename(n))
-                    .unwrap_or_else(|| "Uncategorized".to_string());
-                let dir = format!("{base_dir}/{folder_name}");
-                std::fs::create_dir_all(&dir)?;
-                dir
-            }
-            None => base_dir.clone(),
-        };
-
-        let filename = if title.is_empty() {
-            "Untitled".to_string()
-        } else {
-            sanitize_filename(&title)
-        };
-        let filepath = format!("{}/{}.md", out_dir, filename);
-
-        let frontmatter = build_frontmatter(
-            &title,
-            &status,
-            priority,
-            &tags,
-            scheduled_start.as_deref(),
-            scheduled_end.as_deref(),
-            &created_at,
-            &updated_at,
-        );
-
-        let mut body = markdown_body(&content);
-
-        // Rewrite absolute asset paths to relative export paths in the markdown body.
-        // The relative path depends on whether the page is in a subfolder:
-        // - Root pages: assets/uuid.png
-        // - Subfolder pages: ../assets/uuid.png
-        let in_subfolder = folder_id.is_some();
-        for (abs_path, rel_path) in &copied_assets {
-            let export_ref = if in_subfolder {
-                format!("../{}", rel_path)
-            } else {
-                rel_path.clone()
-            };
-            body = body.replace(abs_path, &export_ref);
+        let destination = format!("{base_dir}/{}", page.path);
+        if let Some(parent) = std::path::Path::new(&destination).parent() {
+            std::fs::create_dir_all(parent)?;
         }
-
-        let full = format!("{frontmatter}{body}");
-        std::fs::write(&filepath, full)?;
+        std::fs::write(
+            &destination,
+            pikos_db::export::render_markdown_page(page, &copied),
+        )?;
     }
 
     log::info!(
         "export_markdown pages={} assets={} dest={}",
-        pages.len(),
-        copied_assets.len(),
+        plan.len(),
+        copied.len(),
         base_dir.replacen(&home, "~", 1)
     );
     Ok(base_dir)
@@ -287,13 +179,10 @@ pub async fn export_csv(
     include_synced: bool,
 ) -> AppResult<String> {
     let pool = state.get_pool().await?;
-    let out = build_export_csv_impl(&pool, include_synced).await?;
+    let out = pikos_db::export::build_export_csv(&pool, include_synced).await?;
 
-    let home =
-        std::env::var("HOME").map_err(|e| AppError::Internal(format!("$HOME not set: {e}")))?;
-    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
-    let dest = format!("{home}/Downloads/pikos-export-{timestamp}.csv");
-
+    let (base, home) = download_path("export")?;
+    let dest = format!("{base}.csv");
     let row_count = out.lines().count().saturating_sub(1);
     std::fs::write(&dest, out)?;
 
@@ -305,216 +194,26 @@ pub async fn export_csv(
     Ok(dest)
 }
 
-/// One reminder offset in the ISO-8601 duration form the importer's
-/// `parseDurationToMinutes` reads: a leading `-` means "before the start" (the
-/// sign is what the importer strips, so it is decoration either way), and `PT0S`
-/// is the at-start case its own doc comment names. Minutes are the only unit
-/// emitted — that is the unit `page_reminders` stores, and the importer's
-/// grammar takes any minute count, so no lossy hour/day rounding is needed.
-fn reminder_duration(minutes_before: i64) -> String {
-    if minutes_before == 0 {
-        "PT0S".to_string()
-    } else {
-        format!("-PT{minutes_before}M")
-    }
-}
-
-/// Build the CSV body (header + one row per non-deleted page). Split from
-/// `export_csv` so the escaping and column order are testable without writing
-/// to disk. Column names match the CSV importer's header heuristics so the
-/// output round-trips back through import — including `Repeat` and `Reminder`,
-/// which the importer has always understood but the export used to drop.
-pub(crate) async fn build_export_csv_impl(
-    pool: &sqlx::SqlitePool,
+/// Export every scheduled page as one `.ics` file in ~/Downloads. Same
+/// destination shape and same return value as the CSV export, so the settings
+/// panel treats all three exports identically.
+#[tauri::command]
+pub async fn export_ics(
+    state: tauri::State<'_, DbState>,
     include_synced: bool,
 ) -> AppResult<String> {
-    let folders =
-        sqlx::query_as::<_, (String, String)>("SELECT id, name FROM folders ORDER BY sort_order")
-            .fetch_all(pool)
-            .await?;
+    let pool = state.get_pool().await?;
+    let out = pikos_db::export_ics::build_export_ics(&pool, include_synced).await?;
 
-    let folder_names: std::collections::HashMap<String, String> = folders.into_iter().collect();
+    let (base, home) = download_path("export")?;
+    let dest = format!("{base}.ics");
+    let event_count = out.matches("BEGIN:VEVENT").count();
+    std::fs::write(&dest, out)?;
 
-    // Recurrence and reminders hang off their own tables, so they are read once
-    // and keyed by page rather than joined onto the page query — one rule per
-    // page (the table is UNIQUE on page_id), any number of reminders.
-    let rrules: std::collections::HashMap<String, String> =
-        sqlx::query_as::<_, (String, String)>("SELECT page_id, rrule FROM page_recurrence_rules")
-            .fetch_all(pool)
-            .await?
-            .into_iter()
-            .collect();
-
-    // The `-1` sentinel means "no reminders on this page", which no ISO-8601
-    // duration can say — it is left out, and the empty cell it produces reads on
-    // import as "fall back to the global default", the nearest honest match.
-    let mut reminders: std::collections::HashMap<String, Vec<i64>> =
-        std::collections::HashMap::new();
-    for (page_id, minutes_before) in sqlx::query_as::<_, (String, i64)>(
-        "SELECT page_id, minutes_before FROM page_reminders \
-         WHERE minutes_before >= 0 ORDER BY minutes_before ASC",
-    )
-    .fetch_all(pool)
-    .await?
-    {
-        reminders.entry(page_id).or_default().push(minutes_before);
-    }
-
-    let pages = fetch_export_pages(
-        pool,
-        "id, folder_id, title, content_text, status, priority, tags, \
-         scheduled_start, scheduled_end, created_at, updated_at, completed_at",
-        include_synced,
-    )
-    .await?;
-
-    let mut out = String::new();
-
-    out.push_str("Title,Content,Folder,Status,Priority,Tags,Start Date,End Date,Repeat,Reminder,Created At,Updated At,Completed At\n");
-
-    for row in &pages {
-        let id: String = row.try_get("id").unwrap_or_default();
-        let title: String = row.try_get("title").unwrap_or_default();
-        let content_text: String = row.try_get("content_text").unwrap_or_default();
-        let status: String = row.try_get("status").unwrap_or_default();
-        let priority: i64 = row.try_get("priority").unwrap_or(0);
-        let tags: String = row.try_get("tags").unwrap_or_else(|_| "[]".to_string());
-        let scheduled_start: Option<String> = row.try_get("scheduled_start").ok();
-        let scheduled_end: Option<String> = row.try_get("scheduled_end").ok();
-        let created_at: String = row.try_get("created_at").unwrap_or_default();
-        let updated_at: String = row.try_get("updated_at").unwrap_or_default();
-        let completed_at: Option<String> = row.try_get("completed_at").ok();
-        let folder_id: Option<String> = row.try_get("folder_id").ok();
-
-        let folder_name = folder_id
-            .as_deref()
-            .and_then(|fid| folder_names.get(fid))
-            .cloned()
-            .unwrap_or_default();
-
-        let tag_str = if let Ok(tag_list) = serde_json::from_str::<Vec<String>>(&tags) {
-            tag_list.join(", ")
-        } else {
-            String::new()
-        };
-
-        // The rule is stored the way the importer wants it — bare, no `RRULE:`
-        // prefix and no DTSTART — so it goes out verbatim.
-        let repeat = rrules.get(&id).cloned().unwrap_or_default();
-        // `;` rather than `,`: the importer splits on either, and a semicolon
-        // keeps a multi-reminder cell out of the quoting path.
-        let reminder = reminders
-            .get(&id)
-            .map(|mins| {
-                mins.iter()
-                    .map(|m| reminder_duration(*m))
-                    .collect::<Vec<_>>()
-                    .join(";")
-            })
-            .unwrap_or_default();
-
-        fn csv_field(s: &str) -> String {
-            if s.contains(',') || s.contains('\n') || s.contains('"') {
-                format!("\"{}\"", s.replace('"', "\"\""))
-            } else {
-                s.to_string()
-            }
-        }
-
-        out.push_str(&csv_field(&title));
-        out.push(',');
-        out.push_str(&csv_field(&content_text));
-        out.push(',');
-        out.push_str(&csv_field(&folder_name));
-        out.push(',');
-        out.push_str(&csv_field(&status));
-        out.push(',');
-        out.push_str(&priority.to_string());
-        out.push(',');
-        out.push_str(&csv_field(&tag_str));
-        out.push(',');
-        out.push_str(&csv_field(scheduled_start.as_deref().unwrap_or("")));
-        out.push(',');
-        out.push_str(&csv_field(scheduled_end.as_deref().unwrap_or("")));
-        out.push(',');
-        out.push_str(&csv_field(&repeat));
-        out.push(',');
-        out.push_str(&csv_field(&reminder));
-        out.push(',');
-        out.push_str(&csv_field(&created_at));
-        out.push(',');
-        out.push_str(&csv_field(&updated_at));
-        out.push(',');
-        out.push_str(&csv_field(completed_at.as_deref().unwrap_or("")));
-        out.push('\n');
-    }
-
-    Ok(out)
-}
-
-pub(super) fn sanitize_filename(name: &str) -> String {
-    name.chars()
-        .map(|c| match c {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            _ => c,
-        })
-        .collect::<String>()
-        .trim()
-        .to_string()
-}
-
-/// Build a Markdown page's YAML frontmatter block. Default status
-/// (`not_started`) and zero priority are omitted; tags come from a JSON array
-/// string; `"` is escaped in quoted values. Always ends with the `---\n\n`
-/// separator so the caller can concatenate the body directly.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn build_frontmatter(
-    title: &str,
-    status: &str,
-    priority: i64,
-    tags: &str,
-    scheduled_start: Option<&str>,
-    scheduled_end: Option<&str>,
-    created_at: &str,
-    updated_at: &str,
-) -> String {
-    let mut frontmatter = String::from("---\n");
-    frontmatter.push_str(&format!("title: \"{}\"\n", title.replace('"', "\\\"")));
-    if status != "not_started" {
-        frontmatter.push_str(&format!("status: {}\n", status));
-    }
-    if priority != 0 {
-        frontmatter.push_str(&format!("priority: {}\n", priority));
-    }
-    if let Ok(tag_list) = serde_json::from_str::<Vec<String>>(tags) {
-        if !tag_list.is_empty() {
-            frontmatter.push_str("tags:\n");
-            for tag in &tag_list {
-                frontmatter.push_str(&format!("  - \"{}\"\n", tag.replace('"', "\\\"")));
-            }
-        }
-    }
-    if let Some(start) = scheduled_start {
-        frontmatter.push_str(&format!("scheduled_start: \"{}\"\n", start));
-    }
-    if let Some(end) = scheduled_end {
-        frontmatter.push_str(&format!("scheduled_end: \"{}\"\n", end));
-    }
-    frontmatter.push_str(&format!("created: \"{}\"\n", created_at));
-    frontmatter.push_str(&format!("updated: \"{}\"\n", updated_at));
-    frontmatter.push_str("---\n\n");
-    frontmatter
-}
-
-/// Convert a page's stored ProseMirror JSON `content` to a Markdown body.
-/// Empty (`""`), empty-doc (`"{}"`), and unparseable content all yield an
-/// empty string so a page always produces a valid (frontmatter-only) file.
-pub(super) fn markdown_body(content: &str) -> String {
-    if content.is_empty() || content == "{}" {
-        return String::new();
-    }
-    match serde_json::from_str::<serde_json::Value>(content) {
-        Ok(doc) => prosemirror_to_markdown(&doc),
-        Err(_) => String::new(),
-    }
+    log::info!(
+        "export_ics events={} dest={}",
+        event_count,
+        dest.replacen(&home, "~", 1)
+    );
+    Ok(dest)
 }

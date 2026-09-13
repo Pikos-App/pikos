@@ -101,6 +101,39 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**The workspace can be exported, and wiped.** Four formats through the system
+share sheet — Markdown, CSV, `.ics` and a database backup — plus Delete all data
+in Settings.
+
+Almost all of the work was a move. Every builder lived in the desktop's Tauri
+crate, which is the wrong home for "what happens to my writing if I stop using
+this": a phone that cannot produce these cannot answer it. They are now
+`pikos_db::export` and `pikos_db::export_ics`, with the ProseMirror → Markdown
+renderer in `pikos_core::markdown` beside `extract_text`. The 86 tests that
+pinned the CSV columns and the frontmatter moved with the code, because a
+contract with the importer tested in a crate that no longer owns it is one that
+quietly stops being run. What stayed platform-side is where a file goes.
+
+The move surfaced a bug that had always been there, and it is the kind only a
+port finds. sqlx decodes a NULL SQLite column into `Ok("")` rather than an
+error, so `try_get::<String, _>(col).ok()` — which reads as "None when absent"
+and is not — yielded `Some("")` for every missing value. The Markdown export
+therefore wrote **every unfiled page into an `Uncategorized/` directory**, and
+put `scheduled_start: ""` in an unscheduled page's frontmatter. The
+`Uncategorized` arm's real case is a folder id whose folder is gone, which a
+foreign key makes impossible, so nothing had ever exercised it honestly; that
+constraint is now a test of its own, so nobody deletes the arm as dead code
+without seeing what holds it up.
+
+The Markdown tree is zipped before sharing, via `NSFileCoordinator`'s
+`.forUploading` — the one zip on the platform that needs no third-party code. A
+share sheet handed a folder offers to save it and little else.
+
+Delete all data disconnects the calendar accounts first, so credentials leave
+the keychain where the database cannot reach them, and that half is best-effort
+on purpose: a server that will not answer must not be able to stop somebody
+wiping their own device.
+
 **Folders can be coloured and nested, and calendar folders sit under their
 account.** Three §7 rows, and the interesting part is what each one turned up.
 

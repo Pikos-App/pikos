@@ -13,13 +13,13 @@
 //! for a path-qualified registration — travelling with their functions.
 
 mod export;
-mod ics;
+
 mod maintenance;
 mod seed;
 mod stats;
 
 pub use export::*;
-pub use ics::*;
+
 pub use maintenance::*;
 pub use seed::*;
 pub use stats::*;

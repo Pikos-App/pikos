@@ -19,6 +19,10 @@ path = "src/bin/uniffi-bindgen.rs"
 
 [dependencies]
 pikos-core = { path = "../pikos-core" }
+# One warning, in one place: a calendar server that will not answer must not
+# stop somebody wiping their own device, and swallowing that silently would make
+# a failed disconnect indistinguishable from a clean one.
+log = "0.4"
 pikos-db = { path = "../pikos-db" }
 pikos-recurrence = { path = "../pikos-recurrence" }
 # CalDAV account management and manual sync. Brings reqwest+rustls and the

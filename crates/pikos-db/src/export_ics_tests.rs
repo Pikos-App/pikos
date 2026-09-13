@@ -8,11 +8,11 @@
 //! real servers with, so nothing here can pass by asserting on a shape no
 //! calendar client would accept.
 
+use crate::{insert_test_page, insert_test_page_sync, now_iso, test_pool, TestPage};
 use calcard::icalendar::{
     ICalendar, ICalendarComponent, ICalendarComponentType, ICalendarProperty, ICalendarValue,
 };
 use calcard::{Entry, Parser};
-use pikos_db::{insert_test_page, insert_test_page_sync, now_iso, test_pool, TestPage};
 use sqlx::SqlitePool;
 
 use super::*;
@@ -205,7 +205,7 @@ async fn wraps_the_events_in_one_vcalendar() {
     let pool = test_pool().await;
     add_page(&pool, "p1", "Standup", Some("2026-06-15T09:00:00"), None).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     let lines = unfold(&ics);
 
     assert_eq!(lines.first().unwrap(), "BEGIN:VCALENDAR");
@@ -226,7 +226,7 @@ async fn every_line_ends_with_crlf() {
     let pool = test_pool().await;
     add_page(&pool, "p1", "Standup", Some("2026-06-15T09:00:00"), None).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert!(ics.ends_with("\r\n"));
     assert_eq!(
@@ -242,7 +242,7 @@ async fn leaves_unscheduled_pages_out() {
     add_page(&pool, "p1", "Someday", None, None).await;
     add_page(&pool, "p2", "Scheduled", Some("2026-06-15"), None).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(vevents(&ics).len(), 1);
     assert!(ics.contains("SUMMARY:Scheduled"));
@@ -267,10 +267,10 @@ async fn leaves_un_actioned_mirrors_out_unless_asked() {
         .await
         .unwrap();
 
-    let default = build_export_ics_impl(&pool, false).await.unwrap();
+    let default = build_export_ics(&pool, false).await.unwrap();
     assert!(vevents(&default).is_empty());
 
-    let with_synced = build_export_ics_impl(&pool, true).await.unwrap();
+    let with_synced = build_export_ics(&pool, true).await.unwrap();
     assert_eq!(vevents(&with_synced).len(), 1);
     assert!(with_synced.contains("SUMMARY:Standup"));
 }
@@ -285,7 +285,7 @@ async fn leaves_soft_deleted_pages_out() {
         .await
         .unwrap();
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     assert!(vevents(&ics).is_empty());
 }
 
@@ -306,7 +306,7 @@ async fn all_day_end_goes_back_out_exclusive() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(line(&ics, "DTSTART"), "DTSTART;VALUE=DATE:20260615");
     // Jun 15–17 inclusive → the day after the last covered one.
@@ -318,7 +318,7 @@ async fn an_all_day_page_with_no_end_covers_one_day() {
     let pool = test_pool().await;
     add_page(&pool, "p1", "Holiday", Some("2026-06-15"), None).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(line(&ics, "DTSTART"), "DTSTART;VALUE=DATE:20260615");
     assert_eq!(line(&ics, "DTEND"), "DTEND;VALUE=DATE:20260616");
@@ -338,7 +338,7 @@ async fn an_all_day_end_before_its_start_still_covers_a_day() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     assert_eq!(line(&ics, "DTEND"), "DTEND;VALUE=DATE:20260616");
 }
 
@@ -347,7 +347,7 @@ async fn an_all_day_export_names_no_timezone() {
     let pool = test_pool().await;
     add_page(&pool, "p1", "Holiday", Some("2026-06-15"), None).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     assert!(!ics.contains("BEGIN:VTIMEZONE"));
     assert!(!ics.contains("TZID"));
 }
@@ -375,7 +375,7 @@ async fn a_timed_page_carries_its_own_zone() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(
         line(&ics, "DTSTART"),
@@ -398,7 +398,7 @@ async fn the_generated_vtimezone_states_real_offsets() {
     add_page(&pool, "p1", "1:1", Some("2026-06-15T09:00:00"), None).await;
     add_schedule(&pool, "s1", "p1", "2026-06-15T09:00:00", None, Some(NY)).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert!(ics.contains("BEGIN:VTIMEZONE"));
     assert!(ics.contains("END:VTIMEZONE"));
@@ -438,7 +438,7 @@ async fn a_zone_without_dst_gets_a_single_observance() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(ics.matches("BEGIN:STANDARD").count(), 1);
     assert_eq!(ics.matches("BEGIN:DAYLIGHT").count(), 0);
@@ -465,7 +465,7 @@ async fn each_zone_is_declared_once() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(ics.matches("BEGIN:VTIMEZONE").count(), 2);
     assert_eq!(ics.matches(&format!("TZID:{NY}\r\n")).count(), 1);
@@ -492,7 +492,7 @@ async fn a_series_anchors_on_the_rule_not_the_denormalized_head() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(
         line(&ics, "DTSTART"),
@@ -518,7 +518,7 @@ async fn an_rrule_goes_out_unescaped() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     assert_eq!(
         line(&ics, "RRULE:"),
         "RRULE:FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2"
@@ -543,7 +543,7 @@ async fn a_timed_until_leaves_as_utc() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     assert_eq!(
         line(&ics, "RRULE:"),
         "RRULE:FREQ=DAILY;UNTIL=20260702T035959Z"
@@ -567,7 +567,7 @@ async fn an_all_day_until_stays_a_date() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     assert_eq!(line(&ics, "RRULE:"), "RRULE:FREQ=DAILY;UNTIL=20260701");
 }
 
@@ -586,7 +586,7 @@ async fn an_untouched_until_in_utc_is_left_alone() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     assert_eq!(
         line(&ics, "RRULE:"),
         "RRULE:FREQ=DAILY;UNTIL=20260701T035959Z"
@@ -615,7 +615,7 @@ async fn skips_and_completions_become_exdates() {
     .await
     .unwrap();
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     let series = &vevents(&ics)[0];
 
     assert_eq!(
@@ -642,7 +642,7 @@ async fn a_timed_series_exdate_takes_the_series_time_of_day() {
     .await;
     set_rule_exdates(&pool, "r1", r#"["2026-06-02","2026-06-05T09:00:00"]"#).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(
         line(&ics, "EXDATE"),
@@ -677,7 +677,7 @@ async fn a_moved_occurrence_becomes_a_recurrence_id_event() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     let events = vevents(&ics);
 
     assert_eq!(events.len(), 2);
@@ -725,7 +725,7 @@ async fn a_moved_occurrence_keys_itself_in_the_series_zone() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     let moved = &vevents(&ics)[1];
 
     assert_eq!(
@@ -776,7 +776,7 @@ async fn a_skipped_override_row_excludes_instead_of_replacing() {
         .await
         .unwrap();
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(vevents(&ics).len(), 1);
     assert_eq!(line(&ics, "EXDATE"), "EXDATE;VALUE=DATE:20260603");
@@ -804,7 +804,7 @@ async fn escapes_a_title_and_body_on_the_way_out() {
     add_page(&pool, "p1", "Lunch, then; review", Some("2026-06-15"), None).await;
     set_body(&pool, "p1", "path C:\\tmp\nsecond line").await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert_eq!(line(&ics, "SUMMARY:"), "SUMMARY:Lunch\\, then\\; review");
     assert_eq!(
@@ -853,7 +853,7 @@ async fn folds_a_long_summary_in_the_real_output() {
     let title = "Quarterly planning review with the whole distributed team and guests";
     add_page(&pool, "p1", title, Some("2026-06-15"), None).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
 
     assert!(ics.contains("\r\n "), "nothing folded in:\n{ics}");
     for raw in ics.trim_end_matches("\r\n").split("\r\n") {
@@ -868,7 +868,7 @@ async fn clips_an_enormous_body() {
     add_page(&pool, "p1", "Doc", Some("2026-06-15"), None).await;
     set_body(&pool, "p1", &"a".repeat(MAX_DESCRIPTION_CHARS * 3)).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     let description = line(&ics, "DESCRIPTION:");
 
     assert_eq!(
@@ -883,7 +883,7 @@ async fn leaves_description_out_when_the_page_has_no_body() {
     let pool = test_pool().await;
     add_page(&pool, "p1", "Bare", Some("2026-06-15"), None).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     assert!(lines_with(&ics, "DESCRIPTION").is_empty());
 }
 
@@ -892,7 +892,7 @@ async fn an_untitled_page_still_gets_a_summary() {
     let pool = test_pool().await;
     add_page(&pool, "p1", "", Some("2026-06-15"), None).await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     assert_eq!(line(&ics, "SUMMARY:"), "SUMMARY:Untitled");
 }
 
@@ -967,7 +967,7 @@ async fn calcard_reads_the_export_back() {
     )
     .await;
 
-    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+    let ics = build_export_ics(&pool, false).await.unwrap();
     let cal = parse_ics(&ics);
 
     let events: Vec<&ICalendarComponent> = cal

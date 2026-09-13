@@ -521,7 +521,7 @@ whose whole job is to show what exists.
 | Full-text search                                             | ✅                          | ✅ ⁵²                     | ✅                     | ✅ `search`                | ✅ Search tab               |
 | Today / Inbox views                                          | ✅                          | ✅ ⁵³                     | ✅                     | ✅ `today` / `list` ⁵⁴     | ✅ both, plus Upcoming      |
 | Page linking (`[[`) + backlinks                              | ○ ⁵⁵                        | ○ ⁵⁵                      | ○ ⁵⁵                   | —                          | ○                           |
-| Markdown / CSV / SQLite export                               | ✅ ⁵⁶                       | ✅ ⁵⁶                     | ✅ ⁵⁶                  | —                          | ○                           |
+| Markdown / CSV / SQLite export                               | ✅ ⁵⁶                       | ✅ ⁵⁶                     | ✅ ⁵⁶                  | —                          | ✅ share sheet ⁵⁶           |
 | Import (Markdown / CSV)                                      | ⚠️ ⁵⁷                       | — ¹                       | —                      | —                          | ○                           |
 | Daily summary notification                                   | ✅ ⁵⁸                       | ✅ same                   | ✅ same                | —                          | ○                           |
 | Quiet hours suppress a reminder                              | ✅ dropped, not deferred ⁵⁸ | ✅ same                   | ✅ same                | —                          | ○                           |
@@ -533,7 +533,7 @@ whose whole job is to show what exists.
 | Upcoming view (next 7 days, grouped)                         | ✅                          | ✅                        | ✅                     | —                          | ✅                          |
 | Move overdue → today (bulk)                                  | ✅                          | 🚫 locked ⁶²              | ✅                     | —                          | ✅ Overdue header ⁶²        |
 | Month view                                                   | ✅                          | ✅                        | ✅                     | —                          | ○                           |
-| `.ics` calendar export                                       | ✅ ⁶³                       | ✅ ⁶³                     | ✅ ⁶³                  | —                          | ○                           |
+| `.ics` calendar export                                       | ✅ ⁶³                       | ✅ ⁶³                     | ✅ ⁶³                  | —                          | ✅ same builder ⁶³          |
 | Notification history panel                                   | ✅ ⁶⁴                       | ✅ ⁶⁴                     | ✅ ⁶⁴                  | —                          | ○                           |
 | Notification click opens its page                            | ✅ ⁶⁵                       | ✅ ⁶⁵                     | ✅ ⁶⁵                  | —                          | ○                           |
 | Day-before reminder lead (all-day)                           | ✅ ⁶⁶                       | ✅ ⁶⁶                     | ✅ ⁶⁶                  | ✅ `add` ⁶⁶                | ○                           |
@@ -583,6 +583,17 @@ pages export either way, with no origin marker; a recurring series is one row, s
 its head. The SQLite backup is `VACUUM INTO`: a full file copy including trash and the sync
 bookkeeping tables (`page_sync`, cursors; credentials stay in the OS keychain, never in the
 DB).
+
+Every builder now lives in `pikos_db::export` (the `.ics` in `pikos_db::export_ics`), shared with
+iOS, which writes each one into a temporary directory and hands it to the system share sheet —
+the Markdown tree zipped, since a share sheet given a folder offers little but "save it". What
+stayed platform-side is where a file goes: `~/Downloads` on the desktop, a directory iOS empties
+itself on the phone. Moving it surfaced a bug in the Markdown export that had always been there:
+sqlx decodes a NULL SQLite column into `Ok("")` rather than an error, so the `try_get::<String,
+_>(col).ok()` this code used yielded `Some("")` for every absent value — which put **every
+unfiled page into an `Uncategorized/` directory** whose real purpose (a folder id with no folder)
+a foreign key makes unreachable, and wrote `scheduled_start: ""` into an unscheduled page's
+frontmatter.
 ⁵⁷ Import matches folders **by name** but skips external-calendar folders when reusing
 (`ImportProvider`): a vault folder named like a synced calendar gets a sibling _regular_ folder
 with the same name (names carry no UNIQUE constraint) and the batch survives.
@@ -725,7 +736,7 @@ body silently.
 | Full refresh ("Refresh from calendar") | ✅ re-enumerates + re-arms the deletion sweep ⁷⁷ | ⚠️ re-enumerates, sweep stays disarmed ⁷⁷ | ✅ same                               |
 | Credentials expire / rotate            | ⚠️ reconnect badge, polling stops ⁷⁸             | ⚠️ same ⁷⁸                                | ⚠️ badge shown; repair is CalDAV only |
 | Offline / unreachable                  | ✅ stale dot, cursor kept, retries               | ✅ same; rate limits map here too         | ✅ reported, nothing changed          |
-| Delete all data                        | ✅ keychain cleared, dormant swept               | ✅ same + grant revoked ⁷⁹                | ○                                     |
+| Delete all data                        | ✅ keychain cleared, dormant swept               | ✅ same + grant revoked ⁷⁹                | ✅ Settings, same wipe ⁷⁹             |
 
 ⁷⁴ Needs build-time client credentials (`option_env!`). Without them the Google option is
 disabled with "Not available in this build". Google's granular consent can withhold a scope;
@@ -752,7 +763,11 @@ the background pass skips it outright rather than spending a 401 per pass. "Resy
 regardless of the flag and clears it on the first clean sync, so a manual retry is what takes
 the badge down.
 ⁷⁹ `release_all_credentials` runs before the wipe, dormant accounts included. Their ids are the
-keychain keys and the rows are about to go. `reset_db` (dev-only) misses the dormant sweep.
+keychain keys and the rows are about to go. `reset_db` (dev-only) misses the dormant sweep. iOS
+runs the same two steps from Settings, and the disconnect half is best-effort on purpose: a
+server that will not answer must not be able to stop somebody wiping their own device, so a
+failure there is logged past and the local rows go either way. The deletes themselves are shared
+(`pikos_db::export::reset_workspace`); the desktop kept only the logging that counts what went.
 
 ---
 

@@ -18,6 +18,10 @@ tokio = { version = "1", features = ["time"] }
 # tz: the reconciler and the notification log resolve stored wall clocks against
 # IANA zones through `pikos_recurrence::zoned`, the one home for that policy.
 pikos-recurrence = { path = "../pikos-recurrence", features = ["tz"] }
+# The Markdown export renders stored ProseMirror documents, and that renderer is
+# a content transform like `extract_text` — it belongs beside it rather than in
+# the layer that happens to read the rows.
+pikos-core = { path = "../pikos-core" }
 log = "0.4"
 ts-rs = "12.0.1"
 
@@ -29,5 +33,9 @@ ts-rs = "12.0.1"
 test-support = []
 
 [dev-dependencies]
+# Reads the `.ics` export back, so the tests assert against a real iCalendar
+# parser rather than against the string this crate just produced. Test-only:
+# Pikos writes iCalendar and never parses it.
+calcard = "0.3.5"
 # test-util: paused-clock tests for the write-retry deadline (see tx.rs).
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "test-util"] }
