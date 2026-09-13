@@ -250,6 +250,36 @@ pub enum FolderScope {
     Folder { id: String },
 }
 
+/// Which finished pages a "Completed" section should show.
+///
+/// One case per view rather than a generic filter, because the views do not ask
+/// the same question and a caller assembling the filter itself would have to
+/// know that. A date view's Completed means *completed today* across every
+/// folder — the things that left its sections since this morning; a folder's
+/// means everything ever finished in it. Passing "today" for a folder view
+/// would hide last week's work; passing a folder for Today would hide the rest
+/// of what was ticked off today.
+#[derive(Debug, uniffi::Enum)]
+pub enum CompletedScope {
+    /// Completed today, in any folder — what Today and Upcoming mean by it.
+    Today,
+    /// Everything ever completed with no folder.
+    Inbox,
+    /// Everything ever completed in one folder.
+    Folder { id: String },
+}
+
+/// One page of finished pages, plus how many there are in total.
+///
+/// `total` is the count matching the scope, not the length of `pages` — it is
+/// what lets a "Show more" control know whether there is any more to show
+/// without fetching a page to find out.
+#[derive(Debug, uniffi::Record)]
+pub struct CompletedPages {
+    pub pages: Vec<PageSummary>,
+    pub total: u32,
+}
+
 /// Narrows a page listing. Every field is optional; an all-default filter lists
 /// everything not deleted.
 #[derive(Debug, Default, uniffi::Record)]
@@ -274,6 +304,14 @@ pub struct PageQuery {
     /// When true, only pages that have a schedule at all.
     #[uniffi(default = None)]
     pub has_schedule: Option<bool>,
+    /// When true, leave out finished pages.
+    ///
+    /// What a page list means by "the pages in this folder": desktop's every
+    /// view filters on `isOpen`, and the finished ones appear in their own
+    /// section fed by [`Workspace::list_completed`], ordered by when they were
+    /// completed rather than by where the user filed them.
+    #[uniffi(default = None)]
+    pub open_only: Option<bool>,
 }
 
 impl From<PageQuery> for DbPageFilter {
@@ -293,6 +331,7 @@ impl From<PageQuery> for DbPageFilter {
             scheduled_after: q.scheduled_after,
             scheduled_before: q.scheduled_before,
             has_schedule: q.has_schedule,
+            open_only: q.open_only,
         }
     }
 }
@@ -472,6 +511,51 @@ impl Workspace {
         Ok(pages.into_iter().map(Into::into).collect())
     }
 
+    /// Finished pages for one view, newest first.
+    ///
+    /// Paginated because a folder accumulates completed pages without limit and
+    /// a list that loads all of them is a list that gets slower every week. The
+    /// open pages above it have no such bound in practice and are not paginated;
+    /// this is the one that grows forever.
+    ///
+    /// Separate from `list_pages` rather than a status filter on it because the
+    /// ordering differs and matters: finished pages read newest-first, by when
+    /// they were completed, where open ones follow the order the user arranged
+    /// them in.
+    pub async fn list_completed(
+        &self,
+        scope: CompletedScope,
+        limit: u32,
+        offset: u32,
+    ) -> Result<CompletedPages, WorkspaceError> {
+        let (folder_id, completed_since) = match scope {
+            // `today_local()` rather than a date from the caller: this is the
+            // same function `list_today` uses to decide what is due, so the two
+            // halves of the screen cannot disagree about which day it is.
+            CompletedScope::Today => (None, Some(pikos_db::today_local())),
+            CompletedScope::Inbox => (Some(serde_json::Value::Null), None),
+            CompletedScope::Folder { id } => (Some(serde_json::Value::String(id)), None),
+        };
+        let response = pikos_db::list_completed_pages_impl(
+            &self.pool,
+            pikos_db::CompletedPagesFilter {
+                folder_id,
+                completed_since,
+                limit: i64::from(limit),
+                offset: i64::from(offset),
+            },
+        )
+        .await?;
+        Ok(CompletedPages {
+            pages: response.pages.into_iter().map(Into::into).collect(),
+            // The count comes from SQLite as a signed COUNT(*); it cannot be
+            // negative, and saturating rather than casting means a number too
+            // large to represent shows as "very many" instead of wrapping to
+            // near zero and claiming there is nothing more to load.
+            total: u32::try_from(response.total).unwrap_or(u32::MAX),
+        })
+    }
+
     pub async fn get_page(&self, id: String) -> Result<Page, WorkspaceError> {
         // Distinguished from a genuine failure: a widget or a deep link can
         // easily hold an id that has since been deleted, and that is not an
@@ -640,11 +724,31 @@ impl Workspace {
         }
 
         let status = if done { "done" } else { "not_started" };
+        // `completed_at` is stamped here, not left to the column, because
+        // nothing else on this path sets it: `update_page_impl` writes it only
+        // when a caller supplies it. A page ticked without one is done with no
+        // record of when, which reads as an ordering quirk and is worse than
+        // that — the Completed section for a date view selects on
+        // `date(completed_at)`, so such a page is finished and invisible in
+        // every view that would show it, on this device and on the desktop
+        // reading the same file.
+        //
+        // Local wall clock rather than the UTC `now_iso()` used for
+        // `created_at`/`updated_at`, matching the convention `pikos-db` states
+        // above `complete_recurring_page_once`: the Completed view compares the
+        // first ten characters against the local day, and a UTC stamp hides a
+        // just-ticked page whenever UTC's date is not the local one.
+        let completed_at = if done {
+            serde_json::Value::String(pikos_db::now_local_iso())
+        } else {
+            serde_json::Value::Null
+        };
         pikos_db::update_page_impl(
             &self.pool,
             page_id,
             pikos_db::PageUpdate {
                 status: Some(status.to_string()),
+                completed_at: Some(completed_at),
                 ..Default::default()
             },
         )

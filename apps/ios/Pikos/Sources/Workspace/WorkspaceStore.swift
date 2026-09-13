@@ -24,15 +24,29 @@ public final class WorkspaceStore {
         case inbox
         case folder(id: String, name: String)
 
+        /// Every view lists open work only. What is finished appears below it
+        /// in its own section, ordered by when it was completed rather than by
+        /// where it was filed — see `completedScope`.
         var query: PageQuery {
             switch self {
             case .today:
                 // `listToday` covers this case; the query is unused.
                 return PageQuery()
             case .inbox:
-                return PageQuery(folder: .inbox)
+                return PageQuery(folder: .inbox, openOnly: true)
             case .folder(let id, _):
-                return PageQuery(folder: .folder(id: id))
+                return PageQuery(folder: .folder(id: id), openOnly: true)
+            }
+        }
+
+        /// What this view's Completed section means, which is not the same
+        /// question in each. Today asks "what did I finish today", across every
+        /// folder; a folder asks "what have I ever finished in here".
+        var completedScope: CompletedScope {
+            switch self {
+            case .today: return .today
+            case .inbox: return .inbox
+            case .folder(let id, _): return .folder(id: id)
             }
         }
 
@@ -70,9 +84,35 @@ public final class WorkspaceStore {
     public var scope: Scope = .today {
         didSet {
             guard scope != oldValue else { return }
+            // The finished pages belong to the view that was showing, and the
+            // new one's are a different set entirely — Today's are today's
+            // across every folder. Dropped rather than re-fetched, so the
+            // section starts collapsed in the new view and costs nothing until
+            // somebody asks for it.
+            completedPages = []
+            completedTotal = 0
+            hasLoadedCompleted = false
             Task { await refresh() }
         }
     }
+
+    /// What this view has loaded of its finished pages, newest first.
+    ///
+    /// Empty until the section is opened. A folder accumulates completed pages
+    /// without limit, so this is the one list in the app that is paginated —
+    /// loading all of them would make the screen slower every week for rows
+    /// nobody is looking at.
+    public private(set) var completedPages: [PageSummary] = []
+
+    /// How many finished pages this view has in total, which is usually more
+    /// than `completedPages.count`. The difference is what "Show more" is for.
+    public private(set) var completedTotal: UInt32 = 0
+
+    /// Whether the section has been opened at all. Distinct from
+    /// `completedPages.isEmpty`, which is also true for a view that has been
+    /// opened and genuinely has nothing finished in it — a state that should
+    /// say so rather than silently re-fetching on every redraw.
+    public private(set) var hasLoadedCompleted = false
 
     private var workspace: Workspace?
 
@@ -110,10 +150,86 @@ public final class WorkspaceStore {
                 pages = try await workspace.listPages(query: scope.query)
             }
             folders = try await workspace.listFolders()
+            // An opened section re-reads its rows; a closed one re-reads only
+            // its count. The count is not decoration: the screen decides
+            // whether to show "nothing here yet" from it, and a view whose
+            // pages are all finished is not empty — it just has nothing open.
+            if hasLoadedCompleted {
+                await reloadCompleted()
+            } else {
+                await countCompleted()
+            }
             isLoading = false
             dataVersion += 1
         } catch {
             isLoading = false
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Completed pages
+
+    /// How many finished pages one fetch brings back.
+    private static let completedPageSize: UInt32 = 20
+
+    /// Load the first page of finished work. Call it when the section opens.
+    ///
+    /// Idempotent: reopening a section that is already loaded shows what is
+    /// there rather than re-querying, which is what makes expanding and
+    /// collapsing free.
+    public func expandCompleted() async {
+        guard !hasLoadedCompleted else { return }
+        hasLoadedCompleted = true
+        await fetchCompleted(offset: 0, replacing: true)
+    }
+
+    /// Load the next page. The caller checks `hasMoreCompleted` first.
+    public func loadMoreCompleted() async {
+        guard hasMoreCompleted else { return }
+        await fetchCompleted(offset: UInt32(completedPages.count), replacing: false)
+    }
+
+    public var hasMoreCompleted: Bool {
+        completedPages.count < Int(completedTotal)
+    }
+
+    /// Re-read everything already on screen, in one query rather than page by
+    /// page.
+    ///
+    /// A write can add a row to the top of this list (a page just ticked) or
+    /// take one out of it (unticked, deleted), and both shift every row after
+    /// it. Re-fetching from offset 0 with the count already shown is the only
+    /// way to stay consistent — paging further after an insert with per-page
+    /// offsets would show one row twice and skip another.
+    private func reloadCompleted() async {
+        let shown = max(UInt32(completedPages.count), Self.completedPageSize)
+        await fetchCompleted(offset: 0, replacing: true, limit: shown)
+    }
+
+    /// How many finished pages this view has, without reading any of them.
+    ///
+    /// A limit of zero is the point: the query still runs its `COUNT(*)`, which
+    /// is what the caller wants, and returns no rows to build summaries from.
+    private func countCompleted() async {
+        await fetchCompleted(offset: 0, replacing: false, limit: 0)
+    }
+
+    private func fetchCompleted(
+        offset: UInt32, replacing: Bool, limit: UInt32? = nil
+    ) async {
+        guard let workspace else { return }
+        do {
+            let result = try await workspace.listCompleted(
+                scope: scope.completedScope,
+                limit: limit ?? Self.completedPageSize,
+                offset: offset)
+            completedTotal = result.total
+            if replacing {
+                completedPages = result.pages
+            } else {
+                completedPages.append(contentsOf: result.pages)
+            }
+        } catch {
             errorMessage = error.localizedDescription
         }
     }

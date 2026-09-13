@@ -15,6 +15,7 @@ struct PageListScreen: View {
     @State private var searchText = ""
     @State private var renaming: PageSummary?
     @State private var renameText = ""
+    @State private var isCompletedExpanded = false
 
     /// The list only — no `NavigationStack` of its own.
     ///
@@ -28,9 +29,14 @@ struct PageListScreen: View {
             if store.isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if store.pages.isEmpty {
+            } else if store.pages.isEmpty && store.completedTotal == 0 {
+                // Genuinely nothing — not merely nothing *open*. A view whose
+                // pages have all been finished still has a Completed section to
+                // reach, and replacing the whole list with "nothing here yet"
+                // would put that work out of reach of the screen it belongs to.
+                // The count comes back with every refresh for exactly this.
                 emptyState
-            } else if visiblePages.isEmpty {
+            } else if visiblePages.isEmpty && !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else {
                 list
@@ -67,6 +73,15 @@ struct PageListScreen: View {
 
     private var list: some View {
         List {
+            // Reached when everything in the view has been finished. Said
+            // plainly rather than left as a bare gap above the Completed
+            // section, which reads as a loading failure.
+            if visiblePages.isEmpty {
+                Text("Nothing open here.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             ForEach(visiblePages, id: \.id) { page in
                 // The checkbox sits beside the link rather than inside it: a
                 // Button inside a NavigationLink's label does not reliably get
@@ -100,6 +115,8 @@ struct PageListScreen: View {
                 }
                 .contextMenu { menu(for: page) }
             }
+
+            completedSection
         }
         .listStyle(.plain)
         .refreshable { await store.refresh() }
@@ -116,6 +133,68 @@ struct PageListScreen: View {
             Button("Cancel", role: .cancel) { renaming = nil }
             Button("Rename") { commitRename() }
         }
+    }
+
+    /// Finished work, below the open list and folded away.
+    ///
+    /// Collapsed by default and loaded only when opened: a folder accumulates
+    /// completed pages without limit, and a section that fetches them on every
+    /// appearance would make the screen slower every week for rows nobody asked
+    /// to see. It stays in the same `List` rather than becoming its own screen
+    /// so that unticking something puts it straight back where it came from,
+    /// visibly.
+    @ViewBuilder
+    private var completedSection: some View {
+        Section {
+            DisclosureGroup(isExpanded: $isCompletedExpanded) {
+                if store.completedPages.isEmpty {
+                    Text(
+                        store.hasLoadedCompleted
+                            ? "Nothing finished here yet." : "Loading…"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                } else {
+                    ForEach(store.completedPages, id: \.id) { page in
+                        HStack(spacing: 0) {
+                            CompletionToggle(isDone: true) { done in
+                                Task { await store.setStatus(pageId: page.id, done: done) }
+                            }
+                            NavigationLink(value: page.id) {
+                                PageRow(page: page)
+                            }
+                        }
+                        .contextMenu { menu(for: page) }
+                    }
+                    if store.hasMoreCompleted {
+                        Button("Show more") {
+                            Task { await store.loadMoreCompleted() }
+                        }
+                        .font(.callout)
+                    }
+                }
+            } label: {
+                Text(completedTitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            // The load is driven by the expansion rather than by the tap, so it
+            // also runs when something else expands the section.
+            .onChange(of: isCompletedExpanded) { _, expanded in
+                guard expanded else { return }
+                Task { await store.expandCompleted() }
+            }
+        }
+    }
+
+    /// "Completed" until the count is known, then "Completed (12)".
+    ///
+    /// The number comes from the query's total rather than from the rows
+    /// loaded, so it does not read as 20 for a folder holding hundreds.
+    private var completedTitle: String {
+        store.hasLoadedCompleted && store.completedTotal > 0
+            ? "Completed (\(store.completedTotal))"
+            : "Completed"
     }
 
     /// The long press menu — desktop's right-click menu, minus what a phone

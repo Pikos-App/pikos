@@ -338,6 +338,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_create_page(uint64_t ptr, RustBuff
 uint64_t uniffi_pikos_ffi_fn_method_workspace_get_page(uint64_t ptr, RustBuffer id
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_COMPLETED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_COMPLETED
+uint64_t uniffi_pikos_ffi_fn_method_workspace_list_completed(uint64_t ptr, RustBuffer scope, uint32_t limit, uint32_t offset
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_FOLDERS
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_LIST_FOLDERS
 uint64_t uniffi_pikos_ffi_fn_method_workspace_list_folders(uint64_t ptr
@@ -896,6 +901,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_create_page(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_GET_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_GET_PAGE
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_get_page(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_COMPLETED
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_LIST_COMPLETED
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_list_completed(void
     
 );
 #endif

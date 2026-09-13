@@ -101,6 +101,23 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**Finished pages have somewhere to go, and a bug on the way there.** iOS was
+inconsistent with itself: Today filtered `status != 'done'`, so ticking a page
+made it vanish with no way back short of search; Inbox and folder views had no
+status filter at all, so done pages sat inline with a strikethrough forever.
+Neither matched desktop, whose every view lists open work and folds the rest
+into a paginated Completed section. That section now exists, scoped the way each
+view means it — Today asks "what did I finish today" across every folder, a
+folder asks "what have I ever finished in here".
+
+Building it surfaced a real bug in the write path rather than in the new code.
+`set_page_status` went through `update_page_impl`, which writes `completed_at`
+only when a caller supplies one — and nothing did. A page ticked on the phone
+was done with no record of when: invisible in any Completed view, on the phone
+and on the desktop reading the same file, with nothing logged. Fixed and
+pinned, with the local-wall-clock convention the Completed view's date
+comparison depends on.
+
 **A page can be renamed, moved and un-dated without opening it.** The long
 press menu is desktop's right-click menu: rename, move to folder, clear date,
 delete. Two entries are withheld rather than shown and refused — all of the

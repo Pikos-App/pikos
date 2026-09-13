@@ -955,6 +955,21 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     
     func getPage(id: String) async throws  -> Page
     
+    /**
+     * Finished pages for one view, newest first.
+     *
+     * Paginated because a folder accumulates completed pages without limit and
+     * a list that loads all of them is a list that gets slower every week. The
+     * open pages above it have no such bound in practice and are not paginated;
+     * this is the one that grows forever.
+     *
+     * Separate from `list_pages` rather than a status filter on it because the
+     * ordering differs and matters: finished pages read newest-first, by when
+     * they were completed, where open ones follow the order the user arranged
+     * them in.
+     */
+    func listCompleted(scope: CompletedScope, limit: UInt32, offset: UInt32) async throws  -> CompletedPages
+    
     func listFolders() async throws  -> [Folder]
     
     func listPages(query: PageQuery) async throws  -> [PageSummary]
@@ -1390,6 +1405,35 @@ open func getPage(id: String)async throws  -> Page  {
             completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePage_lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Finished pages for one view, newest first.
+     *
+     * Paginated because a folder accumulates completed pages without limit and
+     * a list that loads all of them is a list that gets slower every week. The
+     * open pages above it have no such bound in practice and are not paginated;
+     * this is the one that grows forever.
+     *
+     * Separate from `list_pages` rather than a status filter on it because the
+     * ordering differs and matters: finished pages read newest-first, by when
+     * they were completed, where open ones follow the order the user arranged
+     * them in.
+     */
+open func listCompleted(scope: CompletedScope, limit: UInt32, offset: UInt32)async throws  -> CompletedPages  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_list_completed(
+                        self.uniffiCloneHandle(),FfiConverterTypeCompletedScope_lower(scope),FfiConverterUInt32.lower(limit),FfiConverterUInt32.lower(offset)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCompletedPages_lift,
             errorHandler: FfiConverterTypeWorkspaceError_lift
         )
 }
@@ -2042,6 +2086,67 @@ public func FfiConverterTypeCalendarEntry_lower(_ value: CalendarEntry) -> RustB
 }
 
 
+/**
+ * One page of finished pages, plus how many there are in total.
+ *
+ * `total` is the count matching the scope, not the length of `pages` — it is
+ * what lets a "Show more" control know whether there is any more to show
+ * without fetching a page to find out.
+ */
+public struct CompletedPages: Equatable, Hashable {
+    public var pages: [PageSummary]
+    public var total: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pages: [PageSummary], total: UInt32) {
+        self.pages = pages
+        self.total = total
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CompletedPages: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompletedPages: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompletedPages {
+        return
+            try CompletedPages(
+                pages: FfiConverterSequenceTypePageSummary.read(from: &buf), 
+                total: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CompletedPages, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypePageSummary.write(value.pages, into: &buf)
+        FfiConverterUInt32.write(value.total, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompletedPages_lift(_ buf: RustBuffer) throws -> CompletedPages {
+    return try FfiConverterTypeCompletedPages.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompletedPages_lower(_ value: CompletedPages) -> RustBuffer {
+    return FfiConverterTypeCompletedPages.lower(value)
+}
+
+
 public struct Folder: Equatable, Hashable {
     public var id: String
     public var name: String
@@ -2608,6 +2713,15 @@ public struct PageQuery: Equatable, Hashable {
      * When true, only pages that have a schedule at all.
      */
     public var hasSchedule: Bool?
+    /**
+     * When true, leave out finished pages.
+     *
+     * What a page list means by "the pages in this folder": desktop's every
+     * view filters on `isOpen`, and the finished ones appear in their own
+     * section fed by [`Workspace::list_completed`], ordered by when they were
+     * completed rather than by where the user filed them.
+     */
+    public var openOnly: Bool?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2627,7 +2741,15 @@ public struct PageQuery: Equatable, Hashable {
          */scheduledBefore: String? = nil, 
         /**
          * When true, only pages that have a schedule at all.
-         */hasSchedule: Bool? = nil) {
+         */hasSchedule: Bool? = nil, 
+        /**
+         * When true, leave out finished pages.
+         *
+         * What a page list means by "the pages in this folder": desktop's every
+         * view filters on `isOpen`, and the finished ones appear in their own
+         * section fed by [`Workspace::list_completed`], ordered by when they were
+         * completed rather than by where the user filed them.
+         */openOnly: Bool? = nil) {
         self.folder = folder
         self.status = status
         self.tags = tags
@@ -2635,6 +2757,7 @@ public struct PageQuery: Equatable, Hashable {
         self.scheduledAfter = scheduledAfter
         self.scheduledBefore = scheduledBefore
         self.hasSchedule = hasSchedule
+        self.openOnly = openOnly
     }
 
     
@@ -2659,7 +2782,8 @@ public struct FfiConverterTypePageQuery: FfiConverterRustBuffer {
                 titleContains: FfiConverterOptionString.read(from: &buf), 
                 scheduledAfter: FfiConverterOptionString.read(from: &buf), 
                 scheduledBefore: FfiConverterOptionString.read(from: &buf), 
-                hasSchedule: FfiConverterOptionBool.read(from: &buf)
+                hasSchedule: FfiConverterOptionBool.read(from: &buf), 
+                openOnly: FfiConverterOptionBool.read(from: &buf)
         )
     }
 
@@ -2671,6 +2795,7 @@ public struct FfiConverterTypePageQuery: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.scheduledAfter, into: &buf)
         FfiConverterOptionString.write(value.scheduledBefore, into: &buf)
         FfiConverterOptionBool.write(value.hasSchedule, into: &buf)
+        FfiConverterOptionBool.write(value.openOnly, into: &buf)
     }
 }
 
@@ -3327,6 +3452,102 @@ public func FfiConverterTypeTrashedPage_lift(_ buf: RustBuffer) throws -> Trashe
 public func FfiConverterTypeTrashedPage_lower(_ value: TrashedPage) -> RustBuffer {
     return FfiConverterTypeTrashedPage.lower(value)
 }
+
+
+/**
+ * Which finished pages a "Completed" section should show.
+ *
+ * One case per view rather than a generic filter, because the views do not ask
+ * the same question and a caller assembling the filter itself would have to
+ * know that. A date view's Completed means *completed today* across every
+ * folder — the things that left its sections since this morning; a folder's
+ * means everything ever finished in it. Passing "today" for a folder view
+ * would hide last week's work; passing a folder for Today would hide the rest
+ * of what was ticked off today.
+ */
+
+public enum CompletedScope: Equatable, Hashable {
+    
+    /**
+     * Completed today, in any folder — what Today and Upcoming mean by it.
+     */
+    case today
+    /**
+     * Everything ever completed with no folder.
+     */
+    case inbox
+    /**
+     * Everything ever completed in one folder.
+     */
+    case folder(id: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CompletedScope: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCompletedScope: FfiConverterRustBuffer {
+    typealias SwiftType = CompletedScope
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CompletedScope {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .today
+        
+        case 2: return .inbox
+        
+        case 3: return .folder(id: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CompletedScope, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .today:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .inbox:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .folder(id):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(id, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompletedScope_lift(_ buf: RustBuffer) throws -> CompletedScope {
+    return try FfiConverterTypeCompletedScope.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCompletedScope_lower(_ value: CompletedScope) -> RustBuffer {
+    return FfiConverterTypeCompletedScope.lower(value)
+}
+
 
 
 /**
@@ -4911,6 +5132,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_get_page() != 16439) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_list_completed() != 34915) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_list_folders() != 57405) {

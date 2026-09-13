@@ -436,6 +436,16 @@ pub struct PageFilter {
     /// used by the calendar to pull completed scheduled pages without also
     /// loading unscheduled completed pages.
     pub has_schedule: Option<bool>,
+    /// When Some(true), restrict to pages that are not finished — the SQL form
+    /// of `isOpen`.
+    ///
+    /// Deliberately a negation rather than `status = 'not_started'`, which is
+    /// what it happens to be equivalent to today. `pages.status` currently only
+    /// ever holds `not_started` or `done` (the third value in the schema
+    /// comment, `skipped`, belongs to `page_schedules`), but a list of open
+    /// work should widen to a new status rather than silently drop every page
+    /// carrying it, which an equality filter would do without any error.
+    pub open_only: Option<bool>,
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -1039,6 +1049,9 @@ pub async fn list_pages_impl(
         }
         if f.has_schedule == Some(true) {
             builder.push(" AND scheduled_start IS NOT NULL");
+        }
+        if f.open_only == Some(true) {
+            builder.push(" AND status != 'done'");
         }
         if let Some(ref query) = f.query {
             let like = format!("%{query}%");

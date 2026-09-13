@@ -6,8 +6,8 @@
 //! error, and the read-only handle that must actually be read-only.
 
 use pikos_ffi::workspace::{
-    FolderAssignment, FolderScope, NewPage, PageEdit, PageQuery, ReadOnlyWorkspace, Workspace,
-    WorkspaceError,
+    CompletedScope, FolderAssignment, FolderScope, NewPage, PageEdit, PageQuery, ReadOnlyWorkspace,
+    Workspace, WorkspaceError,
 };
 
 /// A workspace in a fresh temporary file.
@@ -1677,4 +1677,259 @@ async fn clearing_a_repeating_page_s_date_leaves_the_head_where_it_is() {
         before,
         "the head keeps its date — the series still owns it"
     );
+}
+
+/// A list of open work leaves out what is finished.
+///
+/// The filter is a negation rather than `status = "not_started"`: today those
+/// are the same set, and the point of the negation is that a status added later
+/// keeps showing up in the list of things still to do instead of disappearing
+/// from every view at once with nothing logged.
+#[tokio::test]
+async fn an_open_listing_leaves_out_finished_pages() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    let open = ws.create_page(new_page("Still to do")).await.unwrap();
+    let done = ws.create_page(new_page("Finished")).await.unwrap();
+    ws.set_page_status(done.id.clone(), true).await.unwrap();
+
+    let everything = ws.list_pages(PageQuery::default()).await.unwrap();
+    assert_eq!(everything.len(), 2, "unfiltered, both are there");
+
+    let listed = ws
+        .list_pages(PageQuery {
+            open_only: Some(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        listed.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+        vec![open.id],
+        "only the open one"
+    );
+}
+
+/// The Completed section for a folder: everything ever finished in it, newest
+/// first, and nothing from anywhere else.
+#[tokio::test]
+async fn completed_pages_are_scoped_to_their_folder_and_ordered_newest_first() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+
+    let mut ids = Vec::new();
+    for title in ["First", "Second", "Third"] {
+        let page = ws
+            .create_page(NewPage {
+                folder_id: Some(folder.id.clone()),
+                ..new_page(title)
+            })
+            .await
+            .unwrap();
+        ws.set_page_status(page.id.clone(), true).await.unwrap();
+        ids.push(page.id);
+        // `completed_at` has one-second resolution, and the order is the whole
+        // assertion — without this the three stamps can be identical and the
+        // test passes on whatever order SQLite happens to return.
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    }
+
+    let elsewhere = ws.create_page(new_page("Inbox thing")).await.unwrap();
+    ws.set_page_status(elsewhere.id.clone(), true)
+        .await
+        .unwrap();
+
+    let completed = ws
+        .list_completed(
+            CompletedScope::Folder {
+                id: folder.id.clone(),
+            },
+            10,
+            0,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        completed.total, 3,
+        "the page in the inbox is not this view's"
+    );
+    ids.reverse();
+    assert_eq!(
+        completed
+            .pages
+            .iter()
+            .map(|p| p.id.clone())
+            .collect::<Vec<_>>(),
+        ids,
+        "newest completion first"
+    );
+}
+
+/// Paging through a folder's completed pages.
+///
+/// `total` is the count for the whole scope rather than the length of the page
+/// returned, which is what lets a "Show more" control know there is more to
+/// show without fetching a page to find out.
+#[tokio::test]
+async fn completed_pages_page_through_with_a_total_for_the_whole_scope() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+
+    for title in ["a", "b", "c", "d", "e"] {
+        let page = ws
+            .create_page(NewPage {
+                folder_id: Some(folder.id.clone()),
+                ..new_page(title)
+            })
+            .await
+            .unwrap();
+        ws.set_page_status(page.id.clone(), true).await.unwrap();
+    }
+
+    let scope = || CompletedScope::Folder {
+        id: folder.id.clone(),
+    };
+    let first = ws.list_completed(scope(), 2, 0).await.unwrap();
+    assert_eq!(first.pages.len(), 2);
+    assert_eq!(first.total, 5, "the count is of the scope, not of the page");
+
+    let second = ws.list_completed(scope(), 2, 2).await.unwrap();
+    assert_eq!(second.pages.len(), 2);
+    let last = ws.list_completed(scope(), 2, 4).await.unwrap();
+    assert_eq!(last.pages.len(), 1, "the tail is short, not empty");
+
+    let mut seen: Vec<String> = first
+        .pages
+        .iter()
+        .chain(&second.pages)
+        .chain(&last.pages)
+        .map(|p| p.id.clone())
+        .collect();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), 5, "the three pages do not overlap or skip");
+}
+
+/// Today's Completed section is a different question from a folder's, and the
+/// scope enum is what keeps a caller from asking the wrong one.
+///
+/// It means "completed today, wherever it lives" — the things that left Today's
+/// list since this morning. A page finished long ago in some folder is not part
+/// of that, even though it is completed and even though Today has no folder of
+/// its own to exclude it.
+#[tokio::test]
+async fn todays_completed_section_is_scoped_by_day_rather_than_by_folder() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let folder = ws.create_folder("Work".to_string(), None).await.unwrap();
+
+    let today = ws
+        .create_page(NewPage {
+            folder_id: Some(folder.id.clone()),
+            ..new_page("Ticked off just now")
+        })
+        .await
+        .unwrap();
+    ws.set_page_status(today.id.clone(), true).await.unwrap();
+
+    let long_ago = ws
+        .create_page(new_page("Ticked off in 2020"))
+        .await
+        .unwrap();
+    ws.set_page_status(long_ago.id.clone(), true).await.unwrap();
+    {
+        let pool = pikos_db::open_pool(&tmp.path).await.unwrap();
+        sqlx::query("UPDATE pages SET completed_at = '2020-01-01T09:00:00' WHERE id = ?")
+            .bind(&long_ago.id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    let completed = ws
+        .list_completed(CompletedScope::Today, 10, 0)
+        .await
+        .unwrap();
+    assert_eq!(
+        completed
+            .pages
+            .iter()
+            .map(|p| p.id.clone())
+            .collect::<Vec<_>>(),
+        vec![today.id],
+        "today's, across every folder — and only today's"
+    );
+    assert_eq!(completed.total, 1);
+}
+
+/// Ticking a box records *when*, and unticking takes it back.
+///
+/// Found by writing the Completed section, not by reading the code: the page
+/// vanished from Today and then failed to appear anywhere else. `set_page_status`
+/// went through `update_page_impl`, which writes `completed_at` only when a
+/// caller supplies one — and nothing did. The page was finished with no record
+/// of when, which is not a cosmetic gap: the Completed section for a date view
+/// selects on `date(completed_at)`, so a page ticked on the phone was done and
+/// invisible everywhere, including on the desktop reading the same file.
+#[tokio::test]
+async fn ticking_a_box_records_when_and_unticking_clears_it() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Buy milk")).await.unwrap();
+    assert_eq!(page.completed_at, None, "precondition: never completed");
+
+    ws.set_page_status(page.id.clone(), true).await.unwrap();
+    let done = ws.get_page(page.id.clone()).await.unwrap();
+    let stamp = done.completed_at.expect("a completed page knows when");
+
+    // Local wall clock, not UTC — the same convention `scheduled_start` uses,
+    // and what the Completed view's date comparison depends on. A `Z` here
+    // would mean the page hides from "completed today" whenever UTC's date is
+    // not the reader's.
+    assert!(
+        !stamp.ends_with('Z') && stamp.contains('T'),
+        "wall-clock ISO with no zone suffix, got {stamp}"
+    );
+    assert_eq!(
+        stamp.len(),
+        "2026-09-13T14:30:00".len(),
+        "no milliseconds either: {stamp}"
+    );
+
+    ws.set_page_status(page.id.clone(), false).await.unwrap();
+    assert_eq!(
+        ws.get_page(page.id.clone()).await.unwrap().completed_at,
+        None,
+        "reopening takes the completion date with it, rather than leaving a \
+         stale one for the next tick to look already-set"
+    );
+}
+
+/// A limit of zero counts without reading.
+///
+/// The page list leans on this every refresh: it needs to know whether a view
+/// has any finished pages — a view whose work is all done is not empty, and
+/// showing "nothing here yet" over a full Completed section would put that work
+/// out of reach — but it must not pay to build summaries nobody is looking at.
+/// Zero has to mean "none of them", not "all of them".
+#[tokio::test]
+async fn a_limit_of_zero_returns_the_count_and_no_rows() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+
+    for title in ["a", "b", "c"] {
+        let page = ws.create_page(new_page(title)).await.unwrap();
+        ws.set_page_status(page.id.clone(), true).await.unwrap();
+    }
+
+    let counted = ws
+        .list_completed(CompletedScope::Inbox, 0, 0)
+        .await
+        .unwrap();
+    assert_eq!(counted.total, 3);
+    assert!(counted.pages.is_empty(), "no rows were asked for");
 }

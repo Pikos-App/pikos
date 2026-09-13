@@ -98,6 +98,10 @@ suite.
 - **The iPad UI.** Ships in the same universal binary, styled after the desktop
   app rather than the phone. Not started; `docs/ios/00-status.md` records the
   three things being kept true so that it stays a change of shell.
+- **Filtering the Completed section.** The filter field narrows the open list
+  only. The finished pages come from their own paginated query and a filter
+  over the rows that happen to be loaded would search a fifth of the folder
+  while looking like it searched all of it.
 - **Ending a series from the list.** The context menu's "Clear Date" is left
   out on a repeating page, where it would remove the one-off schedule rows and
   change nothing the user can see — a page with a rule owns its
