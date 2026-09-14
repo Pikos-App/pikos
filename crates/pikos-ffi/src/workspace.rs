@@ -192,6 +192,13 @@ pub struct Page {
     /// Which editor schema wrote `content`. A client finding a version above
     /// its own must not save over the document — see pikos-db migration 013.
     pub content_schema_version: i64,
+    /// Carried for the same reason `PageSummary` carries it: an open page
+    /// offers the same menu a listed one does, and which entries that menu
+    /// may show turns on these two. Without them the editor would have to
+    /// guess from the folder, and a detached calendar page would guess wrong.
+    pub is_recurring: bool,
+    /// See `PageSummary::schedule_locked`.
+    pub schedule_locked: bool,
 }
 
 impl From<pikos_db::Page> for Page {
@@ -211,6 +218,8 @@ impl From<pikos_db::Page> for Page {
             created_at: p.created_at,
             updated_at: p.updated_at,
             content_schema_version: p.content_schema_version,
+            is_recurring: p.is_recurring,
+            schedule_locked: p.schedule_locked,
         }
     }
 }

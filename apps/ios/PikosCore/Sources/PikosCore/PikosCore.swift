@@ -1051,9 +1051,9 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      *
      * Served rather than formatted per platform because it is the same clock on
      * both, and because the floor it counts towards is already here: a phone
-     * that rendered `24:07` beside a desktop showing `24:07` and then said
-     * something different when the session ended would be two implementations
-     * agreeing by luck.
+     * that rendered the running time its own way and then said something
+     * different from the desktop when the session ended would be two
+     * implementations agreeing by luck.
      */
     func focusElapsedLabel(seconds: Int64)  -> String
     
@@ -1216,9 +1216,7 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      *
      * The duration is computed from them rather than taken as a third argument,
      * so a caller cannot report a length its own timestamps disagree with. A
-     * session under the floor is declined and says so; anything else that would
-     * make a bad row — a page that is gone, a clock that went backwards — is
-     * refused by the data layer.
+     * session under the floor is declined and says so.
      *
      * Both strings are local wall clocks, `yyyy-MM-ddTHH:mm:ss`.
      */
@@ -1981,9 +1979,9 @@ open func exportMarkdown(includeSynced: Bool)async throws  -> [ExportFile]  {
      *
      * Served rather than formatted per platform because it is the same clock on
      * both, and because the floor it counts towards is already here: a phone
-     * that rendered `24:07` beside a desktop showing `24:07` and then said
-     * something different when the session ended would be two implementations
-     * agreeing by luck.
+     * that rendered the running time its own way and then said something
+     * different from the desktop when the session ended would be two
+     * implementations agreeing by luck.
      */
 open func focusElapsedLabel(seconds: Int64) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -2336,9 +2334,7 @@ open func reconnectCaldav(accountId: String, password: String)async throws  -> S
      *
      * The duration is computed from them rather than taken as a third argument,
      * so a caller cannot report a length its own timestamps disagree with. A
-     * session under the floor is declined and says so; anything else that would
-     * make a bad row — a page that is gone, a clock that went backwards — is
-     * refused by the data layer.
+     * session under the floor is declined and says so.
      *
      * Both strings are local wall clocks, `yyyy-MM-ddTHH:mm:ss`.
      */
@@ -4057,6 +4053,17 @@ public struct Page: Equatable, Hashable {
      * its own must not save over the document — see pikos-db migration 013.
      */
     public var contentSchemaVersion: Int64
+    /**
+     * Carried for the same reason `PageSummary` carries it: an open page
+     * offers the same menu a listed one does, and which entries that menu
+     * may show turns on these two. Without them the editor would have to
+     * guess from the folder, and a detached calendar page would guess wrong.
+     */
+    public var isRecurring: Bool
+    /**
+     * See `PageSummary::schedule_locked`.
+     */
+    public var scheduleLocked: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -4068,7 +4075,16 @@ public struct Page: Equatable, Hashable {
         /**
          * Which editor schema wrote `content`. A client finding a version above
          * its own must not save over the document — see pikos-db migration 013.
-         */contentSchemaVersion: Int64) {
+         */contentSchemaVersion: Int64, 
+        /**
+         * Carried for the same reason `PageSummary` carries it: an open page
+         * offers the same menu a listed one does, and which entries that menu
+         * may show turns on these two. Without them the editor would have to
+         * guess from the folder, and a detached calendar page would guess wrong.
+         */isRecurring: Bool, 
+        /**
+         * See `PageSummary::schedule_locked`.
+         */scheduleLocked: Bool) {
         self.id = id
         self.folderId = folderId
         self.title = title
@@ -4083,6 +4099,8 @@ public struct Page: Equatable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.contentSchemaVersion = contentSchemaVersion
+        self.isRecurring = isRecurring
+        self.scheduleLocked = scheduleLocked
     }
 
     
@@ -4114,7 +4132,9 @@ public struct FfiConverterTypePage: FfiConverterRustBuffer {
                 completedAt: FfiConverterOptionString.read(from: &buf), 
                 createdAt: FfiConverterString.read(from: &buf), 
                 updatedAt: FfiConverterString.read(from: &buf), 
-                contentSchemaVersion: FfiConverterInt64.read(from: &buf)
+                contentSchemaVersion: FfiConverterInt64.read(from: &buf), 
+                isRecurring: FfiConverterBool.read(from: &buf), 
+                scheduleLocked: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -4133,6 +4153,8 @@ public struct FfiConverterTypePage: FfiConverterRustBuffer {
         FfiConverterString.write(value.createdAt, into: &buf)
         FfiConverterString.write(value.updatedAt, into: &buf)
         FfiConverterInt64.write(value.contentSchemaVersion, into: &buf)
+        FfiConverterBool.write(value.isRecurring, into: &buf)
+        FfiConverterBool.write(value.scheduleLocked, into: &buf)
     }
 }
 
@@ -7777,7 +7799,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_export_markdown() != 3908) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_focus_elapsed_label() != 30210) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_focus_elapsed_label() != 53112) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_get_page() != 16439) {
@@ -7822,7 +7844,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav() != 31810) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_record_focus_session() != 9182) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_record_focus_session() != 53674) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_remove_page_repeat() != 55311) {
