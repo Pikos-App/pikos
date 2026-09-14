@@ -69,6 +69,19 @@ The four complications the spike named, and what became of each:
   `BGAppRefreshTask` that asks for a wake every twelve hours — a request, not a
   promise, which is why the horizon is measured in days.
 
+**Two devices, one reminder.** The convention every personal reminder app
+follows — Apple's Reminders and Calendar, Things, Todoist — is that each device
+rings on its own, and finishing the thing on any device clears it on all of
+them. The Slack-style alternative, suppressing the phone while the desktop is
+active, is a chat convention: a second alert there is noise, where a second
+reminder is insurance. Pikos follows the former. Today the two devices do not
+share a workspace, so the only page both can hold is one mirrored from a
+calendar connected on both — and both ringing for it is what the platform's
+own Calendar does. When workspaces sync, nothing changes: pending requests are
+rebuilt from the workspace on every change, and delivered ones are taken down
+on the same pass for any page that is now done or gone
+(`ReminderScheduler.tidyDelivered`).
+
 The rules deciding _what_ reminds are the desktop's six `due_*` arms composed
 over a forward window (`pikos_db::reminder_horizon`), so a reminder rings on
 the phone for exactly the reasons it rings on the desktop. What the phone does

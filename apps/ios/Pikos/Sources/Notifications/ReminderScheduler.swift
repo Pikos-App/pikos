@@ -154,6 +154,8 @@ public final class ReminderScheduler {
             return
         }
 
+        await tidyDelivered(in: center, workspace: workspace)
+
         // The soonest first, cut at the budget: the workspace already sorts
         // them, so the ones that fall off the end are the furthest out and
         // the next re-plan will reach them.
@@ -171,6 +173,55 @@ public final class ReminderScheduler {
             }
         }
         plannedCount = added
+    }
+
+    /// Take down the reminders that already rang for pages that are now done
+    /// or gone.
+    ///
+    /// The other half of the convention every device-per-device reminder app
+    /// follows: each device rings on its own, and finishing the thing anywhere
+    /// clears it everywhere. Pending requests are rebuilt from the workspace
+    /// on every plan, so they follow a completion for free; the ones that
+    /// have already been delivered sit in Notification Center until something
+    /// removes them, and a banner for a task ticked an hour ago is the kind
+    /// of stale that makes the rest untrusted. Runs on every plan, which is
+    /// after every write — including, once workspaces sync, a write made on
+    /// the desktop.
+    ///
+    /// A page that cannot be read is treated as gone: `NotFound` is the
+    /// routine case (deleted), and any other failure leaves the notification
+    /// where it is — better a stale banner than one removed on a guess.
+    private func tidyDelivered(in center: UNUserNotificationCenter, workspace: Workspace) async {
+        let delivered = await center.deliveredNotifications()
+        guard !delivered.isEmpty else { return }
+
+        // One read per page, not per notification: several reminders for one
+        // page share its answer.
+        var pageIds: Set<String> = []
+        for notification in delivered {
+            if let id = notification.request.content.userInfo[UserInfoKey.pageId] as? String {
+                pageIds.insert(id)
+            }
+        }
+        var finished: Set<String> = []
+        for id in pageIds {
+            do {
+                let page = try await workspace.getPage(id: id)
+                if page.status == "done" { finished.insert(id) }
+            } catch let error as WorkspaceError {
+                if case .NotFound = error { finished.insert(id) }
+            } catch {
+                // Left alone — see above.
+            }
+        }
+        guard !finished.isEmpty else { return }
+
+        let stale = delivered.filter { notification in
+            guard let id = notification.request.content.userInfo[UserInfoKey.pageId] as? String
+            else { return false }
+            return finished.contains(id)
+        }
+        center.removeDeliveredNotifications(withIdentifiers: stale.map(\.request.identifier))
     }
 
     /// One local notification, from one row of the plan.
