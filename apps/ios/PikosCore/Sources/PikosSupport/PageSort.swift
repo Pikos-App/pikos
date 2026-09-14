@@ -57,7 +57,7 @@ public enum PageSort {
             let comparison = compare(lhs.key, rhs.key, by: mode, now: now)
             return comparison == .orderedSame ? lhs.index < rhs.index : comparison == .orderedAscending
         }
-        return sorted.map(\.page)
+        return sorted.map { $0.page }
     }
 
     static func compare(_ a: Key, _ b: Key, by mode: Mode, now: String) -> ComparisonResult {
