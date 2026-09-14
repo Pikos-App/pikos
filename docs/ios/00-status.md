@@ -406,6 +406,76 @@ same mis-tap the screen exists to undo), and it marks the rows that mirror a
 calendar, because those are never purged and the retention sentence is not true
 of them.
 
+## The quality pass (2026-09-14)
+
+A read of every hand-written Swift file against two questions: would this
+compile, and would a person who uses the desktop app find the phone obvious. It
+added no feature the phone did not already have; what it did was move the ones
+it had to where a thumb expects them, and fix what the second adversarial pass
+had left standing.
+
+**Four things that would not have compiled**, found by reading rather than by a
+compiler, so worth listing for the session that finally has one:
+
+- `WorkspaceStore.setStatus` wrote its optimistic tick into `pages`, which is a
+  computed projection of `sections` and cannot be assigned to. It writes into
+  `sections` now, and the row stays put, ticked, for the beat before the
+  refresh moves it to Completed — which is the visible confirmation the tick
+  wanted anyway.
+- `PageListScreen` had an orphaned `@ViewBuilder` sitting on a `private struct`
+  after an earlier extraction moved the property it belonged to.
+- `AppDependencyManager.shared.add { Route.shared }` read a main-actor static
+  from a `@Sendable` closure. `Route.shared` is `nonisolated(unsafe)` now with a
+  `nonisolated init`, which is honest: the reference is immutable and every
+  member on it is still main-actor bound, so a caller off the actor can hold
+  the router but not move it. That was suspect 3 in the list below.
+- `TodayProvider` captured WidgetKit's completion handlers in a `Task`. They
+  travel in an `@unchecked Sendable` box now, since each is called exactly once
+  from the task that owns it. Suspect 2.
+
+**Three things that would have compiled and been wrong on a device.** The
+formatting toolbar was a `.keyboard` toolbar item, which attaches to the input
+accessory of a SwiftUI text field; a webview brings its own responder and its
+own accessory, so the bar would never have appeared above the editor. It is a
+`safeAreaInset` at the bottom now, shown while the keyboard is up, with a
+"hide keyboard" button at its end because a webview's keyboard has no Done of
+its own. The calendar's week ignored the "week starts on" setting — the setting
+went into the environment for `DatePicker`s and `CalendarSpan` was still
+reading `Calendar.current`. And the error alert lived on the page list alone,
+so a write that failed on the calendar waited for the user to come back.
+
+**What moved, and why.** The view switcher was a filter-shaped icon in the
+corner with Settings hidden under it; the title is the switcher now, which is
+the platform's own idiom for "this screen can be one of several things", and
+Settings has a gear. An open page could not be renamed, dated, filed or tagged
+without going back to the list and finding it again — the list's long-press
+menu is now also the editor's menu (`PageActionsMenu`, one declaration), and a
+metadata strip above the document shows the date, folder, priority and tags
+with each chip opening the sheet that changes it. Rows never showed priority;
+the checkbox ring is tinted by it now, the way the desktop's is, and rows in the
+date views name their folder. The calendar pages by swipe, tints blocks by
+folder colour, and its long press on a one-off block offers the full page menu
+rather than "Open" alone. Two copies of a six-second undo bar became one
+`NoticeBar` fed by `WorkspaceStore.notice`, which also carries the one new
+sentence: adding a page that lands outside the current view — "buy milk" typed
+while looking at Today goes to the Inbox — says where it went and offers to go
+there, instead of appearing to have failed. And the app re-reads the workspace
+on return to the foreground, so a page dictated to Siri is there when the app
+comes back rather than after a pull.
+
+**Two ship-readiness items.** There was no asset catalog, so every native
+control tinted system blue while the editor was terracotta; `AccentColor` now
+carries the brand colour, `PikosSupport.Brand` hands the same hex to the editor
+and the widget, and there is an `AppIcon` slot waiting for a 1024-point PNG.
+And there was no privacy manifest, which App Store review now requires of any
+binary calling `UserDefaults`; both the app and the widget have one, declaring
+that one API and nothing collected.
+
+**One FFI addition.** `Page` gained `is_recurring` and `schedule_locked`, the
+two facts the editor's menu turns on and could not otherwise know — guessing
+from the folder would have mis-read a detached calendar page. Bindings
+regenerated; the 135 `pikos-ffi` tests pass.
+
 ## One bug the merge exposed, worth its own note
 
 `WorkspaceStore.setStatus` flipped `status` on every page, recurring ones
@@ -528,11 +598,12 @@ session of its own. What has been done instead:
      main-actor in the SDK in use, this lines up; if not, the conformances
      disagree and the coordinator needs `nonisolated` methods that hop.
   2. **`TodayProvider`** calls WidgetKit's completion handlers from inside a
-     `Task`. `TimelineProvider` is not main-actor, so if those handlers are not
-     `@Sendable` in the SDK, capturing them is an error. The fix is a sendable
-     box around the handler, not a redesign.
+     `Task`. _Addressed in the quality pass_: the handlers travel in a
+     sendable box. If the SDK in use declares them `@Sendable` already, the box
+     is redundant and harmless.
   3. **`AppDependencyManager.shared.add { Route.shared }`** reads a main-actor
      singleton from a closure whose isolation depends on that API's signature.
+     _Addressed_: `Route.shared` is `nonisolated(unsafe)`.
 
   Note that both Swift packages declare `swift-tools-version: 5.9`, so they
   build in Swift 5 mode regardless of the app's setting — suspects 1 and 2 are

@@ -98,9 +98,9 @@ targets at all.
 
 `PikosUITests` is XCUITest, the native analogue of the desktop's Playwright
 suite: it launches the real app and queries the **accessibility tree**. The
-labels scattered through the screens — `Mark as done`, `Switch view`, the
-combined row labels — are what it selects on, so they are contract rather than
-decoration.
+labels scattered through the screens — `Mark as done`, `New page`, the
+navigation title that is also the view switcher, the combined row labels — are
+what it selects on, so they are contract rather than decoration.
 
 It is deliberately five flows, matching the desktop's `@tier1` set: the app
 launches, a page can be made, ticked, found and opened. A UI suite earns its
@@ -134,9 +134,15 @@ suite.
 
 ## What is deliberately missing
 
+- **The app icon.** `Sources/Assets.xcassets/AppIcon.appiconset` is a slot
+  with no image in it: drop a 1024×1024 PNG there and name it in its
+  `Contents.json`. Xcode builds without one and warns; App Store Connect will
+  not accept a build without one.
 - **Dragging in the calendar.** The grid draws; moving and resizing a block by
   dragging is not wired. On a phone both compete with scrolling and want a
-  design decision rather than a port of the desktop's gestures.
+  design decision rather than a port of the desktop's gestures. Paging between
+  days is a swipe; moving a one-off block is the long-press menu's "Change
+  Date…", and moving one occurrence of a series is "Move this one…".
 - **The scope question behind a backlog.** When a series has open occurrences
   before today, the desktop asks whether a skip means _just this one_ or
   _this and everything before today_. iOS always means the first.
@@ -173,8 +179,8 @@ suite.
   question. What is on the screen is theme, list and calendar density, week
   start and the default folder — every one of them wired to something, because
   a settings row that does nothing is indistinguishable from one that is
-  broken. Notifications and import/export are still missing entirely, not
-  omitted by design.
+  broken. Notifications and import are still missing entirely, not omitted by
+  design; export is in Settings, through the share sheet.
 - **Ending a series from the list.** The context menu's "Clear Date" is left
   out on a repeating page, where it would remove the one-off schedule rows and
   change nothing the user can see — a page with a rule owns its
