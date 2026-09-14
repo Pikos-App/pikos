@@ -214,10 +214,16 @@ suite.
   agree on before it lands.
 - **Share extension.** M4. Capturing a URL or a selection into a new page. The
   App Group and the read-only workspace it needs are in place; what is missing
-  is the target itself. The capture surfaces that *are* here: the Today widget's
-  rings tick a page from the home screen without opening the app, the same
-  widget in its lock-screen sizes shows what is next, and Siri takes "Add a page
-  to Pikos".
+  is the target itself. The capture surfaces that *are* here: five widgets
+  (`PikosWidgets/`), and Siri takes "Add a page to Pikos". The widgets are
+  Today (small, medium, large, and the three lock-screen sizes), Next Up (the
+  next scheduled page with a live countdown; small and medium), Inbox (a count
+  in small, the pages in medium and large), Upcoming (the week ahead by day;
+  medium and large) and New Page (a one-tap way into quick add, with Today,
+  Inbox and Calendar beside it in medium). Every ring on every widget is a
+  button that finishes the page in place. They share one row, one header and
+  one way of opening the workspace (`WidgetSupport.swift`), so a change to how
+  a page is drawn is one change.
 - **Onboarding.** Deliberately. Nothing to sign up for means nothing to ask. A
   brand-new workspace starts with one page in the Inbox, "Welcome to Pikos",
   that says where the data lives and what to type; each empty view offers a

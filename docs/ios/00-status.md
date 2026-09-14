@@ -602,6 +602,35 @@ Not done, and why: a share extension is a new target, not a refinement; and
 the cross-device image path convention waits on iCloud sync, which will carry
 the assets directory and settle it.
 
+## Five widgets
+
+One widget became five, each answering a question Today does not. Next Up
+is the next scheduled page with a countdown that the system keeps current
+(`Text(_:style: .relative)`), refreshed when that page's time arrives.
+Inbox is a count at the small size and the pages at medium and large.
+Upcoming is the week ahead from tomorrow, grouped by day at the large size.
+New Page is a launcher: a `pikos://quick-add` button, with Today, Inbox and
+Calendar tiles beside it at medium. All of them read through
+`ReadOnlyWorkspace`, share one row, header and clock (`WidgetSupport.swift`),
+and every ring is a `CompletePageIntent` button.
+
+Two things surfaced doing it. The read-only workspace has no `listUpcoming`,
+so the Upcoming and Next Up widgets run `listPages` with string bounds on the
+schedule and sort by time themselves — the bounds are inclusive and an
+all-day `2026-09-21` sorts before `2026-09-21T09:00`, so the upper bound is
+the day after the last one wanted and the edge is trimmed in Swift. And the
+app never asked WidgetKit to reload after its own writes — only the Siri
+intent did — so a page ticked in the list stayed on the home screen until
+the widget's hourly refresh. The debounced task that re-plans reminders on
+every data version now reloads every timeline too, and the widget intent
+reloads all timelines rather than only the tapped widget's, since the same
+page can be on three of them.
+
+A configurable per-folder widget was considered and left out: its background
+tap would need a `pikos://folder/<id>` link, and the deep-link grammar is
+shared with the desktop and pinned by a parity corpus, so that is a change
+to both apps rather than to one widget.
+
 ## Reminders ring on the phone
 
 The one parity gap that decided whether a task app is usable on a phone, and

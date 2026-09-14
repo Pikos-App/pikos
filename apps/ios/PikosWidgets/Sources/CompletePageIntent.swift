@@ -1,6 +1,7 @@
 import AppIntents
 import PikosCore
 import PikosSupport
+import WidgetKit
 
 /// Tick a page from the widget, without opening the app.
 ///
@@ -57,9 +58,12 @@ struct CompletePageIntent: AppIntent {
         let url = try WorkspaceLocation.databaseURL()
         let workspace = try await Workspace.open(path: url.path)
         try await workspace.setPageStatus(pageId: pageId, done: done)
-        // WidgetKit reloads this widget's timeline itself once an interactive
-        // intent returns, so no reload is requested here; the app refreshes
-        // its own list when it next comes to the foreground.
+        // WidgetKit reloads the tapped widget's timeline itself once the
+        // intent returns, but not its neighbours' — and the same page can be
+        // on Today, Next Up and Inbox at once. Every widget is reloaded so a
+        // tick on one is a tick on all of them; the app refreshes its own
+        // list when it next comes to the foreground.
+        WidgetCenter.shared.reloadAllTimelines()
         return .result()
     }
 }

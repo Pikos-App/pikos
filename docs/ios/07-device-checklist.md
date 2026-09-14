@@ -76,6 +76,13 @@ Cheap, and each one has caught something on other apps:
   if it fails, the symptom is a ring that dims and springs back.
 - Add "Today" to the lock screen in the rectangular slot. It should show the
   next two open pages with their times; the circular one the open count.
+- Add the other four widgets: Next Up should count down to the next timed page
+  and tick over by itself as the minutes pass; Inbox (small) should show a
+  number; Upcoming (large) should have a heading per day starting tomorrow;
+  New Page should open quick add on tap and, at medium, its three tiles should
+  land on Today, Inbox and the calendar. Tick a ring on the app's list, then
+  go back to the home screen: every widget showing that page should have
+  updated within a second or two, not at the next hour.
 - Settings › Your data › Back up to Files, then open the Files app: On My
   iPhone › Pikos › Backups should hold a dated folder with `pikos.sqlite` and,
   if a photo was inserted, `assets`. The "Last backup" line should say Today.

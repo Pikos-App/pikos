@@ -3,6 +3,7 @@ import BackgroundTasks
 import PikosCore
 import SwiftUI
 import UserNotifications
+import WidgetKit
 
 @main
 struct PikosApp: App {
@@ -225,15 +226,19 @@ struct RootView: View {
             }
         }
         // Every write bumps the version, and every write can move, add or
-        // remove a reminder. Re-planning is one query and a few dozen
-        // requests, so it simply follows the version rather than guessing
-        // which writes matter. Debounced by cancellation: a burst of writes
-        // — a bulk move — plans once, after the last one.
+        // remove a reminder — and change what a widget shows. Re-planning is
+        // one query and a few dozen requests, and a widget reload is a
+        // request the system batches, so both simply follow the version
+        // rather than guessing which writes matter. Debounced by
+        // cancellation: a burst of writes — a bulk move — plans once, after
+        // the last one. Without the reload here, a page ticked in the app
+        // stayed on the home screen until the widget's hourly refresh.
         .task(id: store.dataVersion) {
             guard store.dataVersion > 0 else { return }
             try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled else { return }
             await reminders.sync()
+            WidgetCenter.shared.reloadAllTimelines()
         }
         // The two preferences that change the plan without a write.
         .onChange(of: settings.remindersEnabled) { _, _ in Task { await reminders.sync() } }
