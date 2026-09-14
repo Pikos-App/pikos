@@ -90,8 +90,14 @@ struct CalendarGrid: View {
                         .foregroundStyle(isToday(day) ? Color.accentColor : Color.primary)
                 }
                 .frame(maxWidth: .infinity)
+                // Seven columns at the accessibility text sizes do not fit
+                // their abbreviations; the day number shrinks before it wraps,
+                // and the whole label is read out in full anyway.
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Self.accessibleDayLabel(day))
+                .accessibilityAddTraits(isToday(day) ? [.isHeader, .isSelected] : .isHeader)
             }
         }
         .padding(.vertical, 6)
@@ -182,6 +188,7 @@ struct CalendarGrid: View {
             .onTapGesture { if let entry { onOpen(entry.pageId) } }
             .accessibilityAddTraits(.isButton)
             .contextMenu { if let entry { occurrenceMenu(entry) } }
+            .accessibilityActions { if let entry { occurrenceActions(entry) } }
     }
 
     // MARK: - Timed
@@ -216,6 +223,10 @@ struct CalendarGrid: View {
         }
         .frame(width: Self.gutterWidth)
         .padding(.trailing, Self.gutterGap)
+        // Twenty-three labels a screen reader would otherwise step through
+        // before reaching the first event. Every block already says its own
+        // time, so the gutter carries nothing VoiceOver needs.
+        .accessibilityHidden(true)
     }
 
     private var hourLines: some View {
@@ -225,6 +236,7 @@ struct CalendarGrid: View {
                     .id(hour == Self.openingHour ? Self.openingHourAnchor : "hour-\(hour)")
             }
         }
+        .accessibilityHidden(true)
     }
 
     /// The timed entries, keyed by occurrence rather than by page.
@@ -261,6 +273,7 @@ struct CalendarGrid: View {
                         .offset(x: inset + 1.5, y: placed.top)
                         .onTapGesture { onOpen(entry.pageId) }
                         .contextMenu { occurrenceMenu(entry) }
+                        .accessibilityActions { occurrenceActions(entry) }
                 }
             }
 
@@ -340,6 +353,30 @@ struct CalendarGrid: View {
             }
             Divider()
             PageActionsMenu(page: PageFacts(entry), state: $actions)
+        }
+    }
+
+    /// The same verbs as the long-press menu, as VoiceOver actions.
+    ///
+    /// A long press is a gesture VoiceOver users do not have; the rotor's
+    /// actions list is where they expect a block's verbs. The page-wide menu
+    /// is deliberately not mirrored here — rename, tags, folder and the rest
+    /// are on the page itself once it is open, which "Open" reaches.
+    @ViewBuilder
+    private func occurrenceActions(_ entry: CalendarEntry) -> some View {
+        Button("Open") { onOpen(entry.pageId) }
+        if entry.isRecurring {
+            if entry.status != "done" {
+                if canComplete(entry) {
+                    Button("Complete this one") { onComplete(entry) }
+                }
+                if canMove(entry) {
+                    Button("Move this one") { onMove(entry) }
+                }
+                Button("Skip this one") { onSkip(entry) }
+            }
+        } else {
+            Button(entry.status == "done" ? "Reopen" : "Complete") { onToggleDone(entry) }
         }
     }
 

@@ -66,6 +66,15 @@ targets:
         # a slot: drop a 1024×1024 PNG into it and name it in Contents.json.
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Sources/Localizable.xcstrings. Every `Text("…")` literal and every
+        # `String(localized:)` in the app target is extracted into it at
+        # build time, so the catalog fills itself as the app is built and a
+        # translator later gets one file rather than a grep. Strings built as
+        # plain `String` values — notice sentences, titles, footers — go
+        # through `String(localized:)` for the same reason; a `"…"` handed to
+        # `Text` is already covered.
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # iPhone and iPad from one binary — a universal purchase, which is the
         # intent and not merely Xcode's default. Stated explicitly so it is not
         # narrowed to "1" by someone reasoning from the UI, which is currently

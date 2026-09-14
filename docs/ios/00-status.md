@@ -11,6 +11,7 @@ delivery plan.
 | `04-parser-grammar.md`           | The quick-add parser: what it needed, what was built, and what differential fuzzing found that the corpora could not |
 | `05-calendar.md`                 | The calendar: which half is shared, why a calendar cannot draw the pages it queried, and what the mutations caught   |
 | `06-platform-audit.md`           | What iOS breaks regardless of the UI layer, carried over from the Tauri spike and re-read against Swift              |
+| `07-device-checklist.md`         | The first device session: M0, the lock-screen check, and what to write down — each one a row to read on screen       |
 
 ## Based on `feat/external-calendar-sync`, not `main`
 
@@ -466,7 +467,8 @@ comes back rather than after a pull.
 **Two ship-readiness items.** There was no asset catalog, so every native
 control tinted system blue while the editor was terracotta; `AccentColor` now
 carries the brand colour, `PikosSupport.Brand` hands the same hex to the editor
-and the widget, and there is an `AppIcon` slot waiting for a 1024-point PNG.
+and the widget, and `AppIcon` holds the desktop's icon flattened onto its own
+background (App Store Connect refuses alpha) until a phone-designed one exists.
 And there was no privacy manifest, which App Store review now requires of any
 binary calling `UserDefaults`; both the app and the widget have one, declaring
 that one API and nothing collected.
@@ -475,6 +477,25 @@ that one API and nothing collected.
 two facts the editor's menu turns on and could not otherwise know — guessing
 from the folder would have mis-read a detached calendar page. Bindings
 regenerated; the 135 `pikos-ffi` tests pass.
+
+**A second pass, the same day.** Four small closers, each of which had every
+piece but one: a photo button on the formatting bar with a `PhotosPicker`
+behind it, writing into the assets directory and re-encoding anything that is
+not JPEG, PNG or GIF; a `setEditable` message on the bridge, so the
+newer-schema banner locks the surface rather than only refusing to save;
+"Deleted — Undo" through the notice bar, since the trash was two menus away
+from a mis-swipe; and "Stop Repeating" on the page menu, with an undo where the
+rule can be rebuilt. Then the TestFlight items: the app icon (the desktop's,
+flattened, until a phone-designed one exists), a String Catalog with every
+`String`-typed sentence routed through `String(localized:)` — the `Text`
+literals were already covered, and `PikosSupport`'s two words ("Today",
+"Tomorrow") still need the package's own catalog — and a VoiceOver pass on the
+calendar: blocks carry their verbs as rotor actions, the hour gutter is not
+visited, the day header is a header, and paging is on the rotor because the
+swipe is not. And for the device session nobody has had yet, a debug-only
+Diagnostics section in Settings that reads back the protection class of every
+database file, with `07-device-checklist.md` saying what to look at and in what
+order.
 
 ## One bug the merge exposed, worth its own note
 
@@ -497,26 +518,47 @@ call — `a_plain_status_flip_on_a_recurring_head_ends_the_series` records what
 the wrong path does, and `the_status_toggle_routes_by_kind_without_being_told`
 records that no caller has to know which kind it holds.
 
-## The parser corpus has drifted from its reference
+## The parser corpus is back on its reference
 
-`quick_add_parity` grades the Rust parser against
-`crates/pikos-core/tests/corpus/parser.json`, which is a frozen capture of the
-TypeScript. Regenerating it from the _current_ TypeScript changes 238 of the
-2,219 shared cases — so the test is green against a reference that no longer
-describes the implementation it is meant to be tracking. The TypeScript suite
-has also gained inputs (362 where the corpus has 317), several of which exercise
-a `//` comment syntax the Rust does not implement at all.
+An earlier version of this section recorded that `parser.json` had been left as
+a frozen capture of an older TypeScript, because regenerating it changed 238 of
+2,219 cases and the work was on the Rust side. That work is done, and the
+corpus is regenerated: 362 inputs, 2,534 cases, every one matching.
 
-Almost all of the 238 are RRULE serialisation: the TypeScript now writes
-`FREQ=WEEKLY;INTERVAL=2;BYDAY=TU` where the Rust writes
-`FREQ=WEEKLY;BYDAY=TU;INTERVAL=2`, and drops the `Z` from `UNTIL`. That is a
-canonical-ordering difference rather than a semantic one — both parse to the
-same rule — but it means a rule string written on the phone is not byte-equal to
-one written on the desktop, which matters for anything comparing them as text.
+Three things were behind the gap, and all three are ported rather than
+excluded:
 
-Found while adding `views.json` to the same generator, and deliberately **not**
-fixed here: regenerating the corpus would silently redefine the reference, and
-the actual work is on the Rust side. The corpus is left exactly as committed.
+- **RRULE serialisation.** The Rust wrote `FREQ;BYDAY;INTERVAL` and stamped
+  `UNTIL` with a `Z`; the reference writes `FREQ;INTERVAL;BYDAY` and a floating
+  `UNTIL`. Semantically identical, byte-different — and a rule the phone writes
+  has to be byte-equal to the one the desktop would write for the same line,
+  because a reconciler comparing them as text is the thing that notices.
+  `to_rrule` follows `serializeRrule` field for field now, and says why.
+- **The `//` body.** Everything after the first whitespace-delimited `//` is
+  the page body, kept verbatim — no tag, folder, date or cadence is read out of
+  it, so `#word` in a note stays literal. `ParsedInput` carries it as
+  `content`, the FFI writes it as the page's document through the same builder
+  the data layer uses for a synced description, and `Workspace::create_page`
+  now derives the searchable text from any document it is handed, which it did
+  not before: a page created with a body was a page full-text search could not
+  see, on any path.
+- **Reminders.** "remind 30m before", "remind me the day before", "!r1h". The
+  phrase is stashed behind a control-character placeholder before the date
+  engine runs, so a lead is never mistaken for the event's own date, and
+  resolved afterwards against the schedule's shape: a timed page keeps the
+  minutes, an all-day page collapses every lead onto the day-before sentinel,
+  and a page with no date puts the words back into the title — a row on an
+  unscheduled page could never fire. The sentinel is `pikos-db`'s; `pikos-core`
+  cannot name it, so `pikos-ffi`, which depends on both, pins the two equal.
+  The phone writes the rows; nothing on the phone fires them yet, which is the
+  notifications work still ahead — but a reminder typed on the phone now rings
+  on the desktop.
+
+Two other corpora moved in the same regeneration. `views.json` changed only in
+key order. `recurrence.json` changed one snap case, where the reference no
+longer moves an anchor that names an hour and minute onto the rule's weekday;
+the Rust agreed with the new answer already, so the case is a tightened pin
+rather than a fix.
 
 ## Needs a Mac
 

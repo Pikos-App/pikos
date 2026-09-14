@@ -27,10 +27,10 @@ public final class ExportStore {
 
         public var title: String {
             switch self {
-            case .markdown: return "Markdown"
-            case .csv: return "CSV"
-            case .ics: return "Calendar (.ics)"
-            case .backup: return "Database backup"
+            case .markdown: return String(localized: "Markdown")
+            case .csv: return String(localized: "CSV")
+            case .ics: return String(localized: "Calendar (.ics)")
+            case .backup: return String(localized: "Database backup")
             }
         }
 
@@ -39,13 +39,13 @@ public final class ExportStore {
         public var detail: String {
             switch self {
             case .markdown:
-                return "One file per page, in folders. Readable anywhere."
+                return String(localized: "One file per page, in folders. Readable anywhere.")
             case .csv:
-                return "A spreadsheet of every page. Imports back into Pikos."
+                return String(localized: "A spreadsheet of every page. Imports back into Pikos.")
             case .ics:
-                return "Your scheduled pages as calendar events."
+                return String(localized: "Your scheduled pages as calendar events.")
             case .backup:
-                return "The whole workspace as one file, trash included."
+                return String(localized: "The whole workspace as one file, trash included.")
             }
         }
     }

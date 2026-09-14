@@ -164,11 +164,11 @@ public final class CalendarSyncStore {
     private func reportIfAnythingWentWrong(_ results: [CalendarSyncResult]) {
         if results.contains(where: { $0.status == "reconnectNeeded" }) {
             problem = Problem(
-                message: "The server rejected the saved password. Reconnect the account to fix it.",
+                message: String(localized: "The server rejected the saved password. Reconnect the account to fix it."),
                 isRetryable: false)
         } else if results.contains(where: { $0.status == "offline" }) {
             problem = Problem(
-                message: "Could not reach the server. Nothing was changed.",
+                message: String(localized: "Could not reach the server. Nothing was changed."),
                 isRetryable: true)
         }
     }
@@ -182,7 +182,7 @@ public final class CalendarSyncStore {
         // Capitalised, as UniFFI spells it — see the note in `WorkspaceStore`.
         if let error = error as? WorkspaceError, case .Network = error {
             problem = Problem(
-                message: "Could not reach the server. Check the address and your connection.",
+                message: String(localized: "Could not reach the server. Check the address and your connection."),
                 isRetryable: true)
         } else {
             problem = Problem(message: error.localizedDescription, isRetryable: false)

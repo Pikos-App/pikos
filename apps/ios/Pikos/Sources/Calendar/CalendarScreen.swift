@@ -90,6 +90,11 @@ struct CalendarScreen: View {
             }
         }
         .animation(.snappy, value: dayStrings.first)
+        // The swipe below is a gesture VoiceOver does not pass through; the
+        // chevrons remain, and these put the same two moves on the rotor so
+        // the grid itself can be paged without hunting for them.
+        .accessibilityAction(named: "Next \(effectiveSpan.label.lowercased())") { step(by: 1) }
+        .accessibilityAction(named: "Previous \(effectiveSpan.label.lowercased())") { step(by: -1) }
         // A horizontal swipe pages the range; a vertical one still scrolls the
         // hours, because the grid's own scroll view fails a pan that is mostly
         // sideways and this one ignores a pan that is mostly up-and-down.
@@ -174,7 +179,7 @@ struct CalendarScreen: View {
     // MARK: - Title and toolbar
 
     private var title: String {
-        guard let first = days.first, let last = days.last else { return "Calendar" }
+        guard let first = days.first, let last = days.last else { return String(localized: "Calendar") }
         if effectiveSpan == .day {
             return first.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         }

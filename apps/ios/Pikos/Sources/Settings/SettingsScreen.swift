@@ -93,6 +93,29 @@ struct SettingsScreen: View {
                     LabeledContent("Document format", value: "v\(store.contentSchemaVersion)")
                 }
 
+                #if DEBUG
+                    // The first device run's checklist, answered on screen —
+                    // see docs/ios/07-device-checklist.md. Not in a release
+                    // build: a container path is nobody's business but the
+                    // developer's, and the attribute read behind it would
+                    // need a privacy declaration the shipped binary should
+                    // not have to make.
+                    Section {
+                        ForEach(Diagnostics.report()) { row in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.label).font(.caption).foregroundStyle(.secondary)
+                                Text(row.value).font(.caption.monospaced()).textSelection(.enabled)
+                            }
+                        }
+                    } header: {
+                        Text("Diagnostics (debug build)")
+                    } footer: {
+                        Text(
+                            "Lock the phone, wait for the Today widget to refresh, then come back: every file above should still read “until first unlock”."
+                        )
+                    }
+                #endif
+
                 Section {
                     Button("Reset preferences", role: .destructive) {
                         isResetConfirmed = true
@@ -232,8 +255,8 @@ struct SettingsScreen: View {
     /// would describe that as working.
     private var calendarSummary: String {
         let enabled = sync.accounts.flatMap(\.calendars).filter(\.enabled).count
-        if sync.accounts.isEmpty { return "None" }
-        return enabled == 1 ? "1 syncing" : "\(enabled) syncing"
+        if sync.accounts.isEmpty { return String(localized: "None") }
+        return String(localized: "\(enabled) syncing")
     }
 
     /// Says out loud when the stored folder no longer exists.
@@ -243,11 +266,11 @@ struct SettingsScreen: View {
     /// sentence that looks like the preference silently reset itself, which is
     /// the one reading that would send somebody looking for a bug.
     private var defaultFolderFooter: String {
-        let base = "Where a new page lands when you create one from a widget or a link."
+        let base = String(localized: "Where a new page lands when you create one from a widget or a link.")
         guard let id = settings.defaultFolderID,
             !store.fileableFolders.contains(where: { $0.id == id })
         else { return base }
-        return base + " The folder this was set to no longer exists, so new pages go to the Inbox."
+        return base + " " + String(localized: "The folder this was set to no longer exists, so new pages go to the Inbox.")
     }
 
     /// The marketing version and build, as Xcode stamped them.

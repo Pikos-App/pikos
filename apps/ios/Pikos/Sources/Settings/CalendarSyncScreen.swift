@@ -194,8 +194,8 @@ struct CalendarSyncScreen: View {
     private func footer(for entry: SyncAccountWithCalendars) -> String {
         let stamps = entry.calendars.compactMap { $0.lastSyncedAt }
         guard let newest = stamps.max(), let at = StorageTimestamp.utc(newest) else {
-            return "Not synced yet."
+            return String(localized: "Not synced yet.")
         }
-        return "Last synced \(at.formatted(.relative(presentation: .named)))."
+        return String(localized: "Last synced \(at.formatted(.relative(presentation: .named))).")
     }
 }

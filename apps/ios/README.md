@@ -134,10 +134,13 @@ suite.
 
 ## What is deliberately missing
 
-- **The app icon.** `Sources/Assets.xcassets/AppIcon.appiconset` is a slot
-  with no image in it: drop a 1024×1024 PNG there and name it in its
-  `Contents.json`. Xcode builds without one and warns; App Store Connect will
-  not accept a build without one.
+- **A phone-designed app icon.** `Sources/Assets.xcassets/AppIcon.appiconset`
+  holds the desktop's icon flattened onto its own background — App Store
+  Connect refuses an icon with alpha, and the desktop's has rounded
+  transparent corners. It is the right mark and the wrong medium: a home
+  screen icon wants a full-bleed composition, not a rounded tile inside the
+  system's rounding. Replace the PNG when there is one; the slot needs
+  nothing else.
 - **Dragging in the calendar.** The grid draws; moving and resizing a block by
   dragging is not wired. On a phone both compete with scrolling and want a
   design decision rather than a port of the desktop's gestures. Paging between
@@ -181,11 +184,12 @@ suite.
   a settings row that does nothing is indistinguishable from one that is
   broken. Notifications and import are still missing entirely, not omitted by
   design; export is in Settings, through the share sheet.
-- **Ending a series from the list.** The context menu's "Clear Date" is left
-  out on a repeating page, where it would remove the one-off schedule rows and
-  change nothing the user can see — a page with a rule owns its
-  `scheduled_start` directly. Ending a series is a different action and has no
-  affordance yet.
+- **Clearing a repeating page's date.** The context menu's "Clear Date" is
+  left out on a repeating page, where it would remove the one-off schedule rows
+  and change nothing the user can see — a page with a rule owns its
+  `scheduled_start` directly. Ending the series is what is meant there, and
+  that is "Stop Repeating" on the same menu, with an undo in the notice where
+  the rule can be rebuilt.
 - **Emptying the trash by hand.** "Recently Deleted" restores; it does not
   offer a permanent delete. The retention window already clears the trash, and
   a destructive control sitting next to a restore button on a phone is the same
@@ -194,12 +198,15 @@ suite.
 - **Folder icons.** Colour and nesting are wired — the dot on each row is the
   colour picker, and "Move into…" is on the context menu. The `icon` column is
   not: the desktop does not offer it either, so there is no behaviour to match.
-- **Inserting an image.** The whole path exists except its trigger: the editor
-  handles `insertImage`, `EditorController.insertImage(assetPath:)` sends it,
-  and `EditorWebView.onImageRequested` is wired to a `requestImagePicker`
-  message — which nothing in the editor sends, because there is no control to
-  send it from. What is missing is the button and the `PhotosPicker` behind it,
-  plus writing the chosen image into the assets directory.
+- **Images from anywhere but the photo library.** The formatting bar's photo
+  button opens a `PhotosPicker`, writes the picture into the workspace's
+  assets directory and inserts it. Anything not JPEG, PNG or GIF is
+  re-encoded as JPEG on the way in, so a HEIC from the camera roll renders in
+  the webview and on the desktop. Not wired: the Files picker, the camera, and
+  pasting an image into the editor. And one convention worth knowing: the phone
+  stores the asset path *relative to the assets directory*, which is what its
+  scheme handler resolves, where the desktop stores an absolute path — so an
+  image inserted on either device does not yet render on the other.
 - **Share extension.** M4. Capturing a URL or a selection into a new page.
 - **Notifications.** Not a port. The desktop fires reminders from a task that
   wakes every clock minute, and iOS suspends that within seconds of
