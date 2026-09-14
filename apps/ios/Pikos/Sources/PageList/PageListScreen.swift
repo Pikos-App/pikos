@@ -1,6 +1,7 @@
 import PikosCore
 import PikosSupport
 import SwiftUI
+import TipKit
 
 /// The page list — the app's home screen.
 ///
@@ -12,7 +13,14 @@ import SwiftUI
 /// "Today" drops a menu of every view and folder. That is the platform's own
 /// idiom for "this screen can be one of several things" (Files, Mail, Notes),
 /// and it replaces a filter-shaped icon in the corner that named nothing and
-/// hid Settings behind it.
+/// hid Settings behind it. What the screen *does* — select several rows,
+/// manage folders, open the trash — sits under the ellipsis in the corner,
+/// the way Reminders and Notes arrange theirs, so the title menu answers one
+/// question and the corner menu the other.
+///
+/// Creating a page is the floating button at the bottom, in reach of the
+/// thumb; the corner used to hold it, which is the one place a thumb cannot
+/// reach without shifting grip.
 struct PageListScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
@@ -24,6 +32,14 @@ struct PageListScreen: View {
     @State private var actions = PageActionState()
     @State private var isCompletedExpanded = false
     @State private var isMovingOverdue = false
+    /// Select mode: several rows, one verb. Entered from the corner menu and
+    /// left with Done; the tab bar and the floating button give way to a
+    /// bottom bar of verbs while it is on, the way Mail does it.
+    @State private var isSelecting = false
+    @State private var selection: Set<String> = []
+    @State private var isBatchDeleteConfirmed = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The list only — no `NavigationStack` of its own.
     ///
@@ -53,6 +69,12 @@ struct PageListScreen: View {
         .navigationTitle(store.scope.title)
         .toolbarTitleMenu { viewMenu }
         .toolbar { toolbar }
+        .toolbar { selectionBar }
+        // The tab bar steps aside while rows are being selected: the bottom
+        // of the screen is the verbs' now, and two bars stacked there is one
+        // too many to aim at.
+        .toolbar(isSelecting ? .hidden : .visible, for: .tabBar)
+        .environment(\.editMode, .constant(isSelecting ? .active : .inactive))
         // Filters the current view by title. Deliberately narrower than
         // the Search tab, which is full-text across every page — this is
         // "find it in what I'm looking at", which is a different question
@@ -68,12 +90,50 @@ struct PageListScreen: View {
             SettingsScreen()
         }
         .pageActionSheets($actions)
+        .confirmationDialog(
+            "Delete \(selection.count) pages?", isPresented: $isBatchDeleteConfirmed,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                let ids = orderedSelection.map(\.id)
+                Task {
+                    await store.trashPages(ids: ids)
+                    leaveSelection()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("They go to Recently Deleted, where they can be put back.")
+        }
+        // The floating create button and the notice bar, stacked at the
+        // bottom. Hidden while selecting, when the bottom of the screen
+        // belongs to the verbs.
+        .bottomChrome {
+            if !isSelecting {
+                NewPageButton { route.isQuickAddPresented = true }
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : .snappy, value: isSelecting)
+        // A view change ends the selection: the rows it named are gone.
+        .onChange(of: store.scope) { _, _ in leaveSelection() }
     }
 
     // MARK: - Pieces
 
     private var list: some View {
-        List {
+        List(selection: $selection) {
+            // The in-place hints, one at a time and only until dismissed.
+            // At the top of the list because that is where the eye lands,
+            // and inline rather than a popover because a card that scrolls
+            // with the rows is one the reader can ignore without a tap.
+            if !isSelecting && searchText.isEmpty {
+                TipView(SwipeRowTip())
+                    .listRowSeparator(.hidden)
+                TipView(SwitchViewTip())
+                    .listRowSeparator(.hidden)
+            }
+
             // Reached when everything in the view has been finished. Said
             // plainly rather than left as a bare gap above the Completed
             // section, which reads as a loading failure.
@@ -106,10 +166,13 @@ struct PageListScreen: View {
             completedSection
         }
         .listStyle(.plain)
+        // The last row scrolls above the floating button, not under it.
+        .contentMargins(.bottom, isSelecting ? 0 : NewPageButton.clearance, for: .scrollContent)
         // Rows slide rather than jump when a tick moves one to Completed or a
         // refresh reorders a day. Keyed on the sections so a filter keystroke
-        // — which changes only what is *visible* — does not animate too.
-        .animation(.default, value: store.sections)
+        // — which changes only what is *visible* — does not animate too. Under
+        // Reduce Motion the rows simply change: the slide is decoration.
+        .animation(reduceMotion ? nil : .default, value: store.sections)
         .refreshable { await store.refresh() }
     }
 
@@ -134,15 +197,26 @@ struct PageListScreen: View {
         // task, and the chevron was a third control flanking a title that
         // needs the width. Reminders and Things draw their rows the same way.
         return HStack(spacing: 0) {
-            CompletionToggle(isDone: done, priority: PagePriority(stored: page.priority)) { done in
-                Task { await store.setStatus(pageId: page.id, done: done) }
+            // The list's own selection circle takes the ring's place while
+            // selecting; two circles on one row would be two things to aim at.
+            if !isSelecting {
+                CompletionToggle(isDone: done, priority: PagePriority(stored: page.priority)) { done in
+                    Task { await store.setStatus(pageId: page.id, done: done) }
+                }
             }
             PageRow(page: page, showsFolder: store.scope.isDateGrouped)
+                .padding(.leading, isSelecting ? 8 : 0)
         }
         .contentShape(Rectangle())
         .background {
-            NavigationLink(value: page.id) { EmptyView() }.opacity(0)
+            if !isSelecting {
+                NavigationLink(value: page.id) { EmptyView() }.opacity(0)
+            }
         }
+        // What `List(selection:)` collects when the row is tapped in select
+        // mode. The `ForEach` id would serve, but saying it here keeps the
+        // Completed section's rows — a second `ForEach` — selectable too.
+        .tag(page.id)
         // The ring's 44pt hit area already indents the title; the list's own
         // inset on top of it put the title 64pt from the edge, where the
         // platform's lists put it at about 52.
@@ -399,10 +473,9 @@ struct PageListScreen: View {
     ///
     /// The three smart views first, then the user's folders in tree order — a
     /// parent followed by its children — then the calendars, which are folders
-    /// too but not ones the user made. Below a divider, the two things that
-    /// change what exists rather than what is shown: managing folders and the
-    /// trash. Kept apart because a destructive action should not sit adjacent
-    /// to a navigational one in the same list.
+    /// too but not ones the user made. Nothing else: the things that change
+    /// what exists rather than what is shown live in the corner menu, so a
+    /// destructive action never sits one row under a navigational one.
     @ViewBuilder
     private var viewMenu: some View {
         Picker("View", selection: scopeBinding) {
@@ -432,22 +505,6 @@ struct PageListScreen: View {
             .pickerStyle(.inline)
         }
 
-        Divider()
-
-        Button {
-            isFolderManagerPresented = true
-        } label: {
-            Label("Manage Folders…", systemImage: "folder.badge.gearshape")
-        }
-        // The way back from the swipe action further up. It lives here rather
-        // than as a scope in the picker because the trash is not a view of the
-        // workspace — nothing in it can be opened, filed or completed, only
-        // restored.
-        Button {
-            isTrashPresented = true
-        } label: {
-            Label("Recently Deleted…", systemImage: "trash")
-        }
     }
 
     /// The user's folders, a parent immediately followed by its children.
@@ -476,19 +533,148 @@ struct PageListScreen: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button {
-                isSettingsPresented = true
-            } label: {
-                Label("Settings", systemImage: "gearshape")
+        if isSelecting {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(selection.count == selectable.count ? "Deselect All" : "Select All") {
+                    if selection.count == selectable.count {
+                        selection = []
+                    } else {
+                        selection = Set(selectable.map(\.id))
+                    }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") { leaveSelection() }
+                    .fontWeight(.semibold)
+            }
+        } else {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    isSettingsPresented = true
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        enterSelection()
+                    } label: {
+                        Label("Select Pages", systemImage: "checkmark.circle")
+                    }
+                    .disabled(store.pages.isEmpty && store.completedPages.isEmpty)
+
+                    Divider()
+
+                    Button {
+                        isFolderManagerPresented = true
+                    } label: {
+                        Label("Manage Folders…", systemImage: "folder.badge.gearshape")
+                    }
+                    // The way back from the swipe action on a row. Here rather
+                    // than as a scope in the title menu because the trash is
+                    // not a view of the workspace — nothing in it can be
+                    // opened, filed or completed, only restored.
+                    Button {
+                        isTrashPresented = true
+                    } label: {
+                        Label("Recently Deleted…", systemImage: "trash")
+                    }
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
             }
         }
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                route.isQuickAddPresented = true
-            } label: {
-                Label("New page", systemImage: "square.and.pencil")
+    }
+
+    // MARK: - Selecting several
+
+    /// The verbs, along the bottom while selecting.
+    ///
+    /// Four, and the same four Things and Mail put there: finish, date, file,
+    /// delete. Each acts on every selected row through one store call that
+    /// refreshes once and says what it did in the notice. Delete asks first
+    /// — the only one that does — because a mis-tap here is several pages,
+    /// not one, though the trash still has them.
+    @ToolbarContentBuilder
+    private var selectionBar: some ToolbarContent {
+        if isSelecting {
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button {
+                    let ids = orderedSelection.map(\.id)
+                    Task {
+                        await store.completePages(ids: ids)
+                        leaveSelection()
+                    }
+                } label: {
+                    Label("Complete", systemImage: "checkmark.circle")
+                }
+                .disabled(selection.isEmpty)
+                Spacer()
+                Menu {
+                    Button("Today") { schedule(to: DayLabel.today()) }
+                    Button("Tomorrow") { schedule(to: Self.tomorrow()) }
+                    Divider()
+                    Button("Clear Date", role: .destructive) { schedule(to: nil) }
+                } label: {
+                    Label("Schedule", systemImage: "calendar")
+                }
+                .disabled(selection.isEmpty)
+                Spacer()
+                Menu {
+                    Button("Inbox") { move(to: nil) }
+                    ForEach(store.fileableFolders, id: \.id) { folder in
+                        Button(folder.name) { move(to: folder.id) }
+                    }
+                } label: {
+                    Label("Move", systemImage: "folder")
+                }
+                .disabled(selection.isEmpty)
+                Spacer()
+                Button(role: .destructive) {
+                    isBatchDeleteConfirmed = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .disabled(selection.isEmpty)
             }
+        }
+    }
+
+    /// Every row on screen, open and finished alike, in list order.
+    private var selectable: [PageSummary] {
+        visibleSections.flatMap(\.pages) + (isCompletedExpanded ? store.completedPages : [])
+    }
+
+    /// The selected rows in the order the list shows them, so a notice that
+    /// counts them counts what the reader ticked.
+    private var orderedSelection: [PageSummary] {
+        selectable.filter { selection.contains($0.id) }
+    }
+
+    private func enterSelection() {
+        selection = []
+        isSelecting = true
+    }
+
+    private func leaveSelection() {
+        isSelecting = false
+        selection = []
+    }
+
+    private func schedule(to day: String?) {
+        let pages = orderedSelection
+        Task {
+            await store.schedulePages(pages, to: day)
+            leaveSelection()
+        }
+    }
+
+    private func move(to folderId: String?) {
+        let pages = orderedSelection
+        Task {
+            await store.movePages(pages, toFolder: folderId)
+            leaveSelection()
         }
     }
 

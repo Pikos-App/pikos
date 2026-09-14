@@ -12,6 +12,7 @@ delivery plan.
 | `05-calendar.md`                 | The calendar: which half is shared, why a calendar cannot draw the pages it queried, and what the mutations caught   |
 | `06-platform-audit.md`           | What iOS breaks regardless of the UI layer, carried over from the Tauri spike and re-read against Swift              |
 | `07-device-checklist.md`         | The first device session: M0, the lock-screen check, and what to write down — each one a row to read on screen       |
+| `08-design-review.md`            | What a phone productivity app is expected to feel like in 2026, where this one stood, and the pass that followed     |
 
 ## Based on `feat/external-calendar-sync`, not `main`
 
@@ -745,6 +746,39 @@ longer moves an anchor that names an hour and minute onto the rule's weekday;
 the Rust agreed with the new answer already, so the case is a tightened pin
 rather than a fix.
 
+## The design pass (2026-09-14)
+
+A read of the phone app against what the platform and its peers now expect —
+`08-design-review.md` has the review itself and the sources. The short
+version: the app already had most of the idioms right, and what it lacked
+was _placement_ and _system reach_. Twelve changes, all Swift, no FFI:
+
+- The create button floats at the bottom, in reach of the thumb, with
+  Liquid Glass on iOS 26 and a material circle before it; the corner pencil
+  is gone. It shares the bottom with the notice bar through one overlay.
+- The tab shell is the `Tab` form on iOS 18, with the search tab in the
+  search role and the bar minimizing on scroll where iOS 26 offers both;
+  iOS 17 keeps `tabItem`. Every iOS 26 symbol is behind `#if compiler(>=6.2)`
+  _and_ `#available`, so Xcode 16 and 26 both build the tree.
+- A ticked row holds for a beat before the list re-reads, and a run of
+  ticks holds once. Reduce Motion is read wherever something slides.
+- Select mode: a corner menu (which also took Manage Folders and the trash,
+  leaving the title menu to switching), selection circles, and a bottom bar
+  of Complete, Schedule, Move and Delete, each one store call with one
+  notice — Delete's with an undo for the batch.
+- The day view has a week strip with dots, and a long press on empty grid
+  opens quick add already set to that slot. Quick add has a priority chip.
+- Search remembers the last eight searches and completes operators from the
+  reader's own folders and tags.
+- Two TipKit cards, one a day, for the two invisible gestures.
+- Pages are in Spotlight; Control Center has a New Page button (iOS 18); the
+  focus timer runs in the Dynamic Island as a Live Activity.
+
+Left for later and written down in the review: drag-to-place on the button,
+drag reordering (needs a reorder call across the FFI), an evening bucket, a
+deadline distinct from the date, Spotlight _actions_, Focus filters, the
+share extension.
+
 ## Needs a Mac
 
 Nothing here is blocked on design — only on hardware.
@@ -835,6 +869,14 @@ session of its own. What has been done instead:
   Note that both Swift packages declare `swift-tools-version: 5.9`, so they
   build in Swift 5 mode regardless of the app's setting — suspects 1 and 2 are
   warnings there and errors only where app code touches them.
+
+  The design pass added a fourth set, listed at the end of
+  `08-design-review.md`: the compiler-gated iOS 26 blocks in
+  `Support/Platform.swift`, the two `Tab` initialisers under `#available(iOS
+18)`, `List(selection:)` beside the row's invisible link, the sequenced
+  long-press gesture on the calendar grid, `Activity.request` in the focus
+  timer, and the `#available` around the Control Center control in the widget
+  bundle.
 
 ## iPad is a later milestone, not a later decision
 

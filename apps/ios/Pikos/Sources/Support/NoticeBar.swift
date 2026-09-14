@@ -35,10 +35,10 @@ struct NoticeBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
+        // Glass on iOS 26, a material elsewhere: the bar floats in the
+        // navigation layer over content, which is the one place the new
+        // design language puts glass.
+        .floatingSurface(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .accessibilityElement(children: .contain)
         // Keyed on the notice, so a second one restarts the countdown instead
@@ -59,27 +59,48 @@ extension View {
     /// screen sits just above it, which is where a bar the user might tap
     /// belongs.
     func noticeOverlay() -> some View {
-        modifier(NoticeOverlay())
+        bottomChrome { EmptyView() }
+    }
+
+    /// The screen's floating controls and its notice, stacked at the bottom.
+    ///
+    /// One overlay rather than two, so the notice and the create button are
+    /// laid out together: the notice slides in *under* the button and pushes
+    /// it up, rather than appearing on top of it and hiding the one control
+    /// the screen floats on purpose. The button is trailing, where a right
+    /// thumb rests; the notice is full width, since it carries a sentence.
+    func bottomChrome<Floating: View>(@ViewBuilder floating: @escaping () -> Floating) -> some View {
+        modifier(BottomChrome(floating: floating))
     }
 }
 
-private struct NoticeOverlay: ViewModifier {
+private struct BottomChrome<Floating: View>: ViewModifier {
     @Environment(WorkspaceStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let floating: () -> Floating
 
     func body(content: Content) -> some View {
         content.overlay(alignment: .bottom) {
-            if let notice = store.notice {
-                NoticeBar(notice: notice) {
-                    // Only clear the notice this bar was drawn for. By the time
-                    // the countdown ends a newer one may have replaced it, and
-                    // clearing that would cut its window short.
-                    if store.notice == notice {
-                        withAnimation(.snappy) { store.notice = nil }
+            VStack(alignment: .trailing, spacing: 12) {
+                floating()
+                if let notice = store.notice {
+                    NoticeBar(notice: notice) {
+                        // Only clear the notice this bar was drawn for. By the
+                        // time the countdown ends a newer one may have
+                        // replaced it, and clearing that would cut its window
+                        // short.
+                        if store.notice == notice {
+                            withAnimation(reduceMotion ? nil : .snappy) { store.notice = nil }
+                        }
                     }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
         }
-        .animation(.snappy, value: store.notice)
+        // A dissolve under Reduce Motion: the slide is decoration, the
+        // sentence is the content.
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy, value: store.notice)
         // Said aloud as well as shown. A bar that appears for six seconds at
         // the bottom of the screen is one VoiceOver would only find by
         // sweeping down to it, and "Deleted — Undo" is exactly the sentence

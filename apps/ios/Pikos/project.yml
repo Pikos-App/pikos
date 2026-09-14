@@ -114,6 +114,11 @@ targets:
         # not two days. See Notifications/ReminderScheduler.swift.
         BGTaskSchedulerPermittedIdentifiers:
           - app.pikos.reminders.refresh
+        # The focus timer shows in the Dynamic Island and on the lock screen
+        # while a session runs. Drawn by the widget extension from
+        # `PikosSupport.FocusActivityAttributes`; started and ended by
+        # Editor/FocusTimer.swift.
+        NSSupportsLiveActivities: true
         UIBackgroundModes:
           - fetch
         # The app's Documents folder appears in the Files app as "Pikos",

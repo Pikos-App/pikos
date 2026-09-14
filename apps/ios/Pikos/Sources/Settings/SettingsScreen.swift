@@ -384,6 +384,10 @@ struct SettingsScreen: View {
         isDeleting = true
         defer { isDeleting = false }
         await store.deleteAllData()
+        // The home screen's search must forget the titles too: a phone wiped
+        // of its notes that keeps offering them from Spotlight has not been
+        // wiped.
+        await SpotlightIndexer.clear()
         dismiss()
     }
 

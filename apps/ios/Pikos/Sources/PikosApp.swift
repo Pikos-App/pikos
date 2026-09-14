@@ -1,5 +1,6 @@
 import AppIntents
 import BackgroundTasks
+import CoreSpotlight
 import PikosCore
 import SwiftUI
 import UserNotifications
@@ -16,6 +17,9 @@ struct PikosApp: App {
     @State private var exports: ExportStore
     @State private var reminders: ReminderScheduler
     @State private var route = Route.shared
+    /// The home screen's search, kept in step with the workspace. Not in the
+    /// environment: nothing but the shell talks to it.
+    @State private var spotlight: SpotlightIndexer
 
     /// Held for the life of the app: the notification center keeps only a
     /// weak reference to its delegate, and a delegate that is dropped is a
@@ -39,6 +43,11 @@ struct PikosApp: App {
         _exports = State(initialValue: ExportStore(workspace: { pages.handle }))
         let scheduler = ReminderScheduler(workspace: { pages.handle })
         _reminders = State(initialValue: scheduler)
+        _spotlight = State(initialValue: SpotlightIndexer(workspace: { pages.handle }))
+
+        // The in-place hints. Configured before any view exists so the first
+        // list can already ask whether its tip is due.
+        PikosTips.configure()
 
         // Reminders. The delegate routes a tap through the same link a widget
         // uses, and "Complete" through the same store method the checkbox
@@ -90,7 +99,7 @@ struct PikosApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(spotlight: spotlight)
                 .environment(store)
                 .environment(settings)
                 .environment(sync)
@@ -108,11 +117,22 @@ struct PikosApp: App {
                     await reminders.sync()
                 }
                 .onOpenURL { url in route.handle(url, store: store) }
+                // A page chosen from the home screen's search. Routed through
+                // the same link a widget tap uses, so Spotlight is another
+                // entry point and not a second code path.
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    guard let pageId = SpotlightIndexer.pageId(from: activity),
+                        let url = URL(string: "pikos://page/\(pageId)")
+                    else { return }
+                    route.handle(url, store: store)
+                }
         }
     }
 }
 
 struct RootView: View {
+    let spotlight: SpotlightIndexer
+
     @Environment(Route.self) private var route
     @Environment(WorkspaceStore.self) private var store
     @Environment(SettingsStore.self) private var settings
@@ -145,30 +165,38 @@ struct RootView: View {
         // appearance while the app behind it does not, and the calendar is read
         // by every `DatePicker` below here — including the ones inside sheets,
         // which is exactly what a per-screen modifier would miss.
-        TabView(selection: $route.tab) {
-            NavigationStack(path: $route.pagesPath) {
-                PageListScreen()
-                    .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
-                    .noticeOverlay()
+        Group {
+            if #available(iOS 18.0, *) {
+                // The `Tab` form. On iOS 26 the search tab's role is what puts
+                // the search field where the tab bar was, and the minimize
+                // behaviour is what lets the bar shrink out of the way as a
+                // list scrolls; both are no-ops on iOS 18, which draws the
+                // same three tabs it always did.
+                TabView(selection: $route.tab) {
+                    Tab("Pages", systemImage: "doc.text", value: Route.Tab.pages) {
+                        pagesTab
+                    }
+                    Tab("Calendar", systemImage: "calendar", value: Route.Tab.calendar) {
+                        calendarTab
+                    }
+                    Tab(value: Route.Tab.search, role: .search) {
+                        searchTab
+                    }
+                }
+                .minimizingTabBar()
+            } else {
+                TabView(selection: $route.tab) {
+                    pagesTab
+                        .tabItem { Label("Pages", systemImage: "doc.text") }
+                        .tag(Route.Tab.pages)
+                    calendarTab
+                        .tabItem { Label("Calendar", systemImage: "calendar") }
+                        .tag(Route.Tab.calendar)
+                    searchTab
+                        .tabItem { Label("Search", systemImage: "magnifyingglass") }
+                        .tag(Route.Tab.search)
+                }
             }
-            .tabItem { Label("Pages", systemImage: "doc.text") }
-            .tag(Route.Tab.pages)
-
-            NavigationStack(path: $route.calendarPath) {
-                CalendarScreen()
-                    .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
-                    .noticeOverlay()
-            }
-            .tabItem { Label("Calendar", systemImage: "calendar") }
-            .tag(Route.Tab.calendar)
-
-            NavigationStack(path: $route.searchPath) {
-                SearchScreen()
-                    .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
-                    .noticeOverlay()
-            }
-            .tabItem { Label("Search", systemImage: "magnifyingglass") }
-            .tag(Route.Tab.search)
         }
         // One sheet for quick add, wherever it was asked for. The toolbar
         // button, the empty state and a `pikos://quick-add` link all set the
@@ -177,11 +205,12 @@ struct RootView: View {
         .sheet(
             isPresented: $route.isQuickAddPresented,
             // Otherwise the next manual open would inherit the last link's
-            // text. `onDismiss` is declared before `content`, so it cannot be
-            // written as a second trailing closure.
-            onDismiss: { route.quickAddPrefill = "" }
+            // text, or the last calendar slot's time. `onDismiss` is declared
+            // before `content`, so it cannot be written as a second trailing
+            // closure.
+            onDismiss: { route.clearQuickAddPrefill() }
         ) {
-            QuickAddSheet(prefill: route.quickAddPrefill)
+            QuickAddSheet(prefill: route.quickAddPrefill, prefillDate: route.quickAddPrefillDate)
         }
         // Errors surface here, above every tab and sheet, so a write that
         // fails on the calendar is not an alert waiting on the page list.
@@ -240,6 +269,16 @@ struct RootView: View {
             await reminders.sync()
             WidgetCenter.shared.reloadAllTimelines()
         }
+        // The home screen's search index follows the same signal, more
+        // slowly: it is a full rebuild, and nobody is searching Spotlight
+        // for a page they typed three seconds ago. A burst of writes
+        // rebuilds once, after the last.
+        .task(id: store.dataVersion) {
+            guard store.dataVersion > 0 else { return }
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            await spotlight.reindex()
+        }
         // The two preferences that change the plan without a write.
         .onChange(of: settings.remindersEnabled) { _, _ in Task { await reminders.sync() } }
         .onChange(of: settings.defaultReminderMinutes) { _, _ in
@@ -265,6 +304,38 @@ struct RootView: View {
         }
         .preferredColorScheme(settings.colorScheme)
         .environment(\.calendar, settings.calendar)
+    }
+
+    // The shell owns navigation; the screens are content. Each tab is one
+    // stack whose path lives on the router, which is what lets a deep link
+    // push from outside and what makes the iPad shell a change of container
+    // rather than of screens.
+
+    @ViewBuilder
+    private var pagesTab: some View {
+        @Bindable var route = route
+        NavigationStack(path: $route.pagesPath) {
+            PageListScreen()
+                .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
+        }
+    }
+
+    @ViewBuilder
+    private var calendarTab: some View {
+        @Bindable var route = route
+        NavigationStack(path: $route.calendarPath) {
+            CalendarScreen()
+                .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
+        }
+    }
+
+    @ViewBuilder
+    private var searchTab: some View {
+        @Bindable var route = route
+        NavigationStack(path: $route.searchPath) {
+            SearchScreen()
+                .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
+        }
     }
 
     /// Land back on the page that was open, if the app was only just put away.

@@ -35,6 +35,14 @@ struct CalendarGrid: View {
     let onSkip: (CalendarEntry) -> Void
     /// Re-time this occurrence, leaving the rest of the series alone.
     let onMove: (CalendarEntry) -> Void
+    /// A long press on empty grid: a day and a minute into it, snapped to
+    /// a slot, for a page to be made at.
+    let onCreate: (String, Int) -> Void
+
+    /// Counts slot presses, so each one can be felt. The press is the only
+    /// gesture on the grid with no visible target under it, which is exactly
+    /// the one a thumb needs told has landed.
+    @State private var slotPresses = 0
 
     /// Scales the hour height with the reader's text size. A calendar whose
     /// rows stay put while its labels grow is how a block ends up with its
@@ -75,6 +83,7 @@ struct CalendarGrid: View {
                 }
             }
         }
+        .sensoryFeedback(.impact(weight: .medium), trigger: slotPresses)
     }
 
     // MARK: - Header
@@ -261,6 +270,17 @@ struct CalendarGrid: View {
         let blocks = pages.isEmpty ? [] : layoutTimedDay(pages: pages, day: day)
 
         return ZStack(alignment: .topLeading) {
+            // Under the blocks: the empty grid, which a long press turns into
+            // a page at that time. The blocks above take their own taps and
+            // presses first, so this only ever hears the gaps between them.
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(slotPress { point in
+                    slotPresses += 1
+                    onCreate(day, CalendarGeometry.slotMinute(atY: point.y, metrics: metrics))
+                })
+                .accessibilityHidden(true)
+
             ForEach(blocks, id: \.pageId) { block in
                 if let entry = timed.first(where: { $0.key == block.pageId }),
                     let placed = CalendarGeometry.placement(
@@ -285,6 +305,23 @@ struct CalendarGrid: View {
         }
         .frame(width: columnWidth, height: metrics.dayHeight, alignment: .topLeading)
         .offset(x: columnWidth * CGFloat(index))
+    }
+
+    /// A press held on one spot, reported with where it was.
+    ///
+    /// `LongPressGesture` alone says nothing about location, so it is
+    /// sequenced with a zero-distance drag whose start point is the press.
+    /// Inside a scroll view the scroll still wins the moment the finger
+    /// moves, which is the right priority: a person dragging past 3pm was
+    /// scrolling, not asking for a page there.
+    private func slotPress(perform: @escaping (CGPoint) -> Void) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.45)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
+            .onEnded { value in
+                if case .second(true, let drag?) = value {
+                    perform(drag.startLocation)
+                }
+            }
     }
 
     private var nowIndicator: some View {

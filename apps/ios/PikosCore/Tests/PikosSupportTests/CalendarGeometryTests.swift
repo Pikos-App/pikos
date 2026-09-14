@@ -140,4 +140,46 @@ final class CalendarGeometryTests: XCTestCase {
             CalendarGeometry.nowOffset(
                 now: "2026-03-23T06:00:00", on: "2026-03-24", metrics: metrics))
     }
+
+    // MARK: - Touching an empty slot
+
+    /// A finger resting just under the 3pm rule meant 3pm, not 3:30.
+    func testATouchSnapsDownToTheHalfHour() {
+        let metrics = CalendarGeometry.Metrics(hourHeight: 60)
+        XCTAssertEqual(CalendarGeometry.slotMinute(atY: 15 * 60 + 4, metrics: metrics), 15 * 60)
+        XCTAssertEqual(CalendarGeometry.slotMinute(atY: 15 * 60 + 29, metrics: metrics), 15 * 60)
+        XCTAssertEqual(CalendarGeometry.slotMinute(atY: 15 * 60 + 31, metrics: metrics), 15 * 60 + 30)
+    }
+
+    func testSlotsFollowTheHourHeight() {
+        // At 88 points an hour, 3pm is 1320 points down.
+        let metrics = CalendarGeometry.Metrics(hourHeight: 88)
+        XCTAssertEqual(CalendarGeometry.slotMinute(atY: 1320, metrics: metrics), 15 * 60)
+        XCTAssertEqual(CalendarGeometry.slotMinute(atY: 1320 + 44, metrics: metrics), 15 * 60 + 30)
+    }
+
+    /// The bottom of the grid is the last slot of today, never midnight
+    /// tomorrow; above the top is midnight, not a negative minute.
+    func testSlotsAreClampedIntoTheDay() {
+        let metrics = CalendarGeometry.Metrics(hourHeight: 64)
+        XCTAssertEqual(CalendarGeometry.slotMinute(atY: -20, metrics: metrics), 0)
+        XCTAssertEqual(CalendarGeometry.slotMinute(atY: metrics.dayHeight, metrics: metrics), 23 * 60 + 30)
+        XCTAssertEqual(
+            CalendarGeometry.slotMinute(atY: metrics.dayHeight * 2, metrics: metrics), 23 * 60 + 30)
+    }
+
+    func testAQuarterHourSlotIsAvailable() {
+        let metrics = CalendarGeometry.Metrics(hourHeight: 60)
+        XCTAssertEqual(
+            CalendarGeometry.slotMinute(atY: 9 * 60 + 50, metrics: metrics, slotMinutes: 15), 9 * 60 + 45)
+    }
+
+    /// The wall clock written for a slot reads back as the same minute.
+    func testASlotRoundTripsThroughTheStorageFormat() {
+        let clock = CalendarGeometry.wallClock(day: "2026-09-14", minute: 15 * 60 + 30)
+        XCTAssertEqual(clock, "2026-09-14T15:30:00")
+        XCTAssertEqual(CalendarGeometry.minutesIntoDay(clock), 15 * 60 + 30)
+        XCTAssertEqual(CalendarGeometry.day(of: clock), "2026-09-14")
+        XCTAssertEqual(CalendarGeometry.wallClock(day: "2026-09-14", minute: 0), "2026-09-14T00:00:00")
+    }
 }

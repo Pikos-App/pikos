@@ -206,7 +206,7 @@ suite.
   re-encoded as JPEG on the way in, so a HEIC from the camera roll renders in
   the webview and on the desktop. Not wired: the Files picker, the camera, and
   pasting an image into the editor. And one convention worth knowing: the phone
-  stores the asset path *relative to the assets directory*, which is what its
+  stores the asset path _relative to the assets directory_, which is what its
   scheme handler resolves, where the desktop stores an absolute path — so an
   image inserted on either device does not yet render on the other. That is
   iCloud sync's to settle: the sync layer carries the assets directory with the
@@ -214,7 +214,7 @@ suite.
   agree on before it lands.
 - **Share extension.** M4. Capturing a URL or a selection into a new page. The
   App Group and the read-only workspace it needs are in place; what is missing
-  is the target itself. The capture surfaces that *are* here: five widgets
+  is the target itself. The capture surfaces that _are_ here: five widgets
   (`PikosWidgets/`), and Siri takes "Add a page to Pikos". The widgets are
   Today (small, medium, large, and the three lock-screen sizes), Next Up (the
   next scheduled page with a live countdown; small and medium), Inbox (a count
@@ -227,7 +227,21 @@ suite.
 - **Onboarding.** Deliberately. Nothing to sign up for means nothing to ask. A
   brand-new workspace starts with one page in the Inbox, "Welcome to Pikos",
   that says where the data lives and what to type; each empty view offers a
-  sentence the parser understands and opens quick add with it filled in.
+  sentence the parser understands and opens quick add with it filled in. The
+  two gestures with no affordance — the swipes and the title menu — get one
+  TipKit card each at the top of the list, a day apart, until dismissed.
+- **Dragging the create button.** Things' Magic Plus can be dragged into a
+  list position or onto a day. The floating button here is a tap. It is the
+  right place for the button (see `docs/ios/08-design-review.md`); the drag is
+  a delighter that needs drop targets the list does not model.
+- **Reordering rows by drag.** `sort_order` is on the summary and nothing
+  crosses the FFI to change it. Select mode covers moving several pages at
+  once; a hand-arranged order in a folder waits on a reorder call.
+- **Liquid Glass everywhere.** The floating button, the notice bar, the tab
+  bar's minimize and the bottom search are glass on iOS 26 and system
+  materials before it. Nothing in the content layer is glass, on purpose,
+  and every iOS 26 symbol sits behind `#if compiler(>=6.2)` so the tree still
+  builds with Xcode 16.
 - **A way to see the file.** Settings › Your data says how big the workspace
   is and copies it — database and images — into Pikos › Backups in the Files
   app, where a person can hold it, move it or send it on. The live database

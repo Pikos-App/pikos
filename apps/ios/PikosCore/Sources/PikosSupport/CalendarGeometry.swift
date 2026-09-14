@@ -153,6 +153,41 @@ public enum CalendarGeometry {
         return columnWidth * step * cappedDepth
     }
 
+    // MARK: - Touching an empty slot
+
+    /// The minute a touch in a day column lands on, snapped to a slot.
+    ///
+    /// A long press on empty grid means "a page here", and "here" has to be a
+    /// time somebody would actually type. Nobody schedules anything for 14:37,
+    /// so the touch is snapped down to the nearest `slotMinutes` — half an hour
+    /// by default, which is what a calendar's own picker offers. Down rather
+    /// than to the nearest, because a finger resting a little below the 3pm
+    /// rule meant 3pm, and rounding it up to 3:30 would put the page after the
+    /// line the finger was on.
+    ///
+    /// Clamped into the day, so a press at the very bottom of the grid yields
+    /// the last slot rather than midnight tomorrow.
+    public static func slotMinute(
+        atY y: CGFloat, metrics: Metrics, slotMinutes: Int = 30
+    ) -> Int {
+        let slot = max(1, slotMinutes)
+        let perMinute = metrics.hourHeight / 60
+        guard perMinute > 0 else { return 0 }
+        let minute = Int((y / perMinute).rounded(.down))
+        let snapped = (minute / slot) * slot
+        return min(max(0, snapped), 24 * 60 - slot)
+    }
+
+    /// The wall-clock string for a minute of a day — `2026-09-14T15:30:00`.
+    ///
+    /// The inverse of `minutesIntoDay`, for the one caller that starts from a
+    /// position rather than a stored value. Seconds are always zero: a slot
+    /// is a whole minute by construction.
+    public static func wallClock(day: String, minute: Int) -> String {
+        let clamped = min(max(0, minute), 24 * 60 - 1)
+        return String(format: "%@T%02d:%02d:00", day, clamped / 60, clamped % 60)
+    }
+
     // MARK: - The now indicator
 
     /// Where "now" sits in a day column, or nil if that day is not today.

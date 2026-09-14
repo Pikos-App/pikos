@@ -38,6 +38,11 @@ struct CalendarScreen: View {
     @State private var isDatePickerPresented = false
     /// Which way the last step went, so the grid slides in from that side.
     @State private var steppedForward = true
+    /// What the week strip's dots are drawn from: the whole week around the
+    /// day on screen, fetched only in day view, where the strip is.
+    @State private var weekEntries: [CalendarEntry] = []
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Moves the current-time line without a timer.
     ///
@@ -60,12 +65,33 @@ struct CalendarScreen: View {
     private var days: [Date] { effectiveSpan.days(anchoredOn: anchor, calendar: calendar) }
     private var dayStrings: [String] { days.map(WallClockDay.string(from:)) }
 
+    /// The week the strip shows, in day view: the reader's week around the
+    /// anchor. Empty in any other span, where the day header does the job.
+    private var stripDayStrings: [String] {
+        guard effectiveSpan == .day else { return [] }
+        return CalendarSpan.week.days(anchoredOn: anchor, calendar: calendar).map(
+            WallClockDay.string(from:))
+    }
+
     private var reloadKey: String {
-        dayStrings.joined(separator: ",") + "#\(store.dataVersion)"
+        dayStrings.joined(separator: ",") + "|" + (stripDayStrings.first ?? "")
+            + "#\(store.dataVersion)"
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            if effectiveSpan == .day, !stripDayStrings.isEmpty {
+                WeekStrip(
+                    days: stripDayStrings,
+                    selected: dayStrings.first ?? "",
+                    today: WallClockDay.string(from: Date()),
+                    counts: weekCounts
+                ) { day in
+                    guard let chosen = DayLabel.date(from: day, in: calendar) else { return }
+                    steppedForward = chosen > anchor
+                    anchor = chosen
+                }
+            }
             if !hasLoaded {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -82,15 +108,21 @@ struct CalendarScreen: View {
                     },
                     onComplete: { entry in Task { await act(.complete, on: entry) } },
                     onSkip: { entry in Task { await act(.skip, on: entry) } },
-                    onMove: { entry in moving = Moving(entry: entry) }
+                    onMove: { entry in moving = Moving(entry: entry) },
+                    onCreate: { day, minute in create(on: day, at: minute) }
                 )
+                // The last hour scrolls above the floating button, not under it.
+                .contentMargins(.bottom, NewPageButton.clearance, for: .scrollContent)
                 // A new identity per range is what lets the grid slide rather
-                // than redraw in place when the user pages.
+                // than redraw in place when the user pages. A dissolve under
+                // Reduce Motion: the direction is a nicety, the new day is
+                // the content.
                 .id(dayStrings.first ?? "")
-                .transition(.push(from: steppedForward ? .trailing : .leading))
+                .transition(
+                    reduceMotion ? .opacity : .push(from: steppedForward ? .trailing : .leading))
             }
         }
-        .animation(.snappy, value: dayStrings.first)
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy, value: dayStrings.first)
         // The swipe below is a gesture VoiceOver does not pass through; the
         // chevrons remain, and these put the same two moves on the rotor so
         // the grid itself can be paged without hunting for them.
@@ -125,6 +157,12 @@ struct CalendarScreen: View {
         }
         .sheet(isPresented: $isDatePickerPresented) { datePickerSheet }
         .pageActionSheets($actions)
+        // The same floating button the list has. A page made from here is
+        // quick add's business; the slot press below is the way to make one
+        // *at* a time.
+        .bottomChrome {
+            NewPageButton { route.isQuickAddPresented = true }
+        }
         // Keyed on the range *and* on the workspace's version. The range half
         // means swiping to another week cancels the query for the one being
         // left rather than racing it. The version half means a page completed
@@ -136,6 +174,13 @@ struct CalendarScreen: View {
             entries = await store.calendarRange(
                 from: dayStrings.first ?? "", to: dayStrings.last ?? "")
             hasLoaded = true
+            // The strip's week, after the day it is under: the day is what
+            // the reader is waiting for, the dots are context.
+            if let first = stripDayStrings.first, let last = stripDayStrings.last {
+                weekEntries = await store.calendarRange(from: first, to: last)
+            } else {
+                weekEntries = []
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { now = WallClockDay.instant(from: Date()) }
@@ -152,6 +197,31 @@ struct CalendarScreen: View {
     private func goToToday() {
         steppedForward = Date() > anchor
         anchor = Date()
+    }
+
+    /// How many entries each day of the strip's week holds.
+    ///
+    /// By the day an entry starts on. A multi-day span counts once, on its
+    /// first day — a dot is "something here", not a bar chart.
+    private var weekCounts: [String: Int] {
+        var counts: [String: Int] = [:]
+        for entry in weekEntries {
+            if let day = CalendarGeometry.day(of: entry.scheduledStart) {
+                counts[day, default: 0] += 1
+            }
+        }
+        return counts
+    }
+
+    /// A long press on empty grid: quick add, already set to that slot.
+    ///
+    /// The desktop's "click a time slot to create a page", as a phone does
+    /// it. The sheet opens with the day and time in its picker and the field
+    /// focused, so the sentence typed names the page and nothing else.
+    private func create(on day: String, at minute: Int) {
+        let iso = CalendarGeometry.wallClock(day: day, minute: minute)
+        guard let date = StorageTimestamp.wallClock(iso) else { return }
+        route.presentQuickAdd(at: date)
     }
 
     /// Opening a page from the calendar goes through the same stack the list

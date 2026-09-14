@@ -165,4 +165,49 @@ final class PreferencesTests: XCTestCase {
         }
         for start in Preferences.WeekStart.allCases { XCTAssertFalse(start.label.isEmpty) }
     }
+
+    // MARK: - Recent searches
+
+    func testRecentSearchesStartEmptyAndRememberNewestFirst() {
+        XCTAssertEqual(preferences.recentSearches, [])
+        preferences.remember(search: "dentist")
+        preferences.remember(search: "tag:work")
+        XCTAssertEqual(preferences.recentSearches, ["tag:work", "dentist"])
+    }
+
+    /// A repeat moves to the front; it does not appear twice, and a different
+    /// capitalisation of the same words is the same memory.
+    func testARepeatedSearchMovesToTheFrontOnce() {
+        preferences.remember(search: "dentist")
+        preferences.remember(search: "budget")
+        preferences.remember(search: "Dentist")
+        XCTAssertEqual(preferences.recentSearches, ["Dentist", "budget"])
+    }
+
+    /// Whitespace is not a search, and neither is the empty string a
+    /// keystroke-by-keystroke caller might hand over.
+    func testBlankSearchesAreNotRemembered() {
+        preferences.remember(search: "   ")
+        preferences.remember(search: "")
+        XCTAssertEqual(preferences.recentSearches, [])
+        preferences.remember(search: "  trip notes  ")
+        XCTAssertEqual(preferences.recentSearches, ["trip notes"])
+    }
+
+    func testRecentSearchesAreCappedAtTheLimit() {
+        for index in 0..<(Preferences.recentSearchLimit + 3) {
+            preferences.remember(search: "search \(index)")
+        }
+        XCTAssertEqual(preferences.recentSearches.count, Preferences.recentSearchLimit)
+        XCTAssertEqual(preferences.recentSearches.first, "search \(Preferences.recentSearchLimit + 2)")
+    }
+
+    func testClearingAndResettingForgetTheSearches() {
+        preferences.remember(search: "dentist")
+        preferences.clearRecentSearches()
+        XCTAssertEqual(preferences.recentSearches, [])
+        preferences.remember(search: "dentist")
+        preferences.resetAll()
+        XCTAssertEqual(preferences.recentSearches, [])
+    }
 }

@@ -55,6 +55,27 @@ final class Route {
     /// Text to open quick add with, from a `pikos://quick-add?text=…` link.
     /// Cleared when the sheet closes so the next manual open starts empty.
     var quickAddPrefill = ""
+    /// A time to open quick add already scheduled for, from a long press on
+    /// an empty calendar slot. Cleared with the text, for the same reason.
+    var quickAddPrefillDate: Date?
+
+    /// Open quick add with the schedule already set.
+    ///
+    /// The calendar's way of saying "a page here": the sheet opens with the
+    /// slot's day and time in its picker, and the sentence typed into it
+    /// names the page rather than the time. Presents rather than navigates,
+    /// so the calendar stays where it was when the sheet closes.
+    func presentQuickAdd(at date: Date) {
+        quickAddPrefill = ""
+        quickAddPrefillDate = date
+        isQuickAddPresented = true
+    }
+
+    /// Forget both prefills. Called when the sheet closes, whatever opened it.
+    func clearQuickAddPrefill() {
+        quickAddPrefill = ""
+        quickAddPrefillDate = nil
+    }
 
     /// Show today's pages. Also the landing point for the "Open today" intent,
     /// which has no view to route through and moves this state directly.
@@ -130,6 +151,7 @@ final class Route {
             // give the user the sheet and their page back, not lose their
             // place.
             quickAddPrefill = prefill
+            quickAddPrefillDate = nil
             tab = .pages
             isQuickAddPresented = true
 

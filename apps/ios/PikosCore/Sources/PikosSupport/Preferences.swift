@@ -114,7 +114,15 @@ public struct Preferences: @unchecked Sendable {
         static let defaultFolderID = "pikos.defaultFolderId"
         static let remindersEnabled = "pikos.remindersEnabled"
         static let defaultReminderMinutes = "pikos.defaultReminderMinutes"
+        static let recentSearches = "pikos.recentSearches"
     }
+
+    /// How many past searches the search screen offers back.
+    ///
+    /// Eight is what fits above the keyboard without the list itself needing
+    /// to scroll, and further back than that a search is one the reader would
+    /// retype faster than find.
+    public static let recentSearchLimit = 8
 
     /// The lead a page with no reminder of its own gets, in minutes before its
     /// start. Ten, which is the desktop's default too; the two are separate
@@ -222,15 +230,48 @@ public struct Preferences: @unchecked Sendable {
         set { store.set(Int(newValue), forKey: Key.defaultReminderMinutes) }
     }
 
+    /// The last few searches, newest first.
+    ///
+    /// Not a preference the reader sets, but it lives beside them for the same
+    /// reason they are in the App Group: a search typed in the app is one a
+    /// widget or an intent could reasonably offer back, and the phone is the
+    /// device on which retyping costs the most.
+    public var recentSearches: [String] {
+        get { store.stringArray(forKey: Key.recentSearches) ?? [] }
+        set { store.set(newValue, forKey: Key.recentSearches) }
+    }
+
+    /// Remember a search that was actually run.
+    ///
+    /// Only a submitted query, never a keystroke: a list of recents that holds
+    /// "q", "qu", "qua" is a list nobody reuses. A repeat moves to the front
+    /// rather than appearing twice, comparison is case-insensitive so "Dentist"
+    /// and "dentist" are one memory, and blank input is not a search.
+    public mutating func remember(search raw: String) {
+        let query = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+        var searches = recentSearches.filter {
+            $0.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) != .orderedSame
+        }
+        searches.insert(query, at: 0)
+        recentSearches = Array(searches.prefix(Self.recentSearchLimit))
+    }
+
+    public mutating func clearRecentSearches() {
+        store.removeObject(forKey: Key.recentSearches)
+    }
+
     /// Forget every stored preference, returning each to its default.
     ///
     /// Sweeps the keys named above rather than the whole suite: the suite also
     /// holds anything else the App Group has put there, and a settings reset
-    /// that wipes a neighbour's state is a surprise.
+    /// that wipes a neighbour's state is a surprise. The recent searches go
+    /// too — they are not a setting, but "reset" is the one button a person
+    /// reaches for to make the app forget things about them.
     public func resetAll() {
         for key in [
             Key.theme, Key.listDensity, Key.calendarDensity, Key.weekStart, Key.defaultFolderID,
-            Key.remindersEnabled, Key.defaultReminderMinutes,
+            Key.remindersEnabled, Key.defaultReminderMinutes, Key.recentSearches,
         ] {
             store.removeObject(forKey: key)
         }

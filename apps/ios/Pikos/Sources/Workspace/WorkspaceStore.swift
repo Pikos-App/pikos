@@ -471,6 +471,27 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Every tag on an open page, most used first.
+    ///
+    /// For the search screen's suggestions, which complete `tag:` from what
+    /// exists rather than from what the reader can remember. One query over
+    /// the open pages; the finished ones would add tags nobody is filtering
+    /// by any more. Errors are swallowed: a suggestion list that is empty is
+    /// a search screen exactly as it was, not a fault worth an alert.
+    public func allTags() async -> [String] {
+        guard let workspace else { return [] }
+        guard let pages = try? await workspace.listPages(query: PageQuery(openOnly: true)) else {
+            return []
+        }
+        var counts: [String: Int] = [:]
+        for page in pages {
+            for tag in page.tags { counts[tag, default: 0] += 1 }
+        }
+        return counts.sorted { lhs, rhs in
+            lhs.value != rhs.value ? lhs.value > rhs.value : lhs.key < rhs.key
+        }.map(\.key)
+    }
+
     public func search(_ query: String, limit: UInt32 = 50) async -> [SearchHit] {
         guard let workspace, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         do {
@@ -956,11 +977,161 @@ public final class WorkspaceStore {
 
         do {
             try await workspace.setPageStatus(pageId: pageId, done: done)
-            await refresh()
+            if done && !isRecurring {
+                holdThenRefresh()
+            } else {
+                await refresh()
+            }
         } catch {
             errorMessage = error.localizedDescription
             await refresh()
         }
+    }
+
+    /// Let a ticked row be seen before it goes.
+    ///
+    /// The write has landed; what waits is the re-read that moves the row to
+    /// Completed. A row that vanishes the instant it is tapped gives the eye
+    /// nothing to confirm and the thumb no chance to take a mis-tap back —
+    /// Things holds a checked row for about a second for exactly this, and
+    /// Reminders keeps it until the list is left. A beat under a second is
+    /// long enough to read and short enough that the list never feels stuck.
+    ///
+    /// One hold for a run of ticks: clearing five rows in a row moves all
+    /// five together after the last, rather than reshuffling the list under
+    /// the finger four times. Any other write refreshes at once and cancels
+    /// the hold, so nothing is ever *later* than it would have been.
+    private func holdThenRefresh() {
+        pendingHold?.cancel()
+        pendingHold = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(850))
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
+    }
+
+    private var pendingHold: Task<Void, Never>?
+
+    // MARK: - Several pages at once
+
+    /// Finish every selected page.
+    ///
+    /// The batch verbs exist for select mode, where one gesture names many
+    /// rows. Each goes through the same workspace call the single verb uses
+    /// — a repeating page still advances rather than ending — and the list
+    /// re-reads once at the end rather than once per page.
+    public func completePages(ids: [String]) async {
+        guard let workspace, !ids.isEmpty else { return }
+        var finished = 0
+        for id in ids {
+            do {
+                try await workspace.setPageStatus(pageId: id, done: true)
+                finished += 1
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        await refresh()
+        guard finished > 0 else { return }
+        notice = Notice(
+            finished == 1
+                ? String(localized: "Completed 1 page")
+                : String(localized: "Completed \(finished) pages"))
+    }
+
+    /// Put every selected page on a day, or take its date away.
+    ///
+    /// Pages a calendar owns or that repeat are left alone and counted: the
+    /// workspace would refuse both, and a sentence that says "3 moved, 1
+    /// left" is worth more than an error about the one.
+    public func schedulePages(_ pages: [PageSummary], to day: String?) async {
+        guard let workspace, !pages.isEmpty else { return }
+        var moved = 0
+        var kept = 0
+        for page in pages {
+            guard !page.scheduleLocked, !page.isRecurring else {
+                kept += 1
+                continue
+            }
+            do {
+                if let day {
+                    _ = try await workspace.setPageSchedule(
+                        pageId: page.id, scheduledStart: day, scheduledEnd: nil)
+                } else {
+                    _ = try await workspace.clearPageSchedule(pageId: page.id)
+                }
+                moved += 1
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        await refresh()
+        guard moved > 0 || kept > 0 else { return }
+        let verb =
+            day == nil
+            ? String(localized: "Cleared the date on \(moved)")
+            : String(localized: "Scheduled \(moved)")
+        let tail =
+            kept > 0
+            ? " " + String(localized: "(\(kept) repeating or from a calendar, left alone)") : ""
+        notice = Notice(verb + tail)
+    }
+
+    /// File every selected page into a folder, or the Inbox.
+    public func movePages(_ pages: [PageSummary], toFolder folderId: String?) async {
+        guard let workspace, !pages.isEmpty else { return }
+        var moved = 0
+        var kept = 0
+        for page in pages {
+            guard !page.scheduleLocked else {
+                kept += 1
+                continue
+            }
+            guard page.folderId != folderId else { continue }
+            do {
+                _ = try await workspace.updatePage(
+                    id: page.id,
+                    edit: PageEdit(folder: folderId.map { .folder(id: $0) } ?? .inbox))
+                moved += 1
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        await refresh()
+        guard moved > 0 || kept > 0 else { return }
+        let destination =
+            folderId.flatMap { id in folders.first { $0.id == id }?.name }
+            ?? String(localized: "Inbox")
+        let tail =
+            kept > 0 ? " " + String(localized: "(\(kept) from a calendar, left alone)") : ""
+        notice = Notice(String(localized: "Moved \(moved) to \(destination)") + tail)
+    }
+
+    /// Trash every selected page, with one way back for all of them.
+    public func trashPages(ids: [String]) async {
+        guard let workspace, !ids.isEmpty else { return }
+        var trashed: [String] = []
+        for id in ids {
+            do {
+                try await workspace.trashPage(id: id)
+                trashed.append(id)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        await refresh()
+        guard !trashed.isEmpty else { return }
+        notice = Notice(
+            trashed.count == 1
+                ? String(localized: "Deleted 1 page")
+                : String(localized: "Deleted \(trashed.count) pages"),
+            action: Notice.Action(title: String(localized: "Undo")) { [weak self] in
+                guard let self, let workspace = self.workspace else { return }
+                for id in trashed {
+                    try? await workspace.restorePage(id: id)
+                }
+                await self.refresh()
+            })
     }
 
     /// Move everything overdue onto today.

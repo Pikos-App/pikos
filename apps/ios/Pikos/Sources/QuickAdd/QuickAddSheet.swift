@@ -50,12 +50,24 @@ struct QuickAddSheet: View {
     @State private var appliedDate: Date?
     @State private var appliedFolderId: String?
     @State private var parsed: ParsedLine?
+    /// The priority, from the line or from the chip. Manual once the chip
+    /// has been used, like the schedule and the folder.
+    @State private var priority: Priority?
+    @State private var priorityIsManual = false
     @FocusState private var lineFocused: Bool
 
     /// `prefill` arrives from a `pikos://quick-add` link and is parsed on
-    /// appearance, exactly as if it had been typed.
-    init(prefill: String = "") {
+    /// appearance, exactly as if it had been typed. `prefillDate` arrives
+    /// from a long press on a calendar slot and counts as a choice already
+    /// made: the picker opens on it, and a date the line happens to mention
+    /// does not move it — the reader pressed *there*.
+    init(prefill: String = "", prefillDate: Date? = nil) {
         _line = State(initialValue: prefill)
+        if let prefillDate {
+            _date = State(initialValue: prefillDate)
+            _schedule = State(initialValue: .timed)
+            _scheduleIsManual = State(initialValue: true)
+        }
     }
 
     private enum Schedule: String, CaseIterable, Identifiable {
@@ -89,15 +101,12 @@ struct QuickAddSheet: View {
                 // chips already show what was understood — these are for
                 // overriding it, and they open only when asked.
                 Section {
-                    HStack(spacing: 8) {
-                        whenMenu
-                        if !store.fileableFolders.isEmpty {
-                            folderMenu
-                        }
+                    // Three chips, scrolling sideways when the text size
+                    // means they no longer fit side by side.
+                    ViewThatFits(in: .horizontal) {
+                        chipRow
+                        ScrollView(.horizontal, showsIndicators: false) { chipRow }
                     }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.small)
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
 
@@ -163,6 +172,60 @@ struct QuickAddSheet: View {
 
     /// Whether the date pickers are unfolded under the row.
     @State private var isPickingDate = false
+
+    private var chipRow: some View {
+        HStack(spacing: 8) {
+            whenMenu
+            priorityMenu
+            if !store.fileableFolders.isEmpty {
+                folderMenu
+            }
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.small)
+    }
+
+    /// How urgent, as a menu: the four levels and "None".
+    ///
+    /// The line can say `!high`; the chip is for the person who did not
+    /// know that, or changed their mind. Todoist puts the same chip under
+    /// its field, and for the same reason — priority is the one thing about
+    /// a task that is decided *after* the words are typed.
+    private var priorityMenu: some View {
+        Menu {
+            Button {
+                priority = nil
+                priorityIsManual = true
+            } label: {
+                Label("None", systemImage: priority == nil ? "checkmark" : "circle")
+            }
+            ForEach(PagePriority.allCases) { option in
+                Button {
+                    priority = option.value
+                    priorityIsManual = true
+                } label: {
+                    Label(option.name, systemImage: priority == option.value ? "checkmark" : "flag")
+                }
+            }
+        } label: {
+            Label(priorityLabel, systemImage: priority == nil ? "flag" : "flag.fill")
+                .foregroundStyle(priorityColor)
+        }
+        .accessibilityLabel("Priority: \(priorityLabel)")
+    }
+
+    private var priorityLabel: String {
+        guard let priority, let level = PagePriority.allCases.first(where: { $0.value == priority })
+        else { return String(localized: "Priority") }
+        return level.name
+    }
+
+    private var priorityColor: Color {
+        guard let priority, let level = PagePriority.allCases.first(where: { $0.value == priority })
+        else { return .accentColor }
+        return level.color
+    }
 
     /// When the page will be, as a menu: the three answers people give
     /// without a picker, and the picker for the rest.
@@ -259,6 +322,7 @@ struct QuickAddSheet: View {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             parsed = nil
+            if !priorityIsManual { priority = nil }
             return
         }
         parsed = ParsedLine(line: trimmed, reference: Date())
@@ -279,6 +343,10 @@ struct QuickAddSheet: View {
                 schedule = .none
             }
             appliedSchedule = schedule
+        }
+
+        if !priorityIsManual {
+            priority = parsed.priority
         }
 
         if !folderIsManual, let query = parsed.folderQuery,
@@ -310,8 +378,14 @@ struct QuickAddSheet: View {
             // at the moment Add was tapped. `createFromQuickAdd` takes one for
             // exactly this reason, and defaulting it here would let a line
             // typed at 23:59 land on a different day than the one shown.
-            _ = await store.createFromQuickAdd(
+            let created = await store.createFromQuickAdd(
                 line, reference: parsed?.reference ?? Date(), folderId: folderId)
+            // The chip overrules the line, the way a picked date does: a
+            // priority chosen by hand after typing "!high" is the later
+            // decision, and "None" chosen by hand is a real one.
+            if priorityIsManual, let first = created.first, priority != parsed?.priority {
+                await store.setPriority(pageId: first.id, priority: priority)
+            }
             dismiss()
             return
         }
@@ -333,8 +407,9 @@ struct QuickAddSheet: View {
         }
         // Priority is not a field on a new page, so it takes a second write —
         // and it has to happen, or "!urgent" is silently dropped on any line
-        // whose date was picked by hand.
-        if let priority = parsed?.priority {
+        // whose date was picked by hand. The chip's answer, when there is
+        // one, is already in `priority`; otherwise it is the line's.
+        if let priority {
             await store.setPriority(pageId: created.id, priority: priority)
         }
         // Reminders are rows of their own, and were resolved by the parser

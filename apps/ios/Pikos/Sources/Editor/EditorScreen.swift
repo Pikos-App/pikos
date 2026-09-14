@@ -172,7 +172,7 @@ struct EditorScreen: View {
         .navigationTitle(page.title.isEmpty ? "Untitled" : page.title)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                FocusTimer(pageId: page.id)
+                FocusTimer(pageId: page.id, title: page.title)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
