@@ -103,7 +103,11 @@ than leaving it to be discovered.
   app. Needs `ASWebAuthenticationSession`; the PKCE half is transport-agnostic
   and ports unchanged.
 - The 5-minute calendar poll is an **in-process timer** and stops when
-  suspended. Needs the Background Tasks framework.
+  suspended. _Actioned_: the reminders' `BGAppRefreshTask` syncs every
+  connected account before it re-plans the horizon, and a return to the
+  foreground syncs if the last pass is over fifteen minutes old
+  (`CalendarSyncStore.syncAll`, `syncIfStale`). Best-effort, on the OS's
+  schedule — which is what every calendar app without push has on iOS.
 
 ### Vault import has no filesystem to scope to
 

@@ -5,11 +5,12 @@ import SwiftUI
 /// Connected calendars: accounts, which of their calendars mirror into Pikos,
 /// and a sync you ask for.
 ///
-/// Honest about being manual. iOS suspends an in-process timer within seconds
-/// of backgrounding, so the desktop's five-minute poll cannot run here — every
-/// sync on this screen happens because somebody tapped something with the app
-/// open. Saying that plainly costs one sentence and saves the user wondering
-/// why their calendar is a day stale.
+/// Honest about the cadence. iOS suspends an in-process timer within seconds
+/// of backgrounding, so the desktop's five-minute poll cannot run here. What
+/// runs instead is a sync on return to the foreground when the last one is
+/// old, a background refresh the OS grants on its own schedule, and the
+/// buttons on this screen. Saying that plainly costs one sentence and saves
+/// the user wondering why a calendar is an hour behind.
 struct CalendarSyncScreen: View {
     @Environment(CalendarSyncStore.self) private var sync
     @Environment(\.dismiss) private var dismiss
@@ -67,7 +68,7 @@ struct CalendarSyncScreen: View {
                         "Google accounts can only be added on the desktop for now — the sign-in needs a browser the phone cannot hand back to."
                     )
                     Text(
-                        "Calendars sync when you ask them to. Pikos does not check in the background on iPhone."
+                        "Calendars sync when you open Pikos, when you ask, and in the background when iPhone allows it — which is on its schedule, not every few minutes."
                     )
                 }
             }

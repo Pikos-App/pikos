@@ -33,7 +33,8 @@ struct PikosApp: App {
         // once would leave sync permanently unable to do anything.
         let pages = WorkspaceStore()
         _store = State(initialValue: pages)
-        _sync = State(initialValue: CalendarSyncStore(workspace: { pages.handle }))
+        let calendars = CalendarSyncStore(workspace: { pages.handle })
+        _sync = State(initialValue: calendars)
         _exports = State(initialValue: ExportStore(workspace: { pages.handle }))
         let scheduler = ReminderScheduler(workspace: { pages.handle })
         _reminders = State(initialValue: scheduler)
@@ -57,9 +58,12 @@ struct PikosApp: App {
         ReminderScheduler.registerCategories()
 
         // The background refresh has to be registered before launch finishes,
-        // which in a SwiftUI app means here. The handler re-plans the horizon
-        // and asks for the next refresh; the workspace may not be open yet in
-        // a background launch, so it is opened on demand.
+        // which in a SwiftUI app means here. The handler pulls the connected
+        // calendars, then re-plans the reminder horizon over what arrived,
+        // then asks for the next refresh; the workspace may not be open yet
+        // in a background launch, so it is opened on demand. The order is the
+        // point: a meeting that landed in the sync gets its reminder planned
+        // in the same wake.
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: ReminderScheduler.refreshTaskIdentifier, using: nil
         ) { task in
@@ -69,6 +73,7 @@ struct PikosApp: App {
             let handle = BackgroundTaskHandle(task: task)
             let work = Task { @MainActor in
                 await pages.ensureStarted()
+                await calendars.syncAll(quiet: true)
                 await scheduler.sync()
                 ReminderScheduler.scheduleBackgroundRefresh()
                 handle.task.setTaskCompleted(success: true)
@@ -111,6 +116,7 @@ struct RootView: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(SettingsStore.self) private var settings
     @Environment(ReminderScheduler.self) private var reminders
+    @Environment(CalendarSyncStore.self) private var calendars
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -187,7 +193,19 @@ struct RootView: View {
             switch phase {
             case .active:
                 guard !store.isLoading else { return }
-                Task { await store.refresh() }
+                // The list first, so what is already here shows at once;
+                // then the calendars, if it has been a while, and the list
+                // again if they brought anything. That second refresh bumps
+                // the version, which is what re-plans the reminders for
+                // whatever arrived.
+                Task {
+                    await store.refresh()
+                    let before = calendars.lastAutomaticSyncAt
+                    await calendars.syncIfStale()
+                    if calendars.lastAutomaticSyncAt != before {
+                        await store.refresh()
+                    }
+                }
             case .background:
                 // Leaving is the last moment this process is sure to run for
                 // a while: re-plan the horizon so it is as fresh as it can be,

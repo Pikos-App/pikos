@@ -169,13 +169,15 @@ suite.
   the next recompute silently reverts the edit. `resolveAnchorMove` in
   `@pikos/core` is the logic; it is not ported, so the workspace refuses rather
   than corrupting a series — the same line `pikos update --due` draws.
-- **Google calendars, and background sync.** CalDAV accounts can be added,
-  repaired, toggled and synced from the phone. Google cannot: its grant waits on
-  a loopback TCP listener inside the app process, and leaving for the browser is
-  what starts iOS suspending that process. And nothing polls — the desktop's
-  scheduler is an in-process timer, so every sync here is one the user asked
-  for. The screen says both out loud rather than leaving a day-stale calendar to
-  be read as a bug.
+- **Google calendars.** CalDAV accounts can be added, repaired, toggled and
+  synced from the phone. Google cannot: its grant waits on a loopback TCP
+  listener inside the app process, and leaving for the browser is what starts
+  iOS suspending that process. It needs an iOS OAuth client in the Google
+  Cloud project and an `ASWebAuthenticationSession`; the code exchange itself
+  is transport-agnostic. Sync is not polled — an in-process timer is what iOS
+  suspends — but runs on return to the foreground when the last pass is over
+  fifteen minutes old and inside the background refresh the OS grants, which
+  is what every calendar app without push has here. The screen says so.
 - **Most of the desktop's settings.** Five tabs there, one screen here, on
   purpose: keyboard shortcuts, window state and an editor line width describe
   things a phone does not have, and the calendar's day count is an iPad

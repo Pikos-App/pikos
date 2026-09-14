@@ -325,9 +325,11 @@ draws.
 **CalDAV calendars sync from the phone, and the checker grew teeth.**
 `pikos-calendar-sync` is a dependency of `pikos-ffi` for the first time, so
 connecting an account, repairing a password, toggling a calendar and syncing on
-demand all work on iOS. Google and background polling do not, and both are
-structural rather than unfinished — the screen says so rather than letting a
-stale calendar read as a bug. `WorkspaceError` gained a `Network` case so a
+demand all work on iOS. Google does not, and that is structural rather than
+unfinished — the screen says so rather than letting a stale calendar read as a
+bug. Background polling was structural too, and has since been replaced by what
+iOS does allow: a sync on return to the foreground when the last one is over
+fifteen minutes old, and one inside the reminders' background refresh. `WorkspaceError` gained a `Network` case so a
 server that cannot be reached stops being reported as a damaged workspace.
 
 Wiring it up exposed three instances of one bug that had been sitting in the
