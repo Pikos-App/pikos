@@ -61,6 +61,10 @@ export const HOST_TO_WEBVIEW = {
     doc: "Replace the editor's contents with a page's document.",
     fields: { doc: "json", pageId: "string" },
   },
+  setEditable: {
+    doc: "Make the document read-only or editable. The host sends false for a page written by a newer schema than it can save, so the surface refuses input instead of accepting keystrokes it will never persist.",
+    fields: { editable: "boolean" },
+  },
   setTheme: {
     doc: "Apply the host's colour scheme so the editor matches the app around it.",
     fields: { accent: "string", scheme: "string" },

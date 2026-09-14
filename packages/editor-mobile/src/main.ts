@@ -192,6 +192,15 @@ function handleHostMessage(editor: Editor, raw: unknown): void {
       applyTheme(scheme, accent);
       return;
     }
+    case "setEditable": {
+      const { editable } = parsed.payload as { editable: boolean };
+      // Tiptap flips `contenteditable` and drops the caret. No blur is sent
+      // separately: a read-only surface that still owned the keyboard would
+      // show a keyboard for a page that cannot take a keystroke.
+      editor.setEditable(editable);
+      if (!editable) editor.commands.blur();
+      return;
+    }
     case "focus":
       editor.commands.focus();
       return;

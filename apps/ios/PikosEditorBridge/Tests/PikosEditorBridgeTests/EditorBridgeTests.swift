@@ -45,6 +45,14 @@ final class EditorBridgeProtocolTests: XCTestCase {
         XCTAssertTrue(json.contains("\"payload\":{}"))
     }
 
+    func testSetEditableEncodesABareBoolean() throws {
+        let locked = try EditorBridge.Outgoing.setEditable(.init(editable: false)).encoded()
+        XCTAssertTrue(locked.contains("\"type\":\"setEditable\""))
+        // A JSON boolean, not a string or a number: the webview flips
+        // `contenteditable` on exactly this value, and "false" is truthy.
+        XCTAssertTrue(locked.contains("\"editable\":false"))
+    }
+
     func testFormattingCommandsEncode() throws {
         let mark = try EditorBridge.Outgoing.toggleMark(.init(mark: "bold")).encoded()
         XCTAssertTrue(mark.contains("\"type\":\"toggleMark\""))

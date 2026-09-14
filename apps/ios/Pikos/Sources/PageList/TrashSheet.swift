@@ -108,9 +108,9 @@ struct TrashSheet: View {
     /// pages, and the second sentence appears only when a row it describes is
     /// actually on screen.
     private var retentionFooter: String {
-        let base = "Pages are removed permanently after \(store.trashRetentionDays) days."
+        let base = String(localized: "Pages are removed permanently after \(store.trashRetentionDays) days.")
         guard pages.contains(where: \.isSynced) else { return base }
-        return base + " Pages from a calendar stay here until they're deleted in the calendar."
+        return base + " " + String(localized: "Pages from a calendar stay here until they're deleted in the calendar.")
     }
 
     private func load() async {
@@ -132,6 +132,6 @@ struct TrashSheet: View {
     /// rather than restating it in every view that shows a date.
     private static func deletedLabel(_ stamp: String) -> String {
         guard let deleted = StorageTimestamp.utc(stamp) else { return stamp }
-        return "Deleted \(deleted.formatted(.relative(presentation: .named)))"
+        return String(localized: "Deleted \(deleted.formatted(.relative(presentation: .named)))")
     }
 }

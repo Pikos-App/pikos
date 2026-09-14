@@ -137,7 +137,7 @@ struct PageListScreen: View {
         }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
-                Task { await store.trash(pageId: page.id) }
+                Task { await store.trash(pageId: page.id, title: page.title) }
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -249,7 +249,8 @@ struct PageListScreen: View {
     /// hid a number the app already had, which made a closed section look empty
     /// when it was not.
     private var completedTitle: String {
-        store.completedTotal > 0 ? "Completed (\(store.completedTotal))" : "Completed"
+        store.completedTotal > 0
+            ? String(localized: "Completed (\(store.completedTotal))") : String(localized: "Completed")
     }
 
     // MARK: - Filtering
@@ -306,10 +307,10 @@ struct PageListScreen: View {
 
     private var emptyDescription: String {
         switch store.scope {
-        case .today: return "Pages scheduled for today will appear here."
-        case .upcoming: return "Pages scheduled in the next week will appear here."
-        case .inbox: return "Pages you haven't filed will appear here."
-        case .folder(_, let name): return "Nothing in \(name) yet."
+        case .today: return String(localized: "Pages scheduled for today will appear here.")
+        case .upcoming: return String(localized: "Pages scheduled in the next week will appear here.")
+        case .inbox: return String(localized: "Pages you haven't filed will appear here.")
+        case .folder(_, let name): return String(localized: "Nothing in \(name) yet.")
         }
     }
 

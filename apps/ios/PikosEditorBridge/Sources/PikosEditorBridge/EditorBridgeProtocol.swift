@@ -53,6 +53,17 @@ public enum EditorBridge {
         }
     }
 
+    /// Make the document read-only or editable. The host sends false for a page
+    /// written by a newer schema than it can save, so the surface refuses input
+    /// instead of accepting keystrokes it will never persist.
+    public struct OutgoingSetEditablePayload: Codable, Equatable {
+        public let editable: Bool
+
+        public init(editable: Bool) {
+            self.editable = editable
+        }
+    }
+
     /// Apply the host's colour scheme so the editor matches the app around it.
     public struct OutgoingSetThemePayload: Codable, Equatable {
         public let accent: String
@@ -96,6 +107,7 @@ public enum EditorBridge {
         case focus(OutgoingFocusPayload)
         case insertImage(OutgoingInsertImagePayload)
         case load(OutgoingLoadPayload)
+        case setEditable(OutgoingSetEditablePayload)
         case setTheme(OutgoingSetThemePayload)
         case toggleBlock(OutgoingToggleBlockPayload)
         case toggleMark(OutgoingToggleMarkPayload)
@@ -106,6 +118,7 @@ public enum EditorBridge {
             case .focus: return "focus"
             case .insertImage: return "insertImage"
             case .load: return "load"
+            case .setEditable: return "setEditable"
             case .setTheme: return "setTheme"
             case .toggleBlock: return "toggleBlock"
             case .toggleMark: return "toggleMark"
@@ -125,6 +138,7 @@ public enum EditorBridge {
             case .focus(let p): payloadData = try encoder.encode(p)
             case .insertImage(let p): payloadData = try encoder.encode(p)
             case .load(let p): payloadData = try encoder.encode(p)
+            case .setEditable(let p): payloadData = try encoder.encode(p)
             case .setTheme(let p): payloadData = try encoder.encode(p)
             case .toggleBlock(let p): payloadData = try encoder.encode(p)
             case .toggleMark(let p): payloadData = try encoder.encode(p)

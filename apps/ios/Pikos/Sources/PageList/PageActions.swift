@@ -156,13 +156,25 @@ struct PageActionsMenu: View {
         }
 
         if !page.scheduleLocked {
-            // Offered on a repeating page too — it is the way to stop one.
+            // Offered on a repeating page too — it is the way to change one.
             // What the user may change is the workspace's answer, not this
             // menu's guess; the sheet shows a rule it cannot edit read-only.
             Button {
                 state.sheet = .repeatRule(page)
             } label: {
                 Label("Repeat…", systemImage: "repeat")
+            }
+
+            // Ending a series is one tap rather than a sheet, a toggle and a
+            // save: it is the thing most often wanted from a repeat that has
+            // outlived its usefulness, and the notice afterwards carries the
+            // way back where the rule can be rebuilt.
+            if page.isRecurring {
+                Button {
+                    Task { await store.stopRepeating(pageId: page.id, title: page.title) }
+                } label: {
+                    Label("Stop Repeating", systemImage: "repeat.circle")
+                }
             }
 
             // Nested rather than a sheet: a move is one decision from a short
@@ -217,7 +229,7 @@ struct PageActionsMenu: View {
 
         Button(role: .destructive) {
             Task {
-                await store.trash(pageId: page.id)
+                await store.trash(pageId: page.id, title: page.title)
                 afterDelete()
             }
         } label: {
@@ -271,10 +283,10 @@ enum PagePriority: Int64, CaseIterable, Identifiable {
 
     var name: String {
         switch self {
-        case .urgent: return "Urgent"
-        case .high: return "High"
-        case .medium: return "Medium"
-        case .low: return "Low"
+        case .urgent: return String(localized: "Urgent")
+        case .high: return String(localized: "High")
+        case .medium: return String(localized: "Medium")
+        case .low: return String(localized: "Low")
         }
     }
 

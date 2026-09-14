@@ -68,9 +68,9 @@ public final class WorkspaceStore {
 
         var title: String {
             switch self {
-            case .today: return "Today"
-            case .upcoming: return "Upcoming"
-            case .inbox: return "Inbox"
+            case .today: return String(localized: "Today")
+            case .upcoming: return String(localized: "Upcoming")
+            case .inbox: return String(localized: "Inbox")
             case .folder(_, let name): return name
             }
         }
@@ -272,8 +272,8 @@ public final class WorkspaceStore {
                 return [Section(id: "today", title: nil, pages: split.today)]
             }
             return [
-                Section(id: "overdue", title: "Overdue", pages: split.overdue),
-                Section(id: "today", title: "Today", pages: split.today),
+                Section(id: "overdue", title: String(localized: "Overdue"), pages: split.overdue),
+                Section(id: "today", title: String(localized: "Today"), pages: split.today),
             ].filter { !$0.pages.isEmpty }
 
         case .upcoming:
@@ -437,6 +437,21 @@ public final class WorkspaceStore {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    /// Add a reminder to a page, as minutes before its start.
+    ///
+    /// No refresh: a reminder changes nothing a list shows. Used by the one
+    /// path that builds a page by hand from a parsed line, so a lead typed on
+    /// it is written rather than dropped; the quick-add path proper writes its
+    /// reminders in the workspace.
+    public func addReminder(pageId: String, minutesBefore: Int64) async {
+        guard let workspace else { return }
+        do {
+            try await workspace.addPageReminder(pageId: pageId, minutesBefore: minutesBefore)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -803,10 +818,11 @@ public final class WorkspaceStore {
             destination = .upcoming
         }
         let count = created.count
-        let what = count == 1 ? "Added" : "Added \(count) pages"
         notice = Notice(
-            "\(what) to \(destination.title)",
-            action: Notice.Action(title: "View") { [weak self] in
+            count == 1
+                ? String(localized: "Added to \(destination.title)")
+                : String(localized: "Added \(count) pages to \(destination.title)"),
+            action: Notice.Action(title: String(localized: "View")) { [weak self] in
                 self?.scope = destination
             })
     }
@@ -952,7 +968,7 @@ public final class WorkspaceStore {
             try await workspace.skipOccurrence(pageId: pageId, occurrenceDate: date)
             await refresh()
             notice = Notice(
-                "Skipped \(entry.title.isEmpty ? "Untitled" : entry.title)",
+                String(localized: "Skipped \(entry.title.isEmpty ? String(localized: "Untitled") : entry.title)"),
                 action: Notice.Action(title: "Undo") { [weak self] in
                     await self?.unskipOccurrence(pageId: pageId, on: date)
                 })
@@ -1035,11 +1051,50 @@ public final class WorkspaceStore {
         workspace?.trashRetentionDays() ?? 30
     }
 
-    public func trash(pageId: String) async {
+    /// Move a page to the trash, and offer the way back for a few seconds.
+    ///
+    /// The delete was always soft, but until the notice existed the only way
+    /// back was the Recently Deleted screen, two menus away — and a mis-swipe
+    /// on a phone is the commonest accidental delete there is. `title` is what
+    /// the notice names; the caller has it and a lookup here would miss a page
+    /// that is not in the current list.
+    public func trash(pageId: String, title: String = "") async {
         guard let workspace else { return }
         do {
             try await workspace.trashPage(id: pageId)
             await refresh()
+            let name = title.isEmpty ? String(localized: "page") : "“\(title)”"
+            notice = Notice(
+                String(localized: "Deleted \(name)"),
+                action: Notice.Action(title: "Undo") { [weak self] in
+                    await self?.restore(pageId: pageId)
+                })
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Stop a page repeating from the list, in one tap.
+    ///
+    /// The page stays on the date it was last on; what goes is the rule. The
+    /// way back is offered when there is one: a rule the picker can hold is
+    /// re-applied by the undo, and a richer one — "the last Friday of the
+    /// month" — cannot be rebuilt from here, so the notice says what happened
+    /// and offers nothing that would only half work.
+    public func stopRepeating(pageId: String, title: String) async {
+        guard let workspace else { return }
+        let previous = try? await workspace.pageRepeat(pageId: pageId)
+        do {
+            try await workspace.removePageRepeat(pageId: pageId)
+            await refresh()
+            let name = title.isEmpty ? String(localized: "page") : "“\(title)”"
+            var undo: Notice.Action?
+            if case .editable(let rule, _) = previous {
+                undo = Notice.Action(title: "Undo") { [weak self] in
+                    await self?.setRepeat(pageId: pageId, to: rule)
+                }
+            }
+            notice = Notice(String(localized: "\(name) no longer repeats"), action: undo)
         } catch {
             errorMessage = error.localizedDescription
         }

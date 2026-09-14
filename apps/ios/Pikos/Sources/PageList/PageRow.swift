@@ -218,7 +218,7 @@ struct ScheduleLabel: View {
             .labelStyle(.titleAndIcon)
             .font(.caption)
             .foregroundStyle(isOverdue ? Color.red : Color.secondary)
-            .accessibilityLabel(isOverdue ? "Overdue, \(formatted)" : formatted)
+            .accessibilityLabel(isOverdue ? String(localized: "Overdue, \(formatted)") : formatted)
     }
 
     // Fixed locale and no timezone conversion: the stored value is a wall
@@ -243,13 +243,13 @@ struct ScheduleLabel: View {
         let calendar = Calendar.current
         let time = parsed.formatted(date: .omitted, time: .shortened)
         if calendar.isDateInToday(parsed) {
-            return isAllDay ? "Today" : time
+            return isAllDay ? String(localized: "Today") : time
         }
         if calendar.isDateInTomorrow(parsed) {
-            return isAllDay ? "Tomorrow" : "Tomorrow \(time)"
+            return isAllDay ? String(localized: "Tomorrow") : String(localized: "Tomorrow \(time)")
         }
         if calendar.isDateInYesterday(parsed) {
-            return isAllDay ? "Yesterday" : "Yesterday \(time)"
+            return isAllDay ? String(localized: "Yesterday") : String(localized: "Yesterday \(time)")
         }
         // Within the year the year is noise; outside it, it is the point.
         let sameYear = calendar.isDate(parsed, equalTo: .now, toGranularity: .year)

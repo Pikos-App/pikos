@@ -1,3 +1,4 @@
+import PhotosUI
 import PikosCore
 import PikosEditorBridge
 import PikosSupport
@@ -32,6 +33,8 @@ struct EditorScreen: View {
     @State private var coldLoadSeconds: TimeInterval?
     @State private var actions = PageActionState()
     @State private var isKeyboardVisible = false
+    @State private var isPickingPhoto = false
+    @State private var pickedPhoto: PhotosPickerItem?
     /// Owned here rather than by the editor view, which is a value type
     /// recreated on every update and so cannot hold a live reference.
     @State private var controller = EditorController()
@@ -94,6 +97,7 @@ struct EditorScreen: View {
                 controller: controller,
                 colorScheme: colorScheme,
                 accentColor: Brand.accentHex,
+                isEditable: editable,
                 // Every callback hops to the main actor explicitly. They are
                 // invoked from WebKit delegate callbacks, and whether those are
                 // main-actor-isolated depends on the SDK's audit state — hopping
@@ -115,6 +119,9 @@ struct EditorScreen: View {
                     // tapped link from replacing the editor with a web page.
                     Task { @MainActor in openURL(url) }
                 },
+                onImageRequested: {
+                    Task { @MainActor in isPickingPhoto = true }
+                },
                 onReady: { duration in
                     Task { @MainActor in coldLoadSeconds = duration }
                 }
@@ -128,15 +135,27 @@ struct EditorScreen: View {
         // one nobody would ever see above this editor.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if editable && isKeyboardVisible {
-                FormattingToolbar(selection: selection, controller: controller) {
-                    controller.blur()
-                }
+                FormattingToolbar(
+                    selection: selection,
+                    controller: controller,
+                    onInsertImage: { isPickingPhoto = true },
+                    onDismissKeyboard: { controller.blur() }
+                )
                 .background(.bar)
                 .overlay(alignment: .top) { Divider() }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.snappy, value: isKeyboardVisible)
+        // The system picker runs out of process, so no photo-library
+        // permission is asked for: the app only ever sees the one picture
+        // chosen.
+        .photosPicker(isPresented: $isPickingPhoto, selection: $pickedPhoto, matching: .images)
+        .onChange(of: pickedPhoto) { _, item in
+            guard let item else { return }
+            pickedPhoto = nil
+            Task { await insert(photo: item, into: assetsURL) }
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
         ) { _ in isKeyboardVisible = true }
@@ -183,6 +202,39 @@ struct EditorScreen: View {
         }
         page = await store.page(id: pageId)
         loadFailed = page == nil
+    }
+
+    /// Write a picked photo into the workspace and put it in the document.
+    ///
+    /// The document stores the file's name relative to the assets directory,
+    /// which is what the scheme handler resolves — never an absolute path,
+    /// which would be wrong after a restore to a new device and is not the
+    /// host's business to know. JPEG, PNG and GIF are stored as they are;
+    /// anything else — a HEIC from the camera roll, most often — is re-encoded
+    /// as JPEG so it renders here and on the desktop.
+    private func insert(photo item: PhotosPickerItem, into assets: URL) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else { return }
+            let name: String
+            let bytes: Data
+            if let ext = AssetName.storableExtension(for: item.supportedContentTypes) {
+                name = AssetName.fresh(extension: ext)
+                bytes = data
+            } else {
+                guard let image = UIImage(data: data),
+                    let jpeg = image.jpegData(compressionQuality: 0.85)
+                else {
+                    store.errorMessage = String(localized: "That image could not be read.")
+                    return
+                }
+                name = AssetName.fresh(extension: "jpg")
+                bytes = jpeg
+            }
+            try bytes.write(to: assets.appendingPathComponent(name), options: .atomic)
+            controller.insertImage(assetPath: name)
+        } catch {
+            store.errorMessage = String(localized: "The photo could not be added: \(error.localizedDescription)")
+        }
     }
 
     /// Re-read the page after a write from the menu.

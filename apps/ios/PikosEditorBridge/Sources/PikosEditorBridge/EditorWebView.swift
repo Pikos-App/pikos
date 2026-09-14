@@ -32,6 +32,12 @@ public struct EditorWebView: UIViewRepresentable {
     public var colorScheme: ColorScheme = .light
     public var accentColor: String = "#d1603d"
 
+    /// Whether the surface takes input. False for a page written by a newer
+    /// schema than this build can save: refusing to save is not enough on its
+    /// own, because a surface that still accepts keystrokes and drops them
+    /// reads as the app losing work rather than protecting it.
+    public var isEditable: Bool = true
+
     /// Fired when the document changes, already debounced in the webview.
     public var onDocumentChanged: (_ pageId: String, _ json: String, _ plainText: String) -> Void
 
@@ -57,6 +63,7 @@ public struct EditorWebView: UIViewRepresentable {
         controller: EditorController? = nil,
         colorScheme: ColorScheme = .light,
         accentColor: String = "#d1603d",
+        isEditable: Bool = true,
         onDocumentChanged: @escaping (String, String, String) -> Void,
         onSelectionChanged: @escaping ([String], String, Bool) -> Void = { _, _, _ in },
         onLinkTapped: @escaping (URL) -> Void = { _ in },
@@ -69,6 +76,7 @@ public struct EditorWebView: UIViewRepresentable {
         self.controller = controller
         self.colorScheme = colorScheme
         self.accentColor = accentColor
+        self.isEditable = isEditable
         self.onDocumentChanged = onDocumentChanged
         self.onSelectionChanged = onSelectionChanged
         self.onLinkTapped = onLinkTapped
@@ -155,6 +163,11 @@ public struct EditorWebView: UIViewRepresentable {
             context.coordinator.send(
                 .setTheme(.init(accent: accentColor, scheme: scheme)), on: webView)
         }
+
+        if context.coordinator.appliedEditable != isEditable {
+            context.coordinator.appliedEditable = isEditable
+            context.coordinator.send(.setEditable(.init(editable: isEditable)), on: webView)
+        }
     }
 
     /// Name the webview posts messages under. Declared once so registration
@@ -187,6 +200,9 @@ public struct EditorWebView: UIViewRepresentable {
         var isReady = false
         var loadedPageId: String?
         var appliedTheme: String?
+        /// The editor starts editable, so `nil` here and `true` in the view
+        /// agree without a message; only a locked page costs one.
+        var appliedEditable: Bool?
         var loadStartedAt: Date?
         /// Held so `dismantleUIView` can detach it — the view itself is a value
         /// type and will not be the same instance by then.
@@ -258,6 +274,13 @@ public struct EditorWebView: UIViewRepresentable {
                     send(
                         .setTheme(.init(accent: parent.accentColor, scheme: appliedTheme ?? "light")),
                         on: webView)
+                    // Sent before the document can take a keystroke, so a
+                    // locked page is never editable for the beat between
+                    // ready and the first update pass.
+                    if !parent.isEditable {
+                        appliedEditable = false
+                        send(.setEditable(.init(editable: false)), on: webView)
+                    }
                 }
 
             case .docChanged(let payload):

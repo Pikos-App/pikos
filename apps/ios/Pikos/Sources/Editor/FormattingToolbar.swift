@@ -17,6 +17,9 @@ import SwiftUI
 struct FormattingToolbar: View {
     let selection: EditorSelection
     let controller: EditorController
+    /// Open the photo picker. The editor inserts what the host writes; see
+    /// `EditorScreen.insert(photo:)`.
+    let onInsertImage: () -> Void
     let onDismissKeyboard: () -> Void
 
     var body: some View {
@@ -37,6 +40,16 @@ struct FormattingToolbar: View {
                     blockButton(
                         .codeBlock, label: "Code block",
                         systemImage: "chevron.left.forwardslash.chevron.right")
+
+                    Divider().frame(height: 22).padding(.horizontal, 4)
+
+                    Button(action: onInsertImage) {
+                        Image(systemName: "photo")
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.primary)
+                    .accessibilityLabel("Insert photo")
                 }
                 // Horizontally scrollable because the full set does not fit at
                 // larger Dynamic Type sizes, and dropping controls at those sizes
