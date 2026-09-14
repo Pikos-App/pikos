@@ -11,6 +11,7 @@ delivery plan.
 | `04-parser-grammar.md`           | The quick-add parser: what it needed, what was built, and what differential fuzzing found that the corpora could not |
 | `05-calendar.md`                 | The calendar: which half is shared, why a calendar cannot draw the pages it queried, and what the mutations caught   |
 | `06-platform-audit.md`           | What iOS breaks regardless of the UI layer, carried over from the Tauri spike and re-read against Swift              |
+| `07-device-checklist.md`         | The first device session: M0, the lock-screen check, and what to write down — each one a row to read on screen       |
 
 ## Based on `feat/external-calendar-sync`, not `main`
 
@@ -361,9 +362,11 @@ draws.
 **CalDAV calendars sync from the phone, and the checker grew teeth.**
 `pikos-calendar-sync` is a dependency of `pikos-ffi` for the first time, so
 connecting an account, repairing a password, toggling a calendar and syncing on
-demand all work on iOS. Google and background polling do not, and both are
-structural rather than unfinished — the screen says so rather than letting a
-stale calendar read as a bug. `WorkspaceError` gained a `Network` case so a
+demand all work on iOS. Google does not, and that is structural rather than
+unfinished — the screen says so rather than letting a stale calendar read as a
+bug. Background polling was structural too, and has since been replaced by what
+iOS does allow: a sync on return to the foreground when the last one is over
+fifteen minutes old, and one inside the reminders' background refresh. `WorkspaceError` gained a `Network` case so a
 server that cannot be reached stops being reported as a damaged workspace.
 
 Wiring it up exposed three instances of one bug that had been sitting in the
@@ -443,6 +446,96 @@ same mis-tap the screen exists to undo), and it marks the rows that mirror a
 calendar, because those are never purged and the retention sentence is not true
 of them.
 
+## The quality pass (2026-09-14)
+
+A read of every hand-written Swift file against two questions: would this
+compile, and would a person who uses the desktop app find the phone obvious. It
+added no feature the phone did not already have; what it did was move the ones
+it had to where a thumb expects them, and fix what the second adversarial pass
+had left standing.
+
+**Four things that would not have compiled**, found by reading rather than by a
+compiler, so worth listing for the session that finally has one:
+
+- `WorkspaceStore.setStatus` wrote its optimistic tick into `pages`, which is a
+  computed projection of `sections` and cannot be assigned to. It writes into
+  `sections` now, and the row stays put, ticked, for the beat before the
+  refresh moves it to Completed — which is the visible confirmation the tick
+  wanted anyway.
+- `PageListScreen` had an orphaned `@ViewBuilder` sitting on a `private struct`
+  after an earlier extraction moved the property it belonged to.
+- `AppDependencyManager.shared.add { Route.shared }` read a main-actor static
+  from a `@Sendable` closure. `Route.shared` is `nonisolated(unsafe)` now with a
+  `nonisolated init`, which is honest: the reference is immutable and every
+  member on it is still main-actor bound, so a caller off the actor can hold
+  the router but not move it. That was suspect 3 in the list below.
+- `TodayProvider` captured WidgetKit's completion handlers in a `Task`. They
+  travel in an `@unchecked Sendable` box now, since each is called exactly once
+  from the task that owns it. Suspect 2.
+
+**Three things that would have compiled and been wrong on a device.** The
+formatting toolbar was a `.keyboard` toolbar item, which attaches to the input
+accessory of a SwiftUI text field; a webview brings its own responder and its
+own accessory, so the bar would never have appeared above the editor. It is a
+`safeAreaInset` at the bottom now, shown while the keyboard is up, with a
+"hide keyboard" button at its end because a webview's keyboard has no Done of
+its own. The calendar's week ignored the "week starts on" setting — the setting
+went into the environment for `DatePicker`s and `CalendarSpan` was still
+reading `Calendar.current`. And the error alert lived on the page list alone,
+so a write that failed on the calendar waited for the user to come back.
+
+**What moved, and why.** The view switcher was a filter-shaped icon in the
+corner with Settings hidden under it; the title is the switcher now, which is
+the platform's own idiom for "this screen can be one of several things", and
+Settings has a gear. An open page could not be renamed, dated, filed or tagged
+without going back to the list and finding it again — the list's long-press
+menu is now also the editor's menu (`PageActionsMenu`, one declaration), and a
+metadata strip above the document shows the date, folder, priority and tags
+with each chip opening the sheet that changes it. Rows never showed priority;
+the checkbox ring is tinted by it now, the way the desktop's is, and rows in the
+date views name their folder. The calendar pages by swipe, tints blocks by
+folder colour, and its long press on a one-off block offers the full page menu
+rather than "Open" alone. Two copies of a six-second undo bar became one
+`NoticeBar` fed by `WorkspaceStore.notice`, which also carries the one new
+sentence: adding a page that lands outside the current view — "buy milk" typed
+while looking at Today goes to the Inbox — says where it went and offers to go
+there, instead of appearing to have failed. And the app re-reads the workspace
+on return to the foreground, so a page dictated to Siri is there when the app
+comes back rather than after a pull.
+
+**Two ship-readiness items.** There was no asset catalog, so every native
+control tinted system blue while the editor was terracotta; `AccentColor` now
+carries the brand colour, `PikosSupport.Brand` hands the same hex to the editor
+and the widget, and `AppIcon` holds the desktop's icon flattened onto its own
+background (App Store Connect refuses alpha) until a phone-designed one exists.
+And there was no privacy manifest, which App Store review now requires of any
+binary calling `UserDefaults`; both the app and the widget have one, declaring
+that one API and nothing collected.
+
+**One FFI addition.** `Page` gained `is_recurring` and `schedule_locked`, the
+two facts the editor's menu turns on and could not otherwise know — guessing
+from the folder would have mis-read a detached calendar page. Bindings
+regenerated; the 135 `pikos-ffi` tests pass.
+
+**A second pass, the same day.** Four small closers, each of which had every
+piece but one: a photo button on the formatting bar with a `PhotosPicker`
+behind it, writing into the assets directory and re-encoding anything that is
+not JPEG, PNG or GIF; a `setEditable` message on the bridge, so the
+newer-schema banner locks the surface rather than only refusing to save;
+"Deleted — Undo" through the notice bar, since the trash was two menus away
+from a mis-swipe; and "Stop Repeating" on the page menu, with an undo where the
+rule can be rebuilt. Then the TestFlight items: the app icon (the desktop's,
+flattened, until a phone-designed one exists), a String Catalog with every
+`String`-typed sentence routed through `String(localized:)` — the `Text`
+literals were already covered, and `PikosSupport`'s two words ("Today",
+"Tomorrow") still need the package's own catalog — and a VoiceOver pass on the
+calendar: blocks carry their verbs as rotor actions, the hour gutter is not
+visited, the day header is a header, and paging is on the rotor because the
+swipe is not. And for the device session nobody has had yet, a debug-only
+Diagnostics section in Settings that reads back the protection class of every
+database file, with `07-device-checklist.md` saying what to look at and in what
+order.
+
 ## One bug the merge exposed, worth its own note
 
 `WorkspaceStore.setStatus` flipped `status` on every page, recurring ones
@@ -464,26 +557,193 @@ call — `a_plain_status_flip_on_a_recurring_head_ends_the_series` records what
 the wrong path does, and `the_status_toggle_routes_by_kind_without_being_told`
 records that no caller has to know which kind it holds.
 
-## The parser corpus has drifted from its reference
+## What the screens showed once drawn
 
-`quick_add_parity` grades the Rust parser against
-`crates/pikos-core/tests/corpus/parser.json`, which is a frozen capture of the
-TypeScript. Regenerating it from the _current_ TypeScript changes 238 of the
-2,219 shared cases — so the test is green against a reference that no longer
-describes the implementation it is meant to be tracking. The TypeScript suite
-has also gained inputs (362 where the corpus has 317), several of which exercise
-a `//` comment syntax the Rust does not implement at all.
+An HTML reconstruction of the five main screens, built from the SwiftUI as
+written, made a few things visible that the code read fine. Each is a small
+change and none touches Rust:
 
-Almost all of the 238 are RRULE serialisation: the TypeScript now writes
-`FREQ=WEEKLY;INTERVAL=2;BYDAY=TU` where the Rust writes
-`FREQ=WEEKLY;BYDAY=TU;INTERVAL=2`, and drops the `Z` from `UNTIL`. That is a
-canonical-ordering difference rather than a semantic one — both parse to the
-same rule — but it means a rule string written on the phone is not byte-equal to
-one written on the desktop, which matters for anything comparing them as text.
+- **List rows carried too much on one line** — ring, title, meta, a tag chip
+  at the trailing edge and a disclosure chevron. Tags moved into the meta line
+  under the title, the chevron went (the link sits invisibly behind the row,
+  as Reminders draws its rows), and the row inset tightened so the title sits
+  where the platform's lists put it.
+- **The editor lost too much height while typing.** The metadata strip now
+  collapses while the keyboard is up.
+- **The formatting bar's first screen showed the wrong six.** Bold, italic,
+  bullet list, checklist and photo are on the bar; underline, strikethrough,
+  inline code, heading, numbered list, quote and code block are behind an
+  "Aa" menu that ticks whatever is active at the caret, the way Notes does.
+- **Quick add did not fit at the medium detent with the keyboard up.** The
+  When and Folder sections became one row of two menu buttons under the
+  chips — Today, Tomorrow, No date, or the pickers on demand — so the
+  summary is what fits and the pickers are for overriding it.
+- **The calendar's toolbar was crowded in day view.** The chevrons went
+  (swipe and the rotor page the grid); Today stays; the one-column day header
+  that repeated the title is hidden in day view.
+- **"Planned: 7 reminders" was a developer's number.** The row shows the next
+  one instead, and the footer is one sentence.
 
-Found while adding `views.json` to the same generator, and deliberately **not**
-fixed here: regenerating the corpus would silently redefine the reference, and
-the actual work is on the Rust side. The corpus is left exactly as committed.
+And a second pass for what those turned up: the widget's rings take the same
+priority tint as the list's, a successful quick add is felt as well as seen, a
+trashed page can be swiped back as it was swiped away, an untitled page gets a
+"Name this page" chip in the editor strip (the rename was otherwise a menu
+away), and the notice bar is announced to VoiceOver, since a six-second bar at
+the bottom of the screen is one a screen reader would only find by sweeping
+down to it.
+
+## Four more, read off the product vision
+
+The README's pitch is local-first, no accounts, one-time purchase, capture in
+a sentence, and "your data is a file". On a phone that is three tests: capture
+is instant from anywhere, the promise about the file is visible rather than
+asserted, and the whole thing stays calm. This pass is what those tests
+turned up.
+
+- **Capture without opening the app.** The Today widget's rings are buttons:
+  a tap runs `CompletePageIntent` in the widget process and flips the page's
+  status. That is the one write made outside the app, and it is the
+  deliberate exception to the one-writer rule — the database layer's
+  `retry_on_busy` and busy timeout were built for a desktop, a CLI and a sync
+  poller sharing one file, and a single-row status flip is the smallest
+  transaction there is. The same widget gained the three lock-screen sizes:
+  the next two open pages with times, the open count, and one line beside
+  the clock.
+- **"Your data is a file", made checkable.** Settings › Your data shows the
+  workspace's size on disk (database, sidecars and images together) and a
+  "Back up to Files" button that writes a `VACUUM INTO` copy plus the assets
+  directory into `Documents/Backups`, which `UIFileSharingEnabled` and
+  `LSSupportsOpeningDocumentsInPlace` make visible in the Files app. The live
+  database stays in the App Group container, which Files never shows. The
+  privacy manifest gained the file-timestamp reason for the "Last backup"
+  line.
+- **The empty state teaches the grammar.** Today, Upcoming and the Inbox
+  each offer a sentence under the New page button — "Call the dentist today
+  at 3pm !high #health" and so on — that opens quick add with the line filled
+  in, so the chips do the explaining. Every example was run through the Rust
+  parser and lands in the view it is shown on. A brand-new workspace (the
+  database file did not exist before the open) starts with one "Welcome to
+  Pikos" page in the Inbox, in the product's voice. No onboarding screens:
+  nothing to sign up for means nothing to ask.
+- **Three fidelity fixes.** The calendar opens an hour above the red line
+  when today is on screen, rather than at 7am. The page that was open when
+  the app was put away comes back on the next launch, through
+  `@SceneStorage`, within a four-hour window — after that the app keeps its
+  promise to open on Today. Inbox rows swipe to Today or Tomorrow directly,
+  since filing is the Inbox's job and a date picker per capture is not how
+  an inbox gets cleared. (The hour height already scaled with Dynamic Type
+  through `@ScaledMetric`; the recommendation that it should was wrong, and
+  nothing changed there.)
+
+Not done, and why: a share extension is a new target, not a refinement; and
+the cross-device image path convention waits on iCloud sync, which will carry
+the assets directory and settle it.
+
+## Five widgets
+
+One widget became five, each answering a question Today does not. Next Up
+is the next scheduled page with a countdown that the system keeps current
+(`Text(_:style: .relative)`), refreshed when that page's time arrives.
+Inbox is a count at the small size and the pages at medium and large.
+Upcoming is the week ahead from tomorrow, grouped by day at the large size.
+New Page is a launcher: a `pikos://quick-add` button, with Today, Inbox and
+Calendar tiles beside it at medium. All of them read through
+`ReadOnlyWorkspace`, share one row, header and clock (`WidgetSupport.swift`),
+and every ring is a `CompletePageIntent` button.
+
+Two things surfaced doing it. The read-only workspace has no `listUpcoming`,
+so the Upcoming and Next Up widgets run `listPages` with string bounds on the
+schedule and sort by time themselves — the bounds are inclusive and an
+all-day `2026-09-21` sorts before `2026-09-21T09:00`, so the upper bound is
+the day after the last one wanted and the edge is trimmed in Swift. And the
+app never asked WidgetKit to reload after its own writes — only the Siri
+intent did — so a page ticked in the list stayed on the home screen until
+the widget's hourly refresh. The debounced task that re-plans reminders on
+every data version now reloads every timeline too, and the widget intent
+reloads all timelines rather than only the tapped widget's, since the same
+page can be on three of them.
+
+A configurable per-folder widget was considered and left out: its background
+tap would need a `pikos://folder/<id>` link, and the deep-link grammar is
+shared with the desktop and pinned by a parity corpus, so that is a change
+to both apps rather than to one widget.
+
+## Reminders ring on the phone
+
+The one parity gap that decided whether a task app is usable on a phone, and
+the one the platform audit had said was "net-new logic on any path". Less new
+than it sounded: the six `due_*` arms behind the desktop's scheduler already
+took a window, they were just always handed a trailing 60-second one. Their
+fixed windows are explicit `(lo, hi]` parameters now, behind the same
+signatures the desktop calls, and `pikos_db::reminder_horizon` composes them
+_forward_ over fourteen days and places every fire on the device's own clock —
+a 15:00 Berlin meeting reminds a phone in New York at 08:30. Nine tests pin
+the arithmetic, including that one.
+
+The phone side is `ReminderScheduler`: one query, sixty requests at most
+(the OS keeps sixty-four and drops the rest silently), rebuilt on every write,
+on the way to the background, and by a `BGAppRefreshTask`. A tap opens the
+page through the same `pikos://page/<id>` link a widget uses; a "Complete"
+action writes through the same store method the checkbox does. Permission is
+asked for the first time there is something to deliver, not at launch. Two
+per-device preferences — on/off and the default lead, ten minutes like the
+desktop — sit in the App Group with the others, and the settings row says
+which of the two switches, ours or the system's, is the one that is off.
+
+Two things are deliberately absent, both written down where they would be
+looked for: quiet hours (Focus is the same control, system-wide) and the
+desktop's fired log (the OS delivers without waking the app; the plan is
+rebuilt from the workspace, so nothing needs the history).
+
+One thing this found. `scripts/gen-swift-bindings.sh` reused whatever
+`libpikos_ffi.so` was on disk, and `cargo test` never rebuilds a cdylib — so a
+"regenerated" binding after a test-only session described the previous FFI,
+and the call-site checker, which only ever inspected methods it knew, reported
+every call matching while the Swift called two methods the bindings did not
+declare. That was the state of the previous push. The script always builds
+now, and the checker flags a `workspace.x(…)` it cannot find.
+
+## The parser corpus is back on its reference
+
+An earlier version of this section recorded that `parser.json` had been left as
+a frozen capture of an older TypeScript, because regenerating it changed 238 of
+2,219 cases and the work was on the Rust side. That work is done, and the
+corpus is regenerated: 362 inputs, 2,534 cases, every one matching.
+
+Three things were behind the gap, and all three are ported rather than
+excluded:
+
+- **RRULE serialisation.** The Rust wrote `FREQ;BYDAY;INTERVAL` and stamped
+  `UNTIL` with a `Z`; the reference writes `FREQ;INTERVAL;BYDAY` and a floating
+  `UNTIL`. Semantically identical, byte-different — and a rule the phone writes
+  has to be byte-equal to the one the desktop would write for the same line,
+  because a reconciler comparing them as text is the thing that notices.
+  `to_rrule` follows `serializeRrule` field for field now, and says why.
+- **The `//` body.** Everything after the first whitespace-delimited `//` is
+  the page body, kept verbatim — no tag, folder, date or cadence is read out of
+  it, so `#word` in a note stays literal. `ParsedInput` carries it as
+  `content`, the FFI writes it as the page's document through the same builder
+  the data layer uses for a synced description, and `Workspace::create_page`
+  now derives the searchable text from any document it is handed, which it did
+  not before: a page created with a body was a page full-text search could not
+  see, on any path.
+- **Reminders.** "remind 30m before", "remind me the day before", "!r1h". The
+  phrase is stashed behind a control-character placeholder before the date
+  engine runs, so a lead is never mistaken for the event's own date, and
+  resolved afterwards against the schedule's shape: a timed page keeps the
+  minutes, an all-day page collapses every lead onto the day-before sentinel,
+  and a page with no date puts the words back into the title — a row on an
+  unscheduled page could never fire. The sentinel is `pikos-db`'s; `pikos-core`
+  cannot name it, so `pikos-ffi`, which depends on both, pins the two equal.
+  The phone writes the rows; nothing on the phone fires them yet, which is the
+  notifications work still ahead — but a reminder typed on the phone now rings
+  on the desktop.
+
+Two other corpora moved in the same regeneration. `views.json` changed only in
+key order. `recurrence.json` changed one snap case, where the reference no
+longer moves an anchor that names an hour and minute onto the rule's weekday;
+the Rust agreed with the new answer already, so the case is a tightened pin
+rather than a fix.
 
 ## Needs a Mac
 
@@ -565,11 +825,12 @@ session of its own. What has been done instead:
      main-actor in the SDK in use, this lines up; if not, the conformances
      disagree and the coordinator needs `nonisolated` methods that hop.
   2. **`TodayProvider`** calls WidgetKit's completion handlers from inside a
-     `Task`. `TimelineProvider` is not main-actor, so if those handlers are not
-     `@Sendable` in the SDK, capturing them is an error. The fix is a sendable
-     box around the handler, not a redesign.
+     `Task`. _Addressed in the quality pass_: the handlers travel in a
+     sendable box. If the SDK in use declares them `@Sendable` already, the box
+     is redundant and harmless.
   3. **`AppDependencyManager.shared.add { Route.shared }`** reads a main-actor
      singleton from a closure whose isolation depends on that API's signature.
+     _Addressed_: `Route.shared` is `nonisolated(unsafe)`.
 
   Note that both Swift packages declare `swift-tools-version: 5.9`, so they
   build in Swift 5 mode regardless of the app's setting — suspects 1 and 2 are

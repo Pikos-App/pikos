@@ -29,9 +29,6 @@ struct FocusTimer: View {
     @State private var elapsed = 0
     @State private var notice: String?
 
-    /// One second, which is what a visible clock needs and no more.
-    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
     var body: some View {
         Group {
             if let startedAt {
@@ -55,9 +52,17 @@ struct FocusTimer: View {
                 .accessibilityLabel("Start timing this page")
             }
         }
-        .onReceive(tick) { _ in
+        // Ticks only while a session runs. Keyed on the start instant, so
+        // starting cancels nothing and stopping cancels the loop — a timer
+        // publisher that fired every second for the life of the toolbar, as
+        // this once was, was a wake-up a second on every open page for a clock
+        // that was showing nothing.
+        .task(id: startedAt) {
             guard let startedAt else { return }
-            elapsed = Int(Date().timeIntervalSince(startedAt))
+            while !Task.isCancelled {
+                elapsed = Int(Date().timeIntervalSince(startedAt))
+                try? await Task.sleep(for: .seconds(1))
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             // Coming back from the background: the ticks stopped, the clock did

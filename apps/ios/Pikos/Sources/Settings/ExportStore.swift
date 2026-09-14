@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import PikosCore
+import PikosSupport
 
 /// Producing a file to hand to the share sheet.
 ///
@@ -27,10 +28,10 @@ public final class ExportStore {
 
         public var title: String {
             switch self {
-            case .markdown: return "Markdown"
-            case .csv: return "CSV"
-            case .ics: return "Calendar (.ics)"
-            case .backup: return "Database backup"
+            case .markdown: return String(localized: "Markdown")
+            case .csv: return String(localized: "CSV")
+            case .ics: return String(localized: "Calendar (.ics)")
+            case .backup: return String(localized: "Database backup")
             }
         }
 
@@ -39,13 +40,13 @@ public final class ExportStore {
         public var detail: String {
             switch self {
             case .markdown:
-                return "One file per page, in folders. Readable anywhere."
+                return String(localized: "One file per page, in folders. Readable anywhere.")
             case .csv:
-                return "A spreadsheet of every page. Imports back into Pikos."
+                return String(localized: "A spreadsheet of every page. Imports back into Pikos.")
             case .ics:
-                return "Your scheduled pages as calendar events."
+                return String(localized: "Your scheduled pages as calendar events.")
             case .backup:
-                return "The whole workspace as one file, trash included."
+                return String(localized: "The whole workspace as one file, trash included.")
             }
         }
     }
@@ -66,6 +67,78 @@ public final class ExportStore {
 
     public init(workspace: @escaping @MainActor () -> Workspace?) {
         self.workspace = workspace
+    }
+
+    // MARK: - The workspace as a file
+
+    /// Bytes on disk: the database, its sidecars and the images beside it.
+    /// Nil until `refreshDataFacts()` has run, or if the container cannot be
+    /// reached.
+    public private(set) var workspaceSize: Int64?
+
+    /// When the newest backup in the Files app was taken.
+    public private(set) var lastBackup: Date?
+
+    public private(set) var isBackingUp = false
+
+    /// Re-read the size and the last backup date. Cheap — a handful of file
+    /// attributes — so the settings screen calls it on every appearance and
+    /// the number is never a launch old.
+    public func refreshDataFacts() {
+        if let database = try? WorkspaceLocation.databaseURL() {
+            workspaceSize = WorkspaceFiles.size(
+                database: database, assets: try? WorkspaceLocation.assetsURL())
+        }
+        lastBackup = (try? Self.backupsDirectory()).flatMap { WorkspaceFiles.latestBackup(in: $0) }
+    }
+
+    /// Copy the workspace into the Files app.
+    ///
+    /// A folder per backup under `Documents/Backups`, holding the database
+    /// and the images. `Documents` is the one directory the Files app can
+    /// show (`UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace`
+    /// in the Info.plist), and the live database is deliberately *not* there:
+    /// a SQLite file in a folder a person can open, copy and delete from
+    /// while the app has it open is a corrupted workspace waiting to happen.
+    /// So what lands in Files is always a copy, taken through `VACUUM INTO`
+    /// for a consistent snapshot, and the images are copied beside it so the
+    /// folder is the whole workspace and not most of it.
+    ///
+    /// Distinct from the `.backup` export above, which produces a file for
+    /// the share sheet and cleans it up afterwards. This one stays, which is
+    /// the point: it is the copy a person can see, and the answer to "where
+    /// is my data" that a phone otherwise cannot give.
+    public func backUpToFiles() async {
+        guard let workspace, !isBackingUp else { return }
+        isBackingUp = true
+        defer { isBackingUp = false }
+
+        do {
+            let folder = try Self.backupsDirectory()
+                .appendingPathComponent(WorkspaceFiles.backupName(), isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try await workspace.backupDatabase(
+                destination: folder.appendingPathComponent(WorkspaceFiles.backupDatabaseName).path)
+            let assets = try WorkspaceLocation.assetsURL()
+            if WorkspaceFiles.hasContents(assets) {
+                try FileManager.default.copyItem(
+                    at: assets, to: folder.appendingPathComponent(WorkspaceFiles.backupAssetsName))
+            }
+            refreshDataFacts()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// `Documents/Backups`, created on first use.
+    private static func backupsDirectory() throws -> URL {
+        let documents = try FileManager.default.url(
+            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let backups = documents.appendingPathComponent("Backups", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: backups.path) {
+            try FileManager.default.createDirectory(at: backups, withIntermediateDirectories: true)
+        }
+        return backups
     }
 
     public func export(_ format: Format, includeSynced: Bool) async {

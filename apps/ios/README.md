@@ -98,9 +98,9 @@ targets at all.
 
 `PikosUITests` is XCUITest, the native analogue of the desktop's Playwright
 suite: it launches the real app and queries the **accessibility tree**. The
-labels scattered through the screens — `Mark as done`, `Switch view`, the
-combined row labels — are what it selects on, so they are contract rather than
-decoration.
+labels scattered through the screens — `Mark as done`, `New page`, the
+navigation title that is also the view switcher, the combined row labels — are
+what it selects on, so they are contract rather than decoration.
 
 It is deliberately five flows, matching the desktop's `@tier1` set: the app
 launches, a page can be made, ticked, found and opened. A UI suite earns its
@@ -134,9 +134,21 @@ suite.
 
 ## What is deliberately missing
 
+- **A phone-designed app icon.** `Sources/Assets.xcassets/AppIcon.appiconset`
+  holds the desktop's icon flattened onto its own background — App Store
+  Connect refuses an icon with alpha, and the desktop's has rounded
+  transparent corners. It is the right mark and the wrong medium: a home
+  screen icon wants a full-bleed composition, not a rounded tile inside the
+  system's rounding. Replace the PNG when there is one; the slot needs
+  nothing else.
 - **Dragging in the calendar.** The grid draws; moving and resizing a block by
   dragging is not wired. On a phone both compete with scrolling and want a
-  design decision rather than a port of the desktop's gestures.
+  design decision rather than a port of the desktop's gestures. Paging between
+  days is a swipe; moving a one-off block is the long-press menu's "Change
+  Date…", and moving one occurrence of a series is "Move this one…".
+- **The scope question behind a backlog.** When a series has open occurrences
+  before today, the desktop asks whether a skip means _just this one_ or
+  _this and everything before today_. iOS always means the first.
 - **The iPad UI.** Ships in the same universal binary, styled after the desktop
   app rather than the phone. Not started; `docs/ios/00-status.md` records the
   three things being kept true so that it stays a change of shell.
@@ -157,26 +169,29 @@ suite.
   the next recompute silently reverts the edit. `resolveAnchorMove` in
   `@pikos/core` is the logic; it is not ported, so the workspace refuses rather
   than corrupting a series — the same line `pikos update --due` draws.
-- **Google calendars, and background sync.** CalDAV accounts can be added,
-  repaired, toggled and synced from the phone. Google cannot: its grant waits on
-  a loopback TCP listener inside the app process, and leaving for the browser is
-  what starts iOS suspending that process. And nothing polls — the desktop's
-  scheduler is an in-process timer, so every sync here is one the user asked
-  for. The screen says both out loud rather than leaving a day-stale calendar to
-  be read as a bug.
+- **Google calendars.** CalDAV accounts can be added, repaired, toggled and
+  synced from the phone. Google cannot: its grant waits on a loopback TCP
+  listener inside the app process, and leaving for the browser is what starts
+  iOS suspending that process. It needs an iOS OAuth client in the Google
+  Cloud project and an `ASWebAuthenticationSession`; the code exchange itself
+  is transport-agnostic. Sync is not polled — an in-process timer is what iOS
+  suspends — but runs on return to the foreground when the last pass is over
+  fifteen minutes old and inside the background refresh the OS grants, which
+  is what every calendar app without push has here. The screen says so.
 - **Most of the desktop's settings.** Five tabs there, one screen here, on
   purpose: keyboard shortcuts, window state and an editor line width describe
   things a phone does not have, and the calendar's day count is an iPad
   question. What is on the screen is theme, list and calendar density, week
   start and the default folder — every one of them wired to something, because
   a settings row that does nothing is indistinguishable from one that is
-  broken. Notifications and import/export are still missing entirely, not
-  omitted by design.
-- **Ending a series from the list.** The context menu's "Clear Date" is left
-  out on a repeating page, where it would remove the one-off schedule rows and
-  change nothing the user can see — a page with a rule owns its
-  `scheduled_start` directly. Ending a series is a different action and has no
-  affordance yet.
+  broken. Notifications and import are still missing entirely, not omitted by
+  design; export is in Settings, through the share sheet.
+- **Clearing a repeating page's date.** The context menu's "Clear Date" is
+  left out on a repeating page, where it would remove the one-off schedule rows
+  and change nothing the user can see — a page with a rule owns its
+  `scheduled_start` directly. Ending the series is what is meant there, and
+  that is "Stop Repeating" on the same menu, with an undo in the notice where
+  the rule can be rebuilt.
 - **Emptying the trash by hand.** "Recently Deleted" restores; it does not
   offer a permanent delete. The retention window already clears the trash, and
   a destructive control sitting next to a restore button on a phone is the same
@@ -185,16 +200,45 @@ suite.
 - **Folder icons.** Colour and nesting are wired — the dot on each row is the
   colour picker, and "Move into…" is on the context menu. The `icon` column is
   not: the desktop does not offer it either, so there is no behaviour to match.
-- **Inserting an image.** The whole path exists except its trigger: the editor
-  handles `insertImage`, `EditorController.insertImage(assetPath:)` sends it,
-  and `EditorWebView.onImageRequested` is wired to a `requestImagePicker`
-  message — which nothing in the editor sends, because there is no control to
-  send it from. What is missing is the button and the `PhotosPicker` behind it,
-  plus writing the chosen image into the assets directory.
-- **Share extension.** M4. Capturing a URL or a selection into a new page.
-- **Notifications.** Not a port. The desktop fires reminders from a task that
-  wakes every clock minute, and iOS suspends that within seconds of
-  backgrounding — so nearly every reminder would silently never fire. The model
-  has to invert: compute a rolling horizon and hand it to the OS in advance.
-  `docs/ios/06-platform-audit.md` has the four complications that come with
-  that.
+- **Images from anywhere but the photo library.** The formatting bar's photo
+  button opens a `PhotosPicker`, writes the picture into the workspace's
+  assets directory and inserts it. Anything not JPEG, PNG or GIF is
+  re-encoded as JPEG on the way in, so a HEIC from the camera roll renders in
+  the webview and on the desktop. Not wired: the Files picker, the camera, and
+  pasting an image into the editor. And one convention worth knowing: the phone
+  stores the asset path *relative to the assets directory*, which is what its
+  scheme handler resolves, where the desktop stores an absolute path — so an
+  image inserted on either device does not yet render on the other. That is
+  iCloud sync's to settle: the sync layer carries the assets directory with the
+  database, and the path convention is the one thing the two apps have to
+  agree on before it lands.
+- **Share extension.** M4. Capturing a URL or a selection into a new page. The
+  App Group and the read-only workspace it needs are in place; what is missing
+  is the target itself. The capture surfaces that *are* here: five widgets
+  (`PikosWidgets/`), and Siri takes "Add a page to Pikos". The widgets are
+  Today (small, medium, large, and the three lock-screen sizes), Next Up (the
+  next scheduled page with a live countdown; small and medium), Inbox (a count
+  in small, the pages in medium and large), Upcoming (the week ahead by day;
+  medium and large) and New Page (a one-tap way into quick add, with Today,
+  Inbox and Calendar beside it in medium). Every ring on every widget is a
+  button that finishes the page in place. They share one row, one header and
+  one way of opening the workspace (`WidgetSupport.swift`), so a change to how
+  a page is drawn is one change.
+- **Onboarding.** Deliberately. Nothing to sign up for means nothing to ask. A
+  brand-new workspace starts with one page in the Inbox, "Welcome to Pikos",
+  that says where the data lives and what to type; each empty view offers a
+  sentence the parser understands and opens quick add with it filled in.
+- **A way to see the file.** Settings › Your data says how big the workspace
+  is and copies it — database and images — into Pikos › Backups in the Files
+  app, where a person can hold it, move it or send it on. The live database
+  stays in the App Group container, which Files never shows.
+- **The desktop's notification extras.** Reminders ring on the phone: the
+  workspace is asked what will fire over the next fourteen days and each
+  answer becomes a local notification, re-planned on every write, on the way
+  to the background, and by a background refresh (`Notifications/`). What is
+  not here is the desktop's daily overdue summary and its quiet hours — the
+  first is what the Today widget is for, and the second is a Focus mode on
+  iOS. Two limits worth knowing: the OS keeps sixty-four pending
+  notifications, so the phone plans sixty soonest-first; and background
+  refresh is a request the system grants on its own schedule, which is why the
+  horizon is two weeks rather than two days.

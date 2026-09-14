@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The privacy manifest App Store review requires of any app that calls one of
+  the "required reason" APIs. Pikos calls two. UserDefaults, for the
+  preferences in the App Group suite (PikosSupport/Preferences.swift):
+  CA92.1 is the reason code for "the app's own defaults, shared with its
+  extensions". And file timestamps, for the "Last backup" line under
+  Settings › Your data (PikosSupport/WorkspaceFiles.swift), which reads the
+  creation date of the backup folders the app itself wrote: C617.1 is the
+  reason code for "shown to the person using the device". Nothing else.
+
+  Nothing is tracked and nothing is collected. The marketing site says so;
+  this file is the same claim in the form the App Store checks.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

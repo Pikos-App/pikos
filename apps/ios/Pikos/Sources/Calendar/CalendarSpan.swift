@@ -29,9 +29,9 @@ enum CalendarSpan: String, CaseIterable, Identifiable, Hashable {
 
     var label: String {
         switch self {
-        case .day: return "Day"
-        case .threeDays: return "3 Days"
-        case .week: return "Week"
+        case .day: return String(localized: "Day")
+        case .threeDays: return String(localized: "3 Days")
+        case .week: return String(localized: "Week")
         }
     }
 

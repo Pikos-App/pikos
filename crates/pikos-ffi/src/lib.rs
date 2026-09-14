@@ -359,6 +359,26 @@ pub struct QuickAddInput {
     /// is the caller's job, because only it knows the folder tree.
     pub folder_query: Option<String>,
     pub priority: PriorityEdit,
+    /// Reminder leads to write, as `minutes_before` values — ascending,
+    /// deduped, already resolved against the schedule's shape. Empty when the
+    /// line asked for none, or asked with no date to anchor them to (the
+    /// words stay in the title then).
+    pub reminder_minutes: Vec<i64>,
+    /// The page body, from everything after the first whitespace-delimited
+    /// `//`. Plain text; `plain_text_to_document` turns it into the document
+    /// a page stores.
+    pub content: Option<String>,
+}
+
+/// Plain text as the document a page stores: one paragraph per line.
+///
+/// For a caller building a page by hand from a parsed line — the phone's
+/// quick-add sheet, when a date picked in the picker overrides the parse — so
+/// the body typed after `//` is not lost on that path. The same builder the
+/// data layer uses for a synced event's description, so the two cannot drift.
+#[uniffi::export]
+pub fn plain_text_to_document(text: String) -> String {
+    pikos_db::build_tiptap_doc(&text)
 }
 
 /// What a quick-add line asked for.
@@ -414,7 +434,23 @@ impl From<core_quick_add::ParsedInput> for QuickAddInput {
                     priority: priority.into(),
                 },
             },
+            reminder_minutes: input.reminder_minutes.unwrap_or_default(),
+            content: input.content,
         }
+    }
+}
+
+#[cfg(test)]
+mod reminder_sentinel {
+    /// The parser resolves an all-day reminder to the data layer's sentinel
+    /// by value, because `pikos-core` cannot depend on `pikos-db`. This crate
+    /// depends on both, so it is where the two are held equal.
+    #[test]
+    fn the_parser_and_the_data_layer_agree_on_the_day_before_sentinel() {
+        assert_eq!(
+            pikos_core::nlp::quick_add::DAY_BEFORE_MINUTES,
+            pikos_db::DAY_BEFORE_MINUTES
+        );
     }
 }
 

@@ -11,10 +11,11 @@ import SwiftUI
 /// and each needing a different sentence. Mixing them would mean one
 /// `errorMessage` saying "could not read or write" over all of it.
 ///
-/// Everything here is manual. Nothing on iOS polls: the desktop's scheduler is
-/// an in-process timer and iOS suspends that within seconds of backgrounding,
-/// so a sync happens because somebody asked for one with the app open. The UI
-/// says so rather than implying a background service that is not there.
+/// Nothing here polls. The desktop's scheduler is an in-process timer and iOS
+/// suspends that within seconds of backgrounding, so a sync happens at the
+/// moments the process is known to be running — a return to the foreground,
+/// the OS's background refresh — and when somebody asks (`syncAll`,
+/// `syncIfStale`). The UI says so rather than implying a five-minute poll.
 @MainActor
 @Observable
 public final class CalendarSyncStore {
@@ -152,6 +153,59 @@ public final class CalendarSyncStore {
         }
     }
 
+    /// Sync every connected account that is in a state to be synced.
+    ///
+    /// The phone's substitute for the desktop's five-minute poll, which an
+    /// in-process timer cannot be here. Called from the two moments the
+    /// process is known to be running: coming back to the foreground, and the
+    /// background refresh the OS grants on its own schedule. `quiet` because
+    /// an automatic sync's failure is not the user's problem right now — a
+    /// train tunnel at 3 a.m. should not queue an alert for the morning; the
+    /// next manual sync will say what is wrong if it still is.
+    ///
+    /// An account flagged for reconnection is skipped rather than tried: its
+    /// password is already known to be rejected, and the scheduler on the
+    /// desktop skips it for the same reason.
+    public func syncAll(quiet: Bool) async {
+        guard let workspace = workspace() else { return }
+        let accounts: [SyncAccountWithCalendars]
+        do {
+            accounts = try await workspace.syncStatus()
+        } catch {
+            if !quiet { record(error) }
+            return
+        }
+        for entry in accounts where !entry.account.reconnectNeeded {
+            busyAccountID = entry.account.id
+            do {
+                let results = try await workspace.syncAccountNow(accountId: entry.account.id)
+                if !quiet { reportIfAnythingWentWrong(results) }
+            } catch {
+                if !quiet { record(error) }
+            }
+            busyAccountID = nil
+        }
+        lastAutomaticSyncAt = Date()
+        await load()
+    }
+
+    /// When the last automatic pass ran, so returning to the foreground does
+    /// not sync on every app switch.
+    public private(set) var lastAutomaticSyncAt: Date?
+
+    /// How long a calendar may go unrefreshed before a return to the
+    /// foreground triggers a sync — a little longer than the desktop's poll,
+    /// because every one of these costs a network round trip on a battery.
+    public static let staleAfter: TimeInterval = 15 * 60
+
+    /// Sync on return to the foreground, if it has been a while.
+    public func syncIfStale() async {
+        if let last = lastAutomaticSyncAt, Date().timeIntervalSince(last) < Self.staleAfter {
+            return
+        }
+        await syncAll(quiet: true)
+    }
+
     /// `connect` has no account id yet, so it borrows a sentinel to drive the
     /// same spinner.
     public static let connecting = "connecting"
@@ -164,11 +218,11 @@ public final class CalendarSyncStore {
     private func reportIfAnythingWentWrong(_ results: [CalendarSyncResult]) {
         if results.contains(where: { $0.status == "reconnectNeeded" }) {
             problem = Problem(
-                message: "The server rejected the saved password. Reconnect the account to fix it.",
+                message: String(localized: "The server rejected the saved password. Reconnect the account to fix it."),
                 isRetryable: false)
         } else if results.contains(where: { $0.status == "offline" }) {
             problem = Problem(
-                message: "Could not reach the server. Nothing was changed.",
+                message: String(localized: "Could not reach the server. Nothing was changed."),
                 isRetryable: true)
         }
     }
@@ -182,7 +236,7 @@ public final class CalendarSyncStore {
         // Capitalised, as UniFFI spells it — see the note in `WorkspaceStore`.
         if let error = error as? WorkspaceError, case .Network = error {
             problem = Problem(
-                message: "Could not reach the server. Check the address and your connection.",
+                message: String(localized: "Could not reach the server. Check the address and your connection."),
                 isRetryable: true)
         } else {
             problem = Problem(message: error.localizedDescription, isRetryable: false)

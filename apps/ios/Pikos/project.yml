@@ -43,6 +43,11 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      # The privacy manifest App Store review requires. A resource, not a
+      # source; it says which "required reason" APIs the binary calls and why
+      # — see the comment inside it.
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
     dependencies:
       - package: PikosCore
         product: PikosCore
@@ -54,6 +59,22 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.pikos.ios
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        # Sources/Assets.xcassets. The accent is the brand's terracotta, the
+        # same value PikosSupport's `Brand.accentHex` hands to the editor and
+        # the widget — every native control tints from here, so the app and
+        # the document surface agree on what "the" colour is. The icon set is
+        # a slot: drop a 1024×1024 PNG into it and name it in Contents.json.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Sources/Localizable.xcstrings. Every `Text("…")` literal and every
+        # `String(localized:)` in the app target is extracted into it at
+        # build time, so the catalog fills itself as the app is built and a
+        # translator later gets one file rather than a grep. Strings built as
+        # plain `String` values — notice sentences, titles, footers — go
+        # through `String(localized:)` for the same reason; a `"…"` handed to
+        # `Text` is already covered.
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # iPhone and iPad from one binary — a universal purchase, which is the
         # intent and not merely Xcode's default. Stated explicitly so it is not
         # narrowed to "1" by someone reasoning from the UI, which is currently
@@ -86,6 +107,24 @@ targets:
         # No analytics, no phone-home: the privacy claims the marketing site
         # makes are claims about this binary too.
         ITSAppUsesNonExemptEncryption: false
+        # Reminders are planned ahead as local notifications, and the plan
+        # goes stale as days pass. This is the one background entry point
+        # that re-plans it without the app being opened — best-effort, on
+        # the system's schedule, which is why the horizon is two weeks and
+        # not two days. See Notifications/ReminderScheduler.swift.
+        BGTaskSchedulerPermittedIdentifiers:
+          - app.pikos.reminders.refresh
+        UIBackgroundModes:
+          - fetch
+        # The app's Documents folder appears in the Files app as "Pikos",
+        # and files in it can be opened where they are. This is what makes
+        # "your data is a file" true on a phone: Settings › Your data writes
+        # a copy of the workspace there, and a person can see it, keep it,
+        # or move it out. The live database is NOT in Documents — it is in
+        # the App Group container, which Files never shows — so what a
+        # person can touch is always a copy. See ExportStore.backUpToFiles.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
 
   # Today's pages on the home screen.
   #
@@ -101,6 +140,9 @@ targets:
     platform: iOS
     sources:
       - path: ../PikosWidgets/Sources
+      # An extension is reviewed on its own manifest, not its app's.
+      - path: ../PikosWidgets/PrivacyInfo.xcprivacy
+        buildPhase: resources
     dependencies:
       - package: PikosCore
         product: PikosCore

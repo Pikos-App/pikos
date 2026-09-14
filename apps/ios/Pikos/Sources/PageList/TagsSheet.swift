@@ -16,7 +16,7 @@ import SwiftUI
 /// tagging a mirror marks it owned, which is the data layer's business rather
 /// than this sheet's.
 struct TagsSheet: View {
-    let page: PageSummary
+    let page: PageFacts
 
     @Environment(WorkspaceStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -26,7 +26,7 @@ struct TagsSheet: View {
     @State private var isSaving = false
     @FocusState private var entryFocused: Bool
 
-    init(page: PageSummary) {
+    init(page: PageFacts) {
         self.page = page
         _tags = State(initialValue: page.tags)
     }

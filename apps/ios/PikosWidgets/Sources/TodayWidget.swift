@@ -3,7 +3,7 @@ import PikosSupport
 import SwiftUI
 import WidgetKit
 
-/// Today's pages, on the home screen.
+/// Today's pages, on the home screen and the lock screen.
 ///
 /// Reads the workspace directly rather than asking the app for a snapshot. The
 /// database is in the App Group container precisely so this process can open
@@ -14,7 +14,8 @@ import WidgetKit
 /// It opens through `ReadOnlyWorkspace`, which has no write methods at all.
 /// SQLite in WAL mode permits one writer, and a widget refresh racing the app
 /// for it would block the app; the symptom would be a keystroke that does not
-/// appear.
+/// appear. The one write the widget makes — ticking a ring — is a tap, not a
+/// refresh, and goes through `CompletePageIntent`, which says why that is safe.
 struct TodayWidget: Widget {
     static let kind = "app.pikos.widget.today"
 
@@ -25,7 +26,14 @@ struct TodayWidget: Widget {
         }
         .configurationDisplayName("Today")
         .description("What you have scheduled for today.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        // The three home-screen sizes and the three lock-screen ones. One
+        // widget rather than two because they show one thing — today — and a
+        // person who adds "Today" to the lock screen should find the same
+        // name they saw on the home screen.
+        .supportedFamilies([
+            .systemSmall, .systemMedium, .systemLarge,
+            .accessoryInline, .accessoryCircular, .accessoryRectangular,
+        ])
     }
 }
 
@@ -43,6 +51,11 @@ struct TodayEntry: TimelineEntry {
         date: .now,
         pages: [],
         failure: nil)
+
+    /// What is still to do, in the order the day runs.
+    var open: [PageSummary] {
+        pages.filter { $0.status != "done" }
+    }
 }
 
 struct TodayProvider: TimelineProvider {
@@ -51,10 +64,12 @@ struct TodayProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TodayEntry) -> Void) {
-        Task { completion(await entry()) }
+        let done = Completion(call: completion)
+        Task { done.call(await entry()) }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
+        let done = Completion(call: completion)
         Task {
             let current = await entry()
             // Refresh at the next hour boundary rather than on a fixed interval.
@@ -63,18 +78,13 @@ struct TodayProvider: TimelineProvider {
             // whenever it last ran. WidgetKit treats the date as a request
             // rather than a promise, which is fine: being an hour stale is
             // survivable, and asking more often would spend the budget for it.
-            let nextHour =
-                Calendar.current.nextDate(
-                    after: .now, matching: DateComponents(minute: 0), matchingPolicy: .nextTime)
-                ?? Date.now.addingTimeInterval(3600)
-            completion(Timeline(entries: [current], policy: .after(nextHour)))
+            done.call(Timeline(entries: [current], policy: .after(WidgetClock.nextHour())))
         }
     }
 
     private func entry() async -> TodayEntry {
         do {
-            let url = try WorkspaceLocation.databaseURL()
-            let workspace = try await ReadOnlyWorkspace.openExisting(path: url.path)
+            let workspace = try await WidgetWorkspace.open()
             let pages = try await workspace.listToday()
             return TodayEntry(date: .now, pages: pages, failure: nil)
         } catch {
@@ -86,6 +96,26 @@ struct TodayProvider: TimelineProvider {
 // MARK: - Views
 
 struct TodayWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: TodayEntry
+
+    var body: some View {
+        switch family {
+        case .accessoryInline:
+            InlineView(entry: entry)
+        case .accessoryCircular:
+            CircularView(entry: entry)
+        case .accessoryRectangular:
+            RectangularView(entry: entry)
+        default:
+            HomeScreenView(entry: entry)
+        }
+    }
+}
+
+// MARK: Home screen
+
+private struct HomeScreenView: View {
     @Environment(\.widgetFamily) private var family
     let entry: TodayEntry
 
@@ -103,19 +133,20 @@ struct TodayWidgetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            header
+            WidgetHeader(title: "Today", count: entry.open.count)
 
             if entry.failure != nil {
-                Text("Can't read your notes")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                WidgetNote(text: "Can't read your notes")
             } else if entry.pages.isEmpty {
-                Text("Nothing scheduled")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                WidgetNote(text: "Nothing scheduled")
             } else {
                 ForEach(visible, id: \.id) { page in
-                    row(page)
+                    // The small size is a single target that opens Today;
+                    // the ring is still its own button there.
+                    WidgetPageRow(
+                        page: page,
+                        linksToPage: family != .systemSmall,
+                        lineLimit: family == .systemSmall ? 1 : 2)
                 }
                 if entry.pages.count > visible.count {
                     Text("+\(entry.pages.count - visible.count) more")
@@ -126,36 +157,95 @@ struct TodayWidgetView: View {
 
             Spacer(minLength: 0)
         }
-        // Tapping anywhere opens the app on Today. The same pikos:// grammar the
-        // desktop app uses, parsed by the same Rust.
+        // Tapping anywhere else opens the app on Today. The same pikos://
+        // grammar the desktop app uses, parsed by the same Rust.
         .widgetURL(URL(string: "pikos://today"))
     }
+}
 
-    private var header: some View {
-        HStack {
-            Text("Today")
-                .font(.caption.weight(.semibold))
-            Spacer()
-            if !entry.pages.isEmpty {
-                Text("\(entry.pages.count)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+// MARK: Lock screen
+
+/// One line beside the clock: what is next, or how much is left.
+private struct InlineView: View {
+    let entry: TodayEntry
+
+    var body: some View {
+        if let next = entry.open.first {
+            if let time = timeOfDay(next) {
+                Text("\(displayTitle(next)) · \(time, style: .time)")
+            } else {
+                Text(displayTitle(next))
             }
+        } else if entry.pages.isEmpty {
+            Text("Nothing scheduled today")
+        } else {
+            Text("All done for today")
         }
     }
+}
 
-    private func row(_ page: PageSummary) -> some View {
-        let isDone = page.status == "done"
-        return HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                .font(.caption2)
-                .foregroundStyle(isDone ? Color.accentColor : Color.secondary)
-            Text(page.title.isEmpty ? "Untitled" : page.title)
-                .font(.caption)
-                .strikethrough(isDone, color: .secondary)
-                .foregroundStyle(isDone ? Color.secondary : Color.primary)
-                .lineLimit(family == .systemSmall ? 1 : 2)
-            Spacer(minLength: 0)
+/// A count, for the small round slot: how many of today's pages are open.
+private struct CircularView: View {
+    let entry: TodayEntry
+
+    var body: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            VStack(spacing: -2) {
+                Text("\(entry.open.count)")
+                    .font(.title2.weight(.semibold).monospacedDigit())
+                Text("today")
+                    .font(.caption2)
+                    .textCase(.uppercase)
+            }
         }
+        .widgetURL(URL(string: "pikos://today"))
+        .accessibilityLabel("\(entry.open.count) pages open today")
+    }
+}
+
+/// The next two things, with their times.
+///
+/// Two rather than three: the slot is three lines tall and one of them is
+/// the heading, which the lock screen needs — a bare title beside the clock
+/// does not say whose it is.
+private struct RectangularView: View {
+    let entry: TodayEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "sun.max")
+                Text("Today")
+                if !entry.open.isEmpty {
+                    Text("\(entry.open.count)")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .font(.caption.weight(.semibold))
+
+            if entry.failure != nil {
+                Text("Can't read your notes").font(.caption2).foregroundStyle(.secondary)
+            } else if entry.open.isEmpty {
+                Text(entry.pages.isEmpty ? "Nothing scheduled" : "All done")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(entry.open.prefix(2), id: \.id) { page in
+                    HStack(spacing: 4) {
+                        if let time = timeOfDay(page) {
+                            Text(time, style: .time)
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(displayTitle(page))
+                            .font(.caption2)
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .widgetURL(URL(string: "pikos://today"))
     }
 }

@@ -35,6 +35,31 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.listDensity, .cozy)
         XCTAssertEqual(preferences.calendarDensity, .normal)
         XCTAssertNil(preferences.defaultFolderID)
+        // On, and ten minutes: the desktop's defaults, so a page created on
+        // either device reminds the same way until somebody says otherwise.
+        XCTAssertTrue(preferences.remindersEnabled)
+        XCTAssertEqual(preferences.defaultReminderMinutes, 10)
+    }
+
+    /// "Off" and "never" are both real values that must survive a round trip:
+    /// a stored `false` read back as the default `true` would be a reminder
+    /// the user switched off ringing anyway.
+    func testReminderChoicesSurviveIncludingTheOffAndNeverValues() {
+        preferences.remindersEnabled = false
+        preferences.defaultReminderMinutes = -1
+        XCTAssertFalse(preferences.remindersEnabled)
+        XCTAssertEqual(preferences.defaultReminderMinutes, -1)
+
+        preferences.resetAll()
+        XCTAssertTrue(preferences.remindersEnabled)
+        XCTAssertEqual(preferences.defaultReminderMinutes, 10)
+    }
+
+    func testTheOfferedLeadsIncludeNeverAndAreAscending() {
+        let choices = Preferences.reminderLeadChoices
+        XCTAssertEqual(choices.first, -1)
+        XCTAssertEqual(choices, choices.sorted())
+        XCTAssertTrue(choices.contains(Preferences.defaultReminderMinutesFallback))
     }
 
     func testAChoiceSurvivesBeingWritten() {

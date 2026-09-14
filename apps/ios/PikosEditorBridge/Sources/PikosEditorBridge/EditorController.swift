@@ -62,6 +62,16 @@ public final class EditorController {
         send(.focus(.init()))
     }
 
+    /// Make the document read-only, or editable again.
+    ///
+    /// `EditorWebView` sends this itself from its `isEditable` property, so a
+    /// screen normally has no reason to call it; it is public for the case
+    /// where a host wants to lock the surface mid-session without rebuilding
+    /// the view.
+    public func setEditable(_ editable: Bool) {
+        send(.setEditable(.init(editable: editable)))
+    }
+
     public func blur() {
         send(.blur(.init()))
     }

@@ -842,6 +842,17 @@ public func FfiConverterTypeReadOnlyWorkspace_lower(_ value: ReadOnlyWorkspace) 
 public protocol WorkspaceProtocol: AnyObject, Sendable {
     
     /**
+     * Add a reminder to a page, as minutes before its scheduled start.
+     *
+     * For the one path that builds a page by hand from a parsed line — the
+     * phone's quick-add sheet when a picked date overrides the parse — so a
+     * lead typed on that line is written rather than dropped. `-2` is the
+     * day-before sentinel an all-day page carries instead of a lead; the
+     * parser hands over whichever the schedule's shape calls for.
+     */
+    func addPageReminder(pageId: String, minutesBefore: Int64) async throws 
+    
+    /**
      * Copy the whole database to `destination`.
      *
      * A byte copy of the file would not do: SQLite in WAL mode is three files
@@ -1552,6 +1563,22 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      */
     func unskipOccurrences(pageId: String, dates: [String]) async throws 
     
+    /**
+     * Every reminder that will fire in the next `horizon_days`, soonest
+     * first, placed on the clock of `timezone` — the zone the phone is in.
+     *
+     * The phone cannot run the desktop's every-minute loop, so it plans
+     * ahead: the answer here becomes one local notification per record, and
+     * the whole set is re-planned whenever the workspace changes. The six
+     * rules deciding what reminds are the desktop's own, composed forward
+     * rather than copied — see `pikos_db::reminder_horizon`.
+     *
+     * `default_minutes` is the lead for a page with no reminder rows, the
+     * same global default the desktop's settings carry; the phone keeps its
+     * own copy of that preference, since delivery is per device.
+     */
+    func upcomingReminders(timezone: String, horizonDays: UInt32, defaultMinutes: Int64) async throws  -> [UpcomingReminder]
+    
     func updatePage(id: String, edit: PageEdit) async throws  -> Page
     
 }
@@ -1637,6 +1664,31 @@ public static func `open`(path: String)async throws  -> Workspace  {
 }
     
 
+    
+    /**
+     * Add a reminder to a page, as minutes before its scheduled start.
+     *
+     * For the one path that builds a page by hand from a parsed line — the
+     * phone's quick-add sheet when a picked date overrides the parse — so a
+     * lead typed on that line is written rather than dropped. `-2` is the
+     * day-before sentinel an all-day page carries instead of a lead; the
+     * parser hands over whichever the schedule's shape calls for.
+     */
+open func addPageReminder(pageId: String, minutesBefore: Int64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_add_page_reminder(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterInt64.lower(minutesBefore)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
     
     /**
      * Copy the whole database to `destination`.
@@ -3127,6 +3179,36 @@ open func unskipOccurrences(pageId: String, dates: [String])async throws   {
         )
 }
     
+    /**
+     * Every reminder that will fire in the next `horizon_days`, soonest
+     * first, placed on the clock of `timezone` — the zone the phone is in.
+     *
+     * The phone cannot run the desktop's every-minute loop, so it plans
+     * ahead: the answer here becomes one local notification per record, and
+     * the whole set is re-planned whenever the workspace changes. The six
+     * rules deciding what reminds are the desktop's own, composed forward
+     * rather than copied — see `pikos_db::reminder_horizon`.
+     *
+     * `default_minutes` is the lead for a page with no reminder rows, the
+     * same global default the desktop's settings carry; the phone keeps its
+     * own copy of that preference, since delivery is per device.
+     */
+open func upcomingReminders(timezone: String, horizonDays: UInt32, defaultMinutes: Int64)async throws  -> [UpcomingReminder]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_upcoming_reminders(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(timezone),FfiConverterUInt32.lower(horizonDays),FfiConverterInt64.lower(defaultMinutes)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeUpcomingReminder.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
 open func updatePage(id: String, edit: PageEdit)async throws  -> Page  {
     return
         try  await uniffiRustCallAsync(
@@ -4225,6 +4307,17 @@ public struct Page: Equatable, Hashable {
      * its own must not save over the document — see pikos-db migration 013.
      */
     public var contentSchemaVersion: Int64
+    /**
+     * Carried for the same reason `PageSummary` carries it: an open page
+     * offers the same menu a listed one does, and which entries that menu
+     * may show turns on these two. Without them the editor would have to
+     * guess from the folder, and a detached calendar page would guess wrong.
+     */
+    public var isRecurring: Bool
+    /**
+     * See `PageSummary::schedule_locked`.
+     */
+    public var scheduleLocked: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -4236,7 +4329,16 @@ public struct Page: Equatable, Hashable {
         /**
          * Which editor schema wrote `content`. A client finding a version above
          * its own must not save over the document — see pikos-db migration 013.
-         */contentSchemaVersion: Int64) {
+         */contentSchemaVersion: Int64, 
+        /**
+         * Carried for the same reason `PageSummary` carries it: an open page
+         * offers the same menu a listed one does, and which entries that menu
+         * may show turns on these two. Without them the editor would have to
+         * guess from the folder, and a detached calendar page would guess wrong.
+         */isRecurring: Bool, 
+        /**
+         * See `PageSummary::schedule_locked`.
+         */scheduleLocked: Bool) {
         self.id = id
         self.folderId = folderId
         self.title = title
@@ -4251,6 +4353,8 @@ public struct Page: Equatable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.contentSchemaVersion = contentSchemaVersion
+        self.isRecurring = isRecurring
+        self.scheduleLocked = scheduleLocked
     }
 
     
@@ -4282,7 +4386,9 @@ public struct FfiConverterTypePage: FfiConverterRustBuffer {
                 completedAt: FfiConverterOptionString.read(from: &buf), 
                 createdAt: FfiConverterString.read(from: &buf), 
                 updatedAt: FfiConverterString.read(from: &buf), 
-                contentSchemaVersion: FfiConverterInt64.read(from: &buf)
+                contentSchemaVersion: FfiConverterInt64.read(from: &buf), 
+                isRecurring: FfiConverterBool.read(from: &buf), 
+                scheduleLocked: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -4301,6 +4407,8 @@ public struct FfiConverterTypePage: FfiConverterRustBuffer {
         FfiConverterString.write(value.createdAt, into: &buf)
         FfiConverterString.write(value.updatedAt, into: &buf)
         FfiConverterInt64.write(value.contentSchemaVersion, into: &buf)
+        FfiConverterBool.write(value.isRecurring, into: &buf)
+        FfiConverterBool.write(value.scheduleLocked, into: &buf)
     }
 }
 
@@ -4795,6 +4903,19 @@ public struct QuickAddInput: Equatable, Hashable {
      */
     public var folderQuery: String?
     public var priority: PriorityEdit
+    /**
+     * Reminder leads to write, as `minutes_before` values — ascending,
+     * deduped, already resolved against the schedule's shape. Empty when the
+     * line asked for none, or asked with no date to anchor them to (the
+     * words stay in the title then).
+     */
+    public var reminderMinutes: [Int64]
+    /**
+     * The page body, from everything after the first whitespace-delimited
+     * `//`. Plain text; `plain_text_to_document` turns it into the document
+     * a page stores.
+     */
+    public var content: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -4805,7 +4926,18 @@ public struct QuickAddInput: Equatable, Hashable {
         /**
          * A folder *name* as typed, not an id — matching it against the workspace
          * is the caller's job, because only it knows the folder tree.
-         */folderQuery: String?, priority: PriorityEdit) {
+         */folderQuery: String?, priority: PriorityEdit, 
+        /**
+         * Reminder leads to write, as `minutes_before` values — ascending,
+         * deduped, already resolved against the schedule's shape. Empty when the
+         * line asked for none, or asked with no date to anchor them to (the
+         * words stay in the title then).
+         */reminderMinutes: [Int64], 
+        /**
+         * The page body, from everything after the first whitespace-delimited
+         * `//`. Plain text; `plain_text_to_document` turns it into the document
+         * a page stores.
+         */content: String?) {
         self.title = title
         self.scheduledStart = scheduledStart
         self.scheduledEnd = scheduledEnd
@@ -4813,6 +4945,8 @@ public struct QuickAddInput: Equatable, Hashable {
         self.tags = tags
         self.folderQuery = folderQuery
         self.priority = priority
+        self.reminderMinutes = reminderMinutes
+        self.content = content
     }
 
     
@@ -4837,7 +4971,9 @@ public struct FfiConverterTypeQuickAddInput: FfiConverterRustBuffer {
                 durationMinutes: FfiConverterOptionInt64.read(from: &buf), 
                 tags: FfiConverterSequenceString.read(from: &buf), 
                 folderQuery: FfiConverterOptionString.read(from: &buf), 
-                priority: FfiConverterTypePriorityEdit.read(from: &buf)
+                priority: FfiConverterTypePriorityEdit.read(from: &buf), 
+                reminderMinutes: FfiConverterSequenceInt64.read(from: &buf), 
+                content: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -4849,6 +4985,8 @@ public struct FfiConverterTypeQuickAddInput: FfiConverterRustBuffer {
         FfiConverterSequenceString.write(value.tags, into: &buf)
         FfiConverterOptionString.write(value.folderQuery, into: &buf)
         FfiConverterTypePriorityEdit.write(value.priority, into: &buf)
+        FfiConverterSequenceInt64.write(value.reminderMinutes, into: &buf)
+        FfiConverterOptionString.write(value.content, into: &buf)
     }
 }
 
@@ -5752,6 +5890,110 @@ public func FfiConverterTypeUpcomingDay_lift(_ buf: RustBuffer) throws -> Upcomi
 #endif
 public func FfiConverterTypeUpcomingDay_lower(_ value: UpcomingDay) -> RustBuffer {
     return FfiConverterTypeUpcomingDay.lower(value)
+}
+
+
+/**
+ * A reminder that will fire inside the horizon, placed on the device's clock.
+ *
+ * What the phone hands the OS: one local notification per record, identified
+ * by `key`, delivered at `fire_at`. See `pikos_db::reminder_horizon`.
+ */
+public struct UpcomingReminder: Equatable, Hashable {
+    /**
+     * Distinct per (occurrence × lead), and the same key the desktop logs when
+     * it fires the same reminder.
+     */
+    public var key: String
+    public var pageId: String
+    public var title: String
+    /**
+     * The occurrence's own start as stored, for wording — device-local for a
+     * native page, source-zone for a synced one.
+     */
+    public var scheduledStart: String
+    /**
+     * Minutes before the start, or `-2` for the day-before anchor.
+     */
+    public var minutesBefore: Int64
+    /**
+     * When it fires on the device's clock, `YYYY-MM-DDTHH:MM:SS`.
+     */
+    public var fireAt: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Distinct per (occurrence × lead), and the same key the desktop logs when
+         * it fires the same reminder.
+         */key: String, pageId: String, title: String, 
+        /**
+         * The occurrence's own start as stored, for wording — device-local for a
+         * native page, source-zone for a synced one.
+         */scheduledStart: String, 
+        /**
+         * Minutes before the start, or `-2` for the day-before anchor.
+         */minutesBefore: Int64, 
+        /**
+         * When it fires on the device's clock, `YYYY-MM-DDTHH:MM:SS`.
+         */fireAt: String) {
+        self.key = key
+        self.pageId = pageId
+        self.title = title
+        self.scheduledStart = scheduledStart
+        self.minutesBefore = minutesBefore
+        self.fireAt = fireAt
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension UpcomingReminder: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUpcomingReminder: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UpcomingReminder {
+        return
+            try UpcomingReminder(
+                key: FfiConverterString.read(from: &buf), 
+                pageId: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf), 
+                scheduledStart: FfiConverterString.read(from: &buf), 
+                minutesBefore: FfiConverterInt64.read(from: &buf), 
+                fireAt: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UpcomingReminder, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.key, into: &buf)
+        FfiConverterString.write(value.pageId, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.scheduledStart, into: &buf)
+        FfiConverterInt64.write(value.minutesBefore, into: &buf)
+        FfiConverterString.write(value.fireAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpcomingReminder_lift(_ buf: RustBuffer) throws -> UpcomingReminder {
+    return try FfiConverterTypeUpcomingReminder.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUpcomingReminder_lower(_ value: UpcomingReminder) -> RustBuffer {
+    return FfiConverterTypeUpcomingReminder.lower(value)
 }
 
 
@@ -7144,6 +7386,31 @@ fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceInt64: FfiConverterRustBuffer {
+    typealias SwiftType = [Int64]
+
+    public static func write(_ value: [Int64], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterInt64.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Int64] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Int64]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterInt64.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -7615,6 +7882,31 @@ fileprivate struct FfiConverterSequenceTypeUpcomingDay: FfiConverterRustBuffer {
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeUpcomingReminder: FfiConverterRustBuffer {
+    typealias SwiftType = [UpcomingReminder]
+
+    public static func write(_ value: [UpcomingReminder], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUpcomingReminder.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UpcomingReminder] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UpcomingReminder]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUpcomingReminder.read(from: &buf))
+        }
+        return seq
+    }
+}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
 
@@ -7836,6 +8128,22 @@ public func parseQuickAdd(input: String, reference: String) -> QuickAddResult?  
     )
 })
 }
+/**
+ * Plain text as the document a page stores: one paragraph per line.
+ *
+ * For a caller building a page by hand from a parsed line — the phone's
+ * quick-add sheet, when a date picked in the picker overrides the parse — so
+ * the body typed after `//` is not lost on that path. The same builder the
+ * data layer uses for a synced event's description, so the two cannot drift.
+ */
+public func plainTextToDocument(text: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_pikos_ffi_fn_func_plain_text_to_document(
+        FfiConverterString.lower(text),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -7888,6 +8196,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_func_parse_quick_add() != 46428) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_func_plain_text_to_document() != 58750) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_calendar_range() != 3295) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7901,6 +8212,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today() != 33378) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_add_page_reminder() != 49849) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_backup_database() != 64326) {
@@ -8075,6 +8389,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_unskip_occurrences() != 3081) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_upcoming_reminders() != 59004) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_update_page() != 63112) {

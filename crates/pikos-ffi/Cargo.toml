@@ -22,12 +22,15 @@ pikos-core = { path = "../pikos-core" }
 # One subtraction, in one place: the backlog window opens a millisecond before
 # the head's own midnight, because it is exclusive at both ends and the head is
 # part of the backlog whenever the gesture pointed elsewhere.
-chrono = "0.4"
 # One warning, in one place: a calendar server that will not answer must not
 # stop somebody wiping their own device, and swallowing that silently would make
 # a failed disconnect indistinguishable from a clean one.
 log = "0.4"
 pikos-db = { path = "../pikos-db" }
+# The reminder horizon is placed on the phone's own clock, which arrives as an
+# IANA name and has to be resolved here; both are already what pikos-db uses.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono-tz = "0.10"
 pikos-recurrence = { path = "../pikos-recurrence" }
 # CalDAV account management and manual sync. Brings reqwest+rustls and the
 # keychain into the iOS static library; both were verified to cross-compile to

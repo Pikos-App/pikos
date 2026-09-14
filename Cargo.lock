@@ -1496,6 +1496,7 @@ name = "pikos-ffi"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "chrono-tz",
  "log",
  "pikos-calendar-sync",
  "pikos-core",

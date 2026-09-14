@@ -1,26 +1,40 @@
+import PhotosUI
 import PikosCore
-import PikosSupport
 import PikosEditorBridge
+import PikosSupport
 import SwiftUI
+import UIKit
 
 /// A page, open for editing.
 ///
 /// The one screen in the app that is not native. Everything around it — the
-/// navigation bar, the toolbar above the keyboard, the sheets — is SwiftUI; the
-/// document surface itself is the shared Tiptap editor in a webview, so a page
-/// written here is byte-identical to one written on the desktop.
+/// navigation bar, the formatting bar above the keyboard, the metadata strip,
+/// the sheets — is SwiftUI; the document surface itself is the shared Tiptap
+/// editor in a webview, so a page written here is byte-identical to one
+/// written on the desktop.
+///
+/// The page's facts — its date, folder, tags, priority — are shown above the
+/// document and changed from the menu in the corner, which is the list's long
+/// press menu reached from the other direction. Before this an open page could
+/// not be renamed, dated or filed without going back to the list and finding
+/// it again, which on the desktop is the metadata header's whole job.
 struct EditorScreen: View {
     let pageId: String
 
     @Environment(WorkspaceStore.self) private var store
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
+    @Environment(\.dismiss) private var dismiss
 
     @State private var page: Page?
     @State private var loadFailed = false
     @State private var selection = EditorSelection()
     @State private var assetsURL: URL?
     @State private var coldLoadSeconds: TimeInterval?
+    @State private var actions = PageActionState()
+    @State private var isKeyboardVisible = false
+    @State private var isPickingPhoto = false
+    @State private var pickedPhoto: PhotosPickerItem?
     /// Owned here rather than by the editor view, which is a value type
     /// recreated on every update and so cannot hold a live reference.
     @State private var controller = EditorController()
@@ -40,14 +54,24 @@ struct EditorScreen: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
+        // A rename, a new date or a moved folder from the menu is a write
+        // through the store, and the store bumps its version after each. The
+        // facts are re-read so the title and the strip follow; the document is
+        // not re-sent — the editor only loads when the page *id* changes, and
+        // re-pushing content it already holds would fight the caret.
+        .onChange(of: store.dataVersion) { _, _ in
+            Task { await reloadFacts() }
+        }
         // The list is not refreshed on every keystroke — see WorkspaceStore —
         // so it is refreshed once, here, when the editor goes away.
         .onDisappear { Task { await store.refresh() } }
+        .pageActionSheets($actions)
     }
 
     @ViewBuilder
     private func editor(page: Page, assetsURL: URL) -> some View {
         let editable = store.canEdit(page)
+        let facts = PageFacts(page)
 
         VStack(spacing: 0) {
             if !editable {
@@ -64,12 +88,23 @@ struct EditorScreen: View {
                     .background(.yellow.opacity(0.2))
             }
 
+            // Reference, not something needed mid-sentence: the strip gives
+            // its height back while the keyboard is up, when the nav bar,
+            // the formatting bar and the keyboard already leave the document
+            // less than half the screen.
+            if !isKeyboardVisible {
+                MetadataStrip(page: facts, actions: $actions)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
             EditorWebView(
                 pageId: page.id,
                 documentJSON: page.content,
                 assetRoot: assetsURL,
                 controller: controller,
                 colorScheme: colorScheme,
+                accentColor: Brand.accentHex,
+                isEditable: editable,
                 // Every callback hops to the main actor explicitly. They are
                 // invoked from WebKit delegate callbacks, and whether those are
                 // main-actor-isolated depends on the SDK's audit state — hopping
@@ -91,21 +126,64 @@ struct EditorScreen: View {
                     // tapped link from replacing the editor with a web page.
                     Task { @MainActor in openURL(url) }
                 },
+                onImageRequested: {
+                    Task { @MainActor in isPickingPhoto = true }
+                },
                 onReady: { duration in
                     Task { @MainActor in coldLoadSeconds = duration }
                 }
             )
-            .ignoresSafeArea(.container, edges: .bottom)
         }
+        // The formatting bar sits in the safe area's bottom inset, which the
+        // keyboard shrinks — so it rides up with the keyboard and goes away with
+        // it. Not a `.keyboard` toolbar item: that attaches to the input
+        // accessory of a SwiftUI text field, and a webview brings its own
+        // responder and its own accessory view, so a toolbar placed there is
+        // one nobody would ever see above this editor.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if editable && isKeyboardVisible {
+                FormattingToolbar(
+                    selection: selection,
+                    controller: controller,
+                    onInsertImage: { isPickingPhoto = true },
+                    onDismissKeyboard: { controller.blur() }
+                )
+                .background(.bar)
+                .overlay(alignment: .top) { Divider() }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: isKeyboardVisible)
+        // The system picker runs out of process, so no photo-library
+        // permission is asked for: the app only ever sees the one picture
+        // chosen.
+        .photosPicker(isPresented: $isPickingPhoto, selection: $pickedPhoto, matching: .images)
+        .onChange(of: pickedPhoto) { _, item in
+            guard let item else { return }
+            pickedPhoto = nil
+            Task { await insert(photo: item, into: assetsURL) }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
+        ) { _ in isKeyboardVisible = true }
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
+        ) { _ in isKeyboardVisible = false }
         .navigationTitle(page.title.isEmpty ? "Untitled" : page.title)
         .toolbar {
-            if editable {
-                ToolbarItemGroup(placement: .keyboard) {
-                    FormattingToolbar(selection: selection, controller: controller)
-                }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 FocusTimer(pageId: page.id)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    PageActionsMenu(page: facts, state: $actions) {
+                        // The page is in the trash; there is nothing left to
+                        // show. Back to wherever it was opened from.
+                        dismiss()
+                    }
+                } label: {
+                    Label("Page options", systemImage: "ellipsis.circle")
+                }
             }
             #if DEBUG
             // M0's cold-load bar is < 300ms on iPhone 12-class hardware. Shown
@@ -132,6 +210,49 @@ struct EditorScreen: View {
         page = await store.page(id: pageId)
         loadFailed = page == nil
     }
+
+    /// Write a picked photo into the workspace and put it in the document.
+    ///
+    /// The document stores the file's name relative to the assets directory,
+    /// which is what the scheme handler resolves — never an absolute path,
+    /// which would be wrong after a restore to a new device and is not the
+    /// host's business to know. JPEG, PNG and GIF are stored as they are;
+    /// anything else — a HEIC from the camera roll, most often — is re-encoded
+    /// as JPEG so it renders here and on the desktop.
+    private func insert(photo item: PhotosPickerItem, into assets: URL) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else { return }
+            let name: String
+            let bytes: Data
+            if let ext = AssetName.storableExtension(for: item.supportedContentTypes) {
+                name = AssetName.fresh(extension: ext)
+                bytes = data
+            } else {
+                guard let image = UIImage(data: data),
+                    let jpeg = image.jpegData(compressionQuality: 0.85)
+                else {
+                    store.errorMessage = String(localized: "That image could not be read.")
+                    return
+                }
+                name = AssetName.fresh(extension: "jpg")
+                bytes = jpeg
+            }
+            try bytes.write(to: assets.appendingPathComponent(name), options: .atomic)
+            controller.insertImage(assetPath: name)
+        } catch {
+            store.errorMessage = String(localized: "The photo could not be added: \(error.localizedDescription)")
+        }
+    }
+
+    /// Re-read the page after a write from the menu.
+    ///
+    /// Only once it has loaded — the first load owns the failure state, and a
+    /// version bump arriving mid-load must not flip the screen to "deleted"
+    /// over a page that is fine.
+    private func reloadFacts() async {
+        guard page != nil, let latest = await store.page(id: pageId) else { return }
+        page = latest
+    }
 }
 
 /// What the caret is currently inside, as the editor last reported it.
@@ -139,4 +260,111 @@ struct EditorSelection: Equatable {
     var marks: Set<String> = []
     var nodeType: String = "paragraph"
     var isEmpty: Bool = true
+}
+
+/// The page's facts, above the document.
+///
+/// One line: when it is, where it is filed, how urgent, and what it is tagged.
+/// Each chip opens the sheet that changes it, so the strip is the header and
+/// the control at once — the desktop's metadata header, sized for a phone. It
+/// draws nothing at all for a page in the Inbox with no date, priority or
+/// tags: an empty strip would be a gap above every fresh note, and the menu
+/// still offers all four.
+private struct MetadataStrip: View {
+    let page: PageFacts
+    @Binding var actions: PageActionState
+
+    @Environment(WorkspaceStore.self) private var store
+
+    private var folder: Folder? {
+        guard let id = page.folderId else { return nil }
+        return store.folders.first { $0.id == id }
+    }
+
+    private var priority: PagePriority? { PagePriority(stored: page.priority) }
+
+    private var hasAnything: Bool {
+        page.scheduledStart != nil || folder != nil || priority != nil || !page.tags.isEmpty
+            || needsName
+    }
+
+    /// An untitled page shows "Untitled" in the bar and nothing that says how
+    /// to change it — the rename sits in a menu. A chip here is the visible
+    /// way in, and it goes once the page has a name.
+    private var needsName: Bool { page.title.isEmpty && !page.scheduleLocked }
+
+    var body: some View {
+        if hasAnything {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    if needsName {
+                        chip {
+                            Label("Name this page", systemImage: "pencil")
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                        } action: {
+                            actions.renameText = ""
+                            actions.renaming = page
+                        }
+                    }
+                    if let start = page.scheduledStart {
+                        chip {
+                            HStack(spacing: 4) {
+                                if page.isRecurring {
+                                    Image(systemName: "repeat")
+                                }
+                                ScheduleLabel(iso: start, isDone: page.isDone)
+                            }
+                        } action: {
+                            // A repeating page's date belongs to its rule, so
+                            // its chip opens the repeat instead; a calendar's
+                            // page cannot be moved from here at all.
+                            if page.scheduleLocked { return }
+                            actions.sheet = page.isRecurring ? .repeatRule(page) : .schedule(page)
+                        }
+                    }
+                    if let folder {
+                        chip { FolderLabel(folder: folder) }
+                    }
+                    if let priority {
+                        chip {
+                            Label(priority.name, systemImage: "flag.fill")
+                                .font(.caption)
+                                .foregroundStyle(priority.color)
+                        }
+                    }
+                    if !page.tags.isEmpty {
+                        chip {
+                            Label(page.tags.joined(separator: ", "), systemImage: "tag")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        } action: {
+                            actions.sheet = .tags(page)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
+        }
+    }
+
+    /// A chip, tappable when there is something to open from it.
+    @ViewBuilder
+    private func chip<Content: View>(
+        @ViewBuilder content: () -> Content, action: (() -> Void)? = nil
+    ) -> some View {
+        let inner = content()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.quaternary, in: Capsule())
+        if let action {
+            Button(action: action) { inner }.buttonStyle(.plain)
+        } else {
+            inner
+        }
+    }
 }

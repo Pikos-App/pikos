@@ -219,6 +219,21 @@ def main() -> int:
                         f" which is {expected}"
                     )
 
+    # A call to a method the bindings do not declare at all. The label check
+    # above only ever looks at methods it knows, so a `workspace.foo(...)`
+    # whose `foo` the Rust never exported — or exported after the bindings
+    # were last generated — sailed through it. That happened: stale bindings
+    # were committed with the Swift calling two methods they did not have, and
+    # this reported every call site matching.
+    for path in sources:
+        for match in re.finditer(r"\bworkspace\.(\w+)\(", path.read_text()):
+            name = match.group(1)
+            if name not in methods:
+                problems.append(
+                    f"{path.relative_to(REPO)}: workspace.{name}(…) is not a method the"
+                    " bindings declare — regenerate them, or the Rust never exported it"
+                )
+
     problems += check_enum_cases(sources, enum_cases)
 
     print(

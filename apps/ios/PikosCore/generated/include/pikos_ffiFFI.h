@@ -298,6 +298,11 @@ void uniffi_pikos_ffi_fn_free_workspace(uint64_t handle, RustCallStatus *_Nonnul
 uint64_t uniffi_pikos_ffi_fn_constructor_workspace_open(RustBuffer path
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_ADD_PAGE_REMINDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_ADD_PAGE_REMINDER
+uint64_t uniffi_pikos_ffi_fn_method_workspace_add_page_reminder(uint64_t ptr, RustBuffer page_id, int64_t minutes_before
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BACKUP_DATABASE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_BACKUP_DATABASE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_backup_database(uint64_t ptr, RustBuffer destination
@@ -588,6 +593,11 @@ uint64_t uniffi_pikos_ffi_fn_method_workspace_unskip_occurrence(uint64_t ptr, Ru
 uint64_t uniffi_pikos_ffi_fn_method_workspace_unskip_occurrences(uint64_t ptr, RustBuffer page_id, RustBuffer dates
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_UPCOMING_REMINDERS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_UPCOMING_REMINDERS
+uint64_t uniffi_pikos_ffi_fn_method_workspace_upcoming_reminders(uint64_t ptr, RustBuffer timezone, uint32_t horizon_days, int64_t default_minutes
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_UPDATE_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_METHOD_WORKSPACE_UPDATE_PAGE
 uint64_t uniffi_pikos_ffi_fn_method_workspace_update_page(uint64_t ptr, RustBuffer id, RustBuffer edit
@@ -652,6 +662,11 @@ RustBuffer uniffi_pikos_ffi_fn_func_parse_deep_link(RustBuffer url, RustCallStat
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PARSE_QUICK_ADD
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PARSE_QUICK_ADD
 RustBuffer uniffi_pikos_ffi_fn_func_parse_quick_add(RustBuffer input, RustBuffer reference, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PLAIN_TEXT_TO_DOCUMENT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_FN_FUNC_PLAIN_TEXT_TO_DOCUMENT
+RustBuffer uniffi_pikos_ffi_fn_func_plain_text_to_document(RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_PIKOS_FFI_RUSTBUFFER_ALLOC
@@ -986,6 +1001,12 @@ uint16_t uniffi_pikos_ffi_checksum_func_parse_quick_add(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PLAIN_TEXT_TO_DOCUMENT
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_FUNC_PLAIN_TEXT_TO_DOCUMENT
+uint16_t uniffi_pikos_ffi_checksum_func_plain_text_to_document(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_CALENDAR_RANGE
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_CALENDAR_RANGE
 uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_calendar_range(void
@@ -1013,6 +1034,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_pages(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_LIST_TODAY
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_READONLYWORKSPACE_LIST_TODAY
 uint16_t uniffi_pikos_ffi_checksum_method_readonlyworkspace_list_today(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_ADD_PAGE_REMINDER
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_ADD_PAGE_REMINDER
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_add_page_reminder(void
     
 );
 #endif
@@ -1361,6 +1388,12 @@ uint16_t uniffi_pikos_ffi_checksum_method_workspace_unskip_occurrence(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_UNSKIP_OCCURRENCES
 #define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_UNSKIP_OCCURRENCES
 uint16_t uniffi_pikos_ffi_checksum_method_workspace_unskip_occurrences(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_UPCOMING_REMINDERS
+#define UNIFFI_FFIDEF_UNIFFI_PIKOS_FFI_CHECKSUM_METHOD_WORKSPACE_UPCOMING_REMINDERS
+uint16_t uniffi_pikos_ffi_checksum_method_workspace_upcoming_reminders(void
     
 );
 #endif

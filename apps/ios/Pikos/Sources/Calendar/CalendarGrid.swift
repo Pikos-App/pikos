@@ -19,7 +19,15 @@ struct CalendarGrid: View {
     /// Points per hour before Dynamic Type is applied — the reader's calendar
     /// density setting.
     let hourHeightBase: CGFloat
+    /// Folder colours by folder id. A block in a coloured folder draws in
+    /// that colour, which is how the desktop tells a work meeting from a
+    /// dentist at a glance; anything else draws in the accent.
+    let folderColors: [String: Color]
+    /// The sheets a block's page menu can open, owned by the screen.
+    @Binding var actions: PageActionState
     let onOpen: (String) -> Void
+    /// Tick or untick a one-off block, which *is* its page.
+    let onToggleDone: (CalendarEntry) -> Void
     /// Finish the occurrence this block is, rather than the one the series
     /// owes next. See `WorkspaceStore.completeOccurrence`.
     let onComplete: (CalendarEntry) -> Void
@@ -51,7 +59,11 @@ struct CalendarGrid: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            dayHeader
+            // A header over one column repeats the title above it; over
+            // several it is the only thing telling the columns apart.
+            if days.count > 1 {
+                dayHeader
+            }
             allDaySection
             Divider()
             ScrollViewReader { proxy in
@@ -59,9 +71,7 @@ struct CalendarGrid: View {
                     timedSection
                 }
                 .onAppear {
-                    // Land on the working day rather than at midnight, which is
-                    // eight hours of empty grid.
-                    proxy.scrollTo(Self.openingHourAnchor, anchor: .top)
+                    proxy.scrollTo(Self.hourAnchor(openingHour), anchor: .top)
                 }
             }
         }
@@ -82,8 +92,14 @@ struct CalendarGrid: View {
                         .foregroundStyle(isToday(day) ? Color.accentColor : Color.primary)
                 }
                 .frame(maxWidth: .infinity)
+                // Seven columns at the accessibility text sizes do not fit
+                // their abbreviations; the day number shrinks before it wraps,
+                // and the whole label is read out in full anyway.
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Self.accessibleDayLabel(day))
+                .accessibilityAddTraits(isToday(day) ? [.isHeader, .isSelected] : .isHeader)
             }
         }
         .padding(.vertical, 6)
@@ -154,21 +170,27 @@ struct CalendarGrid: View {
         let corners = RoundedCornerStyle(
             leading: !bar.continuesLeft, trailing: !bar.continuesRight)
 
+        let tint = entry.map(color(for:)) ?? Color.accentColor
+        let done = entry?.status == "done"
+
         return Text(entry.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "")
-            .font(.caption2)
+            .font(.caption2.weight(.medium))
+            .strikethrough(done, color: .secondary)
             .lineLimit(1)
             .padding(.horizontal, 5)
             .frame(
                 width: max(columnWidth * CGFloat(bar.span) - 3, 1),
                 height: metrics.allDayRowHeight - 3,
                 alignment: .leading)
-            .background(Color.accentColor.opacity(0.22), in: corners.shape)
+            .background(tint.opacity(done ? 0.12 : 0.22), in: corners.shape)
+            .opacity(done ? 0.7 : 1)
             .offset(
                 x: columnWidth * CGFloat(bar.startCol) + 1.5,
                 y: CGFloat(bar.row) * metrics.allDayRowHeight)
             .onTapGesture { if let entry { onOpen(entry.pageId) } }
             .accessibilityAddTraits(.isButton)
             .contextMenu { if let entry { occurrenceMenu(entry) } }
+            .accessibilityActions { if let entry { occurrenceActions(entry) } }
     }
 
     // MARK: - Timed
@@ -203,15 +225,20 @@ struct CalendarGrid: View {
         }
         .frame(width: Self.gutterWidth)
         .padding(.trailing, Self.gutterGap)
+        // Twenty-three labels a screen reader would otherwise step through
+        // before reaching the first event. Every block already says its own
+        // time, so the gutter carries nothing VoiceOver needs.
+        .accessibilityHidden(true)
     }
 
     private var hourLines: some View {
         VStack(spacing: 0) {
             ForEach(0..<24, id: \.self) { hour in
                 Divider().frame(height: hourHeight, alignment: .top)
-                    .id(hour == Self.openingHour ? Self.openingHourAnchor : "hour-\(hour)")
+                    .id(Self.hourAnchor(hour))
             }
         }
+        .accessibilityHidden(true)
     }
 
     /// The timed entries, keyed by occurrence rather than by page.
@@ -242,11 +269,13 @@ struct CalendarGrid: View {
                 {
                     let inset = CalendarGeometry.cascadeInset(
                         depth: Int(block.cascadeDepth), columnWidth: columnWidth)
-                    CalendarBlock(entry: entry, height: placed.height, block: block)
+                    CalendarBlock(
+                        entry: entry, height: placed.height, block: block, tint: color(for: entry))
                         .frame(width: max(columnWidth - inset - 3, 1), height: placed.height)
                         .offset(x: inset + 1.5, y: placed.top)
                         .onTapGesture { onOpen(entry.pageId) }
                         .contextMenu { occurrenceMenu(entry) }
+                        .accessibilityActions { occurrenceActions(entry) }
                 }
             }
 
@@ -270,16 +299,20 @@ struct CalendarGrid: View {
 
     // MARK: - What can be done to one block
 
-    /// The actions that apply to a single occurrence.
+    /// What a long press on a block offers.
     ///
-    /// Only shown for a repeating page, because for anything else there is no
-    /// such thing as "this one": a one-off page *is* the occurrence, and the
-    /// list already has the checkbox and the delete for it.
+    /// Two kinds of block, two menus. A one-off page *is* its block, so it
+    /// gets a checkbox's worth of verbs and then everything the list's long
+    /// press offers — rename, date, folder, tags, delete — because a meeting
+    /// seen on the calendar is the one most likely to need moving, and going
+    /// to the list to find it again is the round trip the menu exists to save.
     ///
-    /// What is deliberately absent is a delete. Deleting a block of a series
-    /// has no meaning short of deleting the series, which is the whole thing —
-    /// every occurrence behind this one and every one ahead — and offering that
-    /// from a single Tuesday is how people lose a year of a habit. Skip is the
+    /// A repeating page's block is one occurrence of many, and its verbs are
+    /// about *this one*: complete it, move it, skip it. What is deliberately
+    /// absent there is a delete. Deleting a block of a series has no meaning
+    /// short of deleting the series, which is the whole thing — every
+    /// occurrence behind this one and every one ahead — and offering that from
+    /// a single Tuesday is how people lose a year of a habit. Skip is the
     /// operation they actually want, and it is undoable.
     @ViewBuilder
     private func occurrenceMenu(_ entry: CalendarEntry) -> some View {
@@ -289,27 +322,70 @@ struct CalendarGrid: View {
             Label("Open", systemImage: "doc.text")
         }
 
-        if entry.isRecurring && entry.status != "done" {
-            if canComplete(entry) {
+        if entry.isRecurring {
+            if entry.status != "done" {
+                if canComplete(entry) {
+                    Button {
+                        onComplete(entry)
+                    } label: {
+                        Label("Complete this one", systemImage: "checkmark.circle")
+                    }
+                }
+                if canMove(entry) {
+                    Button {
+                        onMove(entry)
+                    } label: {
+                        Label("Move this one…", systemImage: "calendar.badge.clock")
+                    }
+                }
                 Button {
-                    onComplete(entry)
+                    onSkip(entry)
                 } label: {
-                    Label("Complete this one", systemImage: "checkmark.circle")
+                    Label("Skip this one", systemImage: "calendar.badge.minus")
                 }
             }
-            if canMove(entry) {
-                Button {
-                    onMove(entry)
-                } label: {
-                    Label("Move this one…", systemImage: "calendar.badge.clock")
-                }
-            }
+        } else {
+            let done = entry.status == "done"
             Button {
-                onSkip(entry)
+                onToggleDone(entry)
             } label: {
-                Label("Skip this one", systemImage: "calendar.badge.minus")
+                Label(
+                    done ? "Reopen" : "Complete",
+                    systemImage: done ? "arrow.uturn.backward" : "checkmark.circle")
             }
+            Divider()
+            PageActionsMenu(page: PageFacts(entry), state: $actions)
         }
+    }
+
+    /// The same verbs as the long-press menu, as VoiceOver actions.
+    ///
+    /// A long press is a gesture VoiceOver users do not have; the rotor's
+    /// actions list is where they expect a block's verbs. The page-wide menu
+    /// is deliberately not mirrored here — rename, tags, folder and the rest
+    /// are on the page itself once it is open, which "Open" reaches.
+    @ViewBuilder
+    private func occurrenceActions(_ entry: CalendarEntry) -> some View {
+        Button("Open") { onOpen(entry.pageId) }
+        if entry.isRecurring {
+            if entry.status != "done" {
+                if canComplete(entry) {
+                    Button("Complete this one") { onComplete(entry) }
+                }
+                if canMove(entry) {
+                    Button("Move this one") { onMove(entry) }
+                }
+                Button("Skip this one") { onSkip(entry) }
+            }
+        } else {
+            Button(entry.status == "done" ? "Reopen" : "Complete") { onToggleDone(entry) }
+        }
+    }
+
+    /// The colour a block draws in: its folder's, or the accent when the
+    /// folder has none or the page is in the Inbox.
+    private func color(for entry: CalendarEntry) -> Color {
+        entry.folderId.flatMap { folderColors[$0] } ?? Color.accentColor
     }
 
     /// Whether *this* occurrence is a thing that can be finished on its own.
@@ -351,9 +427,26 @@ struct CalendarGrid: View {
     /// four points out is the kind of thing that reads as "slightly wrong" long
     /// before anyone works out why.
     private static let gutterGap: CGFloat = 4
-    /// Where the grid opens, rather than at midnight.
-    private static let openingHour = 7
-    private static let openingHourAnchor = "calendar-opening-hour"
+    /// Where the grid opens when today is not on screen, rather than at
+    /// midnight, which is eight hours of empty grid.
+    private static let defaultOpeningHour = 7
+
+    /// The hour the grid scrolls to when it appears.
+    ///
+    /// When today is one of the columns, the hour before now — so the first
+    /// thing on screen is the red line and what is happening around it, which
+    /// is what a person opening a calendar is asking. Any other range opens
+    /// on the working day.
+    private var openingHour: Int {
+        guard let today = CalendarGeometry.day(of: now), days.contains(today),
+            let minute = CalendarGeometry.minutesIntoDay(now)
+        else { return Self.defaultOpeningHour }
+        return max(0, minute / 60 - 1)
+    }
+
+    private static func hourAnchor(_ hour: Int) -> String {
+        "hour-\(hour)"
+    }
 
     private func isToday(_ day: String) -> Bool {
         CalendarGeometry.day(of: now) == day
@@ -405,6 +498,7 @@ private struct CalendarBlock: View {
     let entry: CalendarEntry
     let height: CGFloat
     let block: TimedBlock
+    let tint: Color
 
     /// Below this, there is no room for a second line and the time is dropped
     /// rather than clipped.
@@ -427,11 +521,11 @@ private struct CalendarBlock: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 4)
         .padding(.vertical, 2)
-        .background(Color.accentColor.opacity(isDone ? 0.10 : 0.20))
+        .background(tint.opacity(isDone ? 0.10 : 0.20))
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(Color.accentColor.opacity(isDone ? 0.4 : 1))
-                .frame(width: 2)
+                .fill(tint.opacity(isDone ? 0.4 : 1))
+                .frame(width: 3)
         }
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .opacity(isDone ? 0.65 : 1)

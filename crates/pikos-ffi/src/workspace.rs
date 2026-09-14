@@ -192,6 +192,13 @@ pub struct Page {
     /// Which editor schema wrote `content`. A client finding a version above
     /// its own must not save over the document — see pikos-db migration 013.
     pub content_schema_version: i64,
+    /// Carried for the same reason `PageSummary` carries it: an open page
+    /// offers the same menu a listed one does, and which entries that menu
+    /// may show turns on these two. Without them the editor would have to
+    /// guess from the folder, and a detached calendar page would guess wrong.
+    pub is_recurring: bool,
+    /// See `PageSummary::schedule_locked`.
+    pub schedule_locked: bool,
 }
 
 impl From<pikos_db::Page> for Page {
@@ -211,6 +218,41 @@ impl From<pikos_db::Page> for Page {
             created_at: p.created_at,
             updated_at: p.updated_at,
             content_schema_version: p.content_schema_version,
+            is_recurring: p.is_recurring,
+            schedule_locked: p.schedule_locked,
+        }
+    }
+}
+
+/// A reminder that will fire inside the horizon, placed on the device's clock.
+///
+/// What the phone hands the OS: one local notification per record, identified
+/// by `key`, delivered at `fire_at`. See `pikos_db::reminder_horizon`.
+#[derive(Debug, uniffi::Record)]
+pub struct UpcomingReminder {
+    /// Distinct per (occurrence × lead), and the same key the desktop logs when
+    /// it fires the same reminder.
+    pub key: String,
+    pub page_id: String,
+    pub title: String,
+    /// The occurrence's own start as stored, for wording — device-local for a
+    /// native page, source-zone for a synced one.
+    pub scheduled_start: String,
+    /// Minutes before the start, or `-2` for the day-before anchor.
+    pub minutes_before: i64,
+    /// When it fires on the device's clock, `YYYY-MM-DDTHH:MM:SS`.
+    pub fire_at: String,
+}
+
+impl From<pikos_db::UpcomingReminder> for UpcomingReminder {
+    fn from(r: pikos_db::UpcomingReminder) -> Self {
+        UpcomingReminder {
+            key: r.key,
+            page_id: r.page_id,
+            title: r.title,
+            scheduled_start: r.scheduled_start,
+            minutes_before: r.minutes_before,
+            fire_at: r.fire_at,
         }
     }
 }
@@ -688,11 +730,15 @@ async fn create_quick_add_page(
     schedule: bool,
 ) -> Result<Page, WorkspaceError> {
     let priority = quick_add_priority(&input.priority);
+    // The body typed after "//", written as the page's document so opening
+    // the page shows the note already typed out. `create_page` derives the
+    // searchable text from the document, so only the document is passed.
+    let content = input.content.as_deref().map(pikos_db::build_tiptap_doc);
     let page = workspace
         .create_page(NewPage {
             title: input.title,
             folder_id,
-            content: None,
+            content,
             tags: Some(input.tags),
             scheduled_start: if schedule {
                 input.scheduled_start
@@ -702,6 +748,13 @@ async fn create_quick_add_page(
             scheduled_end: if schedule { input.scheduled_end } else { None },
         })
         .await?;
+
+    // Reminder leads are rows of their own, written once the page exists.
+    // Already resolved by the parser against the schedule's shape, so what
+    // arrives here is exactly what the desktop would write for the same line.
+    for minutes_before in input.reminder_minutes.iter().flatten() {
+        pikos_db::create_page_reminder(&workspace.pool, &page.id, *minutes_before).await?;
+    }
 
     // Priority is not a `NewPage` field, so it takes a second write. Only
     // when the line actually said something about it — "unchanged" on a
@@ -928,6 +981,15 @@ impl Workspace {
     pub async fn create_page(&self, page: NewPage) -> Result<Page, WorkspaceError> {
         let scheduled_start = page.scheduled_start;
         let scheduled_end = page.scheduled_end;
+        // The searchable text is derived from the document here rather than
+        // asked for alongside it: a caller that supplies one and not the
+        // other creates a page whose body full-text search cannot see, and
+        // nothing about the call would say so.
+        let content_text = page
+            .content
+            .as_deref()
+            .map(pikos_db::extract_text_from_tiptap)
+            .filter(|text| !text.is_empty());
         let created = pikos_db::create_page_impl(
             &self.pool,
             DbNewPage {
@@ -935,7 +997,7 @@ impl Workspace {
                 title: page.title,
                 subtitle: None,
                 content: page.content.unwrap_or_else(|| EMPTY_DOCUMENT.to_string()),
-                content_text: None,
+                content_text,
                 status: "not_started".to_string(),
                 priority: 0,
                 tags: page.tags.unwrap_or_default(),
@@ -1973,6 +2035,54 @@ impl Workspace {
             }
         }
         Ok(restored)
+    }
+
+    /// Every reminder that will fire in the next `horizon_days`, soonest
+    /// first, placed on the clock of `timezone` — the zone the phone is in.
+    ///
+    /// The phone cannot run the desktop's every-minute loop, so it plans
+    /// ahead: the answer here becomes one local notification per record, and
+    /// the whole set is re-planned whenever the workspace changes. The six
+    /// rules deciding what reminds are the desktop's own, composed forward
+    /// rather than copied — see `pikos_db::reminder_horizon`.
+    ///
+    /// `default_minutes` is the lead for a page with no reminder rows, the
+    /// same global default the desktop's settings carry; the phone keeps its
+    /// own copy of that preference, since delivery is per device.
+    pub async fn upcoming_reminders(
+        &self,
+        timezone: String,
+        horizon_days: u32,
+        default_minutes: i64,
+    ) -> Result<Vec<UpcomingReminder>, WorkspaceError> {
+        let zone: chrono_tz::Tz = timezone.parse().map_err(|_| WorkspaceError::InvalidInput {
+            message: format!("not an IANA time zone: {timezone}"),
+        })?;
+        let reminders = pikos_db::upcoming_reminders(
+            &self.pool,
+            chrono::Utc::now(),
+            zone,
+            chrono::Duration::days(i64::from(horizon_days)),
+            default_minutes,
+        )
+        .await?;
+        Ok(reminders.into_iter().map(Into::into).collect())
+    }
+
+    /// Add a reminder to a page, as minutes before its scheduled start.
+    ///
+    /// For the one path that builds a page by hand from a parsed line — the
+    /// phone's quick-add sheet when a picked date overrides the parse — so a
+    /// lead typed on that line is written rather than dropped. `-2` is the
+    /// day-before sentinel an all-day page carries instead of a lead; the
+    /// parser hands over whichever the schedule's shape calls for.
+    pub async fn add_page_reminder(
+        &self,
+        page_id: String,
+        minutes_before: i64,
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::create_page_reminder(&self.pool, &page_id, minutes_before).await?;
+        Ok(())
     }
 
     pub async fn trash_page(&self, id: String) -> Result<(), WorkspaceError> {

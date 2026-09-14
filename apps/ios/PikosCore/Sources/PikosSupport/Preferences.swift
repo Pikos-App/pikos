@@ -112,7 +112,21 @@ public struct Preferences: @unchecked Sendable {
         static let calendarDensity = "pikos.calendarDensity"
         static let weekStart = "pikos.weekStart"
         static let defaultFolderID = "pikos.defaultFolderId"
+        static let remindersEnabled = "pikos.remindersEnabled"
+        static let defaultReminderMinutes = "pikos.defaultReminderMinutes"
     }
+
+    /// The lead a page with no reminder of its own gets, in minutes before its
+    /// start. Ten, which is the desktop's default too; the two are separate
+    /// settings because delivery is per device, and a phone in a pocket and a
+    /// desktop across the room reasonably want different leads.
+    public static let defaultReminderMinutesFallback: Int64 = 10
+
+    /// The leads the settings screen offers. `-1` is the data layer's "never"
+    /// sentinel, so "no default reminder" is a real value here rather than the
+    /// toggle above it being off — the toggle silences everything, this only
+    /// the pages that never asked.
+    public static let reminderLeadChoices: [Int64] = [-1, 0, 5, 10, 15, 30, 60, 1440]
 
     /// Where these are written.
     ///
@@ -183,6 +197,31 @@ public struct Preferences: @unchecked Sendable {
         }
     }
 
+    /// Whether the phone plans local notifications for reminders at all.
+    ///
+    /// On by default: a reminder the user typed and never heard is the worse
+    /// surprise. The OS's own permission still gates delivery, so "on" with
+    /// permission denied plans nothing — the settings screen says which.
+    public var remindersEnabled: Bool {
+        get {
+            guard store.object(forKey: Key.remindersEnabled) != nil else { return true }
+            return store.bool(forKey: Key.remindersEnabled)
+        }
+        set { store.set(newValue, forKey: Key.remindersEnabled) }
+    }
+
+    /// Minutes before a page's start that a page without its own reminder
+    /// rings, or `-1` for never.
+    public var defaultReminderMinutes: Int64 {
+        get {
+            guard store.object(forKey: Key.defaultReminderMinutes) != nil else {
+                return Self.defaultReminderMinutesFallback
+            }
+            return Int64(store.integer(forKey: Key.defaultReminderMinutes))
+        }
+        set { store.set(Int(newValue), forKey: Key.defaultReminderMinutes) }
+    }
+
     /// Forget every stored preference, returning each to its default.
     ///
     /// Sweeps the keys named above rather than the whole suite: the suite also
@@ -191,6 +230,7 @@ public struct Preferences: @unchecked Sendable {
     public func resetAll() {
         for key in [
             Key.theme, Key.listDensity, Key.calendarDensity, Key.weekStart, Key.defaultFolderID,
+            Key.remindersEnabled, Key.defaultReminderMinutes,
         ] {
             store.removeObject(forKey: key)
         }

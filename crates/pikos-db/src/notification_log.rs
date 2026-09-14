@@ -246,6 +246,29 @@ pub(crate) fn synced_fire_instant(
     Some(instant - chrono::Duration::minutes(minutes_before))
 }
 
+/// When a reminder fires, in whichever frame the arm that found it resolves.
+///
+/// A native page floats: its wall clock is the device's, so its fire is a
+/// wall-clock too. A synced page is pinned to a source zone, so its fire is an
+/// instant. The desktop's tick compares each against the matching "now" and
+/// never needs the other frame; the phone, which hands the OS a calendar date
+/// to fire on, converts the instant into the device's wall clock and needs to
+/// know which it was given.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FireAt {
+    Local(chrono::NaiveDateTime),
+    Absolute(chrono::DateTime<chrono::Utc>),
+}
+
+/// A due reminder together with when it fires — what the windowed arms return,
+/// so a caller looking forward over days can order and place them, while the
+/// tick that only asks "now?" drops the instant and keeps the row.
+#[derive(Clone, Debug)]
+pub struct ReminderFire {
+    pub reminder: DueReminder,
+    pub fire_at: FireAt,
+}
+
 /// Synced one-off events whose absolute fire instant lands in
 /// `(now_utc - 60s, now_utc]`, at their explicit reminder lead or — when they have
 /// none — the global `default_minutes`. All-day, done, recurring, and already-fired
@@ -255,10 +278,30 @@ pub async fn due_synced_reminders(
     now_utc: chrono::DateTime<chrono::Utc>,
     default_minutes: i64,
 ) -> Result<Vec<DueReminder>, sqlx::Error> {
-    let lo = (now_utc - chrono::Duration::hours(15))
+    let fires = synced_reminders_firing_between(
+        pool,
+        now_utc - chrono::Duration::seconds(60),
+        now_utc,
+        default_minutes,
+    )
+    .await?;
+    Ok(fires.into_iter().map(|fire| fire.reminder).collect())
+}
+
+/// Synced one-off events whose absolute fire instant lands in `(lo, hi]` — the
+/// windowed form of [`due_synced_reminders`], which is this with a 60-second
+/// window ending now. The SQL prefilter is the window widened by ±15h, which
+/// covers every real zone offset; the exact check runs in Rust via chrono-tz.
+pub async fn synced_reminders_firing_between(
+    pool: &SqlitePool,
+    lo: chrono::DateTime<chrono::Utc>,
+    hi: chrono::DateTime<chrono::Utc>,
+    default_minutes: i64,
+) -> Result<Vec<ReminderFire>, sqlx::Error> {
+    let prefilter_lo = (lo - chrono::Duration::hours(15))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
-    let hi = (now_utc + chrono::Duration::hours(15))
+    let prefilter_hi = (hi + chrono::Duration::hours(15))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
     let rows: Vec<SyncedReminderRow> = sqlx::query_as(
@@ -286,26 +329,37 @@ pub async fn due_synced_reminders(
            )",
     )
     .bind(default_minutes)
-    .bind(&lo)
-    .bind(&hi)
+    .bind(&prefilter_lo)
+    .bind(&prefilter_hi)
     .fetch_all(pool)
     .await?;
 
-    let window_lo = now_utc - chrono::Duration::seconds(60);
-    Ok(rows
-        .into_iter()
+    Ok(resolve_synced_fires(rows, lo, hi))
+}
+
+/// The exact absolute-window check behind both synced arms: keep the rows
+/// whose fire instant lands in `(lo, hi]`, carrying the instant out with them.
+fn resolve_synced_fires(
+    rows: Vec<SyncedReminderRow>,
+    lo: chrono::DateTime<chrono::Utc>,
+    hi: chrono::DateTime<chrono::Utc>,
+) -> Vec<ReminderFire> {
+    rows.into_iter()
         .filter_map(|row| {
             let fire =
                 synced_fire_instant(&row.scheduled_start, &row.timezone, row.minutes_before)?;
-            (fire > window_lo && fire <= now_utc).then_some(DueReminder {
-                schedule_id: row.schedule_id,
-                page_id: row.page_id,
-                title: row.title,
-                scheduled_start: row.scheduled_start,
-                minutes_before: row.minutes_before,
+            (fire > lo && fire <= hi).then_some(ReminderFire {
+                reminder: DueReminder {
+                    schedule_id: row.schedule_id,
+                    page_id: row.page_id,
+                    title: row.title,
+                    scheduled_start: row.scheduled_start,
+                    minutes_before: row.minutes_before,
+                },
+                fire_at: FireAt::Absolute(fire),
             })
         })
-        .collect())
+        .collect()
 }
 
 /// Synced recurring **per-instance overrides** (a moved instance or a
@@ -326,10 +380,28 @@ pub async fn due_synced_override_reminders(
     now_utc: chrono::DateTime<chrono::Utc>,
     default_minutes: i64,
 ) -> Result<Vec<DueReminder>, sqlx::Error> {
-    let lo = (now_utc - chrono::Duration::hours(15))
+    let fires = synced_override_reminders_firing_between(
+        pool,
+        now_utc - chrono::Duration::seconds(60),
+        now_utc,
+        default_minutes,
+    )
+    .await?;
+    Ok(fires.into_iter().map(|fire| fire.reminder).collect())
+}
+
+/// The windowed form of [`due_synced_override_reminders`]: overrides whose
+/// absolute fire instant lands in `(lo, hi]`.
+pub async fn synced_override_reminders_firing_between(
+    pool: &SqlitePool,
+    lo: chrono::DateTime<chrono::Utc>,
+    hi: chrono::DateTime<chrono::Utc>,
+    default_minutes: i64,
+) -> Result<Vec<ReminderFire>, sqlx::Error> {
+    let prefilter_lo = (lo - chrono::Duration::hours(15))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
-    let hi = (now_utc + chrono::Duration::hours(15))
+    let prefilter_hi = (hi + chrono::Duration::hours(15))
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
     let rows: Vec<SyncedReminderRow> = sqlx::query_as(
@@ -367,26 +439,12 @@ pub async fn due_synced_override_reminders(
            )",
     )
     .bind(default_minutes)
-    .bind(&lo)
-    .bind(&hi)
+    .bind(&prefilter_lo)
+    .bind(&prefilter_hi)
     .fetch_all(pool)
     .await?;
 
-    let window_lo = now_utc - chrono::Duration::seconds(60);
-    Ok(rows
-        .into_iter()
-        .filter_map(|row| {
-            let fire =
-                synced_fire_instant(&row.scheduled_start, &row.timezone, row.minutes_before)?;
-            (fire > window_lo && fire <= now_utc).then_some(DueReminder {
-                schedule_id: row.schedule_id,
-                page_id: row.page_id,
-                title: row.title,
-                scheduled_start: row.scheduled_start,
-                minutes_before: row.minutes_before,
-            })
-        })
-        .collect())
+    Ok(resolve_synced_fires(rows, lo, hi))
 }
 
 // ─── Recurring occurrence reminders ──────────────────────────────────────────
@@ -422,6 +480,20 @@ pub async fn due_recurring_reminders(
     )
     .await
     .map_err(derivation_error)
+}
+
+/// The largest lead any reminder could have — an upper bound the recurring
+/// enumeration widens its window by, so an occurrence whose reminder fires
+/// inside the window is enumerated even when the occurrence itself is past it.
+pub async fn max_reminder_lead(
+    pool: &SqlitePool,
+    default_minutes: i64,
+) -> Result<i64, sqlx::Error> {
+    let max_explicit: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(minutes_before), 0) FROM page_reminders")
+            .fetch_one(pool)
+            .await?;
+    Ok(default_minutes.max(max_explicit).max(0))
 }
 
 /// Whether the daily-summary marker row was already inserted on `date`

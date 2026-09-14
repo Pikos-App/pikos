@@ -68,9 +68,9 @@ public final class WorkspaceStore {
 
         var title: String {
             switch self {
-            case .today: return "Today"
-            case .upcoming: return "Upcoming"
-            case .inbox: return "Inbox"
+            case .today: return String(localized: "Today")
+            case .upcoming: return String(localized: "Upcoming")
+            case .inbox: return String(localized: "Inbox")
             case .folder(_, let name): return name
             }
         }
@@ -104,7 +104,43 @@ public final class WorkspaceStore {
 
     /// Set when something failed in a way the user should see. Cleared when
     /// they dismiss it.
+    ///
+    /// Shown by the shell rather than by any one screen, so a write that fails
+    /// while the calendar is up says so on the calendar instead of waiting for
+    /// the user to come back to the page list.
     public var errorMessage: String?
+
+    /// Something that just happened and the way back from it, for a few
+    /// seconds.
+    ///
+    /// One mechanism for every "done — undo?" moment in the app: a backlog
+    /// moved to today, an occurrence skipped, a page added somewhere the user
+    /// is not looking. Each used to draw its own bar, and two copies of a
+    /// six-second countdown is two places for the timing to drift. The shell
+    /// draws whatever is here and clears it; the store only says what
+    /// happened.
+    public struct Notice: Identifiable, Equatable {
+        public let id = UUID()
+        public let message: String
+        public let action: Action?
+
+        /// The one thing worth offering on a notice, usually "Undo".
+        public struct Action {
+            public let title: String
+            public let perform: @MainActor () async -> Void
+        }
+
+        public init(_ message: String, action: Action? = nil) {
+            self.message = message
+            self.action = action
+        }
+
+        // By identity: a closure has no equality, and two notices with the
+        // same words a minute apart are still two notices.
+        public static func == (lhs: Notice, rhs: Notice) -> Bool { lhs.id == rhs.id }
+    }
+
+    public var notice: Notice?
 
     /// True until the first load completes, so the list can distinguish "still
     /// loading" from "genuinely empty" — an empty list shown during startup
@@ -177,17 +213,90 @@ public final class WorkspaceStore {
     public func start() async {
         do {
             let url = try WorkspaceLocation.databaseURL()
+            // Decided before the open, which creates the file. Whether this
+            // is a first launch is a property of the disk, not of a
+            // preference: a preference would survive "Delete all data" and a
+            // reinstall would forget it, and both are exactly the moments a
+            // fresh workspace should be recognised as one.
+            let isNewWorkspace = !FileManager.default.fileExists(atPath: url.path)
             workspace = try await Workspace.open(path: url.path)
             // After the open, so the sidecar files SQLite creates get the class
             // too. The app is the only writer, so this is the one place it can
             // be applied without racing anyone.
             try? WorkspaceLocation.applyProtectionClass()
+            if isNewWorkspace {
+                await seedWelcomePage()
+            }
             await refresh()
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
         }
     }
+
+    /// The one page a brand-new workspace starts with.
+    ///
+    /// There is no onboarding. Nothing to sign up for means nothing to ask,
+    /// and a carousel of screens between a person and their first note is a
+    /// cost the app's whole pitch is about not having. What a first launch
+    /// does get is one page in the Inbox, written in the product's own voice:
+    /// where the data lives, how capture works, and what to swipe. It is a
+    /// page like any other — deletable, editable, and gone from Today's empty
+    /// state, which stays empty so the "Try …" example there still lands.
+    ///
+    /// Seeded only when the database did not exist before this open, so a
+    /// workspace that arrives by restore or sync is never given a page its
+    /// owner did not write.
+    private func seedWelcomePage() async {
+        guard let workspace else { return }
+        let page = NewPage(
+            title: String(localized: "Welcome to Pikos"),
+            content: plainTextToDocument(text: Self.welcomeText))
+        _ = try? await workspace.createPage(page: page)
+    }
+
+    /// Plain paragraphs, turned into a document by the shared Rust so the
+    /// page is written in the same schema as everything else.
+    private static var welcomeText: String {
+        String(
+            localized: """
+                Pikos is notes, tasks and a calendar in one place. Everything you write is stored in a database on this device. There is no account, and nothing is sent anywhere.
+
+                A page is a note until you give it a date. Then it is on your calendar too. Tick the ring beside a page to finish it.
+
+                The fastest way in is the + button. Type a sentence and Pikos reads the details out of it:
+
+                Call the dentist tomorrow at 3pm !high #health
+                Standup every weekday at 9:30 !r10
+                Pay rent every month on the 1st
+
+                Swipe a row to complete or delete it. Tap the title at the top of the list to switch between Today, Upcoming, your Inbox and your folders.
+
+                Settings › Your data shows how big your workspace is and puts a copy of it in the Files app whenever you like.
+
+                Delete this page whenever you like.
+                """)
+    }
+
+    /// Open the workspace if nothing has yet.
+    ///
+    /// For the entry points that can run before the first screen's `.task`
+    /// — a background refresh, a notification action on an app launched in
+    /// the background for it. A second call while the first is still opening
+    /// waits for it rather than opening twice.
+    public func ensureStarted() async {
+        if workspace != nil { return }
+        if let opening {
+            await opening.value
+            return
+        }
+        let task = Task { await start() }
+        opening = task
+        await task.value
+        opening = nil
+    }
+
+    private var opening: Task<Void, Never>?
 
     public func refresh() async {
         guard let workspace else { return }
@@ -236,8 +345,8 @@ public final class WorkspaceStore {
                 return [Section(id: "today", title: nil, pages: split.today)]
             }
             return [
-                Section(id: "overdue", title: "Overdue", pages: split.overdue),
-                Section(id: "today", title: "Today", pages: split.today),
+                Section(id: "overdue", title: String(localized: "Overdue"), pages: split.overdue),
+                Section(id: "today", title: String(localized: "Today"), pages: split.today),
             ].filter { !$0.pages.isEmpty }
 
         case .upcoming:
@@ -396,10 +505,26 @@ public final class WorkspaceStore {
         do {
             let created = try await workspace.createPage(page: page)
             await refresh()
+            noticeIfOutOfView([created])
             return created
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    /// Add a reminder to a page, as minutes before its start.
+    ///
+    /// No refresh: a reminder changes nothing a list shows. Used by the one
+    /// path that builds a page by hand from a parsed line, so a lead typed on
+    /// it is written rather than dropped; the quick-add path proper writes its
+    /// reminders in the workspace.
+    public func addReminder(pageId: String, minutesBefore: Int64) async {
+        guard let workspace else { return }
+        do {
+            try await workspace.addPageReminder(pageId: pageId, minutesBefore: minutesBefore)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -737,11 +862,42 @@ public final class WorkspaceStore {
                 timezone: TimeZone.current.identifier
             )
             await refresh()
+            noticeIfOutOfView(created)
             return created
         } catch {
             errorMessage = error.localizedDescription
             return []
         }
+    }
+
+    /// Say where a new page went when it did not land in front of the user.
+    ///
+    /// Adding "buy milk" while looking at Today files it in the Inbox and
+    /// nothing on screen changes, which reads as the add having failed. The
+    /// notice names where it went and offers to go there. Silent when the page
+    /// did land in the current view — the row appearing is the confirmation.
+    private func noticeIfOutOfView(_ created: [Page]) {
+        guard let first = created.first, !pages.contains(where: { $0.id == first.id }) else {
+            return
+        }
+        let destination: Scope
+        if let folderId = first.folderId, let folder = folders.first(where: { $0.id == folderId }) {
+            destination = .folder(id: folder.id, name: folder.name)
+        } else if first.scheduledStart == nil {
+            destination = .inbox
+        } else {
+            // Dated but not in view: it is somewhere on the calendar. Upcoming
+            // is the nearest view that lists by date.
+            destination = .upcoming
+        }
+        let count = created.count
+        notice = Notice(
+            count == 1
+                ? String(localized: "Added to \(destination.title)")
+                : String(localized: "Added \(count) pages to \(destination.title)"),
+            action: Notice.Action(title: String(localized: "View")) { [weak self] in
+                self?.scope = destination
+            })
     }
 
     /// A `Date` as the wall-clock string the workspace speaks.
@@ -780,8 +936,22 @@ public final class WorkspaceStore {
         // Optimistic, but only for a plain page. A recurring one does not simply
         // become done — the head advances and a completed clone appears beside
         // it — so there is nothing honest to show before the write lands.
-        if !isRecurring, let index = pages.firstIndex(where: { $0.id == pageId }) {
-            pages[index].status = done ? "done" : "not_started"
+        //
+        // Written into `sections`, which is the stored state; `pages` is a
+        // projection of it and cannot be assigned to. The row stays where it
+        // is, ticked, until the refresh moves it to Completed — that beat is
+        // what lets the tick be seen before the row leaves.
+        if !isRecurring {
+            sections = sections.map { section in
+                guard section.pages.contains(where: { $0.id == pageId }) else { return section }
+                let updated = section.pages.map { page -> PageSummary in
+                    guard page.id == pageId else { return page }
+                    var copy = page
+                    copy.status = done ? "done" : "not_started"
+                    return copy
+                }
+                return Section(id: section.id, title: section.title, pages: updated)
+            }
         }
 
         do {
@@ -795,19 +965,30 @@ public final class WorkspaceStore {
 
     /// Move everything overdue onto today.
     ///
-    /// Returns what it did, so the caller can say so and offer the way back.
+    /// Says what it did through `notice`, with the way back attached. The
+    /// sentence comes from the workspace and names what stayed behind as well
+    /// as what moved — a recurring series and a page a calendar owns are both
+    /// left alone, and a reader who is not told will believe the section was
+    /// cleared and stop looking at it.
+    ///
     /// Which pages are overdue is decided by the workspace, not by the list on
     /// screen: that list is as old as the last refresh, and a bulk write keyed
     /// on a stale one moves pages the reader can no longer see.
-    public func moveOverdueToToday() async -> OverdueMoveResult? {
-        guard let workspace else { return nil }
+    public func moveOverdueToToday() async {
+        guard let workspace else { return }
         do {
             let result = try await workspace.moveOverdueToToday()
             await refresh()
-            return result
+            let moved = result.moved
+            notice = Notice(
+                result.label,
+                action: moved.isEmpty
+                    ? nil
+                    : Notice.Action(title: "Undo") { [weak self] in
+                        await self?.undoOverdueMove(moved)
+                    })
         } catch {
             errorMessage = error.localizedDescription
-            return nil
         }
     }
 
@@ -845,16 +1026,29 @@ public final class WorkspaceStore {
 
     /// Skip this occurrence and every open day behind it.
     ///
-    /// Returns what was skipped, for the undo. The gestured date goes first so
-    /// the count in the notice matches what the sheet offered.
-    public func skipOccurrences(_ entry: CalendarEntry, andBacklog backlog: [String]) async
-        -> [String]
-    {
+    /// Nothing is destroyed, so the action needs no confirmation: a
+    /// confirmation before every skip would make the common case — clearing
+    /// one week's standup — two taps and a decision. The undo is offered
+    /// afterwards through `notice`, where it costs nothing when it is not
+    /// wanted, which is almost always. The gestured date goes first so the
+    /// count in the notice matches what the sheet offered.
+    public func skipOccurrences(
+        _ entry: CalendarEntry, andBacklog backlog: [String], title: String
+    ) async -> [String] {
         guard let workspace else { return [] }
         let dates = [occurrence(of: entry).originalDate] + backlog
+        let pageId = entry.pageId
         do {
-            let skipped = try await workspace.skipOccurrences(pageId: entry.pageId, dates: dates)
+            let skipped = try await workspace.skipOccurrences(pageId: pageId, dates: dates)
             await refresh()
+            guard !skipped.isEmpty else { return skipped }
+            notice = Notice(
+                skipped.count == 1
+                    ? String(localized: "Skipped \(title)")
+                    : String(localized: "Skipped \(skipped.count) days of \(title)"),
+                action: Notice.Action(title: String(localized: "Undo")) { [weak self] in
+                    await self?.unskipOccurrences(pageId: pageId, dates: skipped)
+                })
             return skipped
         } catch {
             errorMessage = error.localizedDescription
@@ -894,6 +1088,34 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Move one occurrence of a series to a new time.
+    ///
+    /// Returns whether it took, so the sheet knows whether to close. Only a
+    /// projected block can be moved this way: a real one is a row, and a row
+    /// moves through `setSchedule`. The guard is here rather than only in the
+    /// menu because a calendar can be a refresh out of date by the time a sheet
+    /// is confirmed.
+    ///
+    /// The timezone is the one the phone is in, which is the zone the new wall
+    /// clock is written in.
+    @discardableResult
+    public func moveOccurrence(_ entry: CalendarEntry, to start: String, end: String?) async
+        -> Bool
+    {
+        guard let workspace, let ruleId = entry.ruleId, let originalDate = entry.originalDate
+        else { return false }
+        do {
+            try await workspace.moveOccurrence(
+                ruleId: ruleId, originalDate: originalDate, scheduledStart: start,
+                scheduledEnd: end, timezone: TimeZone.current.identifier)
+            await refresh()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     /// Which occurrence a drawn block is, in the terms the sets are keyed by.
     ///
     /// A projected block carries the rule's own date already. A real one — the
@@ -929,11 +1151,50 @@ public final class WorkspaceStore {
         workspace?.trashRetentionDays() ?? 30
     }
 
-    public func trash(pageId: String) async {
+    /// Move a page to the trash, and offer the way back for a few seconds.
+    ///
+    /// The delete was always soft, but until the notice existed the only way
+    /// back was the Recently Deleted screen, two menus away — and a mis-swipe
+    /// on a phone is the commonest accidental delete there is. `title` is what
+    /// the notice names; the caller has it and a lookup here would miss a page
+    /// that is not in the current list.
+    public func trash(pageId: String, title: String = "") async {
         guard let workspace else { return }
         do {
             try await workspace.trashPage(id: pageId)
             await refresh()
+            let name = title.isEmpty ? String(localized: "page") : "“\(title)”"
+            notice = Notice(
+                String(localized: "Deleted \(name)"),
+                action: Notice.Action(title: "Undo") { [weak self] in
+                    await self?.restore(pageId: pageId)
+                })
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Stop a page repeating from the list, in one tap.
+    ///
+    /// The page stays on the date it was last on; what goes is the rule. The
+    /// way back is offered when there is one: a rule the picker can hold is
+    /// re-applied by the undo, and a richer one — "the last Friday of the
+    /// month" — cannot be rebuilt from here, so the notice says what happened
+    /// and offers nothing that would only half work.
+    public func stopRepeating(pageId: String, title: String) async {
+        guard let workspace else { return }
+        let previous = try? await workspace.pageRepeat(pageId: pageId)
+        do {
+            try await workspace.removePageRepeat(pageId: pageId)
+            await refresh()
+            let name = title.isEmpty ? String(localized: "page") : "“\(title)”"
+            var undo: Notice.Action?
+            if case .editable(let rule, _) = previous {
+                undo = Notice.Action(title: "Undo") { [weak self] in
+                    await self?.setRepeat(pageId: pageId, to: rule)
+                }
+            }
+            notice = Notice(String(localized: "\(name) no longer repeats"), action: undo)
         } catch {
             errorMessage = error.localizedDescription
         }

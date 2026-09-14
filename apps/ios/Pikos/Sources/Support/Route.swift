@@ -16,7 +16,17 @@ final class Route {
     /// `AppDependencyManager`, which is registered before any view exists — and
     /// reading a `@State` wrapper outside a view body to register it would be
     /// undefined.
-    static let shared = Route()
+    ///
+    /// `nonisolated(unsafe)` because the dependency manager's factory closure
+    /// is `@Sendable` and not on any actor, and under strict concurrency a
+    /// main-actor static cannot be read from there. The reference itself is
+    /// safe to hand out from anywhere — it is immutable, and every member on
+    /// it is still main-actor isolated, so a caller off the main actor can hold
+    /// the router but not move it. The initialiser is `nonisolated` for the
+    /// same reason: it touches nothing but stored-property defaults.
+    nonisolated(unsafe) static let shared = Route()
+
+    nonisolated init() {}
 
     enum Tab: Hashable {
         case pages

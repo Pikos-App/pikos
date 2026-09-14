@@ -44,25 +44,52 @@ the property that would make the widget lie.
 Still needs confirming on a device, with the device actually locked. That is the
 spike's own advice and it has not been done.
 
-## Applies, not yet actioned
-
-### Reminders cannot be fired by a loop
+### Reminders cannot be fired by a loop — inverted
 
 The desktop wakes a Rust task every clock minute and queries SQLite. iOS
 suspends that within seconds of backgrounding, so nearly every reminder would
-silently never fire. The model has to inverse: compute a rolling horizon and
-hand it to the OS in advance, through `UNUserNotificationCenter`.
+silently never fire. The model is inverted on the phone: the workspace is
+asked what will fire over the next fourteen days, each answer becomes a
+`UNNotificationRequest` the OS delivers on its own, and the whole plan is
+rebuilt whenever anything could have changed it.
 
-Four complications the spike names, all of which survive the change of UI layer:
+The four complications the spike named, and what became of each:
 
-- a recurring series has no end, so the horizon needs a bound;
-- iOS caps pending notifications (the spike says ~64, and flags it as needing
-  confirmation);
-- quiet hours have to be applied at _schedule_ time, not at fire time;
-- any edit invalidates the scheduled set.
+- **A recurring series has no end.** The horizon is the bound: fourteen days,
+  and the recurring enumeration runs to the horizon plus the longest lead.
+- **iOS caps pending notifications at 64.** Confirmed — the system keeps the
+  sixty-four soonest and drops the rest silently. The phone plans sixty, soonest
+  first, so a drop is ours to notice rather than the OS's to hide.
+- **Quiet hours at schedule time.** Deliberately not implemented. The desktop
+  suppresses a reminder that comes due inside them; on iOS the system's Focus
+  modes are the same control, and a second copy applied at schedule time would
+  silence a reminder the user's Focus schedule would have let through.
+- **Any edit invalidates the set.** The plan follows `WorkspaceStore.dataVersion`,
+  debounced a second, and is rebuilt on the way to the background and by a
+  `BGAppRefreshTask` that asks for a wake every twelve hours — a request, not a
+  promise, which is why the horizon is measured in days.
 
-This is net-new logic on any path. `apps/ios/README.md` lists notifications as
-missing; this is the shape of what is missing.
+**Two devices, one reminder.** The convention every personal reminder app
+follows — Apple's Reminders and Calendar, Things, Todoist — is that each device
+rings on its own, and finishing the thing on any device clears it on all of
+them. The Slack-style alternative, suppressing the phone while the desktop is
+active, is a chat convention: a second alert there is noise, where a second
+reminder is insurance. Pikos follows the former. Today the two devices do not
+share a workspace, so the only page both can hold is one mirrored from a
+calendar connected on both — and both ringing for it is what the platform's
+own Calendar does. When workspaces sync, nothing changes: pending requests are
+rebuilt from the workspace on every change, and delivered ones are taken down
+on the same pass for any page that is now done or gone
+(`ReminderScheduler.tidyDelivered`).
+
+The rules deciding _what_ reminds are the desktop's six `due_*` arms composed
+over a forward window (`pikos_db::reminder_horizon`), so a reminder rings on
+the phone for exactly the reasons it rings on the desktop. What the phone does
+not do is write the desktop's fired log: the OS delivers without waking the
+app, so the moment of firing is never seen — and nothing needs it, since the
+plan is rebuilt from the workspace rather than from history.
+
+## Applies, not yet actioned
 
 ### Google OAuth and background sync are structurally blocked
 
@@ -76,7 +103,11 @@ than leaving it to be discovered.
   app. Needs `ASWebAuthenticationSession`; the PKCE half is transport-agnostic
   and ports unchanged.
 - The 5-minute calendar poll is an **in-process timer** and stops when
-  suspended. Needs the Background Tasks framework.
+  suspended. _Actioned_: the reminders' `BGAppRefreshTask` syncs every
+  connected account before it re-plans the horizon, and a return to the
+  foreground syncs if the last pass is over fifteen minutes old
+  (`CalendarSyncStore.syncAll`, `syncIfStale`). Best-effort, on the OS's
+  schedule — which is what every calendar app without push has on iOS.
 
 ### Vault import has no filesystem to scope to
 

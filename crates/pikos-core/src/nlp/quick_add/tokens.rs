@@ -211,6 +211,25 @@ pub struct Tokens {
     pub priority: Option<Option<Priority>>,
     pub duration_minutes: Option<i64>,
     pub window: Option<Window>,
+    /// Reminder leads in minutes, one per phrase found, in the order found.
+    /// Not yet resolved: whether they become rows or go back into the title
+    /// depends on the schedule, which is not known until the date engine has
+    /// run. See `reminder_placeholder`.
+    pub reminder_leads: Vec<i64>,
+    /// The phrases those leads came from, as typed and trimmed, so a reminder
+    /// on a page with no date can be put back into the title verbatim.
+    pub reminder_tokens: Vec<String>,
+}
+
+/// The stand-in a reminder phrase leaves in the text while the rest of the
+/// pipeline runs.
+///
+/// Control characters only, so nothing between the stash and the restore can
+/// match inside it — a "1d" left in the text would be read as the event's own
+/// date by the engine that runs next. The index is encoded in the run length,
+/// which is what lets the restore step find each one again.
+pub fn reminder_placeholder(index: usize) -> String {
+    format!("\u{0}{}\u{0}", "\u{1}".repeat(index + 1))
 }
 
 /// Pull the inline markers out, leaving the rest of the text behind.
@@ -270,6 +289,63 @@ pub fn extract(text: &str, reference: NaiveDateTime) -> (String, Tokens) {
             _ => Some(Priority::Low),
         });
         " ".to_string()
+    });
+
+    // Reminders: "remind 30m before", "remind me the day before", "!r1h".
+    //
+    // Stashed before the duration and long before the date engine, so a lead
+    // ("1d before") is never mistaken for the event's own date. The phrase is
+    // replaced by a placeholder rather than removed, because whether it turns
+    // into a row or goes back into the title is decided only once the
+    // schedule is known — see the resolution step in `parse_input`.
+    const REMINDER_UNIT: &str = "(minutes|minute|mins|min|m|hours|hour|hrs|hr|h|days|day|d)";
+    let mut stash_reminder = |whole: &str, amount: Option<&str>, unit: &str| -> String {
+        let per = match unit.to_lowercase().as_str() {
+            "d" | "day" | "days" => 1440.0,
+            "h" | "hour" | "hours" | "hr" | "hrs" => 60.0,
+            "m" | "min" | "mins" | "minute" | "minutes" => 1.0,
+            _ => return whole.to_string(),
+        };
+        // A bare unit means one of it: "remind day before" is a one-day lead,
+        // which the resolution step turns into the all-day anchor when it can.
+        let count: f64 = amount.and_then(|n| n.parse().ok()).unwrap_or(1.0);
+        tokens
+            .reminder_leads
+            .push(round_half_up(count * per).max(0));
+        tokens.reminder_tokens.push(whole.trim().to_string());
+        format!(
+            " {} ",
+            reminder_placeholder(tokens.reminder_tokens.len() - 1)
+        )
+    };
+
+    // Shorthand: "!r30" (minutes by default), "!r1h", "!r1d".
+    static REMINDER_SHORT: OnceLock<fancy_regex::Regex> = OnceLock::new();
+    let reminder_short = REMINDER_SHORT
+        .get_or_init(|| compile(&format!("!r(\\d+(?:\\.\\d+)?)\\s*{REMINDER_UNIT}?\\b")));
+    text = replace_all_with(&text, reminder_short, |captures| {
+        let whole = captures.get(0).expect("group 0").as_str();
+        stash_reminder(whole, group(captures, 1), group(captures, 2).unwrap_or("m"))
+    });
+
+    // Phrase: "remind"/"reminder" + generous filler + a strict unit, with the
+    // trailing "before" optional. Filler deliberately excludes "in", so
+    // "remind me in 2 days" stays a date for the engine rather than a lead.
+    static REMINDER_PHRASE: OnceLock<fancy_regex::Regex> = OnceLock::new();
+    let reminder_phrase = REMINDER_PHRASE.get_or_init(|| {
+        compile(&format!(
+            "\\bremind(?:er)?s?\\b(?:\\s+(?:please|about|one|the|an|us|me|at|a))*\\s*\
+             (\\d+(?:\\.\\d+)?)?\\s*{REMINDER_UNIT}\\b\
+             (?:\\s+(?:beforehand|before|ahead|prior|early|in\\s+advance)\\b)?"
+        ))
+    });
+    text = replace_all_with(&text, reminder_phrase, |captures| {
+        let whole = captures.get(0).expect("group 0").as_str();
+        stash_reminder(
+            whole,
+            group(captures, 1),
+            group(captures, 2).unwrap_or_default(),
+        )
     });
 
     static DURATION: OnceLock<fancy_regex::Regex> = OnceLock::new();

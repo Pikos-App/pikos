@@ -1,5 +1,6 @@
 import PikosCore
 import SwiftUI
+import UIKit
 
 /// Create a page without leaving the list.
 ///
@@ -81,42 +82,48 @@ struct QuickAddSheet: View {
                     }
                 }
 
-                Section("When") {
-                    Picker("Schedule", selection: $schedule) {
-                        ForEach(Schedule.allCases) { option in
-                            Text(option.rawValue).tag(option)
+                // One row for the two things the line may not have said,
+                // rather than two sections of pickers. At the medium detent
+                // with the keyboard up, the field and its chips are all that
+                // fits; the pickers were below the fold on every open. The
+                // chips already show what was understood — these are for
+                // overriding it, and they open only when asked.
+                Section {
+                    HStack(spacing: 8) {
+                        whenMenu
+                        if !store.fileableFolders.isEmpty {
+                            folderMenu
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .onChange(of: schedule) { _, new in
-                        if new != appliedSchedule { scheduleIsManual = true }
-                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.small)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
 
-                    if schedule != .none {
+                    if isPickingDate && schedule != .none {
+                        Picker("Schedule", selection: $schedule) {
+                            ForEach(Schedule.allCases) { option in
+                                Text(option.rawValue).tag(option)
+                            }
+                        }
+                        .pickerStyle(.segmented)
                         DatePicker(
                             "Date",
                             selection: $date,
                             displayedComponents: schedule == .timed
                                 ? [.date, .hourAndMinute] : [.date]
                         )
-                        .onChange(of: date) { _, new in
-                            if new != appliedDate { scheduleIsManual = true }
-                        }
                     }
                 }
-
-                if !store.fileableFolders.isEmpty {
-                    Section("Folder") {
-                        Picker("Folder", selection: $folderId) {
-                            Text("Inbox").tag(String?.none)
-                            ForEach(store.fileableFolders, id: \.id) { folder in
-                                Text(folder.name).tag(String?.some(folder.id))
-                            }
-                        }
-                        .onChange(of: folderId) { _, new in
-                            if new != appliedFolderId { folderIsManual = true }
-                        }
-                    }
+                .onChange(of: schedule) { _, new in
+                    if new != appliedSchedule { scheduleIsManual = true }
+                }
+                .onChange(of: date) { _, new in
+                    if new != appliedDate { scheduleIsManual = true }
+                }
+                .onChange(of: folderId) { _, new in
+                    if new != appliedFolderId { folderIsManual = true }
                 }
             }
             .navigationTitle("New page")
@@ -151,6 +158,74 @@ struct QuickAddSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    /// Whether the date pickers are unfolded under the row.
+    @State private var isPickingDate = false
+
+    /// When the page will be, as a menu: the three answers people give
+    /// without a picker, and the picker for the rest.
+    ///
+    /// The label is the current answer, so the row reads as a summary when
+    /// closed — "Tomorrow 3:00 PM" — and the parse's answer is what it shows
+    /// until the user changes it.
+    private var whenMenu: some View {
+        Menu {
+            Button("Today") { choose(day: Date()) }
+            Button("Tomorrow") { choose(day: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) }
+            Button("Pick a date…") {
+                if schedule == .none { schedule = .allDay }
+                isPickingDate = true
+            }
+            if schedule != .none {
+                Divider()
+                Button("No date", role: .destructive) {
+                    schedule = .none
+                    isPickingDate = false
+                }
+            }
+        } label: {
+            Label(whenLabel, systemImage: "calendar")
+        }
+        .accessibilityLabel("When: \(whenLabel)")
+    }
+
+    /// Move the date to a day, keeping the time of day the page already has.
+    private func choose(day: Date) {
+        let calendar = Calendar.current
+        let time = calendar.dateComponents([.hour, .minute], from: date)
+        date =
+            calendar.date(
+                bySettingHour: time.hour ?? 9, minute: time.minute ?? 0, second: 0, of: day)
+            ?? day
+        if schedule == .none { schedule = .allDay }
+    }
+
+    private var whenLabel: String {
+        switch schedule {
+        case .none: return String(localized: "No date")
+        case .allDay: return date.formatted(date: .abbreviated, time: .omitted)
+        case .timed: return date.formatted(date: .abbreviated, time: .shortened)
+        }
+    }
+
+    private var folderMenu: some View {
+        Menu {
+            Picker("Folder", selection: $folderId) {
+                Label("Inbox", systemImage: "tray").tag(String?.none)
+                ForEach(store.fileableFolders, id: \.id) { folder in
+                    Label(folder.name, systemImage: "folder").tag(String?.some(folder.id))
+                }
+            }
+        } label: {
+            Label(folderLabel, systemImage: "folder")
+        }
+        .accessibilityLabel("Folder: \(folderLabel)")
+    }
+
+    private var folderLabel: String {
+        store.fileableFolders.first { $0.id == folderId }?.name ?? String(localized: "Inbox")
     }
 
     /// The title as it will actually be saved.
@@ -220,6 +295,12 @@ struct QuickAddSheet: View {
         guard !savedTitle.isEmpty, !isSaving else { return }
         isSaving = true
         defer { isSaving = false }
+        // Felt before the sheet goes: the page lands in a list the user may
+        // not be looking at (the notice says where), and a tap that is felt
+        // to land does not need to be seen to. A generator call rather than
+        // `.sensoryFeedback`, whose trigger would be on a view that is
+        // dismissing.
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
 
         if usesParse {
             // A folder picked by hand is still honoured — the parser only ever
@@ -236,21 +317,44 @@ struct QuickAddSheet: View {
         }
 
         // The date came from the picker, so the page is built here. Everything
-        // else the line said still applies.
+        // else the line said still applies — the body after "//" becomes the
+        // document, through the same builder the workspace uses.
         let created = await store.createPage(
             NewPage(
                 title: savedTitle,
                 folderId: folderId,
+                content: parsed?.content.map { plainTextToDocument(text: $0) },
                 tags: parsed?.tags,
                 scheduledStart: manualScheduledStart
             ))
+        guard let created else {
+            dismiss()
+            return
+        }
         // Priority is not a field on a new page, so it takes a second write —
         // and it has to happen, or "!urgent" is silently dropped on any line
         // whose date was picked by hand.
-        if let created, let priority = parsed?.priority {
+        if let priority = parsed?.priority {
             await store.setPriority(pageId: created.id, priority: priority)
         }
+        // Reminders are rows of their own, and were resolved by the parser
+        // against the shape the *line* had. The picker may have chosen the
+        // other shape, so they are re-shaped here the way the parser would
+        // have: an all-day page carries the day-before anchor and nothing
+        // else, a timed one carries minutes — with "the day before" read as
+        // a day's worth of them.
+        for minutes in manualReminders {
+            await store.addReminder(pageId: created.id, minutesBefore: minutes)
+        }
         dismiss()
+    }
+
+    /// The parsed reminders, re-shaped for the schedule the picker chose.
+    private var manualReminders: [Int64] {
+        guard let leads = parsed?.reminders, !leads.isEmpty, schedule != .none else { return [] }
+        if schedule == .allDay { return [ParsedLine.dayBeforeMinutes] }
+        let minutes = leads.map { $0 == ParsedLine.dayBeforeMinutes ? 1440 : $0 }
+        return Array(Set(minutes)).sorted()
     }
 
     /// The picked date as the wall-clock string the workspace stores.
@@ -289,6 +393,18 @@ struct ParsedLine {
     /// Set when the line produced a rule or a series, with a phrase describing
     /// it ("every weekday", "3 pages").
     var repeats: String?
+    /// Reminder leads in minutes before the start, or the day-before anchor.
+    /// Empty when none were asked for, or when there was no date to anchor
+    /// them to — the words stay in the title then, and the parser says so by
+    /// leaving them there.
+    var reminders: [Int64] = []
+    /// The body typed after "//", kept exactly as typed.
+    var content: String?
+
+    /// The `minutes_before` value that means "the day before" on an all-day
+    /// page rather than a count of minutes — the data layer's sentinel, which
+    /// the parser hands over for any lead on an all-day page.
+    static let dayBeforeMinutes: Int64 = -2
 
     /// The clock this line was read against.
     ///
@@ -323,11 +439,32 @@ struct ParsedLine {
         tags = input.tags
         folderQuery = input.folderQuery
         if case .set(let value) = input.priority { priority = value }
+        reminders = input.reminderMinutes
+        content = input.content
     }
 
     var hasAnything: Bool {
         scheduledStart != nil || !tags.isEmpty || folderQuery != nil || priority != nil
-            || repeats != nil
+            || repeats != nil || !reminders.isEmpty || content != nil
+    }
+
+    /// The reminders in words: "30 min before", "the day before".
+    var reminderLabel: String? {
+        guard !reminders.isEmpty else { return nil }
+        let parts = reminders.map { minutes -> String in
+            if minutes == Self.dayBeforeMinutes { return "the day before" }
+            if minutes == 0 { return "at the time" }
+            if minutes % 1440 == 0 {
+                let days = minutes / 1440
+                return days == 1 ? "1 day before" : "\(days) days before"
+            }
+            if minutes % 60 == 0 {
+                let hours = minutes / 60
+                return hours == 1 ? "1 hour before" : "\(hours) hours before"
+            }
+            return "\(minutes) min before"
+        }
+        return "Remind " + parts.joined(separator: ", ")
     }
 
     /// A rule in words. Deliberately shallow — the point is to confirm that
@@ -401,6 +538,12 @@ private struct UnderstoodRow: View {
             if let folder = parsed.folderQuery {
                 Chip(text: folder, icon: "folder")
             }
+            if let reminder = parsed.reminderLabel {
+                Chip(text: reminder, icon: "bell")
+            }
+            if parsed.content != nil {
+                Chip(text: "Note", icon: "text.alignleft")
+            }
         }
     }
 
@@ -411,6 +554,8 @@ private struct UnderstoodRow: View {
         if let priority = parsed.priority { parts.append("\(name(priority)) priority") }
         parts.append(contentsOf: parsed.tags.map { "tagged \($0)" })
         if let folder = parsed.folderQuery { parts.append("in \(folder)") }
+        if let reminder = parsed.reminderLabel { parts.append(reminder) }
+        if parsed.content != nil { parts.append("with a note") }
         return parts.joined(separator: ", ")
     }
 

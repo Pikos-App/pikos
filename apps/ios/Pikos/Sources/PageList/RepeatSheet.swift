@@ -14,7 +14,7 @@ import SwiftUI
 /// the rule back without them. The workspace decides which is which and says so
 /// through `PageRepeat`; this screen only draws the answer.
 struct RepeatSheet: View {
-    let page: PageSummary
+    let page: PageFacts
 
     @Environment(WorkspaceStore.self) private var store
     @Environment(\.dismiss) private var dismiss
