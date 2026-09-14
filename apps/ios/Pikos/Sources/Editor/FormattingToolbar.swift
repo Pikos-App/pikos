@@ -8,33 +8,55 @@ import SwiftUI
 /// The editor reports on focus as well as on movement precisely so this can be
 /// correct the moment the user taps in — a toolbar that only heard about
 /// movement would show the previous page's state.
+///
+/// The last control puts the keyboard away. A webview's keyboard has no
+/// "Done" of its own, and a text surface that fills the screen leaves nowhere
+/// else to tap to dismiss it — so without this the only way to see the whole
+/// page again is to scroll the keyboard off interactively, which nobody
+/// discovers by accident.
 struct FormattingToolbar: View {
     let selection: EditorSelection
     let controller: EditorController
+    let onDismissKeyboard: () -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 2) {
-                ForEach(EditorController.Mark.allCases, id: \.self) { mark in
-                    markButton(mark)
+        HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 2) {
+                    ForEach(EditorController.Mark.allCases, id: \.self) { mark in
+                        markButton(mark)
+                    }
+
+                    Divider().frame(height: 22).padding(.horizontal, 4)
+
+                    blockButton(.heading(level: 1), label: "Heading", systemImage: "textformat.size")
+                    blockButton(.bulletList, label: "Bulleted list", systemImage: "list.bullet")
+                    blockButton(.orderedList, label: "Numbered list", systemImage: "list.number")
+                    blockButton(.taskList, label: "Task list", systemImage: "checklist")
+                    blockButton(.blockquote, label: "Quote", systemImage: "text.quote")
+                    blockButton(
+                        .codeBlock, label: "Code block",
+                        systemImage: "chevron.left.forwardslash.chevron.right")
                 }
-
-                Divider().frame(height: 22).padding(.horizontal, 4)
-
-                blockButton(.heading(level: 1), label: "Heading", systemImage: "textformat.size")
-                blockButton(.bulletList, label: "Bulleted list", systemImage: "list.bullet")
-                blockButton(.orderedList, label: "Numbered list", systemImage: "list.number")
-                blockButton(.taskList, label: "Task list", systemImage: "checklist")
-                blockButton(.blockquote, label: "Quote", systemImage: "text.quote")
-                blockButton(
-                    .codeBlock, label: "Code block",
-                    systemImage: "chevron.left.forwardslash.chevron.right")
+                // Horizontally scrollable because the full set does not fit at
+                // larger Dynamic Type sizes, and dropping controls at those sizes
+                // would take formatting away from exactly the people least able to
+                // reach for an alternative.
+                .padding(.horizontal, 4)
             }
-            // Horizontally scrollable because the full set does not fit at
-            // larger Dynamic Type sizes, and dropping controls at those sizes
-            // would take formatting away from exactly the people least able to
-            // reach for an alternative.
-            .padding(.horizontal, 4)
+
+            Divider().frame(height: 22)
+
+            // Pinned outside the scrolling run so it is always where the thumb
+            // expects it, whatever has been scrolled.
+            Button(action: onDismissKeyboard) {
+                Image(systemName: "keyboard.chevron.compact.down")
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.primary)
+            .accessibilityLabel("Hide keyboard")
+            .padding(.trailing, 4)
         }
     }
 

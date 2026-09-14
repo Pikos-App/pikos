@@ -13,7 +13,7 @@ import SwiftUI
 /// expected to have checked — but the workspace refuses both anyway, because a
 /// list row can be a second old by the time a sheet opens.
 struct SchedulePageSheet: View {
-    let page: PageSummary
+    let page: PageFacts
 
     @Environment(WorkspaceStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -34,7 +34,7 @@ struct SchedulePageSheet: View {
         var id: String { rawValue }
     }
 
-    init(page: PageSummary) {
+    init(page: PageFacts) {
         self.page = page
 
         let existing = page.scheduledStart.flatMap { StorageTimestamp.wallClock($0) }

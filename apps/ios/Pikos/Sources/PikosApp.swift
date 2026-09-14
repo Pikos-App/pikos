@@ -55,6 +55,7 @@ struct RootView: View {
     @Environment(Route.self) private var route
     @Environment(WorkspaceStore.self) private var store
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         @Bindable var route = route
@@ -77,6 +78,7 @@ struct RootView: View {
             NavigationStack(path: $route.pagesPath) {
                 PageListScreen()
                     .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
+                    .noticeOverlay()
             }
             .tabItem { Label("Pages", systemImage: "doc.text") }
             .tag(Route.Tab.pages)
@@ -84,6 +86,7 @@ struct RootView: View {
             NavigationStack(path: $route.calendarPath) {
                 CalendarScreen()
                     .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
+                    .noticeOverlay()
             }
             .tabItem { Label("Calendar", systemImage: "calendar") }
             .tag(Route.Tab.calendar)
@@ -91,10 +94,15 @@ struct RootView: View {
             NavigationStack(path: $route.searchPath) {
                 SearchScreen()
                     .navigationDestination(for: String.self) { EditorScreen(pageId: $0) }
+                    .noticeOverlay()
             }
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
             .tag(Route.Tab.search)
         }
+        // One sheet for quick add, wherever it was asked for. The toolbar
+        // button, the empty state and a `pikos://quick-add` link all set the
+        // same flag, so there is one place the prefill is read and one place
+        // it is cleared.
         .sheet(
             isPresented: $route.isQuickAddPresented,
             // Otherwise the next manual open would inherit the last link's
@@ -103,6 +111,25 @@ struct RootView: View {
             onDismiss: { route.quickAddPrefill = "" }
         ) {
             QuickAddSheet(prefill: route.quickAddPrefill)
+        }
+        // Errors surface here, above every tab and sheet, so a write that
+        // fails on the calendar is not an alert waiting on the page list.
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { store.errorMessage != nil },
+                set: { if !$0 { store.errorMessage = nil } }
+            ),
+            actions: { Button("OK", role: .cancel) {} },
+            message: { Text(store.errorMessage ?? "") }
+        )
+        // Coming back to the foreground re-reads the workspace. A page added
+        // by Siri, a widget or a Shortcut lands while the app is suspended,
+        // and without this the list shows the world as it was when the user
+        // left — and a page they just dictated is missing from it.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, !store.isLoading else { return }
+            Task { await store.refresh() }
         }
         // An App Intent can ask for a scope at any time, not only during
         // launch. `Route.showToday()` has no store to move — it runs from

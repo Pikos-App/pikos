@@ -19,7 +19,15 @@ struct CalendarGrid: View {
     /// Points per hour before Dynamic Type is applied — the reader's calendar
     /// density setting.
     let hourHeightBase: CGFloat
+    /// Folder colours by folder id. A block in a coloured folder draws in
+    /// that colour, which is how the desktop tells a work meeting from a
+    /// dentist at a glance; anything else draws in the accent.
+    let folderColors: [String: Color]
+    /// The sheets a block's page menu can open, owned by the screen.
+    @Binding var actions: PageActionState
     let onOpen: (String) -> Void
+    /// Tick or untick a one-off block, which *is* its page.
+    let onToggleDone: (CalendarEntry) -> Void
     /// Finish the occurrence this block is, rather than the one the series
     /// owes next. See `WorkspaceStore.completeOccurrence`.
     let onComplete: (CalendarEntry) -> Void
@@ -154,15 +162,20 @@ struct CalendarGrid: View {
         let corners = RoundedCornerStyle(
             leading: !bar.continuesLeft, trailing: !bar.continuesRight)
 
+        let tint = entry.map(color(for:)) ?? Color.accentColor
+        let done = entry?.status == "done"
+
         return Text(entry.map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "")
-            .font(.caption2)
+            .font(.caption2.weight(.medium))
+            .strikethrough(done, color: .secondary)
             .lineLimit(1)
             .padding(.horizontal, 5)
             .frame(
                 width: max(columnWidth * CGFloat(bar.span) - 3, 1),
                 height: metrics.allDayRowHeight - 3,
                 alignment: .leading)
-            .background(Color.accentColor.opacity(0.22), in: corners.shape)
+            .background(tint.opacity(done ? 0.12 : 0.22), in: corners.shape)
+            .opacity(done ? 0.7 : 1)
             .offset(
                 x: columnWidth * CGFloat(bar.startCol) + 1.5,
                 y: CGFloat(bar.row) * metrics.allDayRowHeight)
@@ -242,7 +255,8 @@ struct CalendarGrid: View {
                 {
                     let inset = CalendarGeometry.cascadeInset(
                         depth: Int(block.cascadeDepth), columnWidth: columnWidth)
-                    CalendarBlock(entry: entry, height: placed.height, block: block)
+                    CalendarBlock(
+                        entry: entry, height: placed.height, block: block, tint: color(for: entry))
                         .frame(width: max(columnWidth - inset - 3, 1), height: placed.height)
                         .offset(x: inset + 1.5, y: placed.top)
                         .onTapGesture { onOpen(entry.pageId) }
@@ -270,16 +284,20 @@ struct CalendarGrid: View {
 
     // MARK: - What can be done to one block
 
-    /// The actions that apply to a single occurrence.
+    /// What a long press on a block offers.
     ///
-    /// Only shown for a repeating page, because for anything else there is no
-    /// such thing as "this one": a one-off page *is* the occurrence, and the
-    /// list already has the checkbox and the delete for it.
+    /// Two kinds of block, two menus. A one-off page *is* its block, so it
+    /// gets a checkbox's worth of verbs and then everything the list's long
+    /// press offers — rename, date, folder, tags, delete — because a meeting
+    /// seen on the calendar is the one most likely to need moving, and going
+    /// to the list to find it again is the round trip the menu exists to save.
     ///
-    /// What is deliberately absent is a delete. Deleting a block of a series
-    /// has no meaning short of deleting the series, which is the whole thing —
-    /// every occurrence behind this one and every one ahead — and offering that
-    /// from a single Tuesday is how people lose a year of a habit. Skip is the
+    /// A repeating page's block is one occurrence of many, and its verbs are
+    /// about *this one*: complete it, move it, skip it. What is deliberately
+    /// absent there is a delete. Deleting a block of a series has no meaning
+    /// short of deleting the series, which is the whole thing — every
+    /// occurrence behind this one and every one ahead — and offering that from
+    /// a single Tuesday is how people lose a year of a habit. Skip is the
     /// operation they actually want, and it is undoable.
     @ViewBuilder
     private func occurrenceMenu(_ entry: CalendarEntry) -> some View {
@@ -289,27 +307,46 @@ struct CalendarGrid: View {
             Label("Open", systemImage: "doc.text")
         }
 
-        if entry.isRecurring && entry.status != "done" {
-            if canComplete(entry) {
+        if entry.isRecurring {
+            if entry.status != "done" {
+                if canComplete(entry) {
+                    Button {
+                        onComplete(entry)
+                    } label: {
+                        Label("Complete this one", systemImage: "checkmark.circle")
+                    }
+                }
+                if canMove(entry) {
+                    Button {
+                        onMove(entry)
+                    } label: {
+                        Label("Move this one…", systemImage: "calendar.badge.clock")
+                    }
+                }
                 Button {
-                    onComplete(entry)
+                    onSkip(entry)
                 } label: {
-                    Label("Complete this one", systemImage: "checkmark.circle")
+                    Label("Skip this one", systemImage: "calendar.badge.minus")
                 }
             }
-            if canMove(entry) {
-                Button {
-                    onMove(entry)
-                } label: {
-                    Label("Move this one…", systemImage: "calendar.badge.clock")
-                }
-            }
+        } else {
+            let done = entry.status == "done"
             Button {
-                onSkip(entry)
+                onToggleDone(entry)
             } label: {
-                Label("Skip this one", systemImage: "calendar.badge.minus")
+                Label(
+                    done ? "Reopen" : "Complete",
+                    systemImage: done ? "arrow.uturn.backward" : "checkmark.circle")
             }
+            Divider()
+            PageActionsMenu(page: PageFacts(entry), state: $actions)
         }
+    }
+
+    /// The colour a block draws in: its folder's, or the accent when the
+    /// folder has none or the page is in the Inbox.
+    private func color(for entry: CalendarEntry) -> Color {
+        entry.folderId.flatMap { folderColors[$0] } ?? Color.accentColor
     }
 
     /// Whether *this* occurrence is a thing that can be finished on its own.
@@ -405,6 +442,7 @@ private struct CalendarBlock: View {
     let entry: CalendarEntry
     let height: CGFloat
     let block: TimedBlock
+    let tint: Color
 
     /// Below this, there is no room for a second line and the time is dropped
     /// rather than clipped.
@@ -427,11 +465,11 @@ private struct CalendarBlock: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 4)
         .padding(.vertical, 2)
-        .background(Color.accentColor.opacity(isDone ? 0.10 : 0.20))
+        .background(tint.opacity(isDone ? 0.10 : 0.20))
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(Color.accentColor.opacity(isDone ? 0.4 : 1))
-                .frame(width: 2)
+                .fill(tint.opacity(isDone ? 0.4 : 1))
+                .frame(width: 3)
         }
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .opacity(isDone ? 0.65 : 1)

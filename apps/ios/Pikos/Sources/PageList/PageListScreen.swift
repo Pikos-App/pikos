@@ -6,45 +6,22 @@ import SwiftUI
 /// Native by construction, which is the whole point of the architecture: the
 /// scrolling, swipe actions, selection and search field here are UIKit's, not a
 /// webview's approximation of them.
+///
+/// The view being shown is the title, and the title is the switcher: tapping
+/// "Today" drops a menu of every view and folder. That is the platform's own
+/// idiom for "this screen can be one of several things" (Files, Mail, Notes),
+/// and it replaces a filter-shaped icon in the corner that named nothing and
+/// hid Settings behind it.
 struct PageListScreen: View {
     @Environment(WorkspaceStore.self) private var store
+    @Environment(Route.self) private var route
 
-    @State private var isQuickAddPresented = false
     @State private var isFolderManagerPresented = false
     @State private var isTrashPresented = false
     @State private var isSettingsPresented = false
     @State private var searchText = ""
-    @State private var renaming: PageSummary?
-    @State private var scheduling: Scheduling?
-    @State private var tagging: Tagging?
-    @State private var repeating: Repeating?
-
-    /// A wrapper rather than a conformance on the generated `PageSummary`.
-    ///
-    /// `sheet(item:)` wants `Identifiable` and the summary is a UniFFI record
-    /// this repo does not own — the same reason `CalendarSyncScreen` wraps an
-    /// account. A retroactive conformance is a name the next regeneration could
-    /// collide with, and `@retroactive` is Swift 6 syntax on a package still on
-    /// tools 5.9.
-    private struct Scheduling: Identifiable {
-        let page: PageSummary
-        var id: String { page.id }
-    }
-
-    /// The same wrapper, for the same reason.
-    private struct Tagging: Identifiable {
-        let page: PageSummary
-        var id: String { page.id }
-    }
-
-    /// And again.
-    private struct Repeating: Identifiable {
-        let page: PageSummary
-        var id: String { page.id }
-    }
-    @State private var renameText = ""
+    @State private var actions = PageActionState()
     @State private var isCompletedExpanded = false
-    @State private var lastBulkMove: BulkMove?
     @State private var isMovingOverdue = false
 
     /// The list only — no `NavigationStack` of its own.
@@ -73,15 +50,13 @@ struct PageListScreen: View {
             }
         }
         .navigationTitle(store.scope.title)
+        .toolbarTitleMenu { viewMenu }
         .toolbar { toolbar }
         // Filters the current view by title. Deliberately narrower than
         // the Search tab, which is full-text across every page — this is
         // "find it in what I'm looking at", which is a different question
         // and the one a list wants answered.
         .searchable(text: $searchText, prompt: "Filter \(store.scope.title)")
-        .sheet(isPresented: $isQuickAddPresented) {
-            QuickAddSheet()
-        }
         .sheet(isPresented: $isFolderManagerPresented) {
             FolderManagerSheet()
         }
@@ -91,24 +66,7 @@ struct PageListScreen: View {
         .sheet(isPresented: $isSettingsPresented) {
             SettingsScreen()
         }
-        .sheet(item: $scheduling) { target in
-            SchedulePageSheet(page: target.page)
-        }
-        .sheet(item: $tagging) { target in
-            TagsSheet(page: target.page)
-        }
-        .sheet(item: $repeating) { target in
-            RepeatSheet(page: target.page)
-        }
-        .alert(
-            "Something went wrong",
-            isPresented: .init(
-                get: { store.errorMessage != nil },
-                set: { if !$0 { store.errorMessage = nil } }
-            ),
-            actions: { Button("OK", role: .cancel) {} },
-            message: { Text(store.errorMessage ?? "") }
-        )
+        .pageActionSheets($actions)
     }
 
     // MARK: - Pieces
@@ -147,21 +105,11 @@ struct PageListScreen: View {
             completedSection
         }
         .listStyle(.plain)
+        // Rows slide rather than jump when a tick moves one to Completed or a
+        // refresh reorders a day. Keyed on the sections so a filter keystroke
+        // — which changes only what is *visible* — does not animate too.
+        .animation(.default, value: store.sections)
         .refreshable { await store.refresh() }
-        // An alert rather than an inline edit, for the same reason as the
-        // folder manager's: a row that becomes editable on tap competes with
-        // the tap that opens the page, and a phone has no hover to disambiguate.
-        //
-        // On the list rather than on `body`, which already carries the error
-        // alert. Two `.alert` modifiers on one view are not reliably two
-        // alerts — the last one applied can win — and this is the view the
-        // context menu that raises it belongs to anyway.
-        .alert("Rename page", isPresented: isRenaming) {
-            TextField("Title", text: $renameText)
-            Button("Cancel", role: .cancel) { renaming = nil }
-            Button("Rename") { commitRename() }
-        }
-        .overlay(alignment: .bottom) { bulkMoveBar }
     }
 
     /// One open page: the checkbox, the link, and everything reachable from a
@@ -174,16 +122,17 @@ struct PageListScreen: View {
     /// from its own status, and its leading swipe says "Reopen" for the same
     /// reason.
     private func row(_ page: PageSummary) -> some View {
+        let done = page.status == "done"
         // The checkbox sits beside the link rather than inside it: a Button
         // inside a NavigationLink's label does not reliably get the tap,
         // because the link swallows it, and the symptom is a checkbox that
         // navigates instead of completing.
-        HStack(spacing: 0) {
-            CompletionToggle(isDone: page.status == "done") { done in
+        return HStack(spacing: 0) {
+            CompletionToggle(isDone: done, priority: PagePriority(stored: page.priority)) { done in
                 Task { await store.setStatus(pageId: page.id, done: done) }
             }
             NavigationLink(value: page.id) {
-                PageRow(page: page)
+                PageRow(page: page, showsFolder: store.scope.isDateGrouped)
             }
         }
         .swipeActions(edge: .trailing) {
@@ -192,9 +141,16 @@ struct PageListScreen: View {
             } label: {
                 Label("Delete", systemImage: "trash")
             }
+            if !page.scheduleLocked && !page.isRecurring {
+                Button {
+                    actions.sheet = .schedule(PageFacts(page))
+                } label: {
+                    Label(page.scheduledStart == nil ? "Schedule" : "Move", systemImage: "calendar")
+                }
+                .tint(.indigo)
+            }
         }
         .swipeActions(edge: .leading) {
-            let done = page.status == "done"
             Button {
                 Task { await store.setStatus(pageId: page.id, done: !done) }
             } label: {
@@ -204,25 +160,10 @@ struct PageListScreen: View {
             }
             .tint(done ? .orange : .green)
         }
-        .contextMenu { menu(for: page) }
+        .contextMenu { PageActionsMenu(page: PageFacts(page), state: $actions) }
     }
 
-    /// Finished work, below the open list and folded away.
-    ///
-    /// Collapsed by default and loaded only when opened: a folder accumulates
-    /// completed pages without limit, and a section that fetches them on every
-    /// appearance would make the screen slower every week for rows nobody asked
-    /// to see. It stays in the same `List` rather than becoming its own screen
-    /// so that unticking something puts it straight back where it came from,
-    /// visibly.
-    @ViewBuilder
     // MARK: - Clearing the backlog
-
-    /// What a bulk move did, for as long as it can be put back.
-    private struct BulkMove: Equatable {
-        let label: String
-        let moved: [MovedPage]
-    }
 
     /// The Overdue heading, with the one thing worth doing to the whole section.
     ///
@@ -232,8 +173,8 @@ struct PageListScreen: View {
     ///
     /// No confirmation. The move is reversible, cheap and visible, and the
     /// three of those together are what a confirmation exists to compensate
-    /// for — so the way back is offered afterwards instead, where it costs
-    /// nothing when it is not wanted.
+    /// for — so the way back is offered afterwards instead, in the notice the
+    /// store posts, where it costs nothing when it is not wanted.
     private func overdueHeader(_ title: String) -> some View {
         HStack {
             Text(title)
@@ -242,7 +183,11 @@ struct PageListScreen: View {
                 ProgressView()
             } else {
                 Button("Move to today") {
-                    Task { await moveOverdue() }
+                    Task {
+                        isMovingOverdue = true
+                        defer { isMovingOverdue = false }
+                        await store.moveOverdueToToday()
+                    }
                 }
                 .font(.caption.weight(.semibold))
                 .textCase(nil)
@@ -250,56 +195,16 @@ struct PageListScreen: View {
         }
     }
 
-    private func moveOverdue() async {
-        isMovingOverdue = true
-        defer { isMovingOverdue = false }
-        guard let result = await store.moveOverdueToToday() else { return }
-        lastBulkMove = BulkMove(label: result.label, moved: result.moved)
-    }
+    // MARK: - Finished work
 
-    /// What happened, and the way back.
+    /// Finished work, below the open list and folded away.
     ///
-    /// Says what stayed behind as well as what moved: a recurring series and a
-    /// page a calendar owns are both left alone, and a reader who is not told
-    /// will believe the section was cleared and stop looking at it.
-    ///
-    /// Clears itself on a timer rather than waiting to be dismissed — a bar
-    /// sitting over the bottom of the list until somebody notices it is worse
-    /// than a missed undo, and every move it describes is one more tap to
-    /// reverse by hand.
-    @ViewBuilder
-    private var bulkMoveBar: some View {
-        if let move = lastBulkMove {
-            HStack {
-                Text(move.label)
-                    .font(.subheadline)
-                    .lineLimit(2)
-                Spacer(minLength: 12)
-                if !move.moved.isEmpty {
-                    Button("Undo") {
-                        Task {
-                            await store.undoOverdueMove(move.moved)
-                            lastBulkMove = nil
-                        }
-                    }
-                    .font(.subheadline.weight(.semibold))
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(.regularMaterial, in: Capsule())
-            .shadow(radius: 6, y: 2)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            .task(id: move) {
-                try? await Task.sleep(for: .seconds(6))
-                guard !Task.isCancelled else { return }
-                withAnimation(.snappy) { lastBulkMove = nil }
-            }
-        }
-    }
-
+    /// Collapsed by default and loaded only when opened: a folder accumulates
+    /// completed pages without limit, and a section that fetches them on every
+    /// appearance would make the screen slower every week for rows nobody asked
+    /// to see. It stays in the same `List` rather than becoming its own screen
+    /// so that unticking something puts it straight back where it came from,
+    /// visibly.
     private var completedSection: some View {
         Section {
             DisclosureGroup(isExpanded: $isCompletedExpanded) {
@@ -347,153 +252,7 @@ struct PageListScreen: View {
         store.completedTotal > 0 ? "Completed (\(store.completedTotal))" : "Completed"
     }
 
-    /// The long press menu — desktop's right-click menu, minus what a phone
-    /// cannot do.
-    ///
-    /// Everything above Delete is withheld from a page a calendar owns. The
-    /// title, dates and placement of a mirror belong upstream and the workspace
-    /// refuses all three, so an entry here would only ever produce an error
-    /// alert. Delete stays: a mirror can be removed locally, and that path
-    /// already knows to keep the tombstone.
-    @ViewBuilder
-    private func menu(for page: PageSummary) -> some View {
-        if !page.scheduleLocked {
-            Button {
-                renameText = page.title
-                renaming = page
-            } label: {
-                Label("Rename", systemImage: "pencil")
-            }
-
-            // Same shape as Move to Folder, and for the same reason: one
-            // decision from a short fixed list. "None" is a real choice here
-            // rather than the absence of one — a page with a priority needs a
-            // way back to having none.
-            Menu {
-                Button { setPriority(page, to: nil) } label: {
-                    priorityLabel("None", current: page.priority == 0)
-                }
-                ForEach(Self.priorities, id: \.stored) { option in
-                    Button { setPriority(page, to: option.value) } label: {
-                        priorityLabel(option.name, current: page.priority == option.stored)
-                    }
-                }
-            } label: {
-                Label("Priority", systemImage: "exclamationmark.circle")
-            }
-
-            Button {
-                tagging = Tagging(page: page)
-            } label: {
-                Label("Tags…", systemImage: "tag")
-            }
-
-            // Offered on a repeating page too — it is the way to stop one — and
-            // on a calendar's, which the sheet shows read-only. What the user
-            // may change is the workspace's answer, not this menu's guess.
-            Button {
-                repeating = Repeating(page: page)
-            } label: {
-                Label("Repeat…", systemImage: "repeat")
-            }
-
-            // Nested rather than a sheet: a move is one decision from a short
-            // list, and a sheet for it would be two taps and a dismissal for
-            // something the menu is already showing.
-            Menu {
-                Button { move(page, to: nil) } label: {
-                    filedLabel("Inbox", current: page.folderId == nil)
-                }
-                ForEach(store.fileableFolders, id: \.id) { folder in
-                    Button { move(page, to: folder.id) } label: {
-                        filedLabel(folder.name, current: page.folderId == folder.id)
-                    }
-                }
-            } label: {
-                Label("Move to Folder", systemImage: "folder")
-            }
-
-            // Not offered on a repeating page. Its date belongs to its rule:
-            // moving it has to realign the anchor and snap onto a day the rule
-            // yields, or the next recompute reverts the edit, and clearing it
-            // does nothing visible at all because the head owns its own
-            // `scheduled_start`. The workspace refuses both — `pikos-ffi`'s
-            // `a_repeating_page_refuses_a_plain_date_change` and
-            // `clearing_a_repeating_page_s_date_leaves_the_head_where_it_is`
-            // pin them — so the menu declines to offer what would fail.
-            if !page.isRecurring {
-                Button {
-                    scheduling = Scheduling(page: page)
-                } label: {
-                    Label(
-                        page.scheduledStart == nil ? "Schedule…" : "Change Date…",
-                        systemImage: "calendar")
-                }
-
-                // Kept beside the sheet rather than folded into it. Taking a
-                // date off is the one schedule change that is a single tap, and
-                // making it three would be a worse trade than the extra row.
-                if page.scheduledStart != nil {
-                    Button {
-                        Task { await store.clearDate(pageId: page.id) }
-                    } label: {
-                        Label("Clear Date", systemImage: "calendar.badge.minus")
-                    }
-                }
-            }
-        }
-
-        Button(role: .destructive) {
-            Task { await store.trash(pageId: page.id) }
-        } label: {
-            Label("Delete", systemImage: "trash")
-        }
-    }
-
-    /// The four priorities, paired with the numbers they are stored as.
-    ///
-    /// Low number first — 1 urgent through 4 low — which runs the opposite way
-    /// to the names. The pairing is written out here rather than derived so the
-    /// menu's order and the column's meaning cannot drift apart.
-    private static let priorities: [(name: String, value: Priority, stored: Int64)] = [
-        ("Urgent", .urgent, 1),
-        ("High", .high, 2),
-        ("Medium", .medium, 3),
-        ("Low", .low, 4),
-    ]
-
-    private func priorityLabel(_ name: String, current: Bool) -> some View {
-        Label(name, systemImage: current ? "checkmark" : "circle")
-    }
-
-    private func setPriority(_ page: PageSummary, to priority: Priority?) {
-        Task { await store.setPriority(pageId: page.id, priority: priority) }
-    }
-
-    /// A tick beside where the page already is.
-    ///
-    /// Desktop bolds that row; a menu on iOS shows state with a checkmark, and
-    /// `Label` is what puts one in the leading position the system uses.
-    private func filedLabel(_ name: String, current: Bool) -> some View {
-        Label(name, systemImage: current ? "checkmark" : "folder")
-    }
-
-    private func move(_ page: PageSummary, to folderId: String?) {
-        guard page.folderId != folderId else { return }
-        Task { await store.movePage(id: page.id, toFolder: folderId) }
-    }
-
-    /// Bound to the presence of a page rather than a separate flag, so the two
-    /// cannot disagree about whether the alert is up.
-    private var isRenaming: Binding<Bool> {
-        Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
-    }
-
-    private func commitRename() {
-        guard let page = renaming else { return }
-        renaming = nil
-        Task { await store.renamePage(id: page.id, to: renameText) }
-    }
+    // MARK: - Filtering
 
     /// The current view's sections, narrowed by the filter field.
     ///
@@ -523,13 +282,25 @@ struct PageListScreen: View {
         }
     }
 
+    // MARK: - Empty state
+
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("Nothing here yet", systemImage: "doc.text")
+            Label("Nothing here yet", systemImage: emptyIcon)
         } description: {
             Text(emptyDescription)
         } actions: {
-            Button("New page") { isQuickAddPresented = true }
+            Button("New page") { route.isQuickAddPresented = true }
+                .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var emptyIcon: String {
+        switch store.scope {
+        case .today: return "sun.max"
+        case .upcoming: return "calendar"
+        case .inbox: return "tray"
+        case .folder: return "folder"
         }
     }
 
@@ -542,52 +313,99 @@ struct PageListScreen: View {
         }
     }
 
+    // MARK: - Switching views
+
+    /// Every view the list can be, under the title.
+    ///
+    /// The three smart views first, then the user's folders in tree order — a
+    /// parent followed by its children — then the calendars, which are folders
+    /// too but not ones the user made. Below a divider, the two things that
+    /// change what exists rather than what is shown: managing folders and the
+    /// trash. Kept apart because a destructive action should not sit adjacent
+    /// to a navigational one in the same list.
+    @ViewBuilder
+    private var viewMenu: some View {
+        Picker("View", selection: scopeBinding) {
+            Label("Today", systemImage: "sun.max").tag(WorkspaceStore.Scope.today)
+            Label("Upcoming", systemImage: "calendar").tag(WorkspaceStore.Scope.upcoming)
+            Label("Inbox", systemImage: "tray").tag(WorkspaceStore.Scope.inbox)
+        }
+        .pickerStyle(.inline)
+
+        if !ownFolders.isEmpty {
+            Picker("Folders", selection: scopeBinding) {
+                ForEach(ownFolders, id: \.id) { folder in
+                    Label(folder.name, systemImage: folder.parentId == nil ? "folder" : "arrow.turn.down.right")
+                        .tag(WorkspaceStore.Scope.folder(id: folder.id, name: folder.name))
+                }
+            }
+            .pickerStyle(.inline)
+        }
+
+        if !calendarFolders.isEmpty {
+            Picker("Calendars", selection: scopeBinding) {
+                ForEach(calendarFolders, id: \.id) { folder in
+                    Label(folder.name, systemImage: "calendar")
+                        .tag(WorkspaceStore.Scope.folder(id: folder.id, name: folder.name))
+                }
+            }
+            .pickerStyle(.inline)
+        }
+
+        Divider()
+
+        Button {
+            isFolderManagerPresented = true
+        } label: {
+            Label("Manage Folders…", systemImage: "folder.badge.gearshape")
+        }
+        // The way back from the swipe action further up. It lives here rather
+        // than as a scope in the picker because the trash is not a view of the
+        // workspace — nothing in it can be opened, filed or completed, only
+        // restored.
+        Button {
+            isTrashPresented = true
+        } label: {
+            Label("Recently Deleted…", systemImage: "trash")
+        }
+    }
+
+    /// The user's folders, a parent immediately followed by its children.
+    ///
+    /// Anything whose parent is missing or unreachable still has to appear, or
+    /// a folder becomes invisible without being deleted.
+    private var ownFolders: [Folder] {
+        let own = store.folders.filter { !$0.isExternalCalendar }
+        var ordered: [Folder] = []
+        func append(childrenOf parent: String?) {
+            for folder in own where folder.parentId == parent {
+                ordered.append(folder)
+                append(childrenOf: folder.id)
+            }
+        }
+        append(childrenOf: nil)
+        for folder in own where !ordered.contains(where: { $0.id == folder.id }) {
+            ordered.append(folder)
+        }
+        return ordered
+    }
+
+    private var calendarFolders: [Folder] {
+        store.folders.filter(\.isExternalCalendar)
+    }
+
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Menu {
-                Picker("View", selection: scopeBinding) {
-                    Label("Today", systemImage: "sun.max").tag(WorkspaceStore.Scope.today)
-                    Label("Upcoming", systemImage: "calendar")
-                        .tag(WorkspaceStore.Scope.upcoming)
-                    Label("Inbox", systemImage: "tray").tag(WorkspaceStore.Scope.inbox)
-                    ForEach(store.folders, id: \.id) { folder in
-                        Text(folder.name)
-                            .tag(WorkspaceStore.Scope.folder(id: folder.id, name: folder.name))
-                    }
-                }
-                // Below the picker and behind a divider: showing a folder and
-                // changing which folders exist are different intentions, and a
-                // destructive action should not sit adjacent to a navigational
-                // one in the same list.
-                Divider()
-                Button {
-                    isFolderManagerPresented = true
-                } label: {
-                    Label("Manage folders…", systemImage: "folder.badge.gearshape")
-                }
-                // The way back from the swipe action two dozen lines up. It
-                // lives here rather than behind a scope in the picker because
-                // the trash is not a view of the workspace — nothing in it can
-                // be opened, filed or completed, only restored.
-                Button {
-                    isTrashPresented = true
-                } label: {
-                    Label("Recently Deleted…", systemImage: "trash")
-                }
-                Divider()
-                Button {
-                    isSettingsPresented = true
-                } label: {
-                    Label("Settings…", systemImage: "gearshape")
-                }
+            Button {
+                isSettingsPresented = true
             } label: {
-                Label("Switch view", systemImage: "line.3.horizontal.decrease.circle")
+                Label("Settings", systemImage: "gearshape")
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button {
-                isQuickAddPresented = true
+                route.isQuickAddPresented = true
             } label: {
                 Label("New page", systemImage: "square.and.pencil")
             }

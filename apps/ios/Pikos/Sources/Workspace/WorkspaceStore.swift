@@ -104,7 +104,43 @@ public final class WorkspaceStore {
 
     /// Set when something failed in a way the user should see. Cleared when
     /// they dismiss it.
+    ///
+    /// Shown by the shell rather than by any one screen, so a write that fails
+    /// while the calendar is up says so on the calendar instead of waiting for
+    /// the user to come back to the page list.
     public var errorMessage: String?
+
+    /// Something that just happened and the way back from it, for a few
+    /// seconds.
+    ///
+    /// One mechanism for every "done — undo?" moment in the app: a backlog
+    /// moved to today, an occurrence skipped, a page added somewhere the user
+    /// is not looking. Each used to draw its own bar, and two copies of a
+    /// six-second countdown is two places for the timing to drift. The shell
+    /// draws whatever is here and clears it; the store only says what
+    /// happened.
+    public struct Notice: Identifiable, Equatable {
+        public let id = UUID()
+        public let message: String
+        public let action: Action?
+
+        /// The one thing worth offering on a notice, usually "Undo".
+        public struct Action {
+            public let title: String
+            public let perform: @MainActor () async -> Void
+        }
+
+        public init(_ message: String, action: Action? = nil) {
+            self.message = message
+            self.action = action
+        }
+
+        // By identity: a closure has no equality, and two notices with the
+        // same words a minute apart are still two notices.
+        public static func == (lhs: Notice, rhs: Notice) -> Bool { lhs.id == rhs.id }
+    }
+
+    public var notice: Notice?
 
     /// True until the first load completes, so the list can distinguish "still
     /// loading" from "genuinely empty" — an empty list shown during startup
@@ -396,6 +432,7 @@ public final class WorkspaceStore {
         do {
             let created = try await workspace.createPage(page: page)
             await refresh()
+            noticeIfOutOfView([created])
             return created
         } catch {
             errorMessage = error.localizedDescription
@@ -737,11 +774,41 @@ public final class WorkspaceStore {
                 timezone: TimeZone.current.identifier
             )
             await refresh()
+            noticeIfOutOfView(created)
             return created
         } catch {
             errorMessage = error.localizedDescription
             return []
         }
+    }
+
+    /// Say where a new page went when it did not land in front of the user.
+    ///
+    /// Adding "buy milk" while looking at Today files it in the Inbox and
+    /// nothing on screen changes, which reads as the add having failed. The
+    /// notice names where it went and offers to go there. Silent when the page
+    /// did land in the current view — the row appearing is the confirmation.
+    private func noticeIfOutOfView(_ created: [Page]) {
+        guard let first = created.first, !pages.contains(where: { $0.id == first.id }) else {
+            return
+        }
+        let destination: Scope
+        if let folderId = first.folderId, let folder = folders.first(where: { $0.id == folderId }) {
+            destination = .folder(id: folder.id, name: folder.name)
+        } else if first.scheduledStart == nil {
+            destination = .inbox
+        } else {
+            // Dated but not in view: it is somewhere on the calendar. Upcoming
+            // is the nearest view that lists by date.
+            destination = .upcoming
+        }
+        let count = created.count
+        let what = count == 1 ? "Added" : "Added \(count) pages"
+        notice = Notice(
+            "\(what) to \(destination.title)",
+            action: Notice.Action(title: "View") { [weak self] in
+                self?.scope = destination
+            })
     }
 
     /// A `Date` as the wall-clock string the workspace speaks.
@@ -780,8 +847,22 @@ public final class WorkspaceStore {
         // Optimistic, but only for a plain page. A recurring one does not simply
         // become done — the head advances and a completed clone appears beside
         // it — so there is nothing honest to show before the write lands.
-        if !isRecurring, let index = pages.firstIndex(where: { $0.id == pageId }) {
-            pages[index].status = done ? "done" : "not_started"
+        //
+        // Written into `sections`, which is the stored state; `pages` is a
+        // projection of it and cannot be assigned to. The row stays where it
+        // is, ticked, until the refresh moves it to Completed — that beat is
+        // what lets the tick be seen before the row leaves.
+        if !isRecurring {
+            sections = sections.map { section in
+                guard section.pages.contains(where: { $0.id == pageId }) else { return section }
+                let updated = section.pages.map { page -> PageSummary in
+                    guard page.id == pageId else { return page }
+                    var copy = page
+                    copy.status = done ? "done" : "not_started"
+                    return copy
+                }
+                return Section(id: section.id, title: section.title, pages: updated)
+            }
         }
 
         do {
@@ -795,19 +876,30 @@ public final class WorkspaceStore {
 
     /// Move everything overdue onto today.
     ///
-    /// Returns what it did, so the caller can say so and offer the way back.
+    /// Says what it did through `notice`, with the way back attached. The
+    /// sentence comes from the workspace and names what stayed behind as well
+    /// as what moved — a recurring series and a page a calendar owns are both
+    /// left alone, and a reader who is not told will believe the section was
+    /// cleared and stop looking at it.
+    ///
     /// Which pages are overdue is decided by the workspace, not by the list on
     /// screen: that list is as old as the last refresh, and a bulk write keyed
     /// on a stale one moves pages the reader can no longer see.
-    public func moveOverdueToToday() async -> OverdueMoveResult? {
-        guard let workspace else { return nil }
+    public func moveOverdueToToday() async {
+        guard let workspace else { return }
         do {
             let result = try await workspace.moveOverdueToToday()
             await refresh()
-            return result
+            let moved = result.moved
+            notice = Notice(
+                result.label,
+                action: moved.isEmpty
+                    ? nil
+                    : Notice.Action(title: "Undo") { [weak self] in
+                        await self?.undoOverdueMove(moved)
+                    })
         } catch {
             errorMessage = error.localizedDescription
-            return nil
         }
     }
 
@@ -847,19 +939,25 @@ public final class WorkspaceStore {
 
     /// Drop one occurrence without finishing it — "not this week".
     ///
-    /// Returns the date it skipped, for an undo. Nothing is destroyed, so the
-    /// undo is one call back the other way and the action needs no confirmation.
-    @discardableResult
-    public func skipOccurrence(_ entry: CalendarEntry) async -> String? {
-        guard let workspace else { return nil }
+    /// Nothing is destroyed, so the way back is one call the other way and the
+    /// action needs no confirmation: a confirmation before every skip would
+    /// make the common case — clearing one week's standup — two taps and a
+    /// decision. The undo is offered afterwards instead, where it costs
+    /// nothing when it is not wanted, which is almost always.
+    public func skipOccurrence(_ entry: CalendarEntry) async {
+        guard let workspace else { return }
         let date = occurrence(of: entry).originalDate
+        let pageId = entry.pageId
         do {
-            try await workspace.skipOccurrence(pageId: entry.pageId, occurrenceDate: date)
+            try await workspace.skipOccurrence(pageId: pageId, occurrenceDate: date)
             await refresh()
-            return date
+            notice = Notice(
+                "Skipped \(entry.title.isEmpty ? "Untitled" : entry.title)",
+                action: Notice.Action(title: "Undo") { [weak self] in
+                    await self?.unskipOccurrence(pageId: pageId, on: date)
+                })
         } catch {
             errorMessage = error.localizedDescription
-            return nil
         }
     }
 

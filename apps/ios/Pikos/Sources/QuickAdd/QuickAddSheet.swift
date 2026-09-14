@@ -151,6 +151,7 @@ struct QuickAddSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     /// The title as it will actually be saved.

@@ -45,16 +45,30 @@ struct TodayEntry: TimelineEntry {
         failure: nil)
 }
 
+/// A completion handler WidgetKit gave us, carried into a `Task`.
+///
+/// `TimelineProvider` hands over plain closures, and under strict concurrency a
+/// plain closure cannot be captured by the `@Sendable` closure a `Task` runs.
+/// The handler is only ever called once, from the task that owns this box, so
+/// the sharing the checker objects to never happens — hence `@unchecked`. A
+/// box rather than an `async` provider because `StaticConfiguration` has no
+/// async variant of this protocol to adopt.
+private struct Completion<Value>: @unchecked Sendable {
+    let call: (Value) -> Void
+}
+
 struct TodayProvider: TimelineProvider {
     func placeholder(in context: Context) -> TodayEntry {
         .placeholder
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TodayEntry) -> Void) {
-        Task { completion(await entry()) }
+        let done = Completion(call: completion)
+        Task { done.call(await entry()) }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
+        let done = Completion(call: completion)
         Task {
             let current = await entry()
             // Refresh at the next hour boundary rather than on a fixed interval.
@@ -67,7 +81,7 @@ struct TodayProvider: TimelineProvider {
                 Calendar.current.nextDate(
                     after: .now, matching: DateComponents(minute: 0), matchingPolicy: .nextTime)
                 ?? Date.now.addingTimeInterval(3600)
-            completion(Timeline(entries: [current], policy: .after(nextHour)))
+            done.call(Timeline(entries: [current], policy: .after(nextHour)))
         }
     }
 
@@ -115,7 +129,15 @@ struct TodayWidgetView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(visible, id: \.id) { page in
-                    row(page)
+                    // A row opens its own page on the medium and large sizes,
+                    // where there is room to aim; the small one is a single
+                    // target that opens Today, since three rows in a two-inch
+                    // square are not something a thumb can pick between.
+                    if family != .systemSmall, let url = URL(string: "pikos://page/\(page.id)") {
+                        Link(destination: url) { row(page) }
+                    } else {
+                        row(page)
+                    }
                 }
                 if entry.pages.count > visible.count {
                     Text("+\(entry.pages.count - visible.count) more")
@@ -146,10 +168,13 @@ struct TodayWidgetView: View {
 
     private func row(_ page: PageSummary) -> some View {
         let isDone = page.status == "done"
+        // `Brand.accent` rather than `Color.accentColor`: the widget is its
+        // own process with no asset catalog, so the app's accent is not here
+        // to inherit.
         return HStack(alignment: .firstTextBaseline, spacing: 5) {
             Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                 .font(.caption2)
-                .foregroundStyle(isDone ? Color.accentColor : Color.secondary)
+                .foregroundStyle(isDone ? Brand.accent : Color.secondary)
             Text(page.title.isEmpty ? "Untitled" : page.title)
                 .font(.caption)
                 .strikethrough(isDone, color: .secondary)

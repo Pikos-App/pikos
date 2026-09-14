@@ -92,8 +92,11 @@ class PikosUITestCase: XCTestCase {
     }
 
     /// Switch the page list to one of its views.
-    func showView(_ name: String) {
-        app.buttons["Switch view"].firstMatch.tap()
+    ///
+    /// The switcher is the title: tapping the navigation bar's title drops the
+    /// menu of views, so the caller says which title is currently showing.
+    func showView(_ name: String, from current: String = "Today") {
+        app.navigationBars[current].buttons[current].firstMatch.tap()
         app.buttons[name].firstMatch.tap()
     }
 }
