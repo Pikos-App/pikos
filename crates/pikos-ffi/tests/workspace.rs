@@ -4534,3 +4534,367 @@ async fn the_elapsed_label_crosses_the_boundary_rather_than_being_reimplemented(
     assert_eq!(ws.focus_elapsed_label(67), "1:07");
     assert_eq!(ws.focus_elapsed_label(3_600), "1:00:00");
 }
+
+// ─── The backlog behind an occurrence ────────────────────────────────────────
+//
+// What decides whether acting on one occurrence is ambiguous. Every rule here
+// removes something from the answer, and each removal is invisible in the UI —
+// a date wrongly left in makes the app offer to complete a day that is already
+// done, and one wrongly taken out silently narrows what "everything before
+// today" means.
+
+/// A daily series whose head sits `days` days in the past.
+async fn overdue_series(ws: &Workspace, title: &str, days: i64) -> String {
+    let page = ws.create_page(new_page(title)).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        format!("{}T09:00:00", days_ago(days)),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+    page.id
+}
+
+#[tokio::test]
+async fn the_backlog_is_every_open_day_before_today_except_the_one_being_acted_on() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Standup", 4).await;
+
+    // Acting on the oldest, which is where the head sits.
+    let backlog = ws
+        .occurrence_backlog(id.clone(), days_ago(4))
+        .await
+        .unwrap();
+    assert_eq!(
+        backlog,
+        vec![days_ago(3), days_ago(2), days_ago(1)],
+        "oldest first, today excluded, and not the day being acted on"
+    );
+
+    // Acting on a middle day: the head is now part of the backlog behind it.
+    let backlog = ws.occurrence_backlog(id, days_ago(2)).await.unwrap();
+    assert_eq!(
+        backlog,
+        vec![days_ago(4), days_ago(3), days_ago(1)],
+        "the head is itself missed when the gesture pointed elsewhere"
+    );
+}
+
+/// Today's occurrence, and tomorrow's, have nothing behind them to ask about.
+///
+/// Not quite true of today — there may be earlier open days — but the prompt is
+/// about a *backlog*, and the caller only asks when it has a date before today.
+/// What this pins is the other half: a series that is not behind at all.
+#[tokio::test]
+async fn a_series_that_is_not_behind_has_no_backlog() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Standup")).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        format!("{}T09:00:00", pikos_db::today_local()),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    assert!(ws
+        .occurrence_backlog(page.id, pikos_db::today_local())
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+/// A day already resolved is not missed — by any of the three routes.
+#[tokio::test]
+async fn days_already_completed_or_skipped_are_out_of_the_backlog() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Standup", 5).await;
+
+    ws.skip_occurrence(id.clone(), days_ago(4)).await.unwrap();
+    ws.complete_recurring_occurrence(
+        id.clone(),
+        Some(Occurrence {
+            original_date: days_ago(3),
+            scheduled_start: format!("{}T09:00:00", days_ago(3)),
+            scheduled_end: None,
+        }),
+    )
+    .await
+    .unwrap();
+
+    let backlog = ws.occurrence_backlog(id, days_ago(5)).await.unwrap();
+    assert_eq!(
+        backlog,
+        vec![days_ago(2), days_ago(1)],
+        "a skipped day and a completed day are both resolved"
+    );
+}
+
+/// A moved occurrence is an override row, not a gap.
+#[tokio::test]
+async fn an_occurrence_that_was_moved_is_not_counted_as_missed() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Standup", 4).await;
+
+    let entries = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap();
+    let rule_id = entries
+        .iter()
+        .find_map(|e| e.rule_id.clone())
+        .expect("the series projects onto the days behind today");
+    ws.move_occurrence(
+        rule_id,
+        days_ago(2),
+        format!("{}T14:00:00", days_ago(2)),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let backlog = ws.occurrence_backlog(id, days_ago(4)).await.unwrap();
+    assert!(
+        !backlog.contains(&days_ago(2)),
+        "it was rescheduled, not missed: {backlog:?}"
+    );
+}
+
+/// An all-day head is the case the window's extra millisecond exists for.
+///
+/// The search runs strictly *after* its lower bound. A timed head at 09:00
+/// clears a bound set at its own midnight either way, so nothing notices — but
+/// an all-day occurrence *is* midnight, and a bound set there would drop the
+/// head out of its own backlog. Which is exactly the day somebody is most
+/// likely to be looking at.
+#[tokio::test]
+async fn an_all_day_head_is_part_of_the_backlog_behind_a_later_day() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("Water the plants")).await.unwrap();
+    ws.set_recurrence(
+        page.id.clone(),
+        "FREQ=DAILY".to_string(),
+        days_ago(3),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let backlog = ws.occurrence_backlog(page.id, days_ago(1)).await.unwrap();
+    assert_eq!(
+        backlog,
+        vec![days_ago(3), days_ago(2)],
+        "the head's own day counts when the gesture pointed past it"
+    );
+}
+
+/// A moved occurrence of a *detached* series, which is the only kind that
+/// leaves an override row without an exdate.
+///
+/// A native move clones the page and excludes the original date from the rule,
+/// so the rule itself already stops yielding it — the filter never runs. A
+/// detached series keeps the occurrence in-series as a `page_schedules` row, and
+/// nothing in the rule says it moved. Without the filter it reads as a day
+/// nobody did.
+#[tokio::test]
+async fn a_moved_occurrence_of_a_detached_series_is_not_missed() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Book club", 4).await;
+    link_to_a_calendar(&tmp.path, &id).await;
+    detach_from_its_calendar(&tmp.path, &id).await;
+
+    let entries = ws
+        .calendar_range(days_ago(4), pikos_db::today_local())
+        .await
+        .unwrap();
+    let rule_id = entries
+        .iter()
+        .find_map(|e| e.rule_id.clone())
+        .expect("the series projects onto the days behind today");
+    ws.move_occurrence(
+        rule_id,
+        days_ago(2),
+        format!("{}T14:00:00", days_ago(2)),
+        None,
+        "UTC".to_string(),
+    )
+    .await
+    .unwrap();
+
+    let backlog = ws.occurrence_backlog(id, days_ago(4)).await.unwrap();
+    assert!(
+        !backlog.contains(&days_ago(2)),
+        "it was rescheduled, not missed: {backlog:?}"
+    );
+    assert!(
+        backlog.contains(&days_ago(3)),
+        "while the days either side of it still are: {backlog:?}"
+    );
+}
+
+/// Occurrences from before the calendar was connected are the provider's
+/// history, not work anybody missed.
+///
+/// A freshly connected calendar full of last year's meetings would otherwise
+/// open as an enormous backlog on the first tap, offering to mark a year of
+/// somebody else's events done.
+#[tokio::test]
+async fn occurrences_before_the_connect_day_are_history_rather_than_backlog() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Book club", 6).await;
+    link_to_a_calendar(&tmp.path, &id).await;
+    connected_on(&tmp.path, &id, &days_ago(3)).await;
+
+    let backlog = ws.occurrence_backlog(id, days_ago(6)).await.unwrap();
+    assert_eq!(
+        backlog,
+        vec![days_ago(3), days_ago(2), days_ago(1)],
+        "nothing from before the connect day"
+    );
+}
+
+/// Backdates a calendar link, so a test can put the connect day inside the
+/// series rather than before all of it.
+async fn connected_on(path: &str, page_id: &str, day: &str) {
+    let pool = pikos_db::open_pool(path).await.unwrap();
+    sqlx::query("UPDATE page_sync SET created_at = ? WHERE page_id = ?")
+        .bind(format!("{day}T00:00:00.000Z"))
+        .bind(page_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+/// A page with no repeat has no backlog, rather than an error.
+#[tokio::test]
+async fn a_page_with_no_repeat_has_nothing_behind_it() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let page = ws.create_page(new_page("One off")).await.unwrap();
+    assert!(ws
+        .occurrence_backlog(page.id, days_ago(2))
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(ws
+        .occurrence_backlog("nobody".to_string(), days_ago(2))
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+// ─── Acting on the whole backlog ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn skipping_a_backlog_drops_every_day_it_was_given() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Standup", 4).await;
+
+    let dates = vec![days_ago(4), days_ago(3), days_ago(2), days_ago(1)];
+    let skipped = ws
+        .skip_occurrences(id.clone(), dates.clone())
+        .await
+        .unwrap();
+    assert_eq!(skipped, dates, "returned in order, for the undo");
+
+    let head = ws.get_page(id.clone()).await.unwrap();
+    assert_eq!(
+        head.scheduled_start.as_deref(),
+        Some(format!("{}T09:00:00", pikos_db::today_local()).as_str()),
+        "the series has caught up to today"
+    );
+    let completed = ws
+        .list_completed(CompletedScope::Inbox, 50, 0)
+        .await
+        .unwrap();
+    assert_eq!(
+        completed.total, 0,
+        "and nothing was marked done — that is the other arm"
+    );
+
+    ws.unskip_occurrences(id.clone(), dates).await.unwrap();
+    assert_eq!(
+        ws.get_page(id).await.unwrap().scheduled_start.as_deref(),
+        Some(format!("{}T09:00:00", days_ago(4)).as_str()),
+        "and the undo walks the whole batch back"
+    );
+}
+
+#[tokio::test]
+async fn completing_a_backlog_leaves_one_done_page_per_day() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Standup", 3).await;
+
+    let done = ws
+        .complete_occurrences_to_today(id.clone(), 3)
+        .await
+        .unwrap();
+    assert_eq!(done, 3);
+
+    let completed = ws
+        .list_completed(CompletedScope::Inbox, 50, 0)
+        .await
+        .unwrap();
+    assert_eq!(
+        completed.total, 3,
+        "each missed day is its own done page, not one covering all three"
+    );
+    assert_eq!(
+        ws.get_page(id).await.unwrap().scheduled_start.as_deref(),
+        Some(format!("{}T09:00:00", pikos_db::today_local()).as_str()),
+    );
+}
+
+/// Today is where it stops, whatever it was asked for.
+#[tokio::test]
+async fn completing_a_backlog_never_runs_past_today() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Standup", 2).await;
+
+    let done = ws
+        .complete_occurrences_to_today(id.clone(), 99)
+        .await
+        .unwrap();
+    assert_eq!(done, 2, "a generous budget does not eat tomorrow");
+    assert_eq!(
+        ws.get_page(id).await.unwrap().scheduled_start.as_deref(),
+        Some(format!("{}T09:00:00", pikos_db::today_local()).as_str()),
+    );
+}
+
+/// The budget is the other bound, and it is the caller's count.
+#[tokio::test]
+async fn completing_a_backlog_stops_at_the_number_it_was_given() {
+    let tmp = TempWorkspace::new();
+    let ws = Workspace::open(tmp.path.clone()).await.unwrap();
+    let id = overdue_series(&ws, "Standup", 5).await;
+
+    assert_eq!(
+        ws.complete_occurrences_to_today(id.clone(), 2)
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        ws.get_page(id).await.unwrap().scheduled_start.as_deref(),
+        Some(format!("{}T09:00:00", days_ago(3)).as_str()),
+        "three days still owed"
+    );
+}

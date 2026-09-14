@@ -904,6 +904,25 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func clearPageSchedule(pageId: String) async throws  -> UInt32
     
     /**
+     * Complete every open occurrence up to today — the other backlog arm.
+     *
+     * Each day becomes its own done clone, by repeating the ordinary single
+     * completion until the head reaches today. Nothing goes to the skip-set:
+     * this is the arm that says the work happened, and a skipped day says the
+     * opposite.
+     *
+     * `max_steps` bounds it. The caller already knows how many days it is
+     * asking about, and a loop driven only by "is the head still behind" would
+     * run until the rule ran out if a completion ever failed to advance it. The
+     * same guard catches that directly: a step that does not move the head
+     * stops the loop.
+     *
+     * Returns how many were completed, which is not always `max_steps` — a
+     * series can exhaust, and a head that has caught up is done.
+     */
+    func completeOccurrencesToToday(pageId: String, maxSteps: UInt32) async throws  -> UInt32
+    
+    /**
      * Complete one occurrence of a recurring page.
      *
      * Not the same operation as setting `status` to done, and the difference is
@@ -1051,9 +1070,9 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      *
      * Served rather than formatted per platform because it is the same clock on
      * both, and because the floor it counts towards is already here: a phone
-     * that rendered `24:07` beside a desktop showing `24:07` and then said
-     * something different when the session ended would be two implementations
-     * agreeing by luck.
+     * that rendered the running time its own way and then said something
+     * different from the desktop when the session ended would be two
+     * implementations agreeing by luck.
      */
     func focusElapsedLabel(seconds: Int64)  -> String
     
@@ -1170,6 +1189,30 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func moveOverdueToToday() async throws  -> OverdueMoveResult
     
     /**
+     * The earlier occurrences of a series that are still open, oldest first.
+     *
+     * The question behind the scope prompt: acting on one occurrence of a
+     * series that has fallen behind is ambiguous, and this is what decides
+     * whether to ask. Empty means there is nothing to ask about — the gesture
+     * commits on its own.
+     *
+     * Bounded on both sides. The head is the oldest open occurrence, so it is
+     * where the search starts; today is where it stops, because an occurrence
+     * that has not happened yet is not missed. The gestured date is dropped
+     * from the result — it is the thing being acted on, not part of the
+     * backlog behind it — and so is anything already excluded from the series:
+     * the rule's own exdates, dates already completed, and dates already
+     * skipped.
+     *
+     * Two things only a synced series has. Occurrences before the day the
+     * calendar was connected are provider history rather than work anybody
+     * missed, so `synced_since` floors the result. And a *moved* occurrence is
+     * an override row, not a gap — its original date is already out of the
+     * head's derivation, so it is neither open nor missed.
+     */
+    func occurrenceBacklog(pageId: String, occurrenceDate: String) async throws  -> [String]
+    
+    /**
      * What a page repeats as, and whether this editor may change it.
      */
     func pageRepeat(pageId: String) async throws  -> PageRepeat
@@ -1216,9 +1259,7 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      *
      * The duration is computed from them rather than taken as a third argument,
      * so a caller cannot report a length its own timestamps disagree with. A
-     * session under the floor is declined and says so; anything else that would
-     * make a bad row — a page that is gone, a clock that went backwards — is
-     * refused by the data layer.
+     * session under the floor is declined and says so.
      *
      * Both strings are local wall clocks, `yyyy-MM-ddTHH:mm:ss`.
      */
@@ -1414,6 +1455,16 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
     func skipOccurrence(pageId: String, occurrenceDate: String) async throws 
     
     /**
+     * Drop several occurrences at once — the backlog arm of the scope prompt.
+     *
+     * One call per date rather than one statement, because each write recomputes
+     * the head and a bulk dismissal can cover the head's own date. Returns the
+     * dates that were skipped, in the order they were given, so an undo can put
+     * exactly those back.
+     */
+    func skipOccurrences(pageId: String, dates: [String]) async throws  -> [String]
+    
+    /**
      * Sync one account now, from where each calendar left off.
      *
      * The ordinary "pull down to refresh" of calendar sync. Nothing calls this
@@ -1495,6 +1546,11 @@ public protocol WorkspaceProtocol: AnyObject, Sendable {
      * no-op when the date was not skipped.
      */
     func unskipOccurrence(pageId: String, occurrenceDate: String) async throws 
+    
+    /**
+     * Put several skipped occurrences back.
+     */
+    func unskipOccurrences(pageId: String, dates: [String]) async throws 
     
     func updatePage(id: String, edit: PageEdit) async throws  -> Page
     
@@ -1676,6 +1732,39 @@ open func clearPageSchedule(pageId: String)async throws  -> UInt32  {
             rustFutureFunc: {
                 uniffi_pikos_ffi_fn_method_workspace_clear_page_schedule(
                         self.uniffiCloneHandle(),FfiConverterString.lower(pageId)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_u32,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_u32,
+            freeFunc: ffi_pikos_ffi_rust_future_free_u32,
+            liftFunc: FfiConverterUInt32.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Complete every open occurrence up to today — the other backlog arm.
+     *
+     * Each day becomes its own done clone, by repeating the ordinary single
+     * completion until the head reaches today. Nothing goes to the skip-set:
+     * this is the arm that says the work happened, and a skipped day says the
+     * opposite.
+     *
+     * `max_steps` bounds it. The caller already knows how many days it is
+     * asking about, and a loop driven only by "is the head still behind" would
+     * run until the rule ran out if a completion ever failed to advance it. The
+     * same guard catches that directly: a step that does not move the head
+     * stops the loop.
+     *
+     * Returns how many were completed, which is not always `max_steps` — a
+     * series can exhaust, and a head that has caught up is done.
+     */
+open func completeOccurrencesToToday(pageId: String, maxSteps: UInt32)async throws  -> UInt32  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_complete_occurrences_to_today(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterUInt32.lower(maxSteps)
                 )
             },
             pollFunc: ffi_pikos_ffi_rust_future_poll_u32,
@@ -1981,9 +2070,9 @@ open func exportMarkdown(includeSynced: Bool)async throws  -> [ExportFile]  {
      *
      * Served rather than formatted per platform because it is the same clock on
      * both, and because the floor it counts towards is already here: a phone
-     * that rendered `24:07` beside a desktop showing `24:07` and then said
-     * something different when the session ended would be two implementations
-     * agreeing by luck.
+     * that rendered the running time its own way and then said something
+     * different from the desktop when the session ended would be two
+     * implementations agreeing by luck.
      */
 open func focusElapsedLabel(seconds: Int64) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -2248,6 +2337,44 @@ open func moveOverdueToToday()async throws  -> OverdueMoveResult  {
 }
     
     /**
+     * The earlier occurrences of a series that are still open, oldest first.
+     *
+     * The question behind the scope prompt: acting on one occurrence of a
+     * series that has fallen behind is ambiguous, and this is what decides
+     * whether to ask. Empty means there is nothing to ask about — the gesture
+     * commits on its own.
+     *
+     * Bounded on both sides. The head is the oldest open occurrence, so it is
+     * where the search starts; today is where it stops, because an occurrence
+     * that has not happened yet is not missed. The gestured date is dropped
+     * from the result — it is the thing being acted on, not part of the
+     * backlog behind it — and so is anything already excluded from the series:
+     * the rule's own exdates, dates already completed, and dates already
+     * skipped.
+     *
+     * Two things only a synced series has. Occurrences before the day the
+     * calendar was connected are provider history rather than work anybody
+     * missed, so `synced_since` floors the result. And a *moved* occurrence is
+     * an override row, not a gap — its original date is already out of the
+     * head's derivation, so it is neither open nor missed.
+     */
+open func occurrenceBacklog(pageId: String, occurrenceDate: String)async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_occurrence_backlog(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(occurrenceDate)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * What a page repeats as, and whether this editor may change it.
      */
 open func pageRepeat(pageId: String)async throws  -> PageRepeat  {
@@ -2336,9 +2463,7 @@ open func reconnectCaldav(accountId: String, password: String)async throws  -> S
      *
      * The duration is computed from them rather than taken as a third argument,
      * so a caller cannot report a length its own timestamps disagree with. A
-     * session under the floor is declined and says so; anything else that would
-     * make a bad row — a page that is gone, a clock that went backwards — is
-     * refused by the data layer.
+     * session under the floor is declined and says so.
      *
      * Both strings are local wall clocks, `yyyy-MM-ddTHH:mm:ss`.
      */
@@ -2758,6 +2883,30 @@ open func skipOccurrence(pageId: String, occurrenceDate: String)async throws   {
 }
     
     /**
+     * Drop several occurrences at once — the backlog arm of the scope prompt.
+     *
+     * One call per date rather than one statement, because each write recomputes
+     * the head and a bulk dismissal can cover the head's own date. Returns the
+     * dates that were skipped, in the order they were given, so an undo can put
+     * exactly those back.
+     */
+open func skipOccurrences(pageId: String, dates: [String])async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_skip_occurrences(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterSequenceString.lower(dates)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_pikos_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
      * Sync one account now, from where each calendar left off.
      *
      * The ordinary "pull down to refresh" of calendar sync. Nothing calls this
@@ -2949,6 +3098,25 @@ open func unskipOccurrence(pageId: String, occurrenceDate: String)async throws  
             rustFutureFunc: {
                 uniffi_pikos_ffi_fn_method_workspace_unskip_occurrence(
                         self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterString.lower(occurrenceDate)
+                )
+            },
+            pollFunc: ffi_pikos_ffi_rust_future_poll_void,
+            completeFunc: ffi_pikos_ffi_rust_future_complete_void,
+            freeFunc: ffi_pikos_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeWorkspaceError_lift
+        )
+}
+    
+    /**
+     * Put several skipped occurrences back.
+     */
+open func unskipOccurrences(pageId: String, dates: [String])async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_pikos_ffi_fn_method_workspace_unskip_occurrences(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(pageId),FfiConverterSequenceString.lower(dates)
                 )
             },
             pollFunc: ffi_pikos_ffi_rust_future_poll_void,
@@ -7744,6 +7912,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_clear_page_schedule() != 51741) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_complete_occurrences_to_today() != 26535) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_complete_recurring_occurrence() != 65429) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7777,7 +7948,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_export_markdown() != 3908) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_focus_elapsed_label() != 30210) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_focus_elapsed_label() != 53112) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_get_page() != 16439) {
@@ -7810,6 +7981,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_move_overdue_to_today() != 5053) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_occurrence_backlog() != 2014) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_page_repeat() != 43934) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7822,7 +7996,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_reconnect_caldav() != 31810) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_pikos_ffi_checksum_method_workspace_record_focus_session() != 9182) {
+    if (uniffi_pikos_ffi_checksum_method_workspace_record_focus_session() != 53674) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_remove_page_repeat() != 55311) {
@@ -7870,6 +8044,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_pikos_ffi_checksum_method_workspace_skip_occurrence() != 64454) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_pikos_ffi_checksum_method_workspace_skip_occurrences() != 32713) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_pikos_ffi_checksum_method_workspace_sync_account_now() != 48127) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7895,6 +8072,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_unskip_occurrence() != 25782) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_pikos_ffi_checksum_method_workspace_unskip_occurrences() != 3081) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_pikos_ffi_checksum_method_workspace_update_page() != 63112) {

@@ -51,6 +51,21 @@ public enum DayLabel {
         return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 
+    /// A bare day, for listing several at once — "Tue 5 May" where the reader
+    /// writes it that way, "Tue, May 5" where they do not.
+    ///
+    /// Never relative. [`relative`] is for a heading over one section, where
+    /// "Today" is the most useful thing a reader can be told; in a list of
+    /// missed days that reads as a mistake, because none of them is today.
+    ///
+    /// Falls back to the raw date for anything it cannot read, like the rest of
+    /// this file: a stamp shown as itself is a visible fault, and a plausible
+    /// wrong date is not.
+    public static func short(_ date: String, calendar: Calendar = .current) -> String {
+        guard let day = self.date(from: date, in: calendar) else { return date }
+        return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    }
+
     /// Today, as the `YYYY-MM-DD` key the shared Rust compares against.
     ///
     /// Built by hand from Gregorian components rather than through a

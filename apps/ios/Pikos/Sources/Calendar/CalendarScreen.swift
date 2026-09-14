@@ -27,6 +27,7 @@ struct CalendarScreen: View {
     @State private var now = WallClockDay.instant(from: Date())
     @State private var undo: SkippedOccurrence?
     @State private var moving: Moving?
+    @State private var scopeQuestion: ScopeQuestion?
 
     /// Moves the current-time line without a timer.
     ///
@@ -58,8 +59,8 @@ struct CalendarScreen: View {
                     now: now,
                     hourHeightBase: settings.calendarDensity.hourHeight,
                     onOpen: { pageId in openPage(pageId) },
-                    onComplete: { entry in Task { await store.completeOccurrence(entry) } },
-                    onSkip: { entry in Task { await skip(entry) } },
+                    onComplete: { entry in Task { await act(.complete, on: entry) } },
+                    onSkip: { entry in Task { await act(.skip, on: entry) } },
                     onMove: { entry in moving = Moving(entry: entry) })
             }
         }
@@ -68,6 +69,16 @@ struct CalendarScreen: View {
         .toolbar { toolbar }
         .overlay(alignment: .bottom) { undoBar }
         .sheet(item: $moving) { MoveOccurrenceSheet(entry: $0.entry) }
+        .confirmationDialog(
+            scopeQuestion?.title ?? "", isPresented: hasScopeQuestion,
+            titleVisibility: .visible, presenting: scopeQuestion
+        ) { question in
+            Button(question.justThisOne) { Task { await resolve(question, scope: .one) } }
+            Button(question.everything) { Task { await resolve(question, scope: .all) } }
+            Button("Cancel", role: .cancel) { scopeQuestion = nil }
+        } message: { question in
+            Text(question.message)
+        }
         // Keyed on the range *and* on the workspace's version. The range half
         // means swiping to another week cancels the query for the one being
         // left rather than racing it. The version half means a page completed
@@ -112,15 +123,99 @@ struct CalendarScreen: View {
     /// What was skipped, for as long as it can be put back.
     private struct SkippedOccurrence: Equatable {
         let pageId: String
-        let date: String
+        /// Every date, because one gesture can skip a whole backlog and the undo
+        /// has to put back exactly what went.
+        let dates: [String]
         let title: String
     }
 
-    private func skip(_ entry: CalendarEntry) async {
-        guard let date = await store.skipOccurrence(entry) else { return }
-        undo = SkippedOccurrence(
-            pageId: entry.pageId, date: date,
-            title: entry.title.isEmpty ? "Untitled" : entry.title)
+    // MARK: - The scope question
+
+    /// What is being done to an occurrence, when there is a backlog behind it.
+    private enum Verb {
+        case complete
+        case skip
+    }
+
+    private enum Scope {
+        case one
+        case all
+    }
+
+    /// A gesture that landed on a series which has fallen behind.
+    ///
+    /// Held rather than acted on, because the answer is genuinely ambiguous:
+    /// ticking last Monday's standup when three earlier Mondays are also open
+    /// could mean either. The desktop asks the same question.
+    private struct ScopeQuestion: Identifiable {
+        let id = UUID()
+        let entry: CalendarEntry
+        let verb: Verb
+        /// Open days before today, oldest first, not counting this one.
+        let backlog: [String]
+
+        var total: Int { backlog.count + 1 }
+
+        var title: String {
+            verb == .complete ? "Mark complete" : "Skip occurrence"
+        }
+
+        /// The earlier days, named. Three at most: a list of eleven dates in a
+        /// sheet's message is not something anybody reads.
+        var message: String {
+            let shown = backlog.prefix(3).map(DayLabel.short(_:)).joined(separator: ", ")
+            let rest = backlog.count - min(backlog.count, 3)
+            let days = backlog.count == 1 ? "day is" : "days are"
+            let list = rest > 0 ? "\(shown), and \(rest) more" : shown
+            return "\(backlog.count) earlier \(days) still open: \(list)."
+        }
+
+        // The counts do the work the desktop puts in a helper line under each
+        // choice — an action sheet's buttons are bare labels, with no room for
+        // one.
+        var justThisOne: String {
+            verb == .complete ? "Complete just this one" : "Skip just this one"
+        }
+
+        var everything: String {
+            verb == .complete ? "Complete all \(total) days" : "Skip all \(total) days"
+        }
+    }
+
+    private var hasScopeQuestion: Binding<Bool> {
+        Binding(get: { scopeQuestion != nil }, set: { if !$0 { scopeQuestion = nil } })
+    }
+
+    /// Ask first, but only when there is something to ask about.
+    ///
+    /// A series that is not behind — or an occurrence today or later, which has
+    /// no backlog *behind* it — commits straight away. The prompt is a
+    /// disambiguation, not a confirmation, and putting one in front of every
+    /// tick would make the common case two taps for no reason.
+    private func act(_ verb: Verb, on entry: CalendarEntry) async {
+        let backlog = await store.backlog(behind: entry)
+        if backlog.isEmpty {
+            return await commit(verb, on: entry, backlog: [])
+        }
+        scopeQuestion = ScopeQuestion(entry: entry, verb: verb, backlog: backlog)
+    }
+
+    private func resolve(_ question: ScopeQuestion, scope: Scope) async {
+        scopeQuestion = nil
+        await commit(
+            question.verb, on: question.entry, backlog: scope == .all ? question.backlog : [])
+    }
+
+    private func commit(_ verb: Verb, on entry: CalendarEntry, backlog: [String]) async {
+        let title = entry.title.isEmpty ? "Untitled" : entry.title
+        switch verb {
+        case .complete:
+            _ = await store.completeOccurrences(entry, andBacklog: backlog)
+        case .skip:
+            let skipped = await store.skipOccurrences(entry, andBacklog: backlog)
+            guard !skipped.isEmpty else { return }
+            undo = SkippedOccurrence(pageId: entry.pageId, dates: skipped, title: title)
+        }
     }
 
     /// The way back, and the reason skipping asks for no confirmation.
@@ -138,13 +233,16 @@ struct CalendarScreen: View {
     private var undoBar: some View {
         if let undo {
             HStack {
-                Text("Skipped \(undo.title)")
+                Text(
+                    undo.dates.count == 1
+                        ? "Skipped \(undo.title)"
+                        : "Skipped \(undo.dates.count) days of \(undo.title)")
                     .font(.subheadline)
                     .lineLimit(1)
                 Spacer(minLength: 12)
                 Button("Undo") {
                     Task {
-                        await store.unskipOccurrence(pageId: undo.pageId, on: undo.date)
+                        await store.unskipOccurrences(pageId: undo.pageId, dates: undo.dates)
                         self.undo = nil
                     }
                 }

@@ -19,6 +19,10 @@ path = "src/bin/uniffi-bindgen.rs"
 
 [dependencies]
 pikos-core = { path = "../pikos-core" }
+# One subtraction, in one place: the backlog window opens a millisecond before
+# the head's own midnight, because it is exclusive at both ends and the head is
+# part of the backlog whenever the gesture pointed elsewhere.
+chrono = "0.4"
 # One warning, in one place: a calendar server that will not answer must not
 # stop somebody wiping their own device, and swallowing that silently would make
 # a failed disconnect indistinguishable from a clean one.

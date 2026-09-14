@@ -824,81 +824,73 @@ public final class WorkspaceStore {
 
     // MARK: - One occurrence at a time
 
-    /// Finish the occurrence the user tapped, not the one the series owes.
+    /// The earlier occurrences of this block's series that are still open.
     ///
-    /// `setStatus` completes whichever occurrence is next due, which is right
-    /// for a checkbox in a list — that row *is* the next one due. On a calendar
-    /// it is wrong the moment a series falls behind: the head sits on last
-    /// Monday while the block on screen is this Thursday's, and ticking the
-    /// block would close last Monday and leave Thursday drawn undone.
+    /// Empty means acting on this one is unambiguous and needs no question. A
+    /// non-empty answer is the backlog behind it, oldest first, with anything
+    /// already resolved — completed, skipped, moved, or from before a calendar
+    /// was connected — already taken out.
+    public func backlog(behind entry: CalendarEntry) async -> [String] {
+        guard let workspace, entry.isRecurring else { return [] }
+        do {
+            return try await workspace.occurrenceBacklog(
+                pageId: entry.pageId, occurrenceDate: occurrence(of: entry).originalDate)
+        } catch {
+            // A question that cannot be asked is not worth an alert: the caller
+            // falls back to acting on the one occurrence, which is the
+            // conservative half of the choice anyway.
+            return []
+        }
+    }
+
+    /// Skip this occurrence and every open day behind it.
     ///
-    /// So the calendar names its occurrence. Every field comes off the entry it
-    /// drew, which is the only place they agree.
-    public func completeOccurrence(_ entry: CalendarEntry) async {
-        guard let workspace else { return }
+    /// Returns what was skipped, for the undo. The gestured date goes first so
+    /// the count in the notice matches what the sheet offered.
+    public func skipOccurrences(_ entry: CalendarEntry, andBacklog backlog: [String]) async
+        -> [String]
+    {
+        guard let workspace else { return [] }
+        let dates = [occurrence(of: entry).originalDate] + backlog
+        do {
+            let skipped = try await workspace.skipOccurrences(pageId: entry.pageId, dates: dates)
+            await refresh()
+            return skipped
+        } catch {
+            errorMessage = error.localizedDescription
+            return []
+        }
+    }
+
+    public func unskipOccurrences(pageId: String, dates: [String]) async {
+        guard let workspace, !dates.isEmpty else { return }
+        do {
+            try await workspace.unskipOccurrences(pageId: pageId, dates: dates)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Complete this occurrence and every open day behind it, each as its own
+    /// finished page.
+    ///
+    /// Returns how many were completed, counting the gestured one.
+    public func completeOccurrences(_ entry: CalendarEntry, andBacklog backlog: [String]) async
+        -> Int
+    {
+        guard let workspace else { return 0 }
         do {
             _ = try await workspace.completeRecurringOccurrence(
                 pageId: entry.pageId, occurrence: occurrence(of: entry))
+            let more = try await workspace.completeOccurrencesToToday(
+                pageId: entry.pageId, maxSteps: UInt32(backlog.count))
             await refresh()
+            return Int(more) + 1
         } catch {
             errorMessage = error.localizedDescription
-        }
-    }
-
-    /// Drop one occurrence without finishing it — "not this week".
-    ///
-    /// Returns the date it skipped, for an undo. Nothing is destroyed, so the
-    /// undo is one call back the other way and the action needs no confirmation.
-    @discardableResult
-    public func skipOccurrence(_ entry: CalendarEntry) async -> String? {
-        guard let workspace else { return nil }
-        let date = occurrence(of: entry).originalDate
-        do {
-            try await workspace.skipOccurrence(pageId: entry.pageId, occurrenceDate: date)
             await refresh()
-            return date
-        } catch {
-            errorMessage = error.localizedDescription
-            return nil
-        }
-    }
-
-    /// Put a skipped occurrence back.
-    public func unskipOccurrence(pageId: String, on date: String) async {
-        guard let workspace else { return }
-        do {
-            try await workspace.unskipOccurrence(pageId: pageId, occurrenceDate: date)
-            await refresh()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    /// Move one occurrence of a series to a new time.
-    ///
-    /// Returns whether it took, so the sheet knows whether to close. Only a
-    /// projected block can be moved this way: a real one is a row, and a row
-    /// moves through `setSchedule`. The guard is here rather than only in the
-    /// menu because a calendar can be a refresh out of date by the time a sheet
-    /// is confirmed.
-    ///
-    /// The timezone is the one the phone is in, which is the zone the new wall
-    /// clock is written in.
-    @discardableResult
-    public func moveOccurrence(_ entry: CalendarEntry, to start: String, end: String?) async
-        -> Bool
-    {
-        guard let workspace, let ruleId = entry.ruleId, let originalDate = entry.originalDate
-        else { return false }
-        do {
-            try await workspace.moveOccurrence(
-                ruleId: ruleId, originalDate: originalDate, scheduledStart: start,
-                scheduledEnd: end, timezone: TimeZone.current.identifier)
-            await refresh()
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
+            return 0
         }
     }
 

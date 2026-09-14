@@ -116,4 +116,35 @@ extension DayLabelTests {
             DayLabel.today(buddhist, now: noon), "2026-01-05",
             "a Buddhist-calendar device would otherwise write 2569")
     }
+
+    // MARK: - short
+
+    /// The bare form never says "Today", which is the whole reason it exists
+    /// separately: it lists days somebody missed, and none of those is today.
+    func testShortIsNeverRelative() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let today = DayLabel.today(calendar, now: Date(timeIntervalSince1970: 1_789_309_800))
+
+        let label = DayLabel.short(today, calendar: calendar)
+        XCTAssertNotEqual(label, "Today")
+        XCTAssertFalse(label.isEmpty)
+        XCTAssertNotEqual(label, today, "and it is formatted, not passed through")
+    }
+
+    func testShortCarriesTheWeekdayTheDayAndTheMonth() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let label = DayLabel.short("2026-05-05", calendar: calendar)
+        // Order and separators are the reader's locale's business; the three
+        // parts being present is not.
+        XCTAssertTrue(label.contains("5"), label)
+        XCTAssertTrue(label.lowercased().contains("may"), label)
+        XCTAssertTrue(label.lowercased().contains("tue"), label)
+    }
+
+    func testAnUnreadableDayIsShownRawByShortToo() {
+        XCTAssertEqual(DayLabel.short("not-a-date"), "not-a-date")
+        XCTAssertEqual(DayLabel.short(""), "")
+    }
 }

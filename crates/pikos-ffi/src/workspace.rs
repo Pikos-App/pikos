@@ -1289,6 +1289,192 @@ impl Workspace {
         Ok(())
     }
 
+    /// The earlier occurrences of a series that are still open, oldest first.
+    ///
+    /// The question behind the scope prompt: acting on one occurrence of a
+    /// series that has fallen behind is ambiguous, and this is what decides
+    /// whether to ask. Empty means there is nothing to ask about — the gesture
+    /// commits on its own.
+    ///
+    /// Bounded on both sides. The head is the oldest open occurrence, so it is
+    /// where the search starts; today is where it stops, because an occurrence
+    /// that has not happened yet is not missed. The gestured date is dropped
+    /// from the result — it is the thing being acted on, not part of the
+    /// backlog behind it — and so is anything already excluded from the series:
+    /// the rule's own exdates, dates already completed, and dates already
+    /// skipped.
+    ///
+    /// Two things only a synced series has. Occurrences before the day the
+    /// calendar was connected are provider history rather than work anybody
+    /// missed, so `synced_since` floors the result. And a *moved* occurrence is
+    /// an override row, not a gap — its original date is already out of the
+    /// head's derivation, so it is neither open nor missed.
+    pub async fn occurrence_backlog(
+        &self,
+        page_id: String,
+        occurrence_date: String,
+    ) -> Result<Vec<String>, WorkspaceError> {
+        let (Some(page), Some(rule)) = (
+            pikos_db::get_page(&self.pool, &page_id).await?,
+            pikos_db::get_recurrence_rule_impl(&self.pool, &page_id).await?,
+        ) else {
+            return Ok(Vec::new());
+        };
+        let Some(head_start) = page.scheduled_start.as_deref() else {
+            return Ok(Vec::new());
+        };
+
+        let (today, _) = pikos_db::now_local_parts();
+        let Some(head_day) =
+            pikos_core::dates::parse_local_iso(pikos_core::views::day_key(head_start))
+        else {
+            return Ok(Vec::new());
+        };
+        let Some(today_start) = pikos_core::dates::parse_local_iso(&today) else {
+            return Ok(Vec::new());
+        };
+        if today_start <= head_day {
+            return Ok(Vec::new());
+        }
+        // A millisecond before the head's own midnight, because the window is
+        // exclusive at both ends and the head is itself part of the backlog
+        // whenever the gesture pointed somewhere else.
+        let from = head_day - chrono::Duration::milliseconds(1);
+
+        // Everything already out of the series, day-keyed: a synced timed exdate
+        // is stored as a full wall clock while occurrences match on the day.
+        let mut excluded: Vec<String> = rule
+            .rrule_exdates
+            .iter()
+            .map(|d| pikos_core::views::day_key(d).to_string())
+            .collect();
+        if let Some(completed) = &page.completed_occurrences {
+            excluded.extend(
+                completed
+                    .keys()
+                    .map(|d| pikos_core::views::day_key(d).to_string()),
+            );
+        }
+        if let Some(skipped) = &page.skipped_occurrences {
+            excluded.extend(
+                skipped
+                    .iter()
+                    .map(|d| pikos_core::views::day_key(d).to_string()),
+            );
+        }
+
+        let dates = pikos_recurrence::missed_occurrences_between(
+            &rule.rrule,
+            &rule.scheduled_start,
+            &pikos_core::dates::format_local_iso(&from),
+            &pikos_core::dates::format_local_iso(&today_start),
+            &excluded,
+        )
+        .map_err(|e| WorkspaceError::InvalidInput {
+            message: format!("this page's repeat could not be read: {e}"),
+        })?;
+
+        let moved: std::collections::HashSet<String> =
+            pikos_db::list_page_schedules_for_rules_impl(
+                &self.pool,
+                std::slice::from_ref(&rule.id),
+            )
+            .await?
+            .into_iter()
+            .filter_map(|row| row.original_date)
+            .map(|d| pikos_core::views::day_key(&d).to_string())
+            .collect();
+        let floor = page.synced_since.as_deref();
+
+        Ok(dates
+            .into_iter()
+            .filter(|date| date != &occurrence_date)
+            .filter(|date| !moved.contains(date))
+            .filter(|date| {
+                floor.is_none_or(|since| date.as_str() >= pikos_core::views::day_key(since))
+            })
+            .collect())
+    }
+
+    /// Drop several occurrences at once — the backlog arm of the scope prompt.
+    ///
+    /// One call per date rather than one statement, because each write recomputes
+    /// the head and a bulk dismissal can cover the head's own date. Returns the
+    /// dates that were skipped, in the order they were given, so an undo can put
+    /// exactly those back.
+    pub async fn skip_occurrences(
+        &self,
+        page_id: String,
+        dates: Vec<String>,
+    ) -> Result<Vec<String>, WorkspaceError> {
+        for date in &dates {
+            self.skip_occurrence(page_id.clone(), date.clone()).await?;
+        }
+        Ok(dates)
+    }
+
+    /// Put several skipped occurrences back.
+    pub async fn unskip_occurrences(
+        &self,
+        page_id: String,
+        dates: Vec<String>,
+    ) -> Result<(), WorkspaceError> {
+        for date in dates {
+            self.unskip_occurrence(page_id.clone(), date).await?;
+        }
+        Ok(())
+    }
+
+    /// Complete every open occurrence up to today — the other backlog arm.
+    ///
+    /// Each day becomes its own done clone, by repeating the ordinary single
+    /// completion until the head reaches today. Nothing goes to the skip-set:
+    /// this is the arm that says the work happened, and a skipped day says the
+    /// opposite.
+    ///
+    /// `max_steps` bounds it. The caller already knows how many days it is
+    /// asking about, and a loop driven only by "is the head still behind" would
+    /// run until the rule ran out if a completion ever failed to advance it. The
+    /// same guard catches that directly: a step that does not move the head
+    /// stops the loop.
+    ///
+    /// Returns how many were completed, which is not always `max_steps` — a
+    /// series can exhaust, and a head that has caught up is done.
+    pub async fn complete_occurrences_to_today(
+        &self,
+        page_id: String,
+        max_steps: u32,
+    ) -> Result<u32, WorkspaceError> {
+        let (today, _) = pikos_db::now_local_parts();
+        let mut completed = 0u32;
+
+        for _ in 0..max_steps {
+            let Some(page) = pikos_db::get_page(&self.pool, &page_id).await? else {
+                break;
+            };
+            let Some(start) = page.scheduled_start.clone() else {
+                break;
+            };
+            if page.status == "done" || pikos_core::views::day_key(&start) >= today.as_str() {
+                break;
+            }
+            self.complete_recurring_occurrence(page_id.clone(), None)
+                .await?;
+            completed += 1;
+
+            // A completion that left the head where it was would loop forever
+            // against a rule the engine cannot advance.
+            let moved = pikos_db::get_page(&self.pool, &page_id)
+                .await?
+                .and_then(|p| p.scheduled_start)
+                .is_none_or(|next| next != start);
+            if !moved {
+                break;
+            }
+        }
+        Ok(completed)
+    }
+
     /// Put a skipped occurrence back.
     ///
     /// The undo for the above, and the reason a skip is worth offering without a

@@ -137,9 +137,6 @@ suite.
 - **Dragging in the calendar.** The grid draws; moving and resizing a block by
   dragging is not wired. On a phone both compete with scrolling and want a
   design decision rather than a port of the desktop's gestures.
-- **The scope question behind a backlog.** When a series has open occurrences
-  before today, the desktop asks whether a skip means _just this one_ or
-  _this and everything before today_. iOS always means the first.
 - **The iPad UI.** Ships in the same universal binary, styled after the desktop
   app rather than the phone. Not started; `docs/ios/00-status.md` records the
   three things being kept true so that it stays a change of shell.

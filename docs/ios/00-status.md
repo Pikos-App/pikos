@@ -101,6 +101,43 @@ be clean for the wrong reason until an axis was added deliberately.
 elsewhere: _a clean fuzz run is evidence about the axes the generator varies and
 nothing else._
 
+**The backlog scope question is asked on the phone too.** Acting on one
+occurrence of a series that has fallen behind is genuinely ambiguous — ticking
+last Monday's standup when three earlier Mondays are also open could mean
+either — and the desktop stops to ask. iOS now asks the same question, as an
+action sheet:
+
+> **Mark complete** — _3 earlier days are still open: Tue 5 May, Wed 6 May, and
+> 1 more._ → **Complete just this one** · **Complete all 4 days** · Cancel
+
+The shape is the one thing that differs, and deliberately. An action sheet's
+buttons are bare labels with no room for the per-choice helper line the desktop
+puts under each card, so the counts carry that instead. A custom sheet could
+have reproduced the cards exactly; a hand-built modal for one question is not
+worth it.
+
+`Workspace::occurrence_backlog` decides whether to ask at all, and applies every
+exclusion the desktop does: the rule's own exdates, days already completed or
+skipped, a moved occurrence's original date, and the connect-day floor on a
+synced series. Empty means no question — a series that is not behind, or a
+gesture on today, commits on the first tap. It is a disambiguation, not a
+confirmation.
+
+Two of those exclusions took a second attempt to test honestly. The
+moved-occurrence filter is unreachable on a **native** series, because a native
+move writes an EXDATE and the rule stops yielding the date anyway; only a
+detached series keeps the occurrence in-series as an override row with nothing
+in the rule to say so. And the window's extra millisecond — it opens just before
+the head's midnight rather than at it — only matters for an **all-day** head,
+which _is_ midnight and would otherwise fall out of its own backlog. Both
+mutations survived against timed, native fixtures and bite against the right
+ones.
+
+Three store methods went in the same change. `skipOccurrence`,
+`unskipOccurrence` and `completeOccurrence` were each superseded by a plural
+that takes the backlog, and leaving the singulars behind would have been three
+pieces of public API nothing called.
+
 **The focus timer works on the phone.** A button in the editor's toolbar, a
 ticking clock beside it, and a row in `focus_sessions` when a session ends.
 
