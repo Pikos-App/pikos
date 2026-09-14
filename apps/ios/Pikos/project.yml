@@ -116,6 +116,15 @@ targets:
           - app.pikos.reminders.refresh
         UIBackgroundModes:
           - fetch
+        # The app's Documents folder appears in the Files app as "Pikos",
+        # and files in it can be opened where they are. This is what makes
+        # "your data is a file" true on a phone: Settings › Your data writes
+        # a copy of the workspace there, and a person can see it, keep it,
+        # or move it out. The live database is NOT in Documents — it is in
+        # the App Group container, which Files never shows — so what a
+        # person can touch is always a copy. See ExportStore.backUpToFiles.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
 
   # Today's pages on the home screen.
   #

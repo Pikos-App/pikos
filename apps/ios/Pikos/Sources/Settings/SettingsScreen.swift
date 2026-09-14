@@ -87,6 +87,8 @@ struct SettingsScreen: View {
                     Text("External calendars")
                 }
 
+                yourDataSection
+
                 exportSection
 
                 Section("About") {
@@ -149,6 +151,7 @@ struct SettingsScreen: View {
                 }
             }
             .task { await sync.load() }
+            .task { exports.refreshDataFacts() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -267,6 +270,64 @@ struct SettingsScreen: View {
     /// They are not interchangeable, and the difference only becomes visible
     /// once the file is somewhere else — a CSV that imports back, a Markdown
     /// tree that opens anywhere, a calendar file, and a backup that is the whole
+    /// The promise, made checkable.
+    ///
+    /// The marketing site says the data is a file on your device. On a
+    /// desktop that is something a person can go and look at; on a phone the
+    /// container is hidden, and the claim has to be taken on faith. This
+    /// section is the faith made visible: how big the file is, and a button
+    /// that puts a copy of it where the Files app shows it.
+    ///
+    /// Above Export rather than folded into it, because it answers a
+    /// different question. Export is "get this into another app"; this is
+    /// "where is my data, and can I hold a copy of it".
+    private var yourDataSection: some View {
+        Section {
+            LabeledContent("On this device") {
+                if let size = exports.workspaceSize {
+                    Text(size, format: .byteCount(style: .file))
+                } else {
+                    Text("—")
+                }
+            }
+            Button {
+                Task { await exports.backUpToFiles() }
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Back up to Files").foregroundStyle(Color.primary)
+                        Text(lastBackupLabel)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if exports.isBackingUp {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(exports.isBackingUp)
+        } header: {
+            Text("Your data")
+        } footer: {
+            Text(
+                "Everything Pikos knows is one database on this device, with your images beside it. A backup is a copy of both, in Pikos › Backups in the Files app, where you can keep it, move it or send it anywhere. Nothing leaves the phone unless you move it."
+            )
+        }
+    }
+
+    /// "Last backup Today at 9:41" or "Never backed up".
+    ///
+    /// The date is relative through the same wording the list uses for a
+    /// schedule, so a backup taken this morning says "Today" and not a date
+    /// the reader has to compare with the clock.
+    private var lastBackupLabel: String {
+        guard let date = exports.lastBackup else { return String(localized: "Never backed up") }
+        let day = DayLabel.relative(DayLabel.today(now: date), today: DayLabel.today())
+        let time = date.formatted(date: .omitted, time: .shortened)
+        return String(localized: "Last backup \(day) at \(time)")
+    }
+
     /// workspace including the trash.
     @ViewBuilder
     private var exportSection: some View {

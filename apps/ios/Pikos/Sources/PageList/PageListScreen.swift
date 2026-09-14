@@ -1,4 +1,5 @@
 import PikosCore
+import PikosSupport
 import SwiftUI
 
 /// The page list — the app's home screen.
@@ -152,7 +153,24 @@ struct PageListScreen: View {
             } label: {
                 Label("Delete", systemImage: "trash")
             }
-            if !page.scheduleLocked && !page.isRecurring {
+            if isInbox && page.scheduledStart == nil && !page.scheduleLocked && !page.isRecurring {
+                // Filing is the Inbox's whole job, and "today or tomorrow" is
+                // most of it. Two one-tap answers here, rather than the sheet
+                // every other view offers: a person clearing an inbox of
+                // twenty captures should not open twenty date pickers.
+                Button {
+                    Task { await store.setSchedule(pageId: page.id, start: DayLabel.today(), end: nil) }
+                } label: {
+                    Label("Today", systemImage: "sun.max")
+                }
+                .tint(.indigo)
+                Button {
+                    Task { await store.setSchedule(pageId: page.id, start: Self.tomorrow(), end: nil) }
+                } label: {
+                    Label("Tomorrow", systemImage: "sunrise")
+                }
+                .tint(.teal)
+            } else if !page.scheduleLocked && !page.isRecurring {
                 Button {
                     actions.sheet = .schedule(PageFacts(page))
                 } label: {
@@ -172,6 +190,18 @@ struct PageListScreen: View {
             .tint(done ? .orange : .green)
         }
         .contextMenu { PageActionsMenu(page: PageFacts(page), state: $actions) }
+    }
+
+    private var isInbox: Bool {
+        if case .inbox = store.scope { return true }
+        return false
+    }
+
+    /// Tomorrow as the `YYYY-MM-DD` key, through calendar arithmetic rather
+    /// than 86,400 seconds: a day around a clock change is not that long.
+    private static func tomorrow() -> String {
+        let next = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        return DayLabel.today(now: next)
     }
 
     // MARK: - Clearing the backlog
@@ -296,14 +326,48 @@ struct PageListScreen: View {
 
     // MARK: - Empty state
 
+    /// An empty view, and the one place the app teaches how to fill it.
+    ///
+    /// Quick capture is the headline feature, and an empty list is the moment
+    /// somebody is about to type their first line. So the empty state shows a
+    /// sentence the parser understands and opens quick add with it filled
+    /// in: the chips the sheet draws under it are the lesson, and Add is the
+    /// exam. A sentence rather than a grammar table, because nobody reads a
+    /// grammar table on a phone.
     private var emptyState: some View {
         ContentUnavailableView {
             Label("Nothing here yet", systemImage: emptyIcon)
         } description: {
             Text(emptyDescription)
         } actions: {
-            Button("New page") { route.isQuickAddPresented = true }
-                .buttonStyle(.borderedProminent)
+            VStack(spacing: 12) {
+                Button("New page") { route.isQuickAddPresented = true }
+                    .buttonStyle(.borderedProminent)
+                if let example = emptyExample {
+                    Button {
+                        route.quickAddPrefill = example
+                        route.isQuickAddPresented = true
+                    } label: {
+                        Text("Try “\(example)”")
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
+    }
+
+    /// A line the parser reads a date, time, priority or tag out of, chosen
+    /// so that adding it lands in the view the reader is looking at. Nothing
+    /// for a folder: a page typed there goes to that folder regardless, and
+    /// the lesson has been taught by the time somebody has made one.
+    private var emptyExample: String? {
+        switch store.scope {
+        case .today: return "Call the dentist today at 3pm !high #health"
+        case .upcoming: return "Review the budget Friday at 10am"
+        case .inbox: return "Ideas for the garden #home"
+        case .folder: return nil
         }
     }
 
@@ -318,9 +382,13 @@ struct PageListScreen: View {
 
     private var emptyDescription: String {
         switch store.scope {
-        case .today: return String(localized: "Pages scheduled for today will appear here.")
+        case .today:
+            return String(
+                localized: "Pages scheduled for today appear here. Type a sentence and Pikos reads the date, time, priority and tags out of it.")
         case .upcoming: return String(localized: "Pages scheduled in the next week will appear here.")
-        case .inbox: return String(localized: "Pages you haven't filed will appear here.")
+        case .inbox:
+            return String(
+                localized: "Pages you haven't filed or dated wait here. Swipe one to send it to today or tomorrow.")
         case .folder(_, let name): return String(localized: "Nothing in \(name) yet.")
         }
     }

@@ -119,6 +119,14 @@ struct RootView: View {
     @Environment(CalendarSyncStore.self) private var calendars
     @Environment(\.scenePhase) private var scenePhase
 
+    /// The page that was open when the app was last put away, and when.
+    ///
+    /// Scene storage rather than a preference: it is this window's state,
+    /// which on iPad is one of several, and it is meant to be forgotten with
+    /// the scene rather than kept forever. See `restoreOpenPage`.
+    @SceneStorage("pikos.openPage") private var openPage = ""
+    @SceneStorage("pikos.openPageAt") private var openPageAt: Double = 0
+
     var body: some View {
         @Bindable var route = route
 
@@ -242,7 +250,49 @@ struct RootView: View {
             guard pending != nil else { return }
             route.applyPending(to: store)
         }
+        .onChange(of: route.pagesPath) { _, path in
+            openPage = path.last ?? ""
+            openPageAt = Date().timeIntervalSince1970
+        }
+        .onChange(of: store.isLoading) { _, loading in
+            guard !loading else { return }
+            Task { await restoreOpenPage() }
+        }
         .preferredColorScheme(settings.colorScheme)
         .environment(\.calendar, settings.calendar)
     }
+
+    /// Land back on the page that was open, if the app was only just put away.
+    ///
+    /// iOS ends a suspended app without telling it, and a person who was in
+    /// the middle of a note ten minutes ago expects to come back to that note,
+    /// not to the list. So the page is restored — but only within a few hours.
+    /// The app's promise is that it opens on Today, and a note from three days
+    /// ago appearing over the morning's list is that promise broken by a
+    /// convenience. The window is the difference between "I was interrupted"
+    /// and "I am starting a day".
+    ///
+    /// A link or an intent that arrived during launch has already pushed a
+    /// page, and wins: the path is left alone if it is not empty. A page that
+    /// has since been trashed — here with the editor closed, or on another
+    /// device — is not brought back.
+    private func restoreOpenPage() async {
+        guard route.pagesPath.isEmpty, !openPage.isEmpty, let workspace = store.handle else { return }
+        let saved = Date(timeIntervalSince1970: openPageAt)
+        guard Date().timeIntervalSince(saved) < Self.restoreWindow else {
+            openPage = ""
+            return
+        }
+        guard (try? await workspace.getPage(id: openPage)) != nil,
+            let trashed = try? await workspace.listTrashedPages(),
+            !trashed.contains(where: { $0.id == openPage })
+        else {
+            openPage = ""
+            return
+        }
+        route.tab = .pages
+        route.pagesPath = [openPage]
+    }
+
+    private static let restoreWindow: TimeInterval = 4 * 60 * 60
 }

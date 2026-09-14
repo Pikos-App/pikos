@@ -555,6 +555,53 @@ away), and the notice bar is announced to VoiceOver, since a six-second bar at
 the bottom of the screen is one a screen reader would only find by sweeping
 down to it.
 
+## Four more, read off the product vision
+
+The README's pitch is local-first, no accounts, one-time purchase, capture in
+a sentence, and "your data is a file". On a phone that is three tests: capture
+is instant from anywhere, the promise about the file is visible rather than
+asserted, and the whole thing stays calm. This pass is what those tests
+turned up.
+
+- **Capture without opening the app.** The Today widget's rings are buttons:
+  a tap runs `CompletePageIntent` in the widget process and flips the page's
+  status. That is the one write made outside the app, and it is the
+  deliberate exception to the one-writer rule — the database layer's
+  `retry_on_busy` and busy timeout were built for a desktop, a CLI and a sync
+  poller sharing one file, and a single-row status flip is the smallest
+  transaction there is. The same widget gained the three lock-screen sizes:
+  the next two open pages with times, the open count, and one line beside
+  the clock.
+- **"Your data is a file", made checkable.** Settings › Your data shows the
+  workspace's size on disk (database, sidecars and images together) and a
+  "Back up to Files" button that writes a `VACUUM INTO` copy plus the assets
+  directory into `Documents/Backups`, which `UIFileSharingEnabled` and
+  `LSSupportsOpeningDocumentsInPlace` make visible in the Files app. The live
+  database stays in the App Group container, which Files never shows. The
+  privacy manifest gained the file-timestamp reason for the "Last backup"
+  line.
+- **The empty state teaches the grammar.** Today, Upcoming and the Inbox
+  each offer a sentence under the New page button — "Call the dentist today
+  at 3pm !high #health" and so on — that opens quick add with the line filled
+  in, so the chips do the explaining. Every example was run through the Rust
+  parser and lands in the view it is shown on. A brand-new workspace (the
+  database file did not exist before the open) starts with one "Welcome to
+  Pikos" page in the Inbox, in the product's voice. No onboarding screens:
+  nothing to sign up for means nothing to ask.
+- **Three fidelity fixes.** The calendar opens an hour above the red line
+  when today is on screen, rather than at 7am. The page that was open when
+  the app was put away comes back on the next launch, through
+  `@SceneStorage`, within a four-hour window — after that the app keeps its
+  promise to open on Today. Inbox rows swipe to Today or Tomorrow directly,
+  since filing is the Inbox's job and a date picker per capture is not how
+  an inbox gets cleared. (The hour height already scaled with Dynamic Type
+  through `@ScaledMetric`; the recommendation that it should was wrong, and
+  nothing changed there.)
+
+Not done, and why: a share extension is a new target, not a refinement; and
+the cross-device image path convention waits on iCloud sync, which will carry
+the assets directory and settle it.
+
 ## Reminders ring on the phone
 
 The one parity gap that decided whether a task app is usable on a phone, and

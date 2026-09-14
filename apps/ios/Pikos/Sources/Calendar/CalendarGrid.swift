@@ -71,9 +71,7 @@ struct CalendarGrid: View {
                     timedSection
                 }
                 .onAppear {
-                    // Land on the working day rather than at midnight, which is
-                    // eight hours of empty grid.
-                    proxy.scrollTo(Self.openingHourAnchor, anchor: .top)
+                    proxy.scrollTo(Self.hourAnchor(openingHour), anchor: .top)
                 }
             }
         }
@@ -237,7 +235,7 @@ struct CalendarGrid: View {
         VStack(spacing: 0) {
             ForEach(0..<24, id: \.self) { hour in
                 Divider().frame(height: hourHeight, alignment: .top)
-                    .id(hour == Self.openingHour ? Self.openingHourAnchor : "hour-\(hour)")
+                    .id(Self.hourAnchor(hour))
             }
         }
         .accessibilityHidden(true)
@@ -429,9 +427,26 @@ struct CalendarGrid: View {
     /// four points out is the kind of thing that reads as "slightly wrong" long
     /// before anyone works out why.
     private static let gutterGap: CGFloat = 4
-    /// Where the grid opens, rather than at midnight.
-    private static let openingHour = 7
-    private static let openingHourAnchor = "calendar-opening-hour"
+    /// Where the grid opens when today is not on screen, rather than at
+    /// midnight, which is eight hours of empty grid.
+    private static let defaultOpeningHour = 7
+
+    /// The hour the grid scrolls to when it appears.
+    ///
+    /// When today is one of the columns, the hour before now — so the first
+    /// thing on screen is the red line and what is happening around it, which
+    /// is what a person opening a calendar is asking. Any other range opens
+    /// on the working day.
+    private var openingHour: Int {
+        guard let today = CalendarGeometry.day(of: now), days.contains(today),
+            let minute = CalendarGeometry.minutesIntoDay(now)
+        else { return Self.defaultOpeningHour }
+        return max(0, minute / 60 - 1)
+    }
+
+    private static func hourAnchor(_ hour: Int) -> String {
+        "hour-\(hour)"
+    }
 
     private func isToday(_ day: String) -> Bool {
         CalendarGeometry.day(of: now) == day

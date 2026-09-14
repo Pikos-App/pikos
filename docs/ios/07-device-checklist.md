@@ -69,6 +69,23 @@ Cheap, and each one has caught something on other apps:
 - Type `Dentist tomorrow at 3pm remind 30m before // bring the card` into quick
   add. The chips should show the time, the reminder and a note; the page's
   document should hold the note.
+- Add the Today widget at the medium size with a page due today, then tap its
+  ring from the home screen. The ring should fill without the app opening, and
+  the row should be under Completed when the app is next opened. This is the
+  one write the widget process makes (`PikosWidgets/CompletePageIntent.swift`);
+  if it fails, the symptom is a ring that dims and springs back.
+- Add "Today" to the lock screen in the rectangular slot. It should show the
+  next two open pages with their times; the circular one the open count.
+- Settings › Your data › Back up to Files, then open the Files app: On My
+  iPhone › Pikos › Backups should hold a dated folder with `pikos.sqlite` and,
+  if a photo was inserted, `assets`. The "Last backup" line should say Today.
+- Open a page, swipe the app away, reopen within a few minutes: it should land
+  on that page. Reopen the next morning: it should land on Today.
+- Open the calendar on a day view of today: the red line should be near the
+  top of the screen, not the 7am rule.
+- On a fresh install, the Inbox should hold "Welcome to Pikos" and Today should
+  be empty with a "Try …" line under the New page button. Tapping it should
+  open quick add with the chips already drawn.
 
 ## What to write down
 

@@ -208,8 +208,24 @@ suite.
   pasting an image into the editor. And one convention worth knowing: the phone
   stores the asset path *relative to the assets directory*, which is what its
   scheme handler resolves, where the desktop stores an absolute path — so an
-  image inserted on either device does not yet render on the other.
-- **Share extension.** M4. Capturing a URL or a selection into a new page.
+  image inserted on either device does not yet render on the other. That is
+  iCloud sync's to settle: the sync layer carries the assets directory with the
+  database, and the path convention is the one thing the two apps have to
+  agree on before it lands.
+- **Share extension.** M4. Capturing a URL or a selection into a new page. The
+  App Group and the read-only workspace it needs are in place; what is missing
+  is the target itself. The capture surfaces that *are* here: the Today widget's
+  rings tick a page from the home screen without opening the app, the same
+  widget in its lock-screen sizes shows what is next, and Siri takes "Add a page
+  to Pikos".
+- **Onboarding.** Deliberately. Nothing to sign up for means nothing to ask. A
+  brand-new workspace starts with one page in the Inbox, "Welcome to Pikos",
+  that says where the data lives and what to type; each empty view offers a
+  sentence the parser understands and opens quick add with it filled in.
+- **A way to see the file.** Settings › Your data says how big the workspace
+  is and copies it — database and images — into Pikos › Backups in the Files
+  app, where a person can hold it, move it or send it on. The live database
+  stays in the App Group container, which Files never shows.
 - **The desktop's notification extras.** Reminders ring on the phone: the
   workspace is asked what will fire over the next fourteen days and each
   answer becomes a local notification, re-planned on every write, on the way

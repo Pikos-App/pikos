@@ -213,16 +213,69 @@ public final class WorkspaceStore {
     public func start() async {
         do {
             let url = try WorkspaceLocation.databaseURL()
+            // Decided before the open, which creates the file. Whether this
+            // is a first launch is a property of the disk, not of a
+            // preference: a preference would survive "Delete all data" and a
+            // reinstall would forget it, and both are exactly the moments a
+            // fresh workspace should be recognised as one.
+            let isNewWorkspace = !FileManager.default.fileExists(atPath: url.path)
             workspace = try await Workspace.open(path: url.path)
             // After the open, so the sidecar files SQLite creates get the class
             // too. The app is the only writer, so this is the one place it can
             // be applied without racing anyone.
             try? WorkspaceLocation.applyProtectionClass()
+            if isNewWorkspace {
+                await seedWelcomePage()
+            }
             await refresh()
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// The one page a brand-new workspace starts with.
+    ///
+    /// There is no onboarding. Nothing to sign up for means nothing to ask,
+    /// and a carousel of screens between a person and their first note is a
+    /// cost the app's whole pitch is about not having. What a first launch
+    /// does get is one page in the Inbox, written in the product's own voice:
+    /// where the data lives, how capture works, and what to swipe. It is a
+    /// page like any other — deletable, editable, and gone from Today's empty
+    /// state, which stays empty so the "Try …" example there still lands.
+    ///
+    /// Seeded only when the database did not exist before this open, so a
+    /// workspace that arrives by restore or sync is never given a page its
+    /// owner did not write.
+    private func seedWelcomePage() async {
+        guard let workspace else { return }
+        let page = NewPage(
+            title: String(localized: "Welcome to Pikos"),
+            content: plainTextToDocument(text: Self.welcomeText))
+        _ = try? await workspace.createPage(page: page)
+    }
+
+    /// Plain paragraphs, turned into a document by the shared Rust so the
+    /// page is written in the same schema as everything else.
+    private static var welcomeText: String {
+        String(
+            localized: """
+                Pikos is notes, tasks and a calendar in one place. Everything you write is stored in a database on this device. There is no account, and nothing is sent anywhere.
+
+                A page is a note until you give it a date. Then it is on your calendar too. Tick the ring beside a page to finish it.
+
+                The fastest way in is the + button. Type a sentence and Pikos reads the details out of it:
+
+                Call the dentist tomorrow at 3pm !high #health
+                Standup every weekday at 9:30 !r10
+                Pay rent every month on the 1st
+
+                Swipe a row to complete or delete it. Tap the title at the top of the list to switch between Today, Upcoming, your Inbox and your folders.
+
+                Settings › Your data shows how big your workspace is and puts a copy of it in the Files app whenever you like.
+
+                Delete this page whenever you like.
+                """)
     }
 
     /// Open the workspace if nothing has yet.
