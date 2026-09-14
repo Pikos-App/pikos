@@ -384,6 +384,7 @@
         }
       ],
       "ref": "sun_noon",
+      "today": "2026-03-15",
       "todayGroups": {
         "ok": true,
         "overdue": [
@@ -396,9 +397,7 @@
           "v_today_late"
         ]
       },
-      "today": "2026-03-15",
       "upcomingDays": {
-        "ok": true,
         "days": [
           {
             "date": "2026-03-15",
@@ -428,7 +427,8 @@
               "v_day7"
             ]
           }
-        ]
+        ],
+        "ok": true
       },
       "windowEnd": {
         "ok": true,
@@ -579,6 +579,7 @@
         }
       ],
       "ref": "wed_noon",
+      "today": "2026-03-18",
       "todayGroups": {
         "ok": true,
         "overdue": [
@@ -594,9 +595,7 @@
         ],
         "today": []
       },
-      "today": "2026-03-18",
       "upcomingDays": {
-        "ok": true,
         "days": [
           {
             "date": "2026-03-21",
@@ -610,7 +609,8 @@
               "v_day8"
             ]
           }
-        ]
+        ],
+        "ok": true
       },
       "windowEnd": {
         "ok": true,
@@ -761,6 +761,7 @@
         }
       ],
       "ref": "mon_morning",
+      "today": "2026-03-16",
       "todayGroups": {
         "ok": true,
         "overdue": [
@@ -776,9 +777,7 @@
           "v_tie_b"
         ]
       },
-      "today": "2026-03-16",
       "upcomingDays": {
-        "ok": true,
         "days": [
           {
             "date": "2026-03-16",
@@ -806,7 +805,8 @@
               "v_day8"
             ]
           }
-        ]
+        ],
+        "ok": true
       },
       "windowEnd": {
         "ok": true,
@@ -957,6 +957,7 @@
         }
       ],
       "ref": "sat_late",
+      "today": "2026-03-21",
       "todayGroups": {
         "ok": true,
         "overdue": [
@@ -974,9 +975,7 @@
           "v_day7"
         ]
       },
-      "today": "2026-03-21",
       "upcomingDays": {
-        "ok": true,
         "days": [
           {
             "date": "2026-03-21",
@@ -990,7 +989,8 @@
               "v_day8"
             ]
           }
-        ]
+        ],
+        "ok": true
       },
       "windowEnd": {
         "ok": true,
@@ -1141,6 +1141,7 @@
         }
       ],
       "ref": "dst_eve",
+      "today": "2026-03-28",
       "todayGroups": {
         "ok": true,
         "overdue": [
@@ -1158,10 +1159,9 @@
         ],
         "today": []
       },
-      "today": "2026-03-28",
       "upcomingDays": {
-        "ok": true,
-        "days": []
+        "days": [],
+        "ok": true
       },
       "windowEnd": {
         "ok": true,
@@ -1312,15 +1312,15 @@
         }
       ],
       "ref": "leap_day",
+      "today": "2024-02-29",
       "todayGroups": {
         "ok": true,
         "overdue": [],
         "today": []
       },
-      "today": "2024-02-29",
       "upcomingDays": {
-        "ok": true,
-        "days": []
+        "days": [],
+        "ok": true
       },
       "windowEnd": {
         "ok": true,
@@ -1471,6 +1471,7 @@
         }
       ],
       "ref": "year_end",
+      "today": "2026-12-31",
       "todayGroups": {
         "ok": true,
         "overdue": [
@@ -1489,10 +1490,9 @@
         ],
         "today": []
       },
-      "today": "2026-12-31",
       "upcomingDays": {
-        "ok": true,
-        "days": []
+        "days": [],
+        "ok": true
       },
       "windowEnd": {
         "ok": true,

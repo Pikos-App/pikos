@@ -52,7 +52,21 @@ pub struct ParsedInput {
     /// `None` when no priority was written; `Some(None)` when `!0` cleared one.
     /// The two are different edits, so they cannot collapse into one `Option`.
     pub priority: Option<Option<Priority>>,
+    /// Reminder rows to write, as `minutes_before` values: ascending, deduped,
+    /// and already resolved against the schedule's shape. `None` when nothing
+    /// was asked for — or when what was asked for has no schedule to anchor
+    /// to, in which case the words stay in the title.
+    pub reminder_minutes: Option<Vec<i64>>,
+    /// The page body, from everything after the first whitespace-delimited
+    /// `//`. Kept verbatim: no tag, folder, date or cadence is read out of it.
+    pub content: Option<String>,
 }
+
+/// The `minutes_before` value that means "the day before, at 09:00 local"
+/// rather than a lead time in minutes. The same sentinel as
+/// `pikos_db::DAY_BEFORE_MINUTES`, which this crate cannot name; the FFI
+/// crate, which depends on both, pins the two equal.
+pub const DAY_BEFORE_MINUTES: i64 = -2;
 
 /// What the line asked for.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -89,7 +103,12 @@ pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
         };
     }
 
-    let text = tokens::rewrite(raw, reference);
+    // Body split: "buy a gift // she likes the blue one". Everything after
+    // the first whitespace-delimited "//" is the page body and sees none of
+    // the pipeline below, so a "#word" in a note stays literal text.
+    let (head, content) = split_body(raw);
+
+    let text = tokens::rewrite(head, reference);
     let (text, tokens) = tokens::extract(&text, reference);
     let (text, mut cadence) = recurrence::detect(&text);
 
@@ -213,6 +232,40 @@ pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
         }
     }
 
+    // Reminder resolution. Every reminder arm of the scheduler joins the
+    // schedule table, so a lead on an unscheduled page could never fire:
+    // without a schedule the words go back into the title verbatim rather
+    // than becoming a row that never rings. With one, the schedule's own
+    // shape decides what the row holds — an all-day page has no start time to
+    // count minutes back from, so every lead collapses onto the one anchor
+    // such a page can carry; a timed page keeps the minutes as typed.
+    let mut reminder_minutes: Option<Vec<i64>> = None;
+    if !tokens.reminder_tokens.is_empty() {
+        if let Some(start) = &scheduled_start {
+            let leads = if is_all_day_iso(start) {
+                vec![DAY_BEFORE_MINUTES]
+            } else {
+                tokens.reminder_leads.clone()
+            };
+            let mut unique: Vec<i64> = Vec::new();
+            for lead in leads {
+                if !unique.contains(&lead) {
+                    unique.push(lead);
+                }
+            }
+            unique.sort_unstable();
+            reminder_minutes = Some(unique);
+        }
+        for (index, token) in tokens.reminder_tokens.iter().enumerate() {
+            let restored = if reminder_minutes.is_some() {
+                " ".to_string()
+            } else {
+                format!(" {token} ")
+            };
+            text = text.replacen(&tokens::reminder_placeholder(index), &restored, 1);
+        }
+    }
+
     let title = clean_title(&text);
     let mut base = ParsedInput {
         title,
@@ -220,6 +273,8 @@ pub fn parse_input(raw: &str, reference: NaiveDateTime) -> ParseResult {
         folder_query: tokens.folder_query.clone(),
         priority: tokens.priority,
         duration_minutes: tokens.duration_minutes,
+        reminder_minutes,
+        content: content.clone(),
         ..Default::default()
     };
 
@@ -397,6 +452,31 @@ fn next_weekday_occurrence(reference: NaiveDateTime, weekday: Weekday) -> Option
 /// becomes "call."); separators that were only there to divide tokens are
 /// dropped entirely ("note ," becomes "note"). Punctuation inside a word is
 /// never touched — only whitespace-isolated orphans.
+/// Split a line at its first `//` that sits on a whitespace boundary (or a
+/// string edge) on both sides.
+///
+/// The boundary rule is what keeps `https://example.com` a URL and a later
+/// `//` part of the body it belongs to. The head excludes the whitespace
+/// before the separator; the body is trimmed, and an empty body is no body.
+fn split_body(raw: &str) -> (&str, Option<String>) {
+    let mut from = 0usize;
+    while let Some(found) = raw[from..].find("//") {
+        let at = from + found;
+        let before = raw[..at].chars().next_back();
+        let after = raw[at + 2..].chars().next();
+        let boundary_before = before.is_none_or(char::is_whitespace);
+        let boundary_after = after.is_none_or(char::is_whitespace);
+        if boundary_before && boundary_after {
+            let head_end = at - before.map_or(0, char::len_utf8);
+            let body = raw[at + 2..].trim();
+            let content = (!body.is_empty()).then(|| body.to_string());
+            return (&raw[..head_end], content);
+        }
+        from = at + 2;
+    }
+    (raw, None)
+}
+
 fn clean_title(text: &str) -> String {
     static WHITESPACE: OnceLock<fancy_regex::Regex> = OnceLock::new();
     static SENTENCE_ORPHAN: OnceLock<fancy_regex::Regex> = OnceLock::new();
@@ -430,6 +510,79 @@ mod tests {
             ParseResult::Single { input } => input,
             other => panic!("expected a single page, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn the_body_after_a_double_slash_is_kept_verbatim() {
+        let input = single("Buy a gift // remember #blue and ~folder !urgent tomorrow");
+        assert_eq!(input.title, "Buy a gift");
+        assert_eq!(
+            input.content.as_deref(),
+            Some("remember #blue and ~folder !urgent tomorrow")
+        );
+        // Nothing in the body is read as a marker.
+        assert!(input.tags.is_empty());
+        assert_eq!(input.folder_query, None);
+        assert_eq!(input.priority, None);
+        assert_eq!(input.scheduled_start, None);
+    }
+
+    #[test]
+    fn a_double_slash_inside_a_word_is_not_a_body_split() {
+        let input = single("Review PR tomorrow at 2pm // see https://example.com for #context");
+        assert_eq!(input.title, "Review PR");
+        assert_eq!(
+            input.content.as_deref(),
+            Some("see https://example.com for #context")
+        );
+        assert_eq!(single("open https://example.com").content, None);
+    }
+
+    #[test]
+    fn a_trailing_double_slash_leaves_no_body() {
+        let input = single("Task //");
+        assert_eq!(input.title, "Task");
+        assert_eq!(input.content, None);
+        assert_eq!(
+            single("// just a note").content.as_deref(),
+            Some("just a note")
+        );
+    }
+
+    #[test]
+    fn a_reminder_on_a_timed_page_keeps_its_minutes() {
+        let input = single("Dentist tomorrow at 3pm remind 30m before");
+        assert_eq!(input.title, "Dentist");
+        assert_eq!(
+            input.scheduled_start.as_deref(),
+            Some("2026-03-16T15:00:00")
+        );
+        assert_eq!(input.reminder_minutes, Some(vec![30]));
+
+        let shorthand = single("Dentist tomorrow at 3pm !r1h !r1h !r15");
+        assert_eq!(shorthand.reminder_minutes, Some(vec![15, 60]));
+        assert_eq!(shorthand.title, "Dentist");
+    }
+
+    #[test]
+    fn a_reminder_on_an_all_day_page_becomes_the_day_before_anchor() {
+        let input = single("Dentist tomorrow remind 1d before");
+        assert_eq!(input.scheduled_start.as_deref(), Some("2026-03-16"));
+        assert_eq!(input.reminder_minutes, Some(vec![DAY_BEFORE_MINUTES]));
+    }
+
+    #[test]
+    fn a_reminder_with_nothing_to_anchor_to_stays_in_the_title() {
+        let input = single("Call mom remind 30m before");
+        assert_eq!(input.title, "Call mom remind 30m before");
+        assert_eq!(input.reminder_minutes, None);
+    }
+
+    #[test]
+    fn remind_me_in_two_days_is_a_date_not_a_lead() {
+        let input = single("Ping team remind me in 2 days");
+        assert_eq!(input.reminder_minutes, None);
+        assert_eq!(input.scheduled_start.as_deref(), Some("2026-03-17"));
     }
 
     #[test]
@@ -606,7 +759,7 @@ mod tests {
         else {
             panic!("expected a recurring page");
         };
-        assert_eq!(rrule, "FREQ=WEEKLY;BYDAY=FR;INTERVAL=2");
+        assert_eq!(rrule, "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR");
         assert_eq!(input.scheduled_start.as_deref(), Some("2026-12-28"));
     }
 

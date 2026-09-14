@@ -73,7 +73,7 @@
       }
     },
     {
-      "note": "yearly on a fixed date \u2014 the gap a term list missed",
+      "note": "yearly on a fixed date — the gap a term list missed",
       "rrule": "FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15",
       "degrades": {
         "ok": true,
@@ -105,7 +105,7 @@
       }
     },
     {
-      "note": "until with a Z \u2014 syntactic only",
+      "note": "until with a Z — syntactic only",
       "rrule": "FREQ=DAILY;UNTIL=20260401T235959Z",
       "degrades": {
         "ok": true,
@@ -590,27 +590,27 @@
   ],
   "meta": {
     "generatedBy": "packages/core/scripts/gen-parity-corpus.ts",
-    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff \u2014 an unexpected line here is a regression, not a rebase.",
+    "note": "Golden output of the TypeScript reference implementation. Regenerate with `pnpm --filter @pikos/core gen:parity` after any intentional behaviour change, and review the diff — an unexpected line here is a regression, not a rebase.",
     "references": [
       {
         "id": "sun_noon",
         "iso": "2026-03-15T12:00:00",
-        "note": "suite NOW \u2014 Sunday, midday"
+        "note": "suite NOW — Sunday, midday"
       },
       {
         "id": "wed_noon",
         "iso": "2026-03-18T12:00:00",
-        "note": "midweek \u2014 forward-date rollover differs"
+        "note": "midweek — forward-date rollover differs"
       },
       {
         "id": "mon_morning",
         "iso": "2026-03-16T08:00:00",
-        "note": "before 9am \u2014 'today vs tomorrow' flips"
+        "note": "before 9am — 'today vs tomorrow' flips"
       },
       {
         "id": "sat_late",
         "iso": "2026-03-21T22:30:00",
-        "note": "after 8pm \u2014 'tonight' rolls to tomorrow"
+        "note": "after 8pm — 'tonight' rolls to tomorrow"
       },
       {
         "id": "dst_eve",
@@ -995,7 +995,7 @@
       "rrule": "FREQ=WEEKLY;BYDAY=WE;BYHOUR=6;BYMINUTE=30",
       "snapped": {
         "ok": true,
-        "value": "2026-03-18T09:15:00"
+        "value": "2026-03-15T09:15:00"
       }
     },
     {

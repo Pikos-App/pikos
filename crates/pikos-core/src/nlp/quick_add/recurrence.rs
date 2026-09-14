@@ -410,8 +410,17 @@ fn is_weekly_without_days(cadence: &Option<Cadence>) -> bool {
 /// Serialise an infinite cadence as the RRULE body — no `RRULE:` prefix and no
 /// `DTSTART`, because the anchor lives on the page, not in the rule.
 ///
-/// Field order is the reference's: FREQ, BYDAY, INTERVAL, then COUNT or UNTIL.
+/// Field order is the reference's: FREQ, INTERVAL, BYDAY, then COUNT or UNTIL.
 /// An interval of 1 is left out, being the default.
+///
+/// The order is not cosmetic. Two rules that differ only in field order mean
+/// the same thing to every parser, and are different strings to anything that
+/// compares them as text — a sync reconciler deciding whether a series
+/// changed, a test diffing a fixture, a human reading two databases. A rule
+/// written on the phone has to be byte-equal to the one the desktop would
+/// have written for the same line, which is why the reference's serialiser
+/// (`serializeRrule` in `packages/core/src/nlp/parser.ts`) is followed field
+/// for field rather than approximated.
 pub fn to_rrule(
     freq: Frequency,
     byday: Option<&[Weekday]>,
@@ -419,12 +428,12 @@ pub fn to_rrule(
     bound: Option<&Bound>,
 ) -> String {
     let mut parts = vec![format!("FREQ={}", freq.code())];
+    if let Some(interval) = interval.filter(|n| *n > 1) {
+        parts.push(format!("INTERVAL={interval}"));
+    }
     if let Some(days) = byday {
         let codes: Vec<&str> = days.iter().map(|day| day.code()).collect();
         parts.push(format!("BYDAY={}", codes.join(",")));
-    }
-    if let Some(interval) = interval.filter(|n| *n > 1) {
-        parts.push(format!("INTERVAL={interval}"));
     }
     match bound {
         Some(Bound::Count(count)) => parts.push(format!("COUNT={count}")),
@@ -439,12 +448,15 @@ pub enum Bound {
     Until(NaiveDateTime),
 }
 
-/// UNTIL is written as a UTC timestamp at the end of the boundary *day*. The
-/// wall-clock date is taken as-is and stamped `Z`, which is what the editor's
-/// own rule builder does — so a rule parsed here and a rule built there
-/// round-trip to the same string.
+/// UNTIL is written as a *floating* timestamp at the end of the boundary day —
+/// `YYYYMMDDT235959`, no `Z`. The data model is timezone-naive and RFC 5545
+/// asks for a floating UNTIL beside the floating DTSTART these rules anchor
+/// to; the reference's `untilFromLocalDate` writes exactly this, and so does
+/// the editor's own rule builder, so a rule parsed here and a rule built there
+/// round-trip to the same string. An earlier version stamped `Z`, which every
+/// parser accepted and no other writer produced.
 fn format_until(boundary: NaiveDateTime) -> String {
-    format!("{}T235959Z", boundary.format("%Y%m%d"))
+    format!("{}T235959", boundary.format("%Y%m%d"))
 }
 
 // ---------------------------------------------------------------------------
@@ -666,7 +678,7 @@ mod tests {
                 Some(2),
                 Some(&Bound::Until(at("2026-04-13T00:00:00")))
             ),
-            "FREQ=WEEKLY;BYDAY=TU;INTERVAL=2;UNTIL=20260413T235959Z"
+            "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU;UNTIL=20260413T235959"
         );
         assert_eq!(
             to_rrule(Frequency::Daily, None, Some(3), Some(&Bound::Count(5))),

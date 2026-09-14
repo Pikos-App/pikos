@@ -697,11 +697,15 @@ async fn create_quick_add_page(
     schedule: bool,
 ) -> Result<Page, WorkspaceError> {
     let priority = quick_add_priority(&input.priority);
+    // The body typed after "//", written as the page's document so opening
+    // the page shows the note already typed out. `create_page` derives the
+    // searchable text from the document, so only the document is passed.
+    let content = input.content.as_deref().map(pikos_db::build_tiptap_doc);
     let page = workspace
         .create_page(NewPage {
             title: input.title,
             folder_id,
-            content: None,
+            content,
             tags: Some(input.tags),
             scheduled_start: if schedule {
                 input.scheduled_start
@@ -711,6 +715,13 @@ async fn create_quick_add_page(
             scheduled_end: if schedule { input.scheduled_end } else { None },
         })
         .await?;
+
+    // Reminder leads are rows of their own, written once the page exists.
+    // Already resolved by the parser against the schedule's shape, so what
+    // arrives here is exactly what the desktop would write for the same line.
+    for minutes_before in input.reminder_minutes.iter().flatten() {
+        pikos_db::create_page_reminder(&workspace.pool, &page.id, *minutes_before).await?;
+    }
 
     // Priority is not a `NewPage` field, so it takes a second write. Only
     // when the line actually said something about it — "unchanged" on a
@@ -937,6 +948,15 @@ impl Workspace {
     pub async fn create_page(&self, page: NewPage) -> Result<Page, WorkspaceError> {
         let scheduled_start = page.scheduled_start;
         let scheduled_end = page.scheduled_end;
+        // The searchable text is derived from the document here rather than
+        // asked for alongside it: a caller that supplies one and not the
+        // other creates a page whose body full-text search cannot see, and
+        // nothing about the call would say so.
+        let content_text = page
+            .content
+            .as_deref()
+            .map(pikos_db::extract_text_from_tiptap)
+            .filter(|text| !text.is_empty());
         let created = pikos_db::create_page_impl(
             &self.pool,
             DbNewPage {
@@ -944,7 +964,7 @@ impl Workspace {
                 title: page.title,
                 subtitle: None,
                 content: page.content.unwrap_or_else(|| EMPTY_DOCUMENT.to_string()),
-                content_text: None,
+                content_text,
                 status: "not_started".to_string(),
                 priority: 0,
                 tags: page.tags.unwrap_or_default(),
@@ -1796,6 +1816,22 @@ impl Workspace {
             }
         }
         Ok(restored)
+    }
+
+    /// Add a reminder to a page, as minutes before its scheduled start.
+    ///
+    /// For the one path that builds a page by hand from a parsed line — the
+    /// phone's quick-add sheet when a picked date overrides the parse — so a
+    /// lead typed on that line is written rather than dropped. `-2` is the
+    /// day-before sentinel an all-day page carries instead of a lead; the
+    /// parser hands over whichever the schedule's shape calls for.
+    pub async fn add_page_reminder(
+        &self,
+        page_id: String,
+        minutes_before: i64,
+    ) -> Result<(), WorkspaceError> {
+        pikos_db::create_page_reminder(&self.pool, &page_id, minutes_before).await?;
+        Ok(())
     }
 
     pub async fn trash_page(&self, id: String) -> Result<(), WorkspaceError> {

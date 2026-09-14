@@ -41,6 +41,8 @@ struct ExpectedInput {
     /// Three states in JSON: absent, `null` (explicitly cleared), or a name.
     #[serde(default, deserialize_with = "double_option")]
     priority: Option<Option<String>>,
+    reminder_minutes: Option<Vec<i64>>,
+    content: Option<String>,
 }
 
 /// Distinguish an absent key from an explicit `null`, which the reference uses
@@ -106,13 +108,16 @@ fn render(input: &ParsedInput) -> String {
         Some(Some(priority)) => priority.as_str().to_string(),
     };
     format!(
-        "title={:?} tags={:?} start={:?} end={:?} mins={:?} folder={:?} priority={priority}",
+        "title={:?} tags={:?} start={:?} end={:?} mins={:?} folder={:?} priority={priority} \
+         reminders={:?} content={:?}",
         input.title,
         input.tags,
         input.scheduled_start,
         input.scheduled_end,
         input.duration_minutes,
         input.folder_query,
+        input.reminder_minutes,
+        input.content,
     )
 }
 
@@ -123,13 +128,16 @@ fn render_expected(input: &ExpectedInput) -> String {
         Some(Some(priority)) => priority.clone(),
     };
     format!(
-        "title={:?} tags={:?} start={:?} end={:?} mins={:?} folder={:?} priority={priority}",
+        "title={:?} tags={:?} start={:?} end={:?} mins={:?} folder={:?} priority={priority} \
+         reminders={:?} content={:?}",
         input.title,
         input.tags,
         input.scheduled_start,
         input.scheduled_end,
         input.duration_minutes,
         input.folder_query,
+        input.reminder_minutes,
+        input.content,
     )
 }
 
@@ -183,6 +191,8 @@ fn inputs_match(expected: &ExpectedInput, actual: &ParsedInput) -> bool {
         && expected.scheduled_end == actual.scheduled_end
         && expected.duration_minutes == actual.duration_minutes
         && expected.folder_query == actual.folder_query
+        && expected.reminder_minutes == actual.reminder_minutes
+        && expected.content == actual.content
 }
 
 fn results_match(expected: &ExpectedValue, actual: &ParseResult) -> bool {
