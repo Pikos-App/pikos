@@ -225,6 +225,26 @@ public final class WorkspaceStore {
         }
     }
 
+    /// Open the workspace if nothing has yet.
+    ///
+    /// For the entry points that can run before the first screen's `.task`
+    /// — a background refresh, a notification action on an app launched in
+    /// the background for it. A second call while the first is still opening
+    /// waits for it rather than opening twice.
+    public func ensureStarted() async {
+        if workspace != nil { return }
+        if let opening {
+            await opening.value
+            return
+        }
+        let task = Task { await start() }
+        opening = task
+        await task.value
+        opening = nil
+    }
+
+    private var opening: Task<Void, Never>?
+
     public func refresh() async {
         guard let workspace else { return }
         do {

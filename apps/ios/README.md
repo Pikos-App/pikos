@@ -208,9 +208,13 @@ suite.
   scheme handler resolves, where the desktop stores an absolute path — so an
   image inserted on either device does not yet render on the other.
 - **Share extension.** M4. Capturing a URL or a selection into a new page.
-- **Notifications.** Not a port. The desktop fires reminders from a task that
-  wakes every clock minute, and iOS suspends that within seconds of
-  backgrounding — so nearly every reminder would silently never fire. The model
-  has to invert: compute a rolling horizon and hand it to the OS in advance.
-  `docs/ios/06-platform-audit.md` has the four complications that come with
-  that.
+- **The desktop's notification extras.** Reminders ring on the phone: the
+  workspace is asked what will fire over the next fourteen days and each
+  answer becomes a local notification, re-planned on every write, on the way
+  to the background, and by a background refresh (`Notifications/`). What is
+  not here is the desktop's daily overdue summary and its quiet hours — the
+  first is what the Today widget is for, and the second is a Focus mode on
+  iOS. Two limits worth knowing: the OS keeps sixty-four pending
+  notifications, so the phone plans sixty soonest-first; and background
+  refresh is a request the system grants on its own schedule, which is why the
+  horizon is two weeks rather than two days.

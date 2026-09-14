@@ -518,6 +518,41 @@ call — `a_plain_status_flip_on_a_recurring_head_ends_the_series` records what
 the wrong path does, and `the_status_toggle_routes_by_kind_without_being_told`
 records that no caller has to know which kind it holds.
 
+## Reminders ring on the phone
+
+The one parity gap that decided whether a task app is usable on a phone, and
+the one the platform audit had said was "net-new logic on any path". Less new
+than it sounded: the six `due_*` arms behind the desktop's scheduler already
+took a window, they were just always handed a trailing 60-second one. Their
+fixed windows are explicit `(lo, hi]` parameters now, behind the same
+signatures the desktop calls, and `pikos_db::reminder_horizon` composes them
+_forward_ over fourteen days and places every fire on the device's own clock —
+a 15:00 Berlin meeting reminds a phone in New York at 08:30. Nine tests pin
+the arithmetic, including that one.
+
+The phone side is `ReminderScheduler`: one query, sixty requests at most
+(the OS keeps sixty-four and drops the rest silently), rebuilt on every write,
+on the way to the background, and by a `BGAppRefreshTask`. A tap opens the
+page through the same `pikos://page/<id>` link a widget uses; a "Complete"
+action writes through the same store method the checkbox does. Permission is
+asked for the first time there is something to deliver, not at launch. Two
+per-device preferences — on/off and the default lead, ten minutes like the
+desktop — sit in the App Group with the others, and the settings row says
+which of the two switches, ours or the system's, is the one that is off.
+
+Two things are deliberately absent, both written down where they would be
+looked for: quiet hours (Focus is the same control, system-wide) and the
+desktop's fired log (the OS delivers without waking the app; the plan is
+rebuilt from the workspace, so nothing needs the history).
+
+One thing this found. `scripts/gen-swift-bindings.sh` reused whatever
+`libpikos_ffi.so` was on disk, and `cargo test` never rebuilds a cdylib — so a
+"regenerated" binding after a test-only session described the previous FFI,
+and the call-site checker, which only ever inspected methods it knew, reported
+every call matching while the Swift called two methods the bindings did not
+declare. That was the state of the previous push. The script always builds
+now, and the checker flags a `workspace.x(…)` it cannot find.
+
 ## The parser corpus is back on its reference
 
 An earlier version of this section recorded that `parser.json` had been left as

@@ -1,6 +1,8 @@
 import AppIntents
+import BackgroundTasks
 import PikosCore
 import SwiftUI
+import UserNotifications
 
 @main
 struct PikosApp: App {
@@ -11,7 +13,13 @@ struct PikosApp: App {
     @State private var settings = SettingsStore()
     @State private var sync: CalendarSyncStore
     @State private var exports: ExportStore
+    @State private var reminders: ReminderScheduler
     @State private var route = Route.shared
+
+    /// Held for the life of the app: the notification center keeps only a
+    /// weak reference to its delegate, and a delegate that is dropped is a
+    /// tap on a reminder that opens the app to wherever it last was.
+    private let notificationDelegate: ReminderNotificationDelegate
 
     init() {
         // App Intents run in this process and reach the router through
@@ -27,6 +35,51 @@ struct PikosApp: App {
         _store = State(initialValue: pages)
         _sync = State(initialValue: CalendarSyncStore(workspace: { pages.handle }))
         _exports = State(initialValue: ExportStore(workspace: { pages.handle }))
+        let scheduler = ReminderScheduler(workspace: { pages.handle })
+        _reminders = State(initialValue: scheduler)
+
+        // Reminders. The delegate routes a tap through the same link a widget
+        // uses, and "Complete" through the same store method the checkbox
+        // uses, so a notification is another entry point and not a second
+        // code path.
+        let delegate = ReminderNotificationDelegate(
+            onOpen: { pageId in
+                if let url = URL(string: "pikos://page/\(pageId)") {
+                    Route.shared.handle(url, store: pages)
+                }
+            },
+            onComplete: { pageId in
+                await pages.ensureStarted()
+                await pages.setStatus(pageId: pageId, done: true)
+            })
+        notificationDelegate = delegate
+        UNUserNotificationCenter.current().delegate = delegate
+        ReminderScheduler.registerCategories()
+
+        // The background refresh has to be registered before launch finishes,
+        // which in a SwiftUI app means here. The handler re-plans the horizon
+        // and asks for the next refresh; the workspace may not be open yet in
+        // a background launch, so it is opened on demand.
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: ReminderScheduler.refreshTaskIdentifier, using: nil
+        ) { task in
+            // The task object is handed over on the scheduler's queue and is
+            // not Sendable; it crosses into the main actor in a box, is
+            // completed exactly once there, and is never shared beyond that.
+            let handle = BackgroundTaskHandle(task: task)
+            let work = Task { @MainActor in
+                await pages.ensureStarted()
+                await scheduler.sync()
+                ReminderScheduler.scheduleBackgroundRefresh()
+                handle.task.setTaskCompleted(success: true)
+            }
+            task.expirationHandler = { work.cancel() }
+        }
+    }
+
+    /// See the comment at the registration above.
+    private struct BackgroundTaskHandle: @unchecked Sendable {
+        let task: BGTask
     }
 
     var body: some Scene {
@@ -36,6 +89,7 @@ struct PikosApp: App {
                 .environment(settings)
                 .environment(sync)
                 .environment(exports)
+                .environment(reminders)
                 .environment(route)
                 // Opening the workspace runs migrations, so it happens once,
                 // here, in the app process. A widget must never be the process
@@ -45,6 +99,7 @@ struct PikosApp: App {
                     // An intent or deep link may have arrived while the
                     // workspace was still opening.
                     route.applyPending(to: store)
+                    await reminders.sync()
                 }
                 .onOpenURL { url in route.handle(url, store: store) }
         }
@@ -55,6 +110,7 @@ struct RootView: View {
     @Environment(Route.self) private var route
     @Environment(WorkspaceStore.self) private var store
     @Environment(SettingsStore.self) private var settings
+    @Environment(ReminderScheduler.self) private var reminders
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -128,8 +184,35 @@ struct RootView: View {
         // and without this the list shows the world as it was when the user
         // left — and a page they just dictated is missing from it.
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active, !store.isLoading else { return }
-            Task { await store.refresh() }
+            switch phase {
+            case .active:
+                guard !store.isLoading else { return }
+                Task { await store.refresh() }
+            case .background:
+                // Leaving is the last moment this process is sure to run for
+                // a while: re-plan the horizon so it is as fresh as it can be,
+                // and ask to be woken to extend it.
+                Task { await reminders.sync() }
+                ReminderScheduler.scheduleBackgroundRefresh()
+            default:
+                break
+            }
+        }
+        // Every write bumps the version, and every write can move, add or
+        // remove a reminder. Re-planning is one query and a few dozen
+        // requests, so it simply follows the version rather than guessing
+        // which writes matter. Debounced by cancellation: a burst of writes
+        // — a bulk move — plans once, after the last one.
+        .task(id: store.dataVersion) {
+            guard store.dataVersion > 0 else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            await reminders.sync()
+        }
+        // The two preferences that change the plan without a write.
+        .onChange(of: settings.remindersEnabled) { _, _ in Task { await reminders.sync() } }
+        .onChange(of: settings.defaultReminderMinutes) { _, _ in
+            Task { await reminders.sync() }
         }
         // An App Intent can ask for a scope at any time, not only during
         // launch. `Route.showToday()` has no store to move — it runs from

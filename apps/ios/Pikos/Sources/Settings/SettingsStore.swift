@@ -48,6 +48,29 @@ public final class SettingsStore {
         set { preferences.defaultFolderID = newValue }
     }
 
+    public var remindersEnabled: Bool {
+        get { preferences.remindersEnabled }
+        set { preferences.remindersEnabled = newValue }
+    }
+
+    public var defaultReminderMinutes: Int64 {
+        get { preferences.defaultReminderMinutes }
+        set { preferences.defaultReminderMinutes = newValue }
+    }
+
+    /// A lead in words, for the picker and its row.
+    public static func leadLabel(_ minutes: Int64) -> String {
+        switch minutes {
+        case ..<0: return String(localized: "None")
+        case 0: return String(localized: "At the time")
+        case 1440: return String(localized: "1 day before")
+        case 60: return String(localized: "1 hour before")
+        case let hours where hours % 60 == 0:
+            return String(localized: "\(hours / 60) hours before")
+        default: return String(localized: "\(minutes) minutes before")
+        }
+    }
+
     /// What `theme` means to SwiftUI. `nil` is "follow the system", which is
     /// the absence of an override rather than a third scheme.
     public var colorScheme: ColorScheme? {

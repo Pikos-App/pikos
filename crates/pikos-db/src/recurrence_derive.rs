@@ -340,6 +340,38 @@ pub async fn occurrences_with_open_reminder_window(
     default_minutes: i64,
     max_lead: i64,
 ) -> AppResult<Vec<DueReminder>> {
+    let fires = occurrences_with_reminders_firing_between(
+        pool,
+        now_local - Duration::seconds(60),
+        now_local,
+        now_utc - Duration::seconds(60),
+        now_utc,
+        default_minutes,
+        max_lead,
+    )
+    .await?;
+    Ok(fires.into_iter().map(|fire| fire.reminder).collect())
+}
+
+/// The windowed form of [`occurrences_with_open_reminder_window`]: every
+/// (occurrence × lead) of every timed series whose reminder fires in the
+/// inclusive window — `[lo_local, hi_local]` for a native series, whose wall
+/// clock is the device's, and `[lo_utc, hi_utc]` for a synced one, whose wall
+/// clock is the source zone's. The two windows describe the same span of time
+/// in two frames; the caller supplies both because only it knows the device
+/// zone. Each fire comes back with its instant so a forward-looking caller
+/// can place it.
+pub async fn occurrences_with_reminders_firing_between(
+    pool: &SqlitePool,
+    lo_local: NaiveDateTime,
+    hi_local: NaiveDateTime,
+    lo_utc: DateTime<Utc>,
+    hi_utc: DateTime<Utc>,
+    default_minutes: i64,
+    max_lead: i64,
+) -> AppResult<Vec<crate::notification_log::ReminderFire>> {
+    use crate::notification_log::ReminderFire;
+
     let series: Vec<ReminderSeries> = sqlx::query_as(
         "SELECT r.id AS rule_id, r.page_id, p.title, r.rrule, r.rrule_exdates,
                 r.scheduled_start AS base_start, r.scheduled_end AS base_end, r.timezone,
@@ -354,26 +386,28 @@ pub async fn occurrences_with_open_reminder_window(
     .fetch_all(pool)
     .await?;
 
-    let mut candidates = Vec::new();
+    let mut candidates: Vec<ReminderFire> = Vec::new();
     for s in series {
-        // The wall-clock "now" the occurrence enumeration seeks near: source-zone
-        // for synced, device-local for native. An unparseable synced zone is
-        // skipped (matches `synced_fire_instant`'s None).
-        let zone_now = if s.synced {
+        // The wall-clock window the occurrence enumeration seeks within:
+        // source-zone for synced, device-local for native. An unparseable
+        // synced zone is skipped (matches `synced_fire_instant`'s None).
+        let (zone_lo, zone_hi) = if s.synced {
             match s.timezone.parse::<chrono_tz::Tz>() {
-                Ok(tz) => now_utc.with_timezone(&tz).naive_local(),
+                Ok(tz) => (
+                    lo_utc.with_timezone(&tz).naive_local(),
+                    hi_utc.with_timezone(&tz).naive_local(),
+                ),
                 Err(_) => continue,
             }
         } else {
-            now_local
+            (lo_local, hi_local)
         };
-        // Widen the upper bound by an hour so a DST shift on the synced wall→instant
-        // mapping can't drop a boundary occurrence; the exact fire check filters the
-        // over-enumeration.
-        let lo = (zone_now - Duration::seconds(60))
-            .format(WALL_FMT)
-            .to_string();
-        let hi = (zone_now + Duration::minutes(max_lead) + Duration::hours(1))
+        // An occurrence's reminder can fire up to `max_lead` before it, so the
+        // enumeration runs that much past the window's end; widened by an hour
+        // more so a DST shift on the synced wall→instant mapping can't drop a
+        // boundary occurrence. The exact fire check filters the over-enumeration.
+        let lo = zone_lo.format(WALL_FMT).to_string();
+        let hi = (zone_hi + Duration::minutes(max_lead) + Duration::hours(1))
             .format(WALL_FMT)
             .to_string();
 
@@ -403,24 +437,34 @@ pub async fn occurrences_with_open_reminder_window(
 
         for occ in &occurrences {
             for lead in &leads {
-                if !fires_in_window(&s, &occ.scheduled_start, lead.minutes, now_local, now_utc) {
+                let Some(fire_at) = fire_between(
+                    &s,
+                    &occ.scheduled_start,
+                    lead.minutes,
+                    (lo_local, hi_local),
+                    (lo_utc, hi_utc),
+                ) else {
                     continue;
-                }
-                candidates.push(DueReminder {
-                    schedule_id: lead.schedule_id(&s.page_id, &occ.scheduled_start),
-                    page_id: s.page_id.clone(),
-                    title: s.title.clone(),
-                    scheduled_start: occ.scheduled_start.clone(),
-                    minutes_before: lead.minutes,
+                };
+                candidates.push(ReminderFire {
+                    reminder: DueReminder {
+                        schedule_id: lead.schedule_id(&s.page_id, &occ.scheduled_start),
+                        page_id: s.page_id.clone(),
+                        title: s.title.clone(),
+                        scheduled_start: occ.scheduled_start.clone(),
+                        minutes_before: lead.minutes,
+                    },
+                    fire_at,
                 });
             }
         }
     }
 
-    let fired = fired_schedule_ids(pool, &candidates).await?;
+    let rows: Vec<DueReminder> = candidates.iter().map(|c| c.reminder.clone()).collect();
+    let fired = fired_schedule_ids(pool, &rows).await?;
     Ok(candidates
         .into_iter()
-        .filter(|c| !fired.contains(&c.schedule_id))
+        .filter(|c| !fired.contains(&c.reminder.schedule_id))
         .collect())
 }
 
@@ -511,27 +555,24 @@ async fn reminder_leads(
     Ok(leads)
 }
 
-/// Whether `scheduled_start - lead` lands in the inclusive 60-second window.
-fn fires_in_window(
+/// When `scheduled_start - lead` fires, if that lands in the inclusive window —
+/// the local one for a native series, the absolute one for a synced series.
+fn fire_between(
     series: &ReminderSeries,
     scheduled_start: &str,
     minutes_before: i64,
-    now_local: NaiveDateTime,
-    now_utc: DateTime<Utc>,
-) -> bool {
+    local: (NaiveDateTime, NaiveDateTime),
+    absolute: (DateTime<Utc>, DateTime<Utc>),
+) -> Option<crate::notification_log::FireAt> {
+    use crate::notification_log::FireAt;
+
     if series.synced {
-        match synced_fire_instant(scheduled_start, &series.timezone, minutes_before) {
-            Some(fire) => fire >= now_utc - Duration::seconds(60) && fire <= now_utc,
-            None => false,
-        }
+        let fire = synced_fire_instant(scheduled_start, &series.timezone, minutes_before)?;
+        (fire >= absolute.0 && fire <= absolute.1).then_some(FireAt::Absolute(fire))
     } else {
-        match NaiveDateTime::parse_from_str(scheduled_start, WALL_FMT) {
-            Ok(start) => {
-                let fire = start - Duration::minutes(minutes_before);
-                fire >= now_local - Duration::seconds(60) && fire <= now_local
-            }
-            Err(_) => false,
-        }
+        let start = NaiveDateTime::parse_from_str(scheduled_start, WALL_FMT).ok()?;
+        let fire = start - Duration::minutes(minutes_before);
+        (fire >= local.0 && fire <= local.1).then_some(FireAt::Local(fire))
     }
 }
 

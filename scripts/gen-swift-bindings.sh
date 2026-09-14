@@ -15,20 +15,22 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Always build. uniffi-bindgen reads the metadata embedded in the *cdylib*,
+# and `cargo test` never produces one — so a library left over from an earlier
+# `cargo build` describes an earlier FFI, and bindings generated from it are
+# stale while looking freshly written. That happened once: a method added to
+# the Rust, tests green, bindings "regenerated", and the Swift calling a method
+# the bindings did not declare. A no-op build costs a second; skipping it cost
+# a push.
+echo "▶ building pikos-ffi"
+(cd "$ROOT" && cargo build -p pikos-ffi --lib)
+
 # Linux builds .so, macOS .dylib — pick whichever this host produced.
 LIB_DIR="$ROOT/target/debug"
 LIB=""
 for candidate in "$LIB_DIR/libpikos_ffi.so" "$LIB_DIR/libpikos_ffi.dylib"; do
   [ -f "$candidate" ] && LIB="$candidate" && break
 done
-
-if [ -z "$LIB" ]; then
-  echo "▶ building pikos-ffi first"
-  (cd "$ROOT" && cargo build -p pikos-ffi)
-  for candidate in "$LIB_DIR/libpikos_ffi.so" "$LIB_DIR/libpikos_ffi.dylib"; do
-    [ -f "$candidate" ] && LIB="$candidate" && break
-  done
-fi
 
 if [ -z "$LIB" ]; then
   echo "error: no libpikos_ffi cdylib found in $LIB_DIR" >&2

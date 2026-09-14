@@ -224,6 +224,39 @@ impl From<pikos_db::Page> for Page {
     }
 }
 
+/// A reminder that will fire inside the horizon, placed on the device's clock.
+///
+/// What the phone hands the OS: one local notification per record, identified
+/// by `key`, delivered at `fire_at`. See `pikos_db::reminder_horizon`.
+#[derive(Debug, uniffi::Record)]
+pub struct UpcomingReminder {
+    /// Distinct per (occurrence × lead), and the same key the desktop logs when
+    /// it fires the same reminder.
+    pub key: String,
+    pub page_id: String,
+    pub title: String,
+    /// The occurrence's own start as stored, for wording — device-local for a
+    /// native page, source-zone for a synced one.
+    pub scheduled_start: String,
+    /// Minutes before the start, or `-2` for the day-before anchor.
+    pub minutes_before: i64,
+    /// When it fires on the device's clock, `YYYY-MM-DDTHH:MM:SS`.
+    pub fire_at: String,
+}
+
+impl From<pikos_db::UpcomingReminder> for UpcomingReminder {
+    fn from(r: pikos_db::UpcomingReminder) -> Self {
+        UpcomingReminder {
+            key: r.key,
+            page_id: r.page_id,
+            title: r.title,
+            scheduled_start: r.scheduled_start,
+            minutes_before: r.minutes_before,
+            fire_at: r.fire_at,
+        }
+    }
+}
+
 /// A page in the trash, as the recovery list shows it.
 #[derive(Debug, uniffi::Record)]
 pub struct TrashedPage {
@@ -1816,6 +1849,38 @@ impl Workspace {
             }
         }
         Ok(restored)
+    }
+
+    /// Every reminder that will fire in the next `horizon_days`, soonest
+    /// first, placed on the clock of `timezone` — the zone the phone is in.
+    ///
+    /// The phone cannot run the desktop's every-minute loop, so it plans
+    /// ahead: the answer here becomes one local notification per record, and
+    /// the whole set is re-planned whenever the workspace changes. The six
+    /// rules deciding what reminds are the desktop's own, composed forward
+    /// rather than copied — see `pikos_db::reminder_horizon`.
+    ///
+    /// `default_minutes` is the lead for a page with no reminder rows, the
+    /// same global default the desktop's settings carry; the phone keeps its
+    /// own copy of that preference, since delivery is per device.
+    pub async fn upcoming_reminders(
+        &self,
+        timezone: String,
+        horizon_days: u32,
+        default_minutes: i64,
+    ) -> Result<Vec<UpcomingReminder>, WorkspaceError> {
+        let zone: chrono_tz::Tz = timezone.parse().map_err(|_| WorkspaceError::InvalidInput {
+            message: format!("not an IANA time zone: {timezone}"),
+        })?;
+        let reminders = pikos_db::upcoming_reminders(
+            &self.pool,
+            chrono::Utc::now(),
+            zone,
+            chrono::Duration::days(i64::from(horizon_days)),
+            default_minutes,
+        )
+        .await?;
+        Ok(reminders.into_iter().map(Into::into).collect())
     }
 
     /// Add a reminder to a page, as minutes before its scheduled start.

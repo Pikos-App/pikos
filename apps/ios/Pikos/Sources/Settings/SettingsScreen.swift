@@ -1,6 +1,7 @@
 import PikosCore
 import PikosSupport
 import SwiftUI
+import UIKit
 
 /// Preferences, and what the app can tell you about itself.
 ///
@@ -18,6 +19,7 @@ struct SettingsScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(CalendarSyncStore.self) private var sync
     @Environment(ExportStore.self) private var exports
+    @Environment(ReminderScheduler.self) private var reminders
     @Environment(\.dismiss) private var dismiss
 
     @State private var isResetConfirmed = false
@@ -72,6 +74,8 @@ struct SettingsScreen: View {
                 } footer: {
                     Text(defaultFolderFooter)
                 }
+
+                remindersSection
 
                 Section {
                     NavigationLink {
@@ -158,7 +162,7 @@ struct SettingsScreen: View {
                 Button("Reset", role: .destructive) { settings.resetAll() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Theme, density, week start and default folder go back to their defaults.")
+                Text("Theme, density, week start, default folder and reminders go back to their defaults.")
             }
             .confirmationDialog(
                 "Delete everything on this device?", isPresented: $isDeleteConfirmed,
@@ -179,6 +183,67 @@ struct SettingsScreen: View {
                 actions: { Button("OK", role: .cancel) { exports.errorMessage = nil } },
                 message: { Text(exports.errorMessage ?? "") })
         }
+    }
+
+    // MARK: - Reminders
+
+    /// The two switches a reminder passes through — ours and the system's —
+    /// and the one lead that applies when a page never asked for its own.
+    ///
+    /// The system's state is shown here rather than discovered, because a
+    /// reminder that never arrives looks the same whether it was never
+    /// planned or never allowed, and only one of those is fixed on this
+    /// screen. Denied permission gets a link to where it is fixed.
+    @ViewBuilder
+    private var remindersSection: some View {
+        @Bindable var settings = settings
+
+        Section {
+            Toggle("Remind me", isOn: $settings.remindersEnabled)
+
+            if settings.remindersEnabled {
+                Picker("Default reminder", selection: $settings.defaultReminderMinutes) {
+                    ForEach(Preferences.reminderLeadChoices, id: \.self) { minutes in
+                        Text(SettingsStore.leadLabel(minutes)).tag(minutes)
+                    }
+                }
+
+                switch reminders.authorization {
+                case .denied:
+                    LabeledContent("Notifications") {
+                        Text("Off in Settings").foregroundStyle(.red)
+                    }
+                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                        Link("Allow notifications for Pikos", destination: url)
+                    }
+                case .notDetermined:
+                    Button("Allow notifications") {
+                        Task { await reminders.requestAuthorization() }
+                    }
+                default:
+                    LabeledContent(
+                        "Planned",
+                        value: reminders.plannedCount == 1
+                            ? String(localized: "1 reminder")
+                            : String(localized: "\(reminders.plannedCount) reminders"))
+                }
+            }
+        } header: {
+            Text("Reminders")
+        } footer: {
+            Text(remindersFooter)
+        }
+        .task { await reminders.refreshAuthorization() }
+    }
+
+    private var remindersFooter: String {
+        guard settings.remindersEnabled else {
+            return String(localized: "Nothing rings on this phone. Reminders still fire on the desktop.")
+        }
+        return String(
+            localized:
+                "Pages without a reminder of their own use the default. Reminders are planned two weeks ahead and re-planned whenever something changes; use a Focus to silence them at night."
+        )
     }
 
     // MARK: - Export

@@ -107,6 +107,15 @@ targets:
         # No analytics, no phone-home: the privacy claims the marketing site
         # makes are claims about this binary too.
         ITSAppUsesNonExemptEncryption: false
+        # Reminders are planned ahead as local notifications, and the plan
+        # goes stale as days pass. This is the one background entry point
+        # that re-plans it without the app being opened — best-effort, on
+        # the system's schedule, which is why the horizon is two weeks and
+        # not two days. See Notifications/ReminderScheduler.swift.
+        BGTaskSchedulerPermittedIdentifiers:
+          - app.pikos.reminders.refresh
+        UIBackgroundModes:
+          - fetch
 
   # Today's pages on the home screen.
   #

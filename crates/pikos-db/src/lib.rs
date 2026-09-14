@@ -20,6 +20,7 @@ pub mod pages;
 mod pool;
 pub mod reconciler;
 pub mod recurrence_derive;
+pub mod reminder_horizon;
 pub mod reminders;
 pub mod schedules;
 pub mod search;
@@ -60,6 +61,7 @@ pub use pool::{
 };
 pub use reconciler::*;
 pub use recurrence_derive::*;
+pub use reminder_horizon::*;
 pub use reminders::*;
 pub use schedules::*;
 pub use search::*;
