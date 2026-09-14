@@ -153,6 +153,20 @@ struct TodayWidgetView: View {
         .widgetURL(URL(string: "pikos://today"))
     }
 
+    /// The same tint the app's list gives the ring, so the widget and the
+    /// list agree about which of today's rows is the urgent one. Spelled
+    /// here rather than shared: the app's `PagePriority` lives in the app
+    /// target, and four colours are cheaper than a third package target.
+    private func ringColor(priority: Int64) -> Color {
+        switch priority {
+        case 1: return .red
+        case 2: return .orange
+        case 3: return .yellow
+        case 4: return .blue
+        default: return .secondary
+        }
+    }
+
     private var header: some View {
         HStack {
             Text("Today")
@@ -174,7 +188,7 @@ struct TodayWidgetView: View {
         return HStack(alignment: .firstTextBaseline, spacing: 5) {
             Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                 .font(.caption2)
-                .foregroundStyle(isDone ? Brand.accent : Color.secondary)
+                .foregroundStyle(isDone ? Brand.accent : ringColor(priority: page.priority))
             Text(page.title.isEmpty ? "Untitled" : page.title)
                 .font(.caption)
                 .strikethrough(isDone, color: .secondary)

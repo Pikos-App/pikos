@@ -123,18 +123,29 @@ struct PageListScreen: View {
     /// reason.
     private func row(_ page: PageSummary) -> some View {
         let done = page.status == "done"
-        // The checkbox sits beside the link rather than inside it: a Button
-        // inside a NavigationLink's label does not reliably get the tap,
-        // because the link swallows it, and the symptom is a checkbox that
-        // navigates instead of completing.
+        // The checkbox sits beside the row rather than inside a link's label:
+        // a Button inside a NavigationLink's label does not reliably get the
+        // tap, because the link swallows it, and the symptom is a checkbox
+        // that navigates instead of completing.
+        //
+        // The link itself is behind the row, invisible. That is what removes
+        // the disclosure chevron: a row with a checkbox already says it is a
+        // task, and the chevron was a third control flanking a title that
+        // needs the width. Reminders and Things draw their rows the same way.
         return HStack(spacing: 0) {
             CompletionToggle(isDone: done, priority: PagePriority(stored: page.priority)) { done in
                 Task { await store.setStatus(pageId: page.id, done: done) }
             }
-            NavigationLink(value: page.id) {
-                PageRow(page: page, showsFolder: store.scope.isDateGrouped)
-            }
+            PageRow(page: page, showsFolder: store.scope.isDateGrouped)
         }
+        .contentShape(Rectangle())
+        .background {
+            NavigationLink(value: page.id) { EmptyView() }.opacity(0)
+        }
+        // The ring's 44pt hit area already indents the title; the list's own
+        // inset on top of it put the title 64pt from the edge, where the
+        // platform's lists put it at about 52.
+        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 16))
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 Task { await store.trash(pageId: page.id, title: page.title) }

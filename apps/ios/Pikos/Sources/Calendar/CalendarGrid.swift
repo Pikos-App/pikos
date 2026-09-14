@@ -59,7 +59,11 @@ struct CalendarGrid: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            dayHeader
+            // A header over one column repeats the title above it; over
+            // several it is the only thing telling the columns apart.
+            if days.count > 1 {
+                dayHeader
+            }
             allDaySection
             Divider()
             ScrollViewReader { proxy in

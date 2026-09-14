@@ -88,6 +88,20 @@ struct TrashSheet: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibleLabel(page))
+        // The same gesture that put it here brings it back: a leading swipe
+        // on the list is "complete", and on the trash the analogous verb is
+        // restore. The button stays for anyone who does not swipe.
+        .swipeActions(edge: .leading) {
+            Button {
+                Task {
+                    await store.restore(pageId: page.id)
+                    await load()
+                }
+            } label: {
+                Label("Restore", systemImage: "arrow.uturn.backward")
+            }
+            .tint(.green)
+        }
     }
 
     private func accessibleLabel(_ page: TrashedPage) -> String {

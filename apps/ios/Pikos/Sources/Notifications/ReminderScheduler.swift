@@ -36,6 +36,11 @@ public final class ReminderScheduler {
     /// there is simply nothing in the next two weeks that asked.
     public private(set) var plannedCount = 0
 
+    /// The soonest reminder in the plan, for the settings row — "Dentist,
+    /// today at 2:30 PM" says more about whether reminders work than a count
+    /// does, and is the one a person can check against their own day.
+    public private(set) var nextPlanned: UpcomingReminder?
+
     /// The task identifier the OS wakes the app under. Declared once here and
     /// once in `project.yml`; a mismatch means the registration throws and no
     /// refresh ever lands.
@@ -129,6 +134,7 @@ public final class ReminderScheduler {
         guard settings.remindersEnabled, let workspace = workspace() else {
             center.removeAllPendingNotificationRequests()
             plannedCount = 0
+            nextPlanned = nil
             return
         }
 
@@ -151,6 +157,7 @@ public final class ReminderScheduler {
         guard authorization == .authorized || authorization == .provisional else {
             center.removeAllPendingNotificationRequests()
             plannedCount = 0
+            nextPlanned = nil
             return
         }
 
@@ -173,6 +180,7 @@ public final class ReminderScheduler {
             }
         }
         plannedCount = added
+        nextPlanned = planned.first
     }
 
     /// Take down the reminders that already rang for pages that are now done

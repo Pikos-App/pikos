@@ -93,6 +93,11 @@ struct PageRow: View {
                 }
 
                 if hasMeta {
+                    // Everything the row knows besides its title, on one line
+                    // under it — the tags included. They used to sit at the
+                    // trailing edge, where a chip and a two-line title fought
+                    // for the same width at the larger text sizes; here they
+                    // wrap with the rest and the title runs the full row.
                     HStack(spacing: 6) {
                         // A repeating page's checkbox does something different —
                         // it completes one occurrence and advances the series
@@ -110,21 +115,21 @@ struct PageRow: View {
                         if showsFolder, let folder {
                             FolderLabel(folder: folder)
                         }
+                        if !page.tags.isEmpty {
+                            tagChips
+                        }
                     }
                 }
             }
 
             Spacer(minLength: 0)
-
-            if !page.tags.isEmpty {
-                tagChips
-            }
         }
         .padding(.vertical, 2 + settings.listDensity.rowPadding)
     }
 
     private var hasMeta: Bool {
         page.isRecurring || page.scheduledStart != nil || (showsFolder && folder != nil)
+            || !page.tags.isEmpty
     }
 
     private var folder: Folder? {

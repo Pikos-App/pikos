@@ -88,7 +88,14 @@ struct EditorScreen: View {
                     .background(.yellow.opacity(0.2))
             }
 
-            MetadataStrip(page: facts, actions: $actions)
+            // Reference, not something needed mid-sentence: the strip gives
+            // its height back while the keyboard is up, when the nav bar,
+            // the formatting bar and the keyboard already leave the document
+            // less than half the screen.
+            if !isKeyboardVisible {
+                MetadataStrip(page: facts, actions: $actions)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
 
             EditorWebView(
                 pageId: page.id,
@@ -278,12 +285,28 @@ private struct MetadataStrip: View {
 
     private var hasAnything: Bool {
         page.scheduledStart != nil || folder != nil || priority != nil || !page.tags.isEmpty
+            || needsName
     }
+
+    /// An untitled page shows "Untitled" in the bar and nothing that says how
+    /// to change it — the rename sits in a menu. A chip here is the visible
+    /// way in, and it goes once the page has a name.
+    private var needsName: Bool { page.title.isEmpty && !page.scheduleLocked }
 
     var body: some View {
         if hasAnything {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
+                    if needsName {
+                        chip {
+                            Label("Name this page", systemImage: "pencil")
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                        } action: {
+                            actions.renameText = ""
+                            actions.renaming = page
+                        }
+                    }
                     if let start = page.scheduledStart {
                         chip {
                             HStack(spacing: 4) {

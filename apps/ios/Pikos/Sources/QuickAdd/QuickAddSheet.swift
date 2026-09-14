@@ -1,5 +1,6 @@
 import PikosCore
 import SwiftUI
+import UIKit
 
 /// Create a page without leaving the list.
 ///
@@ -81,42 +82,48 @@ struct QuickAddSheet: View {
                     }
                 }
 
-                Section("When") {
-                    Picker("Schedule", selection: $schedule) {
-                        ForEach(Schedule.allCases) { option in
-                            Text(option.rawValue).tag(option)
+                // One row for the two things the line may not have said,
+                // rather than two sections of pickers. At the medium detent
+                // with the keyboard up, the field and its chips are all that
+                // fits; the pickers were below the fold on every open. The
+                // chips already show what was understood — these are for
+                // overriding it, and they open only when asked.
+                Section {
+                    HStack(spacing: 8) {
+                        whenMenu
+                        if !store.fileableFolders.isEmpty {
+                            folderMenu
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .onChange(of: schedule) { _, new in
-                        if new != appliedSchedule { scheduleIsManual = true }
-                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.small)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
 
-                    if schedule != .none {
+                    if isPickingDate && schedule != .none {
+                        Picker("Schedule", selection: $schedule) {
+                            ForEach(Schedule.allCases) { option in
+                                Text(option.rawValue).tag(option)
+                            }
+                        }
+                        .pickerStyle(.segmented)
                         DatePicker(
                             "Date",
                             selection: $date,
                             displayedComponents: schedule == .timed
                                 ? [.date, .hourAndMinute] : [.date]
                         )
-                        .onChange(of: date) { _, new in
-                            if new != appliedDate { scheduleIsManual = true }
-                        }
                     }
                 }
-
-                if !store.fileableFolders.isEmpty {
-                    Section("Folder") {
-                        Picker("Folder", selection: $folderId) {
-                            Text("Inbox").tag(String?.none)
-                            ForEach(store.fileableFolders, id: \.id) { folder in
-                                Text(folder.name).tag(String?.some(folder.id))
-                            }
-                        }
-                        .onChange(of: folderId) { _, new in
-                            if new != appliedFolderId { folderIsManual = true }
-                        }
-                    }
+                .onChange(of: schedule) { _, new in
+                    if new != appliedSchedule { scheduleIsManual = true }
+                }
+                .onChange(of: date) { _, new in
+                    if new != appliedDate { scheduleIsManual = true }
+                }
+                .onChange(of: folderId) { _, new in
+                    if new != appliedFolderId { folderIsManual = true }
                 }
             }
             .navigationTitle("New page")
@@ -152,6 +159,73 @@ struct QuickAddSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    /// Whether the date pickers are unfolded under the row.
+    @State private var isPickingDate = false
+
+    /// When the page will be, as a menu: the three answers people give
+    /// without a picker, and the picker for the rest.
+    ///
+    /// The label is the current answer, so the row reads as a summary when
+    /// closed — "Tomorrow 3:00 PM" — and the parse's answer is what it shows
+    /// until the user changes it.
+    private var whenMenu: some View {
+        Menu {
+            Button("Today") { choose(day: Date()) }
+            Button("Tomorrow") { choose(day: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) }
+            Button("Pick a date…") {
+                if schedule == .none { schedule = .allDay }
+                isPickingDate = true
+            }
+            if schedule != .none {
+                Divider()
+                Button("No date", role: .destructive) {
+                    schedule = .none
+                    isPickingDate = false
+                }
+            }
+        } label: {
+            Label(whenLabel, systemImage: "calendar")
+        }
+        .accessibilityLabel("When: \(whenLabel)")
+    }
+
+    /// Move the date to a day, keeping the time of day the page already has.
+    private func choose(day: Date) {
+        let calendar = Calendar.current
+        let time = calendar.dateComponents([.hour, .minute], from: date)
+        date =
+            calendar.date(
+                bySettingHour: time.hour ?? 9, minute: time.minute ?? 0, second: 0, of: day)
+            ?? day
+        if schedule == .none { schedule = .allDay }
+    }
+
+    private var whenLabel: String {
+        switch schedule {
+        case .none: return String(localized: "No date")
+        case .allDay: return date.formatted(date: .abbreviated, time: .omitted)
+        case .timed: return date.formatted(date: .abbreviated, time: .shortened)
+        }
+    }
+
+    private var folderMenu: some View {
+        Menu {
+            Picker("Folder", selection: $folderId) {
+                Label("Inbox", systemImage: "tray").tag(String?.none)
+                ForEach(store.fileableFolders, id: \.id) { folder in
+                    Label(folder.name, systemImage: "folder").tag(String?.some(folder.id))
+                }
+            }
+        } label: {
+            Label(folderLabel, systemImage: "folder")
+        }
+        .accessibilityLabel("Folder: \(folderLabel)")
+    }
+
+    private var folderLabel: String {
+        store.fileableFolders.first { $0.id == folderId }?.name ?? String(localized: "Inbox")
     }
 
     /// The title as it will actually be saved.
@@ -221,6 +295,12 @@ struct QuickAddSheet: View {
         guard !savedTitle.isEmpty, !isSaving else { return }
         isSaving = true
         defer { isSaving = false }
+        // Felt before the sheet goes: the page lands in a list the user may
+        // not be looking at (the notice says where), and a tap that is felt
+        // to land does not need to be seen to. A generator call rather than
+        // `.sensoryFeedback`, whose trigger would be on a view that is
+        // dismissing.
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
 
         if usesParse {
             // A folder picked by hand is still honoured — the parser only ever

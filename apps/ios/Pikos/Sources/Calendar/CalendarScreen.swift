@@ -215,25 +215,15 @@ struct CalendarScreen: View {
         .pickerStyle(.inline)
     }
 
+    /// One button. Paging is the swipe, or the rotor for anyone who cannot
+    /// swipe; the chevrons that used to flank the title left "Sep 14 – 20"
+    /// truncating on an inline bar, and the one thing worth a tap of its own
+    /// is the way back to today.
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button {
-                step(by: -1)
-            } label: {
-                Label("Previous", systemImage: "chevron.left")
-            }
-        }
         ToolbarItem(placement: .topBarTrailing) {
             Button("Today") { goToToday() }
                 .disabled(showsToday)
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                step(by: 1)
-            } label: {
-                Label("Next", systemImage: "chevron.right")
-            }
         }
     }
 

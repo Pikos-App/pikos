@@ -221,11 +221,26 @@ struct SettingsScreen: View {
                         Task { await reminders.requestAuthorization() }
                     }
                 default:
-                    LabeledContent(
-                        "Planned",
-                        value: reminders.plannedCount == 1
-                            ? String(localized: "1 reminder")
-                            : String(localized: "\(reminders.plannedCount) reminders"))
+                    // The next one, not a count: "Dentist, today at 2:30 PM"
+                    // is a claim the reader can check against their day, and
+                    // "7 reminders" is not.
+                    if let next = reminders.nextPlanned {
+                        LabeledContent("Next") {
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(next.title.isEmpty ? "Untitled" : next.title)
+                                    .lineLimit(1)
+                                Text(
+                                    ReminderNotification.body(
+                                        scheduledStart: next.fireAt,
+                                        fireAt: WallClockDay.instant(from: Date()))
+                                )
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        LabeledContent("Next", value: String(localized: "Nothing in the next two weeks"))
+                    }
                 }
             }
         } header: {
@@ -241,8 +256,7 @@ struct SettingsScreen: View {
             return String(localized: "Nothing rings on this phone. Reminders still fire on the desktop.")
         }
         return String(
-            localized:
-                "Pages without a reminder of their own use the default. Reminders are planned two weeks ahead and re-planned whenever something changes; use a Focus to silence them at night."
+            localized: "Pages without a reminder of their own use the default. Use a Focus to silence them at night."
         )
     }
 

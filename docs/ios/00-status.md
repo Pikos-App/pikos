@@ -520,6 +520,41 @@ call — `a_plain_status_flip_on_a_recurring_head_ends_the_series` records what
 the wrong path does, and `the_status_toggle_routes_by_kind_without_being_told`
 records that no caller has to know which kind it holds.
 
+## What the screens showed once drawn
+
+An HTML reconstruction of the five main screens, built from the SwiftUI as
+written, made a few things visible that the code read fine. Each is a small
+change and none touches Rust:
+
+- **List rows carried too much on one line** — ring, title, meta, a tag chip
+  at the trailing edge and a disclosure chevron. Tags moved into the meta line
+  under the title, the chevron went (the link sits invisibly behind the row,
+  as Reminders draws its rows), and the row inset tightened so the title sits
+  where the platform's lists put it.
+- **The editor lost too much height while typing.** The metadata strip now
+  collapses while the keyboard is up.
+- **The formatting bar's first screen showed the wrong six.** Bold, italic,
+  bullet list, checklist and photo are on the bar; underline, strikethrough,
+  inline code, heading, numbered list, quote and code block are behind an
+  "Aa" menu that ticks whatever is active at the caret, the way Notes does.
+- **Quick add did not fit at the medium detent with the keyboard up.** The
+  When and Folder sections became one row of two menu buttons under the
+  chips — Today, Tomorrow, No date, or the pickers on demand — so the
+  summary is what fits and the pickers are for overriding it.
+- **The calendar's toolbar was crowded in day view.** The chevrons went
+  (swipe and the rotor page the grid); Today stays; the one-column day header
+  that repeated the title is hidden in day view.
+- **"Planned: 7 reminders" was a developer's number.** The row shows the next
+  one instead, and the footer is one sentence.
+
+And a second pass for what those turned up: the widget's rings take the same
+priority tint as the list's, a successful quick add is felt as well as seen, a
+trashed page can be swiped back as it was swiped away, an untitled page gets a
+"Name this page" chip in the editor strip (the rename was otherwise a menu
+away), and the notice bar is announced to VoiceOver, since a six-second bar at
+the bottom of the screen is one a screen reader would only find by sweeping
+down to it.
+
 ## Reminders ring on the phone
 
 The one parity gap that decided whether a task app is usable on a phone, and

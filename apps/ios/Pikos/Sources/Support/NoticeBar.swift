@@ -80,5 +80,15 @@ private struct NoticeOverlay: ViewModifier {
             }
         }
         .animation(.snappy, value: store.notice)
+        // Said aloud as well as shown. A bar that appears for six seconds at
+        // the bottom of the screen is one VoiceOver would only find by
+        // sweeping down to it, and "Deleted — Undo" is exactly the sentence
+        // that has to reach the person before it goes.
+        .onChange(of: store.notice) { _, notice in
+            guard let notice else { return }
+            var spoken = notice.message
+            if let action = notice.action { spoken += ". \(action.title) available." }
+            AccessibilityNotification.Announcement(spoken).post()
+        }
     }
 }
