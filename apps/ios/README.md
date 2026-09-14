@@ -235,8 +235,10 @@ suite.
   right place for the button (see `docs/ios/08-design-review.md`); the drag is
   a delighter that needs drop targets the list does not model.
 - **Reordering rows by drag.** `sort_order` is on the summary and nothing
-  crosses the FFI to change it. Select mode covers moving several pages at
-  once; a hand-arranged order in a folder waits on a reorder call.
+  crosses the FFI to change it. A folder can be _sorted_ — manual, date, title,
+  priority, from the corner menu, remembered per view like the desktop — and
+  select mode covers moving several pages at once; a hand-arranged order waits
+  on a reorder call.
 - **Liquid Glass everywhere.** The floating button, the notice bar, the tab
   bar's minimize and the bottom search are glass on iOS 26 and system
   materials before it. Nothing in the content layer is glass, on purpose,

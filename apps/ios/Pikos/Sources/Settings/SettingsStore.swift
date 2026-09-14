@@ -58,6 +58,23 @@ public final class SettingsStore {
         set { preferences.defaultReminderMinutes = newValue }
     }
 
+    /// How a view's list is ordered.
+    ///
+    /// `Preferences` is a plain value, so a read through it is not observed;
+    /// the version below is what a list watches, bumped on every write so the
+    /// rows re-sort the moment the menu is used.
+    public func listSort(for viewId: String, fallback: PageSort.Mode = .manual) -> PageSort.Mode {
+        _ = sortVersion
+        return preferences.listSort(for: viewId, fallback: fallback)
+    }
+
+    public func setListSort(_ mode: PageSort.Mode, for viewId: String) {
+        preferences.setListSort(mode, for: viewId)
+        sortVersion += 1
+    }
+
+    private var sortVersion = 0
+
     /// A lead in words, for the picker and its row.
     public static func leadLabel(_ minutes: Int64) -> String {
         switch minutes {
@@ -95,5 +112,6 @@ public final class SettingsStore {
 
     public func resetAll() {
         preferences.resetAll()
+        sortVersion += 1
     }
 }

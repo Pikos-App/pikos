@@ -24,6 +24,7 @@ import TipKit
 struct PageListScreen: View {
     @Environment(WorkspaceStore.self) private var store
     @Environment(Route.self) private var route
+    @Environment(SettingsStore.self) private var settings
 
     @State private var isFolderManagerPresented = false
     @State private var isTrashPresented = false
@@ -383,9 +384,9 @@ struct PageListScreen: View {
     private var visibleSections: [WorkspaceStore.Section] {
         let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else {
-            return store.sections.filter { !$0.pages.isEmpty }
+            return orderedSections.filter { !$0.pages.isEmpty }
         }
-        return store.sections.compactMap { section in
+        return orderedSections.compactMap { section in
             let matches = section.pages.filter { page in
                 page.title.localizedStandardContains(needle)
                     || (page.subtitle?.localizedStandardContains(needle) ?? false)
@@ -396,6 +397,55 @@ struct PageListScreen: View {
                 ? nil
                 : WorkspaceStore.Section(id: section.id, title: section.title, pages: matches)
         }
+    }
+
+    // MARK: - Ordering
+
+    /// The store's sections in the reader's chosen order.
+    ///
+    /// The date views arrive already ordered by the schedule and are left
+    /// alone; a folder or the Inbox is ordered here, by the mode kept for
+    /// that view — manual by default, chronology for a calendar's folder,
+    /// the same defaults the desktop's `useActiveSortMode` picks.
+    private var orderedSections: [WorkspaceStore.Section] {
+        guard !store.scope.isDateGrouped else { return store.sections }
+        let mode = sortMode
+        let now = WallClockDay.instant(from: Date())
+        return store.sections.map { section in
+            WorkspaceStore.Section(
+                id: section.id, title: section.title,
+                pages: PageSort.order(section.pages, by: mode, now: now) { page in
+                    PageSort.Key(
+                        title: page.title, priority: page.priority, sortOrder: page.sortOrder,
+                        scheduledStart: page.scheduledStart)
+                })
+        }
+    }
+
+    /// The key this view's order is kept under, and the order it starts in.
+    private var sortViewId: String {
+        switch store.scope {
+        case .today: return "today"
+        case .upcoming: return "upcoming"
+        case .inbox: return "inbox"
+        case .folder(let id, _): return id
+        }
+    }
+
+    private var sortMode: PageSort.Mode {
+        let fallback: PageSort.Mode
+        if case .folder(let id, _) = store.scope,
+            store.folders.first(where: { $0.id == id })?.isExternalCalendar == true
+        {
+            fallback = .date
+        } else {
+            fallback = .manual
+        }
+        return settings.listSort(for: sortViewId, fallback: fallback)
+    }
+
+    private var sortBinding: Binding<PageSort.Mode> {
+        Binding(get: { sortMode }, set: { settings.setListSort($0, for: sortViewId) })
     }
 
     // MARK: - Empty state
@@ -563,6 +613,18 @@ struct PageListScreen: View {
                         Label("Select Pages", systemImage: "checkmark.circle")
                     }
                     .disabled(store.pages.isEmpty && store.completedPages.isEmpty)
+
+                    // Only where there is an order to choose. Today and
+                    // Upcoming are the schedule's order by definition, and a
+                    // control that changed nothing there would read as broken.
+                    if !store.scope.isDateGrouped {
+                        Picker("Sort by", selection: sortBinding) {
+                            ForEach(PageSort.Mode.allCases, id: \.self) { mode in
+                                Text(mode.label).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
 
                     Divider()
 

@@ -773,6 +773,11 @@ was _placement_ and _system reach_. Twelve changes, all Swift, no FFI:
 - Two TipKit cards, one a day, for the two invisible gestures.
 - Pages are in Spotlight; Control Center has a New Page button (iOS 18); the
   focus timer runs in the Dynamic Island as a Live Activity.
+- A folder or the Inbox can be sorted — manual, date, title, priority — with
+  the desktop's rules and per-view memory. The home page names sorting as a
+  feature and the matrix had the phone at ⚠️ for it; the rules are in
+  `PikosSupport.PageSort` with host tests. Changing a _manual_ order still
+  waits on a reorder call across the FFI.
 
 Left for later and written down in the review: drag-to-place on the button,
 drag reordering (needs a reorder call across the FFI), an evening bucket, a

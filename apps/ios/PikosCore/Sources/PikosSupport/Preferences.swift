@@ -115,6 +115,9 @@ public struct Preferences: @unchecked Sendable {
         static let remindersEnabled = "pikos.remindersEnabled"
         static let defaultReminderMinutes = "pikos.defaultReminderMinutes"
         static let recentSearches = "pikos.recentSearches"
+        /// Followed by the view's id: one order per folder, as the desktop
+        /// keeps it.
+        static let listSortPrefix = "pikos.listSort."
     }
 
     /// How many past searches the search screen offers back.
@@ -261,6 +264,24 @@ public struct Preferences: @unchecked Sendable {
         store.removeObject(forKey: Key.recentSearches)
     }
 
+    /// How one view's list is ordered, or `fallback` when nobody has chosen.
+    ///
+    /// Per view, like the desktop: a folder of reference notes wants its own
+    /// arrangement while a calendar's folder is chronology, and one setting
+    /// for both would be wrong for one of them. The fallback is the caller's
+    /// to decide, because whether the view is a calendar's folder is a fact
+    /// the workspace holds and this file does not.
+    public func listSort(for viewId: String, fallback: PageSort.Mode = .manual) -> PageSort.Mode {
+        guard let raw = store.string(forKey: Key.listSortPrefix + viewId),
+            let mode = PageSort.Mode(rawValue: raw)
+        else { return fallback }
+        return mode
+    }
+
+    public mutating func setListSort(_ mode: PageSort.Mode, for viewId: String) {
+        store.set(mode.rawValue, forKey: Key.listSortPrefix + viewId)
+    }
+
     /// Forget every stored preference, returning each to its default.
     ///
     /// Sweeps the keys named above rather than the whole suite: the suite also
@@ -273,6 +294,10 @@ public struct Preferences: @unchecked Sendable {
             Key.theme, Key.listDensity, Key.calendarDensity, Key.weekStart, Key.defaultFolderID,
             Key.remindersEnabled, Key.defaultReminderMinutes, Key.recentSearches,
         ] {
+            store.removeObject(forKey: key)
+        }
+        // The per-view orders, whatever views exist.
+        for key in store.dictionaryRepresentation().keys where key.hasPrefix(Key.listSortPrefix) {
             store.removeObject(forKey: key)
         }
     }

@@ -115,6 +115,9 @@ Cheap, and each one has caught something on other apps:
   an empty half-hour: a medium haptic, then quick add with that day and time
   already in its When chip. Type a title and Add: the block should appear at
   that slot.
+- In a folder, ··· → Sort by → Priority: urgent rows first, undated rows of a
+  tier after dated ones, "none" last. Switch to another folder and back: the
+  choice should hold; Today should offer no Sort at all.
 - Quick add: the Priority chip should show "Priority" until the line says
   `!high` or the chip is used, and the chip's choice should win over the
   line's.

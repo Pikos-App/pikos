@@ -210,4 +210,29 @@ final class PreferencesTests: XCTestCase {
         preferences.resetAll()
         XCTAssertEqual(preferences.recentSearches, [])
     }
+
+    // MARK: - List order
+
+    func testListSortIsPerViewWithTheCallersFallback() {
+        XCTAssertEqual(preferences.listSort(for: "inbox"), .manual)
+        XCTAssertEqual(preferences.listSort(for: "calendar-folder", fallback: .date), .date)
+        preferences.setListSort(.priority, for: "inbox")
+        XCTAssertEqual(preferences.listSort(for: "inbox"), .priority)
+        XCTAssertEqual(preferences.listSort(for: "work"), .manual, "another view is untouched")
+    }
+
+    /// A mode this build does not know reads as the fallback, not as a crash
+    /// or as manual when the caller wanted date.
+    func testAnUnknownStoredSortReadsAsTheFallback() {
+        suite.set("by-colour", forKey: "pikos.listSort.inbox")
+        XCTAssertEqual(preferences.listSort(for: "inbox", fallback: .date), .date)
+    }
+
+    func testResetForgetsEveryViewsSort() {
+        preferences.setListSort(.title, for: "inbox")
+        preferences.setListSort(.date, for: "work")
+        preferences.resetAll()
+        XCTAssertEqual(preferences.listSort(for: "inbox"), .manual)
+        XCTAssertEqual(preferences.listSort(for: "work"), .manual)
+    }
 }

@@ -69,6 +69,40 @@ contrast tested with Increase Contrast and Reduce Transparency both ways;
 Reduce Motion replacing slides with dissolves; and a second cue beside every
 colour that carries meaning.
 
+## 1b. What Pikos itself promises
+
+The site, the README and the functionality matrix were read alongside the
+platform research, because a phone app can be modern and still be the wrong
+app. What they promise, and what each meant for this pass:
+
+- **One page is a note, a task and an event.** "Not three things bolted
+  together." So the phone must not split into a notes tab, a tasks tab and a
+  calendar tab with three creation flows: one create button, one quick add,
+  one page menu everywhere, and the calendar's long press making an ordinary
+  page at a time.
+- **Your data stays on your device. There is no server, and never a
+  subscription.** Every system surface added here is on-device: Spotlight's
+  index, TipKit's datastore, the Live Activity (no push), the Control Center
+  control (a link). Nothing new talks to a network, and the privacy manifest
+  is unchanged.
+- **Quick capture is the headline.** "Type naturally … no menus, no forms."
+  Which is why the create button moved to where the thumb is, why Control
+  Center gets a button, and why the calendar slot press opens quick add
+  rather than a form.
+- **"Click a slot to create a new page"** and **"sort by date, priority, or
+  drag to reorder"** are on the home page as features. The phone had
+  neither. The slot press is now the long press; the sort control is now in
+  the corner menu with the desktop's four modes and its per-view memory.
+  Drag-to-reorder still waits on a reorder call across the FFI.
+- **Calm, keyboard-first on the desktop, "stays out of your way".** On a
+  phone the equivalent is restraint: one haptic per meaningful change, one
+  tip a day, a notice bar that clears itself, and no onboarding. Nothing in
+  this pass adds a screen a person has to get through.
+- **Built to last, not to grow; one person maintains it.** Each change had to
+  be small enough to keep. The sort rules and the slot snapping are pure
+  functions with host tests; the iOS 26 work is one file of gated
+  modifiers; nothing new crosses the FFI.
+
 ## 2. Where Pikos mobile stood
 
 The app was read screen by screen against the table above. It was in better
@@ -111,6 +145,7 @@ platform's idioms already in place.
 | The day view had no way to a specific day but paging, and no way to create _at a time_.                            | Medium                       | The desktop's "click a slot to create" had no phone equivalent, and Apple's own day view has a week strip.               |
 | Search remembered nothing and completed nothing.                                                                   | Medium                       | Operators were on a legend nobody would read twice; the reader's own folders and tags were not offered back.             |
 | Quick add had no priority control.                                                                                 | Low                          | The line could say `!high`; a person who did not know that had no chip. Todoist's row has one.                           |
+| No sort control in a folder or the Inbox.                                                                          | Medium                       | The home page names it as a feature; the matrix marked the phone ⚠️.                                                     |
 | Reduce Motion was never read.                                                                                      | Low (but on the store label) | The calendar's push transition and the list's slides played regardless.                                                  |
 | No in-place teaching of the two invisible gestures.                                                                | Low                          | Swipes and the title menu have no affordance; the platform's own answer is one TipKit card each.                         |
 | Pages were not in Spotlight; no Control Center control; the focus timer was invisible once the phone was put down. | Low each                     | The three cheapest system surfaces for this kind of app, all missing.                                                    |
@@ -169,7 +204,12 @@ Everything below is Swift only; the FFI did not move.
 11. **A Control Center "New Page" control** (iOS 18) that opens the app on
     quick add through the `pikos://quick-add` link, in the widget bundle under
     `#available`.
-12. **The focus timer is a Live Activity**: the Dynamic Island and lock screen
+12. **Sort, per view.** Manual, date, title and priority in the corner menu of
+    a folder or the Inbox, with the desktop's rules (`PikosSupport.PageSort`,
+    host-tested: unscheduled last, an all-day page today at _now_, "none"
+    priority last) and its defaults — manual for a folder, chronology for a
+    calendar's folder — remembered per view in the App Group.
+13. **The focus timer is a Live Activity**: the Dynamic Island and lock screen
     count the session up from the same start instant the in-app clock uses,
     and a tap opens the page. No stop button on the island, by the one-writer
     rule; it ends with the session.
