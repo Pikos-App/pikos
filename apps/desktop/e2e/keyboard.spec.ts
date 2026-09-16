@@ -296,3 +296,35 @@ appTest("Arrow keys drive a focused dropdown, not the page list @tier2", async (
   await app.keyboard.press("Escape");
   await expect(alphabetical).not.toBeVisible();
 });
+
+// ─── A focus session's hidden panels leave the Tab order ────────────────────
+//
+// The panels a session hides are zero-width, not unmounted, and their contents
+// overflow rather than clip — so left to themselves they keep taking Tab focus
+// while nothing is on screen, and the user tabs through furniture they cannot
+// see. Both panels sit above the editor in the document, so the first Tab from
+// the top is the whole question: it must land in the editor.
+
+appTest("a focus session's hidden panels leave the Tab order @tier2", async ({ app }) => {
+  await quickAdd(app, "focus target");
+  await app.locator("[data-page-list-item]").getByText("focus target").click();
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+
+  // Start at <body>: Tiptap owns Tab and never gives focus up, so a walk that
+  // starts inside the editor would pass whatever the panels did.
+  await app.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  // Everything focusable in the two panels: the sidebar, and the page list's
+  // toolbar plus its rows.
+  const hiddenPanels = app.locator(
+    'nav[aria-label="Workspace navigation"], [aria-label="Page actions"], [role="group"][aria-label="Inbox"]'
+  );
+
+  await app.keyboard.press("Tab");
+  await expect(app.getByRole("textbox", { name: "Page content" })).toBeFocused();
+
+  for (let i = 0; i < 5; i++) {
+    await app.keyboard.press("Tab");
+    await expect(hiddenPanels.locator(":focus")).toHaveCount(0);
+  }
+});
