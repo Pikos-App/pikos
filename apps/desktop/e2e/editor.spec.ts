@@ -391,3 +391,32 @@ appTest("reopening the sidebar mid-session survives the session ending @tier2", 
 // user isn't looking at — so both outcomes toast. The strings are unit-pinned in
 // useFocusTimer.test.ts; what nothing covered is that they reach the screen.
 //
+// A recorded session has to outrun the 30s discard floor, so the length arm runs
+// on the raw `page` fixture: clock.install must land before the first app script
+// reads Date.
+
+appTest("stopping a focus session toasts how long it ran @tier2", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-06-08T09:00:00") });
+  await page.clock.resume();
+  await page.goto("/");
+  await expect(page.getByRole("main", { name: "Workspace" })).toBeVisible();
+
+  await quickAdd(page, "Deep work");
+  await openEditorForPage(page, "Deep work");
+
+  await page.getByRole("button", { name: "Start focus timer" }).click();
+  await page.clock.setFixedTime(new Date("2026-06-08T09:25:00"));
+  await page.getByRole("button", { name: "Stop focus timer" }).click();
+
+  await expect(page.getByRole("status", { name: "Focused for 25 minutes" })).toBeVisible();
+});
+
+appTest("a session under the floor toasts that nothing was recorded @tier2", async ({ app }) => {
+  await quickAdd(app, "Quick glance");
+  await openEditorForPage(app, "Quick glance");
+
+  await app.getByRole("button", { name: "Start focus timer" }).click();
+  await app.getByRole("button", { name: "Stop focus timer" }).click();
+
+  await expect(app.getByRole("status", { name: "Under 30 seconds — not recorded" })).toBeVisible();
+});
