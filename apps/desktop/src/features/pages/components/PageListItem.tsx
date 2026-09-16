@@ -2,7 +2,6 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Folder, PagePriority, PageSummary } from "@pikos/core";
 import {
-  folderMoveTargets,
   formatDateRange,
   formatLongDate,
   formatPageDate,
@@ -12,6 +11,7 @@ import {
   isDueSoon,
   isOpen,
   parseLocalISO,
+  writableFolders,
 } from "@pikos/core";
 import type React from "react";
 
@@ -287,7 +287,7 @@ export function PageListItem({
               >
                 Inbox
               </ContextMenuItem>
-              {folderMoveTargets(folders).map((folder) => (
+              {writableFolders(folders).map((folder) => (
                 <ContextMenuItem
                   className={cn(page.folderId === folder.id && "font-medium")}
                   key={folder.id}

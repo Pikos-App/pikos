@@ -179,7 +179,6 @@ export type { ParseResult, ParsedInput } from "./nlp/parser";
 export { buildSearchFilter, parseSearchQuery } from "./nlp/searchQuery";
 export type { ParsedSearchQuery, SearchFilterBuild } from "./nlp/searchQuery";
 // ── Page list: view scoping, sorting, selection and schedule edits ──
-export { folderMoveTargets } from "./pages/folderMoveTargets";
 export { moveOverdueToTodayLabel, planMoveOverdueToToday } from "./pages/moveOverdueToToday";
 export type { OverdueMove, OverdueMovePlan } from "./pages/moveOverdueToToday";
 export {
@@ -204,6 +203,7 @@ export { partitionToggleSelection } from "./pages/toggleSelection";
 export type { ToggleSelectionGroups } from "./pages/toggleSelection";
 export { groupUpcomingPages } from "./pages/upcoming";
 export type { UpcomingDaySection } from "./pages/upcoming";
+export { folderIdForNewPage, writableFolders } from "./pages/writableFolders";
 // ── Host-shell seam: everything the app asks of the machine, minus storage ──
 export * from "./platform";
 export * from "./storage";

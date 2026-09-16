@@ -1,4 +1,5 @@
 import type { CalendarDayCount, CalendarDensity } from "@pikos/core";
+import { writableFolders } from "@pikos/core";
 
 import { SearchablePopover, SearchablePopoverItem } from "@/shared/components/SearchablePopover";
 import { IS_LINUX } from "@/shared/constants/platform";
@@ -103,7 +104,9 @@ export function GeneralSettingsPreferences() {
     setTextScale: setInterfaceTextScale,
     textScale: interfaceTextScale,
   } = useInterfaceSettings();
-  const defaultFolderName = folders.find((f) => f.id === defaultFolderId)?.name ?? "Inbox";
+  const defaultFolderChoices = writableFolders(folders);
+  const defaultFolderName =
+    defaultFolderChoices.find((f) => f.id === defaultFolderId)?.name ?? "Inbox";
 
   return (
     <SettingsSection title="Preferences">
@@ -207,7 +210,7 @@ export function GeneralSettingsPreferences() {
                 >
                   Inbox
                 </SearchablePopoverItem>
-                {folders.map((f) => (
+                {defaultFolderChoices.map((f) => (
                   <SearchablePopoverItem
                     key={f.id}
                     onClick={() => {

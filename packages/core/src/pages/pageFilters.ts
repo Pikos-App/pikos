@@ -17,10 +17,13 @@ export function isSmartViewId(viewId: string): viewId is SmartViewId {
 }
 
 /**
- * The folder a view implies for a page created or dropped inside it — null for
- * every smart view, since none of them is a place a page can live. Keeps the
- * "is this id a folder?" question in one place so a fourth smart view can never
- * leak its id into a `folderId` column.
+ * The folder scope a view names — null for every smart view, since none of them
+ * is a place a page can live. Keeps the "is this id a folder?" question in one
+ * place so a fourth smart view can never leak its id into a `folderId` column.
+ *
+ * Answers membership, not permission: an external-calendar folder is a folder
+ * and comes back verbatim. Anything choosing where to *put* a page wants
+ * `folderIdForNewPage`, which also excludes the folders that can't hold one.
  */
 export function folderIdForView(viewId: string): string | null {
   return isSmartViewId(viewId) ? null : viewId;

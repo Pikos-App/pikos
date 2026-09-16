@@ -2,7 +2,6 @@ import {
   buildCalendarDays,
   buildMonthGrid,
   clampDayCount,
-  folderIdForView,
   getCalendarDayCount,
   monthGridDays,
 } from "@pikos/core";
@@ -18,6 +17,7 @@ import { useUndoDelete } from "@/shared/context/UndoDeleteContext";
 import { useWorkspace } from "@/shared/context/WorkspaceContext";
 import { useRecurrenceExpansion } from "@/shared/hooks/useRecurrenceExpansion";
 
+import { useCalendarPageCreate } from "../hooks/useCalendarPageCreate";
 import { MonthGrid } from "./MonthGrid";
 import { WeekGrid } from "./WeekGrid";
 
@@ -37,7 +37,6 @@ const COMPLETED_LOOKBACK_DAYS = 31;
  */
 export function CalendarView() {
   const {
-    createPage,
     deletePage,
     expandRecurrenceRange,
     flushPage,
@@ -51,9 +50,9 @@ export function CalendarView() {
     scheduleOnce,
   } = usePages();
   const { storage } = useWorkspace();
-  const { activeViewId, openPage, referenceDate, setReferenceDate } = useUI();
+  const { openPage, referenceDate, setReferenceDate } = useUI();
   const { hiddenIds } = useUndoDelete();
-  const { defaultFolderId: settingsDefaultFolder, weekStart } = useAppSettings();
+  const { weekStart } = useAppSettings();
   const {
     dayCount: preferredDayCount,
     setViewMode,
@@ -63,6 +62,7 @@ export function CalendarView() {
   const visiblePages = pages.filter((p) => !hiddenIds.has(p.id));
 
   const [autoOpenPageId, setAutoOpenPageId] = useState<string | null>(null);
+  const { createAllDayPage, createTimedPage } = useCalendarPageCreate(setAutoOpenPageId);
 
   // Blur whatever had focus in the editor panel so no focus ring lingers.
   useEffect(() => {
@@ -134,31 +134,6 @@ export function CalendarView() {
     setViewMode("time");
   }
 
-  async function handleCreatePage(day: Date, start: Date, end?: Date) {
-    // Default folder: active folder, then settings default, then Inbox.
-    const folderId = folderIdForView(activeViewId) ?? settingsDefaultFolder;
-
-    const page = await createPage({ folderId });
-    // Use local-time format (no Z suffix) — SQLite's date() functions require this.
-    const fmt = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm:ss");
-    await scheduleOnce(page.id, fmt(start), end ? fmt(end) : undefined);
-    setAutoOpenPageId(page.id);
-  }
-
-  /** `end` is undefined for a single-day click; set by the drag-to-create
-   * gesture for a multi-day span. */
-  async function handleCreateAllDay(start: Date, end?: Date) {
-    const folderId = folderIdForView(activeViewId);
-    const page = await createPage({ folderId });
-    // Date-only strings → isAllDayPage() returns true.
-    await scheduleOnce(
-      page.id,
-      format(start, "yyyy-MM-dd"),
-      end ? format(end, "yyyy-MM-dd") : undefined
-    );
-    setAutoOpenPageId(page.id);
-  }
-
   /**
    * Drag-to-reschedule or resize. When `originalDate` is set, the dragged block
    * is a virtual rrule occurrence (which shares the head's id) — calling
@@ -219,8 +194,8 @@ export function CalendarView() {
           days={days}
           isCurrentWeek={isCurrentWeek}
           onAutoOpenConsumed={handleAutoOpenConsumed}
-          onCreateAllDay={handleCreateAllDay}
-          onCreatePage={handleCreatePage}
+          onCreateAllDay={createAllDayPage}
+          onCreatePage={(_day, start, end) => createTimedPage(start, end)}
           onPageDoubleClick={handlePageDoubleClick}
           onReschedule={handleReschedule}
           pages={expandedPages}

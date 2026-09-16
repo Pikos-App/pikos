@@ -3,7 +3,7 @@
 // on every page mutation. Reads folders/storage from WorkspaceContext and
 // dispatches soft-delete + reload through it on undo.
 
-import { getLocalTimezone } from "@pikos/core";
+import { getLocalTimezone, writableFolders } from "@pikos/core";
 import { createContext, type ReactNode, useContext, useState } from "react";
 
 import type {
@@ -38,11 +38,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
     const folderIds: string[] = [];
     const pageIds: string[] = [];
 
-    // A mirror-locked calendar folder rejects every create, so reusing one by
-    // name would fail the import mid-batch.
-    const existingFoldersByName = new Map(
-      folders.filter((f) => !f.isExternalCalendar).map((f) => [f.name, f])
-    );
+    const existingFoldersByName = new Map(writableFolders(folders).map((f) => [f.name, f]));
 
     const folderKeyToId = new Map<string, string>();
     for (const f of data.folders) {

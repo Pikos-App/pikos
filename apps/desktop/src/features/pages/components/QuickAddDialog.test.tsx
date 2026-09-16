@@ -138,3 +138,29 @@ describe("QuickAddDialog — body separator", () => {
     expect(createPage.mock.calls[0]![0].title).toBe("Call mom");
   });
 });
+
+describe("QuickAddDialog — a refused write", () => {
+  it("says what went wrong and keeps the dialog open with the text intact", async () => {
+    vi.spyOn(MockStorageAdapter.prototype, "createPage").mockRejectedValue(
+      new Error("disk is full")
+    );
+    const input = await quickAdd("Buy milk");
+
+    expect(await screen.findByText("Something went wrong while adding the page.")).toBeTruthy();
+    expect((input as HTMLInputElement).value).toBe("Buy milk");
+  });
+
+  it("clears the message once the user types again", async () => {
+    vi.spyOn(MockStorageAdapter.prototype, "createPage").mockRejectedValue(
+      new Error("disk is full")
+    );
+    const input = await quickAdd("Buy milk");
+    await screen.findByText("Something went wrong while adding the page.");
+
+    fireEvent.change(input, { target: { value: "Buy oat milk" } });
+
+    await waitFor(() =>
+      expect(screen.queryByText("Something went wrong while adding the page.")).toBeNull()
+    );
+  });
+});
