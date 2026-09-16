@@ -352,6 +352,107 @@ async fn an_all_day_export_names_no_timezone() {
     assert!(!ics.contains("TZID"));
 }
 
+// ── The whole document ───────────────────────────────────────────────────────
+
+/// The file, end to end, against a pinned copy.
+///
+/// Every test above reads one property. This one is what catches the change nobody meant to make:
+/// a dropped `VTIMEZONE`, a renamed `PRODID`, a property that stopped folding, an observance that
+/// moved. `DTSTAMP` is the clock and the version is the build, so both are masked; everything else
+/// is compared byte for byte, `CRLF` included.
+#[tokio::test]
+async fn the_whole_export_matches_its_golden_copy() {
+    let pool = test_pool().await;
+    add_page(
+        &pool,
+        "p1",
+        "Weekly 1:1, with Sam",
+        Some("2026-06-15T09:00:00"),
+        Some("2026-06-15T09:30:00"),
+    )
+    .await;
+    add_schedule(
+        &pool,
+        "s1",
+        "p1",
+        "2026-06-15T09:00:00",
+        Some("2026-06-15T09:30:00"),
+        Some(NY),
+    )
+    .await;
+    set_body(&pool, "p1", "Agenda: roadmap, hiring").await;
+    add_page(
+        &pool,
+        "p2",
+        "Offsite",
+        Some("2026-06-18"),
+        Some("2026-06-19"),
+    )
+    .await;
+
+    let ics = build_export_ics_impl(&pool, false).await.unwrap();
+
+    assert_eq!(mask(&ics), GOLDEN, "the export changed:\n{ics}");
+}
+
+/// The parts that move on their own: the moment of export, the app's version, and the generated
+/// zone, whose observances run to a horizon counted from the current year. The offsets inside it
+/// are pinned by `the_generated_vtimezone_states_real_offsets`; what this test keeps is that the
+/// block is there, once, around the right TZID.
+fn mask(ics: &str) -> String {
+    let mut out = String::new();
+    let mut inside_zone = false;
+    for line in ics.split_inclusive("\r\n") {
+        let bare = line.trim_end_matches("\r\n");
+        if inside_zone {
+            if bare.starts_with("TZID:") {
+                out.push_str(line);
+            } else if bare == "END:VTIMEZONE" {
+                inside_zone = false;
+                out.push_str("<observances>\r\nEND:VTIMEZONE\r\n");
+            }
+            continue;
+        }
+        match bare {
+            "BEGIN:VTIMEZONE" => {
+                inside_zone = true;
+                out.push_str(line);
+            }
+            _ if bare.starts_with("DTSTAMP:") => out.push_str("DTSTAMP:<stamp>\r\n"),
+            _ if bare.starts_with("PRODID:") => out.push_str("PRODID:<prodid>\r\n"),
+            _ => out.push_str(line),
+        }
+    }
+    out
+}
+
+const GOLDEN: &str = "\
+     BEGIN:VCALENDAR\r\n\
+     VERSION:2.0\r\n\
+     PRODID:<prodid>\r\n\
+     CALSCALE:GREGORIAN\r\n\
+     BEGIN:VTIMEZONE\r\n\
+     TZID:America/New_York\r\n\
+     <observances>\r\n\
+     END:VTIMEZONE\r\n\
+     BEGIN:VEVENT\r\n\
+     UID:p1@pikos\r\n\
+     DTSTAMP:<stamp>\r\n\
+     DTSTART;TZID=America/New_York:20260615T090000\r\n\
+     DTEND;TZID=America/New_York:20260615T093000\r\n\
+     SUMMARY:Weekly 1:1\\, with Sam\r\n\
+     DESCRIPTION:Agenda: roadmap\\, hiring\r\n\
+     END:VEVENT\r\n\
+     BEGIN:VEVENT\r\n\
+     UID:p2@pikos\r\n\
+     DTSTAMP:<stamp>\r\n\
+     DTSTART;VALUE=DATE:20260618\r\n\
+     DTEND;VALUE=DATE:20260620\r\n\
+     SUMMARY:Offsite\r\n\
+     END:VEVENT\r\n\
+     END:VCALENDAR\r\n\
+";
+
 // ── Timed: TZID + VTIMEZONE ──────────────────────────────────────────────────
 
 #[tokio::test]
