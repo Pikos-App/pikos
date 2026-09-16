@@ -199,6 +199,32 @@ appTest("task checkbox toggles checked state @tier2", async ({ app }) => {
   await expect(checkbox).not.toBeChecked();
 });
 
+// A checkbox in the body is one line of a note; the page's own status is whether
+// the page is done. Nothing else pins them apart, and the two read identically on
+// screen — a tick next to text.
+
+appTest("ticking an inline task leaves the page's own status open @tier2", async ({ app }) => {
+  await quickAdd(app, "inline status test");
+  const editor = await openEditorForPage(app, "inline status test");
+
+  await app.keyboard.type("/");
+  await expect(app.locator(".slash-menu")).toBeVisible();
+  await app.keyboard.type("task");
+  await app.keyboard.press("Enter");
+  await app.keyboard.type("Toggle me");
+
+  const status = app.getByRole("button", { name: "Mark done" });
+  await expect(status).toHaveText("Open");
+
+  const checkbox = editor.locator("ul[data-type='taskList'] input[type='checkbox']");
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
+
+  // A flipped page status renames the chip to "Mark not done", so this resolves
+  // to nothing rather than reading "Done".
+  await expect(status).toHaveText("Open");
+});
+
 // ─── Content persistence ────────────────────────────────────────────────────
 
 appTest("formatted content persists across page switches @tier1", async ({ app }) => {
@@ -360,3 +386,8 @@ appTest("reopening the sidebar mid-session survives the session ending @tier2", 
   await app.getByRole("button", { name: "Stop focus timer" }).click();
   await expect(app.getByRole("button", { name: "Collapse sidebar" })).toBeVisible();
 });
+
+// Ending a session is otherwise invisible — the row lands in a settings panel the
+// user isn't looking at — so both outcomes toast. The strings are unit-pinned in
+// useFocusTimer.test.ts; what nothing covered is that they reach the screen.
+//
