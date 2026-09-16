@@ -286,6 +286,18 @@ fn build_excerpt_joins_blocks_rather_than_running_them_together() {
     assert_eq!(out, "Measure the alcove \u{00B7} Order the desktop top");
 }
 
+/// A mirror's metadata gets the same treatment, and it is the half a blank line tells apart:
+/// replacing every newline would leave an empty block between two separators.
+#[test]
+fn build_mirror_excerpt_joins_blocks_rather_than_running_them_together() {
+    let metadata = "Weyland Room  \n\n priya@example.com \nstandup";
+    let out = build_mirror_excerpt(Some(metadata), &["priya".into()]);
+    assert_eq!(
+        out,
+        "Weyland Room \u{00B7} priya@example.com \u{00B7} standup"
+    );
+}
+
 #[test]
 fn strip_prefix_ci_handles_multibyte() {
     // Regression check: char-based prefix strip must not panic on UTF-8.
