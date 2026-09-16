@@ -56,6 +56,65 @@ impl CalendarProvider for OneShot {
 
 // ─── tests ──────────────────────────────────────────────────────────────────────
 
+/// A password never reaches the database file.
+///
+/// The claim the privacy page makes, and what a `strings` sweep over a real workspace is looking
+/// for in the pre-release pass. Asserted against the bytes on disk rather than against a query,
+/// because a credential can arrive there by a column nobody meant to add or by an error string
+/// parked in a row. The WAL counts: it holds pages the main file has not been given yet, and a
+/// sweep that read only `pikos.sqlite` would call a fresh write clean.
+#[tokio::test]
+async fn a_caldav_password_never_lands_in_the_database_file() {
+    const PASSWORD: &str = "correct-horse-battery-staple";
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("pikos-credentials-{unique}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("pikos.sqlite");
+    let pool = pikos_db::open_pool(path.to_str().unwrap()).await.unwrap();
+
+    // The connect path's two writes, without the discovery that proves the credentials first.
+    let backing = MemoryStore::default();
+    let keychain = Keychain::with_store(Box::new(backing.clone()));
+    let account = claim_account(&pool, PROVIDER_CALDAV, "Fastmail", "basic")
+        .await
+        .unwrap();
+    let blob = CaldavCredentials {
+        base_url: "https://caldav.fastmail.com".into(),
+        username: "person@example.com".into(),
+        password: PASSWORD.into(),
+    }
+    .to_blob()
+    .unwrap();
+    keychain.store(&account.id, &blob).unwrap();
+    pool.close().await;
+
+    assert!(
+        backing.get(&account.id).unwrap().contains(PASSWORD),
+        "precondition: the keychain is where it went"
+    );
+    let mut swept = 0;
+    for suffix in ["", "-wal", "-shm"] {
+        let file = dir.join(format!("pikos.sqlite{suffix}"));
+        let Ok(bytes) = std::fs::read(&file) else {
+            continue;
+        };
+        swept += 1;
+        assert!(
+            !bytes
+                .windows(PASSWORD.len())
+                .any(|w| w == PASSWORD.as_bytes()),
+            "the password is in {}",
+            file.display()
+        );
+    }
+    assert!(swept > 0, "nothing was swept, so nothing was proven");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[tokio::test]
 async fn disconnect_goes_dormant_and_hides_the_account() {
     let pool = test_pool().await;
