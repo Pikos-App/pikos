@@ -31,6 +31,19 @@ if [ -z "$IDENTITY" ]; then
 fi
 log "signing identity: $IDENTITY"
 
+# The build succeeds without these and simply hides Google sync, so a QA pass would
+# work through every Google row against a build that never had the feature in it.
+missing=""
+[ -n "${PIKOS_GOOGLE_CLIENT_ID:-}" ] || missing="PIKOS_GOOGLE_CLIENT_ID"
+[ -n "${PIKOS_GOOGLE_CLIENT_SECRET:-}" ] || missing="$missing PIKOS_GOOGLE_CLIENT_SECRET"
+if [ -n "$missing" ]; then
+  echo "[qa-build] Not set:$missing" >&2
+  echo "[qa-build] This build would hide Google sync, so every Google QA row would pass by" >&2
+  echo "[qa-build] being untestable. Export both, or PIKOS_ALLOW_NO_GOOGLE=1 to build anyway." >&2
+  [ "${PIKOS_ALLOW_NO_GOOGLE:-}" = "1" ] || exit 1
+  log "building without Google sync, as asked"
+fi
+
 # Remove previously built bundles so macOS Spotlight can't launch a stale copy
 # (duplicate app.pikos.desktop registrations also confuse notification auth).
 log "removing stale target bundles"
